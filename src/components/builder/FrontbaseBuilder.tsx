@@ -1,5 +1,6 @@
 import React from 'react';
 import { Puck } from '@measured/puck';
+import '@measured/puck/puck.css';
 import { BuilderHeader } from './BuilderHeader';
 import { useBuilderStore } from '@/stores/builder';
 import { puckConfig } from './puck-config';
@@ -14,6 +15,10 @@ export const FrontbaseBuilder: React.FC = () => {
   } = useBuilderStore();
   
   const currentPage = pages.find(page => page.id === currentPageId);
+  
+  // Debug: Log current page data
+  console.log('Current page:', currentPage);
+  console.log('Layout data:', currentPage?.layoutData);
   
   if (!currentPage) {
     return (
@@ -30,8 +35,9 @@ export const FrontbaseBuilder: React.FC = () => {
     <Puck
       config={puckConfig}
       data={currentPage.layoutData || { content: [], root: {} }}
-      onChange={(data) => {
+      onPublish={(data) => {
         // Handle save - update page layout data
+        console.log('Publishing data:', data);
         useBuilderStore.getState().updatePage(currentPage.id, {
           layoutData: data
         });

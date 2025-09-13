@@ -48,6 +48,19 @@
   padding: 1rem;
 }
 
+/* Override Puck's default styles for our layout */
+.puck-components-wrapper .Puck-components {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.puck-fields-wrapper .Puck-fields {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 .puck-components-wrapper [data-rbd-draggable-id] {
   margin-bottom: 0.5rem;
   padding: 0.75rem;

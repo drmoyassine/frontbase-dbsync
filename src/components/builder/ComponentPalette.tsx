@@ -183,6 +183,7 @@ const ComponentItem: React.FC<ComponentItemProps> = ({ name, icon: Icon, descrip
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
+    canDrag: () => true,
   });
 
   return (

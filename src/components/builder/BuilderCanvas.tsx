@@ -14,6 +14,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
   const [{ isOver }, drop] = useDrop({
     accept: 'component',
     drop: (item: { type: string }, monitor) => {
+      console.log('Drop event triggered:', item);
       if (!monitor.didDrop()) {
         // Add component to the end of the content array
         const newComponent = {
@@ -23,6 +24,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
           styles: {}
         };
 
+        console.log('Creating new component:', newComponent);
         const updatedContent = [...(page.layoutData?.content || []), newComponent];
         
         updatePage(page.id, {
@@ -39,6 +41,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
     collect: (monitor) => ({
       isOver: monitor.isOver({ shallow: true }),
     }),
+    canDrop: () => true,
   });
 
   const handleComponentClick = (componentId: string, event: React.MouseEvent) => {
@@ -51,7 +54,8 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
   return (
     <div 
       ref={drop}
-      className={`min-h-full p-8 ${isOver ? 'bg-accent/50' : 'bg-background'} transition-colors`}
+      className={`min-h-full p-8 ${isOver ? 'bg-accent/50' : 'bg-background'} transition-colors relative`}
+      style={{ minHeight: '400px' }}
     >
       <div className="max-w-4xl mx-auto space-y-4">
         {page.layoutData?.content?.map((component, index) => (

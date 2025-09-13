@@ -8,12 +8,11 @@ services:
     volumes:
       # Persist database and uploads
       - ./data:/app/data
-      # Development: hot reload server code
-      - ./server:/app/server:ro
     environment:
       - NODE_ENV=development
       - DB_PATH=/app/data/frontbase.db
       - PORT=3000
+      - DEBUG=1
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/project', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]

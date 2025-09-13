@@ -39,8 +39,13 @@ RUN mkdir -p /app/data/uploads /app/data/exports
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S frontbase -u 1001
 
-# Change ownership of app directory
+# Change ownership of app directory and data directories
 RUN chown -R frontbase:nodejs /app
+RUN chmod -R 755 /app/data
+
+# Copy startup script
+COPY server/scripts/start.sh /app/start.sh
+RUN chmod +x /app/start.sh && chown frontbase:nodejs /app/start.sh
 
 # Switch to non-root user
 USER frontbase
@@ -53,4 +58,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/project', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
 
 # Start server
-CMD ["node", "index.js"]
+CMD ["/app/start.sh"]

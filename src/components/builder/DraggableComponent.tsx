@@ -132,6 +132,16 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
   // Check if this is the last component in its container
   const isLastComponent = index === siblingComponents.length - 1;
 
+  // Debug logging for this component
+  console.log('DraggableComponent render:', {
+    componentId: component.id,
+    index,
+    isLastComponent,
+    siblingComponentsLength: siblingComponents.length,
+    draggedComponentId,
+    isDragging
+  });
+
   // Drop zone after last component
   const [{ isOverAfter }, dropAfter] = useDrop({
     accept: ['component', 'existing-component', 'layer-component'],
@@ -157,7 +167,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
     collect: (monitor) => ({
       isOverAfter: monitor.isOver({ shallow: true }),
     }),
-    canDrop: () => !isPreviewMode && isLastComponent,
+    canDrop: () => !isPreviewMode && isLastComponent && component.id !== draggedComponentId,
   });
 
   // Check if the "after last" drop zone should be rendered

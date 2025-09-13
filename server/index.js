@@ -115,6 +115,10 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Cookie parser for session handling
+const cookieParser = require('cookie-parser');
+app.use(cookieParser());
+
 // Health check endpoint for debugging
 app.get('/health', (req, res) => {
   try {
@@ -237,6 +241,16 @@ app.get('/api', (req, res) => {
     documentation: 'Visit /builder for the visual page builder interface'
   });
 });
+
+// Auth routes (must be loaded first)
+try {
+  const { router: authRouter } = require('./routes/api/auth');
+  app.use('/api/auth', authRouter);
+  console.log('✅ Auth API routes loaded');
+} catch (error) {
+  console.error('❌ Failed to load auth routes:', error);
+  process.exit(1);
+}
 
 try {
   app.use('/api/project', require('./routes/api/project')(dbManager));

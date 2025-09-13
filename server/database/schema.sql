@@ -49,6 +49,38 @@ CREATE TABLE IF NOT EXISTS assets (
   created_at TEXT NOT NULL
 );
 
+-- Users table for Frontbase authentication
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+-- User sessions for authentication
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  session_token TEXT UNIQUE NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+-- User settings and configurations
+CREATE TABLE IF NOT EXISTS user_settings (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  supabase_url TEXT,
+  supabase_anon_key TEXT,
+  settings_data TEXT, -- JSON for various user preferences
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
 -- Page views for analytics (optional)
 CREATE TABLE IF NOT EXISTS page_views (
   id TEXT PRIMARY KEY,
@@ -63,6 +95,10 @@ CREATE TABLE IF NOT EXISTS page_views (
 -- Initialize with default project
 INSERT OR IGNORE INTO project (id, name, description, created_at, updated_at) 
 VALUES ('default', 'My Frontbase Project', 'A new project created with Frontbase', datetime('now'), datetime('now'));
+
+-- Initialize with default admin user (password: admin123)
+INSERT OR IGNORE INTO users (id, username, email, password_hash, created_at, updated_at)
+VALUES ('default-admin', 'admin', 'admin@frontbase.dev', '$2b$10$rOHp.yLJ9O/OgJ9F9iJOCOdh9h8H3JxH3n7qZ.7xL6mF8WGpXzO4G', datetime('now'), datetime('now'));
 
 -- Initialize with default homepage
 INSERT OR IGNORE INTO pages (id, name, slug, title, description, keywords, is_public, is_homepage, layout_data, seo_data, created_at, updated_at)

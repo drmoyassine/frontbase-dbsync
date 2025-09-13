@@ -1,5 +1,5 @@
 # Multi-stage build for Frontbase
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -17,10 +17,7 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM node:18-alpine AS runtime
-
-# Install runtime dependencies
-RUN apk add --no-cache sqlite
+FROM node:20-alpine AS runtime
 
 # Create app directory
 WORKDIR /app

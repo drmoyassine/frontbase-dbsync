@@ -7,6 +7,10 @@ import { Badge } from '@/components/ui/badge';
 
 // Basic Puck configuration for core components
 export const puckConfig: Config = {
+  root: {
+    render: ({ children }) => 
+      React.createElement('div', { className: 'min-h-screen w-full bg-background' }, children),
+  },
   components: {
     Button: {
       fields: {

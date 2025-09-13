@@ -1,10 +1,9 @@
 import React from 'react';
 import { Puck } from '@measured/puck';
-import { ComponentPalette } from './ComponentPalette';
-import { PropertiesPanel } from './PropertiesPanel';
 import { BuilderHeader } from './BuilderHeader';
 import { useBuilderStore } from '@/stores/builder';
 import { puckConfig } from './puck-config';
+import './builder.css';
 
 export const FrontbaseBuilder: React.FC = () => {
   const { 
@@ -41,32 +40,31 @@ export const FrontbaseBuilder: React.FC = () => {
       <div className="h-screen flex flex-col bg-background">
         <BuilderHeader />
         
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left Sidebar - Component Palette */}
+        <div className="builder-layout">
+          {/* Left Sidebar - Native Puck Components */}
           {!isPreviewMode && (
-            <div className="w-80 border-r border-border bg-card">
-              <div className="h-full overflow-y-auto">
-                <ComponentPalette />
-                <div className="border-t border-border mt-4 pt-4">
-                  <h3 className="text-sm font-medium text-foreground mb-2 px-4">Components</h3>
-                  <Puck.Components />
-                </div>
+            <div className="builder-sidebar left-sidebar">
+              <div className="p-4 border-b border-border">
+                <h2 className="font-semibold text-foreground">Components</h2>
+              </div>
+              <div className="puck-components-wrapper">
+                <Puck.Components />
               </div>
             </div>
           )}
-          
-          {/* Main Canvas */}
-          <div className="flex-1 bg-muted/30">
+
+          {/* Center - Canvas */}
+          <div className="builder-canvas">
             <Puck.Preview />
           </div>
-          
+
           {/* Right Sidebar - Properties Panel */}
           {!isPreviewMode && (
-            <div className="w-80 border-l border-border bg-card">
-              <div className="h-full overflow-y-auto">
-                <div className="p-4 border-b border-border">
-                  <h3 className="text-sm font-medium text-foreground">Properties</h3>
-                </div>
+            <div className="builder-sidebar right-sidebar">
+              <div className="p-4 border-b border-border">
+                <h2 className="font-semibold text-foreground">Properties</h2>
+              </div>
+              <div className="puck-fields-wrapper">
                 <Puck.Fields />
               </div>
             </div>

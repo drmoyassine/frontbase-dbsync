@@ -6,19 +6,12 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Persist database and uploads with better error handling
-      - type: bind
-        source: ./data
-        target: /app/data
-        bind:
-          create_host_path: true
+      # Use named volume for EasyPanel compatibility
+      - frontbase_data:/app/data
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - DB_PATH=/app/data/frontbase.db
       - PORT=3000
-      - DEBUG=1
-      - STARTUP_DEBUG=1
-      - LOG_LEVEL=verbose
     restart: unless-stopped
     # Enhanced healthcheck with debugging
     healthcheck:

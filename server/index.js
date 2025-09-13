@@ -325,9 +325,18 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
+// Prevent multiple server instances
+let serverRunning = false;
+
 // Start server
 console.log('🚀 Starting HTTP server...');
 const server = app.listen(PORT, () => {
+  if (serverRunning) {
+    console.log('⚠️ Server already running, ignoring duplicate start');
+    return;
+  }
+  
+  serverRunning = true;
   console.log('✅ Server setup complete!');
   console.log(`🌐 Server running on http://localhost:${PORT}`);
   console.log(`🔧 Builder available at http://localhost:${PORT}/builder`);
@@ -337,10 +346,18 @@ const server = app.listen(PORT, () => {
   console.log(`🩺 Health check: http://localhost:${PORT}/health`);
   console.log(`🔍 Debug info: http://localhost:${PORT}/debug/filesystem`);
   
-  // Test database connection
+  // Test database connection and default page
   try {
     const testConnection = dbManager.getProject();
     console.log('✅ Database connection test passed');
+    
+    // Verify default homepage exists
+    const pages = dbManager.getPublicPages();
+    if (pages.length > 0) {
+      console.log('✅ Default homepage found:', pages.find(p => p.isHomepage)?.name || pages[0].name);
+    } else {
+      console.warn('⚠️ No pages found in database');
+    }
   } catch (error) {
     console.error('❌ Database connection test failed:', error.message);
   }

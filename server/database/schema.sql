@@ -63,3 +63,20 @@ CREATE TABLE IF NOT EXISTS page_views (
 -- Initialize with default project
 INSERT OR IGNORE INTO project (id, name, description, created_at, updated_at) 
 VALUES ('default', 'My Frontbase Project', 'A new project created with Frontbase', datetime('now'), datetime('now'));
+
+-- Initialize with default homepage
+INSERT OR IGNORE INTO pages (id, name, slug, title, description, keywords, is_public, is_homepage, layout_data, seo_data, created_at, updated_at)
+VALUES (
+  'default-homepage',
+  'Home',
+  'home',
+  'Welcome to Frontbase',
+  'Build amazing websites with our visual page builder',
+  'frontbase, website builder, visual editor',
+  true,
+  true,
+  '{"content":[{"id":"heading-1","type":"Heading","props":{"text":"Welcome to Frontbase","level":"1"},"children":[]},{"id":"text-1","type":"Text","props":{"text":"Start building your amazing website with our visual page builder.","size":"lg"},"children":[]},{"id":"button-1","type":"Button","props":{"text":"Get Started","variant":"default","size":"lg"},"children":[]}],"root":{}}',
+  '{"openGraph":{"title":"Welcome to Frontbase","description":"Build amazing websites with our visual page builder","image":"/og-image.jpg"},"twitter":{"card":"summary_large_image","title":"Welcome to Frontbase","description":"Build amazing websites with our visual page builder"}}',
+  datetime('now'),
+  datetime('now')
+);

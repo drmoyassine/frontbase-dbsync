@@ -1,0 +1,32 @@
+/* Hide Puck's built-in UI elements that might still show */
+.puck-header,
+.puck-left-sidebar,
+.puck-right-sidebar,
+.puck-outline,
+.puck-toolbar {
+  display: none !important;
+}
+
+/* Ensure canvas takes full space */
+.puck-canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Hide any dropdown menus or overlays from Puck */
+.puck-dropdown,
+.puck-menu,
+.puck-overlay {
+  display: none !important;
+}
+
+/* Style the drop zone properly */
+.puck-dropzone {
+  min-height: 100vh;
+  background: transparent;
+}
+
+/* Hide Puck's component selector */
+.puck-component-selector {
+  display: none !important;
+}

@@ -7,6 +7,7 @@ import { PropertiesPanel } from './PropertiesPanel';
 import { BuilderHeader } from './BuilderHeader';
 import { useBuilderStore } from '@/stores/builder';
 import { puckConfig } from './puck-config';
+import './builder.css';
 
 export const FrontbaseBuilder: React.FC = () => {
   const { 
@@ -53,6 +54,16 @@ export const FrontbaseBuilder: React.FC = () => {
                   layoutData: data
                 });
               }}
+              overrides={{
+                header: () => null,
+                headerActions: () => null,
+                outline: () => null,
+              }}
+              viewports={[
+                { width: 1200, height: 'auto', label: 'Desktop' },
+                { width: 768, height: 'auto', label: 'Tablet' },
+                { width: 375, height: 'auto', label: 'Mobile' },
+              ]}
             />
           </div>
           

@@ -104,7 +104,13 @@ RUN echo "📂 Server files copied:" && \
 COPY --from=frontend-builder /app/dist ./public
 RUN echo "📂 Frontend files copied to public:" && \
     ls -la public/ && \
-    echo "✅ Frontend files copied"
+    echo "📂 Checking for assets directory:" && \
+    ls -la public/assets/ || echo "❌ No assets directory found" && \
+    echo "📂 Checking for index.html:" && \
+    ls -la public/index.html || echo "❌ No index.html found" && \
+    echo "📂 Verifying asset files:" && \
+    find public/ -name "*.css" -o -name "*.js" | head -10 && \
+    echo "✅ Frontend files copied and verified"
 
 # Create data directories for persistence with proper permissions
 RUN echo "📁 Creating data directories..." && \

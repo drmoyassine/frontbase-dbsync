@@ -160,6 +160,66 @@ app.get('/debug/filesystem', (req, res) => {
   }
 });
 
+// Extensive debugging endpoint for /builder asset issues
+app.get('/debug/builder', (req, res) => {
+  try {
+    const publicDir = path.join(__dirname, 'public');
+    const assetsDir = path.join(publicDir, 'assets');
+    const indexPath = path.join(publicDir, 'index.html');
+    
+    const debugInfo = {
+      paths: {
+        __dirname: __dirname,
+        publicDir: publicDir,
+        assetsDir: assetsDir,
+        indexPath: indexPath
+      },
+      exists: {
+        publicDir: fs.existsSync(publicDir),
+        assetsDir: fs.existsSync(assetsDir),
+        indexHtml: fs.existsSync(indexPath)
+      },
+      contents: {},
+      staticMiddleware: {
+        builderRoute: '/builder',
+        staticPath: path.join(__dirname, 'public')
+      }
+    };
+    
+    // Get public directory contents
+    if (fs.existsSync(publicDir)) {
+      debugInfo.contents.public = fs.readdirSync(publicDir);
+      
+      // Get assets directory contents if it exists
+      if (fs.existsSync(assetsDir)) {
+        debugInfo.contents.assets = fs.readdirSync(assetsDir);
+      }
+      
+      // Read first few lines of index.html if it exists
+      if (fs.existsSync(indexPath)) {
+        const indexContent = fs.readFileSync(indexPath, 'utf8');
+        debugInfo.indexHtml = {
+          size: indexContent.length,
+          firstLines: indexContent.split('\n').slice(0, 10),
+          hasAssetLinks: indexContent.includes('/assets/')
+        };
+      }
+    }
+    
+    // Show all middleware in order
+    debugInfo.middleware = app._router.stack.map((layer, index) => ({
+      index,
+      path: layer.regexp.source,
+      method: layer.route?.methods || 'middleware',
+      name: layer.name || 'anonymous'
+    }));
+    
+    res.json(debugInfo);
+  } catch (error) {
+    res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
+
 // API Routes
 console.log('🔧 Setting up API routes...');
 
@@ -239,8 +299,51 @@ Sitemap: ${req.protocol}://${req.get('host')}/sitemap.xml`;
 // Static file serving for uploads
 app.use('/uploads', express.static(uploadsDir));
 
-// Builder SPA routes
-app.use('/builder', express.static(path.join(__dirname, 'public')));
+// Builder SPA routes with extensive debugging
+console.log('🔧 Setting up /builder static middleware...');
+const builderStaticPath = path.join(__dirname, 'public');
+console.log('📂 Builder static path:', builderStaticPath);
+console.log('📂 Builder static exists:', fs.existsSync(builderStaticPath));
+
+// Add request logging middleware for all /builder requests
+app.use('/builder', (req, res, next) => {
+  console.log(`🔍 Builder request: ${req.method} ${req.originalUrl}`);
+  console.log(`🎯 Requested file: ${req.path}`);
+  
+  // Check if this is an asset request
+  if (req.path.startsWith('/assets/')) {
+    const assetPath = path.join(builderStaticPath, req.path);
+    console.log(`📁 Asset path: ${assetPath}`);
+    console.log(`📁 Asset exists: ${fs.existsSync(assetPath)}`);
+    
+    // If asset doesn't exist, log what's in the assets directory
+    if (!fs.existsSync(assetPath)) {
+      const assetsDir = path.join(builderStaticPath, 'assets');
+      if (fs.existsSync(assetsDir)) {
+        console.log(`📂 Assets directory contents:`, fs.readdirSync(assetsDir));
+      } else {
+        console.log(`❌ Assets directory doesn't exist: ${assetsDir}`);
+      }
+    }
+  }
+  
+  next();
+});
+
+// Static file serving for builder assets
+app.use('/builder', express.static(builderStaticPath, {
+  setHeaders: (res, path) => {
+    console.log(`📦 Serving static file: ${path}`);
+    // Ensure proper MIME types for assets
+    if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
+
+// Fallback for builder SPA routing
 app.get('/builder/*', (req, res) => {
   const indexPath = path.join(__dirname, 'public', 'index.html');
   const publicDir = path.join(__dirname, 'public');

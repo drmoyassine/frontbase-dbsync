@@ -4,8 +4,6 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
-const { verbose } = sqlite3;
-
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -16,23 +14,29 @@ const DATA_DIR = path.join(__dirname, '../../data');
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+  console.log('Created data directory:', DATA_DIR);
 }
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  console.log('Created uploads directory:', UPLOADS_DIR);
 }
+
+// Initialize SQLite3 with verbose mode
+const sqliteVerbose = sqlite3.verbose();
 
 let db;
 
 function getDatabase() {
   if (!db) {
-    db = new verbose().Database(DB_PATH, (err) => {
+    console.log('Initializing database connection to:', DB_PATH);
+    db = new sqliteVerbose.Database(DB_PATH, (err) => {
       if (err) {
         console.error('Error opening database:', err);
       } else {
-        console.log('Connected to SQLite database');
+        console.log('Connected to SQLite database successfully');
       }
     });
   }

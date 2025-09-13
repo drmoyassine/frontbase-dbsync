@@ -231,11 +231,29 @@ export const useBuilderStore = create<BuilderState>()(
           
           let componentToMove = component;
           
-          // If moving existing component, remove it first
+          // If moving existing component, remove it first and adjust target index
           if (componentId) {
             const removed = removeComponent(content, componentId, sourceParentId);
             if (removed) {
               componentToMove = removed;
+              
+              // Adjust target index if moving within same parent and target is after source
+              if (!parentId && !sourceParentId) {
+                // Both at root level - find original index
+                const originalIndex = content.findIndex(c => c.id === componentId);
+                if (originalIndex !== -1 && originalIndex < targetIndex) {
+                  // Component was removed from before target position, adjust index down
+                  targetIndex = Math.max(0, targetIndex - 1);
+                }
+              }
+            }
+          }
+          
+          // Prevent dropping component on itself at same position
+          if (componentId && componentId === componentToMove.id) {
+            const currentIndex = content.findIndex(c => c.id === componentId);
+            if (currentIndex === targetIndex) {
+              return state;
             }
           }
           

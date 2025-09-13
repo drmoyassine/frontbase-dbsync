@@ -110,8 +110,8 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
           />
         ))}
         
-        {/* Bottom drop zone */}
-        {!isPreviewMode && (
+        {/* Bottom drop zone - only when no components exist */}
+        {!isPreviewMode && (!page.layoutData?.content || page.layoutData.content.length === 0) && (
           <div
             ref={dropBottom}
             className={cn(

@@ -73,11 +73,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
     canDrop: () => !isPreviewMode,
   });
 
-  // Combine drag and drop refs
-  const ref = (node: HTMLDivElement | null) => {
-    drag(node);
-    drop(node);
-  };
+  // No need to combine refs - separate them for cleaner logic
 
   // Container drop zone (for dropping inside containers)
   const [{ isOverContainer }, dropContainer] = useDrop({
@@ -106,11 +102,47 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
     canDrop: () => !isPreviewMode && component.type === 'Container',
   });
 
+  // Add drop zone after last component (only for the last component)
+  const { pages, currentPageId } = useBuilderStore();
+  const currentPage = pages.find(p => p.id === pageId);
+  const isLastComponent = currentPage?.layoutData?.content && 
+    currentPage.layoutData.content.length > 0 &&
+    currentPage.layoutData.content[currentPage.layoutData.content.length - 1].id === component.id;
+
+  // Drop zone after last component
+  const [{ isOverAfter }, dropAfter] = useDrop({
+    accept: ['component', 'existing-component', 'layer-component'],
+    drop: (item: any, monitor) => {
+      if (!monitor.didDrop() && isLastComponent) {
+        const targetIndex = index + 1;
+        if (item.type) {
+          // New component from palette
+          const newComponent = {
+            id: `${Date.now()}-${Math.random()}`,
+            type: item.type,
+            props: getDefaultProps(item.type),
+            styles: {},
+            children: []
+          };
+          moveComponent(pageId, null, newComponent, targetIndex, parentId);
+        } else if (item.id !== component.id) {
+          // Existing component being moved (prevent self-drop)
+          moveComponent(pageId, item.id, item.component, targetIndex, parentId, item.parentId);
+        }
+      }
+    },
+    collect: (monitor) => ({
+      isOverAfter: monitor.isOver({ shallow: true }),
+    }),
+    canDrop: () => !isPreviewMode && isLastComponent,
+  });
+
   return (
     <>
       {/* Drop zone above component for reordering */}
       {!isPreviewMode && (
         <div
+          ref={drop}
           className={cn(
             'h-4 transition-all duration-200 rounded mb-1',
             isOver ? 'bg-primary/30 border-2 border-primary border-dashed' : 'hover:bg-primary/10'
@@ -120,7 +152,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
       
       {/* The actual component */}
       <div
-        ref={ref}
+        ref={drag}
         onClick={(e) => onSelect(component.id, e)}
         className={cn(
           'transition-all duration-200',
@@ -147,6 +179,17 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
           />
         )}
       </div>
+
+      {/* Drop zone after last component only */}
+      {!isPreviewMode && isLastComponent && (
+        <div
+          ref={dropAfter}
+          className={cn(
+            'h-6 transition-all duration-200 rounded mt-1',
+            isOverAfter ? 'bg-primary/30 border-2 border-primary border-dashed' : 'hover:bg-primary/10'
+          )}
+        />
+      )}
     </>
   );
 };

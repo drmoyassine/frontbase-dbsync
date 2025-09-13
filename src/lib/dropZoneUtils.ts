@@ -97,8 +97,23 @@ export function shouldRenderDropZone(
   siblingComponents: ComponentData[],
   zoneType: 'above' | 'after'
 ): boolean {
+  // Always apply smart validation logic for both palette and existing component drags
   if (!draggedComponentId) {
-    return true; // Always show zones when dragging new components from palette
+    // For palette drags, apply smart validation to prevent visual clutter
+    // Show first drop zone only for first component
+    if (zoneType === 'above' && componentIndex === 0) {
+      return true;
+    }
+    // Show between zones (above non-first components)
+    if (zoneType === 'above' && componentIndex > 0) {
+      return true;
+    }
+    // Show last zone only for last component
+    if (zoneType === 'after') {
+      const isLastComponent = componentIndex === siblingComponents.length - 1;
+      return isLastComponent;
+    }
+    return false;
   }
   
   const context: DropZoneContext = {

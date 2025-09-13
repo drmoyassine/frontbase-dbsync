@@ -1,6 +1,6 @@
-const express = require('express');
-const { v4: uuidv4 } = require('uuid');
-const { getDatabase } = require('../database/init');
+import express from 'express';
+import { v4 as uuidv4 } from 'uuid';
+import { getDatabase } from '../database/init.js';
 
 const router = express.Router();
 
@@ -297,4 +297,4 @@ router.delete('/:id', (req, res) => {
   );
 });
 
-module.exports = router;
+export default router;

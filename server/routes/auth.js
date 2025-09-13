@@ -1,7 +1,8 @@
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const { getDatabase } = require('../database/init');
-const { generateToken } = require('../middleware/auth');
+import express from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { getDatabase } from '../database/init.js';
+import { generateToken, JWT_SECRET } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -111,8 +112,6 @@ router.get('/verify', (req, res) => {
     return res.status(401).json({ error: 'No token provided' });
   }
 
-  const jwt = require('jsonwebtoken');
-  const { JWT_SECRET } = require('../middleware/auth');
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
@@ -123,4 +122,4 @@ router.get('/verify', (req, res) => {
   });
 });
 
-module.exports = router;
+export default router;

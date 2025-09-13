@@ -1,13 +1,21 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const { initDatabase } = require('./database/init');
-const authRoutes = require('./routes/auth');
-const projectRoutes = require('./routes/projects');
-const pageRoutes = require('./routes/pages');
-const uploadRoutes = require('./routes/upload');
-const { authenticateToken } = require('./middleware/auth');
-require('dotenv').config();
+import express from 'express';
+import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import dotenv from 'dotenv';
+import { initDatabase } from './database/init.js';
+import authRoutes from './routes/auth.js';
+import projectRoutes from './routes/projects.js';
+import pageRoutes from './routes/pages.js';
+import uploadRoutes from './routes/upload.js';
+import { authenticateToken } from './middleware/auth.js';
+
+dotenv.config();
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;

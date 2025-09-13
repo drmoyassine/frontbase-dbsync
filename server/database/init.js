@@ -1,6 +1,14 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
-const fs = require('fs');
+import sqlite3 from 'sqlite3';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const { verbose } = sqlite3;
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const DB_PATH = path.join(__dirname, '../../data/frontbase.db');
 const DATA_DIR = path.join(__dirname, '../../data');
@@ -20,7 +28,7 @@ let db;
 
 function getDatabase() {
   if (!db) {
-    db = new sqlite3.Database(DB_PATH, (err) => {
+    db = new verbose().Database(DB_PATH, (err) => {
       if (err) {
         console.error('Error opening database:', err);
       } else {
@@ -108,7 +116,7 @@ async function initDatabase() {
   });
 }
 
-module.exports = {
+export {
   getDatabase,
   initDatabase
 };

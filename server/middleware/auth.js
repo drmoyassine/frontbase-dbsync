@@ -1,4 +1,4 @@
-const jwt = require('jsonwebtoken');
+import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
 
@@ -27,7 +27,7 @@ function generateToken(user) {
   );
 }
 
-module.exports = {
+export {
   authenticateToken,
   generateToken,
   JWT_SECRET

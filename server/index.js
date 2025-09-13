@@ -299,6 +299,19 @@ Sitemap: ${req.protocol}://${req.get('host')}/sitemap.xml`;
 // Static file serving for uploads
 app.use('/uploads', express.static(uploadsDir));
 
+// Root-level assets route to fix current build compatibility
+console.log('🔧 Setting up root /assets route...');
+app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), {
+  setHeaders: (res, path) => {
+    console.log(`📦 Serving root asset: ${path}`);
+    if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
+
 // Builder SPA routes with extensive debugging
 console.log('🔧 Setting up /builder static middleware...');
 const builderStaticPath = path.join(__dirname, 'public');

@@ -22,7 +22,7 @@ import { ChevronDown, Plus, FileText, Home } from 'lucide-react';
 import { useBuilderStore } from '@/stores/builder';
 
 export const PageSelector: React.FC = () => {
-  const { pages, currentPageId, setCurrentPage, createPage, project } = useBuilderStore();
+  const { pages, currentPageId, setCurrentPage, createPage } = useBuilderStore();
   const [isCreating, setIsCreating] = useState(false);
   const [newPageData, setNewPageData] = useState({
     name: '',
@@ -37,11 +37,10 @@ export const PageSelector: React.FC = () => {
   const currentPage = pages.find(page => page.id === currentPageId);
 
   const handleCreatePage = () => {
-    if (newPageData.name && newPageData.slug && project) {
+    if (newPageData.name && newPageData.slug) {
       createPage({
         ...newPageData,
-        project_id: project.id,
-        layout_data: []
+        layoutData: { content: [], root: {} }
       });
       setIsCreating(false);
       setNewPageData({

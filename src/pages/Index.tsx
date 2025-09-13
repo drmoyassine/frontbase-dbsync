@@ -1,40 +1,68 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { FrontbaseBuilder } from '@/components/builder/FrontbaseBuilder';
 import { useBuilderStore } from '@/stores/builder';
+import { v4 as uuidv4 } from 'uuid';
 
 const Index = () => {
-  const { 
-    project,
-    projects,
-    pages,
-    currentPageId,
-    loadProjects,
-    createProject,
-    loadProject
-  } = useBuilderStore();
+  const { project, setProject, pages, createPage } = useBuilderStore();
 
+  // Initialize project and demo page on first load
   useEffect(() => {
-    // Load projects on mount
-    loadProjects();
-  }, [loadProjects]);
-
-  useEffect(() => {
-    // If no projects exist, create a default one
-    if (projects.length === 0 && !project) {
-      createProject({
-        name: 'My Website',
-        description: 'A new Frontbase project',
-        settings: {}
+    if (!project) {
+      setProject({
+        id: uuidv4(),
+        name: 'My Frontbase Project',
+        description: 'A new project created with Frontbase',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
     }
-  }, [projects, project, createProject]);
 
-  // If we have a project but no current page selected, load the project
-  useEffect(() => {
-    if (project && !currentPageId && pages.length === 0) {
-      loadProject(project.id);
+    if (pages.length === 0) {
+      createPage({
+        name: 'Home',
+        slug: 'home',
+        title: 'Home - My Website',
+        description: 'Welcome to my website',
+        keywords: 'home, welcome, website',
+        isPublic: true,
+        isHomepage: true,
+        layoutData: {
+          content: [
+            {
+              id: 'heading-1',
+              type: 'Heading',
+              props: {
+                text: 'Welcome to Frontbase',
+                level: '1'
+              },
+              children: []
+            },
+            {
+              id: 'text-1',
+              type: 'Text',
+              props: {
+                text: 'Start building your amazing website with our visual page builder.',
+                size: 'lg'
+              },
+              children: []
+            },
+            {
+              id: 'button-1',
+              type: 'Button',
+              props: {
+                text: 'Get Started',
+                variant: 'default',
+                size: 'lg'
+              },
+              children: []
+            }
+          ],
+          root: {}
+        }
+      });
     }
-  }, [project, currentPageId, pages, loadProject]);
+  }, [project, pages.length, setProject, createPage]);
 
   return <FrontbaseBuilder />;
 };

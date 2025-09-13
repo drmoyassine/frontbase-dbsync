@@ -41,8 +41,8 @@ export const StylingPanel: React.FC = () => {
     return null;
   };
   
-  const selectedComponent = currentPage?.layout_data ? 
-    findComponentById(currentPage.layout_data, selectedComponentId || '') : null;
+  const selectedComponent = currentPage?.layoutData?.content ? 
+    findComponentById(currentPage.layoutData.content, selectedComponentId || '') : null;
   
   useEffect(() => {
     if (selectedComponent?.styles) {
@@ -101,7 +101,7 @@ export const StylingPanel: React.FC = () => {
     const processedValue = defaultValues.includes(value) ? undefined : value;
     
     const updatedContent = updateComponentInContent(
-      currentPage.layout_data,
+      currentPage.layoutData.content,
       selectedComponentId!,
       {
         styles: {
@@ -112,7 +112,10 @@ export const StylingPanel: React.FC = () => {
     );
     
     updatePage(currentPage.id, {
-      layout_data: updatedContent
+      layoutData: {
+        ...currentPage.layoutData,
+        content: updatedContent
+      }
     });
   };
   
@@ -130,10 +133,13 @@ export const StylingPanel: React.FC = () => {
       });
     };
     
-    const updatedContent = removeComponentFromContent(currentPage.layout_data, selectedComponentId!);
+    const updatedContent = removeComponentFromContent(currentPage.layoutData.content, selectedComponentId!);
     
     updatePage(currentPage.id, {
-      layout_data: updatedContent
+      layoutData: {
+        ...currentPage.layoutData,
+        content: updatedContent
+      }
     });
     
     setSelectedComponentId(null);
@@ -143,7 +149,7 @@ export const StylingPanel: React.FC = () => {
     if (!currentPage) return;
     
     const updatedContent = updateComponentInContent(
-      currentPage.layout_data,
+      currentPage.layoutData.content,
       selectedComponentId!,
       {
         styles: {
@@ -154,7 +160,10 @@ export const StylingPanel: React.FC = () => {
     );
     
     updatePage(currentPage.id, {
-      layout_data: updatedContent
+      layoutData: {
+        ...currentPage.layoutData,
+        content: updatedContent
+      }
     });
   };
   
@@ -180,7 +189,7 @@ export const StylingPanel: React.FC = () => {
       });
       
       const updatedContent = updateComponentInContent(
-        currentPage.layout_data,
+        currentPage.layoutData.content,
         selectedComponentId!,
         {
           styles: {
@@ -191,7 +200,10 @@ export const StylingPanel: React.FC = () => {
       );
       
       updatePage(currentPage.id, {
-        layout_data: updatedContent
+        layoutData: {
+          ...currentPage.layoutData,
+          content: updatedContent
+        }
       });
     } catch (error) {
       console.error('Failed to parse CSS:', error);

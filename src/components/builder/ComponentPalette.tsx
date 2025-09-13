@@ -174,14 +174,24 @@ interface ComponentItemProps {
   description: string;
 }
 
+import { useDrag } from 'react-dnd';
+
 const ComponentItem: React.FC<ComponentItemProps> = ({ name, icon: Icon, description }) => {
+  const [{ isDragging }, drag] = useDrag({
+    type: 'component',
+    item: { type: name },
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
+  });
+
   return (
     <div
-      className="p-3 border border-border rounded-lg bg-card hover:bg-accent/50 cursor-grab active:cursor-grabbing transition-colors"
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData('component-type', name);
-      }}
+      ref={drag}
+      className={`
+        p-3 border border-border rounded-lg bg-card hover:bg-accent/50 cursor-grab active:cursor-grabbing transition-colors
+        ${isDragging ? 'opacity-50' : 'opacity-100'}
+      `}
     >
       <div className="flex items-start gap-3">
         <div className="p-2 bg-primary/10 rounded-md">

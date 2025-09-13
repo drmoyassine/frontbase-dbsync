@@ -1,0 +1,103 @@
+import React from 'react';
+import { useDrop } from 'react-dnd';
+import { useBuilderStore, type Page } from '@/stores/builder';
+import { ComponentRenderer } from './ComponentRenderer';
+import { v4 as uuidv4 } from 'uuid';
+
+interface BuilderCanvasProps {
+  page: Page;
+}
+
+export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
+  const { updatePage, selectedComponentId, setSelectedComponentId, isPreviewMode } = useBuilderStore();
+
+  const [{ isOver }, drop] = useDrop({
+    accept: 'component',
+    drop: (item: { type: string }, monitor) => {
+      if (!monitor.didDrop()) {
+        // Add component to the end of the content array
+        const newComponent = {
+          type: item.type,
+          props: {
+            id: uuidv4(),
+            ...getDefaultProps(item.type)
+          }
+        };
+
+        const updatedContent = [...(page.layoutData?.content || []), newComponent];
+        
+        updatePage(page.id, {
+          layoutData: {
+            content: updatedContent,
+            root: page.layoutData?.root || {}
+          }
+        });
+
+        // Select the newly added component
+        setSelectedComponentId(newComponent.props.id);
+      }
+    },
+    collect: (monitor) => ({
+      isOver: monitor.isOver({ shallow: true }),
+    }),
+  });
+
+  const handleComponentClick = (componentId: string) => {
+    if (!isPreviewMode) {
+      setSelectedComponentId(selectedComponentId === componentId ? null : componentId);
+    }
+  };
+
+  return (
+    <div 
+      ref={drop}
+      className={`min-h-full p-8 ${isOver ? 'bg-accent/50' : 'bg-background'} transition-colors`}
+    >
+      <div className="max-w-4xl mx-auto space-y-4">
+        {page.layoutData?.content?.map((component, index) => (
+          <div
+            key={component.props.id}
+            onClick={() => handleComponentClick(component.props.id)}
+            className={`
+              ${selectedComponentId === component.props.id && !isPreviewMode 
+                ? 'ring-2 ring-primary ring-offset-2' 
+                : ''
+              }
+              ${!isPreviewMode ? 'cursor-pointer' : ''}
+              transition-all duration-200
+            `}
+          >
+            <ComponentRenderer 
+              component={component}
+              isSelected={selectedComponentId === component.props.id}
+            />
+          </div>
+        ))}
+        
+        {(!page.layoutData?.content || page.layoutData.content.length === 0) && (
+          <div className="text-center py-16 text-muted-foreground">
+            <p className="text-lg">Drop components here to start building</p>
+            <p className="text-sm mt-2">Drag components from the left panel</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Default props for different component types
+function getDefaultProps(componentType: string): Record<string, any> {
+  const defaults: Record<string, any> = {
+    Button: { text: 'Button', variant: 'default', size: 'default' },
+    Text: { text: 'Sample text content', size: 'base' },
+    Heading: { text: 'Heading', level: '2' },
+    Card: { title: 'Card Title', description: 'Card description', content: 'Card content' },
+    Input: { placeholder: 'Enter text...', type: 'text' },
+    Badge: { text: 'Badge', variant: 'default' },
+    Container: { className: 'p-6' },
+    Image: { src: '/placeholder.svg', alt: 'Placeholder image' },
+    Link: { text: 'Link', href: '#', target: '_self' }
+  };
+
+  return defaults[componentType] || {};
+}

@@ -1,203 +1,301 @@
 import React from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
+import { useBuilderStore } from '@/stores/builder';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { 
-  Settings, 
-  Palette, 
-  Database, 
-  Code, 
-  Eye 
-} from 'lucide-react';
-import { useBuilderStore } from '@/stores/builder';
+import { Trash2 } from 'lucide-react';
 
 export const PropertiesPanel: React.FC = () => {
-  const { selectedComponentId } = useBuilderStore();
+  const { 
+    selectedComponentId, 
+    currentPageId, 
+    pages, 
+    updatePage,
+    setSelectedComponentId 
+  } = useBuilderStore();
 
-  if (!selectedComponentId) {
+  const currentPage = pages.find(page => page.id === currentPageId);
+  const selectedComponent = currentPage?.layoutData?.content?.find(
+    component => component.props.id === selectedComponentId
+  );
+
+  if (!selectedComponent) {
     return (
-      <div className="h-full flex flex-col">
-        <div className="p-4 border-b border-border">
+      <div className="p-4">
+        <div className="border-b border-border pb-4 mb-4">
           <h2 className="font-semibold text-foreground">Properties</h2>
         </div>
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center text-muted-foreground">
-            <Eye className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>Select a component to edit its properties</p>
-          </div>
-        </div>
+        <p className="text-muted-foreground text-center py-8">
+          Select a component to edit its properties
+        </p>
       </div>
     );
   }
 
+  const updateComponentProp = (key: string, value: any) => {
+    if (!currentPage) return;
+
+    const updatedContent = currentPage.layoutData?.content?.map(component => 
+      component.props.id === selectedComponentId
+        ? { ...component, props: { ...component.props, [key]: value } }
+        : component
+    ) || [];
+
+    updatePage(currentPage.id, {
+      layoutData: {
+        content: updatedContent,
+        root: currentPage.layoutData?.root || {}
+      }
+    });
+  };
+
+  const deleteComponent = () => {
+    if (!currentPage) return;
+
+    const updatedContent = currentPage.layoutData?.content?.filter(
+      component => component.props.id !== selectedComponentId
+    ) || [];
+
+    updatePage(currentPage.id, {
+      layoutData: {
+        content: updatedContent,
+        root: currentPage.layoutData?.root || {}
+      }
+    });
+
+    setSelectedComponentId(null);
+  };
+
+  const renderPropertyFields = () => {
+    const { type, props } = selectedComponent;
+
+    switch (type) {
+      case 'Button':
+        return (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="button-text">Text</Label>
+              <Input
+                id="button-text"
+                value={props.text || ''}
+                onChange={(e) => updateComponentProp('text', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="button-variant">Variant</Label>
+              <Select value={props.variant || 'default'} onValueChange={(value) => updateComponentProp('variant', value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Default</SelectItem>
+                  <SelectItem value="destructive">Destructive</SelectItem>
+                  <SelectItem value="outline">Outline</SelectItem>
+                  <SelectItem value="secondary">Secondary</SelectItem>
+                  <SelectItem value="ghost">Ghost</SelectItem>
+                  <SelectItem value="link">Link</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="button-size">Size</Label>
+              <Select value={props.size || 'default'} onValueChange={(value) => updateComponentProp('size', value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Default</SelectItem>
+                  <SelectItem value="sm">Small</SelectItem>
+                  <SelectItem value="lg">Large</SelectItem>
+                  <SelectItem value="icon">Icon</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        );
+
+      case 'Text':
+        return (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="text-content">Content</Label>
+              <Textarea
+                id="text-content"
+                value={props.text || ''}
+                onChange={(e) => updateComponentProp('text', e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="text-size">Size</Label>
+              <Select value={props.size || 'base'} onValueChange={(value) => updateComponentProp('size', value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sm">Small</SelectItem>
+                  <SelectItem value="base">Base</SelectItem>
+                  <SelectItem value="lg">Large</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        );
+
+      case 'Heading':
+        return (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="heading-text">Text</Label>
+              <Input
+                id="heading-text"
+                value={props.text || ''}
+                onChange={(e) => updateComponentProp('text', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="heading-level">Level</Label>
+              <Select value={props.level || '2'} onValueChange={(value) => updateComponentProp('level', value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">H1</SelectItem>
+                  <SelectItem value="2">H2</SelectItem>
+                  <SelectItem value="3">H3</SelectItem>
+                  <SelectItem value="4">H4</SelectItem>
+                  <SelectItem value="5">H5</SelectItem>
+                  <SelectItem value="6">H6</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        );
+
+      case 'Card':
+        return (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="card-title">Title</Label>
+              <Input
+                id="card-title"
+                value={props.title || ''}
+                onChange={(e) => updateComponentProp('title', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="card-description">Description</Label>
+              <Input
+                id="card-description"
+                value={props.description || ''}
+                onChange={(e) => updateComponentProp('description', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="card-content">Content</Label>
+              <Textarea
+                id="card-content"
+                value={props.content || ''}
+                onChange={(e) => updateComponentProp('content', e.target.value)}
+                rows={3}
+              />
+            </div>
+          </>
+        );
+
+      case 'Input':
+        return (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="input-placeholder">Placeholder</Label>
+              <Input
+                id="input-placeholder"
+                value={props.placeholder || ''}
+                onChange={(e) => updateComponentProp('placeholder', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="input-type">Type</Label>
+              <Select value={props.type || 'text'} onValueChange={(value) => updateComponentProp('type', value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Text</SelectItem>
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="password">Password</SelectItem>
+                  <SelectItem value="number">Number</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        );
+
+      case 'Badge':
+        return (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="badge-text">Text</Label>
+              <Input
+                id="badge-text"
+                value={props.text || ''}
+                onChange={(e) => updateComponentProp('text', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="badge-variant">Variant</Label>
+              <Select value={props.variant || 'default'} onValueChange={(value) => updateComponentProp('variant', value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Default</SelectItem>
+                  <SelectItem value="secondary">Secondary</SelectItem>
+                  <SelectItem value="destructive">Destructive</SelectItem>
+                  <SelectItem value="outline">Outline</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        );
+
+      default:
+        return (
+          <p className="text-muted-foreground text-sm">
+            No properties available for {type} component.
+          </p>
+        );
+    }
+  };
+
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="p-4 border-b border-border">
+    <div className="p-4 h-full flex flex-col">
+      <div className="border-b border-border pb-4 mb-4 flex justify-between items-center">
         <h2 className="font-semibold text-foreground">Properties</h2>
-        <p className="text-sm text-muted-foreground mt-1">Button Component</p>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={deleteComponent}
+          className="text-destructive hover:text-destructive"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
 
-      {/* Property Tabs */}
-      <Tabs defaultValue="content" className="flex-1 flex flex-col">
-        <TabsList className="grid grid-cols-4 gap-1 p-2 h-auto">
-          <TabsTrigger value="content" className="flex flex-col gap-1 h-auto py-2">
-            <Settings className="h-4 w-4" />
-            <span className="text-xs">Content</span>
-          </TabsTrigger>
-          <TabsTrigger value="style" className="flex flex-col gap-1 h-auto py-2">
-            <Palette className="h-4 w-4" />
-            <span className="text-xs">Style</span>
-          </TabsTrigger>
-          <TabsTrigger value="data" className="flex flex-col gap-1 h-auto py-2">
-            <Database className="h-4 w-4" />
-            <span className="text-xs">Data</span>
-          </TabsTrigger>
-          <TabsTrigger value="code" className="flex flex-col gap-1 h-auto py-2">
-            <Code className="h-4 w-4" />
-            <span className="text-xs">Code</span>
-          </TabsTrigger>
-        </TabsList>
+      <div className="flex-1 overflow-y-auto">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Component Type</Label>
+            <div className="px-3 py-2 bg-muted rounded-md text-sm">
+              {selectedComponent.type}
+            </div>
+          </div>
 
-        <div className="flex-1 overflow-y-auto">
-          <TabsContent value="content" className="p-4 space-y-4">
-            <div>
-              <Label htmlFor="button-text">Button Text</Label>
-              <Input id="button-text" defaultValue="Click me" />
-            </div>
-            
-            <div>
-              <Label htmlFor="button-variant">Variant</Label>
-              <select className="w-full p-2 border border-input rounded-md bg-background">
-                <option value="default">Default</option>
-                <option value="secondary">Secondary</option>
-                <option value="outline">Outline</option>
-                <option value="ghost">Ghost</option>
-                <option value="destructive">Destructive</option>
-              </select>
-            </div>
-            
-            <div>
-              <Label htmlFor="button-size">Size</Label>
-              <select className="w-full p-2 border border-input rounded-md bg-background">
-                <option value="default">Default</option>
-                <option value="sm">Small</option>
-                <option value="lg">Large</option>
-                <option value="icon">Icon</option>
-              </select>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch id="disabled" />
-              <Label htmlFor="disabled">Disabled</Label>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch id="full-width" />
-              <Label htmlFor="full-width">Full Width</Label>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="style" className="p-4 space-y-4">
-            <div>
-              <Label>Background Color</Label>
-              <div className="flex gap-2 mt-2">
-                <div className="w-8 h-8 bg-primary rounded border cursor-pointer"></div>
-                <div className="w-8 h-8 bg-secondary rounded border cursor-pointer"></div>
-                <div className="w-8 h-8 bg-accent rounded border cursor-pointer"></div>
-                <div className="w-8 h-8 bg-destructive rounded border cursor-pointer"></div>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="margin">Margin</Label>
-                <Input id="margin" placeholder="0px" />
-              </div>
-              <div>
-                <Label htmlFor="padding">Padding</Label>
-                <Input id="padding" placeholder="8px 16px" />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="border-radius">Border Radius</Label>
-              <Input id="border-radius" placeholder="4px" />
-            </div>
-
-            <div>
-              <Label htmlFor="custom-css">Custom CSS</Label>
-              <Textarea 
-                id="custom-css" 
-                placeholder="Add custom CSS classes or styles..."
-                rows={4}
-              />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="data" className="p-4 space-y-4">
-            <div>
-              <Label htmlFor="data-source">Data Source</Label>
-              <select className="w-full p-2 border border-input rounded-md bg-background">
-                <option value="">Select a table...</option>
-                <option value="users">users</option>
-                <option value="posts">posts</option>
-                <option value="orders">orders</option>
-              </select>
-            </div>
-
-            <div>
-              <Label htmlFor="click-action">Click Action</Label>
-              <select className="w-full p-2 border border-input rounded-md bg-background">
-                <option value="none">None</option>
-                <option value="navigate">Navigate to page</option>
-                <option value="submit">Submit form</option>
-                <option value="delete">Delete record</option>
-                <option value="custom">Custom action</option>
-              </select>
-            </div>
-
-            <div>
-              <Label htmlFor="conditional-visibility">Conditional Visibility</Label>
-              <Textarea 
-                id="conditional-visibility"
-                placeholder="{{ record.status === 'active' }}"
-                rows={2}
-              />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="code" className="p-4 space-y-4">
-            <div>
-              <Label htmlFor="template-content">Template Content</Label>
-              <Textarea 
-                id="template-content"
-                placeholder="{{ record.name }} - {{ record.status }}"
-                rows={4}
-                className="font-mono text-sm"
-              />
-            </div>
-
-            <div>
-              <Label>Available Variables</Label>
-              <div className="text-xs text-muted-foreground space-y-1 mt-2">
-                <div>• record.field - Current record data</div>
-                <div>• url.param - URL parameters</div>
-                <div>• localstate.var - Component state</div>
-                <div>• cookie.var - Cookie variables</div>
-                <div>• app.variable - App variables</div>
-              </div>
-            </div>
-
-            <Button className="w-full" variant="outline">
-              Open Template Editor
-            </Button>
-          </TabsContent>
+          {renderPropertyFields()}
         </div>
-      </Tabs>
+      </div>
     </div>
   );
 };

@@ -64,7 +64,8 @@ interface BuilderState {
   deletePage: (id: string) => void;
   setCurrentPage: (id: string) => void;
   
-  setSelectedComponent: (id: string | null) => void;
+  setSelectedComponentId: (id: string | null) => void;
+  setCurrentPageId: (id: string | null) => void;
   setPreviewMode: (isPreview: boolean) => void;
   
   addAppVariable: (variable: Omit<AppVariable, 'id' | 'createdAt'>) => void;
@@ -123,7 +124,8 @@ export const useBuilderStore = create<BuilderState>()(
       
       setCurrentPage: (id) => set({ currentPageId: id }),
       
-      setSelectedComponent: (id) => set({ selectedComponentId: id }),
+      setSelectedComponentId: (id) => set({ selectedComponentId: id }),
+      setCurrentPageId: (id) => set({ currentPageId: id }),
       
       setPreviewMode: (isPreview) => set({ isPreviewMode: isPreview }),
       

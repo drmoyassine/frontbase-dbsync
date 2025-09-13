@@ -23,6 +23,16 @@ export function isTailwindValue(property: string, value: string): boolean {
       return TAILWIND_SPACING.includes(value) || value.endsWith('rem') || value.endsWith('px');
     case 'borderRadius':
       return ['none', 'sm', 'md', 'lg', 'xl', '2xl', 'full'].includes(value);
+    case 'display':
+      return ['block', 'flex', 'grid', 'none'].includes(value);
+    case 'flexDirection':
+      return ['row', 'column', 'row-reverse', 'column-reverse'].includes(value);
+    case 'justifyContent':
+      return ['flex-start', 'center', 'flex-end', 'space-between', 'space-around', 'space-evenly'].includes(value);
+    case 'alignItems':
+      return ['flex-start', 'center', 'flex-end', 'stretch'].includes(value);
+    case 'gap':
+      return TAILWIND_SPACING.includes(value);
     default:
       return false;
   }
@@ -96,6 +106,18 @@ export function generateTailwindClass(property: string, value: string): string |
         'stretch': 'items-stretch'
       };
       return alignMap[value] || null;
+    case 'display':
+      return value === 'flex' ? 'flex' : 
+             value === 'block' ? 'block' :
+             value === 'grid' ? 'grid' :
+             value === 'none' ? 'hidden' : null;
+    case 'flexDirection':
+      return value === 'row' ? 'flex-row' :
+             value === 'column' ? 'flex-col' :
+             value === 'row-reverse' ? 'flex-row-reverse' :
+             value === 'column-reverse' ? 'flex-col-reverse' : null;
+    case 'gap':
+      return `gap-${value}`;
     default:
       return null;
   }
@@ -127,6 +149,34 @@ export function generateStyles(styles: ComponentStyles): { classes: string; inli
 
 export function getStylePresets() {
   return [
+    {
+      id: 'center-horizontal',
+      name: 'Center Horizontally',
+      description: 'Center content horizontally',
+      styles: {
+        display: 'flex',
+        justifyContent: 'center'
+      }
+    },
+    {
+      id: 'center-vertical',
+      name: 'Center Vertically', 
+      description: 'Center content vertically',
+      styles: {
+        display: 'flex',
+        alignItems: 'center'
+      }
+    },
+    {
+      id: 'center-both',
+      name: 'Center Both Ways',
+      description: 'Center content horizontally and vertically',
+      styles: {
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center'
+      }
+    },
     {
       id: 'card-shadow',
       name: 'Card with Shadow',
@@ -183,6 +233,16 @@ export function getTailwindSuggestions(property: string): string[] {
       return ['none', 'sm', 'md', 'lg', 'xl', '2xl', 'full'];
     case 'textAlign':
       return ['left', 'center', 'right', 'justify'];
+    case 'display':
+      return ['block', 'flex', 'grid', 'none'];
+    case 'flexDirection':
+      return ['row', 'column', 'row-reverse', 'column-reverse'];
+    case 'justifyContent':
+      return ['flex-start', 'center', 'flex-end', 'space-between', 'space-around', 'space-evenly'];
+    case 'alignItems':
+      return ['flex-start', 'center', 'flex-end', 'stretch'];
+    case 'gap':
+      return TAILWIND_SPACING;
     default:
       return [];
   }

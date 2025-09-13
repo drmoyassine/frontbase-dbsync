@@ -227,9 +227,120 @@ export const AdvancedPropertiesPanel: React.FC = () => {
               </div>
             </Card>
             
+            {/* Layout Controls */}
+            <Card className="p-3">
+              <Label className="text-sm font-medium mb-3 block">Layout Controls</Label>
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-sm">Display</Label>
+                  <Select 
+                    value={styles.display || ''} 
+                    onValueChange={(value) => updateComponentStyle('display', value)}
+                  >
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="Display" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Default</SelectItem>
+                      <SelectItem value="block">Block</SelectItem>
+                      <SelectItem value="flex">Flex</SelectItem>
+                      <SelectItem value="grid">Grid</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {styles.display === 'flex' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-sm">Direction</Label>
+                        <Select 
+                          value={styles.flexDirection || ''} 
+                          onValueChange={(value) => updateComponentStyle('flexDirection', value)}
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue placeholder="Direction" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">Default</SelectItem>
+                            <SelectItem value="row">Row</SelectItem>
+                            <SelectItem value="column">Column</SelectItem>
+                            <SelectItem value="row-reverse">Row Reverse</SelectItem>
+                            <SelectItem value="column-reverse">Column Reverse</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div>
+                        <Label className="text-sm">Gap</Label>
+                        <Select 
+                          value={styles.gap || ''} 
+                          onValueChange={(value) => updateComponentStyle('gap', value)}
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue placeholder="Gap" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">None</SelectItem>
+                            <SelectItem value="1">1</SelectItem>
+                            <SelectItem value="2">2</SelectItem>
+                            <SelectItem value="3">3</SelectItem>
+                            <SelectItem value="4">4</SelectItem>
+                            <SelectItem value="6">6</SelectItem>
+                            <SelectItem value="8">8</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className="text-sm">Justify Content (Horizontal)</Label>
+                      <Select 
+                        value={styles.justifyContent || ''} 
+                        onValueChange={(value) => updateComponentStyle('justifyContent', value)}
+                      >
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="Justify" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Default</SelectItem>
+                          <SelectItem value="flex-start">Start</SelectItem>
+                          <SelectItem value="center">Center</SelectItem>
+                          <SelectItem value="flex-end">End</SelectItem>
+                          <SelectItem value="space-between">Space Between</SelectItem>
+                          <SelectItem value="space-around">Space Around</SelectItem>
+                          <SelectItem value="space-evenly">Space Evenly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label className="text-sm">Align Items (Vertical)</Label>
+                      <Select 
+                        value={styles.alignItems || ''} 
+                        onValueChange={(value) => updateComponentStyle('alignItems', value)}
+                      >
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="Align" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Default</SelectItem>
+                          <SelectItem value="flex-start">Start</SelectItem>
+                          <SelectItem value="center">Center</SelectItem>
+                          <SelectItem value="flex-end">End</SelectItem>
+                          <SelectItem value="stretch">Stretch</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                )}
+              </div>
+            </Card>
+
             {/* Layout & Spacing */}
             <Card className="p-3">
-              <Label className="text-sm font-medium mb-3 block">Layout & Spacing</Label>
+              <Label className="text-sm font-medium mb-3 block">Size & Spacing</Label>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div>

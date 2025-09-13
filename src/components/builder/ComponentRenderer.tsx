@@ -122,7 +122,13 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
 
     case 'Container':
       return (
-        <div className={props.className || 'p-6 border border-border rounded-lg'}>
+        <div 
+          className={cn(
+            combinedClassName,
+            props.className || 'p-6 border border-border rounded-lg min-h-[100px]'
+          )}
+          style={inlineStyles}
+        >
           <p className="text-muted-foreground text-center">Container - Drop components here</p>
         </div>
       );

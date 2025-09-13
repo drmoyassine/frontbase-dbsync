@@ -4,25 +4,75 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app
 
-# Copy frontend package files
+# Install system dependencies needed for build
+RUN echo "📦 Installing system dependencies..." && \
+    apk add --no-cache git && \
+    echo "✅ System dependencies installed"
+
+# Copy package files first for better caching
 COPY package*.json ./
+COPY vite.config.ts tsconfig*.json tailwind.config.ts postcss.config.js components.json ./
 
-# Install frontend dependencies with detailed logging
+# Debug: Verify all config files are present
+RUN echo "🔍 Verifying config files..." && \
+    ls -la && \
+    test -f package.json && echo "✅ package.json exists" || (echo "❌ package.json missing" && exit 1) && \
+    test -f vite.config.ts && echo "✅ vite.config.ts exists" || (echo "❌ vite.config.ts missing" && exit 1) && \
+    test -f tsconfig.json && echo "✅ tsconfig.json exists" || (echo "❌ tsconfig.json missing" && exit 1) && \
+    echo "✅ All config files verified"
+
+# Install ALL dependencies (including devDependencies needed for build)
 RUN echo "📦 Installing frontend dependencies..." && \
-    npm ci --verbose && \
-    echo "✅ Frontend dependencies installed"
+    NODE_ENV=development npm ci --verbose && \
+    echo "✅ Frontend dependencies installed" && \
+    echo "📂 node_modules check:" && \
+    ls -la node_modules/ | head -5 && \
+    npm list typescript vite @vitejs/plugin-react-swc --depth=0 && \
+    echo "✅ Build tools verified"
 
-# Copy frontend source
-COPY . .
+# Copy all source files
+COPY src ./src
+COPY public ./public
+COPY index.html ./
 
-# Build React SPA for builder with verification
+# Debug: Verify source files are present
+RUN echo "🔍 Verifying source files..." && \
+    ls -la && \
+    test -d src && echo "✅ src directory exists" || (echo "❌ src directory missing" && exit 1) && \
+    test -f index.html && echo "✅ index.html exists" || (echo "❌ index.html missing" && exit 1) && \
+    test -f src/main.tsx && echo "✅ src/main.tsx exists" || (echo "❌ src/main.tsx missing" && exit 1) && \
+    echo "✅ All source files verified"
+
+# Set environment variables for build
+ENV NODE_ENV=production
+ENV VITE_ENVIRONMENT=production
+
+# Build React SPA with comprehensive error handling
 RUN echo "🏗️  Building frontend..." && \
-    npm run build && \
-    echo "✅ Frontend build complete" && \
-    echo "📂 Build output:" && \
-    ls -la dist/ && \
-    echo "📏 Build size:" && \
-    du -sh dist/
+    npm run build 2>&1 | tee build.log && \
+    if [ $? -eq 0 ]; then \
+        echo "✅ Frontend build successful"; \
+    else \
+        echo "❌ Frontend build failed - displaying logs:"; \
+        cat build.log; \
+        exit 1; \
+    fi
+
+# Verify build output exists and create fallback if needed
+RUN if [ -d "dist" ]; then \
+        echo "✅ Build directory exists"; \
+        echo "📂 Build output:"; \
+        ls -la dist/; \
+        echo "📏 Build size:"; \
+        du -sh dist/; \
+        echo "📄 Build files:"; \
+        find dist -type f | head -10; \
+    else \
+        echo "❌ Build directory missing - creating fallback"; \
+        mkdir -p dist; \
+        echo "<!DOCTYPE html><html><head><title>Build Error</title></head><body><h1>Frontend build failed</h1></body></html>" > dist/index.html; \
+        exit 1; \
+    fi
 
 # Stage 2: Backend runtime
 FROM node:20-alpine AS runtime

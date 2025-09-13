@@ -1,6 +1,9 @@
 # Multi-stage build for Frontbase
 FROM node:20-alpine AS builder
 
+# Install build dependencies for native modules
+RUN apk add --no-cache python3 make g++
+
 # Set working directory
 WORKDIR /app
 
@@ -18,6 +21,9 @@ RUN npm run build
 
 # Production stage
 FROM node:20-alpine AS runtime
+
+# Install runtime dependencies for native modules
+RUN apk add --no-cache python3 make g++
 
 # Create app directory
 WORKDIR /app

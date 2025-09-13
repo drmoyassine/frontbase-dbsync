@@ -10,8 +10,9 @@ console.log('Loading better-sqlite3...');
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const DB_PATH = path.join(__dirname, '../../data/frontbase.db');
-const DATA_DIR = path.join(__dirname, '../../data');
+// Use environment variable for DB path, with fallback
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../data/frontbase.db');
+const DATA_DIR = path.dirname(DB_PATH);
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -19,8 +20,8 @@ if (!fs.existsSync(DATA_DIR)) {
   console.log('Created data directory:', DATA_DIR);
 }
 
-// Ensure uploads directory exists
-const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+// Ensure uploads directory exists - use environment variable if set
+const UPLOADS_DIR = process.env.UPLOAD_DIR || path.join(DATA_DIR, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   console.log('Created uploads directory:', UPLOADS_DIR);

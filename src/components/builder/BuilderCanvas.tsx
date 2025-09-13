@@ -41,7 +41,8 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
     }),
   });
 
-  const handleComponentClick = (componentId: string) => {
+  const handleComponentClick = (componentId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
     if (!isPreviewMode) {
       setSelectedComponentId(selectedComponentId === componentId ? null : componentId);
     }
@@ -56,10 +57,10 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
         {page.layoutData?.content?.map((component, index) => (
           <div
             key={component.id}
-            onClick={() => handleComponentClick(component.id)}
+            onClick={(e) => handleComponentClick(component.id, e)}
             className={`
               ${selectedComponentId === component.id && !isPreviewMode 
-                ? 'ring-2 ring-primary ring-offset-2' 
+                ? 'ring-2 ring-primary ring-offset-2 rounded-md' 
                 : ''
               }
               ${!isPreviewMode ? 'cursor-pointer' : ''}

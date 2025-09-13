@@ -35,8 +35,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
   const { classes: generatedClasses, inlineStyles } = generateStyles(styles);
   const combinedClassName = cn(
     generatedClasses,
-    className,
-    isSelected ? 'ring-2 ring-primary' : ''
+    className
   );
 
   // Render different component types
@@ -141,7 +140,8 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
       return (
         <Textarea 
           placeholder={props.placeholder || 'Enter text...'}
-          className={isSelected ? 'ring-2 ring-primary' : ''}
+          className={combinedClassName}
+          style={inlineStyles}
           rows={props.rows || 3}
           readOnly
         />
@@ -150,7 +150,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
     case 'Select':
       return (
         <Select>
-          <SelectTrigger className={isSelected ? 'ring-2 ring-primary' : ''}>
+          <SelectTrigger className={combinedClassName} style={inlineStyles}>
             <SelectValue placeholder={props.placeholder || 'Select an option'} />
           </SelectTrigger>
           <SelectContent>
@@ -165,7 +165,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
 
     case 'Checkbox':
       return (
-        <div className={`flex items-center space-x-2 ${isSelected ? 'ring-2 ring-primary rounded p-1' : ''}`}>
+        <div className={cn('flex items-center space-x-2', combinedClassName)} style={inlineStyles}>
           <Checkbox id={`checkbox-${Math.random()}`} />
           <label htmlFor={`checkbox-${Math.random()}`} className="text-sm">
             {props.label || 'Checkbox'}
@@ -175,7 +175,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
 
     case 'Switch':
       return (
-        <div className={`flex items-center space-x-2 ${isSelected ? 'ring-2 ring-primary rounded p-1' : ''}`}>
+        <div className={cn('flex items-center space-x-2', combinedClassName)} style={inlineStyles}>
           <Switch />
           <label className="text-sm">
             {props.label || 'Toggle'}
@@ -185,7 +185,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
 
     case 'Alert':
       return (
-        <Alert className={isSelected ? 'ring-2 ring-primary' : ''}>
+        <Alert className={combinedClassName} style={inlineStyles}>
           <AlertDescription>
             {props.message || 'This is an alert message.'}
           </AlertDescription>
@@ -194,7 +194,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
 
     case 'Separator':
       return (
-        <Separator className={isSelected ? 'ring-2 ring-primary' : ''} />
+        <Separator className={combinedClassName} style={inlineStyles} />
       );
 
     case 'Tabs':
@@ -203,7 +203,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
         { label: 'Tab 2', content: 'Content for tab 2' }
       ];
       return (
-        <Tabs defaultValue={tabs[0]?.label.toLowerCase().replace(/\s+/g, '-')} className={isSelected ? 'ring-2 ring-primary rounded' : ''}>
+        <Tabs defaultValue={tabs[0]?.label.toLowerCase().replace(/\s+/g, '-')} className={combinedClassName} style={inlineStyles}>
           <TabsList>
             {tabs.map((tab: any, index: number) => (
               <TabsTrigger key={index} value={tab.label.toLowerCase().replace(/\s+/g, '-')}>
@@ -225,7 +225,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
         { title: 'Item 2', content: 'Content for item 2' }
       ];
       return (
-        <Accordion type="single" collapsible className={isSelected ? 'ring-2 ring-primary rounded' : ''}>
+        <Accordion type="single" collapsible className={combinedClassName} style={inlineStyles}>
           {items.map((item: any, index: number) => (
             <AccordionItem key={index} value={`item-${index}`}>
               <AccordionTrigger>{item.title}</AccordionTrigger>
@@ -237,7 +237,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
 
     case 'Avatar':
       return (
-        <Avatar className={isSelected ? 'ring-2 ring-primary' : ''}>
+        <Avatar className={combinedClassName} style={inlineStyles}>
           <AvatarImage src={props.src} alt={props.alt || 'Avatar'} />
           <AvatarFallback>{props.fallback || 'U'}</AvatarFallback>
         </Avatar>
@@ -249,7 +249,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
         { label: 'Page', href: '/page' }
       ];
       return (
-        <Breadcrumb className={isSelected ? 'ring-2 ring-primary rounded' : ''}>
+        <Breadcrumb className={combinedClassName} style={inlineStyles}>
           <BreadcrumbList>
             {crumbs.map((crumb: any, index: number) => (
               <React.Fragment key={index}>
@@ -267,7 +267,8 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
       return (
         <Progress 
           value={props.value || 50} 
-          className={isSelected ? 'ring-2 ring-primary rounded' : ''} 
+          className={combinedClassName}
+          style={inlineStyles}
         />
       );
 
@@ -276,7 +277,8 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
         <a 
           href={props.href || '#'} 
           target={props.target || '_self'}
-          className="text-primary hover:underline"
+          className={cn('text-primary hover:underline', combinedClassName)}
+          style={inlineStyles}
         >
           {props.text || 'Link'}
         </a>

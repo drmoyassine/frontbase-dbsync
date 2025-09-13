@@ -4,6 +4,9 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
+console.log('Loading SQLite3...');
+console.log('SQLite3 version:', sqlite3.VERSION);
+
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -45,11 +48,21 @@ function getDatabase() {
 
 async function initDatabase() {
   return new Promise((resolve, reject) => {
+    console.log('Getting database instance...');
     const database = getDatabase();
     
+    console.log('Enabling foreign keys...');
     // Enable foreign keys
-    database.run('PRAGMA foreign_keys = ON');
+    database.run('PRAGMA foreign_keys = ON', (err) => {
+      if (err) {
+        console.error('Error enabling foreign keys:', err);
+        reject(err);
+        return;
+      }
+      console.log('Foreign keys enabled successfully');
+    });
     
+    console.log('Creating database tables...');
     // Create tables
     const createTables = `
       -- Users table

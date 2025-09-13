@@ -11,7 +11,25 @@ import pageRoutes from './routes/pages.js';
 import uploadRoutes from './routes/upload.js';
 import { authenticateToken } from './middleware/auth.js';
 
-dotenv.config();
+// Load environment variables
+const envResult = dotenv.config();
+console.log('Environment loaded:', envResult.parsed ? Object.keys(envResult.parsed).length + ' variables' : 'No .env file found');
+
+// Global error handlers
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
+
+console.log('Starting Frontbase server...');
+console.log('Node version:', process.version);
+console.log('Platform:', process.platform);
+console.log('Architecture:', process.arch);
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -54,15 +72,26 @@ if (process.env.NODE_ENV === 'production') {
 // Initialize database and start server
 async function startServer() {
   try {
+    console.log('Initializing database...');
     await initDatabase();
     console.log('Database initialized successfully');
     
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Frontbase server running on port ${PORT}`);
+    console.log(`Starting server on port ${PORT}...`);
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`✅ Frontbase server running on port ${PORT}`);
       console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`Server accessible at: http://0.0.0.0:${PORT}`);
+      console.log('Server started successfully!');
     });
+
+    server.on('error', (error) => {
+      console.error('Server error:', error);
+      process.exit(1);
+    });
+
   } catch (error) {
     console.error('Failed to start server:', error);
+    console.error('Error stack:', error.stack);
     process.exit(1);
   }
 }

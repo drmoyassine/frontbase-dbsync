@@ -19,8 +19,14 @@ RUN npm run build
 # Production stage
 FROM node:18-alpine AS runtime
 
-# Install sqlite3 and other runtime dependencies
-RUN apk add --no-cache sqlite
+# Install sqlite3, build tools, and other runtime dependencies
+RUN apk add --no-cache \
+    sqlite \
+    sqlite-dev \
+    python3 \
+    make \
+    g++ \
+    && ln -sf python3 /usr/bin/python
 
 # Create app directory
 WORKDIR /app
@@ -31,8 +37,10 @@ RUN mkdir -p /app/data/uploads
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci && npm cache clean --force
+# Install dependencies and rebuild sqlite3 for Alpine
+RUN npm ci && \
+    npm rebuild sqlite3 && \
+    npm cache clean --force
 
 # Copy built frontend from builder stage
 COPY --from=builder /app/dist ./dist

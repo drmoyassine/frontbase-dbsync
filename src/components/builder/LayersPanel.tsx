@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
 import { useBuilderStore } from '@/stores/builder';
 import { Button } from '@/components/ui/button';
@@ -85,26 +85,25 @@ export const LayersPanel: React.FC = () => {
     // Drag functionality
     const [{ isDragging }, drag, dragPreview] = useDrag(() => ({
       type: 'layer-component',
-      item: { 
-        id: component.id, 
-        index, 
-        parentId,
-        component,
-        level
+      item: () => {
+        // Set drag state immediately when drag begins
+        setDraggedComponentId(component.id);
+        return { 
+          id: component.id, 
+          index, 
+          parentId,
+          component,
+          level
+        };
+      },
+      end: () => {
+        // Clear drag state immediately when drag ends
+        setDraggedComponentId(null);
       },
       collect: (monitor) => ({
         isDragging: monitor.isDragging(),
       }),
-    }), [component.id, index, parentId, component, level]);
-
-    // Track drag state changes with useEffect
-    useEffect(() => {
-      if (isDragging) {
-        setDraggedComponentId(component.id);
-      } else {
-        setDraggedComponentId(null);
-      }
-    }, [isDragging, component.id, setDraggedComponentId]);
+    }), [component.id, index, parentId, component, level, setDraggedComponentId]);
 
     // Get sibling components for validation
     const currentPage = pages.find(p => p.id === currentPageId);

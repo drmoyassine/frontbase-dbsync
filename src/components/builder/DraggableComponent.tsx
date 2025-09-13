@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useDrag, useDrop } from 'react-dnd';
 import { ComponentRenderer } from './ComponentRenderer';
 import { useBuilderStore } from '@/stores/builder';

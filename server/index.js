@@ -162,6 +162,22 @@ app.get('/debug/filesystem', (req, res) => {
 
 // API Routes
 console.log('🔧 Setting up API routes...');
+
+// API root endpoint - shows available endpoints
+app.get('/api', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Frontbase API',
+    version: '1.0.0',
+    endpoints: {
+      project: '/api/project',
+      pages: '/api/pages', 
+      variables: '/api/variables'
+    },
+    documentation: 'Visit /builder for the visual page builder interface'
+  });
+});
+
 try {
   app.use('/api/project', require('./routes/api/project')(dbManager));
   console.log('✅ Project API routes loaded');
@@ -227,10 +243,59 @@ app.use('/uploads', express.static(uploadsDir));
 app.use('/builder', express.static(path.join(__dirname, 'public')));
 app.get('/builder/*', (req, res) => {
   const indexPath = path.join(__dirname, 'public', 'index.html');
+  const publicDir = path.join(__dirname, 'public');
+  
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
-    res.status(404).send('Builder not found. Please build the frontend first.');
+    // Provide detailed error information for debugging
+    const publicExists = fs.existsSync(publicDir);
+    const publicContents = publicExists ? fs.readdirSync(publicDir) : [];
+    
+    res.status(503).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Builder Not Available</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://cdn.tailwindcss.com"></script>
+      </head>
+      <body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+        <div class="max-w-2xl mx-auto text-center bg-white rounded-lg shadow-lg p-8">
+          <div class="text-red-500 mb-4">
+            <svg class="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+            </svg>
+          </div>
+          <h1 class="text-3xl font-bold text-gray-800 mb-4">Builder Not Available</h1>
+          <p class="text-gray-600 mb-6">The frontend build files are missing. This usually happens when the Docker build process hasn't completed properly.</p>
+          
+          <div class="bg-gray-50 rounded-lg p-4 mb-6 text-left">
+            <h3 class="font-semibold text-gray-800 mb-2">Debug Information:</h3>
+            <ul class="text-sm text-gray-600 space-y-1">
+              <li><strong>Public directory:</strong> ${publicExists ? 'exists' : 'missing'}</li>
+              <li><strong>Index.html:</strong> ${fs.existsSync(indexPath) ? 'found' : 'missing'}</li>
+              <li><strong>Public contents:</strong> ${publicContents.length > 0 ? publicContents.join(', ') : 'empty'}</li>
+              <li><strong>Expected path:</strong> ${indexPath}</li>
+            </ul>
+          </div>
+          
+          <div class="space-y-3">
+            <a href="/api" class="inline-block bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded transition-colors">
+              Check API Status
+            </a>
+            <a href="/" class="inline-block bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded transition-colors ml-2">
+              View Public Site
+            </a>
+          </div>
+          
+          <p class="text-sm text-gray-500 mt-6">
+            If you're seeing this repeatedly, the Docker build may need to be rebuilt to include the frontend assets.
+          </p>
+        </div>
+      </body>
+      </html>
+    `);
   }
 });
 

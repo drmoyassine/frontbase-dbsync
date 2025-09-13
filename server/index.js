@@ -15,6 +15,12 @@ import { authenticateToken } from './middleware/auth.js';
 const envResult = dotenv.config();
 console.log('Environment loaded:', envResult.parsed ? Object.keys(envResult.parsed).length + ' variables' : 'No .env file found');
 
+// Set default environment variables if not set
+if (!process.env.JWT_SECRET) {
+  process.env.JWT_SECRET = 'your-super-secret-jwt-key-change-in-production';
+  console.log('Using default JWT_SECRET');
+}
+
 // Global error handlers
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);

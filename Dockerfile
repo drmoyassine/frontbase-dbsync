@@ -19,14 +19,8 @@ RUN npm run build
 # Production stage
 FROM node:18-alpine AS runtime
 
-# Install sqlite3, build tools, and other runtime dependencies
-RUN apk add --no-cache \
-    sqlite \
-    sqlite-dev \
-    python3 \
-    make \
-    g++ \
-    && ln -sf python3 /usr/bin/python
+# Install runtime dependencies
+RUN apk add --no-cache sqlite
 
 # Create app directory
 WORKDIR /app
@@ -37,10 +31,8 @@ RUN mkdir -p /app/data/uploads
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies and rebuild sqlite3 for Alpine
-RUN npm ci && \
-    npm rebuild sqlite3 && \
-    npm cache clean --force
+# Install dependencies
+RUN npm ci && npm cache clean --force
 
 # Copy built frontend from builder stage
 COPY --from=builder /app/dist ./dist
@@ -52,6 +44,11 @@ COPY server ./server
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S frontbase -u 1001
 
+# Set environment variables with defaults
+ENV NODE_ENV=production
+ENV JWT_SECRET=your-super-secret-jwt-key-change-in-production
+ENV PORT=3000
+
 # Change ownership of app directory to nodejs user
 RUN chown -R frontbase:nodejs /app
 
@@ -62,8 +59,8 @@ USER frontbase
 EXPOSE 3000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "http.get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })" || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 
 # Start the application
 CMD ["node", "server/index.js"]

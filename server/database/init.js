@@ -1,11 +1,10 @@
-import sqlite3 from 'sqlite3';
+import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
-console.log('Loading SQLite3...');
-console.log('SQLite3 version:', sqlite3.VERSION);
+console.log('Loading better-sqlite3...');
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -27,40 +26,29 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   console.log('Created uploads directory:', UPLOADS_DIR);
 }
 
-// Initialize SQLite3 with verbose mode
-const sqliteVerbose = sqlite3.verbose();
-
 let db;
 
 function getDatabase() {
   if (!db) {
     console.log('Initializing database connection to:', DB_PATH);
-    db = new sqliteVerbose.Database(DB_PATH, (err) => {
-      if (err) {
-        console.error('Error opening database:', err);
-      } else {
-        console.log('Connected to SQLite database successfully');
-      }
-    });
+    try {
+      db = new Database(DB_PATH);
+      console.log('Connected to SQLite database successfully');
+      // Enable foreign keys
+      db.pragma('foreign_keys = ON');
+      console.log('Foreign keys enabled successfully');
+    } catch (err) {
+      console.error('Error opening database:', err);
+      throw err;
+    }
   }
   return db;
 }
 
 async function initDatabase() {
-  return new Promise((resolve, reject) => {
+  try {
     console.log('Getting database instance...');
     const database = getDatabase();
-    
-    console.log('Enabling foreign keys...');
-    // Enable foreign keys
-    database.run('PRAGMA foreign_keys = ON', (err) => {
-      if (err) {
-        console.error('Error enabling foreign keys:', err);
-        reject(err);
-        return;
-      }
-      console.log('Foreign keys enabled successfully');
-    });
     
     console.log('Creating database tables...');
     // Create tables
@@ -121,16 +109,12 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_app_variables_project_id ON app_variables(project_id);
     `;
 
-    database.exec(createTables, (err) => {
-      if (err) {
-        console.error('Error creating tables:', err);
-        reject(err);
-      } else {
-        console.log('Database tables created/verified successfully');
-        resolve();
-      }
-    });
-  });
+    database.exec(createTables);
+    console.log('Database tables created/verified successfully');
+  } catch (error) {
+    console.error('Error creating tables:', error);
+    throw error;
+  }
 }
 
 export {

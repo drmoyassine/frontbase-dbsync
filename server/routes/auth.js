@@ -22,39 +22,26 @@ router.post('/register', async (req, res) => {
     const db = getDatabase();
     
     // Check if user already exists
-    db.get('SELECT id FROM users WHERE email = ?', [email], async (err, existingUser) => {
-      if (err) {
-        console.error('Database error:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
+    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    
+    if (existingUser) {
+      return res.status(400).json({ error: 'User already exists with this email' });
+    }
 
-      if (existingUser) {
-        return res.status(400).json({ error: 'User already exists with this email' });
-      }
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
 
-      // Hash password
-      const passwordHash = await bcrypt.hash(password, 10);
+    // Create user
+    const insertUser = db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)');
+    const result = insertUser.run(email, passwordHash);
+    
+    const userId = result.lastInsertRowid;
+    const token = generateToken({ id: userId, email });
 
-      // Create user
-      db.run(
-        'INSERT INTO users (email, password_hash) VALUES (?, ?)',
-        [email, passwordHash],
-        function(err) {
-          if (err) {
-            console.error('Error creating user:', err);
-            return res.status(500).json({ error: 'Failed to create user' });
-          }
-
-          const userId = this.lastID;
-          const token = generateToken({ id: userId, email });
-
-          res.status(201).json({
-            message: 'User created successfully',
-            token,
-            user: { id: userId, email }
-          });
-        }
-      );
+    res.status(201).json({
+      message: 'User created successfully',
+      token,
+      user: { id: userId, email }
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -73,29 +60,24 @@ router.post('/login', async (req, res) => {
 
     const db = getDatabase();
     
-    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
-      if (err) {
-        console.error('Database error:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
+    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
 
-      if (!user) {
-        return res.status(401).json({ error: 'Invalid email or password' });
-      }
+    // Check password
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
 
-      // Check password
-      const isValidPassword = await bcrypt.compare(password, user.password_hash);
-      if (!isValidPassword) {
-        return res.status(401).json({ error: 'Invalid email or password' });
-      }
+    const token = generateToken({ id: user.id, email: user.email });
 
-      const token = generateToken({ id: user.id, email: user.email });
-
-      res.json({
-        message: 'Login successful',
-        token,
-        user: { id: user.id, email: user.email }
-      });
+    res.json({
+      message: 'Login successful',
+      token,
+      user: { id: user.id, email: user.email }
     });
   } catch (error) {
     console.error('Login error:', error);

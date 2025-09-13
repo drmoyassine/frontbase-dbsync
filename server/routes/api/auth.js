@@ -19,9 +19,9 @@ const createSessionStmt = db.db.prepare(`
   INSERT INTO user_sessions (id, user_id, session_token, expires_at, created_at)
   VALUES (?, ?, ?, ?, datetime('now'))
 `);
-const getSessionStmt = db.db.prepare('SELECT * FROM user_sessions WHERE session_token = ? AND datetime(expires_at) > datetime("now")');
+const getSessionStmt = db.db.prepare('SELECT * FROM user_sessions WHERE session_token = ? AND datetime(expires_at) > datetime(\'now\')');
 const deleteSessionStmt = db.db.prepare('DELETE FROM user_sessions WHERE session_token = ?');
-const deleteExpiredSessionsStmt = db.db.prepare('DELETE FROM user_sessions WHERE datetime(expires_at) <= datetime("now")');
+const deleteExpiredSessionsStmt = db.db.prepare('DELETE FROM user_sessions WHERE datetime(expires_at) <= datetime(\'now\')');
 
 // Authentication middleware
 const authenticateToken = (req, res, next) => {

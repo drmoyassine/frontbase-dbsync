@@ -53,6 +53,7 @@
     "input-otp": "^1.4.2",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.462.0",
+    "monaco-editor": "^0.53.0",
     "multer": "^2.0.2",
     "mustache": "^4.2.0",
     "next-themes": "^0.3.0",

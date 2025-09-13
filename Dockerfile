@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci
 
 # Copy source code
 COPY . .
@@ -31,8 +31,8 @@ RUN mkdir -p /app/data/uploads
 # Copy package files
 COPY package*.json ./
 
-# Install only production dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Install dependencies
+RUN npm ci && npm cache clean --force
 
 # Copy built frontend from builder stage
 COPY --from=builder /app/dist ./dist

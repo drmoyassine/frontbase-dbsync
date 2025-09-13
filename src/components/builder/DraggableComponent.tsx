@@ -42,20 +42,26 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
       parentId,
       component 
     },
+    begin: () => {
+      // Set drag state immediately when drag begins
+      setDraggedComponentId(component.id);
+      return { 
+        id: component.id, 
+        index, 
+        pageId,
+        parentId,
+        component 
+      };
+    },
+    end: () => {
+      // Clear drag state immediately when drag ends
+      setDraggedComponentId(null);
+    },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
     canDrag: () => !isPreviewMode,
-  }), [component.id, index, pageId, parentId, component, isPreviewMode]);
-
-  // Track drag state changes with useEffect
-  useEffect(() => {
-    if (isDragging) {
-      setDraggedComponentId(component.id);
-    } else {
-      setDraggedComponentId(null);
-    }
-  }, [isDragging, component.id, setDraggedComponentId]);
+  }), [component.id, index, pageId, parentId, component, isPreviewMode, setDraggedComponentId]);
 
   // Get sibling components for drop zone validation
   const { pages } = useBuilderStore();
@@ -132,15 +138,6 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
   // Check if this is the last component in its container
   const isLastComponent = index === siblingComponents.length - 1;
 
-  // Debug logging for this component
-  console.log('DraggableComponent render:', {
-    componentId: component.id,
-    index,
-    isLastComponent,
-    siblingComponentsLength: siblingComponents.length,
-    draggedComponentId,
-    isDragging
-  });
 
   // Drop zone after last component
   const [{ isOverAfter }, dropAfter] = useDrop({

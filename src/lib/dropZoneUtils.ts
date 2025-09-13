@@ -98,17 +98,6 @@ export function shouldRenderDropZone(
   zoneType: 'above' | 'after'
 ): boolean {
   const isLastComponent = componentIndex === siblingComponents.length - 1;
-  
-  // Debug logging
-  console.log('shouldRenderDropZone:', {
-    componentId,
-    componentIndex,
-    draggedComponentId,
-    siblingComponentsLength: siblingComponents.length,
-    zoneType,
-    isLastComponent,
-    siblingIds: siblingComponents.map(c => c.id)
-  });
 
   // Always apply smart validation logic for both palette and existing component drags
   if (!draggedComponentId) {
@@ -134,29 +123,18 @@ export function shouldRenderDropZone(
   };
   
   const validZones = calculateValidDropZones(context);
-  console.log('validZones:', validZones);
   
   if (zoneType === 'above') {
     // Check if there's a valid drop zone at this component's index
-    const result = validZones.some(zone => zone.index === componentIndex);
-    console.log('above zone result:', result);
-    return result;
+    return validZones.some(zone => zone.index === componentIndex);
   } else {
     // CRITICAL FIX: Only show 'after' zone if this is the last component AND there's a valid 'last' zone AND it's not the dragged component itself
     if (!isLastComponent) {
-      console.log('not last component, no after zone');
       return false;
     }
     
     const hasValidLastZone = validZones.some(zone => zone.type === 'last');
     const isDraggingThisComponent = draggedComponentId === componentId;
-    
-    console.log('after zone check:', {
-      isLastComponent,
-      hasValidLastZone,
-      isDraggingThisComponent,
-      result: hasValidLastZone && !isDraggingThisComponent
-    });
     
     return hasValidLastZone && !isDraggingThisComponent;
   }

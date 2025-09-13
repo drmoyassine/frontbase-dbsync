@@ -60,6 +60,9 @@ interface BuilderState {
   // App variables
   appVariables: AppVariable[];
   
+  // Legacy compatibility
+  isSupabaseConnected: boolean;
+  
   // Loading states
   isLoading: boolean;
   
@@ -69,11 +72,13 @@ interface BuilderState {
   createProject: (project: Omit<ProjectConfig, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<void>;
   updateProject: (projectId: string, updates: Partial<ProjectConfig>) => Promise<void>;
   deleteProject: (projectId: string) => Promise<void>;
+  setProject: (project: ProjectConfig) => void;
   
   createPage: (page: Omit<Page, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
   updatePage: (pageId: string, updates: Partial<Page>) => Promise<void>;
   deletePage: (pageId: string) => Promise<void>;
   setCurrentPageId: (pageId: string) => void;
+  setCurrentPage: (pageId: string) => void;
   
   setSelectedComponentId: (componentId: string | null) => void;
   setPreviewMode: (isPreview: boolean) => void;
@@ -81,6 +86,7 @@ interface BuilderState {
   
   loadAppVariables: (projectId: string) => Promise<void>;
   addAppVariable: (variable: Omit<AppVariable, 'id' | 'project_id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  updateAppVariable: (variableId: string, updates: Partial<AppVariable>) => void;
   deleteAppVariable: (projectId: string, variableId: string) => Promise<void>;
   
   moveComponent: (draggedId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
@@ -97,6 +103,7 @@ export const useBuilderStore = create<BuilderState>()((set, get) => ({
   isPreviewMode: false,
   draggedComponentId: null,
   appVariables: [],
+  isSupabaseConnected: false,
   isLoading: false,
 
   // Actions
@@ -144,9 +151,13 @@ export const useBuilderStore = create<BuilderState>()((set, get) => ({
       const project = await apiService.createProject(projectData);
       const state = get();
       set({ 
+        project,
         projects: [...state.projects, project],
         isLoading: false 
       });
+      
+      // Load the project to get the default page
+      await get().loadProject(project.id);
     } catch (error) {
       console.error('Failed to create project:', error);
       set({ isLoading: false });
@@ -180,6 +191,8 @@ export const useBuilderStore = create<BuilderState>()((set, get) => ({
       console.error('Failed to delete project:', error);
     }
   },
+  
+  setProject: (project) => set({ project }),
   
   createPage: async (pageData) => {
     try {
@@ -220,6 +233,8 @@ export const useBuilderStore = create<BuilderState>()((set, get) => ({
   
   setCurrentPageId: (pageId) => set({ currentPageId: pageId }),
   
+  setCurrentPage: (pageId) => set({ currentPageId: pageId }),
+  
   setSelectedComponentId: (componentId) => set({ selectedComponentId: componentId }),
   
   setPreviewMode: (isPreview) => set({ isPreviewMode: isPreview }),
@@ -245,6 +260,15 @@ export const useBuilderStore = create<BuilderState>()((set, get) => ({
     } catch (error) {
       console.error('Failed to add app variable:', error);
     }
+  },
+
+  updateAppVariable: (variableId, updates) => {
+    const state = get();
+    set({
+      appVariables: state.appVariables.map((variable) =>
+        variable.id === variableId ? { ...variable, ...updates } : variable
+      )
+    });
   },
   
   deleteAppVariable: async (projectId, variableId) => {

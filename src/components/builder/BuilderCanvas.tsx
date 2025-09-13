@@ -17,11 +17,10 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       if (!monitor.didDrop()) {
         // Add component to the end of the content array
         const newComponent = {
+          id: uuidv4(),
           type: item.type,
-          props: {
-            id: uuidv4(),
-            ...getDefaultProps(item.type)
-          }
+          props: getDefaultProps(item.type),
+          styles: {}
         };
 
         const updatedContent = [...(page.layoutData?.content || []), newComponent];
@@ -34,7 +33,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
         });
 
         // Select the newly added component
-        setSelectedComponentId(newComponent.props.id);
+        setSelectedComponentId(newComponent.id);
       }
     },
     collect: (monitor) => ({
@@ -56,10 +55,10 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       <div className="max-w-4xl mx-auto space-y-4">
         {page.layoutData?.content?.map((component, index) => (
           <div
-            key={component.props.id}
-            onClick={() => handleComponentClick(component.props.id)}
+            key={component.id}
+            onClick={() => handleComponentClick(component.id)}
             className={`
-              ${selectedComponentId === component.props.id && !isPreviewMode 
+              ${selectedComponentId === component.id && !isPreviewMode 
                 ? 'ring-2 ring-primary ring-offset-2' 
                 : ''
               }
@@ -69,7 +68,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
           >
             <ComponentRenderer 
               component={component}
-              isSelected={selectedComponentId === component.props.id}
+              isSelected={selectedComponentId === component.id}
             />
           </div>
         ))}

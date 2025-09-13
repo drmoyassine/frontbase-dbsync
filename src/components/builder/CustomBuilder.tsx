@@ -4,7 +4,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { BuilderHeader } from './BuilderHeader';
 import { ComponentPalette } from './ComponentPalette';
 import { BuilderCanvas } from './BuilderCanvas';
-import { PropertiesPanel } from './PropertiesPanel';
+import { AdvancedPropertiesPanel } from './AdvancedPropertiesPanel';
 import { useBuilderStore } from '@/stores/builder';
 import './builder.css';
 
@@ -49,7 +49,7 @@ export const CustomBuilder: React.FC = () => {
           {/* Right Sidebar - Properties Panel */}
           {!isPreviewMode && (
             <div className="builder-sidebar right-sidebar">
-              <PropertiesPanel />
+              <AdvancedPropertiesPanel />
             </div>
           )}
         </div>

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
+import { ComponentWithStyles } from '@/types/styles';
 
 export interface Page {
   id: string;

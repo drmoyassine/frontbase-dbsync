@@ -14,17 +14,30 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { Progress } from '@/components/ui/progress';
+import { generateStyles } from '@/lib/styleUtils';
+import { ComponentStyles } from '@/types/styles';
+import { cn } from '@/lib/utils';
 
 interface ComponentRendererProps {
   component: {
     type: string;
     props: Record<string, any>;
+    styles?: ComponentStyles;
+    className?: string;
   };
   isSelected?: boolean;
 }
 
 export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component, isSelected }) => {
-  const { type, props } = component;
+  const { type, props, styles = {}, className = '' } = component;
+  
+  // Generate styles from the styles object
+  const { classes: generatedClasses, inlineStyles } = generateStyles(styles);
+  const combinedClassName = cn(
+    generatedClasses,
+    className,
+    isSelected ? 'ring-2 ring-primary' : ''
+  );
 
   // Render different component types
   switch (type) {
@@ -33,6 +46,8 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
         <Button 
           variant={props.variant || 'default'} 
           size={props.size || 'default'}
+          className={combinedClassName}
+          style={inlineStyles}
         >
           {props.text || 'Button'}
         </Button>
@@ -46,7 +61,10 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
         lg: 'text-lg'
       };
       return (
-        <TextComponent className={textClasses[props.size as keyof typeof textClasses] || 'text-base'}>
+        <TextComponent 
+          className={cn(textClasses[props.size as keyof typeof textClasses] || 'text-base', combinedClassName)}
+          style={inlineStyles}
+        >
           {props.text || 'Sample text'}
         </TextComponent>
       );
@@ -62,14 +80,17 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
         '6': 'text-base font-semibold'
       };
       return (
-        <HeadingTag className={headingClasses[props.level as keyof typeof headingClasses] || 'text-2xl font-semibold'}>
+        <HeadingTag 
+          className={cn(headingClasses[props.level as keyof typeof headingClasses] || 'text-2xl font-semibold', combinedClassName)}
+          style={inlineStyles}
+        >
           {props.text || 'Heading'}
         </HeadingTag>
       );
 
     case 'Card':
       return (
-        <Card>
+        <Card className={combinedClassName} style={inlineStyles}>
           <CardHeader>
             <CardTitle>{props.title || 'Card Title'}</CardTitle>
             {props.description && <CardDescription>{props.description}</CardDescription>}
@@ -87,6 +108,8 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
         <Input 
           placeholder={props.placeholder || 'Enter text...'} 
           type={props.type || 'text'}
+          className={combinedClassName}
+          style={inlineStyles}
           readOnly
         />
       );

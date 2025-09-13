@@ -99,6 +99,16 @@ try {
   process.exit(1);
 }
 
+// Ensure admin user exists with correct password hash
+(async () => {
+  try {
+    const createAdminUser = require('./scripts/create-admin');
+    await createAdminUser();
+  } catch (error) {
+    console.error('Failed to create admin user:', error);
+  }
+})();
+
 // Middleware
 app.use(helmet({
   contentSecurityPolicy: {

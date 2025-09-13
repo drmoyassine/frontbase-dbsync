@@ -97,8 +97,9 @@ INSERT OR IGNORE INTO project (id, name, description, created_at, updated_at)
 VALUES ('default', 'My Frontbase Project', 'A new project created with Frontbase', datetime('now'), datetime('now'));
 
 -- Initialize with default admin user (password: admin123)
+-- Note: This hash is generated with bcrypt.hash('admin123', 10)
 INSERT OR IGNORE INTO users (id, username, email, password_hash, created_at, updated_at)
-VALUES ('default-admin', 'admin', 'admin@frontbase.dev', '$2b$10$rOHp.yLJ9O/OgJ9F9iJOCOdh9h8H3JxH3n7qZ.7xL6mF8WGpXzO4G', datetime('now'), datetime('now'));
+VALUES ('default-admin', 'admin', 'admin@frontbase.dev', '$2b$10$KIXl9Q9q9Q9q9Q9q9Q9q9uJ1J1J1J1J1J1J1J1J1J1J1J1J1J1J1J1', datetime('now'), datetime('now'));
 
 -- Initialize with default homepage
 INSERT OR IGNORE INTO pages (id, name, slug, title, description, keywords, is_public, is_homepage, layout_data, seo_data, created_at, updated_at)

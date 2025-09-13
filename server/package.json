@@ -16,7 +16,8 @@
     "helmet": "^8.1.0",
     "compression": "^1.7.4",
     "mustache": "^4.2.0",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "cookie-parser": "^1.4.6"
   },
   "engines": {
     "node": ">=18.0.0"

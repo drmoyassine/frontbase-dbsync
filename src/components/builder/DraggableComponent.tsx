@@ -143,6 +143,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
           <ComponentRenderer 
             component={component}
             isSelected={isSelected}
+            onComponentClick={(componentId, event) => onSelect(componentId, event)}
           />
         )}
       </div>
@@ -159,42 +160,43 @@ const ContainerComponent: React.FC<{
 }> = ({ component, pageId, isOverContainer, dropContainer }) => {
   const { selectedComponentId, setSelectedComponentId, isPreviewMode } = useBuilderStore();
 
+  // Use ComponentRenderer for Container to apply styles properly
+  const containerChildren = component.children?.length > 0 ? (
+    <div className="space-y-4">
+      {component.children.map((child: any, index: number) => (
+        <DraggableComponent
+          key={child.id}
+          component={child}
+          index={index}
+          pageId={pageId}
+          parentId={component.id}
+          isSelected={selectedComponentId === child.id}
+          onSelect={(componentId, event) => {
+            event.stopPropagation();
+            if (!isPreviewMode) {
+              setSelectedComponentId(selectedComponentId === componentId ? null : componentId);
+            }
+          }}
+        />
+      ))}
+    </div>
+  ) : (
+    !isPreviewMode && (
+      <div className="text-center py-8">
+        <p className="text-muted-foreground">Drop components here</p>
+      </div>
+    )
+  );
+
   return (
-    <div 
-      ref={dropContainer}
-      className={cn(
-        'min-h-[100px] p-6 border-2 border-dashed rounded-lg transition-all duration-200',
-        {
-          'border-border bg-background': !isOverContainer,
-          'border-primary bg-primary/10': isOverContainer && !isPreviewMode,
-          'border-solid border-border': component.children?.length > 0,
-        }
-      )}
-    >
-      {component.children?.length > 0 ? (
-        <div className="space-y-4">
-          {component.children.map((child: any, index: number) => (
-            <DraggableComponent
-              key={child.id}
-              component={child}
-              index={index}
-              pageId={pageId}
-              parentId={component.id}
-              isSelected={selectedComponentId === child.id}
-              onSelect={(componentId, event) => {
-                event.stopPropagation();
-                if (!isPreviewMode) {
-                  setSelectedComponentId(selectedComponentId === componentId ? null : componentId);
-                }
-              }}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-8">
-          <p className="text-muted-foreground">Drop components here</p>
-        </div>
-      )}
+    <div ref={dropContainer} className={cn({
+      'ring-2 ring-primary/50 ring-offset-2': isOverContainer && !isPreviewMode,
+    })}>
+      <ComponentRenderer 
+        component={component}
+        isSelected={false}
+        children={containerChildren}
+      />
     </div>
   );
 };

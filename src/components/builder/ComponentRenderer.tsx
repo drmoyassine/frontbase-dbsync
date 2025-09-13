@@ -24,11 +24,19 @@ interface ComponentRendererProps {
     props: Record<string, any>;
     styles?: ComponentStyles;
     className?: string;
+    children?: any[];
   };
   isSelected?: boolean;
+  children?: React.ReactNode;
+  onComponentClick?: (componentId: string, event: React.MouseEvent) => void;
 }
 
-export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component, isSelected }) => {
+export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ 
+  component, 
+  isSelected, 
+  children, 
+  onComponentClick 
+}) => {
   const { type, props, styles = {}, className = '' } = component;
   
   // Generate styles from the styles object
@@ -121,15 +129,24 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
       );
 
     case 'Container':
+      // For containers, merge styling classes with default container styling
+      const containerClassName = cn(
+        combinedClassName,
+        'min-h-[100px] transition-all duration-200',
+        // Only add default styling if no custom styling is applied
+        !combinedClassName.includes('p-') && !styles?.padding ? 'p-6' : '',
+        !combinedClassName.includes('border') && !styles?.borderWidth ? 'border border-border' : '',
+        !combinedClassName.includes('rounded') && !styles?.borderRadius ? 'rounded-lg' : ''
+      );
+      
       return (
         <div 
-          className={cn(
-            combinedClassName,
-            props.className || 'p-6 border border-border rounded-lg min-h-[100px]'
-          )}
+          className={containerClassName}
           style={inlineStyles}
         >
-          <p className="text-muted-foreground text-center">Container - Drop components here</p>
+          {children ? children : (
+            <p className="text-muted-foreground text-center">Container - Drop components here</p>
+          )}
         </div>
       );
 

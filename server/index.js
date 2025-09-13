@@ -13,47 +13,79 @@ const { renderPageSSR } = require('./ssr/renderer');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Enhanced startup logging
+// Enhanced startup logging with error handling
 console.log('🚀 Starting Frontbase server...');
-console.log('Environment:', process.env.NODE_ENV || 'development');
-console.log('Database Path:', process.env.DB_PATH || 'default');
+console.log('Environment:', process.env.NODE_ENV || 'production');
+console.log('Database Path:', process.env.DB_PATH || '/app/data/frontbase.db');
 console.log('Port:', process.env.PORT || 3000);
-console.log('Debug Mode:', process.env.DEBUG || 'false');
+console.log('Working Directory:', process.cwd());
 
-// Validate environment variables
-const requiredEnvVars = ['DB_PATH', 'PORT'];
-const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
-if (missingEnvVars.length > 0) {
-  console.warn('⚠️  Missing environment variables:', missingEnvVars.join(', '));
-}
+// Set default environment variables if not provided
+process.env.NODE_ENV = process.env.NODE_ENV || 'production';
+process.env.DB_PATH = process.env.DB_PATH || '/app/data/frontbase.db';
+process.env.PORT = process.env.PORT || '3000';
 
-// Validate file system access
-console.log('📁 Validating file system access...');
-const dataDir = process.env.DB_PATH ? path.dirname(process.env.DB_PATH) : path.join(__dirname, 'data');
+// Ensure data directory exists with comprehensive error handling
+console.log('📁 Ensuring data directory exists...');
+const dataDir = path.dirname(process.env.DB_PATH);
+console.log('📂 Data directory path:', dataDir);
+
 try {
   if (!fs.existsSync(dataDir)) {
     console.log('📁 Creating data directory:', dataDir);
-    fs.mkdirSync(dataDir, { recursive: true });
+    fs.mkdirSync(dataDir, { recursive: true, mode: 0o755 });
+    console.log('✅ Data directory created');
+  } else {
+    console.log('✅ Data directory already exists');
   }
+  
+  // Create subdirectories
+  const uploadsDir = path.join(dataDir, 'uploads');
+  const exportsDir = path.join(dataDir, 'exports');
+  
+  [uploadsDir, exportsDir].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
+      console.log('📁 Created directory:', dir);
+    }
+  });
+  
   // Test write access
   const testFile = path.join(dataDir, '.write-test');
   fs.writeFileSync(testFile, 'test');
   fs.unlinkSync(testFile);
-  console.log('✅ File system access validated');
+  console.log('✅ Data directory is writable');
+  
 } catch (error) {
-  console.error('❌ File system access error:', error.message);
-  console.error('📂 Current working directory:', process.cwd());
+  console.error('❌ Data directory setup failed:', error.message);
+  console.error('📂 Working directory:', process.cwd());
   console.error('📂 Attempted data directory:', dataDir);
+  console.error('📋 Directory details:');
+  try {
+    const stats = fs.statSync(path.dirname(dataDir));
+    console.error('  Parent exists:', fs.existsSync(path.dirname(dataDir)));
+    console.error('  Parent writable:', !!(stats.mode & parseInt('0200', 8)));
+  } catch (e) {
+    console.error('  Cannot access parent directory:', e.message);
+  }
   process.exit(1);
 }
 
-// Initialize database
+// Initialize database with comprehensive error handling
 console.log('📦 Initializing database...');
+let db;
 try {
-  initializeDatabase();
+  db = initializeDatabase();
   console.log('✅ Database initialized successfully');
 } catch (error) {
-  console.error('❌ Failed to initialize database:', error);
+  console.error('❌ Failed to initialize database:', error.message);
+  console.error('📋 Database error details:');
+  console.error('  Error type:', error.constructor.name);
+  console.error('  Error stack:', error.stack);
+  console.error('  Database path:', process.env.DB_PATH);
+  console.error('  Data directory exists:', fs.existsSync(dataDir));
+  process.exit(1);
+}
   console.error('Stack trace:', error.stack);
   process.exit(1);
 }

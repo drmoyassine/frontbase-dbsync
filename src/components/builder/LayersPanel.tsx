@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDrag, useDrop } from 'react-dnd';
 import { useBuilderStore } from '@/stores/builder';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +13,8 @@ import {
   Search,
   MoreHorizontal,
   Trash2,
-  Copy
+  Copy,
+  GripVertical
 } from 'lucide-react';
 import { ComponentData } from '@/stores/builder';
 import { cn } from '@/lib/utils';
@@ -28,7 +30,8 @@ export const LayersPanel: React.FC = () => {
     currentPageId, 
     pages, 
     selectedComponentId, 
-    setSelectedComponentId 
+    setSelectedComponentId,
+    moveComponent
   } = useBuilderStore();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -70,22 +73,94 @@ export const LayersPanel: React.FC = () => {
     component: ComponentData;
     level: number;
     parentId?: string;
-  }> = ({ component, level, parentId }) => {
+    index: number;
+  }> = ({ component, level, parentId, index }) => {
     const hasChildren = component.children && component.children.length > 0;
     const isExpanded = expandedComponents.has(component.id);
     const isSelected = selectedComponentId === component.id;
 
+    // Drag functionality
+    const [{ isDragging }, drag, dragPreview] = useDrag({
+      type: 'layer-component',
+      item: { 
+        id: component.id, 
+        index, 
+        parentId,
+        component,
+        level
+      },
+      collect: (monitor) => ({
+        isDragging: monitor.isDragging(),
+      }),
+    });
+
+    // Drop functionality
+    const [{ isOver, canDrop }, drop] = useDrop({
+      accept: 'layer-component',
+      drop: (item: any, monitor) => {
+        if (!monitor.didDrop() && item.id !== component.id) {
+          // Calculate if dropping above or below this component
+          const targetIndex = index;
+          moveComponent(currentPageId!, item.id, item.component, targetIndex, parentId, item.parentId);
+        }
+      },
+      collect: (monitor) => ({
+        isOver: monitor.isOver({ shallow: true }),
+        canDrop: monitor.canDrop(),
+      }),
+    });
+
+    // Container drop functionality
+    const [{ isOverContainer }, dropContainer] = useDrop({
+      accept: 'layer-component',
+      drop: (item: any, monitor) => {
+        if (!monitor.didDrop() && item.id !== component.id && (component.type === 'Container' || hasChildren)) {
+          // Drop inside this component
+          const childIndex = component.children?.length || 0;
+          moveComponent(currentPageId!, item.id, item.component, childIndex, component.id, item.parentId);
+        }
+      },
+      collect: (monitor) => ({
+        isOverContainer: monitor.isOver({ shallow: true }),
+      }),
+      canDrop: (item) => component.type === 'Container' || hasChildren,
+    });
+
+    const ref = (node: HTMLDivElement | null) => {
+      drag(node);
+      drop(node);
+      if (component.type === 'Container' || hasChildren) {
+        dropContainer(node);
+      }
+    };
+
     return (
       <div>
+        {/* Drop indicator above */}
+        {isOver && canDrop && (
+          <div className="h-0.5 bg-primary mx-2 rounded" />
+        )}
+        
         <div
+          ref={ref}
           className={cn(
-            'flex items-center gap-1 py-1 px-2 rounded-sm cursor-pointer hover:bg-accent/50 group',
+            'flex items-center gap-1 py-1 px-2 rounded-sm cursor-pointer hover:bg-accent/50 group transition-all',
             isSelected && 'bg-accent text-accent-foreground',
+            isDragging && 'opacity-50',
+            isOverContainer && (component.type === 'Container' || hasChildren) && 'bg-primary/10 ring-1 ring-primary/30',
             'text-sm'
           )}
           style={{ paddingLeft: `${8 + level * 16}px` }}
           onClick={() => setSelectedComponentId(isSelected ? null : component.id)}
         >
+          {/* Drag handle */}
+          <div
+            ref={dragPreview}
+            className="opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing"
+          >
+            <GripVertical className="h-3 w-3 text-muted-foreground" />
+          </div>
+          
           {hasChildren ? (
             <Button
               variant="ghost"
@@ -139,12 +214,13 @@ export const LayersPanel: React.FC = () => {
         
         {hasChildren && isExpanded && (
           <div>
-            {component.children!.map((child) => (
+            {component.children!.map((child, childIndex) => (
               <ComponentItem
                 key={child.id}
                 component={child}
                 level={level + 1}
                 parentId={component.id}
+                index={childIndex}
               />
             ))}
           </div>
@@ -179,11 +255,12 @@ export const LayersPanel: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-2">
         {filteredComponents.length > 0 ? (
           <div className="space-y-1">
-            {filteredComponents.map((component) => (
+            {filteredComponents.map((component, index) => (
               <ComponentItem
                 key={component.id}
                 component={component}
                 level={0}
+                index={index}
               />
             ))}
           </div>

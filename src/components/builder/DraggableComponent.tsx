@@ -48,7 +48,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
 
   // Create drop zone for reordering (drop above this component)
   const [{ isOver }, drop] = useDrop({
-    accept: ['component', 'existing-component'],
+    accept: ['component', 'existing-component', 'layer-component'],
     drop: (item: any, monitor) => {
       if (!monitor.didDrop()) {
         if (item.type) {
@@ -81,7 +81,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
 
   // Container drop zone (for dropping inside containers)
   const [{ isOverContainer }, dropContainer] = useDrop({
-    accept: ['component', 'existing-component'],
+    accept: ['component', 'existing-component', 'layer-component'],
     drop: (item: any, monitor) => {
       if (component.type === 'Container' && !monitor.didDrop()) {
         if (item.type) {
@@ -112,8 +112,8 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
       {!isPreviewMode && (
         <div
           className={cn(
-            'h-2 transition-all duration-200',
-            isOver ? 'bg-primary/50 rounded' : 'transparent'
+            'h-4 transition-all duration-200 rounded mb-1',
+            isOver ? 'bg-primary/30 border-2 border-primary border-dashed' : 'hover:bg-primary/10'
           )}
         />
       )}

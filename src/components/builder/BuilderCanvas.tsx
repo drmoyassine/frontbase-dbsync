@@ -2,6 +2,7 @@ import React from 'react';
 import { useDrop } from 'react-dnd';
 import { useBuilderStore, type Page } from '@/stores/builder';
 import { DraggableComponent } from './DraggableComponent';
+import { cn } from '@/lib/utils';
 
 interface BuilderCanvasProps {
   page: Page;
@@ -10,11 +11,10 @@ interface BuilderCanvasProps {
 export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
   const { moveComponent, selectedComponentId, setSelectedComponentId, isPreviewMode } = useBuilderStore();
 
-  // Drop zone for the main canvas (add to end)
-  const [{ isOver }, drop] = useDrop({
-    accept: ['component', 'existing-component'],
+  // Top drop zone (add to beginning)
+  const [{ isOverTop }, dropTop] = useDrop({
+    accept: ['component', 'existing-component', 'layer-component'],
     drop: (item: any, monitor) => {
-      console.log('Drop event triggered:', item);
       if (!monitor.didDrop()) {
         if (item.type) {
           // New component from palette
@@ -25,8 +25,34 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
             styles: {},
             children: []
           };
-          
-          console.log('Creating new component:', newComponent);
+          moveComponent(page.id, null, newComponent, 0);
+          setSelectedComponentId(newComponent.id);
+        } else if (item.id) {
+          // Existing component being moved to top
+          moveComponent(page.id, item.id, item.component, 0, undefined, item.parentId);
+        }
+      }
+    },
+    collect: (monitor) => ({
+      isOverTop: monitor.isOver({ shallow: true }),
+    }),
+    canDrop: () => true,
+  });
+
+  // Bottom drop zone (add to end)
+  const [{ isOverBottom }, dropBottom] = useDrop({
+    accept: ['component', 'existing-component', 'layer-component'],
+    drop: (item: any, monitor) => {
+      if (!monitor.didDrop()) {
+        if (item.type) {
+          // New component from palette
+          const newComponent = {
+            id: `${Date.now()}-${Math.random()}`,
+            type: item.type,
+            props: getDefaultProps(item.type),
+            styles: {},
+            children: []
+          };
           const targetIndex = page.layoutData?.content?.length || 0;
           moveComponent(page.id, null, newComponent, targetIndex);
           setSelectedComponentId(newComponent.id);
@@ -38,7 +64,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       }
     },
     collect: (monitor) => ({
-      isOver: monitor.isOver({ shallow: true }),
+      isOverBottom: monitor.isOver({ shallow: true }),
     }),
     canDrop: () => true,
   });
@@ -52,8 +78,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
 
   return (
     <div 
-      ref={drop}
-      className={`min-h-full p-8 ${isOver ? 'bg-accent/50' : 'bg-background'} transition-colors relative`}
+      className={`min-h-full p-8 bg-background transition-colors relative`}
       style={{ minHeight: '400px' }}
       onClick={(e) => {
         // Deselect when clicking on empty canvas
@@ -63,6 +88,17 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       }}
     >
       <div className="max-w-4xl mx-auto">
+        {/* Top drop zone */}
+        {!isPreviewMode && (
+          <div
+            ref={dropTop}
+            className={cn(
+              'h-6 transition-all duration-200 rounded mb-2',
+              isOverTop ? 'bg-primary/30 border-2 border-primary border-dashed' : 'hover:bg-primary/10'
+            )}
+          />
+        )}
+        
         {page.layoutData?.content?.map((component, index) => (
           <DraggableComponent
             key={component.id}
@@ -74,13 +110,25 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
           />
         ))}
         
-        {/* Final drop zone at the bottom */}
-        {!isPreviewMode && page.layoutData?.content && page.layoutData.content.length > 0 && (
-          <div className="h-4 transition-all duration-200 hover:bg-primary/20 rounded mt-4" />
+        {/* Bottom drop zone */}
+        {!isPreviewMode && (
+          <div
+            ref={dropBottom}
+            className={cn(
+              'h-6 transition-all duration-200 rounded mt-2',
+              isOverBottom ? 'bg-primary/30 border-2 border-primary border-dashed' : 'hover:bg-primary/10'
+            )}
+          />
         )}
         
         {(!page.layoutData?.content || page.layoutData.content.length === 0) && (
-          <div className="text-center py-16 text-muted-foreground">
+          <div 
+            ref={dropBottom}
+            className={cn(
+              "text-center py-16 text-muted-foreground transition-all duration-200 rounded-lg border-2 border-dashed",
+              isOverBottom ? 'border-primary bg-primary/10' : 'border-muted hover:border-primary/50'
+            )}
+          >
             <p className="text-lg">Drop components here to start building</p>
             <p className="text-sm mt-2">Drag components from the left panel or reorder existing ones</p>
           </div>

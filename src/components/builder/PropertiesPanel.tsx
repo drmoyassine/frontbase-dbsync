@@ -233,6 +233,78 @@ export const PropertiesPanel: React.FC = () => {
           </>
         );
 
+      case 'Textarea':
+        return (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="textarea-placeholder">Placeholder</Label>
+              <Input
+                id="textarea-placeholder"
+                value={props.placeholder || ''}
+                onChange={(e) => updateComponentProp('placeholder', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="textarea-rows">Rows</Label>
+              <Input
+                id="textarea-rows"
+                type="number"
+                value={props.rows || 3}
+                onChange={(e) => updateComponentProp('rows', parseInt(e.target.value))}
+              />
+            </div>
+          </>
+        );
+
+      case 'Select':
+        return (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="select-placeholder">Placeholder</Label>
+              <Input
+                id="select-placeholder"
+                value={props.placeholder || ''}
+                onChange={(e) => updateComponentProp('placeholder', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="select-options">Options (one per line)</Label>
+              <Textarea
+                id="select-options"
+                value={(props.options || []).join('\n')}
+                onChange={(e) => updateComponentProp('options', e.target.value.split('\n').filter(Boolean))}
+                rows={4}
+              />
+            </div>
+          </>
+        );
+
+      case 'Checkbox':
+      case 'Switch':
+        return (
+          <div className="space-y-2">
+            <Label htmlFor="label-text">Label</Label>
+            <Input
+              id="label-text"
+              value={props.label || ''}
+              onChange={(e) => updateComponentProp('label', e.target.value)}
+            />
+          </div>
+        );
+
+      case 'Alert':
+        return (
+          <div className="space-y-2">
+            <Label htmlFor="alert-message">Message</Label>
+            <Textarea
+              id="alert-message"
+              value={props.message || ''}
+              onChange={(e) => updateComponentProp('message', e.target.value)}
+              rows={3}
+            />
+          </div>
+        );
+
       case 'Badge':
         return (
           <>
@@ -255,6 +327,100 @@ export const PropertiesPanel: React.FC = () => {
                   <SelectItem value="secondary">Secondary</SelectItem>
                   <SelectItem value="destructive">Destructive</SelectItem>
                   <SelectItem value="outline">Outline</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        );
+
+      case 'Avatar':
+        return (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="avatar-src">Image URL</Label>
+              <Input
+                id="avatar-src"
+                value={props.src || ''}
+                onChange={(e) => updateComponentProp('src', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="avatar-fallback">Fallback Text</Label>
+              <Input
+                id="avatar-fallback"
+                value={props.fallback || ''}
+                onChange={(e) => updateComponentProp('fallback', e.target.value)}
+                maxLength={2}
+              />
+            </div>
+          </>
+        );
+
+      case 'Progress':
+        return (
+          <div className="space-y-2">
+            <Label htmlFor="progress-value">Value (0-100)</Label>
+            <Input
+              id="progress-value"
+              type="number"
+              min="0"
+              max="100"
+              value={props.value || 50}
+              onChange={(e) => updateComponentProp('value', parseInt(e.target.value))}
+            />
+          </div>
+        );
+
+      case 'Image':
+        return (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="image-src">Image URL</Label>
+              <Input
+                id="image-src"
+                value={props.src || ''}
+                onChange={(e) => updateComponentProp('src', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="image-alt">Alt Text</Label>
+              <Input
+                id="image-alt"
+                value={props.alt || ''}
+                onChange={(e) => updateComponentProp('alt', e.target.value)}
+              />
+            </div>
+          </>
+        );
+
+      case 'Link':
+        return (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="link-text">Text</Label>
+              <Input
+                id="link-text"
+                value={props.text || ''}
+                onChange={(e) => updateComponentProp('text', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="link-href">URL</Label>
+              <Input
+                id="link-href"
+                value={props.href || ''}
+                onChange={(e) => updateComponentProp('href', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="link-target">Target</Label>
+              <Select value={props.target || '_self'} onValueChange={(value) => updateComponentProp('target', value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_self">Same Tab</SelectItem>
+                  <SelectItem value="_blank">New Tab</SelectItem>
                 </SelectContent>
               </Select>
             </div>

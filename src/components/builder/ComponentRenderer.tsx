@@ -3,6 +3,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
+import { Progress } from '@/components/ui/progress';
 
 interface ComponentRendererProps {
   component: {
@@ -100,6 +111,140 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ component,
           src={props.src || '/placeholder.svg'} 
           alt={props.alt || 'Image'} 
           className="max-w-full h-auto rounded-lg"
+        />
+      );
+
+    case 'Textarea':
+      return (
+        <Textarea 
+          placeholder={props.placeholder || 'Enter text...'}
+          className={isSelected ? 'ring-2 ring-primary' : ''}
+          rows={props.rows || 3}
+          readOnly
+        />
+      );
+
+    case 'Select':
+      return (
+        <Select>
+          <SelectTrigger className={isSelected ? 'ring-2 ring-primary' : ''}>
+            <SelectValue placeholder={props.placeholder || 'Select an option'} />
+          </SelectTrigger>
+          <SelectContent>
+            {(props.options || ['Option 1', 'Option 2', 'Option 3']).map((option: string, index: number) => (
+              <SelectItem key={index} value={option.toLowerCase().replace(/\s+/g, '-')}>
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
+
+    case 'Checkbox':
+      return (
+        <div className={`flex items-center space-x-2 ${isSelected ? 'ring-2 ring-primary rounded p-1' : ''}`}>
+          <Checkbox id={`checkbox-${Math.random()}`} />
+          <label htmlFor={`checkbox-${Math.random()}`} className="text-sm">
+            {props.label || 'Checkbox'}
+          </label>
+        </div>
+      );
+
+    case 'Switch':
+      return (
+        <div className={`flex items-center space-x-2 ${isSelected ? 'ring-2 ring-primary rounded p-1' : ''}`}>
+          <Switch />
+          <label className="text-sm">
+            {props.label || 'Toggle'}
+          </label>
+        </div>
+      );
+
+    case 'Alert':
+      return (
+        <Alert className={isSelected ? 'ring-2 ring-primary' : ''}>
+          <AlertDescription>
+            {props.message || 'This is an alert message.'}
+          </AlertDescription>
+        </Alert>
+      );
+
+    case 'Separator':
+      return (
+        <Separator className={isSelected ? 'ring-2 ring-primary' : ''} />
+      );
+
+    case 'Tabs':
+      const tabs = props.tabs || [
+        { label: 'Tab 1', content: 'Content for tab 1' },
+        { label: 'Tab 2', content: 'Content for tab 2' }
+      ];
+      return (
+        <Tabs defaultValue={tabs[0]?.label.toLowerCase().replace(/\s+/g, '-')} className={isSelected ? 'ring-2 ring-primary rounded' : ''}>
+          <TabsList>
+            {tabs.map((tab: any, index: number) => (
+              <TabsTrigger key={index} value={tab.label.toLowerCase().replace(/\s+/g, '-')}>
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {tabs.map((tab: any, index: number) => (
+            <TabsContent key={index} value={tab.label.toLowerCase().replace(/\s+/g, '-')}>
+              {tab.content}
+            </TabsContent>
+          ))}
+        </Tabs>
+      );
+
+    case 'Accordion':
+      const items = props.items || [
+        { title: 'Item 1', content: 'Content for item 1' },
+        { title: 'Item 2', content: 'Content for item 2' }
+      ];
+      return (
+        <Accordion type="single" collapsible className={isSelected ? 'ring-2 ring-primary rounded' : ''}>
+          {items.map((item: any, index: number) => (
+            <AccordionItem key={index} value={`item-${index}`}>
+              <AccordionTrigger>{item.title}</AccordionTrigger>
+              <AccordionContent>{item.content}</AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      );
+
+    case 'Avatar':
+      return (
+        <Avatar className={isSelected ? 'ring-2 ring-primary' : ''}>
+          <AvatarImage src={props.src} alt={props.alt || 'Avatar'} />
+          <AvatarFallback>{props.fallback || 'U'}</AvatarFallback>
+        </Avatar>
+      );
+
+    case 'Breadcrumb':
+      const crumbs = props.items || [
+        { label: 'Home', href: '/' },
+        { label: 'Page', href: '/page' }
+      ];
+      return (
+        <Breadcrumb className={isSelected ? 'ring-2 ring-primary rounded' : ''}>
+          <BreadcrumbList>
+            {crumbs.map((crumb: any, index: number) => (
+              <React.Fragment key={index}>
+                <BreadcrumbItem>
+                  <BreadcrumbLink href={crumb.href}>{crumb.label}</BreadcrumbLink>
+                </BreadcrumbItem>
+                {index < crumbs.length - 1 && <BreadcrumbSeparator />}
+              </React.Fragment>
+            ))}
+          </BreadcrumbList>
+        </Breadcrumb>
+      );
+
+    case 'Progress':
+      return (
+        <Progress 
+          value={props.value || 50} 
+          className={isSelected ? 'ring-2 ring-primary rounded' : ''} 
         />
       );
 

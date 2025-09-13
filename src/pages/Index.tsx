@@ -30,29 +30,32 @@ const Index = () => {
         layoutData: {
           content: [
             {
+              id: 'heading-1',
               type: 'Heading',
               props: {
-                id: 'heading-1',
                 text: 'Welcome to Frontbase',
                 level: '1'
-              }
+              },
+              children: []
             },
             {
+              id: 'text-1',
               type: 'Text',
               props: {
-                id: 'text-1',
                 text: 'Start building your amazing website with our visual page builder.',
                 size: 'lg'
-              }
+              },
+              children: []
             },
             {
+              id: 'button-1',
               type: 'Button',
               props: {
-                id: 'button-1',
                 text: 'Get Started',
                 variant: 'default',
                 size: 'lg'
-              }
+              },
+              children: []
             }
           ],
           root: {}

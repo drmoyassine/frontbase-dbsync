@@ -1,41 +1,40 @@
 import React from 'react';
 import { useDrop } from 'react-dnd';
 import { useBuilderStore, type Page } from '@/stores/builder';
-import { ComponentRenderer } from './ComponentRenderer';
-import { v4 as uuidv4 } from 'uuid';
+import { DraggableComponent } from './DraggableComponent';
 
 interface BuilderCanvasProps {
   page: Page;
 }
 
 export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
-  const { updatePage, selectedComponentId, setSelectedComponentId, isPreviewMode } = useBuilderStore();
+  const { moveComponent, selectedComponentId, setSelectedComponentId, isPreviewMode } = useBuilderStore();
 
+  // Drop zone for the main canvas (add to end)
   const [{ isOver }, drop] = useDrop({
-    accept: 'component',
-    drop: (item: { type: string }, monitor) => {
+    accept: ['component', 'existing-component'],
+    drop: (item: any, monitor) => {
       console.log('Drop event triggered:', item);
       if (!monitor.didDrop()) {
-        // Add component to the end of the content array
-        const newComponent = {
-          id: uuidv4(),
-          type: item.type,
-          props: getDefaultProps(item.type),
-          styles: {}
-        };
-
-        console.log('Creating new component:', newComponent);
-        const updatedContent = [...(page.layoutData?.content || []), newComponent];
-        
-        updatePage(page.id, {
-          layoutData: {
-            content: updatedContent,
-            root: page.layoutData?.root || {}
-          }
-        });
-
-        // Select the newly added component
-        setSelectedComponentId(newComponent.id);
+        if (item.type) {
+          // New component from palette
+          const newComponent = {
+            id: `${Date.now()}-${Math.random()}`,
+            type: item.type,
+            props: getDefaultProps(item.type),
+            styles: {},
+            children: []
+          };
+          
+          console.log('Creating new component:', newComponent);
+          const targetIndex = page.layoutData?.content?.length || 0;
+          moveComponent(page.id, null, newComponent, targetIndex);
+          setSelectedComponentId(newComponent.id);
+        } else if (item.id) {
+          // Existing component being moved to end
+          const targetIndex = page.layoutData?.content?.length || 0;
+          moveComponent(page.id, item.id, item.component, targetIndex, undefined, item.parentId);
+        }
       }
     },
     collect: (monitor) => ({
@@ -56,32 +55,34 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       ref={drop}
       className={`min-h-full p-8 ${isOver ? 'bg-accent/50' : 'bg-background'} transition-colors relative`}
       style={{ minHeight: '400px' }}
+      onClick={(e) => {
+        // Deselect when clicking on empty canvas
+        if (e.target === e.currentTarget && !isPreviewMode) {
+          setSelectedComponentId(null);
+        }
+      }}
     >
-      <div className="max-w-4xl mx-auto space-y-4">
+      <div className="max-w-4xl mx-auto">
         {page.layoutData?.content?.map((component, index) => (
-          <div
+          <DraggableComponent
             key={component.id}
-            onClick={(e) => handleComponentClick(component.id, e)}
-            className={`
-              ${selectedComponentId === component.id && !isPreviewMode 
-                ? 'ring-2 ring-primary ring-offset-2 rounded-md' 
-                : ''
-              }
-              ${!isPreviewMode ? 'cursor-pointer' : ''}
-              transition-all duration-200
-            `}
-          >
-            <ComponentRenderer 
-              component={component}
-              isSelected={selectedComponentId === component.id}
-            />
-          </div>
+            component={component}
+            index={index}
+            pageId={page.id}
+            isSelected={selectedComponentId === component.id}
+            onSelect={handleComponentClick}
+          />
         ))}
+        
+        {/* Final drop zone at the bottom */}
+        {!isPreviewMode && page.layoutData?.content && page.layoutData.content.length > 0 && (
+          <div className="h-4 transition-all duration-200 hover:bg-primary/20 rounded mt-4" />
+        )}
         
         {(!page.layoutData?.content || page.layoutData.content.length === 0) && (
           <div className="text-center py-16 text-muted-foreground">
             <p className="text-lg">Drop components here to start building</p>
-            <p className="text-sm mt-2">Drag components from the left panel</p>
+            <p className="text-sm mt-2">Drag components from the left panel or reorder existing ones</p>
           </div>
         )}
       </div>
@@ -89,7 +90,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
   );
 };
 
-// Default props for different component types
+// Default props for different component types  
 function getDefaultProps(componentType: string): Record<string, any> {
   const defaults: Record<string, any> = {
     Button: { text: 'Button', variant: 'default', size: 'default' },
@@ -119,8 +120,8 @@ function getDefaultProps(componentType: string): Record<string, any> {
     Avatar: { src: '/placeholder.svg', alt: 'Avatar', fallback: 'U' },
     Breadcrumb: {
       items: [
-        { label: 'Home', href: '/' },
-        { label: 'Page', href: '/page' }
+        { label: 'Home', href: '/page' },
+        { label: 'Current', href: '#' }
       ]
     },
     Progress: { value: 50 },

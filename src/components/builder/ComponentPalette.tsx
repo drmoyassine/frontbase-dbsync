@@ -184,6 +184,9 @@ const ComponentItem: React.FC<ComponentItemProps> = ({ name, icon: Icon, descrip
       isDragging: monitor.isDragging(),
     }),
     canDrag: () => true,
+    end: (item, monitor) => {
+      console.log('Drag ended:', item, 'Drop result:', monitor.getDropResult());
+    },
   });
 
   return (

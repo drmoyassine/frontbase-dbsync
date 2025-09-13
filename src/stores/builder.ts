@@ -1,7 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
-import { ComponentWithStyles } from '@/types/styles';
+import { apiService } from '@/services/api';
 
 export interface ComponentData {
   id: string;
@@ -13,6 +12,7 @@ export interface ComponentData {
 
 export interface Page {
   id: string;
+  project_id: string;
   name: string;
   slug: string;
   title?: string;
@@ -20,39 +20,35 @@ export interface Page {
   keywords?: string;
   isPublic: boolean;
   isHomepage: boolean;
-  layoutData?: {
-    content: ComponentData[];
-    root: Record<string, any>;
-  };
-  createdAt: string;
-  updatedAt: string;
+  layout_data: ComponentData[];
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ProjectConfig {
   id: string;
   name: string;
   description?: string;
-  supabaseUrl?: string;
-  supabaseAnonKey?: string;
-  createdAt: string;
-  updatedAt: string;
+  user_id: number;
+  settings: Record<string, any>;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AppVariable {
   id: string;
+  project_id: string;
   name: string;
-  type: 'variable' | 'calculated';
+  type: 'static' | 'calculated';
   value?: string;
-  formula?: string;
-  description?: string;
-  createdAt: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface BuilderState {
-  // Project config
+  // Project and Pages
   project: ProjectConfig | null;
-  
-  // Pages
+  projects: ProjectConfig[];
   pages: Page[];
   currentPageId: string | null;
   
@@ -61,224 +57,289 @@ interface BuilderState {
   isPreviewMode: boolean;
   draggedComponentId: string | null;
   
-  // Variables
+  // App variables
   appVariables: AppVariable[];
   
-  // Supabase connection
-  isSupabaseConnected: boolean;
-  supabaseTables: any[];
+  // Loading states
+  isLoading: boolean;
   
   // Actions
-  setProject: (project: ProjectConfig) => void;
-  updateProject: (updates: Partial<ProjectConfig>) => void;
+  loadProjects: () => Promise<void>;
+  loadProject: (projectId: string) => Promise<void>;
+  createProject: (project: Omit<ProjectConfig, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  updateProject: (projectId: string, updates: Partial<ProjectConfig>) => Promise<void>;
+  deleteProject: (projectId: string) => Promise<void>;
   
-  createPage: (page: Omit<Page, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  updatePage: (id: string, updates: Partial<Page>) => void;
-  deletePage: (id: string) => void;
-  setCurrentPage: (id: string) => void;
+  createPage: (page: Omit<Page, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  updatePage: (pageId: string, updates: Partial<Page>) => Promise<void>;
+  deletePage: (pageId: string) => Promise<void>;
+  setCurrentPageId: (pageId: string) => void;
   
-  setSelectedComponentId: (id: string | null) => void;
-  setCurrentPageId: (id: string | null) => void;
+  setSelectedComponentId: (componentId: string | null) => void;
   setPreviewMode: (isPreview: boolean) => void;
-  
-  addAppVariable: (variable: Omit<AppVariable, 'id' | 'createdAt'>) => void;
-  updateAppVariable: (id: string, updates: Partial<AppVariable>) => void;
-  deleteAppVariable: (id: string) => void;
-  
-  setSupabaseConnection: (connected: boolean, tables?: any[]) => void;
-  moveComponent: (pageId: string, componentId: string | null, component: ComponentData, targetIndex: number, parentId?: string, sourceParentId?: string) => void;
   setDraggedComponentId: (componentId: string | null) => void;
+  
+  loadAppVariables: (projectId: string) => Promise<void>;
+  addAppVariable: (variable: Omit<AppVariable, 'id' | 'project_id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  deleteAppVariable: (projectId: string, variableId: string) => Promise<void>;
+  
+  moveComponent: (draggedId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
+  updatePageLayout: (pageId: string, layoutData: ComponentData[]) => Promise<void>;
 }
 
-export const useBuilderStore = create<BuilderState>()(
-  persist(
-    (set, get) => ({
-      // Initial state
-      project: null,
-      pages: [],
-      currentPageId: null,
-      selectedComponentId: null,
-      isPreviewMode: false,
-      draggedComponentId: null,
-      appVariables: [],
-      isSupabaseConnected: false,
-      supabaseTables: [],
-      
-      // Actions
-      setProject: (project) => set({ project }),
-      
-      updateProject: (updates) => set((state) => ({
-        project: state.project ? { ...state.project, ...updates, updatedAt: new Date().toISOString() } : null
-      })),
-      
-      createPage: (pageData) => {
-        const newPage: Page = {
-          ...pageData,
-          id: uuidv4(),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        
-        set((state) => ({
-          pages: [...state.pages, newPage],
-          currentPageId: newPage.id
-        }));
-      },
-      
-      updatePage: (id, updates) => set((state) => ({
-        pages: state.pages.map(page => 
-          page.id === id 
-            ? { ...page, ...updates, updatedAt: new Date().toISOString() }
-            : page
-        )
-      })),
-      
-      deletePage: (id) => set((state) => ({
-        pages: state.pages.filter(page => page.id !== id),
-        currentPageId: state.currentPageId === id ? null : state.currentPageId
-      })),
-      
-      setCurrentPage: (id) => set({ currentPageId: id }),
-      
-      setSelectedComponentId: (id) => set({ selectedComponentId: id }),
-      setCurrentPageId: (id) => set({ currentPageId: id }),
-      
-      setPreviewMode: (isPreview) => set({ isPreviewMode: isPreview }),
-      
-      addAppVariable: (variableData) => {
-        const newVariable: AppVariable = {
-          ...variableData,
-          id: uuidv4(),
-          createdAt: new Date().toISOString(),
-        };
-        
-        set((state) => ({
-          appVariables: [...state.appVariables, newVariable]
-        }));
-      },
-      
-      updateAppVariable: (id, updates) => set((state) => ({
-        appVariables: state.appVariables.map(variable =>
-          variable.id === id ? { ...variable, ...updates } : variable
-        )
-      })),
-      
-      deleteAppVariable: (id) => set((state) => ({
-        appVariables: state.appVariables.filter(variable => variable.id !== id)
-      })),
-      
-      setSupabaseConnection: (connected, tables = []) => set({
-        isSupabaseConnected: connected,
-        supabaseTables: tables
-      }),
+export const useBuilderStore = create<BuilderState>()((set, get) => ({
+  // Initial state
+  project: null,
+  projects: [],
+  pages: [],
+  currentPageId: null,
+  selectedComponentId: null,
+  isPreviewMode: false,
+  draggedComponentId: null,
+  appVariables: [],
+  isLoading: false,
 
-      moveComponent: (pageId, componentId, component, targetIndex, parentId, sourceParentId) => {
-        set((state) => {
-          const pages = [...state.pages];
-          const pageIndex = pages.findIndex(p => p.id === pageId);
-          
-          if (pageIndex === -1) return state;
-          
-          const page = { ...pages[pageIndex] };
-          const content = [...(page.layoutData?.content || [])];
-          
-          // Helper function to find and remove component from nested structure
-          const removeComponent = (items: ComponentData[], id: string, parentId?: string): ComponentData | null => {
-            if (parentId) {
-              // Remove from parent's children
-              const parent = findComponentById(items, parentId);
-              if (parent?.children) {
-                const childIndex = parent.children.findIndex(c => c.id === id);
-                if (childIndex !== -1) {
-                  const removed = parent.children[childIndex];
-                  parent.children.splice(childIndex, 1);
-                  return removed;
-                }
-              }
-            } else {
-              // Remove from root level
-              const index = items.findIndex(c => c.id === id);
-              if (index !== -1) {
-                return items.splice(index, 1)[0];
-              }
-            }
-            return null;
-          };
-          
-          // Helper function to find component by ID in nested structure
-          const findComponentById = (items: ComponentData[], id: string): ComponentData | null => {
-            for (const item of items) {
-              if (item.id === id) return item;
-              if (item.children) {
-                const found = findComponentById(item.children, id);
-                if (found) return found;
-              }
-            }
-            return null;
-          };
-          
-          // Helper function to insert component at target position
-          const insertComponent = (items: ComponentData[], comp: ComponentData, index: number, parentId?: string) => {
-            if (parentId) {
-              // Insert into parent's children
-              const parent = findComponentById(items, parentId);
-              if (parent) {
-                if (!parent.children) parent.children = [];
-                parent.children.splice(index, 0, { ...comp, children: comp.children || [] });
-              }
-            } else {
-              // Insert at root level
-              items.splice(index, 0, { ...comp, children: comp.children || [] });
-            }
-          };
-          
-          let componentToMove = component;
-          
-          // If moving existing component, remove it first and adjust target index
-          if (componentId) {
-            const removed = removeComponent(content, componentId, sourceParentId);
-            if (removed) {
-              componentToMove = removed;
-              
-              // Adjust target index if moving within same parent and target is after source
-              if (!parentId && !sourceParentId) {
-                // Both at root level - find original index
-                const originalIndex = content.findIndex(c => c.id === componentId);
-                if (originalIndex !== -1 && originalIndex < targetIndex) {
-                  // Component was removed from before target position, adjust index down
-                  targetIndex = Math.max(0, targetIndex - 1);
-                }
-              }
-            }
-          }
-          
-          // Prevent dropping component on itself at same position
-          if (componentId && componentId === componentToMove.id) {
-            const currentIndex = content.findIndex(c => c.id === componentId);
-            if (currentIndex === targetIndex) {
-              return state;
-            }
-          }
-          
-          // Insert component at target position
-          insertComponent(content, componentToMove, targetIndex, parentId);
-          
-          // Update the page
-          page.layoutData = {
-            ...page.layoutData,
-            content,
-            root: page.layoutData?.root || {}
-          };
-          pages[pageIndex] = page;
-          
-          return { ...state, pages };
-        });
-      },
-
-      setDraggedComponentId: (componentId) => set({ draggedComponentId: componentId }),
-    }),
-    {
-      name: 'frontbase-builder-storage',
+  // Actions
+  loadProjects: async () => {
+    set({ isLoading: true });
+    try {
+      const projects = await apiService.getProjects();
+      set({ projects, isLoading: false });
+    } catch (error) {
+      console.error('Failed to load projects:', error);
+      set({ isLoading: false });
     }
-  )
-);
+  },
+
+  loadProject: async (projectId: string) => {
+    set({ isLoading: true });
+    try {
+      const [project, pages] = await Promise.all([
+        apiService.getProject(projectId),
+        apiService.getProjectPages(projectId)
+      ]);
+      
+      const homepage = pages.find(p => p.isHomepage) || pages[0];
+      
+      set({ 
+        project, 
+        pages, 
+        currentPageId: homepage?.id || null, 
+        isLoading: false 
+      });
+
+      // Load app variables
+      if (projectId) {
+        get().loadAppVariables(projectId);
+      }
+    } catch (error) {
+      console.error('Failed to load project:', error);
+      set({ isLoading: false });
+    }
+  },
+
+  createProject: async (projectData) => {
+    set({ isLoading: true });
+    try {
+      const project = await apiService.createProject(projectData);
+      const state = get();
+      set({ 
+        projects: [...state.projects, project],
+        isLoading: false 
+      });
+    } catch (error) {
+      console.error('Failed to create project:', error);
+      set({ isLoading: false });
+    }
+  },
+
+  updateProject: async (projectId, updates) => {
+    try {
+      await apiService.updateProject(projectId, updates);
+      const state = get();
+      set({
+        project: state.project?.id === projectId ? { ...state.project, ...updates } : state.project,
+        projects: state.projects.map(p => p.id === projectId ? { ...p, ...updates } : p)
+      });
+    } catch (error) {
+      console.error('Failed to update project:', error);
+    }
+  },
+
+  deleteProject: async (projectId) => {
+    try {
+      await apiService.deleteProject(projectId);
+      const state = get();
+      set({
+        projects: state.projects.filter(p => p.id !== projectId),
+        project: state.project?.id === projectId ? null : state.project,
+        pages: state.project?.id === projectId ? [] : state.pages,
+        currentPageId: state.project?.id === projectId ? null : state.currentPageId
+      });
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+    }
+  },
+  
+  createPage: async (pageData) => {
+    try {
+      const page = await apiService.createPage(pageData);
+      const state = get();
+      set({ pages: [...state.pages, page] });
+    } catch (error) {
+      console.error('Failed to create page:', error);
+    }
+  },
+  
+  updatePage: async (pageId, updates) => {
+    try {
+      await apiService.updatePage(pageId, updates);
+      const state = get();
+      set({
+        pages: state.pages.map((page) =>
+          page.id === pageId ? { ...page, ...updates } : page
+        )
+      });
+    } catch (error) {
+      console.error('Failed to update page:', error);
+    }
+  },
+  
+  deletePage: async (pageId) => {
+    try {
+      await apiService.deletePage(pageId);
+      const state = get();
+      set({
+        pages: state.pages.filter((page) => page.id !== pageId),
+        currentPageId: state.currentPageId === pageId ? state.pages.find(p => p.id !== pageId)?.id || null : state.currentPageId
+      });
+    } catch (error) {
+      console.error('Failed to delete page:', error);
+    }
+  },
+  
+  setCurrentPageId: (pageId) => set({ currentPageId: pageId }),
+  
+  setSelectedComponentId: (componentId) => set({ selectedComponentId: componentId }),
+  
+  setPreviewMode: (isPreview) => set({ isPreviewMode: isPreview }),
+
+  setDraggedComponentId: (componentId) => set({ draggedComponentId: componentId }),
+
+  loadAppVariables: async (projectId) => {
+    try {
+      const variables = await apiService.getProjectVariables(projectId);
+      set({ appVariables: variables });
+    } catch (error) {
+      console.error('Failed to load app variables:', error);
+    }
+  },
+  
+  addAppVariable: async (variable) => {
+    try {
+      const state = get();
+      if (!state.project) return;
+      
+      const newVariable = await apiService.createVariable(state.project.id, variable);
+      set({ appVariables: [...state.appVariables, newVariable] });
+    } catch (error) {
+      console.error('Failed to add app variable:', error);
+    }
+  },
+  
+  deleteAppVariable: async (projectId, variableId) => {
+    try {
+      await apiService.deleteVariable(projectId, variableId);
+      const state = get();
+      set({
+        appVariables: state.appVariables.filter((variable) => variable.id !== variableId)
+      });
+    } catch (error) {
+      console.error('Failed to delete app variable:', error);
+    }
+  },
+
+  updatePageLayout: async (pageId, layoutData) => {
+    try {
+      await apiService.updatePage(pageId, { layout_data: layoutData });
+      const state = get();
+      set({
+        pages: state.pages.map((page) =>
+          page.id === pageId ? { ...page, layout_data: layoutData } : page
+        )
+      });
+    } catch (error) {
+      console.error('Failed to update page layout:', error);
+    }
+  },
+
+  moveComponent: (draggedId, targetId, position) => {
+    const state = get();
+    const currentPage = state.pages.find(p => p.id === state.currentPageId);
+    if (!currentPage) return;
+
+    const moveComponentInTree = (
+      components: ComponentData[],
+      draggedId: string,
+      targetId: string,
+      position: 'before' | 'after' | 'inside'
+    ): ComponentData[] => {
+      // Find and remove the dragged component
+      let draggedComponent: ComponentData | null = null;
+      
+      const removeDraggedComponent = (items: ComponentData[]): ComponentData[] => {
+        return items.reduce((acc: ComponentData[], item) => {
+          if (item.id === draggedId) {
+            draggedComponent = item;
+            return acc;
+          }
+          return [...acc, {
+            ...item,
+            children: item.children ? removeDraggedComponent(item.children) : []
+          }];
+        }, []);
+      };
+
+      let newComponents = removeDraggedComponent(components);
+
+      if (!draggedComponent) return components;
+
+      // Insert the dragged component at the new position
+      const insertComponent = (items: ComponentData[]): ComponentData[] => {
+        return items.reduce((acc: ComponentData[], item, index) => {
+          if (item.id === targetId) {
+            if (position === 'before') {
+              return [...acc, draggedComponent, item];
+            } else if (position === 'after') {
+              return [...acc, item, draggedComponent];
+            } else if (position === 'inside') {
+              return [...acc, {
+                ...item,
+                children: [...(item.children || []), draggedComponent]
+              }];
+            }
+          }
+          
+          return [...acc, {
+            ...item,
+            children: item.children ? insertComponent(item.children) : []
+          }];
+        }, []);
+      };
+
+      return insertComponent(newComponents);
+    };
+
+    const newLayoutData = moveComponentInTree(currentPage.layout_data, draggedId, targetId, position);
+    
+    // Update local state immediately for responsive UI
+    set((state) => ({
+      pages: state.pages.map((page) =>
+        page.id === state.currentPageId ? { ...page, layout_data: newLayoutData } : page
+      )
+    }));
+
+    // Save to backend
+    get().updatePageLayout(currentPage.id, newLayoutData);
+  }
+}));

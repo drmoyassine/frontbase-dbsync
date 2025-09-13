@@ -35,15 +35,8 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
   // Make the component draggable
   const [{ isDragging }, drag] = useDrag(() => ({
     type: 'existing-component',
-    item: { 
-      id: component.id, 
-      index, 
-      pageId,
-      parentId,
-      component 
-    },
-    begin: () => {
-      // Set drag state immediately when drag begins
+    item: () => {
+      // Set drag state immediately when drag begins (replaces deprecated begin)
       setDraggedComponentId(component.id);
       return { 
         id: component.id, 

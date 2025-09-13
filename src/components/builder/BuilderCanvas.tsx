@@ -3,13 +3,17 @@ import { useDrop } from 'react-dnd';
 import { useBuilderStore, type Page } from '@/stores/builder';
 import { DraggableComponent } from './DraggableComponent';
 import { cn } from '@/lib/utils';
+import { shouldRenderDropZone, getDropZoneStyle } from '@/lib/dropZoneUtils';
 
 interface BuilderCanvasProps {
   page: Page;
 }
 
 export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
-  const { moveComponent, selectedComponentId, setSelectedComponentId, isPreviewMode } = useBuilderStore();
+  const { moveComponent, selectedComponentId, setSelectedComponentId, isPreviewMode, draggedComponentId } = useBuilderStore();
+  
+  const components = page.layoutData?.content || [];
+  const hasComponents = components.length > 0;
 
   // Top drop zone (add to beginning)
   const [{ isOverTop }, dropTop] = useDrop({
@@ -88,13 +92,13 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       }}
     >
       <div className="max-w-4xl mx-auto">
-        {/* Top drop zone */}
-        {!isPreviewMode && (
+        {/* Top drop zone - smart logic */}
+        {!isPreviewMode && hasComponents && shouldRenderDropZone('first', 0, draggedComponentId, components, 'above') && (
           <div
             ref={dropTop}
             className={cn(
-              'h-6 transition-all duration-200 rounded mb-2',
-              isOverTop ? 'bg-primary/30 border-2 border-primary border-dashed' : 'hover:bg-primary/10'
+              'mb-2',
+              getDropZoneStyle('first', isOverTop)
             )}
           />
         )}
@@ -110,18 +114,8 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
           />
         ))}
         
-        {/* Bottom drop zone - only when no components exist */}
-        {!isPreviewMode && (!page.layoutData?.content || page.layoutData.content.length === 0) && (
-          <div
-            ref={dropBottom}
-            className={cn(
-              'h-6 transition-all duration-200 rounded mt-2',
-              isOverBottom ? 'bg-primary/30 border-2 border-primary border-dashed' : 'hover:bg-primary/10'
-            )}
-          />
-        )}
-        
-        {(!page.layoutData?.content || page.layoutData.content.length === 0) && (
+        {/* Empty canvas drop zone */}
+        {!isPreviewMode && !hasComponents && (
           <div 
             ref={dropBottom}
             className={cn(

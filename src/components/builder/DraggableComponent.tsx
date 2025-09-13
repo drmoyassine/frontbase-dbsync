@@ -3,6 +3,7 @@ import { useDrag, useDrop } from 'react-dnd';
 import { ComponentRenderer } from './ComponentRenderer';
 import { useBuilderStore } from '@/stores/builder';
 import { cn } from '@/lib/utils';
+import { shouldRenderDropZone, getDropZoneStyle } from '@/lib/dropZoneUtils';
 
 interface DraggableComponentProps {
   component: {
@@ -28,10 +29,10 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
   isSelected, 
   onSelect 
 }) => {
-  const { moveComponent, isPreviewMode } = useBuilderStore();
+  const { moveComponent, isPreviewMode, draggedComponentId, setDraggedComponentId } = useBuilderStore();
 
   // Make the component draggable
-  const [{ isDragging }, drag] = useDrag({
+  const [{ isDragging }, drag] = useDrag(() => ({
     type: 'existing-component',
     item: { 
       id: component.id, 
@@ -40,12 +41,25 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
       parentId,
       component 
     },
+    begin: () => {
+      setDraggedComponentId(component.id);
+    },
+    end: () => {
+      setDraggedComponentId(null);
+    },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
     canDrag: () => !isPreviewMode,
-  });
+  }), [component.id, index, pageId, parentId, component, setDraggedComponentId, isPreviewMode]);
 
+  // Get sibling components for drop zone validation
+  const { pages } = useBuilderStore();
+  const currentPage = pages.find(p => p.id === pageId);
+  const siblingComponents = parentId 
+    ? currentPage?.layoutData?.content?.find(c => c.id === parentId)?.children || []
+    : currentPage?.layoutData?.content || [];
+  
   // Create drop zone for reordering (drop above this component)
   const [{ isOver }, drop] = useDrop({
     accept: ['component', 'existing-component', 'layer-component'],
@@ -72,6 +86,15 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
     }),
     canDrop: () => !isPreviewMode,
   });
+
+  // Check if this drop zone should be rendered
+  const shouldShowAboveZone = shouldRenderDropZone(
+    component.id,
+    index,
+    draggedComponentId,
+    siblingComponents,
+    'above'
+  );
 
   // No need to combine refs - separate them for cleaner logic
 
@@ -102,12 +125,8 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
     canDrop: () => !isPreviewMode && component.type === 'Container',
   });
 
-  // Add drop zone after last component (only for the last component)
-  const { pages, currentPageId } = useBuilderStore();
-  const currentPage = pages.find(p => p.id === pageId);
-  const isLastComponent = currentPage?.layoutData?.content && 
-    currentPage.layoutData.content.length > 0 &&
-    currentPage.layoutData.content[currentPage.layoutData.content.length - 1].id === component.id;
+  // Check if this is the last component in its container
+  const isLastComponent = index === siblingComponents.length - 1;
 
   // Drop zone after last component
   const [{ isOverAfter }, dropAfter] = useDrop({
@@ -137,15 +156,24 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
     canDrop: () => !isPreviewMode && isLastComponent,
   });
 
+  // Check if the "after last" drop zone should be rendered
+  const shouldShowAfterZone = shouldRenderDropZone(
+    component.id,
+    index,
+    draggedComponentId,
+    siblingComponents,
+    'after'
+  );
+
   return (
     <>
       {/* Drop zone above component for reordering */}
-      {!isPreviewMode && (
+      {!isPreviewMode && shouldShowAboveZone && (
         <div
           ref={drop}
           className={cn(
-            'h-4 transition-all duration-200 rounded mb-1',
-            isOver ? 'bg-primary/30 border-2 border-primary border-dashed' : 'hover:bg-primary/10'
+            'mb-1',
+            getDropZoneStyle('between', isOver)
           )}
         />
       )}
@@ -181,12 +209,12 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
       </div>
 
       {/* Drop zone after last component only */}
-      {!isPreviewMode && isLastComponent && (
+      {!isPreviewMode && shouldShowAfterZone && (
         <div
           ref={dropAfter}
           className={cn(
-            'h-6 transition-all duration-200 rounded mt-1',
-            isOverAfter ? 'bg-primary/30 border-2 border-primary border-dashed' : 'hover:bg-primary/10'
+            'mt-1',
+            getDropZoneStyle('last', isOverAfter)
           )}
         />
       )}

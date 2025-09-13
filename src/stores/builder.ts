@@ -59,6 +59,7 @@ interface BuilderState {
   // Builder state
   selectedComponentId: string | null;
   isPreviewMode: boolean;
+  draggedComponentId: string | null;
   
   // Variables
   appVariables: AppVariable[];
@@ -86,6 +87,7 @@ interface BuilderState {
   
   setSupabaseConnection: (connected: boolean, tables?: any[]) => void;
   moveComponent: (pageId: string, componentId: string | null, component: ComponentData, targetIndex: number, parentId?: string, sourceParentId?: string) => void;
+  setDraggedComponentId: (componentId: string | null) => void;
 }
 
 export const useBuilderStore = create<BuilderState>()(
@@ -97,6 +99,7 @@ export const useBuilderStore = create<BuilderState>()(
       currentPageId: null,
       selectedComponentId: null,
       isPreviewMode: false,
+      draggedComponentId: null,
       appVariables: [],
       isSupabaseConnected: false,
       supabaseTables: [],
@@ -271,6 +274,8 @@ export const useBuilderStore = create<BuilderState>()(
           return { ...state, pages };
         });
       },
+
+      setDraggedComponentId: (componentId) => set({ draggedComponentId: componentId }),
     }),
     {
       name: 'frontbase-builder-storage',

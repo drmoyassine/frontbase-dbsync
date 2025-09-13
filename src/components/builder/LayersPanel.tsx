@@ -3,6 +3,7 @@ import { useDrag, useDrop } from 'react-dnd';
 import { useBuilderStore } from '@/stores/builder';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { shouldRenderDropZone, calculateValidDropZones } from '@/lib/dropZoneUtils';
 import { 
   ChevronDown, 
   ChevronRight, 
@@ -31,7 +32,9 @@ export const LayersPanel: React.FC = () => {
     pages, 
     selectedComponentId, 
     setSelectedComponentId,
-    moveComponent
+    moveComponent,
+    draggedComponentId,
+    setDraggedComponentId
   } = useBuilderStore();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -80,7 +83,7 @@ export const LayersPanel: React.FC = () => {
     const isSelected = selectedComponentId === component.id;
 
     // Drag functionality
-    const [{ isDragging }, drag, dragPreview] = useDrag({
+    const [{ isDragging }, drag, dragPreview] = useDrag(() => ({
       type: 'layer-component',
       item: { 
         id: component.id, 
@@ -89,19 +92,49 @@ export const LayersPanel: React.FC = () => {
         component,
         level
       },
+      begin: () => {
+        setDraggedComponentId(component.id);
+      },
+      end: () => {
+        setDraggedComponentId(null);
+      },
       collect: (monitor) => ({
         isDragging: monitor.isDragging(),
       }),
-    });
+    }), [component.id, index, parentId, component, level, setDraggedComponentId]);
+
+    // Get sibling components for validation
+    const currentPage = pages.find(p => p.id === currentPageId);
+    const siblingComponents = parentId 
+      ? currentPage?.layoutData?.content?.find(c => c.id === parentId)?.children || []
+      : currentPage?.layoutData?.content || [];
+
+    // Check if drop zone should be rendered
+    const shouldShowDropZone = shouldRenderDropZone(
+      component.id,
+      index,
+      draggedComponentId,
+      siblingComponents,
+      'above'
+    );
 
     // Drop functionality
     const [{ isOver, canDrop }, drop] = useDrop({
       accept: 'layer-component',
       drop: (item: any, monitor) => {
         if (!monitor.didDrop() && item.id !== component.id) {
-          // Calculate if dropping above or below this component
-          const targetIndex = index;
-          moveComponent(currentPageId!, item.id, item.component, targetIndex, parentId, item.parentId);
+          // Use smart drop zone validation
+          const validZones = calculateValidDropZones({
+            draggedComponentId: item.id,
+            siblingComponents,
+            parentId
+          });
+          
+          // Find the appropriate drop zone for this index
+          const validZone = validZones.find(zone => zone.index === index);
+          if (validZone) {
+            moveComponent(currentPageId!, item.id, item.component, validZone.index, parentId, item.parentId);
+          }
         }
       },
       collect: (monitor) => ({
@@ -136,8 +169,8 @@ export const LayersPanel: React.FC = () => {
 
     return (
       <div>
-        {/* Drop indicator above */}
-        {isOver && canDrop && (
+        {/* Drop indicator above - only for valid drop zones */}
+        {isOver && canDrop && shouldShowDropZone && (
           <div className="h-0.5 bg-primary mx-2 rounded" />
         )}
         

@@ -1,32 +1,70 @@
-/* Hide Puck's built-in UI elements that might still show */
+/* Hide all Puck's built-in UI elements */
 .puck-header,
 .puck-left-sidebar,
 .puck-right-sidebar,
 .puck-outline,
-.puck-toolbar {
+.puck-toolbar,
+.puck-components,
+.puck-component-list,
+.puck-viewport-controls,
+.puck-zoom-controls,
+.puck-fields,
+.puck-field-loader,
+.puck-action-bar,
+.puck-frame-tools,
+.puck-button-group,
+.puck-button--secondary,
+.puck-button--primary {
   display: none !important;
 }
 
-/* Ensure canvas takes full space */
+/* Hide viewport and zoom controls */
+[data-puck-portal-root] {
+  display: none !important;
+}
+
+/* Hide component selector and any floating elements */
+.puck-component-selector,
+.puck-dropdown,
+.puck-menu,
+.puck-overlay,
+.puck-modal,
+.puck-drawer {
+  display: none !important;
+}
+
+/* Hide any buttons or controls that might appear */
+button[data-puck-button],
+div[data-puck-viewport-controls],
+div[data-puck-zoom-controls],
+div[data-puck-component-list] {
+  display: none !important;
+}
+
+/* Ensure canvas takes full space and is clean */
 .puck-canvas {
   width: 100% !important;
   height: 100% !important;
-}
-
-/* Hide any dropdown menus or overlays from Puck */
-.puck-dropdown,
-.puck-menu,
-.puck-overlay {
-  display: none !important;
+  position: relative !important;
 }
 
 /* Style the drop zone properly */
 .puck-dropzone {
   min-height: 100vh;
   background: transparent;
+  width: 100%;
+  position: relative;
 }
 
-/* Hide Puck's component selector */
-.puck-component-selector {
-  display: none !important;
+/* Hide any remaining UI controls */
+div[class*="puck-"],
+button[class*="puck-"],
+span[class*="puck-"] {
+  z-index: -1 !important;
+}
+
+/* Exception: Keep only the actual content components visible */
+.puck-dropzone > *,
+.puck-dropzone [data-puck-component-id] {
+  z-index: 1 !important;
 }

@@ -58,6 +58,8 @@ export const FrontbaseBuilder: React.FC = () => {
                 header: () => null,
                 headerActions: () => null,
                 outline: () => null,
+                components: () => null,
+                fields: () => null
               }}
               viewports={[
                 { width: 1200, height: 'auto', label: 'Desktop' },

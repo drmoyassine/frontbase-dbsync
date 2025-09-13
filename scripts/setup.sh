@@ -2,12 +2,20 @@
 
 echo "🚀 Setting up Frontbase..."
 
-# Create necessary directories
+# Create necessary directories with proper permissions
 echo "📁 Creating directories..."
 mkdir -p data/uploads data/exports server/data
+chmod 755 data data/uploads data/exports
 
-# Make sure the script is executable
-chmod +x scripts/dev.sh
+# Make scripts executable
+chmod +x scripts/dev.sh scripts/fix-startup.sh scripts/debug-container.sh
+
+# Check for port conflicts before building
+echo "🔍 Checking system requirements..."
+if lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo "⚠️  Port 3000 is already in use. You may need to stop the conflicting service."
+    echo "   Run './scripts/fix-startup.sh' for automated resolution."
+fi
 
 # Build and start with Docker Compose
 echo "🐳 Building and starting with Docker..."

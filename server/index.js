@@ -86,15 +86,12 @@ try {
   console.error('  Data directory exists:', fs.existsSync(dataDir));
   process.exit(1);
 }
-  console.error('Stack trace:', error.stack);
-  process.exit(1);
-}
 
 // Initialize database manager
 console.log('🔗 Connecting to database manager...');
-let db;
+let dbManager;
 try {
-  db = new DatabaseManager();
+  dbManager = new DatabaseManager();
   console.log('✅ Database manager connected');
 } catch (error) {
   console.error('❌ Failed to connect database manager:', error);
@@ -118,21 +115,10 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Create necessary directories
-const dataDir = path.join(__dirname, 'data');
-const uploadsDir = path.join(dataDir, 'uploads');
-const exportsDir = path.join(dataDir, 'exports');
-
-[dataDir, uploadsDir, exportsDir].forEach(dir => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-});
-
 // Health check endpoint for debugging
 app.get('/health', (req, res) => {
   try {
-    const dbTest = db.getProject();
+    const dbTest = dbManager.getProject();
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -177,7 +163,7 @@ app.get('/debug/filesystem', (req, res) => {
 // API Routes
 console.log('🔧 Setting up API routes...');
 try {
-  app.use('/api/project', require('./routes/api/project')(db));
+  app.use('/api/project', require('./routes/api/project')(dbManager));
   console.log('✅ Project API routes loaded');
 } catch (error) {
   console.error('❌ Failed to load project routes:', error);
@@ -185,7 +171,7 @@ try {
 }
 
 try {
-  app.use('/api/pages', require('./routes/api/pages')(db));
+  app.use('/api/pages', require('./routes/api/pages')(dbManager));
   console.log('✅ Pages API routes loaded');
 } catch (error) {
   console.error('❌ Failed to load pages routes:', error);
@@ -193,7 +179,7 @@ try {
 }
 
 try {
-  app.use('/api/variables', require('./routes/api/variables')(db));
+  app.use('/api/variables', require('./routes/api/variables')(dbManager));
   console.log('✅ Variables API routes loaded');
 } catch (error) {
   console.error('❌ Failed to load variables routes:', error);
@@ -203,7 +189,7 @@ try {
 // Public SSR Routes (for SEO)
 app.get('/sitemap.xml', async (req, res) => {
   try {
-    const publicPages = db.getPublicPages();
+    const publicPages = dbManager.getPublicPages();
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     
     const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
@@ -262,10 +248,10 @@ app.get('/:slug?', async (req, res) => {
     let page;
     if (slug === 'home' || slug === '') {
       // Try to find homepage first
-      const pages = db.getPublicPages();
+      const pages = dbManager.getPublicPages();
       page = pages.find(p => p.isHomepage) || pages[0];
     } else {
-      page = db.getPageBySlug(slug);
+      page = dbManager.getPageBySlug(slug);
     }
     
     if (!page || !page.isPublic) {
@@ -289,7 +275,7 @@ app.get('/:slug?', async (req, res) => {
     }
     
     // Get variables for template replacement
-    const variables = db.getAllVariables();
+    const variables = dbManager.getAllVariables();
     
     // Render page with SSR
     const html = renderPageSSR(page, variables);
@@ -329,13 +315,13 @@ app.use((err, req, res, next) => {
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\n🛑 Shutting down server...');
-  db.close();
+  dbManager.close();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   console.log('\n🛑 Shutting down server...');
-  db.close();
+  dbManager.close();
   process.exit(0);
 });
 
@@ -353,7 +339,7 @@ const server = app.listen(PORT, () => {
   
   // Test database connection
   try {
-    const testConnection = db.getProject();
+    const testConnection = dbManager.getProject();
     console.log('✅ Database connection test passed');
   } catch (error) {
     console.error('❌ Database connection test failed:', error.message);

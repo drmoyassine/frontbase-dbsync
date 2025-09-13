@@ -1,4 +1,4 @@
-const { generateStyles } = require('./styleUtils');
+const { generateStyles } = require('../styleUtils');
 
 function replaceVariables(text, variables) {
   if (typeof text !== 'string') return text;

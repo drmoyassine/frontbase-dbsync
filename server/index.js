@@ -13,20 +13,62 @@ const { renderPageSSR } = require('./ssr/renderer');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Initialize database
+// Enhanced startup logging
 console.log('🚀 Starting Frontbase server...');
-console.log('📦 Initializing database...');
+console.log('Environment:', process.env.NODE_ENV || 'development');
+console.log('Database Path:', process.env.DB_PATH || 'default');
+console.log('Port:', process.env.PORT || 3000);
+console.log('Debug Mode:', process.env.DEBUG || 'false');
 
+// Validate environment variables
+const requiredEnvVars = ['DB_PATH', 'PORT'];
+const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+if (missingEnvVars.length > 0) {
+  console.warn('⚠️  Missing environment variables:', missingEnvVars.join(', '));
+}
+
+// Validate file system access
+console.log('📁 Validating file system access...');
+const dataDir = process.env.DB_PATH ? path.dirname(process.env.DB_PATH) : path.join(__dirname, 'data');
+try {
+  if (!fs.existsSync(dataDir)) {
+    console.log('📁 Creating data directory:', dataDir);
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  // Test write access
+  const testFile = path.join(dataDir, '.write-test');
+  fs.writeFileSync(testFile, 'test');
+  fs.unlinkSync(testFile);
+  console.log('✅ File system access validated');
+} catch (error) {
+  console.error('❌ File system access error:', error.message);
+  console.error('📂 Current working directory:', process.cwd());
+  console.error('📂 Attempted data directory:', dataDir);
+  process.exit(1);
+}
+
+// Initialize database
+console.log('📦 Initializing database...');
 try {
   initializeDatabase();
   console.log('✅ Database initialized successfully');
 } catch (error) {
   console.error('❌ Failed to initialize database:', error);
+  console.error('Stack trace:', error.stack);
   process.exit(1);
 }
 
 // Initialize database manager
-const db = new DatabaseManager();
+console.log('🔗 Connecting to database manager...');
+let db;
+try {
+  db = new DatabaseManager();
+  console.log('✅ Database manager connected');
+} catch (error) {
+  console.error('❌ Failed to connect database manager:', error);
+  console.error('Stack trace:', error.stack);
+  process.exit(1);
+}
 
 // Middleware
 app.use(helmet({
@@ -55,11 +97,76 @@ const exportsDir = path.join(dataDir, 'exports');
   }
 });
 
+// Health check endpoint for debugging
+app.get('/health', (req, res) => {
+  try {
+    const dbTest = db.getProject();
+    res.json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      database: 'connected',
+      environment: process.env.NODE_ENV || 'development',
+      port: PORT,
+      uptime: process.uptime()
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'unhealthy',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Debug endpoint for container inspection
+app.get('/debug/filesystem', (req, res) => {
+  try {
+    const debugInfo = {
+      cwd: process.cwd(),
+      dataDir: process.env.DB_PATH ? path.dirname(process.env.DB_PATH) : 'not set',
+      files: {
+        '/app': fs.existsSync('/app') ? fs.readdirSync('/app') : 'not found',
+        '/app/data': fs.existsSync('/app/data') ? fs.readdirSync('/app/data') : 'not found',
+        'current': fs.readdirSync('.').slice(0, 20)
+      },
+      env: {
+        NODE_ENV: process.env.NODE_ENV,
+        DB_PATH: process.env.DB_PATH,
+        PORT: process.env.PORT,
+        DEBUG: process.env.DEBUG
+      }
+    };
+    res.json(debugInfo);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // API Routes
 console.log('🔧 Setting up API routes...');
-app.use('/api/project', require('./routes/api/project')(db));
-app.use('/api/pages', require('./routes/api/pages')(db));
-app.use('/api/variables', require('./routes/api/variables')(db));
+try {
+  app.use('/api/project', require('./routes/api/project')(db));
+  console.log('✅ Project API routes loaded');
+} catch (error) {
+  console.error('❌ Failed to load project routes:', error);
+  process.exit(1);
+}
+
+try {
+  app.use('/api/pages', require('./routes/api/pages')(db));
+  console.log('✅ Pages API routes loaded');
+} catch (error) {
+  console.error('❌ Failed to load pages routes:', error);
+  process.exit(1);
+}
+
+try {
+  app.use('/api/variables', require('./routes/api/variables')(db));
+  console.log('✅ Variables API routes loaded');
+} catch (error) {
+  console.error('❌ Failed to load variables routes:', error);
+  process.exit(1);
+}
 
 // Public SSR Routes (for SEO)
 app.get('/sitemap.xml', async (req, res) => {
@@ -201,11 +308,30 @@ process.on('SIGTERM', () => {
 });
 
 // Start server
-app.listen(PORT, () => {
+console.log('🚀 Starting HTTP server...');
+const server = app.listen(PORT, () => {
   console.log('✅ Server setup complete!');
   console.log(`🌐 Server running on http://localhost:${PORT}`);
   console.log(`🔧 Builder available at http://localhost:${PORT}/builder`);
   console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
   console.log(`🎯 Public pages served with SSR for SEO`);
   console.log(`📍 Database: ${process.env.DB_PATH || path.join(__dirname, 'data/frontbase.db')}`);
+  console.log(`🩺 Health check: http://localhost:${PORT}/health`);
+  console.log(`🔍 Debug info: http://localhost:${PORT}/debug/filesystem`);
+  
+  // Test database connection
+  try {
+    const testConnection = db.getProject();
+    console.log('✅ Database connection test passed');
+  } catch (error) {
+    console.error('❌ Database connection test failed:', error.message);
+  }
+});
+
+server.on('error', (error) => {
+  console.error('❌ Server error:', error);
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use`);
+  }
+  process.exit(1);
 });

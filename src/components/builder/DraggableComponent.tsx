@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
 import { ComponentRenderer } from './ComponentRenderer';
 import { useBuilderStore } from '@/stores/builder';
@@ -41,17 +41,20 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
       parentId,
       component 
     },
-    begin: () => {
-      setDraggedComponentId(component.id);
-    },
-    end: () => {
-      setDraggedComponentId(null);
-    },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
     canDrag: () => !isPreviewMode,
-  }), [component.id, index, pageId, parentId, component, setDraggedComponentId, isPreviewMode]);
+  }), [component.id, index, pageId, parentId, component, isPreviewMode]);
+
+  // Track drag state changes with useEffect
+  useEffect(() => {
+    if (isDragging) {
+      setDraggedComponentId(component.id);
+    } else {
+      setDraggedComponentId(null);
+    }
+  }, [isDragging, component.id, setDraggedComponentId]);
 
   // Get sibling components for drop zone validation
   const { pages } = useBuilderStore();

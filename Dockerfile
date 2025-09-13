@@ -51,9 +51,9 @@ RUN echo "📂 Server files copied:" && \
     echo "✅ Backend source copied"
 
 # Copy built frontend to serve as static files
-COPY --from=frontend-builder /app/dist ./public
-RUN echo "📂 Frontend files copied to public:" && \
-    ls -la public/ && \
+COPY --from=frontend-builder /app/dist ./server/public
+RUN echo "📂 Frontend files copied to server/public:" && \
+    ls -la server/public/ && \
     echo "✅ Frontend files copied"
 
 # Create data directories for persistence with proper permissions

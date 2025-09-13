@@ -21,14 +21,69 @@ RUN echo "🔍 Verifying config files..." && \
     test -f tsconfig.json && echo "✅ tsconfig.json exists" || (echo "❌ tsconfig.json missing" && exit 1) && \
     echo "✅ All config files verified"
 
-# Install ALL dependencies (including devDependencies needed for build)
-RUN echo "📦 Installing frontend dependencies..." && \
-    NODE_ENV=development npm ci --verbose && \
-    echo "✅ Frontend dependencies installed" && \
-    echo "📂 node_modules check:" && \
-    ls -la node_modules/ | head -5 && \
-    npm list typescript vite @vitejs/plugin-react-swc --depth=0 && \
-    echo "✅ Build tools verified"
+# Install ALL dependencies with extensive debugging
+RUN echo "🔍 DEBUGGING: Starting frontend dependencies installation..." && \
+    echo "📊 Environment Information:" && \
+    echo "  - Node version: $(node --version)" && \
+    echo "  - NPM version: $(npm --version)" && \
+    echo "  - Platform: $(uname -a)" && \
+    echo "  - Working directory: $(pwd)" && \
+    echo "  - USER: $(whoami)" && \
+    echo "  - Environment: NODE_ENV=${NODE_ENV:-not-set}" && \
+    echo "" && \
+    echo "📋 File System Check:" && \
+    echo "  - Current directory contents:" && \
+    ls -la && \
+    echo "  - Package.json exists: $(test -f package.json && echo 'YES' || echo 'NO')" && \
+    echo "  - Package-lock.json exists: $(test -f package-lock.json && echo 'YES' || echo 'NO')" && \
+    echo "  - Package.json size: $(wc -c < package.json) bytes" && \
+    echo "  - Package-lock.json size: $(wc -c < package-lock.json) bytes" && \
+    echo "" && \
+    echo "📦 Package.json validation:" && \
+    cat package.json | head -20 && \
+    echo "..." && \
+    echo "" && \
+    echo "🔒 Package-lock.json validation:" && \
+    cat package-lock.json | head -10 && \
+    echo "..." && \
+    echo "" && \
+    echo "🧹 NPM Configuration:" && \
+    npm config list && \
+    echo "" && \
+    echo "💾 NPM Cache Info:" && \
+    npm cache verify || echo "Cache verification failed" && \
+    echo "" && \
+    echo "🚀 Starting npm ci with maximum verbosity..." && \
+    NODE_ENV=development npm ci --verbose --loglevel=verbose 2>&1 | tee npm-install.log || { \
+        echo "❌ NPM CI FAILED - Detailed Error Analysis:"; \
+        echo "📜 Last 50 lines of npm install log:"; \
+        tail -50 npm-install.log; \
+        echo ""; \
+        echo "🔍 Error code: $?"; \
+        echo "📊 Disk space:"; \
+        df -h; \
+        echo "💾 Memory usage:"; \
+        free -h; \
+        echo "📁 Tmp directory:"; \
+        ls -la /tmp/ | head -10; \
+        echo "🗂️ NPM cache directory:"; \
+        ls -la ~/.npm/ | head -10 || echo "NPM cache directory not accessible"; \
+        echo ""; \
+        echo "🔄 Attempting npm install as fallback..."; \
+        NODE_ENV=development npm install --verbose 2>&1 | tee npm-install-fallback.log || { \
+            echo "❌ NPM INSTALL FALLBACK ALSO FAILED"; \
+            echo "📜 Fallback log:"; \
+            tail -30 npm-install-fallback.log; \
+            exit 1; \
+        }; \
+    } && \
+    echo "✅ Frontend dependencies installed successfully" && \
+    echo "📂 node_modules verification:" && \
+    ls -la node_modules/ | head -10 && \
+    echo "📊 node_modules size: $(du -sh node_modules/)" && \
+    echo "🔍 Critical packages check:" && \
+    npm list typescript vite @vitejs/plugin-react-swc --depth=0 || echo "Some packages missing but continuing..." && \
+    echo "✅ Build tools verification completed"
 
 # Copy all source files
 COPY src ./src

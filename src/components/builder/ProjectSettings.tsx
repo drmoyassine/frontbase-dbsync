@@ -25,12 +25,12 @@ export const ProjectSettings: React.FC = () => {
   } = useBuilderStore();
   
   const [isOpen, setIsOpen] = useState(false);
-  const [newVariable, setNewVariable] = useState({ name: '', type: 'variable' as const, value: '', description: '' });
+  const [newVariable, setNewVariable] = useState({ name: '', type: 'static' as const, value: '', description: '' });
 
   const handleAddVariable = () => {
     if (newVariable.name) {
       addAppVariable(newVariable);
-      setNewVariable({ name: '', type: 'variable', value: '', description: '' });
+      setNewVariable({ name: '', type: 'static', value: '', description: '' });
     }
   };
 
@@ -60,7 +60,7 @@ export const ProjectSettings: React.FC = () => {
               <Input
                 id="project-name"
                 value={project?.name || ''}
-                onChange={(e) => updateProject({ name: e.target.value })}
+                onChange={(e) => project && updateProject(project.id, project.id, { name: e.target.value })}
                 placeholder="My Frontbase Project"
               />
             </div>
@@ -69,7 +69,7 @@ export const ProjectSettings: React.FC = () => {
               <Textarea
                 id="project-description"
                 value={project?.description || ''}
-                onChange={(e) => updateProject({ description: e.target.value })}
+                onChange={(e) => project && updateProject(project.id, project.id, { description: e.target.value })}
                 placeholder="Project description..."
                 rows={3}
               />
@@ -84,8 +84,10 @@ export const ProjectSettings: React.FC = () => {
               <Label htmlFor="supabase-url">Supabase URL</Label>
               <Input
                 id="supabase-url"
-                value={project?.supabaseUrl || ''}
-                onChange={(e) => updateProject({ supabaseUrl: e.target.value })}
+                value={(project?.settings as any)?.supabaseUrl || ''}
+                onChange={(e) => project && updateProject(project.id, project.id, { 
+                  settings: { ...project.settings, supabaseUrl: e.target.value } 
+                })}
                 placeholder="https://your-project.supabase.co"
               />
             </div>
@@ -94,8 +96,10 @@ export const ProjectSettings: React.FC = () => {
               <Input
                 id="supabase-key"
                 type="password"
-                value={project?.supabaseAnonKey || ''}
-                onChange={(e) => updateProject({ supabaseAnonKey: e.target.value })}
+                value={(project?.settings as any)?.supabaseAnonKey || ''}
+                onChange={(e) => project && updateProject(project.id, project.id, { 
+                  settings: { ...project.settings, supabaseAnonKey: e.target.value } 
+                })}
                 placeholder="Your anon public key"
               />
             </div>
@@ -141,7 +145,7 @@ export const ProjectSettings: React.FC = () => {
                     <div className="font-medium">{`{{ app.${variable.name} }}`}</div>
                     <div className="text-sm text-muted-foreground">{variable.value}</div>
                   </div>
-                  <Button variant="destructive" size="sm" onClick={() => deleteAppVariable(variable.id)}>
+                  <Button variant="destructive" size="sm" onClick={() => project && deleteAppVariable(project.id, variable.id)}>
                     Delete
                   </Button>
                 </div>

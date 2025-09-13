@@ -28,7 +28,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
   const [cssText, setCssText] = useState('');
   
   const currentPage = pages.find(page => page.id === currentPageId);
-  const selectedComponent = currentPage?.layoutData?.content?.find(
+  const selectedComponent = currentPage?.layout_data?.find(
     (comp: any) => comp.id === selectedComponentId
   );
   
@@ -54,7 +54,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
     const defaultValues = ['default', 'auto', 'none'];
     const processedValue = defaultValues.includes(value) ? undefined : value;
     
-    const updatedContent = currentPage.layoutData.content.map((comp: any) =>
+    const updatedContent = currentPage.layout_data.map((comp: any) =>
       comp.id === selectedComponentId
         ? {
             ...comp,
@@ -67,17 +67,14 @@ export const AdvancedPropertiesPanel: React.FC = () => {
     );
     
     updatePage(currentPage.id, {
-      layoutData: {
-        ...currentPage.layoutData,
-        content: updatedContent
-      }
+      layout_data: updatedContent
     });
   };
   
   const updateComponentProp = (key: string, value: any) => {
     if (!currentPage) return;
     
-    const updatedContent = currentPage.layoutData.content.map((comp: any) =>
+    const updatedContent = currentPage.layout_data.map((comp: any) =>
       comp.id === selectedComponentId
         ? {
             ...comp,
@@ -90,25 +87,19 @@ export const AdvancedPropertiesPanel: React.FC = () => {
     );
     
     updatePage(currentPage.id, {
-      layoutData: {
-        ...currentPage.layoutData,
-        content: updatedContent
-      }
+      layout_data: updatedContent
     });
   };
   
   const deleteComponent = () => {
     if (!currentPage) return;
     
-    const updatedContent = currentPage.layoutData.content.filter(
+    const updatedContent = currentPage.layout_data.filter(
       (comp: any) => comp.id !== selectedComponentId
     );
     
     updatePage(currentPage.id, {
-      layoutData: {
-        ...currentPage.layoutData,
-        content: updatedContent
-      }
+      layout_data: updatedContent
     });
     
     setSelectedComponentId(null);
@@ -117,7 +108,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
   const applyPreset = (presetStyles: ComponentStyles) => {
     if (!currentPage) return;
     
-    const updatedContent = currentPage.layoutData.content.map((comp: any) =>
+    const updatedContent = currentPage.layout_data.map((comp: any) =>
       comp.id === selectedComponentId
         ? {
             ...comp,
@@ -130,10 +121,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
     );
     
     updatePage(currentPage.id, {
-      layoutData: {
-        ...currentPage.layoutData,
-        content: updatedContent
-      }
+      layout_data: updatedContent
     });
   };
   

@@ -12,7 +12,7 @@ interface BuilderCanvasProps {
 export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
   const { moveComponent, selectedComponentId, setSelectedComponentId, isPreviewMode } = useBuilderStore();
   
-  const components = page.layoutData?.content || [];
+  const components = page.layout_data || [];
   const hasComponents = components.length > 0;
 
   // Empty canvas drop zone for initial component
@@ -29,11 +29,11 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
             styles: {},
             children: []
           };
-          moveComponent(page.id, null, newComponent, 0);
+          moveComponent(page.id, newComponent.id, 0);
           setSelectedComponentId(newComponent.id);
         } else if (item.id) {
           // Existing component being moved to empty canvas
-          moveComponent(page.id, item.id, item.component, 0, undefined, item.parentId);
+          moveComponent(page.id, item.id, 0);
         }
       }
     },
@@ -63,7 +63,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
     >
       <div className="max-w-4xl mx-auto">
         {/* Render components with integrated drop zones */}
-        {page.layoutData?.content?.map((component, index) => (
+        {page.layout_data?.map((component, index) => (
           <DraggableComponent
             key={component.id}
             component={component}

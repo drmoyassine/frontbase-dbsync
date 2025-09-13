@@ -30,8 +30,8 @@ export const PropertiesPanel: React.FC = () => {
     return null;
   };
   
-  const selectedComponent = currentPage?.layoutData?.content ? 
-    findComponentById(currentPage.layoutData.content, selectedComponentId || '') : null;
+  const selectedComponent = currentPage?.layout_data ? 
+    findComponentById(currentPage.layout_data, selectedComponentId || '') : null;
 
   if (!selectedComponent) {
     return (
@@ -66,7 +66,7 @@ export const PropertiesPanel: React.FC = () => {
     if (!currentPage) return;
 
     const updatedContent = updateComponentInContent(
-      currentPage.layoutData.content,
+      currentPage.layout_data,
       selectedComponentId!,
       {
         props: {
@@ -77,10 +77,7 @@ export const PropertiesPanel: React.FC = () => {
     );
 
     updatePage(currentPage.id, {
-      layoutData: {
-        ...currentPage.layoutData,
-        content: updatedContent
-      }
+      layout_data: updatedContent
     });
   };
 
@@ -98,13 +95,10 @@ export const PropertiesPanel: React.FC = () => {
       });
     };
     
-    const updatedContent = removeComponentFromContent(currentPage.layoutData.content, selectedComponentId!);
+    const updatedContent = removeComponentFromContent(currentPage.layout_data, selectedComponentId!);
 
     updatePage(currentPage.id, {
-      layoutData: {
-        ...currentPage.layoutData,
-        content: updatedContent
-      }
+      layout_data: updatedContent
     });
 
     setSelectedComponentId(null);

@@ -41,7 +41,7 @@ export const LayersPanel: React.FC = () => {
   const [expandedComponents, setExpandedComponents] = useState<Set<string>>(new Set());
   
   const currentPage = pages.find(page => page.id === currentPageId);
-  const components = currentPage?.layoutData?.content || [];
+  const components = currentPage?.layout_data || [];
 
   const toggleExpanded = (componentId: string) => {
     const newExpanded = new Set(expandedComponents);
@@ -108,8 +108,8 @@ export const LayersPanel: React.FC = () => {
     // Get sibling components for validation
     const currentPage = pages.find(p => p.id === currentPageId);
     const siblingComponents = parentId 
-      ? currentPage?.layoutData?.content?.find(c => c.id === parentId)?.children || []
-      : currentPage?.layoutData?.content || [];
+      ? currentPage?.layout_data?.find(c => c.id === parentId)?.children || []
+      : currentPage?.layout_data || [];
 
     // Check if drop zone should be rendered
     const shouldShowDropZone = shouldRenderDropZone(
@@ -135,7 +135,7 @@ export const LayersPanel: React.FC = () => {
           // Find the appropriate drop zone for this index
           const validZone = validZones.find(zone => zone.index === index);
           if (validZone) {
-            moveComponent(currentPageId!, item.id, item.component, validZone.index, parentId, item.parentId);
+            moveComponent(currentPageId!, item.id, validZone.index);
           }
         }
       },
@@ -152,7 +152,7 @@ export const LayersPanel: React.FC = () => {
         if (!monitor.didDrop() && item.id !== component.id && (component.type === 'Container' || hasChildren)) {
           // Drop inside this component
           const childIndex = component.children?.length || 0;
-          moveComponent(currentPageId!, item.id, item.component, childIndex, component.id, item.parentId);
+          moveComponent(currentPageId!, item.id, childIndex);
         }
       },
       collect: (monitor) => ({

@@ -60,8 +60,8 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
   const { pages } = useBuilderStore();
   const currentPage = pages.find(p => p.id === pageId);
   const siblingComponents = parentId 
-    ? currentPage?.layoutData?.content?.find(c => c.id === parentId)?.children || []
-    : currentPage?.layoutData?.content || [];
+    ? currentPage?.layout_data?.find(c => c.id === parentId)?.children || []
+    : currentPage?.layout_data || [];
   
   // Create drop zone for reordering (drop above this component)
   const [{ isOver }, drop] = useDrop({
@@ -77,10 +77,10 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
             styles: {},
             children: []
           };
-          moveComponent(pageId, null, newComponent, index, parentId);
+          moveComponent(pageId, newComponent.id, index);
         } else if (item.id !== component.id) {
           // Existing component being moved
-          moveComponent(pageId, item.id, item.component, index, parentId, item.parentId);
+          moveComponent(pageId, item.id, index);
         }
       }
     },
@@ -115,10 +115,10 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
             styles: {},
             children: []
           };
-          moveComponent(pageId, null, newComponent, 0, component.id);
+          moveComponent(pageId, newComponent.id, 0);
         } else if (item.id !== component.id) {
           // Existing component being moved
-          moveComponent(pageId, item.id, item.component, 0, component.id, item.parentId);
+          moveComponent(pageId, item.id, 0);
         }
       }
     },
@@ -147,10 +147,10 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
             styles: {},
             children: []
           };
-          moveComponent(pageId, null, newComponent, targetIndex, parentId);
+          moveComponent(pageId, newComponent.id, targetIndex);
         } else if (item.id !== component.id) {
           // Existing component being moved (prevent self-drop)
-          moveComponent(pageId, item.id, item.component, targetIndex, parentId, item.parentId);
+          moveComponent(pageId, item.id, targetIndex);
         }
       }
     },

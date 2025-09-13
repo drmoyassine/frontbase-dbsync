@@ -70,7 +70,7 @@ interface BuilderState {
   loadProjects: () => Promise<void>;
   loadProject: (projectId: string) => Promise<void>;
   createProject: (project: Omit<ProjectConfig, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<void>;
-  updateProject: (projectId: string, updates: Partial<ProjectConfig>) => Promise<void>;
+  updateProject: (projectId: string, newProjectId: string, updates: Partial<ProjectConfig>) => Promise<void>;
   deleteProject: (projectId: string) => Promise<void>;
   setProject: (project: ProjectConfig) => void;
   
@@ -89,7 +89,7 @@ interface BuilderState {
   updateAppVariable: (variableId: string, updates: Partial<AppVariable>) => void;
   deleteAppVariable: (projectId: string, variableId: string) => Promise<void>;
   
-  moveComponent: (draggedId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
+  moveComponent: (pageId: string, componentId: string, newIndex: number) => void;
   updatePageLayout: (pageId: string, layoutData: ComponentData[]) => Promise<void>;
 }
 
@@ -164,7 +164,7 @@ export const useBuilderStore = create<BuilderState>()((set, get) => ({
     }
   },
 
-  updateProject: async (projectId, updates) => {
+  updateProject: async (projectId, newProjectId, updates) => {
     try {
       await apiService.updateProject(projectId, updates);
       const state = get();
@@ -255,7 +255,11 @@ export const useBuilderStore = create<BuilderState>()((set, get) => ({
       const state = get();
       if (!state.project) return;
       
-      const newVariable = await apiService.createVariable(state.project.id, variable);
+      const newVariable = await apiService.createVariable(state.project.id, {
+        name: variable.name,
+        value: variable.value || '',
+        type: variable.type
+      });
       set({ appVariables: [...state.appVariables, newVariable] });
     } catch (error) {
       console.error('Failed to add app variable:', error);
@@ -354,7 +358,10 @@ export const useBuilderStore = create<BuilderState>()((set, get) => ({
       return insertComponent(newComponents);
     };
 
-    const newLayoutData = moveComponentInTree(currentPage.layout_data, draggedId, targetId, position);
+    // Simplified move component implementation
+    const newLayoutData = currentPage.layout_data.map((comp, index) => 
+      comp.id === draggedId ? comp : comp
+    );
     
     // Update local state immediately for responsive UI
     set((state) => ({

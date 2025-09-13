@@ -40,7 +40,7 @@ export const FrontbaseBuilder: React.FC = () => {
       <div className="h-screen flex flex-col bg-background">
         <BuilderHeader />
         
-        <div className="builder-layout">
+        <div className={`builder-layout ${isPreviewMode ? 'preview-mode' : 'design-mode'}`}>
           {/* Left Sidebar - Native Puck Components */}
           {!isPreviewMode && (
             <div className="builder-sidebar left-sidebar">

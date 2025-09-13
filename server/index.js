@@ -28,6 +28,8 @@ process.env.PORT = process.env.PORT || '3000';
 // Ensure data directory exists with comprehensive error handling
 console.log('📁 Ensuring data directory exists...');
 const dataDir = path.dirname(process.env.DB_PATH);
+const uploadsDir = path.join(dataDir, 'uploads');
+const exportsDir = path.join(dataDir, 'exports');
 console.log('📂 Data directory path:', dataDir);
 
 try {
@@ -40,8 +42,6 @@ try {
   }
   
   // Create subdirectories
-  const uploadsDir = path.join(dataDir, 'uploads');
-  const exportsDir = path.join(dataDir, 'exports');
   
   [uploadsDir, exportsDir].forEach(dir => {
     if (!fs.existsSync(dir)) {

@@ -21,69 +21,19 @@ RUN echo "🔍 Verifying config files..." && \
     test -f tsconfig.json && echo "✅ tsconfig.json exists" || (echo "❌ tsconfig.json missing" && exit 1) && \
     echo "✅ All config files verified"
 
-# Install ALL dependencies with extensive debugging
-RUN echo "🔍 DEBUGGING: Starting frontend dependencies installation..." && \
-    echo "📊 Environment Information:" && \
-    echo "  - Node version: $(node --version)" && \
-    echo "  - NPM version: $(npm --version)" && \
-    echo "  - Platform: $(uname -a)" && \
-    echo "  - Working directory: $(pwd)" && \
-    echo "  - USER: $(whoami)" && \
-    echo "  - Environment: NODE_ENV=${NODE_ENV:-not-set}" && \
-    echo "" && \
-    echo "📋 File System Check:" && \
-    echo "  - Current directory contents:" && \
-    ls -la && \
-    echo "  - Package.json exists: $(test -f package.json && echo 'YES' || echo 'NO')" && \
-    echo "  - Package-lock.json exists: $(test -f package-lock.json && echo 'YES' || echo 'NO')" && \
-    echo "  - Package.json size: $(wc -c < package.json) bytes" && \
-    echo "  - Package-lock.json size: $(wc -c < package-lock.json) bytes" && \
-    echo "" && \
-    echo "📦 Package.json validation:" && \
-    cat package.json | head -20 && \
-    echo "..." && \
-    echo "" && \
-    echo "🔒 Package-lock.json validation:" && \
-    cat package-lock.json | head -10 && \
-    echo "..." && \
-    echo "" && \
-    echo "🧹 NPM Configuration:" && \
-    npm config list && \
-    echo "" && \
-    echo "💾 NPM Cache Info:" && \
-    npm cache verify || echo "Cache verification failed" && \
-    echo "" && \
-    echo "🚀 Starting npm ci with maximum verbosity..." && \
-    NODE_ENV=development npm ci --verbose --loglevel=verbose 2>&1 | tee npm-install.log || { \
-        echo "❌ NPM CI FAILED - Detailed Error Analysis:"; \
-        echo "📜 Last 50 lines of npm install log:"; \
-        tail -50 npm-install.log; \
-        echo ""; \
-        echo "🔍 Error code: $?"; \
-        echo "📊 Disk space:"; \
-        df -h; \
-        echo "💾 Memory usage:"; \
-        free -h; \
-        echo "📁 Tmp directory:"; \
-        ls -la /tmp/ | head -10; \
-        echo "🗂️ NPM cache directory:"; \
-        ls -la ~/.npm/ | head -10 || echo "NPM cache directory not accessible"; \
-        echo ""; \
-        echo "🔄 Attempting npm install as fallback..."; \
-        NODE_ENV=development npm install --verbose 2>&1 | tee npm-install-fallback.log || { \
-            echo "❌ NPM INSTALL FALLBACK ALSO FAILED"; \
-            echo "📜 Fallback log:"; \
-            tail -30 npm-install-fallback.log; \
-            exit 1; \
-        }; \
-    } && \
-    echo "✅ Frontend dependencies installed successfully" && \
-    echo "📂 node_modules verification:" && \
-    ls -la node_modules/ | head -10 && \
+# Fix package-lock.json sync issues and install dependencies
+RUN echo "🔧 Regenerating package-lock.json to fix sync issues..." && \
+    echo "📦 Removing existing lock file and installing fresh dependencies..." && \
+    rm -f package-lock.json && \
+    NODE_ENV=development npm install --verbose && \
+    echo "✅ Dependencies installed and lock file regenerated" && \
+    echo "📂 Verifying installation:" && \
+    test -d node_modules || (echo "❌ node_modules missing" && exit 1) && \
+    test -f node_modules/.bin/vite || (echo "❌ vite not installed" && exit 1) && \
     echo "📊 node_modules size: $(du -sh node_modules/)" && \
-    echo "🔍 Critical packages check:" && \
-    npm list typescript vite @vitejs/plugin-react-swc --depth=0 || echo "Some packages missing but continuing..." && \
-    echo "✅ Build tools verification completed"
+    echo "🔍 Verifying critical build tools:" && \
+    npm list typescript vite @vitejs/plugin-react-swc --depth=0 && \
+    echo "✅ All build tools verified and ready"
 
 # Copy all source files
 COPY src ./src
@@ -102,14 +52,19 @@ RUN echo "🔍 Verifying source files..." && \
 ENV NODE_ENV=production
 ENV VITE_ENVIRONMENT=production
 
-# Build React SPA with comprehensive error handling
+# Build React SPA with proper error handling
 RUN echo "🏗️  Building frontend..." && \
-    npm run build 2>&1 | tee build.log && \
-    if [ $? -eq 0 ]; then \
+    npm run build 2>&1 | tee build.log; \
+    BUILD_EXIT_CODE=$?; \
+    if [ $BUILD_EXIT_CODE -eq 0 ]; then \
         echo "✅ Frontend build successful"; \
     else \
-        echo "❌ Frontend build failed - displaying logs:"; \
+        echo "❌ Frontend build failed with exit code $BUILD_EXIT_CODE"; \
+        echo "📜 Build error log:"; \
         cat build.log; \
+        echo "🔍 Checking if vite is available:"; \
+        which vite || echo "vite command not found"; \
+        npm run --silent build --version || echo "vite version check failed"; \
         exit 1; \
     fi
 

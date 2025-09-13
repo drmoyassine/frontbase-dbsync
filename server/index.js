@@ -429,6 +429,25 @@ app.get('/builder/*', (req, res) => {
   }
 });
 
+// SPA fallback for frontend app routes (auth, dashboard, etc.)
+app.get('/auth/*', (req, res) => {
+  const indexPath = path.join(__dirname, 'public', 'index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(503).send('Frontend not available');
+  }
+});
+
+app.get('/dashboard/*', (req, res) => {
+  const indexPath = path.join(__dirname, 'public', 'index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(503).send('Frontend not available');
+  }
+});
+
 // Public page SSR handler
 app.get('/:slug?', async (req, res) => {
   try {

@@ -2,9 +2,9 @@ import React from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { BuilderHeader } from './BuilderHeader';
-import { ComponentPalette } from './ComponentPalette';
+import { LeftSidebar } from './LeftSidebar';
+import { RightSidebar } from './RightSidebar';
 import { BuilderCanvas } from './BuilderCanvas';
-import { AdvancedPropertiesPanel } from './AdvancedPropertiesPanel';
 import { useBuilderStore } from '@/stores/builder';
 import './builder.css';
 
@@ -34,10 +34,10 @@ export const CustomBuilder: React.FC = () => {
         <BuilderHeader />
         
         <div className={`builder-layout ${isPreviewMode ? 'preview-mode' : 'design-mode'}`}>
-          {/* Left Sidebar - Component Palette */}
+          {/* Left Sidebar - Components & Layers */}
           {!isPreviewMode && (
             <div className="builder-sidebar left-sidebar">
-              <ComponentPalette />
+              <LeftSidebar />
             </div>
           )}
 
@@ -46,10 +46,10 @@ export const CustomBuilder: React.FC = () => {
             <BuilderCanvas page={currentPage} />
           </div>
 
-          {/* Right Sidebar - Properties Panel */}
+          {/* Right Sidebar - Properties & Styling */}
           {!isPreviewMode && (
             <div className="builder-sidebar right-sidebar">
-              <AdvancedPropertiesPanel />
+              <RightSidebar />
             </div>
           )}
         </div>

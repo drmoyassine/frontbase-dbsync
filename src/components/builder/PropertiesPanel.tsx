@@ -17,9 +17,21 @@ export const PropertiesPanel: React.FC = () => {
   } = useBuilderStore();
 
   const currentPage = pages.find(page => page.id === currentPageId);
-  const selectedComponent = currentPage?.layoutData?.content?.find(
-    component => component.props.id === selectedComponentId
-  );
+  
+  // Recursive function to find component by ID
+  const findComponentById = (components: any[], id: string): any => {
+    for (const comp of components) {
+      if (comp.id === id) return comp;
+      if (comp.children) {
+        const found = findComponentById(comp.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+  
+  const selectedComponent = currentPage?.layoutData?.content ? 
+    findComponentById(currentPage.layoutData.content, selectedComponentId || '') : null;
 
   if (!selectedComponent) {
     return (
@@ -34,34 +46,64 @@ export const PropertiesPanel: React.FC = () => {
     );
   }
 
+  // Recursive function to update component in nested structure
+  const updateComponentInContent = (components: any[], componentId: string, updates: any): any[] => {
+    return components.map(comp => {
+      if (comp.id === componentId) {
+        return { ...comp, ...updates };
+      }
+      if (comp.children) {
+        return {
+          ...comp,
+          children: updateComponentInContent(comp.children, componentId, updates)
+        };
+      }
+      return comp;
+    });
+  };
+
   const updateComponentProp = (key: string, value: any) => {
     if (!currentPage) return;
 
-    const updatedContent = currentPage.layoutData?.content?.map(component => 
-      component.props.id === selectedComponentId
-        ? { ...component, props: { ...component.props, [key]: value } }
-        : component
-    ) || [];
+    const updatedContent = updateComponentInContent(
+      currentPage.layoutData.content,
+      selectedComponentId!,
+      {
+        props: {
+          ...selectedComponent.props,
+          [key]: value
+        }
+      }
+    );
 
     updatePage(currentPage.id, {
       layoutData: {
-        content: updatedContent,
-        root: currentPage.layoutData?.root || {}
+        ...currentPage.layoutData,
+        content: updatedContent
       }
     });
   };
 
   const deleteComponent = () => {
     if (!currentPage) return;
-
-    const updatedContent = currentPage.layoutData?.content?.filter(
-      component => component.props.id !== selectedComponentId
-    ) || [];
+    
+    // Recursive function to remove component from nested structure
+    const removeComponentFromContent = (components: any[], componentId: string): any[] => {
+      return components.filter(comp => {
+        if (comp.id === componentId) return false;
+        if (comp.children) {
+          comp.children = removeComponentFromContent(comp.children, componentId);
+        }
+        return true;
+      });
+    };
+    
+    const updatedContent = removeComponentFromContent(currentPage.layoutData.content, selectedComponentId!);
 
     updatePage(currentPage.id, {
       layoutData: {
-        content: updatedContent,
-        root: currentPage.layoutData?.root || {}
+        ...currentPage.layoutData,
+        content: updatedContent
       }
     });
 

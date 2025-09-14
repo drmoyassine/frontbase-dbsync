@@ -61,12 +61,14 @@ class DatabaseManager {
     
     // User settings statements
     this.getUserSettingsStmt = this.db.prepare('SELECT * FROM user_settings WHERE user_id = ?');
-    this.upsertUserSettingsStmt = this.db.prepare(`
-      INSERT INTO user_settings (user_id, setting_key, setting_value, updated_at)
-      VALUES (?, ?, ?, datetime('now'))
-      ON CONFLICT(user_id, setting_key) DO UPDATE SET
-        setting_value = excluded.setting_value,
-        updated_at = excluded.updated_at
+    this.createUserSettingsStmt = this.db.prepare(`
+      INSERT INTO user_settings (id, user_id, supabase_url, supabase_anon_key, settings_data, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `);
+    this.updateUserSettingsStmt = this.db.prepare(`
+      UPDATE user_settings 
+      SET supabase_url = ?, supabase_anon_key = ?, settings_data = ?, updated_at = datetime('now')
+      WHERE user_id = ?
     `);
   }
   
@@ -221,16 +223,44 @@ class DatabaseManager {
   
   // User settings methods
   getUserSettings(userId) {
-    const settings = this.getUserSettingsStmt.all(userId);
-    const result = {};
-    settings.forEach(setting => {
-      result[setting.setting_key] = setting.setting_value;
-    });
+    const userSettings = this.getUserSettingsStmt.get(userId);
+    if (!userSettings) return {};
+    
+    const result = {
+      supabase_url: userSettings.supabase_url,
+      supabase_anon_key: userSettings.supabase_anon_key,
+    };
+    
+    // Parse additional settings from JSON
+    if (userSettings.settings_data) {
+      try {
+        const additionalSettings = JSON.parse(userSettings.settings_data);
+        Object.assign(result, additionalSettings);
+      } catch (error) {
+        console.error('Error parsing settings_data:', error);
+      }
+    }
+    
     return result;
   }
-  
+
+  updateUserSettings(userId, settings) {
+    const { supabase_url, supabase_anon_key, ...otherSettings } = settings;
+    const settingsData = Object.keys(otherSettings).length > 0 ? JSON.stringify(otherSettings) : null;
+    
+    const current = this.getUserSettingsStmt.get(userId);
+    if (current) {
+      this.updateUserSettingsStmt.run(supabase_url, supabase_anon_key, settingsData, userId);
+    } else {
+      const { v4: uuidv4 } = require('uuid');
+      this.createUserSettingsStmt.run(uuidv4(), userId, supabase_url, supabase_anon_key, settingsData);
+    }
+  }
+
   updateUserSetting(userId, key, value) {
-    this.upsertUserSettingsStmt.run(userId, key, value);
+    const current = this.getUserSettings(userId);
+    const updated = { ...current, [key]: value };
+    this.updateUserSettings(userId, updated);
   }
   
   close() {

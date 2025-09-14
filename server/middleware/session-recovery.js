@@ -11,8 +11,11 @@ const sessionRecovery = (dbManager) => {
   const getUserByIdStmt = dbManager.db.prepare('SELECT * FROM users WHERE id = ?');
 
   return (req, res, next) => {
-    // Only apply to auth check endpoint
-    if (req.path !== '/me' || req.method !== 'GET') {
+    // Apply to all protected API routes that might need session recovery
+    const protectedPaths = ['/me', '/database/connections', '/database/', '/project/', '/pages/', '/variables/'];
+    const isProtectedRoute = protectedPaths.some(path => req.path.includes(path)) && req.method === 'GET';
+    
+    if (!isProtectedRoute) {
       return next();
     }
 

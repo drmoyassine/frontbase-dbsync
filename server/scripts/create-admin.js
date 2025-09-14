@@ -20,17 +20,17 @@ async function createAdminUser() {
     const passwordHash = await bcrypt.hash(adminPassword, 10);
     console.log('Generated password hash for admin user');
     
-    // Delete existing admin user if exists
-    const deleteStmt = db.db.prepare('DELETE FROM users WHERE username = ?');
-    deleteStmt.run(adminUsername);
-    
-    // Create new admin user with correct hash
-    const createUserStmt = db.db.prepare(`
-      INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
-      VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+    // Use INSERT OR REPLACE to handle existing admin user
+    const upsertUserStmt = db.db.prepare(`
+      INSERT OR REPLACE INTO users (id, username, email, password_hash, created_at, updated_at)
+      VALUES ('default-admin', ?, ?, ?, datetime('now'), datetime('now'))
     `);
     
-    createUserStmt.run('default-admin', adminUsername, adminEmail, passwordHash);
+    const result = upsertUserStmt.run(adminUsername, adminEmail, passwordHash);
+    
+    if (result.changes === 0) {
+      throw new Error('Failed to create or update admin user');
+    }
     
     const isCustomCredentials = process.env.ADMIN_USERNAME || process.env.ADMIN_PASSWORD;
     console.log(`Admin user created successfully with username: ${adminUsername}${!isCustomCredentials ? ', password: admin123' : ' (custom credentials)'}`);

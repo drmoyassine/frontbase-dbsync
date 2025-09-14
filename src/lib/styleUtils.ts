@@ -1,4 +1,4 @@
-import { ComponentStyles } from '@/types/styles';
+import { ComponentStyles, ResponsiveStyles } from '@/types/styles';
 
 // Tailwind spacing values (using design tokens)
 const TAILWIND_SPACING = ['0', '1', '2', '3', '4', '5', '6', '8', '10', '12', '16', '20', '24', '32', '40', '48', '56', '64'];
@@ -123,10 +123,15 @@ export function generateTailwindClass(property: string, value: string): string |
   }
 }
 
-export function generateStyles(styles: ComponentStyles): { classes: string; inlineStyles: React.CSSProperties } {
+export function generateStyles(
+  styles: ComponentStyles, 
+  responsiveStyles?: ResponsiveStyles,
+  currentViewport: 'mobile' | 'tablet' | 'desktop' = 'desktop'
+): { classes: string; inlineStyles: React.CSSProperties } {
   const tailwindClasses: string[] = [];
   const inlineStyles: React.CSSProperties = {};
   
+  // Apply base styles
   Object.entries(styles).forEach(([property, value]) => {
     if (!value) return;
     
@@ -135,16 +140,74 @@ export function generateStyles(styles: ComponentStyles): { classes: string; inli
     if (tailwindClass) {
       tailwindClasses.push(tailwindClass);
     } else {
-      // Convert camelCase to kebab-case for CSS properties
       const cssProperty = property.replace(/([A-Z])/g, '-$1').toLowerCase();
       inlineStyles[cssProperty as keyof React.CSSProperties] = value as any;
     }
   });
   
+  // Apply responsive styles for current viewport
+  if (responsiveStyles) {
+    const viewportStyles = responsiveStyles[currentViewport];
+    if (viewportStyles) {
+      Object.entries(viewportStyles).forEach(([property, value]) => {
+        if (!value) return;
+        
+        const tailwindClass = generateTailwindClass(property, value);
+        
+        if (tailwindClass) {
+          // For current viewport, these styles override base styles
+          tailwindClasses.push(tailwindClass);
+        } else {
+          const cssProperty = property.replace(/([A-Z])/g, '-$1').toLowerCase();
+          inlineStyles[cssProperty as keyof React.CSSProperties] = value as any;
+        }
+      });
+    }
+  }
+  
   return {
     classes: tailwindClasses.join(' '),
     inlineStyles
   };
+}
+
+export function generateResponsiveCSS(responsiveStyles: ResponsiveStyles): string {
+  const css: string[] = [];
+  
+  if (responsiveStyles.mobile) {
+    css.push('@media (max-width: 767px) {');
+    Object.entries(responsiveStyles.mobile).forEach(([property, value]) => {
+      if (value) {
+        const cssProperty = property.replace(/([A-Z])/g, '-$1').toLowerCase();
+        css.push(`  ${cssProperty}: ${value};`);
+      }
+    });
+    css.push('}');
+  }
+  
+  if (responsiveStyles.tablet) {
+    css.push('@media (min-width: 768px) and (max-width: 1023px) {');
+    Object.entries(responsiveStyles.tablet).forEach(([property, value]) => {
+      if (value) {
+        const cssProperty = property.replace(/([A-Z])/g, '-$1').toLowerCase();
+        css.push(`  ${cssProperty}: ${value};`);
+      }
+    });
+    css.push('}');
+  }
+  
+  if (responsiveStyles.desktop) {
+    css.push('@media (min-width: 1024px) {');
+    Object.entries(responsiveStyles.desktop).forEach(([property, value]) => {
+      if (value) {
+        const cssProperty = property.replace(/([A-Z])/g, '-$1').toLowerCase();
+        css.push(`  ${cssProperty}: ${value};`);
+      }
+    });
+    css.push('}');
+  }
+  
+  return css.join('\n');
 }
 
 export function getStylePresets() {

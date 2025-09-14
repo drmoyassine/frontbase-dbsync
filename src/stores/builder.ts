@@ -67,6 +67,11 @@ interface BuilderState {
   hasUnsavedChanges: boolean;
   editingComponentId: string | null;
   
+  // Responsive state
+  currentViewport: 'mobile' | 'tablet' | 'desktop';
+  zoomLevel: number;
+  showDeviceFrame: boolean;
+  
   // Variables
   appVariables: AppVariable[];
   
@@ -97,6 +102,11 @@ interface BuilderState {
   setEditingComponentId: (id: string | null) => void;
   updateComponentText: (componentId: string, textProperty: string, text: string) => void;
   
+  // Responsive actions
+  setCurrentViewport: (viewport: 'mobile' | 'tablet' | 'desktop') => void;
+  setZoomLevel: (zoom: number) => void;
+  setShowDeviceFrame: (show: boolean) => void;
+  
   // New actions for database integration
   savePageToDatabase: (pageId: string) => Promise<void>;
   publishPage: (pageId: string) => Promise<void>;
@@ -123,6 +133,12 @@ export const useBuilderStore = create<BuilderState>()(
       isLoading: false,
       hasUnsavedChanges: false,
       editingComponentId: null,
+      
+      // Responsive state
+      currentViewport: 'desktop',
+      zoomLevel: 100,
+      showDeviceFrame: true,
+      
       appVariables: [],
       isSupabaseConnected: false,
       supabaseTables: [],
@@ -302,6 +318,11 @@ export const useBuilderStore = create<BuilderState>()(
       setDraggedComponentId: (componentId) => set({ draggedComponentId: componentId }),
       
       setEditingComponentId: (id) => set({ editingComponentId: id }),
+
+      // Responsive actions
+      setCurrentViewport: (viewport: 'mobile' | 'tablet' | 'desktop') => set({ currentViewport: viewport }),
+      setZoomLevel: (zoom: number) => set({ zoomLevel: Math.max(25, Math.min(200, zoom)) }),
+      setShowDeviceFrame: (show: boolean) => set({ showDeviceFrame: show }),
 
       updateComponentText: (componentId: string, textProperty: string, text: string) => {
         set((state) => {

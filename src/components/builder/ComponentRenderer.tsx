@@ -15,7 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { Progress } from '@/components/ui/progress';
 import { generateStyles } from '@/lib/styleUtils';
-import { ComponentStyles } from '@/types/styles';
+import { ComponentStyles, ResponsiveStyles } from '@/types/styles';
 import { cn } from '@/lib/utils';
 import { InlineTextEditor } from './InlineTextEditor';
 import { useBuilderStore } from '@/stores/builder';
@@ -26,6 +26,7 @@ interface ComponentRendererProps {
     type: string;
     props: Record<string, any>;
     styles?: ComponentStyles;
+    responsiveStyles?: ResponsiveStyles;
     className?: string;
     children?: any[];
   };
@@ -43,10 +44,14 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   onDoubleClick 
 }) => {
   const { id, type, props, styles = {}, className = '' } = component;
-  const { editingComponentId, setEditingComponentId, updateComponentText, isPreviewMode } = useBuilderStore();
+  const { editingComponentId, setEditingComponentId, updateComponentText, isPreviewMode, currentViewport } = useBuilderStore();
   
   // Generate styles from the styles object
-  const { classes: generatedClasses, inlineStyles } = generateStyles(styles);
+  const { classes: generatedClasses, inlineStyles } = generateStyles(
+    styles, 
+    component.responsiveStyles, 
+    currentViewport
+  );
   const combinedClassName = cn(
     generatedClasses,
     className

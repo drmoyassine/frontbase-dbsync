@@ -143,26 +143,7 @@ export const BuilderHeader: React.FC = () => {
         )}
       </div>
 
-      {/* Center Section */}
-      <div className="flex items-center gap-2">
-        <Button
-          variant={isPreviewMode ? "default" : "outline"}
-          size="sm"
-          onClick={() => setPreviewMode(!isPreviewMode)}
-        >
-          {isPreviewMode ? (
-            <>
-              <Eye className="h-4 w-4 mr-2" />
-              Preview
-            </>
-          ) : (
-            <>
-              <Layers className="h-4 w-4 mr-2" />
-              Design
-            </>
-          )}
-        </Button>
-      </div>
+      {/* Center Section - Removed, now handled by ResponsiveToolbar */}
 
       {/* Right Section */}
       <div className="flex items-center gap-3">

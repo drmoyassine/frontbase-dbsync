@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { BuilderHeader } from './BuilderHeader';
+import { ResponsiveToolbar } from './ResponsiveToolbar';
 import { LeftSidebar } from './LeftSidebar';
 import { RightSidebar } from './RightSidebar';
 import { BuilderCanvas } from './BuilderCanvas';
@@ -84,6 +85,7 @@ export const CustomBuilder: React.FC = () => {
     <DndProvider backend={HTML5Backend}>
       <div className="h-screen flex flex-col bg-background">
         <BuilderHeader />
+        <ResponsiveToolbar />
         
         <div className={`builder-layout ${isPreviewMode ? 'preview-mode' : 'design-mode'}`}>
           {/* Left Sidebar - Components & Layers */}

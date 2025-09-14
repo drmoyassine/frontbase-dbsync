@@ -49,9 +49,17 @@ export const TableDataModal: React.FC<TableDataModalProps> = ({
     setError(null);
     
     try {
+      // Add stronger cache busting
+      const cacheBuster = Math.random().toString(36).substring(7);
       const response = await fetch(
-        `/api/database/table-data/${tableName}?limit=${limit}&offset=${offset}`,
-        { credentials: 'include' }
+        `/api/database/table-data/${tableName}?limit=${limit}&offset=${offset}&_cb=${cacheBuster}`,
+        { 
+          credentials: 'include',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        }
       );
       
       if (response.ok) {

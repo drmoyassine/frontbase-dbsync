@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Database, ExternalLink, AlertCircle, CheckCircle, Plus, Settings, Trash2 } from 'lucide-react';
 import { useDashboardStore } from '@/stores/dashboard';
 import { SupabaseConnectionModal } from './SupabaseConnectionModal';
-import { CombinedTableView } from './CombinedTableView';
+import { SimpleTableView } from './SimpleTableView';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -224,7 +224,7 @@ export const DatabasePanel: React.FC = () => {
 
       {connections.supabase.connected && (
         <div className="space-y-6">
-          <CombinedTableView />
+          <SimpleTableView />
         </div>
       )}
 

@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const { authenticateToken } = require('./auth');
 const DatabaseManager = require('../../utils/db');
 const { encrypt, decrypt } = require('../../utils/encryption');
@@ -164,11 +165,13 @@ router.get('/supabase-tables', authenticateToken, async (req, res) => {
 
 // Get table schema
 router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
-  // Add cache-busting headers
+  // Add stronger cache-busting headers
   res.set({
-    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Cache-Control': 'no-cache, no-store, must-revalidate, private',
     'Pragma': 'no-cache',
-    'Expires': '0'
+    'Expires': '0',
+    'ETag': crypto.randomUUID(),
+    'Last-Modified': new Date().toUTCString()
   });
 
   try {
@@ -300,11 +303,13 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
 
 // Get table data preview
 router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
-  // Add cache-busting headers
+  // Add stronger cache-busting headers
   res.set({
-    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Cache-Control': 'no-cache, no-store, must-revalidate, private',
     'Pragma': 'no-cache',
-    'Expires': '0'
+    'Expires': '0',
+    'ETag': crypto.randomUUID(),
+    'Last-Modified': new Date().toUTCString()
   });
 
   try {

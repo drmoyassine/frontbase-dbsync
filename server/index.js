@@ -80,7 +80,7 @@ try {
   
   // Test database integrity after startup
   console.log('🔍 Testing database integrity...');
-  const testQuery = db.prepare('SELECT name FROM sqlite_master WHERE type="table"');
+  const testQuery = db.prepare('SELECT name FROM sqlite_master WHERE type=\'table\'');
   const tables = testQuery.all();
   console.log('📋 Database tables found:', tables.map(t => t.name).join(', '));
   

@@ -115,6 +115,13 @@ export const useAuthStore = create<AuthState>()(
         console.log('Current URL:', window.location.href);
         console.log('Current cookies:', document.cookie);
         
+        const currentState = get();
+        console.log('Current localStorage state:', {
+          hasUser: !!currentState.user,
+          isAuthenticated: currentState.isAuthenticated,
+          userId: currentState.user?.id
+        });
+        
         try {
           set({ isLoading: true });
           
@@ -129,6 +136,11 @@ export const useAuthStore = create<AuthState>()(
           if (response.ok) {
             const data = await response.json();
             console.log('Auth check successful, user data:', data);
+            
+            if (data.recovered) {
+              console.log('🔄 Session was recovered automatically');
+            }
+            
             set({ 
               user: data.user, 
               isAuthenticated: true, 
@@ -136,6 +148,37 @@ export const useAuthStore = create<AuthState>()(
             });
             console.log('User is authenticated:', data.user);
           } else {
+            // Check if we should attempt session recovery
+            if (response.status === 401 && currentState.user && currentState.isAuthenticated) {
+              console.log('🔄 AUTH STORE: Attempting session recovery...');
+              console.log('🔄 AUTH STORE: User in localStorage:', currentState.user.id);
+              
+              try {
+                const recoveryResponse = await fetch('/api/auth/me', {
+                  credentials: 'include',
+                  headers: {
+                    'X-Recovery-User-Id': currentState.user.id,
+                    'Authorization': 'Bearer recovery-token'
+                  }
+                });
+
+                if (recoveryResponse.ok) {
+                  const recoveryData = await recoveryResponse.json();
+                  console.log('🔄 AUTH STORE: Session recovery successful:', recoveryData);
+                  
+                  set({ 
+                    user: recoveryData.user, 
+                    isAuthenticated: true, 
+                    isLoading: false 
+                  });
+                  console.log('🔄 User session recovered successfully');
+                  return;
+                }
+              } catch (recoveryError) {
+                console.error('🔄 AUTH STORE: Session recovery failed:', recoveryError);
+              }
+            }
+            
             const errorText = await response.text();
             console.log('Auth check failed with status:', response.status);
             console.log('Auth check error response:', errorText);

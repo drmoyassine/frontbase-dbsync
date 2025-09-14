@@ -77,6 +77,26 @@ let db;
 try {
   db = initializeDatabase();
   console.log('✅ Database initialized successfully');
+  
+  // Test database integrity after startup
+  console.log('🔍 Testing database integrity...');
+  const testQuery = db.prepare('SELECT name FROM sqlite_master WHERE type="table"');
+  const tables = testQuery.all();
+  console.log('📋 Database tables found:', tables.map(t => t.name).join(', '));
+  
+  // Check critical tables exist
+  const requiredTables = ['users', 'user_sessions', 'project_config', 'pages'];
+  const missingTables = requiredTables.filter(table => 
+    !tables.some(t => t.name === table)
+  );
+  
+  if (missingTables.length > 0) {
+    console.error('❌ Missing required tables:', missingTables);
+    process.exit(1);
+  }
+  
+  console.log('✅ Database integrity check passed');
+  
 } catch (error) {
   console.error('❌ Failed to initialize database:', error.message);
   console.error('📋 Database error details:');
@@ -93,6 +113,26 @@ let dbManager;
 try {
   dbManager = new DatabaseManager();
   console.log('✅ Database manager connected');
+  
+  // Add session monitoring for debugging
+  if (process.env.NODE_ENV !== 'production' || process.env.DEBUG_SESSIONS) {
+    const { monitorSessions } = require('./debug/session-monitor');
+    monitorSessions(dbManager);
+    console.log('🔍 Session monitoring enabled');
+  }
+  
+  // Run comprehensive startup health check
+  const { checkStartupHealth } = require('./debug/startup-check');
+  const healthResult = checkStartupHealth(dbManager);
+  
+  if (!healthResult.success) {
+    console.error('❌ Startup health check failed');
+    if (healthResult.error) {
+      console.error('Error:', healthResult.error);
+    }
+    // Don't exit - allow server to start with warnings
+  }
+  
 } catch (error) {
   console.error('❌ Failed to connect database manager:', error);
   console.error('Stack trace:', error.stack);
@@ -129,23 +169,40 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 const cookieParser = require('cookie-parser');
 app.use(cookieParser());
 
-// Health check endpoint for debugging
+// Enhanced health check endpoint for debugging
 app.get('/health', (req, res) => {
   try {
+    // Test basic database connectivity
     const dbTest = dbManager.getProject();
+    
+    // Test session functionality
+    const sessionTest = dbManager.db.prepare('SELECT COUNT(*) as count FROM user_sessions').get();
+    
+    // Test critical tables
+    const tableTest = dbManager.db.prepare(`
+      SELECT name FROM sqlite_master 
+      WHERE type='table' AND name IN ('users', 'user_sessions', 'project_config', 'pages')
+    `).all();
+    
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
       database: 'connected',
       environment: process.env.NODE_ENV || 'development',
       port: PORT,
-      uptime: process.uptime()
+      uptime: process.uptime(),
+      session_count: sessionTest.count,
+      tables: tableTest.map(t => t.name),
+      database_path: process.env.DB_PATH,
+      startup_time: new Date().toISOString()
     });
   } catch (error) {
+    console.error('❌ Health check failed:', error);
     res.status(500).json({
       status: 'unhealthy',
       error: error.message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      database_path: process.env.DB_PATH
     });
   }
 });
@@ -255,8 +312,12 @@ app.get('/api', (req, res) => {
 // Auth routes (must be loaded first)
 try {
   const { router: authRouter } = require('./routes/api/auth');
+  const sessionRecovery = require('./middleware/session-recovery');
+  
+  // Add session recovery middleware
+  app.use('/api/auth', sessionRecovery(dbManager));
   app.use('/api/auth', authRouter);
-  console.log('✅ Auth API routes loaded');
+  console.log('✅ Auth API routes loaded with session recovery');
 } catch (error) {
   console.error('❌ Failed to load auth routes:', error);
   process.exit(1);

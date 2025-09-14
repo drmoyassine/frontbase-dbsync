@@ -7,13 +7,21 @@ const KEY_LENGTH = 32;
 const IV_LENGTH = 16;
 const TAG_LENGTH = 16;
 
-// Persistent key storage
-const DATA_DIR = path.join(__dirname, '../../data');
+// Persistent key storage - use environment variable or absolute path for Docker
+const DATA_DIR = process.env.DATA_DIR || '/app/data';
 const KEY_FILE = path.join(DATA_DIR, 'encryption.key');
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+console.log('Encryption setup - DATA_DIR:', DATA_DIR, 'KEY_FILE:', KEY_FILE);
+
+// Ensure data directory exists with error handling
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    console.log('Created data directory:', DATA_DIR);
+  }
+} catch (error) {
+  console.warn('Failed to create data directory:', error.message);
+  console.warn('Will use environment variable fallback for encryption key');
 }
 
 // Generate or use existing encryption key

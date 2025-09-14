@@ -156,39 +156,63 @@ try {
     const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
     
+    console.log('🔍 Checking for Supabase environment variables...');
+    console.log(`  SUPABASE_PROJECT_URL: ${supabaseUrl ? '✓ Set' : '✗ Not set'}`);
+    console.log(`  SUPABASE_ANON_KEY: ${supabaseAnonKey ? '✓ Set' : '✗ Not set'}`);
+    console.log(`  SUPABASE_SERVICE_KEY: ${supabaseServiceKey ? '✓ Set' : '✗ Not set'}`);
+    
     if (supabaseUrl && supabaseAnonKey && supabaseServiceKey) {
-      console.log('🔗 Auto-configuring Supabase from environment variables...');
+      console.log('🔗 Auto-configuring Supabase at PROJECT LEVEL from environment variables...');
       
-      const { encryptData } = require('./utils/encryption');
+      const { encrypt } = require('./utils/encryption');
       
-      // Get admin user ID
+      // Encrypt the service key
+      console.log('🔐 Encrypting service key...');
+      const encryptedServiceKey = encrypt(supabaseServiceKey);
+      
+      // Store Supabase connection at PROJECT level (not user level)
+      console.log('💾 Storing Supabase credentials in project settings...');
+      const stmt = dbManager.db.prepare(`
+        UPDATE project 
+        SET supabase_url = ?, 
+            supabase_anon_key = ?,
+            updated_at = datetime('now')
+        WHERE id = 'default'
+      `);
+      
+      stmt.run(supabaseUrl, supabaseAnonKey);
+      
+      // Store encrypted service key in user settings for admin (for now, until we add it to project table)
       const adminUser = dbManager.db.prepare('SELECT id FROM users WHERE username = ? OR email = ?')
         .get(process.env.ADMIN_USERNAME || 'admin', process.env.ADMIN_EMAIL || 'admin@frontbase.dev');
       
       if (adminUser) {
-        // Encrypt the service key
-        const encryptedServiceKey = encryptData(supabaseServiceKey);
-        
-        // Store Supabase connection for admin user
-        const stmt = dbManager.db.prepare(`
-          INSERT OR REPLACE INTO user_database_connections 
-          (user_id, database_type, connection_data) 
-          VALUES (?, 'supabase', ?)
-        `);
-        
-        const connectionData = JSON.stringify({
-          url: supabaseUrl,
-          anon_key: supabaseAnonKey,
-          service_key: encryptedServiceKey
+        console.log('🔐 Storing encrypted service key...');
+        dbManager.db.updateUserSetting(adminUser.id, 'supabase_service_key_encrypted', JSON.stringify(encryptedServiceKey));
+      }
+      
+      // Test the connection
+      console.log('🧪 Testing Supabase connection...');
+      try {
+        const testResponse = await fetch(`${supabaseUrl}/rest/v1/`, {
+          headers: {
+            'apikey': supabaseAnonKey,
+            'Authorization': `Bearer ${supabaseAnonKey}`
+          }
         });
         
-        stmt.run(adminUser.id, connectionData);
-        console.log('✅ Supabase auto-configured successfully');
-      } else {
-        console.warn('⚠️ Could not find admin user for Supabase auto-configuration');
+        if (testResponse.ok) {
+          console.log('✅ Supabase connection test SUCCESSFUL');
+          console.log('✅ Supabase auto-configured successfully at PROJECT level');
+        } else {
+          console.warn('⚠️ Supabase connection test FAILED - credentials may be invalid');
+        }
+      } catch (testError) {
+        console.warn('⚠️ Supabase connection test ERROR:', testError.message);
       }
+      
     } else {
-      console.log('ℹ️ No Supabase environment variables found, using manual configuration');
+      console.log('ℹ️ No Supabase environment variables found, manual configuration will be used');
     }
   } catch (error) {
     console.error('❌ Failed to auto-configure Supabase:', error.message);

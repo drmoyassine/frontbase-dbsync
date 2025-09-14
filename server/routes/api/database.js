@@ -7,18 +7,29 @@ const { encrypt, decrypt } = require('../../utils/encryption');
 const router = express.Router();
 const db = new DatabaseManager();
 
-// Get database connections for current user
+// Get database connections (PROJECT level)
 router.get('/connections', authenticateToken, async (req, res) => {
   try {
+    // Get project-level Supabase settings
+    const project = db.db.prepare('SELECT supabase_url, supabase_anon_key FROM project WHERE id = ?').get('default');
+    
+    // Get user-level service key (for now, until we move it to project level)
     const settings = db.getUserSettings(req.user.id);
     
     const connections = {
       supabase: {
-        connected: !!(settings.supabase_url && settings.supabase_anon_key),
-        url: settings.supabase_url || '',
+        connected: !!(project?.supabase_url && project?.supabase_anon_key),
+        url: project?.supabase_url || '',
         hasServiceKey: !!settings.supabase_service_key_encrypted
       }
     };
+    
+    console.log('Connection status check:', {
+      project_url: !!project?.supabase_url,
+      project_anon: !!project?.supabase_anon_key,
+      user_service_key: !!settings.supabase_service_key_encrypted,
+      connected: connections.supabase.connected
+    });
     
     res.json(connections);
   } catch (error) {
@@ -55,7 +66,7 @@ router.post('/test-supabase', authenticateToken, async (req, res) => {
   }
 });
 
-// Save Supabase connection
+// Save Supabase connection (PROJECT level)
 router.post('/connect-supabase', authenticateToken, async (req, res) => {
   try {
     const { url, anonKey, serviceKey } = req.body;
@@ -64,16 +75,25 @@ router.post('/connect-supabase', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'URL and anon key required' });
     }
     
-    // Save connection details
-    db.updateUserSetting(req.user.id, 'supabase_url', url);
-    db.updateUserSetting(req.user.id, 'supabase_anon_key', anonKey);
+    console.log('Saving Supabase connection at PROJECT level...');
     
-    // Encrypt and save service key if provided
+    // Save connection details at PROJECT level
+    const projectStmt = db.db.prepare(`
+      UPDATE project 
+      SET supabase_url = ?, 
+          supabase_anon_key = ?,
+          updated_at = datetime('now')
+      WHERE id = 'default'
+    `);
+    projectStmt.run(url, anonKey);
+    
+    // Encrypt and save service key if provided (user level for now)
     if (serviceKey) {
       const encryptedServiceKey = encrypt(serviceKey);
       db.updateUserSetting(req.user.id, 'supabase_service_key_encrypted', JSON.stringify(encryptedServiceKey));
     }
     
+    console.log('✅ Supabase connection saved at PROJECT level');
     res.json({ success: true, message: 'Connection saved successfully' });
   } catch (error) {
     console.error('Save connection error:', error);
@@ -81,13 +101,25 @@ router.post('/connect-supabase', authenticateToken, async (req, res) => {
   }
 });
 
-// Disconnect Supabase
+// Disconnect Supabase (PROJECT level)
 router.delete('/disconnect-supabase', authenticateToken, async (req, res) => {
   try {
-    db.updateUserSetting(req.user.id, 'supabase_url', '');
-    db.updateUserSetting(req.user.id, 'supabase_anon_key', '');
+    console.log('Disconnecting Supabase at PROJECT level...');
+    
+    // Clear project-level settings
+    const projectStmt = db.db.prepare(`
+      UPDATE project 
+      SET supabase_url = NULL, 
+          supabase_anon_key = NULL,
+          updated_at = datetime('now')
+      WHERE id = 'default'
+    `);
+    projectStmt.run();
+    
+    // Clear user-level service key
     db.updateUserSetting(req.user.id, 'supabase_service_key_encrypted', '');
     
+    console.log('✅ Supabase disconnected at PROJECT level');
     res.json({ success: true, message: 'Disconnected successfully' });
   } catch (error) {
     console.error('Disconnect error:', error);
@@ -95,9 +127,13 @@ router.delete('/disconnect-supabase', authenticateToken, async (req, res) => {
   }
 });
 
-// Get Supabase tables (requires service key)
+// Get Supabase tables (requires service key) - Uses PROJECT level connection
 router.get('/supabase-tables', authenticateToken, async (req, res) => {
   try {
+    // Get PROJECT level Supabase URL
+    const project = db.db.prepare('SELECT supabase_url FROM project WHERE id = ?').get('default');
+    
+    // Get service key from user settings (for now)
     const settings = db.getUserSettings(req.user.id);
     const encryptedServiceKey = settings.supabase_service_key_encrypted;
     
@@ -118,7 +154,7 @@ router.get('/supabase-tables', authenticateToken, async (req, res) => {
       });
     }
     
-    const url = settings.supabase_url;
+    const url = project?.supabase_url;
     const response = await fetch(`${url}/rest/v1/`, {
       headers: {
         'apikey': serviceKey,
@@ -177,6 +213,10 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
   });
 
   try {
+    // Get PROJECT level Supabase URL
+    const project = db.db.prepare('SELECT supabase_url FROM project WHERE id = ?').get('default');
+    
+    // Get service key from user settings (for now)
     const settings = db.getUserSettings(req.user.id);
     const { tableName } = req.params;
     const encryptedServiceKey = settings.supabase_service_key_encrypted;
@@ -189,7 +229,7 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
     }
 
     const serviceKey = decrypt(JSON.parse(encryptedServiceKey));
-    if (!serviceKey || !settings.supabase_url) {
+    if (!serviceKey || !project?.supabase_url) {
       console.error('Service key decryption failed or URL missing - encryption key mismatch possible');
       return res.status(400).json({
         success: false,
@@ -199,7 +239,7 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
     }
 
     // Direct query to information_schema via REST API
-    const schemaUrl = `${settings.supabase_url}/rest/v1/rpc/exec_sql`;
+    const schemaUrl = `${project.supabase_url}/rest/v1/rpc/exec_sql`;
     const schemaQuery = `
       SELECT 
         column_name,
@@ -239,7 +279,7 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
     if (!response.ok) {
       console.log('Schema RPC failed, trying direct query approach');
       // Alternative: direct query to columns table
-      const directUrl = `${settings.supabase_url}/rest/v1/information_schema.columns?table_name=eq.${tableName}&table_schema=eq.public&select=column_name,data_type,is_nullable,column_default`;
+      const directUrl = `${project.supabase_url}/rest/v1/information_schema.columns?table_name=eq.${tableName}&table_schema=eq.public&select=column_name,data_type,is_nullable,column_default`;
       
       response = await fetch(directUrl, {
         headers: {
@@ -267,7 +307,7 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
     } else {
       console.log('Both schema queries failed, using fallback');
       // Fallback: try to get schema from first row
-      const fallbackResponse = await fetch(`${settings.supabase_url}/rest/v1/${tableName}?limit=1`, {
+      const fallbackResponse = await fetch(`${project.supabase_url}/rest/v1/${tableName}?limit=1`, {
         headers: {
           'Authorization': `Bearer ${serviceKey}`,
           'apikey': serviceKey
@@ -317,19 +357,23 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
   });
 
   try {
+    // Get PROJECT level Supabase connection
+    const project = db.db.prepare('SELECT supabase_url, supabase_anon_key FROM project WHERE id = ?').get('default');
+    
+    // Get service key from user settings (for now)
     const settings = db.getUserSettings(req.user.id);
     const { tableName } = req.params;
     const { limit = 20, offset = 0 } = req.query;
     
     console.log(`Fetching data for table: ${tableName}, limit: ${limit}, offset: ${offset}`);
     
-    const anonKey = settings.supabase_anon_key;
+    const anonKey = project?.supabase_anon_key;
     const encryptedServiceKey = settings.supabase_service_key_encrypted;
     
-    if (!anonKey || !settings.supabase_url) {
+    if (!anonKey || !project?.supabase_url) {
       return res.status(400).json({
         success: false,
-        message: 'Supabase credentials not found'
+        message: 'Supabase credentials not found at PROJECT level'
       });
     }
 
@@ -351,7 +395,7 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
         throw new Error('Failed to decrypt service key');
       }
 
-      response = await fetch(`${settings.supabase_url}/rest/v1/${tableName}?limit=${limit}&offset=${offset}`, {
+      response = await fetch(`${project.supabase_url}/rest/v1/${tableName}?limit=${limit}&offset=${offset}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${serviceKey}`,

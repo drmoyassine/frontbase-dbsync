@@ -85,7 +85,7 @@ try {
   console.log('📋 Database tables found:', tables.map(t => t.name).join(', '));
   
   // Check critical tables exist
-  const requiredTables = ['users', 'user_sessions', 'project_config', 'pages'];
+  const requiredTables = ['users', 'user_sessions', 'project', 'pages'];
   const missingTables = requiredTables.filter(table => 
     !tables.some(t => t.name === table)
   );

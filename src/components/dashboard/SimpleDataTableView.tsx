@@ -130,8 +130,10 @@ export const SimpleDataTableView: React.FC = () => {
       if (schemaResponse.ok) {
         const schemaResult = await schemaResponse.json();
         console.log('Schema result:', schemaResult);
-        if (schemaResult.success) {
-          columns = schemaResult.columns;
+        console.log('Schema result.data:', schemaResult.data);
+        if (schemaResult.success && schemaResult.data) {
+          // Try different possible locations for columns in the schema response
+          columns = schemaResult.data.columns || schemaResult.columns || schemaResult.data || [];
           console.log('Columns from schema:', columns);
         }
       }

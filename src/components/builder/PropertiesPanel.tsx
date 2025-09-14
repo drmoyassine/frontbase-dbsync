@@ -14,7 +14,9 @@ export const PropertiesPanel: React.FC = () => {
     currentPageId, 
     pages, 
     updatePage,
-    setSelectedComponentId 
+    setSelectedComponentId,
+    editingComponentId,
+    setEditingComponentId
   } = useBuilderStore();
   
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -85,6 +87,11 @@ export const PropertiesPanel: React.FC = () => {
         content: updatedContent
       }
     });
+
+    // If we're editing this component inline, exit edit mode to show updated text
+    if (editingComponentId === selectedComponentId) {
+      setEditingComponentId(null);
+    }
   };
 
   const deleteComponent = () => {

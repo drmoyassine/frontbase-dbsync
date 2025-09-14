@@ -65,6 +65,7 @@ interface BuilderState {
   isSaving: boolean;
   isLoading: boolean;
   hasUnsavedChanges: boolean;
+  editingComponentId: string | null;
   
   // Variables
   appVariables: AppVariable[];
@@ -93,6 +94,8 @@ interface BuilderState {
   setSupabaseConnection: (connected: boolean, tables?: any[]) => void;
   moveComponent: (pageId: string, componentId: string | null, component: ComponentData, targetIndex: number, parentId?: string, sourceParentId?: string) => void;
   setDraggedComponentId: (componentId: string | null) => void;
+  setEditingComponentId: (id: string | null) => void;
+  updateComponentText: (componentId: string, textProperty: string, text: string) => void;
   
   // New actions for database integration
   savePageToDatabase: (pageId: string) => Promise<void>;
@@ -119,6 +122,7 @@ export const useBuilderStore = create<BuilderState>()(
       isSaving: false,
       isLoading: false,
       hasUnsavedChanges: false,
+      editingComponentId: null,
       appVariables: [],
       isSupabaseConnected: false,
       supabaseTables: [],
@@ -296,6 +300,55 @@ export const useBuilderStore = create<BuilderState>()(
       },
 
       setDraggedComponentId: (componentId) => set({ draggedComponentId: componentId }),
+      
+      setEditingComponentId: (id) => set({ editingComponentId: id }),
+
+      updateComponentText: (componentId: string, textProperty: string, text: string) => {
+        set((state) => {
+          const { pages, currentPageId } = state;
+          if (!currentPageId) return state;
+
+          const pageIndex = pages.findIndex(p => p.id === currentPageId);
+          if (pageIndex === -1) return state;
+
+          const page = { ...pages[pageIndex] };
+          
+          // Helper function to update component text in nested structure
+          const updateComponentInContent = (content: ComponentData[]): ComponentData[] => {
+            return content.map(component => {
+              if (component.id === componentId) {
+                return {
+                  ...component,
+                  props: {
+                    ...component.props,
+                    [textProperty]: text
+                  }
+                };
+              }
+              if (component.children) {
+                return {
+                  ...component,
+                  children: updateComponentInContent(component.children)
+                };
+              }
+              return component;
+            });
+          };
+
+          if (page.layoutData?.content) {
+            page.layoutData.content = updateComponentInContent(page.layoutData.content);
+          }
+
+          const updatedPages = [...state.pages];
+          updatedPages[pageIndex] = page;
+          
+          return { 
+            ...state, 
+            pages: updatedPages, 
+            hasUnsavedChanges: true 
+          };
+        });
+      },
 
       // New database integration actions
       setSaving: (saving) => set({ isSaving: saving }),

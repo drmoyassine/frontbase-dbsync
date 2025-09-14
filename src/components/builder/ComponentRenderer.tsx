@@ -17,9 +17,12 @@ import { Progress } from '@/components/ui/progress';
 import { generateStyles } from '@/lib/styleUtils';
 import { ComponentStyles } from '@/types/styles';
 import { cn } from '@/lib/utils';
+import { InlineTextEditor } from './InlineTextEditor';
+import { useBuilderStore } from '@/stores/builder';
 
 interface ComponentRendererProps {
   component: {
+    id?: string;
     type: string;
     props: Record<string, any>;
     styles?: ComponentStyles;
@@ -29,15 +32,18 @@ interface ComponentRendererProps {
   isSelected?: boolean;
   children?: React.ReactNode;
   onComponentClick?: (componentId: string, event: React.MouseEvent) => void;
+  onDoubleClick?: (componentId: string, event: React.MouseEvent) => void;
 }
 
 export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ 
   component, 
   isSelected, 
   children, 
-  onComponentClick 
+  onComponentClick,
+  onDoubleClick 
 }) => {
-  const { type, props, styles = {}, className = '' } = component;
+  const { id, type, props, styles = {}, className = '' } = component;
+  const { editingComponentId, setEditingComponentId, updateComponentText, isPreviewMode } = useBuilderStore();
   
   // Generate styles from the styles object
   const { classes: generatedClasses, inlineStyles } = generateStyles(styles);
@@ -45,6 +51,54 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     generatedClasses,
     className
   );
+
+  // Helper function to handle text editing
+  const handleTextEdit = (textProperty: string, text: string) => {
+    if (id) {
+      updateComponentText(id, textProperty, text);
+    }
+  };
+
+  const handleTextEditEnd = () => {
+    setEditingComponentId(null);
+  };
+
+  // Check if this component is being edited
+  const isEditing = editingComponentId === id;
+
+  // Helper to create editable text with hover effects
+  const createEditableText = (text: string, textProperty: string, className: string, style: React.CSSProperties = {}) => {
+    if (isEditing) {
+      return (
+        <InlineTextEditor
+          value={text}
+          onChange={(newText) => handleTextEdit(textProperty, newText)}
+          onSave={handleTextEditEnd}
+          onCancel={handleTextEditEnd}
+          className={className}
+          style={style}
+        />
+      );
+    }
+
+    return (
+      <span 
+        className={cn(
+          className,
+          !isPreviewMode && 'cursor-text hover:bg-accent/20 rounded-sm transition-colors duration-200'
+        )}
+        style={style}
+        onDoubleClick={(e) => {
+          if (!isPreviewMode && onDoubleClick && id) {
+            e.stopPropagation();
+            setEditingComponentId(id);
+          }
+        }}
+      >
+        {text}
+      </span>
+    );
+  };
 
   // Render different component types
   switch (type) {
@@ -56,7 +110,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           className={combinedClassName}
           style={inlineStyles}
         >
-          {props.text || 'Button'}
+          {createEditableText(props.text || 'Button', 'text', '')}
         </Button>
       );
 
@@ -72,7 +126,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           className={cn(textClasses[props.size as keyof typeof textClasses] || 'text-base', combinedClassName)}
           style={inlineStyles}
         >
-          {props.text || 'Sample text'}
+          {createEditableText(props.text || 'Sample text', 'text', textClasses[props.size as keyof typeof textClasses] || 'text-base', inlineStyles)}
         </TextComponent>
       );
 
@@ -91,7 +145,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           className={cn(headingClasses[props.level as keyof typeof headingClasses] || 'text-2xl font-semibold', combinedClassName)}
           style={inlineStyles}
         >
-          {props.text || 'Heading'}
+          {createEditableText(props.text || 'Heading', 'text', headingClasses[props.level as keyof typeof headingClasses] || 'text-2xl font-semibold', inlineStyles)}
         </HeadingTag>
       );
 
@@ -124,7 +178,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     case 'Badge':
       return (
         <Badge variant={props.variant || 'default'}>
-          {props.text || 'Badge'}
+          {createEditableText(props.text || 'Badge', 'text', '')}
         </Badge>
       );
 
@@ -303,7 +357,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           className={cn('text-primary hover:underline', combinedClassName)}
           style={inlineStyles}
         >
-          {props.text || 'Link'}
+          {createEditableText(props.text || 'Link', 'text', 'text-primary hover:underline', inlineStyles)}
         </a>
       );
 

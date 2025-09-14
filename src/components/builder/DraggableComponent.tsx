@@ -208,6 +208,15 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
             component={component}
             isSelected={isSelected}
             onComponentClick={(componentId, event) => onSelect(componentId, event)}
+            onDoubleClick={(componentId, event) => {
+              event.stopPropagation();
+              // Double-click to edit text for text-based components
+              const textComponents = ['Text', 'Heading', 'Button', 'Badge', 'Link'];
+              if (textComponents.includes(component.type) && !isPreviewMode) {
+                const { setEditingComponentId } = useBuilderStore.getState();
+                setEditingComponentId(componentId);
+              }
+            }}
           />
         )}
       </div>

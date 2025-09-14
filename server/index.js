@@ -149,6 +149,52 @@ try {
   }
 })();
 
+// Auto-configure Supabase if environment variables are present
+(async () => {
+  try {
+    const supabaseUrl = process.env.SUPABASE_PROJECT_URL;
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+    
+    if (supabaseUrl && supabaseAnonKey && supabaseServiceKey) {
+      console.log('🔗 Auto-configuring Supabase from environment variables...');
+      
+      const { encryptData } = require('./utils/encryption');
+      
+      // Get admin user ID
+      const adminUser = dbManager.db.prepare('SELECT id FROM users WHERE username = ? OR email = ?')
+        .get(process.env.ADMIN_USERNAME || 'admin', process.env.ADMIN_EMAIL || 'admin@frontbase.dev');
+      
+      if (adminUser) {
+        // Encrypt the service key
+        const encryptedServiceKey = encryptData(supabaseServiceKey);
+        
+        // Store Supabase connection for admin user
+        const stmt = dbManager.db.prepare(`
+          INSERT OR REPLACE INTO user_database_connections 
+          (user_id, database_type, connection_data) 
+          VALUES (?, 'supabase', ?)
+        `);
+        
+        const connectionData = JSON.stringify({
+          url: supabaseUrl,
+          anon_key: supabaseAnonKey,
+          service_key: encryptedServiceKey
+        });
+        
+        stmt.run(adminUser.id, connectionData);
+        console.log('✅ Supabase auto-configured successfully');
+      } else {
+        console.warn('⚠️ Could not find admin user for Supabase auto-configuration');
+      }
+    } else {
+      console.log('ℹ️ No Supabase environment variables found, using manual configuration');
+    }
+  } catch (error) {
+    console.error('❌ Failed to auto-configure Supabase:', error.message);
+  }
+})();
+
 // Middleware
 app.use(helmet({
   contentSecurityPolicy: {

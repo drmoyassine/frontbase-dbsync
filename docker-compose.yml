@@ -13,6 +13,10 @@ services:
       - DB_PATH=/app/data/frontbase.db
       - PORT=3000
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
+      # Optional: Supabase auto-configuration
+      - SUPABASE_PROJECT_URL=${SUPABASE_PROJECT_URL:-}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
     restart: unless-stopped
     # Enhanced healthcheck with debugging
     healthcheck:

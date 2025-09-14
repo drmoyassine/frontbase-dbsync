@@ -76,6 +76,12 @@ This project supports various environment variables for configuration. See `.env
   - Generate with: `node -p "require('crypto').randomBytes(32).toString('hex')"`
   - **Without this, Supabase connections will be lost on container restart**
 
+**Supabase Auto-Configuration (Optional):**
+- `SUPABASE_PROJECT_URL` - Your Supabase project URL (e.g., `https://your-project.supabase.co`)
+- `SUPABASE_ANON_KEY` - Your Supabase anonymous key
+- `SUPABASE_SERVICE_KEY` - Your Supabase service key
+- **If all three are provided, Supabase will be automatically configured on container startup**
+
 ### Optional Configuration
 
 **Server Settings:**
@@ -103,6 +109,10 @@ services:
       - ADMIN_USERNAME=your_admin
       - ADMIN_PASSWORD=your_secure_password
       - ADMIN_EMAIL=admin@yourdomain.com
+      # Optional: Auto-configure Supabase
+      - SUPABASE_PROJECT_URL=https://your-project.supabase.co
+      - SUPABASE_ANON_KEY=your_anon_key
+      - SUPABASE_SERVICE_KEY=your_service_key
 ```
 
 ### Docker Deployment with Persistent Connections

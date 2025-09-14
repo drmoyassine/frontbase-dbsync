@@ -71,37 +71,58 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   setSelectedTable: (table) => set({ selectedTable: table }),
   
   fetchConnections: async () => {
+    console.log('=== DASHBOARD STORE: FETCH CONNECTIONS ===');
     try {
       const response = await fetch('/api/database/connections', {
         credentials: 'include'
       });
+      console.log('Connections API response status:', response.status);
+      console.log('Connections API response ok:', response.ok);
+      
       if (response.ok) {
         const connections = await response.json();
+        console.log('Connections data received:', connections);
         set({ connections });
+      } else {
+        console.error('Failed to fetch connections - non-200 status:', response.status);
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
       }
     } catch (error) {
-      console.error('Failed to fetch connections:', error);
+      console.error('Failed to fetch connections - network/parse error:', error);
     }
   },
 
   fetchSupabaseTables: async () => {
+    console.log('=== DASHBOARD STORE: FETCH SUPABASE TABLES ===');
     set({ tablesLoading: true, tablesError: null });
     try {
       const response = await fetch('/api/database/supabase-tables', {
         credentials: 'include'
       });
+      console.log('Tables API response status:', response.status);
+      console.log('Tables API response ok:', response.ok);
+      
       if (response.ok) {
         const result = await response.json();
+        console.log('Tables API result:', result);
+        console.log('Tables API success:', result.success);
+        
         if (result.success) {
+          console.log('Tables data:', result.data.tables);
           set({ supabaseTables: result.data.tables, tablesLoading: false });
         } else {
+          console.error('Tables API returned success=false:', result.message);
           set({ tablesError: result.message, tablesLoading: false });
         }
       } else {
+        console.error('Tables API failed with status:', response.status);
+        const errorText = await response.text();
+        console.error('Tables API error response:', errorText);
         set({ tablesError: 'Failed to fetch tables', tablesLoading: false });
       }
     } catch (error) {
-      console.error('Failed to fetch Supabase tables:', error);
+      console.error('Failed to fetch Supabase tables - network/parse error:', error);
       set({ tablesError: 'Failed to fetch tables', tablesLoading: false });
     }
   },

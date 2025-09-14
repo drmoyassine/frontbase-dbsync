@@ -15,9 +15,17 @@ import ProtectedRoute from "./components/ProtectedRoute";
 const queryClient = new QueryClient();
 
 const App = () => {
-  const { checkAuth, isLoading } = useAuthStore();
+  const { checkAuth, isLoading, isAuthenticated, user } = useAuthStore();
+
+  console.log('=== APP.TSX DEBUG ===');
+  console.log('App rendered, current location:', window.location.href);
+  console.log('Auth loading:', isLoading);
+  console.log('Auth authenticated:', isAuthenticated);
+  console.log('Auth user:', user);
+  console.log('=== END APP DEBUG ===');
 
   useEffect(() => {
+    console.log('=== APP USEEFFECT: CHECK AUTH ===');
     checkAuth();
   }, [checkAuth]);
 

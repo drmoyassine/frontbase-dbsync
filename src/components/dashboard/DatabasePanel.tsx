@@ -23,7 +23,18 @@ export const DatabasePanel: React.FC = () => {
   const { connections, setSupabaseModalOpen, fetchConnections } = useDashboardStore();
   const { toast } = useToast();
 
+  // Add extensive logging for debugging
+  console.log('=== DATABASE PANEL DEBUG ===');
+  console.log('Database Panel rendered');
+  console.log('Connections state:', connections);
+  console.log('Current URL:', window.location.href);
+  console.log('Current pathname:', window.location.pathname);
+  console.log('Cookies:', document.cookie);
+  console.log('=== END DATABASE PANEL DEBUG ===');
+
   useEffect(() => {
+    console.log('=== DATABASE PANEL USEEFFECT ===');
+    console.log('Fetching connections on mount...');
     fetchConnections();
   }, [fetchConnections]);
 

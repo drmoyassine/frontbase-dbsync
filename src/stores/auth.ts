@@ -110,6 +110,11 @@ export const useAuthStore = create<AuthState>()(
       },
 
       checkAuth: async () => {
+        console.log('=== AUTH STORE: CHECK AUTH ===');
+        console.log('Starting authentication check...');
+        console.log('Current URL:', window.location.href);
+        console.log('Current cookies:', document.cookie);
+        
         try {
           set({ isLoading: true });
           
@@ -117,27 +122,40 @@ export const useAuthStore = create<AuthState>()(
             credentials: 'include',
           });
 
+          console.log('Auth check response status:', response.status);
+          console.log('Auth check response ok:', response.ok);
+          console.log('Auth check response headers:', Object.fromEntries(response.headers.entries()));
+
           if (response.ok) {
             const data = await response.json();
+            console.log('Auth check successful, user data:', data);
             set({ 
               user: data.user, 
               isAuthenticated: true, 
               isLoading: false 
             });
+            console.log('User is authenticated:', data.user);
           } else {
+            const errorText = await response.text();
+            console.log('Auth check failed with status:', response.status);
+            console.log('Auth check error response:', errorText);
             set({ 
               user: null, 
               isAuthenticated: false, 
               isLoading: false 
             });
+            console.log('User is NOT authenticated');
           }
         } catch (error) {
+          console.error('Auth check network/parse error:', error);
           set({ 
             user: null, 
             isAuthenticated: false, 
             isLoading: false 
           });
+          console.log('User is NOT authenticated due to error');
         }
+        console.log('=== AUTH CHECK COMPLETED ===');
       },
 
       setUser: (user: User | null) => {

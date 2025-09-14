@@ -291,7 +291,7 @@ export const useBuilderStore = create<BuilderState>()(
           };
           pages[pageIndex] = page;
           
-          return { ...state, pages };
+          return { ...state, pages, hasUnsavedChanges: true };
         });
       },
 
@@ -302,7 +302,7 @@ export const useBuilderStore = create<BuilderState>()(
       setLoading: (loading) => set({ isLoading: loading }),
 
       savePageToDatabase: async (pageId: string) => {
-        const { pages, setSaving } = get();
+        const { pages, setSaving, setUnsavedChanges } = get();
         const page = pages.find(p => p.id === pageId);
         if (!page) return;
 
@@ -315,9 +315,13 @@ export const useBuilderStore = create<BuilderState>()(
             throw new Error(result.error || 'Failed to save page');
           }
           
-          // Show success message
-          const { toast } = await import('sonner');
-          toast.success('Page saved successfully');
+          // Reset unsaved changes flag on successful save
+          setUnsavedChanges(false);
+          
+          toast({
+            title: "Page saved",
+            description: "Page has been saved successfully"
+          });
         } catch (error) {
           toast({
             title: "Error saving page",
@@ -330,7 +334,7 @@ export const useBuilderStore = create<BuilderState>()(
       },
 
       publishPage: async (pageId: string) => {
-        const { pages, updatePage, setSaving } = get();
+        const { pages, updatePage, setSaving, setUnsavedChanges } = get();
         const page = pages.find(p => p.id === pageId);
         if (!page) return;
 
@@ -345,11 +349,18 @@ export const useBuilderStore = create<BuilderState>()(
             throw new Error(result.error || 'Failed to publish page');
           }
           
-          const { toast } = await import('sonner');
-          toast.success('Page published successfully');
+          setUnsavedChanges(false);
+          
+          toast({
+            title: "Page published",
+            description: "Page has been published successfully"
+          });
         } catch (error) {
-          const { toast } = await import('sonner');
-          toast.error(error instanceof Error ? error.message : 'Failed to publish page');
+          toast({
+            title: "Error publishing page",
+            description: error instanceof Error ? error.message : "Failed to publish page",
+            variant: "destructive"
+          });
         } finally {
           setSaving(false);
         }
@@ -419,7 +430,8 @@ export const useBuilderStore = create<BuilderState>()(
           return {
             ...state,
             pages: newPages,
-            selectedComponentId: null
+            selectedComponentId: null,
+            hasUnsavedChanges: true
           };
         });
 

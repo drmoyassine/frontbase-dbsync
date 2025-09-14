@@ -182,16 +182,24 @@ export const BuilderHeader: React.FC = () => {
         </Button>
         
         
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={handleSave}
-          disabled={isSaving}
-          className={hasUnsavedChanges ? "border-orange-500 text-orange-600" : ""}
-        >
-          <Save className="h-4 w-4 mr-2" />
-          {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save*' : 'Save'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {!isSaving && !hasUnsavedChanges && (
+            <Badge variant="outline" className="text-xs text-green-600 border-green-500">
+              Synced
+            </Badge>
+          )}
+          
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleSave}
+            disabled={isSaving}
+            className={hasUnsavedChanges ? "border-orange-500 text-orange-600" : ""}
+          >
+            <Save className="h-4 w-4 mr-2" />
+            {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save*' : 'Save'}
+          </Button>
+        </div>
         
         <AlertDialog>
           <AlertDialogTrigger asChild>

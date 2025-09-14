@@ -10,7 +10,12 @@ import {
   Globe,
   Layers,
   Database,
-  ArrowLeft
+  ArrowLeft,
+  Smartphone,
+  Tablet,
+  Monitor,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -40,6 +45,10 @@ export const BuilderHeader: React.FC = () => {
     selectedComponentId,
     isSaving,
     hasUnsavedChanges,
+    currentViewport,
+    zoomLevel,
+    setCurrentViewport,
+    setZoomLevel,
     savePageToDatabase,
     publishPage,
     togglePageVisibility,
@@ -98,7 +107,7 @@ export const BuilderHeader: React.FC = () => {
   };
 
   return (
-    <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4">
+    <header className="relative h-14 bg-card border-b border-border flex items-center px-4">
       {/* Left Section */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" onClick={handleBackToDashboard}>
@@ -143,10 +152,66 @@ export const BuilderHeader: React.FC = () => {
         )}
       </div>
 
-      {/* Center Section - Removed, now handled by ResponsiveToolbar */}
+      {/* Center Section - Responsive Controls */}
+      <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 flex items-center gap-3">
+        {/* Viewport Selection */}
+        <div className="flex items-center gap-1 p-1 bg-muted rounded-lg">
+          <Button
+            variant={currentViewport === 'mobile' ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setCurrentViewport('mobile')}
+            className="h-8 w-8 p-0"
+          >
+            <Smartphone className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={currentViewport === 'tablet' ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setCurrentViewport('tablet')}
+            className="h-8 w-8 p-0"
+          >
+            <Tablet className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={currentViewport === 'desktop' ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setCurrentViewport('desktop')}
+            className="h-8 w-8 p-0"
+          >
+            <Monitor className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Zoom Controls */}
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setZoomLevel(Math.max(25, zoomLevel - 25))}
+            disabled={zoomLevel <= 25}
+            className="h-8 w-8 p-0"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+          
+          <Badge variant="outline" className="min-w-16 justify-center">
+            {zoomLevel}%
+          </Badge>
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setZoomLevel(Math.min(200, zoomLevel + 25))}
+            disabled={zoomLevel >= 200}
+            className="h-8 w-8 p-0"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
 
       {/* Right Section */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 ml-auto">
         <Button
           variant="ghost"
           size="sm"

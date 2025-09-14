@@ -6,8 +6,8 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Use named volume for EasyPanel compatibility
-      - frontbase_data:/app/data
+      # Use host directory mount for true portability
+      - ./data:/app/data
     environment:
       - NODE_ENV=production
       - DB_PATH=/app/data/frontbase.db
@@ -40,6 +40,4 @@ services:
   #     - frontbase
   #   restart: unless-stopped
 
-volumes:
-  frontbase_data:
-    driver: local
+# No named volumes needed - using host directory mount for portability

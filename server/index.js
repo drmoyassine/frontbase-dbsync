@@ -287,6 +287,14 @@ try {
   process.exit(1);
 }
 
+try {
+  app.use('/api/database', require('./routes/api/database'));
+  console.log('✅ Database API routes loaded');
+} catch (error) {
+  console.error('❌ Failed to load database routes:', error);
+  process.exit(1);
+}
+
 // Public SSR Routes (for SEO)
 app.get('/sitemap.xml', async (req, res) => {
   try {

@@ -58,6 +58,16 @@ class DatabaseManager {
       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
     `);
     this.deleteAssetStmt = this.db.prepare('DELETE FROM assets WHERE id = ?');
+    
+    // User settings statements
+    this.getUserSettingsStmt = this.db.prepare('SELECT * FROM user_settings WHERE user_id = ?');
+    this.upsertUserSettingsStmt = this.db.prepare(`
+      INSERT INTO user_settings (user_id, setting_key, setting_value, updated_at)
+      VALUES (?, ?, ?, datetime('now'))
+      ON CONFLICT(user_id, setting_key) DO UPDATE SET
+        setting_value = excluded.setting_value,
+        updated_at = excluded.updated_at
+    `);
   }
   
   // Project methods
@@ -207,6 +217,20 @@ class DatabaseManager {
   deleteAsset(id) {
     const result = this.deleteAssetStmt.run(id);
     return result.changes > 0;
+  }
+  
+  // User settings methods
+  getUserSettings(userId) {
+    const settings = this.getUserSettingsStmt.all(userId);
+    const result = {};
+    settings.forEach(setting => {
+      result[setting.setting_key] = setting.setting_value;
+    });
+    return result;
+  }
+  
+  updateUserSetting(userId, key, value) {
+    this.upsertUserSettingsStmt.run(userId, key, value);
   }
   
   close() {

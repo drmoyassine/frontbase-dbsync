@@ -6,7 +6,8 @@ import { HardDrive, ExternalLink, AlertCircle, CheckCircle, FolderOpen } from 'l
 import { useDashboardStore } from '@/stores/dashboard';
 
 export const StoragePanel: React.FC = () => {
-  const { supabaseConnected } = useDashboardStore();
+  const { connections } = useDashboardStore();
+  const supabaseConnected = connections.supabase.connected;
 
   return (
     <div className="p-6 space-y-6">

@@ -97,11 +97,58 @@ services:
       - ADMIN_EMAIL=admin@yourdomain.com
 ```
 
+### Docker Deployment with Persistent Connections
+
+**Critical for Supabase connections:**
+
+```bash
+# 1. Generate a secure encryption key
+node -p "require('crypto').randomBytes(32).toString('hex')"
+
+# 2. Set the encryption key in your environment
+export ENCRYPTION_KEY=your_generated_key_here
+
+# 3. Start the container
+docker-compose up -d
+```
+
+**Example docker-compose.yml with persistent Supabase:**
+
+```yaml
+version: '3.8'
+services:
+  frontbase:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+      - ENCRYPTION_KEY=a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456
+      - ADMIN_USERNAME=your_admin
+      - ADMIN_PASSWORD=your_secure_password
+      - ADMIN_EMAIL=admin@yourdomain.com
+```
+
 ### Security Notes
 
 - **Demo Mode**: When no custom admin credentials are set, demo credentials are shown on the login page
 - **Production**: Always set custom admin credentials for production deployments
 - **Password Security**: Use strong passwords (minimum 6 characters, recommended 12+)
+- **Encryption Key**: Required for persistent Supabase connections - generate with crypto.randomBytes(32)
+
+### Troubleshooting
+
+**Supabase Connection Lost on Restart:**
+- Ensure `ENCRYPTION_KEY` environment variable is set
+- Generate key with: `node -p "require('crypto').randomBytes(32).toString('hex')"`
+- Verify the key persists across container restarts
+
+**Database Access Issues:**
+- Check RLS policies in Supabase dashboard
+- Verify service key permissions
+- See API.md for detailed endpoint documentation
 
 ## Can I connect a custom domain to my Lovable project?
 

@@ -52,16 +52,18 @@ export const DatabasePanel: React.FC = () => {
         });
         await fetchConnections();
       } else {
+        const errorData = await response.json().catch(() => ({}));
         toast({
           title: "Error",
-          description: "Failed to disconnect",
+          description: errorData.error || "Failed to disconnect",
           variant: "destructive"
         });
       }
     } catch (error) {
+      console.error('Disconnect error:', error);
       toast({
-        title: "Error",
-        description: "Failed to disconnect",
+        title: "Connection Error", 
+        description: "Check if encryption key is set properly. See API.md for troubleshooting.",
         variant: "destructive"
       });
     }

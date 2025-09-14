@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { BuilderHeader } from './BuilderHeader';
@@ -12,10 +12,58 @@ export const CustomBuilder: React.FC = () => {
   const { 
     currentPageId, 
     pages, 
-    isPreviewMode 
+    isPreviewMode,
+    deleteSelectedComponent,
+    selectedComponentId,
+    setSelectedComponentId,
+    savePageToDatabase
   } = useBuilderStore();
   
   const currentPage = pages.find(page => page.id === currentPageId);
+
+  // Keyboard event handling
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Save shortcut (Ctrl/Cmd + S)
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        if (currentPageId) {
+          savePageToDatabase(currentPageId);
+        }
+        return;
+      }
+
+      // Delete component (Delete or Backspace)
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedComponentId) {
+        // Only delete if not in an input field
+        const activeElement = document.activeElement;
+        const isInInput = activeElement && (
+          activeElement.tagName === 'INPUT' || 
+          activeElement.tagName === 'TEXTAREA' || 
+          activeElement.hasAttribute('contenteditable')
+        );
+        
+        if (!isInInput) {
+          event.preventDefault();
+          
+          // Show confirmation dialog
+          if (window.confirm('Are you sure you want to delete this component?')) {
+            deleteSelectedComponent();
+          }
+        }
+        return;
+      }
+
+      // Escape to deselect
+      if (event.key === 'Escape' && selectedComponentId) {
+        setSelectedComponentId(null);
+        return;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [currentPageId, selectedComponentId, savePageToDatabase, deleteSelectedComponent, setSelectedComponentId]);
   
   if (!currentPage) {
     return (

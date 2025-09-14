@@ -60,6 +60,8 @@ interface BuilderState {
   selectedComponentId: string | null;
   isPreviewMode: boolean;
   draggedComponentId: string | null;
+  isSaving: boolean;
+  isLoading: boolean;
   
   // Variables
   appVariables: AppVariable[];
@@ -88,6 +90,15 @@ interface BuilderState {
   setSupabaseConnection: (connected: boolean, tables?: any[]) => void;
   moveComponent: (pageId: string, componentId: string | null, component: ComponentData, targetIndex: number, parentId?: string, sourceParentId?: string) => void;
   setDraggedComponentId: (componentId: string | null) => void;
+  
+  // New actions for database integration
+  savePageToDatabase: (pageId: string) => Promise<void>;
+  publishPage: (pageId: string) => Promise<void>;
+  togglePageVisibility: (pageId: string) => Promise<void>;
+  deleteSelectedComponent: () => void;
+  loadPagesFromDatabase: () => Promise<void>;
+  setSaving: (saving: boolean) => void;
+  setLoading: (loading: boolean) => void;
 }
 
 export const useBuilderStore = create<BuilderState>()(
@@ -100,6 +111,8 @@ export const useBuilderStore = create<BuilderState>()(
       selectedComponentId: null,
       isPreviewMode: false,
       draggedComponentId: null,
+      isSaving: false,
+      isLoading: false,
       appVariables: [],
       isSupabaseConnected: false,
       supabaseTables: [],
@@ -276,6 +289,146 @@ export const useBuilderStore = create<BuilderState>()(
       },
 
       setDraggedComponentId: (componentId) => set({ draggedComponentId: componentId }),
+
+      // New database integration actions
+      setSaving: (saving) => set({ isSaving: saving }),
+      setLoading: (loading) => set({ isLoading: loading }),
+
+      savePageToDatabase: async (pageId: string) => {
+        const { pages, setSaving } = get();
+        const page = pages.find(p => p.id === pageId);
+        if (!page) return;
+
+        setSaving(true);
+        try {
+          const { pageAPI } = await import('@/lib/api');
+          const result = await pageAPI.updatePage(pageId, page);
+          
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to save page');
+          }
+          
+          // Show success message
+          const { toast } = await import('sonner');
+          toast.success('Page saved successfully');
+        } catch (error) {
+          const { toast } = await import('sonner');
+          toast.error(error instanceof Error ? error.message : 'Failed to save page');
+        } finally {
+          setSaving(false);
+        }
+      },
+
+      publishPage: async (pageId: string) => {
+        const { pages, updatePage, setSaving } = get();
+        const page = pages.find(p => p.id === pageId);
+        if (!page) return;
+
+        setSaving(true);
+        try {
+          updatePage(pageId, { isPublic: true });
+          
+          const { pageAPI } = await import('@/lib/api');
+          const result = await pageAPI.updatePage(pageId, { ...page, isPublic: true });
+          
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to publish page');
+          }
+          
+          const { toast } = await import('sonner');
+          toast.success('Page published successfully');
+        } catch (error) {
+          const { toast } = await import('sonner');
+          toast.error(error instanceof Error ? error.message : 'Failed to publish page');
+        } finally {
+          setSaving(false);
+        }
+      },
+
+      togglePageVisibility: async (pageId: string) => {
+        const { pages, updatePage, setSaving } = get();
+        const page = pages.find(p => p.id === pageId);
+        if (!page) return;
+
+        setSaving(true);
+        try {
+          const newVisibility = !page.isPublic;
+          updatePage(pageId, { isPublic: newVisibility });
+          
+          const { pageAPI } = await import('@/lib/api');
+          const result = await pageAPI.updatePage(pageId, { ...page, isPublic: newVisibility });
+          
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to update page visibility');
+          }
+          
+          const { toast } = await import('sonner');
+          toast.success(`Page ${newVisibility ? 'published' : 'made private'}`);
+        } catch (error) {
+          const { toast } = await import('sonner');
+          toast.error(error instanceof Error ? error.message : 'Failed to update page visibility');
+        } finally {
+          setSaving(false);
+        }
+      },
+
+      deleteSelectedComponent: () => {
+        const { selectedComponentId, currentPageId, pages } = get();
+        if (!selectedComponentId || !currentPageId) return;
+
+        const pageIndex = pages.findIndex(p => p.id === currentPageId);
+        if (pageIndex === -1) return;
+
+        const deleteFromContent = (items: ComponentData[]): ComponentData[] => {
+          return items.filter(item => {
+            if (item.id === selectedComponentId) return false;
+            if (item.children) {
+              item.children = deleteFromContent(item.children);
+            }
+            return true;
+          });
+        };
+
+        set((state) => {
+          const newPages = [...state.pages];
+          const page = { ...newPages[pageIndex] };
+          const content = page.layoutData?.content || [];
+          
+          page.layoutData = {
+            ...page.layoutData,
+            content: deleteFromContent([...content])
+          };
+          
+          newPages[pageIndex] = page;
+          
+          return {
+            ...state,
+            pages: newPages,
+            selectedComponentId: null
+          };
+        });
+
+        const { toast } = require('sonner');
+        toast.success('Component deleted');
+      },
+
+      loadPagesFromDatabase: async () => {
+        const { setLoading } = get();
+        setLoading(true);
+        
+        try {
+          const { pageAPI } = await import('@/lib/api');
+          const result = await pageAPI.getAllPages();
+          
+          if (result.success && result.data) {
+            set({ pages: result.data });
+          }
+        } catch (error) {
+          console.error('Failed to load pages from database:', error);
+        } finally {
+          setLoading(false);
+        }
+      },
     }),
     {
       name: 'frontbase-builder-storage',

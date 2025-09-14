@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Database, ExternalLink, AlertCircle, CheckCircle, Plus, Settings, Trash2 } from 'lucide-react';
 import { useDashboardStore } from '@/stores/dashboard';
 import { SupabaseConnectionModal } from './SupabaseConnectionModal';
-import { SupabaseTablesList } from './SupabaseTablesList';
+import { CombinedTableView } from './CombinedTableView';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -222,7 +222,11 @@ export const DatabasePanel: React.FC = () => {
         </Card>
       </div>
 
-      {connections.supabase.connected && <SupabaseTablesList />}
+      {connections.supabase.connected && (
+        <div className="space-y-6">
+          <CombinedTableView />
+        </div>
+      )}
 
       <SupabaseConnectionModal />
     </div>

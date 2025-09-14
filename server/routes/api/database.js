@@ -184,11 +184,71 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
       });
     }
 
-    // Return basic table info (schema details would require more complex queries)
-    res.json({
-      success: true,
-      data: { table_name: tableName, columns: [] }
+    // Query information_schema for actual column details
+    const schemaQuery = `
+      SELECT 
+        column_name,
+        data_type,
+        is_nullable,
+        column_default,
+        character_maximum_length,
+        numeric_precision,
+        numeric_scale
+      FROM information_schema.columns 
+      WHERE table_name = '${tableName}' 
+      AND table_schema = 'public'
+      ORDER BY ordinal_position
+    `;
+
+    const response = await fetch(`${settings.supabase_url}/rest/v1/rpc/get_table_schema`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${serviceKey}`,
+        'apikey': serviceKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ 
+        query: schemaQuery
+      })
     });
+
+    if (response.ok) {
+      const schemaData = await response.json();
+      res.json({
+        success: true,
+        data: { 
+          table_name: tableName, 
+          columns: schemaData || []
+        }
+      });
+    } else {
+      // Fallback: try to get schema from first row
+      const fallbackResponse = await fetch(`${settings.supabase_url}/rest/v1/${tableName}?limit=1`, {
+        headers: {
+          'Authorization': `Bearer ${serviceKey}`,
+          'apikey': serviceKey
+        }
+      });
+      
+      if (fallbackResponse.ok) {
+        const data = await fallbackResponse.json();
+        const columns = data.length > 0 ? Object.keys(data[0]).map(col => ({
+          column_name: col,
+          data_type: 'unknown',
+          is_nullable: 'YES'
+        })) : [];
+        
+        res.json({
+          success: true,
+          data: { table_name: tableName, columns }
+        });
+      } else {
+        res.json({
+          success: true,
+          data: { table_name: tableName, columns: [] }
+        });
+      }
+    }
   } catch (error) {
     console.error('Error fetching table schema:', error);
     res.json({
@@ -206,6 +266,8 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
     const { limit = 20, offset = 0 } = req.query;
     
     const anonKey = settings.supabase_anon_key;
+    const encryptedServiceKey = settings.supabase_service_key_encrypted;
+    
     if (!anonKey || !settings.supabase_url) {
       return res.status(400).json({
         success: false,
@@ -213,8 +275,8 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
       });
     }
 
-    // Fetch table data using anon key for security
-    const response = await fetch(`${settings.supabase_url}/rest/v1/${tableName}?limit=${limit}&offset=${offset}`, {
+    // Try with anon key first
+    let response = await fetch(`${settings.supabase_url}/rest/v1/${tableName}?limit=${limit}&offset=${offset}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${anonKey}`,
@@ -223,13 +285,33 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
       }
     });
 
+    // If anon key fails and we have service key, try with service key
+    if (!response.ok && encryptedServiceKey) {
+      try {
+        const serviceKey = decrypt(JSON.parse(encryptedServiceKey));
+        if (serviceKey) {
+          response = await fetch(`${settings.supabase_url}/rest/v1/${tableName}?limit=${limit}&offset=${offset}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${serviceKey}`,
+              'apikey': serviceKey,
+              'Content-Type': 'application/json'
+            }
+          });
+        }
+      } catch (decryptError) {
+        console.error('Service key decryption failed:', decryptError);
+      }
+    }
+
     if (response.ok) {
       const data = await response.json();
       res.json({ success: true, data });
     } else {
+      const errorText = await response.text();
       res.status(response.status).json({
         success: false,
-        message: 'Failed to fetch table data'
+        message: `Failed to fetch table data: ${errorText || 'Unknown error'}`
       });
     }
   } catch (error) {

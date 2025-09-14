@@ -16,8 +16,19 @@ class DatabaseManager {
     this.getProjectStmt = this.db.prepare('SELECT * FROM project WHERE id = ?');
     this.updateProjectStmt = this.db.prepare(`
       UPDATE project 
-      SET name = ?, description = ?, supabase_url = ?, supabase_anon_key = ?, updated_at = datetime('now')
+      SET name = ?, description = ?, supabase_url = ?, supabase_anon_key = ?, supabase_service_key_encrypted = ?, updated_at = datetime('now')
       WHERE id = ?
+    `);
+    
+    // Service key specific statements
+    this.updateProjectServiceKeyStmt = this.db.prepare(`
+      UPDATE project 
+      SET supabase_service_key_encrypted = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `);
+    
+    this.getProjectServiceKeyStmt = this.db.prepare(`
+      SELECT supabase_service_key_encrypted FROM project WHERE id = ?
     `);
     
     // Pages statements
@@ -79,9 +90,25 @@ class DatabaseManager {
   
   updateProject(updates) {
     const current = this.getProject();
-    const { name, description, supabase_url, supabase_anon_key } = { ...current, ...updates };
-    this.updateProjectStmt.run(name, description, supabase_url, supabase_anon_key, 'default');
+    const { name, description, supabase_url, supabase_anon_key, supabase_service_key_encrypted } = { ...current, ...updates };
+    this.updateProjectStmt.run(name, description, supabase_url, supabase_anon_key, supabase_service_key_encrypted, 'default');
     return this.getProject();
+  }
+  
+  // Project-level service key methods
+  updateProjectServiceKey(encryptedServiceKey) {
+    console.log('🔐 DatabaseManager: Storing service key at PROJECT level');
+    this.updateProjectServiceKeyStmt.run(encryptedServiceKey, 'default');
+    
+    // Verify storage immediately
+    const stored = this.getProjectServiceKey();
+    console.log('🔐 DatabaseManager: Service key storage verification:', !!stored);
+    return stored;
+  }
+  
+  getProjectServiceKey() {
+    const result = this.getProjectServiceKeyStmt.get('default');
+    return result?.supabase_service_key_encrypted || null;
   }
   
   // Pages methods

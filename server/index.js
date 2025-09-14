@@ -170,26 +170,21 @@ try {
       console.log('🔐 Encrypting service key...');
       const encryptedServiceKey = encrypt(supabaseServiceKey);
       
-      // Store Supabase connection at PROJECT level (not user level)
-      console.log('💾 Storing Supabase credentials in project settings...');
-      const stmt = dbManager.db.prepare(`
-        UPDATE project 
-        SET supabase_url = ?, 
-            supabase_anon_key = ?,
-            updated_at = datetime('now')
-        WHERE id = 'default'
-      `);
+      // Store ALL Supabase credentials at PROJECT level
+      console.log('💾 Storing ALL Supabase credentials at PROJECT level...');
+      dbManager.updateProject({
+        supabase_url: supabaseUrl,
+        supabase_anon_key: supabaseAnonKey,
+        supabase_service_key_encrypted: JSON.stringify(encryptedServiceKey)
+      });
       
-      stmt.run(supabaseUrl, supabaseAnonKey);
-      
-      // Store encrypted service key in user settings for admin (for now, until we add it to project table)
-      const adminUser = dbManager.db.prepare('SELECT id FROM users WHERE username = ? OR email = ?')
-        .get(process.env.ADMIN_USERNAME || 'admin', process.env.ADMIN_EMAIL || 'admin@frontbase.dev');
-      
-      if (adminUser) {
-        console.log('🔐 Storing encrypted service key...');
-        await dbManager.updateUserSetting(adminUser.id, 'supabase_service_key_encrypted', JSON.stringify(encryptedServiceKey));
-      }
+      // Verify storage
+      const storedProject = dbManager.getProject();
+      console.log('✅ Supabase configuration verification:', {
+        url_stored: !!storedProject.supabase_url,
+        anon_key_stored: !!storedProject.supabase_anon_key,
+        service_key_stored: !!storedProject.supabase_service_key_encrypted
+      });
       
       // Test the connection
       console.log('🧪 Testing Supabase connection...');

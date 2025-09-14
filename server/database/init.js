@@ -1,6 +1,7 @@
 const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
+const { migrateServiceKeyToProjectLevel } = require('./migrate-service-key');
 
 function initializeDatabase() {
   const dbPath = process.env.DB_PATH || path.join(__dirname, '../data/frontbase.db');
@@ -92,6 +93,19 @@ function initializeDatabase() {
   
   console.log('✅ Database initialized successfully');
   console.log(`📍 Database location: ${dbPath}`);
+  
+  // Run service key migration after database initialization
+  try {
+    console.log('🔄 Running service key migration...');
+    db.close(); // Close the connection before migration
+    migrateServiceKeyToProjectLevel();
+    db = new Database(dbPath); // Reopen connection
+    db.pragma('foreign_keys = ON');
+    console.log('✅ Service key migration completed');
+  } catch (migrationError) {
+    console.warn('⚠️  Service key migration failed:', migrationError.message);
+    // Don't fail the entire initialization for migration issues
+  }
   
   return db;
 }

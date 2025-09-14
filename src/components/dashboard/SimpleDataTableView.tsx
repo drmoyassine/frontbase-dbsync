@@ -390,45 +390,49 @@ export const SimpleDataTableView: React.FC = () => {
               </div>
             </div>
             
-            <ScrollArea className="h-96">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {tableData.columns.map((column) => (
-                      <TableHead key={column.column_name}>
-                        <div className="flex flex-col">
-                          <span>{column.column_name}</span>
-                          <span className="text-xs text-muted-foreground font-normal">
-                            {column.data_type}
-                          </span>
-                        </div>
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredData.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={tableData.columns.length} className="text-center py-8">
-                        <div className="text-muted-foreground">
-                          {searchQuery ? 'No matching data found' : 'No data in this table'}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredData.map((row, index) => (
-                      <TableRow key={index}>
+            <div className="h-96 w-full overflow-hidden">
+              <ScrollArea className="h-full w-full">
+                <div className="w-full overflow-x-auto">
+                  <Table className="min-w-full">
+                    <TableHeader>
+                      <TableRow>
                         {tableData.columns.map((column) => (
-                          <TableCell key={column.column_name}>
-                            {formatValue(row[column.column_name])}
-                          </TableCell>
+                          <TableHead key={column.column_name} className="min-w-32 whitespace-nowrap">
+                            <div className="flex flex-col">
+                              <span>{column.column_name}</span>
+                              <span className="text-xs text-muted-foreground font-normal">
+                                {column.data_type}
+                              </span>
+                            </div>
+                          </TableHead>
                         ))}
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </ScrollArea>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredData.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={tableData.columns.length} className="text-center py-8">
+                            <div className="text-muted-foreground">
+                              {searchQuery ? 'No matching data found' : 'No data in this table'}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredData.map((row, index) => (
+                          <TableRow key={index}>
+                            {tableData.columns.map((column) => (
+                              <TableCell key={column.column_name} className="min-w-32 max-w-64 truncate">
+                                {formatValue(row[column.column_name])}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </ScrollArea>
+            </div>
           </div>
         ) : (
           <div className="text-center py-8">

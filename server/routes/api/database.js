@@ -110,9 +110,11 @@ router.get('/supabase-tables', authenticateToken, async (req, res) => {
     
     const serviceKey = decrypt(JSON.parse(encryptedServiceKey));
     if (!serviceKey) {
+      console.error('Service key decryption failed - this may indicate encryption key mismatch');
       return res.status(400).json({
         success: false,
-        message: 'Failed to decrypt service key'
+        message: 'Failed to decrypt service key. This may indicate an encryption key mismatch. Please check your ENCRYPTION_KEY environment variable or reconnect to Supabase.',
+        requiresReconnection: true
       });
     }
     
@@ -188,9 +190,11 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
 
     const serviceKey = decrypt(JSON.parse(encryptedServiceKey));
     if (!serviceKey || !settings.supabase_url) {
+      console.error('Service key decryption failed or URL missing - encryption key mismatch possible');
       return res.status(400).json({
         success: false,
-        message: 'Supabase credentials not found'
+        message: 'Failed to decrypt Supabase credentials. This may indicate an encryption key mismatch. Please check your ENCRYPTION_KEY environment variable or reconnect to Supabase.',
+        requiresReconnection: true
       });
     }
 

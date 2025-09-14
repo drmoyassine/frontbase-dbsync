@@ -24,17 +24,31 @@ try {
   console.warn('Will use environment variable fallback for encryption key');
 }
 
-// Generate or use existing encryption key
+// Generate or use existing encryption key with proper validation
 const getEncryptionKey = () => {
-  // First try environment variable
+  // CRITICAL: Only use environment variable when set to ensure persistence
   const envKey = process.env.ENCRYPTION_KEY;
   if (envKey) {
+    console.log('Using ENCRYPTION_KEY from environment variable');
+    
+    // Validate the environment key format
+    if (!/^[a-fA-F0-9]{64}$/.test(envKey)) {
+      console.error('ENCRYPTION_KEY must be a 64-character hexadecimal string (32 bytes)');
+      console.error('Generate one with: node -p "require(\'crypto\').randomBytes(32).toString(\'hex\')"');
+      process.exit(1);
+    }
+    
     return Buffer.from(envKey, 'hex');
   }
   
-  // Then try persistent file
+  console.warn('ENCRYPTION_KEY not found in environment variables');
+  console.warn('This will cause Supabase connections to be lost on container restart');
+  console.warn('Set ENCRYPTION_KEY in your environment to fix this issue');
+  
+  // Try persistent file as fallback (for development only)
   try {
     if (fs.existsSync(KEY_FILE)) {
+      console.log('Using fallback encryption key from file (development only)');
       const keyData = fs.readFileSync(KEY_FILE, 'utf8');
       return Buffer.from(keyData, 'hex');
     }
@@ -42,7 +56,8 @@ const getEncryptionKey = () => {
     console.warn('Failed to read encryption key from file:', error.message);
   }
   
-  // Generate new key and save it
+  // Generate new key and save it (development fallback)
+  console.warn('Generating new encryption key - connections will be lost on restart');
   const newKey = crypto.randomBytes(KEY_LENGTH);
   try {
     fs.writeFileSync(KEY_FILE, newKey.toString('hex'), 'utf8');

@@ -68,6 +68,14 @@ Simply open [Lovable](https://lovable.dev/projects/4651ed78-2b9d-433c-88ca-fdbe2
 
 This project supports various environment variables for configuration. See `.env.example` for a complete list.
 
+### Critical Configuration
+
+**Encryption (REQUIRED for Production):**
+- `ENCRYPTION_KEY` - **Required for persistent Supabase connections**
+  - Must be a 64-character hexadecimal string (32 bytes)
+  - Generate with: `node -p "require('crypto').randomBytes(32).toString('hex')"`
+  - **Without this, Supabase connections will be lost on container restart**
+
 ### Optional Configuration
 
 **Server Settings:**
@@ -140,12 +148,28 @@ services:
 
 ### Troubleshooting
 
-**Supabase Connection Lost on Restart:**
-- Ensure `ENCRYPTION_KEY` environment variable is set
-- Generate key with: `node -p "require('crypto').randomBytes(32).toString('hex')"`
-- Verify the key persists across container restarts
+**Supabase Connection Lost After Restart:**
+If your Supabase connection is lost after container restart:
+1. **Set the `ENCRYPTION_KEY` environment variable** (most common cause)
+   - Generate: `node -p "require('crypto').randomBytes(32).toString('hex')"`
+   - Add to your `.env` file or docker environment
+2. Ensure the data directory is properly mounted (`./data:/app/data`)
+3. Check container logs for encryption key warnings
 
 **Database Access Issues:**
+If you can't access the database or see tables:
+1. Check if you have the service key configured
+2. Verify your Supabase credentials are correct
+3. Ensure your Supabase project is running
+4. If you see "Failed to decrypt service key", regenerate `ENCRYPTION_KEY`
+
+**Table Display Issues:**
+If table scrolling is problematic:
+- Tables now have contained horizontal scrolling within the viewport
+- Columns have minimum widths to prevent cramped display
+- Use the search function to filter large datasets
+
+**Additional Resources:**
 - Check RLS policies in Supabase dashboard
 - Verify service key permissions
 - See API.md for detailed endpoint documentation

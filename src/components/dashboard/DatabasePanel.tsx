@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Database, ExternalLink, AlertCircle, CheckCircle, Plus, Settings, Trash2 } from 'lucide-react';
 import { useDashboardStore } from '@/stores/dashboard';
 import { SupabaseConnectionModal } from './SupabaseConnectionModal';
+import { SupabaseTablesList } from './SupabaseTablesList';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -221,23 +222,7 @@ export const DatabasePanel: React.FC = () => {
         </Card>
       </div>
 
-      {connections.supabase.connected && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Database Tables</CardTitle>
-            <CardDescription>
-              Overview of your connected database tables
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-8 text-muted-foreground">
-              <Database className="mx-auto h-12 w-12 mb-4" />
-              <p>Table management features coming soon</p>
-              <p className="text-sm">Use your Supabase dashboard to manage tables for now</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {connections.supabase.connected && <SupabaseTablesList />}
 
       <SupabaseConnectionModal />
     </div>

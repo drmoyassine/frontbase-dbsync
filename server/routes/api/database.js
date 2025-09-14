@@ -101,12 +101,18 @@ router.get('/supabase-tables', authenticateToken, async (req, res) => {
     const encryptedServiceKey = settings.supabase_service_key_encrypted;
     
     if (!encryptedServiceKey) {
-      return res.status(400).json({ error: 'Service key required for table operations' });
+      return res.status(400).json({
+        success: false,
+        message: 'Service key required for table operations'
+      });
     }
     
     const serviceKey = decrypt(JSON.parse(encryptedServiceKey));
     if (!serviceKey) {
-      return res.status(400).json({ error: 'Failed to decrypt service key' });
+      return res.status(400).json({
+        success: false,
+        message: 'Failed to decrypt service key'
+      });
     }
     
     const url = settings.supabase_url;
@@ -118,19 +124,120 @@ router.get('/supabase-tables', authenticateToken, async (req, res) => {
     });
     
     if (!response.ok) {
-      return res.status(400).json({ error: 'Failed to fetch tables' });
+      return res.status(400).json({
+        success: false,
+        message: 'Failed to fetch tables from Supabase'
+      });
+    }
+
+    const data = await response.json();
+    
+    // Extract table information from OpenAPI spec
+    const tables = [];
+    if (data.paths) {
+      Object.keys(data.paths).forEach(path => {
+        if (path.startsWith('/') && !path.includes('{')) {
+          const tableName = path.substring(1);
+          if (tableName && !tableName.includes('/')) {
+            tables.push({
+              name: tableName,
+              schema: 'public',
+              path: path
+            });
+          }
+        }
+      });
     }
     
-    // This is a simplified response - in a real implementation you'd query the schema
-    res.json({ 
-      tables: [
-        { name: 'users', rows: 'Unknown' },
-        { name: 'posts', rows: 'Unknown' }
-      ]
+    res.json({
+      success: true,
+      data: { tables }
     });
   } catch (error) {
     console.error('Get tables error:', error);
-    res.status(500).json({ error: 'Failed to get tables' });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get tables'
+    });
+  }
+});
+
+// Get table schema
+router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
+  try {
+    const settings = db.getUserSettings(req.user.id);
+    const { tableName } = req.params;
+    const encryptedServiceKey = settings.supabase_service_key_encrypted;
+    
+    if (!encryptedServiceKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'Service key required'
+      });
+    }
+
+    const serviceKey = decrypt(JSON.parse(encryptedServiceKey));
+    if (!serviceKey || !settings.supabase_url) {
+      return res.status(400).json({
+        success: false,
+        message: 'Supabase credentials not found'
+      });
+    }
+
+    // Return basic table info (schema details would require more complex queries)
+    res.json({
+      success: true,
+      data: { table_name: tableName, columns: [] }
+    });
+  } catch (error) {
+    console.error('Error fetching table schema:', error);
+    res.json({
+      success: true,
+      data: { table_name: req.params.tableName, columns: [] }
+    });
+  }
+});
+
+// Get table data preview
+router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
+  try {
+    const settings = db.getUserSettings(req.user.id);
+    const { tableName } = req.params;
+    const { limit = 20, offset = 0 } = req.query;
+    
+    const anonKey = settings.supabase_anon_key;
+    if (!anonKey || !settings.supabase_url) {
+      return res.status(400).json({
+        success: false,
+        message: 'Supabase credentials not found'
+      });
+    }
+
+    // Fetch table data using anon key for security
+    const response = await fetch(`${settings.supabase_url}/rest/v1/${tableName}?limit=${limit}&offset=${offset}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${anonKey}`,
+        'apikey': anonKey,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      res.json({ success: true, data });
+    } else {
+      res.status(response.status).json({
+        success: false,
+        message: 'Failed to fetch table data'
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching table data:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch table data'
+    });
   }
 });
 

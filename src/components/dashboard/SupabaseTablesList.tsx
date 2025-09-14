@@ -48,7 +48,10 @@ export const SupabaseTablesList: React.FC = () => {
   const handleOpenInSupabase = (tableName: string) => {
     if (connections.supabase.url) {
       const baseUrl = connections.supabase.url.replace('/rest/v1', '');
-      window.open(`${baseUrl}/project/default/editor/${tableName}`, '_blank');
+      const projectRef = baseUrl.split('//')[1]?.split('.')[0];
+      if (projectRef) {
+        window.open(`https://supabase.com/dashboard/project/${projectRef}/editor/${tableName}`, '_blank');
+      }
     }
   };
 

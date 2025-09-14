@@ -184,7 +184,8 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
       });
     }
 
-    // Query information_schema for actual column details
+    // Direct query to information_schema via REST API
+    const schemaUrl = `${settings.supabase_url}/rest/v1/rpc/exec_sql`;
     const schemaQuery = `
       SELECT 
         column_name,
@@ -193,35 +194,64 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
         column_default,
         character_maximum_length,
         numeric_precision,
-        numeric_scale
-      FROM information_schema.columns 
-      WHERE table_name = '${tableName}' 
-      AND table_schema = 'public'
-      ORDER BY ordinal_position
+        numeric_scale,
+        CASE WHEN tc.constraint_type = 'PRIMARY KEY' THEN true ELSE false END as is_primary,
+        CASE WHEN tc.constraint_type = 'FOREIGN KEY' THEN true ELSE false END as is_foreign
+      FROM information_schema.columns c
+      LEFT JOIN information_schema.key_column_usage kcu 
+        ON c.table_name = kcu.table_name AND c.column_name = kcu.column_name
+      LEFT JOIN information_schema.table_constraints tc 
+        ON kcu.constraint_name = tc.constraint_name
+      WHERE c.table_name = '${tableName}' 
+        AND c.table_schema = 'public'
+      ORDER BY c.ordinal_position
     `;
 
-    const response = await fetch(`${settings.supabase_url}/rest/v1/rpc/get_table_schema`, {
+    console.log('Fetching schema for table:', tableName);
+    
+    let response = await fetch(schemaUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${serviceKey}`,
         'apikey': serviceKey,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
       },
       body: JSON.stringify({ 
         query: schemaQuery
       })
     });
 
+    if (!response.ok) {
+      console.log('Schema RPC failed, trying direct query approach');
+      // Alternative: direct query to columns table
+      const directUrl = `${settings.supabase_url}/rest/v1/information_schema.columns?table_name=eq.${tableName}&table_schema=eq.public&select=column_name,data_type,is_nullable,column_default`;
+      
+      response = await fetch(directUrl, {
+        headers: {
+          'Authorization': `Bearer ${serviceKey}`,
+          'apikey': serviceKey,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+
     if (response.ok) {
       const schemaData = await response.json();
+      console.log('Schema data received:', schemaData);
+      
+      // Handle different response formats
+      let columns = Array.isArray(schemaData) ? schemaData : (schemaData.data || []);
+      
       res.json({
         success: true,
         data: { 
           table_name: tableName, 
-          columns: schemaData || []
+          columns: columns
         }
       });
     } else {
+      console.log('Both schema queries failed, using fallback');
       // Fallback: try to get schema from first row
       const fallbackResponse = await fetch(`${settings.supabase_url}/rest/v1/${tableName}?limit=1`, {
         headers: {
@@ -234,15 +264,18 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
         const data = await fallbackResponse.json();
         const columns = data.length > 0 ? Object.keys(data[0]).map(col => ({
           column_name: col,
-          data_type: 'unknown',
+          data_type: typeof data[0][col],
           is_nullable: 'YES'
         })) : [];
+        
+        console.log('Fallback schema extracted:', columns);
         
         res.json({
           success: true,
           data: { table_name: tableName, columns }
         });
       } else {
+        console.log('Fallback also failed');
         res.json({
           success: true,
           data: { table_name: tableName, columns: [] }

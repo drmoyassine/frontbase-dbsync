@@ -142,8 +142,13 @@ router.post('/login', async (req, res) => {
       secure: isProduction && (req.headers['x-forwarded-proto'] === 'https' || req.secure),
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      // Add domain only if we're on a custom domain (not localhost)
-      ...(req.headers.host && !req.headers.host.includes('localhost') && !req.headers.host.includes('127.0.0.1') 
+      // Add domain only if we're on a custom domain (not localhost or platform hosting)
+      ...(req.headers.host && 
+          !req.headers.host.includes('localhost') && 
+          !req.headers.host.includes('127.0.0.1') &&
+          !req.headers.host.includes('easypanel.host') &&
+          !req.headers.host.includes('railway.app') &&
+          !req.headers.host.includes('vercel.app')
           ? { domain: `.${req.headers.host.split('.').slice(-2).join('.')}` } 
           : {})
     };
@@ -213,8 +218,13 @@ router.post('/register', async (req, res) => {
       secure: isProduction && (req.headers['x-forwarded-proto'] === 'https' || req.secure),
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      // Add domain only if we're on a custom domain (not localhost)
-      ...(req.headers.host && !req.headers.host.includes('localhost') && !req.headers.host.includes('127.0.0.1') 
+      // Add domain only if we're on a custom domain (not localhost or platform hosting)
+      ...(req.headers.host && 
+          !req.headers.host.includes('localhost') && 
+          !req.headers.host.includes('127.0.0.1') &&
+          !req.headers.host.includes('easypanel.host') &&
+          !req.headers.host.includes('railway.app') &&
+          !req.headers.host.includes('vercel.app')
           ? { domain: `.${req.headers.host.split('.').slice(-2).join('.')}` } 
           : {})
     };

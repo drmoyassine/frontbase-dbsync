@@ -85,26 +85,59 @@ export const CombinedTableView: React.FC = () => {
     setDataError(null);
     
     try {
-      const response = await fetch(`/api/database/table-data/${tableName}?limit=50&offset=0`, {
-        credentials: 'include'
+      // Add cache-busting timestamp
+      const timestamp = Date.now();
+      const response = await fetch(`/api/database/table-data/${tableName}?limit=50&offset=0&_t=${timestamp}`, {
+        credentials: 'include',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
       });
       
       if (response.ok) {
         const result = await response.json();
-        if (result.success && result.data) {
+        console.log('Table data response:', result);
+        
+        if (result.success) {
           const data = Array.isArray(result.data) ? result.data : [];
-          const columns = data.length > 0 ? Object.keys(data[0]) : [];
+          
+          // Fetch schema separately to get columns even if data is empty
+          const schemaResponse = await fetch(`/api/database/table-schema/${tableName}?_t=${timestamp}`, {
+            credentials: 'include',
+            headers: {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          });
+          
+          let columns = [];
+          if (schemaResponse.ok) {
+            const schemaResult = await schemaResponse.json();
+            if (schemaResult.success && schemaResult.data && schemaResult.data.columns) {
+              columns = schemaResult.data.columns.map((col: any) => col.column_name || col.name);
+            }
+          }
+          
+          // Fallback: if no schema, use columns from data (if available)
+          if (columns.length === 0 && data.length > 0) {
+            columns = Object.keys(data[0]);
+          }
+          
           setTableData({
             columns,
             data,
-            total: data.length
+            total: result.total || data.length
           });
+        } else {
+          setDataError(result.message || 'Failed to fetch table data');
         }
       } else {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({ message: 'Network error' }));
         setDataError(error.message || 'Failed to fetch table data');
       }
     } catch (error) {
+      console.error('Fetch table data error:', error);
       setDataError('Network error occurred');
     } finally {
       setDataLoading(false);
@@ -203,14 +236,28 @@ export const CombinedTableView: React.FC = () => {
                 <Badge variant="secondary">{supabaseTables.length}</Badge>
               )}
             </CardTitle>
-            <Button
-              onClick={fetchSupabaseTables}
-              variant="outline"
-              size="sm"
-              disabled={tablesLoading}
-            >
-              <RefreshCw className={`h-4 w-4 ${tablesLoading ? 'animate-spin' : ''}`} />
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={fetchSupabaseTables}
+                variant="outline"
+                size="sm"
+                disabled={tablesLoading}
+              >
+                <RefreshCw className={`h-4 w-4 ${tablesLoading ? 'animate-spin' : ''}`} />
+              </Button>
+              {currentTable && (
+                <Button
+                  onClick={() => fetchTableData(currentTable)}
+                  variant="outline"
+                  size="sm"
+                  disabled={dataLoading}
+                  title="Refresh table data"
+                >
+                  <RefreshCw className={`h-4 w-4 ${dataLoading ? 'animate-spin' : ''}`} />
+                  Data
+                </Button>
+              )}
+            </div>
           </div>
           
           {/* Table Selector and Operations */}
@@ -319,12 +366,24 @@ export const CombinedTableView: React.FC = () => {
             <div className="space-y-4">
               {/* Table Stats */}
               {tableData && (
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  <span>{tableData.columns.length} columns</span>
-                  <span>{tableData.total} rows</span>
-                  {searchQuery && (
-                    <span>{filteredData.length} filtered</span>
-                  )}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <span>{tableData.columns.length} columns</span>
+                    <span>{tableData.total} rows</span>
+                    {searchQuery && (
+                      <span>{filteredData.length} filtered</span>
+                    )}
+                  </div>
+                  <Button
+                    onClick={() => fetchTableData(currentTable)}
+                    variant="ghost"
+                    size="sm"
+                    disabled={dataLoading}
+                    className="text-xs"
+                  >
+                    <RefreshCw className={`h-3 w-3 mr-1 ${dataLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
                 </div>
               )}
 
@@ -342,7 +401,7 @@ export const CombinedTableView: React.FC = () => {
                     Retry
                   </Button>
                 </div>
-              ) : tableData && tableData.data.length > 0 ? (
+              ) : tableData && tableData.columns.length > 0 ? (
                 <ScrollArea className="h-96 w-full border rounded-lg">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -356,15 +415,23 @@ export const CombinedTableView: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredData.map((row, index) => (
-                          <tr key={index} className="hover:bg-muted/25 border-b">
-                            {tableData.columns.map((column) => (
-                              <td key={column} className="px-4 py-2 font-mono text-xs">
-                                {formatValue(row[column])}
-                              </td>
-                            ))}
+                        {tableData.data.length > 0 ? (
+                          filteredData.map((row, index) => (
+                            <tr key={index} className="hover:bg-muted/25 border-b">
+                              {tableData.columns.map((column) => (
+                                <td key={column} className="px-4 py-2 font-mono text-xs">
+                                  {formatValue(row[column])}
+                                </td>
+                              ))}
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={tableData.columns.length} className="px-4 py-8 text-center text-muted-foreground">
+                              No data found in this table
+                            </td>
                           </tr>
-                        ))}
+                        )}
                       </tbody>
                     </table>
                   </div>

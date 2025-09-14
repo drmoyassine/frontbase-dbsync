@@ -164,6 +164,13 @@ router.get('/supabase-tables', authenticateToken, async (req, res) => {
 
 // Get table schema
 router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
+  // Add cache-busting headers
+  res.set({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  });
+
   try {
     const settings = db.getUserSettings(req.user.id);
     const { tableName } = req.params;
@@ -293,10 +300,19 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
 
 // Get table data preview
 router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
+  // Add cache-busting headers
+  res.set({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  });
+
   try {
     const settings = db.getUserSettings(req.user.id);
     const { tableName } = req.params;
     const { limit = 20, offset = 0 } = req.query;
+    
+    console.log(`Fetching data for table: ${tableName}, limit: ${limit}, offset: ${offset}`);
     
     const anonKey = settings.supabase_anon_key;
     const encryptedServiceKey = settings.supabase_service_key_encrypted;
@@ -308,8 +324,12 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
       });
     }
 
+    let authMethod = 'anon';
+    let response;
+
     // Try with anon key first
-    let response = await fetch(`${settings.supabase_url}/rest/v1/${tableName}?limit=${limit}&offset=${offset}`, {
+    console.log('Trying with anon key...');
+    response = await fetch(`${settings.supabase_url}/rest/v1/${tableName}?limit=${limit}&offset=${offset}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${anonKey}`,
@@ -320,9 +340,11 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
 
     // If anon key fails and we have service key, try with service key
     if (!response.ok && encryptedServiceKey) {
+      console.log('Anon key failed, trying with service key...');
       try {
         const serviceKey = decrypt(JSON.parse(encryptedServiceKey));
         if (serviceKey) {
+          authMethod = 'service';
           response = await fetch(`${settings.supabase_url}/rest/v1/${tableName}?limit=${limit}&offset=${offset}`, {
             method: 'GET',
             headers: {
@@ -339,13 +361,34 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
 
     if (response.ok) {
       const data = await response.json();
-      res.json({ success: true, data });
+      console.log(`Success with ${authMethod} key. Rows fetched: ${Array.isArray(data) ? data.length : 0}`);
+      
+      // Always return data array, even if empty
+      const responseData = Array.isArray(data) ? data : [];
+      
+      res.json({ 
+        success: true, 
+        data: responseData,
+        authMethod,
+        total: responseData.length
+      });
     } else {
       const errorText = await response.text();
-      res.status(response.status).json({
-        success: false,
-        message: `Failed to fetch table data: ${errorText || 'Unknown error'}`
-      });
+      console.error(`Failed to fetch table data: ${response.status} - ${errorText}`);
+      
+      // Check if it's an RLS policy error
+      if (response.status === 401 || errorText.includes('RLS')) {
+        res.status(response.status).json({
+          success: false,
+          message: `Access denied: Table may have Row Level Security enabled. ${errorText}`,
+          isRLSError: true
+        });
+      } else {
+        res.status(response.status).json({
+          success: false,
+          message: `Failed to fetch table data: ${errorText || 'Unknown error'}`
+        });
+      }
     }
   } catch (error) {
     console.error('Error fetching table data:', error);

@@ -233,8 +233,8 @@ export const SimpleDataTableView: React.FC = () => {
   };
 
   if (tablesError) {
-    return (
-      <Card>
+  return (
+    <Card className="w-full max-w-full">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Database className="h-5 w-5" />

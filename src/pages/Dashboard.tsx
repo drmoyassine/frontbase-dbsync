@@ -11,7 +11,7 @@ import { SettingsPanel } from '@/components/dashboard/SettingsPanel';
 const Dashboard: React.FC = () => {
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full">
+      <div className="min-h-screen flex w-full max-w-full overflow-hidden">
         <DashboardLayout>
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard/pages" replace />} />

@@ -329,39 +329,38 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
       });
     }
 
-    let authMethod = 'anon';
+    let authMethod = 'service';
     let response;
 
-    // Try with anon key first
-    console.log('Trying with anon key...');
-    response = await fetch(`${settings.supabase_url}/rest/v1/${tableName}?limit=${limit}&offset=${offset}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${anonKey}`,
-        'apikey': anonKey,
-        'Content-Type': 'application/json'
-      }
-    });
+    // Use service key exclusively for dashboard access (bypasses RLS)
+    if (!encryptedServiceKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'Service key required for dashboard database access. Please reconnect to Supabase.'
+      });
+    }
 
-    // If anon key fails and we have service key, try with service key
-    if (!response.ok && encryptedServiceKey) {
-      console.log('Anon key failed, trying with service key...');
-      try {
-        const serviceKey = decrypt(JSON.parse(encryptedServiceKey));
-        if (serviceKey) {
-          authMethod = 'service';
-          response = await fetch(`${settings.supabase_url}/rest/v1/${tableName}?limit=${limit}&offset=${offset}`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${serviceKey}`,
-              'apikey': serviceKey,
-              'Content-Type': 'application/json'
-            }
-          });
-        }
-      } catch (decryptError) {
-        console.error('Service key decryption failed:', decryptError);
+    console.log('Using service key for admin dashboard access...');
+    try {
+      const serviceKey = decrypt(JSON.parse(encryptedServiceKey));
+      if (!serviceKey) {
+        throw new Error('Failed to decrypt service key');
       }
+
+      response = await fetch(`${settings.supabase_url}/rest/v1/${tableName}?limit=${limit}&offset=${offset}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${serviceKey}`,
+          'apikey': serviceKey,
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch (decryptError) {
+      console.error('Service key decryption failed:', decryptError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to decrypt service key. Please reconnect to Supabase.'
+      });
     }
 
     if (response.ok) {

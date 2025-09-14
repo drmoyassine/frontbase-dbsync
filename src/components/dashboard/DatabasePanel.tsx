@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Database, ExternalLink, AlertCircle, CheckCircle, Plus, Settings, Trash2 } from 'lucide-react';
 import { useDashboardStore } from '@/stores/dashboard';
+import { useAuthStore } from '@/stores/auth';
 import { SupabaseConnectionModal } from './SupabaseConnectionModal';
 import { SimpleDataTableView } from './SimpleDataTableView';
 import { useToast } from '@/hooks/use-toast';
@@ -21,6 +22,7 @@ import {
 
 export const DatabasePanel: React.FC = () => {
   const { connections, setSupabaseModalOpen, fetchConnections } = useDashboardStore();
+  const { isAuthenticated, isLoading } = useAuthStore();
   const { toast } = useToast();
 
   // Add extensive logging for debugging
@@ -34,9 +36,16 @@ export const DatabasePanel: React.FC = () => {
 
   useEffect(() => {
     console.log('=== DATABASE PANEL USEEFFECT ===');
-    console.log('Fetching connections on mount...');
-    fetchConnections();
-  }, [fetchConnections]);
+    console.log('Auth loading:', isLoading, 'Auth authenticated:', isAuthenticated);
+    
+    // Only fetch connections when auth is complete and user is authenticated
+    if (!isLoading && isAuthenticated) {
+      console.log('Fetching connections after auth completion...');
+      fetchConnections();
+    } else {
+      console.log('Waiting for authentication to complete before fetching connections...');
+    }
+  }, [fetchConnections, isAuthenticated, isLoading]);
 
   const handleDisconnectSupabase = async () => {
     try {

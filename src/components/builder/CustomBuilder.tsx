@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { BuilderHeader } from './BuilderHeader';
@@ -6,6 +6,7 @@ import { LeftSidebar } from './LeftSidebar';
 import { RightSidebar } from './RightSidebar';
 import { BuilderCanvas } from './BuilderCanvas';
 import { useBuilderStore } from '@/stores/builder';
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 import './builder.css';
 
 export const CustomBuilder: React.FC = () => {
@@ -18,6 +19,8 @@ export const CustomBuilder: React.FC = () => {
     setSelectedComponentId,
     savePageToDatabase
   } = useBuilderStore();
+  
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   
   const currentPage = pages.find(page => page.id === currentPageId);
 
@@ -45,11 +48,7 @@ export const CustomBuilder: React.FC = () => {
         
         if (!isInInput) {
           event.preventDefault();
-          
-          // Show confirmation dialog
-          if (window.confirm('Are you sure you want to delete this component?')) {
-            deleteSelectedComponent();
-          }
+          setShowDeleteDialog(true);
         }
         return;
       }
@@ -76,6 +75,11 @@ export const CustomBuilder: React.FC = () => {
     );
   }
 
+  const handleDeleteConfirm = () => {
+    deleteSelectedComponent();
+    setShowDeleteDialog(false);
+  };
+
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="h-screen flex flex-col bg-background">
@@ -101,6 +105,12 @@ export const CustomBuilder: React.FC = () => {
             </div>
           )}
         </div>
+
+        <DeleteConfirmationDialog
+          open={showDeleteDialog}
+          onOpenChange={setShowDeleteDialog}
+          onConfirm={handleDeleteConfirm}
+        />
       </div>
     </DndProvider>
   );

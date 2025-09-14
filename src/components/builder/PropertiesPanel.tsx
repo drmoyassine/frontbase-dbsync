@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useBuilderStore } from '@/stores/builder';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Trash2 } from 'lucide-react';
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 
 export const PropertiesPanel: React.FC = () => {
   const { 
@@ -15,6 +16,8 @@ export const PropertiesPanel: React.FC = () => {
     updatePage,
     setSelectedComponentId 
   } = useBuilderStore();
+  
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const currentPage = pages.find(page => page.id === currentPageId);
   
@@ -108,6 +111,7 @@ export const PropertiesPanel: React.FC = () => {
     });
 
     setSelectedComponentId(null);
+    setShowDeleteDialog(false);
   };
 
   const renderPropertyFields = () => {
@@ -485,7 +489,7 @@ export const PropertiesPanel: React.FC = () => {
         <Button 
           variant="ghost" 
           size="icon" 
-          onClick={deleteComponent}
+          onClick={() => setShowDeleteDialog(true)}
           className="text-destructive hover:text-destructive"
         >
           <Trash2 className="h-4 w-4" />
@@ -504,6 +508,12 @@ export const PropertiesPanel: React.FC = () => {
           {renderPropertyFields()}
         </div>
       </div>
+
+      <DeleteConfirmationDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        onConfirm={deleteComponent}
+      />
     </div>
   );
 };

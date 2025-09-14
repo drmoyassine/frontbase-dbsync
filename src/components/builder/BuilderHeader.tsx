@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,8 +10,7 @@ import {
   Globe,
   Layers,
   Database,
-  ArrowLeft,
-  Trash2
+  ArrowLeft
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -27,6 +26,7 @@ import {
 import { useBuilderStore } from '@/stores/builder';
 import { PageSelector } from './PageSelector';
 import { PageSettings } from './PageSettings';
+import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
 
 export const BuilderHeader: React.FC = () => {
   const navigate = useNavigate();
@@ -39,11 +39,14 @@ export const BuilderHeader: React.FC = () => {
     isSupabaseConnected,
     selectedComponentId,
     isSaving,
+    hasUnsavedChanges,
     savePageToDatabase,
     publishPage,
     togglePageVisibility,
     deleteSelectedComponent
   } = useBuilderStore();
+  
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   
   const currentPage = pages.find(page => page.id === currentPageId);
 
@@ -74,7 +77,24 @@ export const BuilderHeader: React.FC = () => {
   };
 
   const handleBackToDashboard = () => {
+    if (hasUnsavedChanges) {
+      setShowUnsavedDialog(true);
+    } else {
+      navigate('/dashboard/pages');
+    }
+  };
+
+  const handleSaveAndNavigate = async () => {
+    if (currentPageId) {
+      await handleSave();
+    }
     navigate('/dashboard/pages');
+    setShowUnsavedDialog(false);
+  };
+
+  const handleDiscardAndNavigate = () => {
+    navigate('/dashboard/pages');
+    setShowUnsavedDialog(false);
   };
 
   return (
@@ -82,8 +102,7 @@ export const BuilderHeader: React.FC = () => {
       {/* Left Section */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" onClick={handleBackToDashboard}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Pages
+          <ArrowLeft className="h-4 w-4" />
         </Button>
         
         <div className="h-6 w-px bg-border" />
@@ -162,40 +181,16 @@ export const BuilderHeader: React.FC = () => {
           </Badge>
         </Button>
         
-        {/* Delete Component Button - only show when component is selected */}
-        {selectedComponentId && !isPreviewMode && (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete Component</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Are you sure you want to delete this component? This action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteComponent}>
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
         
         <Button 
           variant="outline" 
           size="sm" 
           onClick={handleSave}
           disabled={isSaving}
+          className={hasUnsavedChanges ? "border-orange-500 text-orange-600" : ""}
         >
           <Save className="h-4 w-4 mr-2" />
-          {isSaving ? 'Saving...' : 'Save'}
+          {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save*' : 'Save'}
         </Button>
         
         <AlertDialog>
@@ -223,6 +218,13 @@ export const BuilderHeader: React.FC = () => {
         
         <PageSettings />
       </div>
+
+      <UnsavedChangesDialog
+        open={showUnsavedDialog}
+        onOpenChange={setShowUnsavedDialog}
+        onSaveAndContinue={handleSaveAndNavigate}
+        onDiscardAndContinue={handleDiscardAndNavigate}
+      />
     </header>
   );
 };

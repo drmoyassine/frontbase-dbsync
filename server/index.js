@@ -271,8 +271,9 @@ try {
 }
 
 try {
-  app.use('/api/pages', require('./routes/api/pages')(dbManager));
-  console.log('✅ Pages API routes loaded');
+  const { authenticateToken } = require('./routes/api/auth');
+  app.use('/api/pages', authenticateToken, require('./routes/api/pages')(dbManager));
+  console.log('✅ Pages API routes loaded with authentication');
 } catch (error) {
   console.error('❌ Failed to load pages routes:', error);
   process.exit(1);

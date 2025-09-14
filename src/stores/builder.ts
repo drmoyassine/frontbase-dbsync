@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { ComponentWithStyles } from '@/types/styles';
+import { pageAPI } from '@/lib/api';
+import { toast } from '@/hooks/use-toast';
 
 export interface ComponentData {
   id: string;
@@ -62,6 +64,7 @@ interface BuilderState {
   draggedComponentId: string | null;
   isSaving: boolean;
   isLoading: boolean;
+  hasUnsavedChanges: boolean;
   
   // Variables
   appVariables: AppVariable[];
@@ -99,6 +102,8 @@ interface BuilderState {
   loadPagesFromDatabase: () => Promise<void>;
   setSaving: (saving: boolean) => void;
   setLoading: (loading: boolean) => void;
+  setUnsavedChanges: (hasChanges: boolean) => void;
+  createPageInDatabase: (pageData: Omit<Page, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string | null>;
 }
 
 export const useBuilderStore = create<BuilderState>()(
@@ -113,6 +118,7 @@ export const useBuilderStore = create<BuilderState>()(
       draggedComponentId: null,
       isSaving: false,
       isLoading: false,
+      hasUnsavedChanges: false,
       appVariables: [],
       isSupabaseConnected: false,
       supabaseTables: [],
@@ -143,7 +149,8 @@ export const useBuilderStore = create<BuilderState>()(
           page.id === id 
             ? { ...page, ...updates, updatedAt: new Date().toISOString() }
             : page
-        )
+        ),
+        hasUnsavedChanges: true
       })),
       
       deletePage: (id) => set((state) => ({
@@ -312,8 +319,11 @@ export const useBuilderStore = create<BuilderState>()(
           const { toast } = await import('sonner');
           toast.success('Page saved successfully');
         } catch (error) {
-          const { toast } = await import('sonner');
-          toast.error(error instanceof Error ? error.message : 'Failed to save page');
+          toast({
+            title: "Error saving page",
+            description: error instanceof Error ? error.message : "Failed to save page",
+            variant: "destructive"
+          });
         } finally {
           setSaving(false);
         }
@@ -362,11 +372,16 @@ export const useBuilderStore = create<BuilderState>()(
             throw new Error(result.error || 'Failed to update page visibility');
           }
           
-          const { toast } = await import('sonner');
-          toast.success(`Page ${newVisibility ? 'published' : 'made private'}`);
+          toast({
+            title: "Page updated",
+            description: `Page ${newVisibility ? 'published' : 'made private'}`
+          });
         } catch (error) {
-          const { toast } = await import('sonner');
-          toast.error(error instanceof Error ? error.message : 'Failed to update page visibility');
+          toast({
+            title: "Error updating page",
+            description: error instanceof Error ? error.message : "Failed to update page visibility",
+            variant: "destructive"
+          });
         } finally {
           setSaving(false);
         }
@@ -408,8 +423,10 @@ export const useBuilderStore = create<BuilderState>()(
           };
         });
 
-        const { toast } = require('sonner');
-        toast.success('Component deleted');
+        toast({
+          title: "Component deleted",
+          description: "Component has been removed successfully"
+        });
       },
 
       loadPagesFromDatabase: async () => {
@@ -417,16 +434,57 @@ export const useBuilderStore = create<BuilderState>()(
         setLoading(true);
         
         try {
-          const { pageAPI } = await import('@/lib/api');
           const result = await pageAPI.getAllPages();
           
           if (result.success && result.data) {
-            set({ pages: result.data });
+            set({ pages: result.data.data || result.data, hasUnsavedChanges: false });
           }
         } catch (error) {
           console.error('Failed to load pages from database:', error);
+          toast({
+            title: "Error loading pages",
+            description: error instanceof Error ? error.message : "Failed to load pages from database",
+            variant: "destructive"
+          });
         } finally {
           setLoading(false);
+        }
+      },
+
+      setUnsavedChanges: (hasChanges) => set({ hasUnsavedChanges: hasChanges }),
+
+      createPageInDatabase: async (pageData) => {
+        const { setSaving } = get();
+        setSaving(true);
+        
+        try {
+          const result = await pageAPI.createPage(pageData);
+          
+          if (result.success && result.data) {
+            const newPage = result.data.data || result.data;
+            set((state) => ({
+              pages: [...state.pages, newPage],
+              hasUnsavedChanges: false
+            }));
+            
+            toast({
+              title: "Page created",
+              description: "Page has been created successfully"
+            });
+            
+            return newPage.id;
+          } else {
+            throw new Error(result.error || 'Failed to create page');
+          }
+        } catch (error) {
+          toast({
+            title: "Error creating page",
+            description: error instanceof Error ? error.message : "Failed to create page",
+            variant: "destructive"
+          });
+          return null;
+        } finally {
+          setSaving(false);
         }
       },
     }),

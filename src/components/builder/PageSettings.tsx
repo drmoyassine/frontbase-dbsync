@@ -13,11 +13,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Settings } from 'lucide-react';
 import { useBuilderStore } from '@/stores/builder';
-import { toast } from 'sonner';
+import { pageAPI } from '@/lib/api';
+import { toast } from '@/hooks/use-toast';
 
 export const PageSettings: React.FC = () => {
-  const { pages, currentPageId, updatePage } = useBuilderStore();
+  const { 
+    pages, 
+    currentPageId, 
+    updatePage,
+    setUnsavedChanges 
+  } = useBuilderStore();
+  
   const [isOpen, setIsOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   const currentPage = pages.find(page => page.id === currentPageId);
   
@@ -33,10 +41,51 @@ export const PageSettings: React.FC = () => {
     isHomepage: currentPage.isHomepage
   });
 
-  const handleSave = () => {
-    updatePage(currentPage.id, formData);
-    setIsOpen(false);
-    toast.success('Page settings updated');
+  const handleSave = async () => {
+    if (!currentPageId || !currentPage) return;
+    
+    setIsSaving(true);
+    try {
+      // First update the local store
+      updatePage(currentPageId, formData);
+      
+      // Then sync to database
+      const result = await pageAPI.updatePage(currentPageId, {
+        ...currentPage,
+        ...formData
+      });
+      
+      if (!result.success) {
+        // If update fails with 404, try creating the page
+        if (result.error?.includes('404')) {
+          const createResult = await pageAPI.createPage({
+            ...currentPage,
+            ...formData
+          });
+          
+          if (!createResult.success) {
+            throw new Error(createResult.error || 'Failed to create page in database');
+          }
+        } else {
+          throw new Error(result.error || 'Failed to update page settings');
+        }
+      }
+      
+      setUnsavedChanges(false);
+      toast({
+        title: "Settings saved",
+        description: "Page settings have been saved successfully"
+      });
+      setIsOpen(false);
+    } catch (error) {
+      toast({
+        title: "Error saving settings",
+        description: error instanceof Error ? error.message : "Failed to save page settings",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleInputChange = (field: string, value: any) => {
@@ -161,8 +210,11 @@ export const PageSettings: React.FC = () => {
             <Button variant="outline" onClick={() => setIsOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>
-              Save Changes
+            <Button 
+              onClick={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
         </div>

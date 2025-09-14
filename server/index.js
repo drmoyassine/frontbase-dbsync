@@ -188,7 +188,7 @@ try {
       
       if (adminUser) {
         console.log('🔐 Storing encrypted service key...');
-        dbManager.db.updateUserSetting(adminUser.id, 'supabase_service_key_encrypted', JSON.stringify(encryptedServiceKey));
+        await dbManager.updateUserSetting(adminUser.id, 'supabase_service_key_encrypted', JSON.stringify(encryptedServiceKey));
       }
       
       // Test the connection

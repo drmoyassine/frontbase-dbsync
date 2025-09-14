@@ -46,7 +46,7 @@ const checkStartupHealth = (dbManager) => {
       `).all();
       
       const tableNames = tables.map(t => t.name);
-      const requiredTables = ['users', 'user_sessions', 'project_config', 'pages'];
+      const requiredTables = ['users', 'user_sessions', 'project', 'pages'];
       const missingTables = requiredTables.filter(table => !tableNames.includes(table));
       
       if (missingTables.length === 0) {

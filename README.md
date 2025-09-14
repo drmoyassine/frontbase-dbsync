@@ -64,6 +64,45 @@ This project is built with:
 
 Simply open [Lovable](https://lovable.dev/projects/4651ed78-2b9d-433c-88ca-fdbe2875e6cf) and click on Share -> Publish.
 
+## Environment Variables
+
+This project supports various environment variables for configuration. See `.env.example` for a complete list.
+
+### Optional Configuration
+
+**Server Settings:**
+- `PORT` - Server port (default: 3000)
+- `NODE_ENV` - Environment mode (development/production)
+- `DB_PATH` - Database file path (default: ./database.sqlite)
+
+**Admin User Settings:**
+- `ADMIN_USERNAME` - Custom admin username (default: admin)
+- `ADMIN_PASSWORD` - Custom admin password (default: admin123)
+- `ADMIN_EMAIL` - Custom admin email (default: admin@frontbase.dev)
+
+### Docker Deployment with Environment Variables
+
+```yaml
+# docker-compose.yml example
+version: '3.8'
+services:
+  frontbase:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - ADMIN_USERNAME=your_admin
+      - ADMIN_PASSWORD=your_secure_password
+      - ADMIN_EMAIL=admin@yourdomain.com
+```
+
+### Security Notes
+
+- **Demo Mode**: When no custom admin credentials are set, demo credentials are shown on the login page
+- **Production**: Always set custom admin credentials for production deployments
+- **Password Security**: Use strong passwords (minimum 6 characters, recommended 12+)
+
 ## Can I connect a custom domain to my Lovable project?
 
 Yes, you can!

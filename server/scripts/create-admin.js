@@ -5,13 +5,24 @@ async function createAdminUser() {
   const db = new DatabaseManager();
   
   try {
-    // Generate proper hash for 'admin123'
-    const passwordHash = await bcrypt.hash('admin123', 10);
-    console.log('Generated password hash:', passwordHash);
+    // Get admin credentials from environment variables or use defaults
+    const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@frontbase.dev';
+    
+    // Validate admin password length for security
+    if (adminPassword.length < 6) {
+      console.error('ERROR: Admin password must be at least 6 characters long');
+      return;
+    }
+    
+    // Generate proper hash for the admin password
+    const passwordHash = await bcrypt.hash(adminPassword, 10);
+    console.log('Generated password hash for admin user');
     
     // Delete existing admin user if exists
     const deleteStmt = db.db.prepare('DELETE FROM users WHERE username = ?');
-    deleteStmt.run('admin');
+    deleteStmt.run(adminUsername);
     
     // Create new admin user with correct hash
     const createUserStmt = db.db.prepare(`
@@ -19,19 +30,20 @@ async function createAdminUser() {
       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
     `);
     
-    createUserStmt.run('default-admin', 'admin', 'admin@frontbase.dev', passwordHash);
+    createUserStmt.run('default-admin', adminUsername, adminEmail, passwordHash);
     
-    console.log('Admin user created successfully with username: admin, password: admin123');
+    const isCustomCredentials = process.env.ADMIN_USERNAME || process.env.ADMIN_PASSWORD;
+    console.log(`Admin user created successfully with username: ${adminUsername}${!isCustomCredentials ? ', password: admin123' : ' (custom credentials)'}`);
     
     // Verify the user was created
     const getUserStmt = db.db.prepare('SELECT * FROM users WHERE username = ?');
-    const user = getUserStmt.get('admin');
+    const user = getUserStmt.get(adminUsername);
     
     if (user) {
       console.log('Verification: Admin user exists in database');
       
       // Test password verification
-      const isValid = await bcrypt.compare('admin123', user.password_hash);
+      const isValid = await bcrypt.compare(adminPassword, user.password_hash);
       console.log('Password verification test:', isValid ? 'PASS' : 'FAIL');
     } else {
       console.log('ERROR: Admin user not found after creation');

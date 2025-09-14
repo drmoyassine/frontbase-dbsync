@@ -166,6 +166,12 @@ router.get('/me', authenticateToken, (req, res) => {
   });
 });
 
+// Demo info endpoint
+router.get('/demo-info', (req, res) => {
+  const isDemoMode = !process.env.ADMIN_USERNAME && !process.env.ADMIN_PASSWORD;
+  res.json({ isDemoMode });
+});
+
 // Logout endpoint
 router.post('/logout', (req, res) => {
   const token = req.cookies?.session_token;

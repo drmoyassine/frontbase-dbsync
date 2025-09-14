@@ -12,6 +12,22 @@ const LoginPage: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+
+  // Check if demo mode is active
+  useEffect(() => {
+    const checkDemoMode = async () => {
+      try {
+        const response = await fetch('/api/auth/demo-info');
+        const data = await response.json();
+        setIsDemoMode(data.isDemoMode);
+      } catch (error) {
+        console.error('Failed to check demo mode:', error);
+      }
+    };
+    
+    checkDemoMode();
+  }, []);
 
   // Redirect if already authenticated
   if (isAuthenticated) {
@@ -89,10 +105,12 @@ const LoginPage: React.FC = () => {
             </Button>
           </form>
           
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            <p>Demo credentials:</p>
-            <p className="font-mono">Username: admin | Password: admin123</p>
-          </div>
+          {isDemoMode && (
+            <div className="mt-6 text-center text-sm text-muted-foreground">
+              <p>Demo credentials:</p>
+              <p className="font-mono">Username: admin | Password: admin123</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

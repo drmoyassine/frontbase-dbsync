@@ -149,7 +149,10 @@ export const useAuthStore = create<AuthState>()(
             console.log('User is authenticated:', data.user);
           } else {
             // Check if we should attempt session recovery
-            if (response.status === 401 && currentState.user && currentState.isAuthenticated) {
+            // Skip recovery if we're on the login page - user should authenticate properly
+            const isOnLoginPage = window.location.pathname.includes('/auth/login');
+            
+            if (response.status === 401 && currentState.user && currentState.isAuthenticated && !isOnLoginPage) {
               console.log('🔄 AUTH STORE: Attempting session recovery...');
               console.log('🔄 AUTH STORE: User in localStorage:', currentState.user.id);
               
@@ -176,6 +179,12 @@ export const useAuthStore = create<AuthState>()(
                 }
               } catch (recoveryError) {
                 console.error('🔄 AUTH STORE: Session recovery failed:', recoveryError);
+              }
+            } else if (isOnLoginPage) {
+              console.log('🔄 AUTH STORE: Skipping session recovery on login page');
+              // Clear stale localStorage data when on login page
+              if (currentState.user && currentState.isAuthenticated) {
+                console.log('🔄 AUTH STORE: Clearing stale auth data on login page');
               }
             }
             

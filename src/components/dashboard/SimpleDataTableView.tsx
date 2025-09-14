@@ -390,47 +390,47 @@ export const SimpleDataTableView: React.FC = () => {
               </div>
             </div>
             
-            <div className="h-96 w-full overflow-hidden">
-              <ScrollArea className="h-full w-full">
-                <div className="w-full overflow-x-auto">
-                  <Table className="min-w-full">
-                    <TableHeader>
+            <div className="border rounded-md">
+              <ScrollArea className="h-96 w-full">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {tableData.columns.map((column) => (
+                        <TableHead key={column.column_name} className="min-w-[150px] whitespace-nowrap sticky-column">
+                          <div className="flex flex-col">
+                            <span>{column.column_name}</span>
+                            <span className="text-xs text-muted-foreground font-normal">
+                              {column.data_type}
+                            </span>
+                          </div>
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredData.length === 0 ? (
                       <TableRow>
-                        {tableData.columns.map((column) => (
-                          <TableHead key={column.column_name} className="min-w-32 whitespace-nowrap">
-                            <div className="flex flex-col">
-                              <span>{column.column_name}</span>
-                              <span className="text-xs text-muted-foreground font-normal">
-                                {column.data_type}
-                              </span>
-                            </div>
-                          </TableHead>
-                        ))}
+                        <TableCell colSpan={tableData.columns.length} className="text-center py-8">
+                          <div className="text-muted-foreground">
+                            {searchQuery ? 'No matching data found' : 'No data in this table'}
+                          </div>
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredData.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={tableData.columns.length} className="text-center py-8">
-                            <div className="text-muted-foreground">
-                              {searchQuery ? 'No matching data found' : 'No data in this table'}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        filteredData.map((row, index) => (
-                          <TableRow key={index}>
-                            {tableData.columns.map((column) => (
-                              <TableCell key={column.column_name} className="min-w-32 max-w-64 truncate">
+                    ) : (
+                      filteredData.map((row, index) => (
+                        <TableRow key={index}>
+                          {tableData.columns.map((column) => (
+                            <TableCell key={column.column_name} className="min-w-[150px] max-w-[300px]">
+                              <div className="truncate" title={String(row[column.column_name] || '')}>
                                 {formatValue(row[column.column_name])}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+                              </div>
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </ScrollArea>
             </div>
           </div>

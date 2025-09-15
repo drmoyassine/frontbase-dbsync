@@ -81,8 +81,8 @@ export const PagesPanel: React.FC = () => {
         }
       });
       
-      // Get the newly created page
-      const newPageId = pages[pages.length]?.id || `page-${Date.now()}`;
+      // Get the newly created page ID - it will be added to the end of the array
+      const newPageId = `page-${Date.now()}`;
       setCurrentPageId(newPageId);
       navigate(`/builder/${newPageId}`);
       toast.success('Page created successfully!');

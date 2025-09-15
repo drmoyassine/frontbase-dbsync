@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useBuilderStore } from '@/stores/builder';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,7 +23,8 @@ export const PropertiesPanel: React.FC = () => {
   
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDataBinding, setShowDataBinding] = useState(false);
-  const { getComponentBinding, setComponentBinding } = useDataBindingStore();
+  const [lastSelectedComponent, setLastSelectedComponent] = useState<string | null>(null);
+  const { getComponentBinding, setComponentBinding, initialize } = useDataBindingStore();
 
   const currentPage = pages.find(page => page.id === currentPageId);
   
@@ -41,6 +42,29 @@ export const PropertiesPanel: React.FC = () => {
   
   const selectedComponent = currentPage?.layoutData?.content ? 
     findComponentById(currentPage.layoutData.content, selectedComponentId || '') : null;
+
+  // Initialize data binding store
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
+  // Auto-open data binding modal for new data components
+  useEffect(() => {
+    if (selectedComponent && selectedComponentId && selectedComponentId !== lastSelectedComponent) {
+      setLastSelectedComponent(selectedComponentId);
+      
+      // Check if this is a new data component without binding
+      const isDataComponent = ['DataTable', 'KPICard', 'Chart', 'Grid'].includes(selectedComponent.type);
+      const hasBinding = getComponentBinding(selectedComponentId);
+      
+      if (isDataComponent && !hasBinding) {
+        // Small delay to ensure component is properly selected
+        setTimeout(() => {
+          setShowDataBinding(true);
+        }, 100);
+      }
+    }
+  }, [selectedComponent, selectedComponentId, lastSelectedComponent, getComponentBinding]);
 
   if (!selectedComponent) {
     return (

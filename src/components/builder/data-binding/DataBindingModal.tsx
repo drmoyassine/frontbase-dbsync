@@ -71,32 +71,33 @@ export function DataBindingModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Configure Data Binding - {componentType}</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="basic" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="basic">Basic</TabsTrigger>
-            <TabsTrigger value="columns">Columns</TabsTrigger>
-            <TabsTrigger value="display">Display</TabsTrigger>
-            <TabsTrigger value="advanced">Advanced</TabsTrigger>
-          </TabsList>
+        <div className="flex-1 overflow-hidden">
+          <Tabs defaultValue="basic" className="w-full h-full flex flex-col">
+            <TabsList className="grid w-full grid-cols-4 flex-shrink-0">
+              <TabsTrigger value="basic">Basic</TabsTrigger>
+              <TabsTrigger value="columns">Columns</TabsTrigger>
+              <TabsTrigger value="display">Display</TabsTrigger>
+              <TabsTrigger value="advanced">Advanced</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="basic" className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <DataSourceSelector
-                value={binding.dataSourceId}
-                onValueChange={(value) => updateBinding({ dataSourceId: value })}
-              />
-              
-              <TableSelector
-                value={binding.tableName}
-                onValueChange={(value) => updateBinding({ tableName: value })}
-                dataSourceId={binding.dataSourceId}
-              />
-            </div>
+            <TabsContent value="basic" className="space-y-4 flex-1 overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <DataSourceSelector
+                  value={binding.dataSourceId}
+                  onValueChange={(value) => updateBinding({ dataSourceId: value })}
+                />
+                
+                <TableSelector
+                  value={binding.tableName}
+                  onValueChange={(value) => updateBinding({ tableName: value })}
+                  dataSourceId={binding.dataSourceId}
+                />
+              </div>
 
             <div className="space-y-4">
               <div>
@@ -121,18 +122,18 @@ export function DataBindingModal({
             </div>
           </TabsContent>
 
-          <TabsContent value="columns" className="space-y-4">
-            {binding.tableName && (
-              <ColumnConfigurator
-                tableName={binding.tableName}
-                dataSourceId={binding.dataSourceId}
-                columnOverrides={binding.columnOverrides || {}}
-                onColumnOverridesChange={(overrides) => updateBinding({ columnOverrides: overrides })}
-              />
-            )}
-          </TabsContent>
+            <TabsContent value="columns" className="space-y-4 flex-1 overflow-y-auto">
+              {binding.tableName && (
+                <ColumnConfigurator
+                  tableName={binding.tableName}
+                  dataSourceId={binding.dataSourceId}
+                  columnOverrides={binding.columnOverrides || {}}
+                  onColumnOverridesChange={(overrides) => updateBinding({ columnOverrides: overrides })}
+                />
+              )}
+            </TabsContent>
 
-          <TabsContent value="display" className="space-y-4">
+            <TabsContent value="display" className="space-y-4 flex-1 overflow-y-auto">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-4">
                 <h4 className="font-medium">Pagination</h4>
@@ -198,25 +199,26 @@ export function DataBindingModal({
             </div>
           </TabsContent>
 
-          <TabsContent value="advanced" className="space-y-4">
-            <div className="space-y-4">
-              <h4 className="font-medium">Bulk Actions</h4>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  checked={binding.bulkActions?.enabled || false}
-                  onCheckedChange={(checked) => 
-                    updateBinding({
-                      bulkActions: { ...binding.bulkActions!, enabled: checked }
-                    })
-                  }
-                />
-                <Label>Enable Bulk Actions</Label>
+            <TabsContent value="advanced" className="space-y-4 flex-1 overflow-y-auto">
+              <div className="space-y-4">
+                <h4 className="font-medium">Bulk Actions</h4>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    checked={binding.bulkActions?.enabled || false}
+                    onCheckedChange={(checked) => 
+                      updateBinding({
+                        bulkActions: { ...binding.bulkActions!, enabled: checked }
+                      })
+                    }
+                  />
+                  <Label>Enable Bulk Actions</Label>
+                </div>
               </div>
-            </div>
-          </TabsContent>
-        </Tabs>
+            </TabsContent>
+          </Tabs>
+        </div>
 
-        <div className="flex justify-end gap-2 pt-4">
+        <div className="flex justify-end gap-2 pt-4 border-t border-border flex-shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

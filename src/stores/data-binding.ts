@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { immer } from 'zustand/middleware/immer';
 import { dataSourceManager } from '@/lib/data-sources/DataSourceManager';
 import {
   DataSourceConfig,
@@ -90,7 +89,7 @@ export interface DataBindingState {
 
 export const useDataBindingStore = create<DataBindingState>()(
   persist(
-    immer((set, get) => ({
+    (set, get) => ({
       dataSources: [],
       activeDataSourceId: null,
       schemas: new Map(),
@@ -120,37 +119,39 @@ export const useDataBindingStore = create<DataBindingState>()(
             isActive: true
           };
           
-          set(state => {
-            state.dataSources.push(defaultDataSource);
-            state.activeDataSourceId = defaultDataSource.id;
-          });
+          set(state => ({
+            ...state,
+            dataSources: [...state.dataSources, defaultDataSource],
+            activeDataSourceId: defaultDataSource.id
+          }));
         }
       },
 
       addDataSource: (config: DataSourceConfig) => {
-        set(state => {
-          state.dataSources.push(config);
-          if (!state.activeDataSourceId) {
-            state.activeDataSourceId = config.id;
-          }
-        });
+        set(state => ({
+          ...state,
+          dataSources: [...state.dataSources, config],
+          activeDataSourceId: state.activeDataSourceId || config.id
+        }));
       },
 
       removeDataSource: (id: string) => {
         set(state => {
-          state.dataSources = state.dataSources.filter(ds => ds.id !== id);
-          if (state.activeDataSourceId === id) {
-            state.activeDataSourceId = state.dataSources[0]?.id || null;
-          }
+          const newDataSources = state.dataSources.filter(ds => ds.id !== id);
+          return {
+            ...state,
+            dataSources: newDataSources,
+            activeDataSourceId: state.activeDataSourceId === id ? (newDataSources[0]?.id || null) : state.activeDataSourceId
+          };
         });
       },
 
       updateDataSource: (id: string, updates: Partial<DataSourceConfig>) => {
         set(state => {
-          const index = state.dataSources.findIndex(ds => ds.id === id);
-          if (index !== -1) {
-            state.dataSources[index] = { ...state.dataSources[index], ...updates };
-          }
+          const newDataSources = state.dataSources.map(ds => 
+            ds.id === id ? { ...ds, ...updates } : ds
+          );
+          return { ...state, dataSources: newDataSources };
         });
       },
 
@@ -168,7 +169,7 @@ export const useDataBindingStore = create<DataBindingState>()(
             newLoading.set(`schema-${tableName}`, true);
             const newErrors = new Map(state.errors);
             newErrors.delete(`schema-${tableName}`);
-            return { loading: newLoading, errors: newErrors };
+            return { ...state, loading: newLoading, errors: newErrors };
           });
 
           const schema = await dataSourceManager.getTableSchema(tableName, sourceId);
@@ -178,7 +179,7 @@ export const useDataBindingStore = create<DataBindingState>()(
             newSchemas.set(tableName, schema);
             const newLoading = new Map(state.loading);
             newLoading.delete(`schema-${tableName}`);
-            return { schemas: newSchemas, loading: newLoading };
+            return { ...state, schemas: newSchemas, loading: newLoading };
           });
         } catch (error) {
           set(state => {
@@ -186,7 +187,7 @@ export const useDataBindingStore = create<DataBindingState>()(
             newErrors.set(`schema-${tableName}`, error instanceof Error ? error.message : 'Failed to load schema');
             const newLoading = new Map(state.loading);
             newLoading.delete(`schema-${tableName}`);
-            return { errors: newErrors, loading: newLoading };
+            return { ...state, errors: newErrors, loading: newLoading };
           });
         }
       },
@@ -196,29 +197,32 @@ export const useDataBindingStore = create<DataBindingState>()(
         if (!sourceId) return;
 
         try {
-          set({ schemasLoading: true });
+          set(state => ({ ...state, schemasLoading: true }));
           
           const tables = await dataSourceManager.getAllTables(sourceId);
           
-          set(state => {
-            state.tables = tables;
-            state.schemasLoading = false;
-          });
+          set(state => ({
+            ...state,
+            tables,
+            schemasLoading: false
+          }));
         } catch (error) {
           console.error('Failed to refresh schemas:', error);
-          set({ schemasLoading: false });
+          set(state => ({ ...state, schemasLoading: false }));
         }
       },
 
       setComponentBinding: (componentId: string, binding: ComponentDataBinding) => {
-        set(state => ({
-          componentBindings: new Map(state.componentBindings).set(componentId, {
+        set(state => {
+          const newBindings = new Map(state.componentBindings);
+          newBindings.set(componentId, {
             componentId,
             binding,
             lastFetched: new Date(),
             cached: false
-          })
-        }));
+          });
+          return { ...state, componentBindings: newBindings };
+        });
       },
 
       getComponentBinding: (componentId: string) => {
@@ -232,7 +236,7 @@ export const useDataBindingStore = create<DataBindingState>()(
         set(state => {
           const newBindings = new Map(state.componentBindings);
           newBindings.delete(componentId);
-          return { componentBindings: newBindings };
+          return { ...state, componentBindings: newBindings };
         });
       },
 
@@ -248,7 +252,7 @@ export const useDataBindingStore = create<DataBindingState>()(
             newLoading.set(`query-${componentId}`, true);
             const newErrors = new Map(state.errors);
             newErrors.delete(`query-${componentId}`);
-            return { loading: newLoading, errors: newErrors };
+            return { ...state, loading: newLoading, errors: newErrors };
           });
 
           const queryOptions = {
@@ -262,14 +266,16 @@ export const useDataBindingStore = create<DataBindingState>()(
           // Cache the result if successful
           if (!result.error) {
             const cacheKey = `${componentId}-${JSON.stringify(queryOptions)}`;
-            set(state => ({
-              cache: new Map(state.cache).set(cacheKey, {
+            set(state => {
+              const newCache = new Map(state.cache);
+              newCache.set(cacheKey, {
                 key: cacheKey,
                 data: result,
                 timestamp: new Date(),
                 ttl: 5 * 60 * 1000 // 5 minutes
-              })
-            }));
+              });
+              return { ...state, cache: newCache };
+            });
           }
 
           set(state => {
@@ -278,9 +284,9 @@ export const useDataBindingStore = create<DataBindingState>()(
             if (result.error) {
               const newErrors = new Map(state.errors);
               newErrors.set(`query-${componentId}`, result.error);
-              return { loading: newLoading, errors: newErrors };
+              return { ...state, loading: newLoading, errors: newErrors };
             }
-            return { loading: newLoading };
+            return { ...state, loading: newLoading };
           });
 
           return result;
@@ -291,7 +297,7 @@ export const useDataBindingStore = create<DataBindingState>()(
             newLoading.delete(`query-${componentId}`);
             const newErrors = new Map(state.errors);
             newErrors.set(`query-${componentId}`, errorMessage);
-            return { loading: newLoading, errors: newErrors };
+            return { ...state, loading: newLoading, errors: newErrors };
           });
           
           return { data: [], count: 0, error: errorMessage };
@@ -301,16 +307,18 @@ export const useDataBindingStore = create<DataBindingState>()(
       subscribeToTable: (componentId: string, tableName: string) => {
         // Implementation depends on the data source adapter
         // For now, just track the subscription
-        set(state => ({
-          subscriptions: new Map(state.subscriptions).set(componentId, { tableName })
-        }));
+        set(state => {
+          const newSubscriptions = new Map(state.subscriptions);
+          newSubscriptions.set(componentId, { tableName });
+          return { ...state, subscriptions: newSubscriptions };
+        });
       },
 
       unsubscribeFromTable: (componentId: string) => {
         set(state => {
           const newSubscriptions = new Map(state.subscriptions);
           newSubscriptions.delete(componentId);
-          return { subscriptions: newSubscriptions };
+          return { ...state, subscriptions: newSubscriptions };
         });
       },
 
@@ -324,23 +332,25 @@ export const useDataBindingStore = create<DataBindingState>()(
                 newCache.set(key, value);
               }
             }
-            return { cache: newCache };
+            return { ...state, cache: newCache };
           } else {
             // Clear all cache
-            return { cache: new Map() };
+            return { ...state, cache: new Map() };
           }
         });
       },
 
       setGlobalColumnConfig: (tableName: string, columnName: string, config: any) => {
         const key = `${tableName}.${columnName}`;
-        set(state => ({
-          globalColumnConfigs: new Map(state.globalColumnConfigs).set(key, {
+        set(state => {
+          const newConfigs = new Map(state.globalColumnConfigs);
+          newConfigs.set(key, {
             tableName,
             columnName,
             ...config
-          })
-        }));
+          });
+          return { ...state, globalColumnConfigs: newConfigs };
+        });
       },
 
       getGlobalColumnConfig: (tableName: string, columnName: string) => {
@@ -349,16 +359,18 @@ export const useDataBindingStore = create<DataBindingState>()(
       },
 
       setError: (key: string, error: string) => {
-        set(state => ({
-          errors: new Map(state.errors).set(key, error)
-        }));
+        set(state => {
+          const newErrors = new Map(state.errors);
+          newErrors.set(key, error);
+          return { ...state, errors: newErrors };
+        });
       },
 
       clearError: (key: string) => {
         set(state => {
           const newErrors = new Map(state.errors);
           newErrors.delete(key);
-          return { errors: newErrors };
+          return { ...state, errors: newErrors };
         });
       },
 
@@ -370,10 +382,10 @@ export const useDataBindingStore = create<DataBindingState>()(
           } else {
             newLoading.delete(key);
           }
-          return { loading: newLoading };
+          return { ...state, loading: newLoading };
         });
       }
-    })),
+    }),
     {
       name: 'data-binding-storage',
       partialize: (state) => ({

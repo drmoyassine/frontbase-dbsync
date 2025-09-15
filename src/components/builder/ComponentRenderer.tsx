@@ -14,6 +14,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { Progress } from '@/components/ui/progress';
+import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table';
 import { generateStyles } from '@/lib/styleUtils';
 import { ComponentStyles, ResponsiveStyles } from '@/types/styles';
 import { cn } from '@/lib/utils';
@@ -364,6 +365,42 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         >
           {createEditableText(props.text || 'Link', 'text', 'text-primary hover:underline', inlineStyles)}
         </a>
+      );
+
+    case 'DataTable':
+      const columns = props.columns || ['Name', 'Email', 'Role', 'Status'];
+      const rows = props.rows || [
+        ['John Doe', 'john@example.com', 'Admin', 'Active'],
+        ['Jane Smith', 'jane@example.com', 'User', 'Active'],
+        ['Bob Johnson', 'bob@example.com', 'Editor', 'Inactive'],
+        ['Alice Brown', 'alice@example.com', 'User', 'Active']
+      ];
+      
+      return (
+        <div className={cn('w-full', combinedClassName)} style={inlineStyles}>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {columns.map((column: string, index: number) => (
+                  <TableHead key={index}>
+                    {createEditableText(column, 'text', 'font-medium')}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row: string[], rowIndex: number) => (
+                <TableRow key={rowIndex}>
+                  {row.map((cell: string, cellIndex: number) => (
+                    <TableCell key={cellIndex}>
+                      {createEditableText(cell, 'text', '')}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       );
 
     default:

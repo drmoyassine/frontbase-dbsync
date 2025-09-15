@@ -9,8 +9,33 @@ import { Switch } from '@/components/ui/switch';
 import { DataSourceSelector } from '@/components/data-binding/DataSourceSelector';
 import { TableSelector } from '@/components/data-binding/TableSelector';
 import { ColumnConfigurator } from '@/components/data-binding/ColumnConfigurator';
-import { useDataBindingStore } from '@/stores/data-binding';
-import { ComponentDataBinding } from '@/lib/data-sources/types';
+import { useDataBindingStore } from '@/stores/data-binding-simple';
+
+interface ComponentDataBinding {
+  componentId: string;
+  dataSourceId: string;
+  tableName: string;
+  refreshInterval?: number;
+  pagination: {
+    enabled: boolean;
+    pageSize: number;
+    page: number;
+  };
+  sorting: {
+    enabled: boolean;
+    column?: string;
+    direction?: 'asc' | 'desc';
+  };
+  filtering: {
+    searchEnabled: boolean;
+    filters: Record<string, any>;
+  };
+  columnOverrides: Record<string, {
+    displayName?: string;
+    visible?: boolean;
+    displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
+  }>;
+}
 
 interface DataBindingModalProps {
   open: boolean;
@@ -31,32 +56,28 @@ export function DataBindingModal({
   const existingBinding = store.getComponentBinding(componentId);
   
   const [binding, setBinding] = useState<ComponentDataBinding>({
-    dataSourceId: store.activeDataSourceId || '',
+    componentId,
+    dataSourceId: 'backend',
     tableName: '',
     refreshInterval: -1,
     pagination: {
       enabled: true,
       pageSize: 10,
-      serverSide: true
+      page: 0
     },
     sorting: {
-      enabled: true,
-      serverSide: true
+      enabled: true
     },
     filtering: {
-      visibleFilters: [],
-      hiddenFilters: [],
-      searchEnabled: true
+      searchEnabled: true,
+      filters: {}
     },
-    bulkActions: {
-      enabled: false,
-      actions: []
-    }
+    columnOverrides: {}
   });
 
   useEffect(() => {
     if (existingBinding) {
-      setBinding(existingBinding.binding);
+      setBinding(existingBinding);
     }
   }, [existingBinding]);
 
@@ -204,14 +225,11 @@ export function DataBindingModal({
                 <h4 className="font-medium">Bulk Actions</h4>
                 <div className="flex items-center space-x-2">
                   <Switch
-                    checked={binding.bulkActions?.enabled || false}
-                    onCheckedChange={(checked) => 
-                      updateBinding({
-                        bulkActions: { ...binding.bulkActions!, enabled: checked }
-                      })
-                    }
+                    checked={false}
+                    onCheckedChange={() => {}}
+                    disabled
                   />
-                  <Label>Enable Bulk Actions</Label>
+                  <Label>Enable Bulk Actions (Coming Soon)</Label>
                 </div>
               </div>
             </TabsContent>

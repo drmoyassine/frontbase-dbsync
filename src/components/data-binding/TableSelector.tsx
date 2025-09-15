@@ -3,7 +3,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
-import { useDataBindingStore } from '@/stores/data-binding';
+import { useDataBindingStore } from '@/stores/data-binding-simple';
 
 interface TableSelectorProps {
   value?: string;
@@ -24,11 +24,23 @@ export function TableSelector({
   disabled = false,
   showRefresh = true
 }: TableSelectorProps) {
-  const { tables, schemasLoading, refreshSchemas } = useDataBindingStore();
+  const { tables, tablesLoading, tablesError, fetchTables, connected } = useDataBindingStore();
+
+  const loadTables = React.useCallback(async () => {
+    if (!connected) return;
+    await fetchTables();
+  }, [connected, fetchTables]);
+
+  React.useEffect(() => {
+    loadTables();
+  }, [loadTables]);
 
   const handleRefresh = () => {
-    refreshSchemas();
+    loadTables();
   };
+
+  const isLoading = tablesLoading;
+  const tableList = tables.map(table => table.name);
 
   return (
     <div className="space-y-2">
@@ -39,31 +51,31 @@ export function TableSelector({
             variant="ghost"
             size="sm"
             onClick={handleRefresh}
-            disabled={schemasLoading}
+            disabled={isLoading}
           >
-            <RefreshCw className={`w-4 h-4 ${schemasLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
         )}
       </div>
       <Select 
         value={value || ''} 
         onValueChange={onValueChange}
-        disabled={disabled || schemasLoading || tables.length === 0}
+        disabled={disabled || isLoading || tableList.length === 0}
       >
         <SelectTrigger>
-          <SelectValue placeholder={schemasLoading ? "Loading tables..." : placeholder} />
+          <SelectValue placeholder={isLoading ? "Loading tables..." : placeholder} />
         </SelectTrigger>
         <SelectContent>
-          {tables.map((table) => (
+          {tableList.map((table) => (
             <SelectItem key={table} value={table}>
               {table}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
-      {!schemasLoading && tables.length === 0 && (
+      {!isLoading && tableList.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          No tables found. Make sure your data source is connected.
+          {tablesError || 'No tables found. Make sure your database is properly connected.'}
         </p>
       )}
     </div>

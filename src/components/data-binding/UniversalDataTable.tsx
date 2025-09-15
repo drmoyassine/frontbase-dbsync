@@ -5,8 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChevronLeft, ChevronRight, Search, Settings, ArrowUpDown } from 'lucide-react';
-import { useUniversalData } from '@/hooks/useUniversalData';
-import { ComponentDataBinding } from '@/lib/data-sources/types';
+import { useSimpleData } from '@/hooks/useSimpleData';
 import { cn } from '@/lib/utils';
 
 interface UniversalDataTableProps {

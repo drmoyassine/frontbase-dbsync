@@ -1,5 +1,6 @@
 import { DataSourceAdapter, DataSourceConfig, QueryOptions, QueryResult, TableSchema, AggregationOptions, AggregationResult, DataBindingError } from './types';
 import { SupabaseAdapter } from './adapters/SupabaseAdapter';
+import { BackendAdapter } from './adapters/BackendAdapter';
 
 class DataSourceManager {
   private adapters: Map<string, DataSourceAdapter> = new Map();
@@ -9,6 +10,7 @@ class DataSourceManager {
   constructor() {
     // Initialize with available adapters
     this.registerAdapter('supabase', new SupabaseAdapter());
+    this.registerAdapter('backend', new BackendAdapter());
   }
 
   // Adapter management

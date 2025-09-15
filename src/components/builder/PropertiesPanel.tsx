@@ -57,7 +57,11 @@ export const PropertiesPanel: React.FC = () => {
       const isDataComponent = ['DataTable', 'KPICard', 'Chart', 'Grid'].includes(selectedComponent.type);
       const hasBinding = getComponentBinding(selectedComponentId);
       
-      if (isDataComponent && !hasBinding) {
+      // Check if component was just dropped by looking at props timestamp
+      const isNewComponent = selectedComponent.props?.createdAt && 
+        (Date.now() - new Date(selectedComponent.props.createdAt).getTime()) < 5000; // 5 seconds
+      
+      if (isDataComponent && !hasBinding && isNewComponent) {
         // Small delay to ensure component is properly selected
         setTimeout(() => {
           setShowDataBinding(true);

@@ -57,7 +57,7 @@ export const PagesPanel: React.FC = () => {
   const handleCreatePage = async () => {
     setIsCreating(true);
     try {
-      createPage({
+      const pageData = {
         name: `New Page ${pages.length + 1}`,
         slug: `new-page-${pages.length + 1}`,
         title: `New Page ${pages.length + 1}`,
@@ -79,14 +79,21 @@ export const PagesPanel: React.FC = () => {
           ],
           root: {}
         }
-      });
+      };
+
+      // Create page in database first, then update local state
+      const { createPageInDatabase } = useBuilderStore.getState();
+      const newPageId = await createPageInDatabase(pageData);
       
-      // Get the newly created page ID - it will be added to the end of the array
-      const newPageId = `page-${Date.now()}`;
-      setCurrentPageId(newPageId);
-      navigate(`/builder/${newPageId}`);
-      toast.success('Page created successfully!');
+      if (newPageId) {
+        setCurrentPageId(newPageId);
+        navigate(`/builder/${newPageId}`);
+        toast.success('Page created successfully!');
+      } else {
+        throw new Error('Failed to create page in database');
+      }
     } catch (error) {
+      console.error('Page creation failed:', error);
       toast.error('Failed to create page');
     } finally {
       setIsCreating(false);

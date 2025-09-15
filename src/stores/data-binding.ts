@@ -111,7 +111,7 @@ export const useDataBindingStore = create<DataBindingState>()(
           const defaultDataSource: DataSourceConfig = {
             id: 'default-backend',
             name: 'Backend Database',
-            type: 'supabase', // Using supabase adapter for the backend
+            type: 'backend', // Using backend adapter
             connection: {
               url: window.location.origin,
               type: 'backend'
@@ -198,6 +198,13 @@ export const useDataBindingStore = create<DataBindingState>()(
 
         try {
           set(state => ({ ...state, schemasLoading: true }));
+          
+          // Add the data source to the manager if it doesn't exist
+          const { dataSources } = get();
+          const dataSource = dataSources.find(ds => ds.id === sourceId);
+          if (dataSource) {
+            await dataSourceManager.addDataSource(dataSource);
+          }
           
           const tables = await dataSourceManager.getAllTables(sourceId);
           
@@ -315,11 +322,10 @@ export const useDataBindingStore = create<DataBindingState>()(
       },
 
       unsubscribeFromTable: (componentId: string) => {
-        set(state => {
-          const newSubscriptions = new Map(state.subscriptions);
-          newSubscriptions.delete(componentId);
-          return { ...state, subscriptions: newSubscriptions };
-        });
+        set(state => ({
+          ...state,
+          subscriptions: new Map(Array.from(state.subscriptions.entries()).filter(([key]) => key !== componentId))
+        }));
       },
 
       invalidateCache: (pattern?: string) => {

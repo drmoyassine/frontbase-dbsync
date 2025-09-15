@@ -85,8 +85,8 @@ export function DataBindingModal({
               <TabsTrigger value="advanced">Advanced</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="basic" className="space-y-4 flex-1 overflow-y-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <TabsContent value="basic" className="space-y-6 flex-1 overflow-y-auto p-1">
+              <div className="space-y-4">
                 <DataSourceSelector
                   value={binding.dataSourceId}
                   onValueChange={(value) => updateBinding({ dataSourceId: value })}

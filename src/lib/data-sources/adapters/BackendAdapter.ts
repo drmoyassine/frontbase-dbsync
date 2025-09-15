@@ -7,9 +7,12 @@ export class BackendAdapter implements DataSourceAdapter {
   async connect(config: DataSourceConfig): Promise<boolean> {
     try {
       this.config = config;
+      const baseUrl = config.connection?.url || window.location.origin;
+      
       // Test connection by trying to fetch table list
-      const response = await fetch('/api/database/tables', {
+      const response = await fetch(`${baseUrl}/api/database/tables`, {
         method: 'GET',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -70,8 +73,10 @@ export class BackendAdapter implements DataSourceAdapter {
 
   async getAllTables(): Promise<string[]> {
     try {
-      const response = await fetch('/api/database/tables', {
+      const baseUrl = this.config?.connection?.url || window.location.origin;
+      const response = await fetch(`${baseUrl}/api/database/tables`, {
         method: 'GET',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -80,7 +85,7 @@ export class BackendAdapter implements DataSourceAdapter {
       if (!response.ok) return [];
       
       const data = await response.json();
-      return data.tables || [];
+      return data.data || data.tables || [];
     } catch (error) {
       console.error('Failed to get tables:', error);
       return [];

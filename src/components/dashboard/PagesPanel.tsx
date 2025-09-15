@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBuilderStore } from '@/stores/builder';
 import { useDashboardStore } from '@/stores/dashboard';
+import { useAuthStore } from '@/stores/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,9 +18,32 @@ import { toast } from 'sonner';
 
 export const PagesPanel: React.FC = () => {
   const navigate = useNavigate();
-  const { pages, createPage, deletePage, setCurrentPageId } = useBuilderStore();
+  const { pages, createPage, deletePage, setCurrentPageId, loadPagesFromDatabase } = useBuilderStore();
+  const { isAuthenticated, isLoading } = useAuthStore();
   const { searchQuery, setSearchQuery, filterStatus } = useDashboardStore();
   const [isCreating, setIsCreating] = useState(false);
+  const [isLoadingPages, setIsLoadingPages] = useState(true);
+
+  // Load pages from database when component mounts
+  useEffect(() => {
+    const loadPages = async () => {
+      if (!isLoading && isAuthenticated) {
+        try {
+          setIsLoadingPages(true);
+          await loadPagesFromDatabase();
+        } catch (error) {
+          console.error('Failed to load pages:', error);
+          toast.error('Failed to load pages from database');
+        } finally {
+          setIsLoadingPages(false);
+        }
+      } else if (!isLoading && !isAuthenticated) {
+        setIsLoadingPages(false);
+      }
+    };
+
+    loadPages();
+  }, [loadPagesFromDatabase, isAuthenticated, isLoading]);
 
   const filteredPages = pages.filter(page => {
     const matchesSearch = page.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -198,7 +222,17 @@ export const PagesPanel: React.FC = () => {
         ))}
       </div>
 
-      {filteredPages.length === 0 && (
+      {isLoadingPages ? (
+        <div className="text-center py-12">
+          <div className="mx-auto w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-4">
+            <FileText className="h-12 w-12 text-muted-foreground animate-pulse" />
+          </div>
+          <h3 className="text-lg font-semibold">Loading pages...</h3>
+          <p className="text-muted-foreground">
+            Fetching your pages from the database
+          </p>
+        </div>
+      ) : filteredPages.length === 0 ? (
         <div className="text-center py-12">
           <div className="mx-auto w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-4">
             <FileText className="h-12 w-12 text-muted-foreground" />
@@ -208,7 +242,7 @@ export const PagesPanel: React.FC = () => {
             {searchQuery ? 'Try adjusting your search criteria' : 'Get started by creating your first page'}
           </p>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 interface DatabaseConnection {
   connected: boolean;
@@ -46,7 +47,9 @@ interface DashboardState {
   fetchSupabaseTables: () => Promise<void>;
 }
 
-export const useDashboardStore = create<DashboardState>((set, get) => ({
+export const useDashboardStore = create<DashboardState>()(
+  persist(
+    (set, get) => ({
   activeSection: 'pages',
   searchQuery: '',
   filterStatus: 'all',
@@ -126,4 +129,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       set({ tablesError: 'Failed to fetch tables', tablesLoading: false });
     }
   },
-}));
+    }),
+    {
+      name: 'dashboard-storage',
+      partialize: (state) => ({
+        connections: state.connections,
+        // Only persist connections, exclude UI state like loading, modals, etc.
+      }),
+    }
+  )
+);

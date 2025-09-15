@@ -34,9 +34,11 @@ export const DatabasePanel: React.FC = () => {
   console.log('Cookies:', document.cookie);
   console.log('=== END DATABASE PANEL DEBUG ===');
 
+  // Add automatic connection restoration on mount for persistent connections
   useEffect(() => {
     console.log('=== DATABASE PANEL USEEFFECT ===');
     console.log('Auth loading:', isLoading, 'Auth authenticated:', isAuthenticated);
+    console.log('Persisted connections:', connections);
     
     // Only fetch connections when auth is complete and user is authenticated
     if (!isLoading && isAuthenticated) {

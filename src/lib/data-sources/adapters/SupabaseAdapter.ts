@@ -7,26 +7,50 @@ export class SupabaseAdapter implements DataSourceAdapter {
   private subscriptions: Map<string, any> = new Map();
 
   async connect(config: Record<string, any>): Promise<boolean> {
+    console.log('[SupabaseAdapter] Attempting connection with config:', {
+      hasUrl: !!config?.url,
+      hasAnonKey: !!config?.anonKey,
+      hasServiceKey: !!config?.serviceKey,
+      url: config?.url ? config.url.substring(0, 30) + '...' : 'none'
+    });
+    
     try {
       const { url, anonKey, serviceKey } = config;
       
       if (!url || (!anonKey && !serviceKey)) {
+        console.error('[SupabaseAdapter] Missing required Supabase connection parameters:', {
+          hasUrl: !!url,
+          hasAnonKey: !!anonKey,
+          hasServiceKey: !!serviceKey
+        });
         throw new Error('Missing required Supabase connection parameters');
       }
 
       // Use service key if available for admin operations, otherwise anon key
       const key = serviceKey || anonKey;
+      console.log('[SupabaseAdapter] Creating Supabase client with:', {
+        keyType: serviceKey ? 'service' : 'anon',
+        keyLength: key?.length || 0
+      });
+      
       this.client = createClient(url, key);
+      console.log('[SupabaseAdapter] Created Supabase client, testing connection...');
       
       // Test connection
       const { error } = await this.client.from('_health_check').select('*').limit(1);
+      console.log('[SupabaseAdapter] Health check result:', { 
+        hasError: !!error, 
+        errorCode: error?.code,
+        errorMessage: error?.message 
+      });
       
       // Connection successful if no auth error or table doesn't exist (expected)
       this.connected = !error || error.code === 'PGRST116' || error.code === '42P01';
+      console.log('[SupabaseAdapter] Connection status:', this.connected);
       
       return this.connected;
     } catch (error) {
-      console.error('Supabase connection error:', error);
+      console.error('[SupabaseAdapter] Connection error:', error);
       this.connected = false;
       return false;
     }
@@ -66,9 +90,16 @@ export class SupabaseAdapter implements DataSourceAdapter {
   }
 
   async getAllTables(): Promise<string[]> {
-    if (!this.client) throw new Error('Not connected to Supabase');
+    console.log('[SupabaseAdapter] Fetching all tables...');
+    
+    if (!this.client) {
+      console.error('[SupabaseAdapter] Cannot fetch tables - not connected to Supabase');
+      throw new Error('Not connected to Supabase');
+    }
 
     try {
+      console.log('[SupabaseAdapter] Querying information_schema.tables...');
+      
       // Get public schema tables
       const { data, error } = await this.client
         .from('information_schema.tables')
@@ -76,21 +107,42 @@ export class SupabaseAdapter implements DataSourceAdapter {
         .eq('table_schema', 'public')
         .eq('table_type', 'BASE TABLE');
 
+      console.log('[SupabaseAdapter] Schema query result:', {
+        hasData: !!data,
+        dataLength: data?.length || 0,
+        hasError: !!error,
+        errorCode: error?.code,
+        errorMessage: error?.message
+      });
+
       if (error) {
+        console.log('[SupabaseAdapter] Schema query failed, trying fallback...');
+        
         // Fallback: try to get tables from pg_tables
         const { data: fallbackData, error: fallbackError } = await this.client
           .rpc('get_public_tables');
         
+        console.log('[SupabaseAdapter] Fallback query result:', {
+          hasData: !!fallbackData,
+          dataLength: fallbackData?.length || 0,
+          hasError: !!fallbackError
+        });
+        
         if (fallbackError) {
+          console.error('[SupabaseAdapter] Fallback query also failed:', fallbackError);
           throw fallbackError;
         }
         
-        return fallbackData?.map((row: any) => row.tablename) || [];
+        const tables = fallbackData?.map((row: any) => row.tablename) || [];
+        console.log('[SupabaseAdapter] Retrieved tables via fallback:', tables);
+        return tables;
       }
 
-      return data?.map(row => row.table_name) || [];
+      const tables = data?.map(row => row.table_name) || [];
+      console.log('[SupabaseAdapter] Retrieved tables:', tables);
+      return tables;
     } catch (error) {
-      console.error('Error fetching tables:', error);
+      console.error('[SupabaseAdapter] Error fetching tables:', error);
       return [];
     }
   }

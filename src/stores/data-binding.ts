@@ -104,12 +104,23 @@ export const useDataBindingStore = create<DataBindingState>()(
 
       // Initialize the store
       initialize: async () => {
+        console.log('[DataBindingStore] Initializing store...');
+        
         // Auto-detect stored Supabase connections and initialize data sources
         const state = get();
+        console.log('[DataBindingStore] Current state:', {
+          dataSourcesCount: state.dataSources.length,
+          activeDataSourceId: state.activeDataSourceId
+        });
+        
         if (state.dataSources.length === 0) {
+          console.log('[DataBindingStore] No existing data sources, checking for stored credentials...');
+          
           const storedCredentials = await dataSourceManager.getStoredSupabaseCredentials();
           
           if (storedCredentials) {
+            console.log('[DataBindingStore] Found stored Supabase credentials, creating direct connection...');
+            
             // Create direct Supabase connection
             const supabaseDataSource: DataSourceConfig = {
               id: 'supabase-direct',
@@ -119,6 +130,7 @@ export const useDataBindingStore = create<DataBindingState>()(
               isActive: true
             };
 
+            console.log('[DataBindingStore] Adding Supabase data source to store...');
             set(state => ({
               ...state,
               dataSources: [...state.dataSources, supabaseDataSource],
@@ -126,8 +138,12 @@ export const useDataBindingStore = create<DataBindingState>()(
             }));
 
             // Initialize the data source with the manager
-            await dataSourceManager.addDataSource(supabaseDataSource);
+            console.log('[DataBindingStore] Initializing Supabase data source with manager...');
+            const success = await dataSourceManager.addDataSource(supabaseDataSource);
+            console.log('[DataBindingStore] Supabase data source initialization result:', success);
           } else {
+            console.log('[DataBindingStore] No stored credentials found, creating backend API connection...');
+            
             // Add backend API adapter for dashboard compatibility
             const backendDataSource: DataSourceConfig = {
               id: 'backend-api',
@@ -139,6 +155,7 @@ export const useDataBindingStore = create<DataBindingState>()(
               isActive: true
             };
 
+            console.log('[DataBindingStore] Adding backend API data source to store...');
             set(state => ({
               ...state,
               dataSources: [...state.dataSources, backendDataSource],
@@ -146,9 +163,15 @@ export const useDataBindingStore = create<DataBindingState>()(
             }));
 
             // Initialize the data source with the manager
-            await dataSourceManager.addDataSource(backendDataSource);
+            console.log('[DataBindingStore] Initializing backend API data source with manager...');
+            const success = await dataSourceManager.addDataSource(backendDataSource);
+            console.log('[DataBindingStore] Backend API data source initialization result:', success);
           }
+        } else {
+          console.log('[DataBindingStore] Existing data sources found, skipping initialization');
         }
+        
+        console.log('[DataBindingStore] Store initialization complete');
       },
 
       addDataSource: (config: DataSourceConfig) => {

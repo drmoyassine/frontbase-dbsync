@@ -13,79 +13,120 @@ class DataSourceManager {
 
   // Dynamic adapter creation
   private createAdapter(type: string, credentials: Record<string, any>): DataSourceAdapter {
+    console.log('[DataSourceManager] Creating adapter:', { type, hasCredentials: !!credentials });
+    
     switch (type) {
       case 'supabase':
+        console.log('[DataSourceManager] Creating SupabaseAdapter with credentials:', { 
+          hasUrl: !!credentials?.url, 
+          hasAnonKey: !!credentials?.anonKey, 
+          hasServiceKey: !!credentials?.serviceKey 
+        });
         return new SupabaseAdapter();
       case 'backend-api':
+        console.log('[DataSourceManager] Creating BackendAPIAdapter with config:', credentials);
         return new BackendAPIAdapter();
       default:
+        console.error('[DataSourceManager] Unsupported data source type:', type);
         throw new Error(`Unsupported data source type: ${type}`);
     }
   }
 
   private getAdapterForDataSource(dataSourceId: string): DataSourceAdapter | null {
+    console.log('[DataSourceManager] Getting adapter for data source:', dataSourceId);
+    
     const config = this.configs.get(dataSourceId);
-    if (!config) return null;
+    if (!config) {
+      console.warn('[DataSourceManager] No config found for data source:', dataSourceId);
+      return null;
+    }
 
     // Check if we already have an adapter instance
     const existingAdapter = this.adapters.get(dataSourceId);
     if (existingAdapter && existingAdapter.isConnected()) {
+      console.log('[DataSourceManager] Using existing connected adapter for:', dataSourceId);
       return existingAdapter;
     }
 
     // Create new adapter instance
     try {
+      console.log('[DataSourceManager] Creating new adapter instance for:', { dataSourceId, type: config.type });
       const adapter = this.createAdapter(config.type, config.connection);
       this.adapters.set(dataSourceId, adapter);
+      console.log('[DataSourceManager] Successfully created and cached adapter for:', dataSourceId);
       return adapter;
     } catch (error) {
-      console.error(`Error creating adapter for ${dataSourceId}:`, error);
+      console.error(`[DataSourceManager] Error creating adapter for ${dataSourceId}:`, error);
       return null;
     }
   }
 
   async getStoredSupabaseCredentials(): Promise<Record<string, any> | null> {
+    console.log('[DataSourceManager] Fetching stored Supabase credentials...');
+    
     try {
       const response = await fetch('/api/database/connections');
-      if (!response.ok) return null;
+      console.log('[DataSourceManager] Credentials API response status:', response.status);
+      
+      if (!response.ok) {
+        console.warn('[DataSourceManager] Failed to fetch credentials, status:', response.status);
+        return null;
+      }
       
       const data = await response.json();
+      console.log('[DataSourceManager] Credentials API response data:', {
+        hasUrl: !!data.supabase_url,
+        hasAnonKey: !!data.supabase_anon_key,
+        hasServiceKey: !!data.supabase_service_key
+      });
       
       if (data.supabase_url && (data.supabase_anon_key || data.supabase_service_key)) {
-        return {
+        const credentials = {
           url: data.supabase_url,
           anonKey: data.supabase_anon_key,
           serviceKey: data.supabase_service_key,
         };
+        console.log('[DataSourceManager] Successfully retrieved Supabase credentials');
+        return credentials;
       }
       
+      console.log('[DataSourceManager] No valid Supabase credentials found in response');
       return null;
     } catch (error) {
-      console.error('Error fetching stored Supabase credentials:', error);
+      console.error('[DataSourceManager] Error fetching stored Supabase credentials:', error);
       return null;
     }
   }
 
   // Data source configuration
   async addDataSource(config: DataSourceConfig): Promise<boolean> {
+    console.log('[DataSourceManager] Adding data source:', { id: config.id, type: config.type, name: config.name });
+    
     try {
       const adapter = this.createAdapter(config.type, config.connection);
+      console.log('[DataSourceManager] Created adapter, attempting connection...');
+      
       const connected = await adapter.connect(config.connection);
+      console.log('[DataSourceManager] Connection result:', { connected, dataSourceId: config.id });
       
       if (!connected) {
+        console.error('[DataSourceManager] Failed to connect to data source:', config.id);
         throw new Error('Failed to connect to data source');
       }
 
       this.configs.set(config.id, { ...config, isActive: connected });
       this.adapters.set(config.id, adapter);
+      console.log('[DataSourceManager] Stored config and adapter for:', config.id);
       
       if (!this.activeDataSourceId || config.isActive) {
         this.activeDataSourceId = config.id;
+        console.log('[DataSourceManager] Set active data source:', config.id);
       }
 
+      console.log('[DataSourceManager] Successfully added data source:', config.id);
       return true;
     } catch (error) {
-      console.error(`Error adding data source ${config.id}:`, error);
+      console.error(`[DataSourceManager] Error adding data source ${config.id}:`, error);
       return false;
     }
   }

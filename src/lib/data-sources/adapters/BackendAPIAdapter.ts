@@ -5,16 +5,27 @@ export class BackendAPIAdapter implements DataSourceAdapter {
   private baseUrl: string = '';
 
   async connect(config: Record<string, any>): Promise<boolean> {
+    console.log('[BackendAPIAdapter] Attempting connection with config:', config);
+    
     try {
       this.baseUrl = config.url || window.location.origin;
+      console.log('[BackendAPIAdapter] Using base URL:', this.baseUrl);
       
       // Test connection by fetching connections status
+      console.log('[BackendAPIAdapter] Testing connection to /api/database/connections...');
       const response = await fetch(`${this.baseUrl}/api/database/connections`);
+      console.log('[BackendAPIAdapter] Connection test response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+      
       this.connected = response.ok;
+      console.log('[BackendAPIAdapter] Connection status:', this.connected);
       
       return this.connected;
     } catch (error) {
-      console.error('Backend API connection error:', error);
+      console.error('[BackendAPIAdapter] Connection error:', error);
       this.connected = false;
       return false;
     }
@@ -41,19 +52,39 @@ export class BackendAPIAdapter implements DataSourceAdapter {
   }
 
   async getAllTables(): Promise<string[]> {
-    if (!this.connected) throw new Error('Not connected to Backend API');
+    console.log('[BackendAPIAdapter] Fetching all tables...');
+    
+    if (!this.connected) {
+      console.error('[BackendAPIAdapter] Cannot fetch tables - not connected to Backend API');
+      throw new Error('Not connected to Backend API');
+    }
 
     try {
-      const response = await fetch(`${this.baseUrl}/api/database/supabase-tables`);
+      const url = `${this.baseUrl}/api/database/supabase-tables`;
+      console.log('[BackendAPIAdapter] Requesting tables from:', url);
+      
+      const response = await fetch(url);
+      console.log('[BackendAPIAdapter] Tables API response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
       
       if (!response.ok) {
+        console.error('[BackendAPIAdapter] Tables API failed:', response.status, response.statusText);
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json();
+      console.log('[BackendAPIAdapter] Tables API response data:', {
+        hasTables: !!data.tables,
+        tablesCount: data.tables?.length || 0,
+        tables: data.tables
+      });
+      
       return data.tables || [];
     } catch (error) {
-      console.error('Error fetching tables from backend API:', error);
+      console.error('[BackendAPIAdapter] Error fetching tables from backend API:', error);
       return [];
     }
   }

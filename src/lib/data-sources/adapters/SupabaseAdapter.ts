@@ -8,7 +8,8 @@ export class SupabaseAdapter implements DataSourceAdapter {
     console.log('[SupabaseAdapter] Attempting connection with config:', config);
     
     try {
-      this.baseUrl = config?.apiUrl || 'http://localhost:3001';
+      // Use current domain's API endpoint instead of localhost to avoid CSP violations
+      this.baseUrl = config?.apiUrl || window.location.origin;
       console.log('[SupabaseAdapter] Set base URL to:', this.baseUrl);
       
       // Test connection by trying to reach the API

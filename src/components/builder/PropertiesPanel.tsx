@@ -43,10 +43,7 @@ export const PropertiesPanel: React.FC = () => {
   const selectedComponent = currentPage?.layoutData?.content ? 
     findComponentById(currentPage.layoutData.content, selectedComponentId || '') : null;
 
-  // Initialize data binding store
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
+  // Remove duplicate initialize call - it's already called in App.tsx
 
   // Auto-open data binding modal for new data components
   useEffect(() => {

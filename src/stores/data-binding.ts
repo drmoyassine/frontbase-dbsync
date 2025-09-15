@@ -124,7 +124,7 @@ export const useDataBindingStore = create<DataBindingState>()(
           // Use unified SupabaseAdapter for all connections
           const backendDataSource: DataSourceConfig = {
             id: 'primary-backend',
-            name: 'Backend API',
+            name: 'Backend Database',
             type: 'supabase', // Use the unified adapter
             connection: {
               apiUrl: window.location.origin

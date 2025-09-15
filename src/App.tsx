@@ -19,18 +19,10 @@ const App = () => {
   const { checkAuth, isLoading, isAuthenticated, user } = useAuthStore();
   const { initialize } = useDataBindingStore();
 
-  console.log('=== APP.TSX DEBUG ===');
-  console.log('App rendered, current location:', window.location.href);
-  console.log('Auth loading:', isLoading);
-  console.log('Auth authenticated:', isAuthenticated);
-  console.log('Auth user:', user);
-  console.log('=== END APP DEBUG ===');
-
   useEffect(() => {
-    console.log('=== APP USEEFFECT: CHECK AUTH ===');
     checkAuth();
     initialize();
-  }, [checkAuth, initialize]);
+  }, []); // Remove dependencies to prevent infinite loop
 
   if (isLoading) {
     return (

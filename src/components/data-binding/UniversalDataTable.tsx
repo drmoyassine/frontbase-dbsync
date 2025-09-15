@@ -8,9 +8,35 @@ import { ChevronLeft, ChevronRight, Search, Settings, ArrowUpDown } from 'lucide
 import { useSimpleData } from '@/hooks/useSimpleData';
 import { cn } from '@/lib/utils';
 
+interface ComponentDataBinding {
+  componentId: string;
+  dataSourceId: string;
+  tableName: string;
+  refreshInterval?: number;
+  pagination: {
+    enabled: boolean;
+    pageSize: number;
+    page: number;
+  };
+  sorting: {
+    enabled: boolean;
+    column?: string;
+    direction?: 'asc' | 'desc';
+  };
+  filtering: {
+    searchEnabled: boolean;
+    filters: Record<string, any>;
+  };
+  columnOverrides: Record<string, {
+    displayName?: string;
+    visible?: boolean;
+    displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
+  }>;
+}
+
 interface UniversalDataTableProps {
   componentId: string;
-  binding?: ComponentDataBinding;
+  binding?: ComponentDataBinding | null;
   className?: string;
   onConfigureBinding?: () => void;
 }
@@ -31,30 +57,26 @@ export function UniversalDataTable({
     setFilters,
     setSorting,
     setPagination,
-    currentPage,
-    pageSize,
-    totalPages,
-    filters,
-    sorting,
-    searchQuery,
     setSearchQuery
-  } = useUniversalData({
+  } = useSimpleData({
     componentId,
     binding,
     autoFetch: true
   });
 
-  const [sortColumn, setSortColumn] = useState<string>('');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [searchInput, setSearchInput] = useState('');
 
   const handleSort = (column: string) => {
-    let direction: 'asc' | 'desc' = 'asc';
-    if (sortColumn === column && sortDirection === 'asc') {
-      direction = 'desc';
-    }
-    setSortColumn(column);
-    setSortDirection(direction);
-    setSorting([{ column, direction }]);
+    if (!binding?.sorting.enabled) return;
+    
+    const currentDirection = binding.sorting.column === column ? binding.sorting.direction : undefined;
+    const newDirection = currentDirection === 'asc' ? 'desc' : 'asc';
+    setSorting(column, newDirection);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value);
+    setSearchQuery(value);
   };
 
   const formatValue = (value: any, columnName: string): React.ReactNode => {
@@ -177,17 +199,17 @@ export function UniversalDataTable({
           </Button>
         </CardTitle>
         
-        {binding.filtering?.searchEnabled && (
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-        )}
+         {binding.filtering?.searchEnabled && (
+           <div className="relative max-w-sm">
+             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+             <Input
+               placeholder="Search..."
+               value={searchInput}
+               onChange={(e) => handleSearchChange(e.target.value)}
+               className="pl-9"
+             />
+           </div>
+         )}
       </CardHeader>
       
       <CardContent>
@@ -244,36 +266,33 @@ export function UniversalDataTable({
               </Table>
             </div>
 
-            {binding.pagination?.enabled && totalPages > 1 && (
-              <div className="flex items-center justify-between px-2 py-4">
-                <div className="text-sm text-muted-foreground">
-                  Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, count)} of {count} entries
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPagination({ page: currentPage - 1, pageSize })}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Previous
-                  </Button>
-                  <span className="text-sm">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPagination({ page: currentPage + 1, pageSize })}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
+             {binding.pagination?.enabled && data.length > 0 && (
+               <div className="flex items-center justify-between px-2 py-4">
+                 <div className="text-sm text-muted-foreground">
+                   Showing {data.length} entries (Page {(binding.pagination.page || 0) + 1})
+                 </div>
+                 <div className="flex items-center space-x-2">
+                   <Button
+                     variant="outline"
+                     size="sm"
+                     onClick={() => setPagination(Math.max(0, (binding.pagination.page || 0) - 1))}
+                     disabled={binding.pagination.page === 0 || loading}
+                   >
+                     <ChevronLeft className="h-4 w-4" />
+                     Previous
+                   </Button>
+                   <Button
+                     variant="outline"
+                     size="sm"
+                     onClick={() => setPagination((binding.pagination.page || 0) + 1)}
+                     disabled={data.length < binding.pagination.pageSize || loading}
+                   >
+                     Next
+                     <ChevronRight className="h-4 w-4" />
+                   </Button>
+                 </div>
+               </div>
+             )}
           </>
         )}
       </CardContent>

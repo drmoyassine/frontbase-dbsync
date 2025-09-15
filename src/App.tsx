@@ -3,9 +3,10 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { useDataBindingStore } from "@/stores/data-binding";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import LoginPage from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
@@ -19,10 +20,15 @@ const App = () => {
   const { checkAuth, isLoading, isAuthenticated, user } = useAuthStore();
   const { initialize } = useDataBindingStore();
 
-  useEffect(() => {
+  // Memoize functions to prevent unnecessary re-renders
+  const initializeApp = useCallback(() => {
     checkAuth();
     initialize();
-  }, []); // Remove dependencies to prevent infinite loop
+  }, []); // Empty dependency array is intentional
+
+  useEffect(() => {
+    initializeApp();
+  }, [initializeApp]);
 
   if (isLoading) {
     return (
@@ -36,12 +42,13 @@ const App = () => {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth/login" element={<LoginPage />} />
             <Route path="/dashboard/*" element={
@@ -60,6 +67,7 @@ const App = () => {
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
+    </ErrorBoundary>
   );
 };
 

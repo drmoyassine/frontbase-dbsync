@@ -12,8 +12,8 @@ export class SupabaseAdapter implements DataSourceAdapter {
       this.baseUrl = config?.apiUrl || window.location.origin;
       console.log('[SupabaseAdapter] Set base URL to:', this.baseUrl);
       
-      // Test connection by trying to reach the API
-      const response = await fetch(`${this.baseUrl}/api/database/test`, {
+      // Test connection by trying to reach the API using existing connections endpoint
+      const response = await fetch(`${this.baseUrl}/api/database/connections`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -53,7 +53,7 @@ export class SupabaseAdapter implements DataSourceAdapter {
     }
     
     try {
-      const response = await fetch(`${this.baseUrl}/api/database/test`, {
+      const response = await fetch(`${this.baseUrl}/api/database/connections`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -113,7 +113,7 @@ export class SupabaseAdapter implements DataSourceAdapter {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/api/database/schema/${encodeURIComponent(tableName)}`, {
+      const response = await fetch(`${this.baseUrl}/api/database/table-schema/${encodeURIComponent(tableName)}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

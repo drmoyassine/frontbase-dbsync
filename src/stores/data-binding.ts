@@ -107,14 +107,14 @@ export const useDataBindingStore = create<DataBindingState>()(
         // Initialize default data source if needed
         const state = get();
         if (state.dataSources.length === 0) {
-          // Add the existing backend connection as default
+          // Add the existing Supabase connection via SQLite backend as default
           const defaultDataSource: DataSourceConfig = {
-            id: 'default-backend',
-            name: 'Backend Database',
-            type: 'backend', // Using backend adapter
+            id: 'default-supabase',
+            name: 'Supabase (via Backend)',
+            type: 'supabase', // Using supabase adapter
             connection: {
               url: window.location.origin,
-              type: 'backend'
+              type: 'supabase'
             },
             isActive: true
           };

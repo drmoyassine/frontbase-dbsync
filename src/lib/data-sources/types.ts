@@ -3,7 +3,7 @@
 export interface DataSourceConfig {
   id: string;
   name: string;
-  type: 'supabase' | 'xano' | 'airtable' | 'googlesheets' | 'rest' | 'backend';
+  type: 'supabase' | 'xano' | 'airtable' | 'googlesheets' | 'rest';
   connection: Record<string, any>;
   isActive: boolean;
 }

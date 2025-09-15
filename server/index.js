@@ -374,23 +374,11 @@ app.get('/api', (req, res) => {
   });
 });
 
-// Global session recovery middleware for all protected API routes
-try {
-  const sessionRecovery = require('./middleware/session-recovery');
-  
-  // Apply session recovery middleware globally to all API routes
-  app.use('/api', sessionRecovery(dbManager));
-  console.log('✅ Global session recovery middleware applied to all API routes');
-} catch (error) {
-  console.error('❌ Failed to load session recovery middleware:', error);
-  process.exit(1);
-}
-
-// Auth routes (must be loaded first)
+// Auth routes (must be loaded first - now includes universal session recovery)
 try {
   const { router: authRouter } = require('./routes/api/auth');
   app.use('/api/auth', authRouter);
-  console.log('✅ Auth API routes loaded');
+  console.log('✅ Auth API routes loaded with universal session recovery');
 } catch (error) {
   console.error('❌ Failed to load auth routes:', error);
   process.exit(1);

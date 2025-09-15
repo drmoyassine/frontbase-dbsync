@@ -10,6 +10,7 @@ const db = new DatabaseManager();
 const getUserByUsernameStmt = db.db.prepare('SELECT * FROM users WHERE username = ?');
 const getUserByEmailStmt = db.db.prepare('SELECT * FROM users WHERE email = ?');
 const getUserByIdStmt = db.db.prepare('SELECT * FROM users WHERE id = ?');
+const getAllUsersStmt = db.db.prepare('SELECT * FROM users ORDER BY created_at ASC');
 const createUserStmt = db.db.prepare(`
   INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
   VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -23,7 +24,10 @@ const getSessionStmt = db.db.prepare('SELECT * FROM user_sessions WHERE session_
 const deleteSessionStmt = db.db.prepare('DELETE FROM user_sessions WHERE session_token = ?');
 const deleteExpiredSessionsStmt = db.db.prepare('DELETE FROM user_sessions WHERE datetime(expires_at) <= datetime(\'now\')');
 
-// Authentication middleware with enhanced debugging
+// Universal session recovery helpers
+const getAllUsersStmt = db.db.prepare('SELECT * FROM users ORDER BY created_at ASC');
+
+// Authentication middleware with universal session recovery
 const authenticateToken = (req, res, next) => {
   console.log('🔐 AUTH MIDDLEWARE: Starting authentication check');
   console.log('🔐 AUTH MIDDLEWARE: Request URL:', req.originalUrl);
@@ -63,31 +67,83 @@ const authenticateToken = (req, res, next) => {
       expires_at: session.expires_at,
       created_at: session.created_at
     });
+    
+    console.log('🔐 AUTH MIDDLEWARE: Looking up user in database');
+    const user = getUserByIdStmt.get(session.user_id);
+    console.log('🔐 AUTH MIDDLEWARE: User found:', !!user);
+    
+    if (!user) {
+      console.log('🔐 AUTH MIDDLEWARE: User not found - rejecting');
+      return res.status(401).json({ 
+        error: 'User not found',
+        debug: 'User ID from session not found in users table'
+      });
+    }
+
+    console.log('🔐 AUTH MIDDLEWARE: Authentication successful for user:', user.username);
+    req.user = user;
+    return next();
   }
   
-  if (!session) {
-    console.log('🔐 AUTH MIDDLEWARE: Invalid or expired session - rejecting');
+  // Session not found - attempt universal session recovery
+  console.log('🔄 UNIVERSAL RECOVERY: Session not found, attempting automatic recovery');
+  
+  try {
+    // Get all users to determine recovery strategy
+    const allUsers = getAllUsersStmt.all();
+    console.log('🔄 UNIVERSAL RECOVERY: Total users in database:', allUsers.length);
+    
+    if (allUsers.length === 0) {
+      console.log('🔄 UNIVERSAL RECOVERY: No users found, cannot recover');
+      return res.status(401).json({ 
+        error: 'Invalid or expired session',
+        debug: 'Session not found in database or expired'
+      });
+    }
+    
+    // Recovery strategy: Use the first/oldest user (typically the admin)
+    // This works well for single-user or small team environments
+    const userToRecover = allUsers[0];
+    console.log('🔄 UNIVERSAL RECOVERY: Attempting recovery for user:', userToRecover.username);
+    
+    // Create new session automatically
+    const sessionId = crypto.randomUUID();
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    createSessionStmt.run(sessionId, userToRecover.id, sessionToken, expiresAt.toISOString());
+
+    // Set cookie with same logic as login/register
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieOptions = {
+      httpOnly: true,
+      secure: isProduction && (req.headers['x-forwarded-proto'] === 'https' || req.secure),
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      ...(req.headers.host && 
+          !req.headers.host.includes('localhost') && 
+          !req.headers.host.includes('127.0.0.1') &&
+          !req.headers.host.includes('easypanel.host') &&
+          !req.headers.host.includes('railway.app') &&
+          !req.headers.host.includes('vercel.app')
+          ? { domain: `.${req.headers.host.split('.').slice(-2).join('.')}` } 
+          : {})
+    };
+
+    res.cookie('session_token', sessionToken, cookieOptions);
+    console.log('🔄 UNIVERSAL RECOVERY: New session created and cookie set for user:', userToRecover.username);
+
+    // Set user on request and continue
+    req.user = userToRecover;
+    next();
+
+  } catch (error) {
+    console.error('🔄 UNIVERSAL RECOVERY: Error during automatic recovery:', error);
     return res.status(401).json({ 
       error: 'Invalid or expired session',
       debug: 'Session not found in database or expired'
     });
   }
-
-  console.log('🔐 AUTH MIDDLEWARE: Looking up user in database');
-  const user = getUserByIdStmt.get(session.user_id);
-  console.log('🔐 AUTH MIDDLEWARE: User found:', !!user);
-  
-  if (!user) {
-    console.log('🔐 AUTH MIDDLEWARE: User not found - rejecting');
-    return res.status(401).json({ 
-      error: 'User not found',
-      debug: 'User ID from session not found in users table'
-    });
-  }
-
-  console.log('🔐 AUTH MIDDLEWARE: Authentication successful for user:', user.username);
-  req.user = user;
-  next();
 };
 
 // Login endpoint

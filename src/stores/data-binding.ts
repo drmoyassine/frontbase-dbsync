@@ -103,27 +103,51 @@ export const useDataBindingStore = create<DataBindingState>()(
       globalColumnConfigs: new Map(),
 
       // Initialize the store
-      initialize: () => {
-        // Initialize default data source if needed
+      initialize: async () => {
+        // Auto-detect stored Supabase connections and initialize data sources
         const state = get();
         if (state.dataSources.length === 0) {
-          // Add the existing Supabase connection via SQLite backend as default
-          const defaultDataSource: DataSourceConfig = {
-            id: 'default-supabase',
-            name: 'Supabase (via Backend)',
-            type: 'supabase', // Using supabase adapter
-            connection: {
-              url: window.location.origin,
-              type: 'supabase'
-            },
-            isActive: true
-          };
+          const storedCredentials = await dataSourceManager.getStoredSupabaseCredentials();
           
-          set(state => ({
-            ...state,
-            dataSources: [...state.dataSources, defaultDataSource],
-            activeDataSourceId: defaultDataSource.id
-          }));
+          if (storedCredentials) {
+            // Create direct Supabase connection
+            const supabaseDataSource: DataSourceConfig = {
+              id: 'supabase-direct',
+              name: 'Supabase Database',
+              type: 'supabase',
+              connection: storedCredentials,
+              isActive: true
+            };
+
+            set(state => ({
+              ...state,
+              dataSources: [...state.dataSources, supabaseDataSource],
+              activeDataSourceId: supabaseDataSource.id
+            }));
+
+            // Initialize the data source with the manager
+            await dataSourceManager.addDataSource(supabaseDataSource);
+          } else {
+            // Add backend API adapter for dashboard compatibility
+            const backendDataSource: DataSourceConfig = {
+              id: 'backend-api',
+              name: 'Backend API',
+              type: 'backend-api',
+              connection: {
+                url: window.location.origin
+              },
+              isActive: true
+            };
+
+            set(state => ({
+              ...state,
+              dataSources: [...state.dataSources, backendDataSource],
+              activeDataSourceId: backendDataSource.id
+            }));
+
+            // Initialize the data source with the manager
+            await dataSourceManager.addDataSource(backendDataSource);
+          }
         }
       },
 

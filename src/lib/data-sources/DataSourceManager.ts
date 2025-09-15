@@ -1,5 +1,6 @@
 import { DataSourceAdapter, DataSourceConfig, QueryOptions, QueryResult, TableSchema, AggregationOptions, AggregationResult, DataBindingError } from './types';
 import { SupabaseAdapter } from './adapters/SupabaseAdapter';
+import { BackendAPIAdapter } from './adapters/BackendAPIAdapter';
 
 class DataSourceManager {
   private adapters: Map<string, DataSourceAdapter> = new Map();
@@ -7,33 +8,76 @@ class DataSourceManager {
   private activeDataSourceId: string | null = null;
 
   constructor() {
-    // Initialize with available adapters
-    this.registerAdapter('supabase', new SupabaseAdapter());
+    // Adapters are now created dynamically, not pre-registered
   }
 
-  // Adapter management
-  registerAdapter(type: string, adapter: DataSourceAdapter): void {
-    this.adapters.set(type, adapter);
+  // Dynamic adapter creation
+  private createAdapter(type: string, credentials: Record<string, any>): DataSourceAdapter {
+    switch (type) {
+      case 'supabase':
+        return new SupabaseAdapter();
+      case 'backend-api':
+        return new BackendAPIAdapter();
+      default:
+        throw new Error(`Unsupported data source type: ${type}`);
+    }
   }
 
-  getAdapter(type: string): DataSourceAdapter | undefined {
-    return this.adapters.get(type);
+  private getAdapterForDataSource(dataSourceId: string): DataSourceAdapter | null {
+    const config = this.configs.get(dataSourceId);
+    if (!config) return null;
+
+    // Check if we already have an adapter instance
+    const existingAdapter = this.adapters.get(dataSourceId);
+    if (existingAdapter && existingAdapter.isConnected()) {
+      return existingAdapter;
+    }
+
+    // Create new adapter instance
+    try {
+      const adapter = this.createAdapter(config.type, config.connection);
+      this.adapters.set(dataSourceId, adapter);
+      return adapter;
+    } catch (error) {
+      console.error(`Error creating adapter for ${dataSourceId}:`, error);
+      return null;
+    }
+  }
+
+  async getStoredSupabaseCredentials(): Promise<Record<string, any> | null> {
+    try {
+      const response = await fetch('/api/database/connections');
+      if (!response.ok) return null;
+      
+      const data = await response.json();
+      
+      if (data.supabase_url && (data.supabase_anon_key || data.supabase_service_key)) {
+        return {
+          url: data.supabase_url,
+          anonKey: data.supabase_anon_key,
+          serviceKey: data.supabase_service_key,
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error fetching stored Supabase credentials:', error);
+      return null;
+    }
   }
 
   // Data source configuration
   async addDataSource(config: DataSourceConfig): Promise<boolean> {
     try {
-      const adapter = this.getAdapter(config.type);
-      if (!adapter) {
-        throw new Error(`Unsupported data source type: ${config.type}`);
-      }
-
+      const adapter = this.createAdapter(config.type, config.connection);
       const connected = await adapter.connect(config.connection);
+      
       if (!connected) {
         throw new Error('Failed to connect to data source');
       }
 
       this.configs.set(config.id, { ...config, isActive: connected });
+      this.adapters.set(config.id, adapter);
       
       if (!this.activeDataSourceId || config.isActive) {
         this.activeDataSourceId = config.id;
@@ -49,9 +93,10 @@ class DataSourceManager {
   removeDataSource(id: string): void {
     const config = this.configs.get(id);
     if (config) {
-      const adapter = this.getAdapter(config.type);
+      const adapter = this.adapters.get(id);
       adapter?.disconnect();
       this.configs.delete(id);
+      this.adapters.delete(id);
       
       if (this.activeDataSourceId === id) {
         this.activeDataSourceId = null;
@@ -78,8 +123,8 @@ class DataSourceManager {
   }
 
   getActiveAdapter(): DataSourceAdapter | null {
-    const config = this.getActiveDataSource();
-    return config ? this.getAdapter(config.type) || null : null;
+    if (!this.activeDataSourceId) return null;
+    return this.getAdapterForDataSource(this.activeDataSourceId);
   }
 
   getAllDataSources(): DataSourceConfig[] {
@@ -237,8 +282,7 @@ class DataSourceManager {
   // Helper methods
   private getAdapterForRequest(dataSourceId?: string): DataSourceAdapter | null {
     const targetId = dataSourceId || this.activeDataSourceId;
-    const config = targetId ? this.configs.get(targetId) : null;
-    return config ? this.getAdapter(config.type) || null : null;
+    return targetId ? this.getAdapterForDataSource(targetId) : null;
   }
 
   // Template resolution for dynamic values
@@ -278,11 +322,9 @@ class DataSourceManager {
 
   getConnectionStatus(dataSourceId?: string): 'connected' | 'disconnected' | 'unknown' {
     const targetId = dataSourceId || this.activeDataSourceId;
-    const config = targetId ? this.configs.get(targetId) : null;
+    if (!targetId) return 'unknown';
     
-    if (!config) return 'unknown';
-    
-    const adapter = this.getAdapter(config.type);
+    const adapter = this.getAdapterForDataSource(targetId);
     if (!adapter) return 'unknown';
     
     return adapter.isConnected() ? 'connected' : 'disconnected';

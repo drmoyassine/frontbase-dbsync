@@ -1,368 +1,449 @@
-import { DataSourceAdapter, TableSchema, ColumnSchema, QueryOptions, QueryResult, AggregationOptions, AggregationResult, QueryFilter, SubscriptionOptions } from '../types';
-
-interface SupabaseClient {
-  from: (table: string) => any;
-  rpc: (fn: string, params?: any) => any;
-  channel: (name: string) => any;
-}
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { DataSourceAdapter, QueryOptions, QueryResult, TableSchema, ColumnSchema, AggregationOptions, AggregationResult, QueryFilter, SubscriptionOptions } from '../types';
 
 export class SupabaseAdapter implements DataSourceAdapter {
   private client: SupabaseClient | null = null;
-  private config: { url: string; anonKey: string; serviceKey?: string } | null = null;
+  private connected: boolean = false;
   private subscriptions: Map<string, any> = new Map();
 
-  async connect(config: { url: string; anonKey: string; serviceKey?: string }): Promise<boolean> {
+  async connect(config: Record<string, any>): Promise<boolean> {
     try {
-      this.config = config;
+      const { url, anonKey, serviceKey } = config;
       
-      // Create a simple client interface that works with your existing setup
-      this.client = await this.createClient(config);
+      if (!url || (!anonKey && !serviceKey)) {
+        throw new Error('Missing required Supabase connection parameters');
+      }
+
+      // Use service key if available for admin operations, otherwise anon key
+      const key = serviceKey || anonKey;
+      this.client = createClient(url, key);
       
       // Test connection
-      const testResult = await this.testConnection();
-      return testResult;
+      const { error } = await this.client.from('_health_check').select('*').limit(1);
+      
+      // Connection successful if no auth error or table doesn't exist (expected)
+      this.connected = !error || error.code === 'PGRST116' || error.code === '42P01';
+      
+      return this.connected;
     } catch (error) {
       console.error('Supabase connection error:', error);
+      this.connected = false;
       return false;
     }
   }
 
   async disconnect(): Promise<void> {
-    // Clean up subscriptions
-    for (const [key, subscription] of this.subscriptions) {
-      try {
-        if (subscription && typeof subscription.unsubscribe === 'function') {
-          subscription.unsubscribe();
+    if (this.client) {
+      // Unsubscribe from all active subscriptions
+      for (const [key, subscription] of this.subscriptions) {
+        try {
+          await this.client.removeChannel(subscription);
+        } catch (error) {
+          console.warn(`Failed to unsubscribe from ${key}:`, error);
         }
-      } catch (error) {
-        console.error(`Error unsubscribing from ${key}:`, error);
       }
+      this.subscriptions.clear();
+      
+      this.client = null;
+      this.connected = false;
     }
-    this.subscriptions.clear();
-    
-    this.client = null;
-    this.config = null;
   }
 
   isConnected(): boolean {
-    return this.client !== null && this.config !== null;
+    return this.connected && this.client !== null;
   }
 
   async testConnection(): Promise<boolean> {
+    if (!this.client) return false;
+    
     try {
-      if (!this.client) return false;
-      
-      // Test by getting tables
-      const tables = await this.getAllTables();
-      return Array.isArray(tables);
+      // Try to get a list of tables as a connection test
+      const { error } = await this.client.rpc('get_schema_info').limit(1);
+      return !error || error.code === 'PGRST116'; // Function not found is OK
     } catch (error) {
-      console.error('Connection test failed:', error);
       return false;
     }
   }
 
-  async getTableSchema(tableName: string): Promise<TableSchema> {
-    if (!this.client) {
-      throw new Error('Not connected to Supabase');
-    }
-
-    try {
-      // Get table information from your existing API
-      const response = await fetch('/api/database/table-schema', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ tableName })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to get table schema: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      if (!result.success) {
-        throw new Error(result.message || 'Failed to get table schema');
-      }
-
-      // Convert to our universal format
-      const columns: ColumnSchema[] = result.data.columns.map((col: any) => ({
-        name: col.column_name,
-        type: this.mapPostgresTypeToUniversal(col.data_type),
-        isPrimaryKey: col.is_primary_key,
-        isForeignKey: col.is_foreign_key,
-        isNullable: col.is_nullable !== 'NO',
-        defaultValue: col.column_default,
-        constraints: col.constraints || []
-      }));
-
-      return {
-        name: tableName,
-        schema: 'public',
-        columns,
-        primaryKey: columns.filter(c => c.isPrimaryKey).map(c => c.name),
-        foreignKeys: columns
-          .filter(c => c.isForeignKey)
-          .map(c => ({
-            column: c.name,
-            referencedTable: c.relatedTable || '',
-            referencedColumn: c.relatedColumn || ''
-          })),
-        permissions: {
-          canRead: true,
-          canWrite: true,
-          canDelete: true
-        }
-      };
-    } catch (error) {
-      console.error('Error getting table schema:', error);
-      throw error;
-    }
-  }
-
   async getAllTables(): Promise<string[]> {
+    if (!this.client) throw new Error('Not connected to Supabase');
+
     try {
-      // Use your existing API
-      const response = await fetch('/api/database/supabase-tables', {
-        credentials: 'include'
-      });
+      // Get public schema tables
+      const { data, error } = await this.client
+        .from('information_schema.tables')
+        .select('table_name')
+        .eq('table_schema', 'public')
+        .eq('table_type', 'BASE TABLE');
 
-      if (!response.ok) {
-        throw new Error(`Failed to get tables: ${response.statusText}`);
+      if (error) {
+        // Fallback: try to get tables from pg_tables
+        const { data: fallbackData, error: fallbackError } = await this.client
+          .rpc('get_public_tables');
+        
+        if (fallbackError) {
+          throw fallbackError;
+        }
+        
+        return fallbackData?.map((row: any) => row.tablename) || [];
       }
 
-      const result = await response.json();
-      if (!result.success) {
-        throw new Error(result.message || 'Failed to get tables');
-      }
-
-      return result.data.tables.map((table: any) => table.name);
+      return data?.map(row => row.table_name) || [];
     } catch (error) {
-      console.error('Error getting tables:', error);
+      console.error('Error fetching tables:', error);
       return [];
     }
   }
 
-  async getDistinctValues(tableName: string, column: string): Promise<any[]> {
+  async getTableSchema(tableName: string): Promise<TableSchema> {
+    if (!this.client) throw new Error('Not connected to Supabase');
+
     try {
-      const response = await fetch('/api/database/distinct-values', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ tableName, column })
-      });
+      // Get column information
+      const { data: columns, error: columnsError } = await this.client
+        .from('information_schema.columns')
+        .select('*')
+        .eq('table_schema', 'public')
+        .eq('table_name', tableName)
+        .order('ordinal_position');
 
-      if (!response.ok) {
-        throw new Error(`Failed to get distinct values: ${response.statusText}`);
-      }
+      if (columnsError) throw columnsError;
 
-      const result = await response.json();
-      if (!result.success) {
-        throw new Error(result.message || 'Failed to get distinct values');
-      }
+      // Get primary key information
+      const { data: primaryKeys, error: pkError } = await this.client
+        .from('information_schema.key_column_usage')
+        .select('column_name')
+        .eq('table_schema', 'public')
+        .eq('table_name', tableName);
 
-      return result.data.values || [];
+      if (pkError) console.warn('Could not fetch primary keys:', pkError);
+
+      // Get foreign key information
+      const { data: foreignKeys, error: fkError } = await this.client
+        .from('information_schema.table_constraints')
+        .select(`
+          column_name,
+          foreign_table_name,
+          foreign_column_name
+        `)
+        .eq('table_schema', 'public')
+        .eq('table_name', tableName)
+        .eq('constraint_type', 'FOREIGN KEY');
+
+      if (fkError) console.warn('Could not fetch foreign keys:', fkError);
+
+      const columnSchemas: ColumnSchema[] = columns?.map(col => ({
+        name: col.column_name,
+        type: this.mapPostgresTypeToUniversal(col.data_type),
+        isPrimaryKey: primaryKeys?.some(pk => pk.column_name === col.column_name) || false,
+        isForeignKey: foreignKeys?.some(fk => fk.column_name === col.column_name) || false,
+        isNullable: col.is_nullable === 'YES',
+        defaultValue: col.column_default,
+        relatedTable: foreignKeys?.find(fk => fk.column_name === col.column_name)?.foreign_table_name,
+        relatedColumn: foreignKeys?.find(fk => fk.column_name === col.column_name)?.foreign_column_name,
+      })) || [];
+
+      return {
+        name: tableName,
+        schema: 'public',
+        columns: columnSchemas,
+        primaryKey: primaryKeys?.map(pk => pk.column_name) || [],
+        foreignKeys: foreignKeys?.map(fk => ({
+          column: fk.column_name,
+          referencedTable: fk.foreign_table_name,
+          referencedColumn: fk.foreign_column_name,
+        })) || [],
+        permissions: {
+          canRead: true,
+          canWrite: true,
+          canDelete: true,
+        },
+      };
     } catch (error) {
-      console.error('Error getting distinct values:', error);
+      console.error('Error fetching table schema:', error);
+      throw error;
+    }
+  }
+
+  async getDistinctValues(tableName: string, column: string): Promise<any[]> {
+    if (!this.client) throw new Error('Not connected to Supabase');
+
+    try {
+      const { data, error } = await this.client
+        .from(tableName)
+        .select(column)
+        .not(column, 'is', null)
+        .limit(100);
+
+      if (error) throw error;
+
+      // Extract unique values
+      const values = data?.map(row => row[column]) || [];
+      return [...new Set(values)];
+    } catch (error) {
+      console.error('Error fetching distinct values:', error);
       return [];
     }
   }
 
   async query(options: QueryOptions): Promise<QueryResult> {
+    if (!this.client) throw new Error('Not connected to Supabase');
+
     try {
-      const response = await fetch('/api/database/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          tableName: options.table,
-          select: options.select,
-          filters: options.filters,
-          search: options.search,
-          sort: options.sort,
-          pagination: options.pagination,
-          limit: options.limit,
-          offset: options.offset
-        })
-      });
+      let query = this.client.from(options.table).select('*', { count: 'exact' });
 
-      if (!response.ok) {
-        throw new Error(`Query failed: ${response.statusText}`);
+      // Apply select
+      if (options.select && options.select.length > 0) {
+        query = this.client.from(options.table).select(options.select.join(', '), { count: 'exact' });
       }
 
-      const result = await response.json();
-      if (!result.success) {
-        throw new Error(result.message || 'Query failed');
+      // Apply filters
+      if (options.filters) {
+        for (const filter of options.filters) {
+          query = this.applyFilter(query, filter);
+        }
       }
+
+      // Apply search
+      if (options.search) {
+        query = query.ilike(options.search.column, `%${options.search.query}%`);
+      }
+
+      // Apply sorting
+      if (options.sort) {
+        for (const sort of options.sort) {
+          query = query.order(sort.column, { ascending: sort.direction === 'asc' });
+        }
+      }
+
+      // Apply pagination
+      if (options.pagination) {
+        const offset = (options.pagination.page - 1) * options.pagination.pageSize;
+        query = query.range(offset, offset + options.pagination.pageSize - 1);
+      } else if (options.limit) {
+        query = query.limit(options.limit);
+        if (options.offset) {
+          query = query.range(options.offset, options.offset + options.limit - 1);
+        }
+      }
+
+      const { data, error, count } = await query;
+
+      if (error) throw error;
 
       return {
-        data: result.data.rows || [],
-        count: result.data.count || 0,
-        metadata: result.data.metadata
+        data: data || [],
+        count: count || data?.length || 0,
+        metadata: options.pagination ? {
+          totalPages: Math.ceil((count || 0) / options.pagination.pageSize),
+          currentPage: options.pagination.page,
+          pageSize: options.pagination.pageSize,
+        } : undefined,
       };
     } catch (error) {
       console.error('Query error:', error);
       return {
         data: [],
         count: 0,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
 
   async aggregate(options: AggregationOptions): Promise<AggregationResult> {
+    if (!this.client) throw new Error('Not connected to Supabase');
+
     try {
-      const response = await fetch('/api/database/aggregate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(options)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Aggregation failed: ${response.statusText}`);
+      // Build aggregation query
+      const selectParts: string[] = [];
+      
+      if (options.groupBy) {
+        selectParts.push(...options.groupBy);
       }
 
-      const result = await response.json();
-      if (!result.success) {
-        throw new Error(result.message || 'Aggregation failed');
+      for (const agg of options.aggregations) {
+        const alias = agg.alias || `${agg.function}_${agg.column}`;
+        selectParts.push(`${agg.column}.${agg.function}()`);
       }
+
+      let query = this.client
+        .from(options.table)
+        .select(selectParts.join(', '));
+
+      // Apply filters
+      if (options.filters) {
+        for (const filter of options.filters) {
+          query = this.applyFilter(query, filter);
+        }
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
 
       return {
-        data: result.data.rows || []
+        data: data || [],
       };
     } catch (error) {
       console.error('Aggregation error:', error);
       return {
         data: [],
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
 
   async insert(tableName: string, data: Record<string, any>): Promise<{ success: boolean; data?: any; error?: string }> {
+    if (!this.client) throw new Error('Not connected to Supabase');
+
     try {
-      const response = await fetch('/api/database/insert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ tableName, data })
-      });
+      const { data: result, error } = await this.client
+        .from(tableName)
+        .insert(data)
+        .select();
 
-      if (!response.ok) {
-        throw new Error(`Insert failed: ${response.statusText}`);
-      }
+      if (error) throw error;
 
-      const result = await response.json();
       return {
-        success: result.success,
-        data: result.data,
-        error: result.success ? undefined : result.message
+        success: true,
+        data: result,
       };
     } catch (error) {
+      console.error('Insert error:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
 
   async update(tableName: string, id: any, data: Record<string, any>): Promise<{ success: boolean; data?: any; error?: string }> {
+    if (!this.client) throw new Error('Not connected to Supabase');
+
     try {
-      const response = await fetch('/api/database/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ tableName, id, data })
-      });
+      const { data: result, error } = await this.client
+        .from(tableName)
+        .update(data)
+        .eq('id', id)
+        .select();
 
-      if (!response.ok) {
-        throw new Error(`Update failed: ${response.statusText}`);
-      }
+      if (error) throw error;
 
-      const result = await response.json();
       return {
-        success: result.success,
-        data: result.data,
-        error: result.success ? undefined : result.message
+        success: true,
+        data: result,
       };
     } catch (error) {
+      console.error('Update error:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
 
   async delete(tableName: string, id: any): Promise<{ success: boolean; error?: string }> {
+    if (!this.client) throw new Error('Not connected to Supabase');
+
     try {
-      const response = await fetch('/api/database/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ tableName, id })
-      });
+      const { error } = await this.client
+        .from(tableName)
+        .delete()
+        .eq('id', id);
 
-      if (!response.ok) {
-        throw new Error(`Delete failed: ${response.statusText}`);
-      }
+      if (error) throw error;
 
-      const result = await response.json();
-      return {
-        success: result.success,
-        error: result.success ? undefined : result.message
-      };
+      return { success: true };
     } catch (error) {
+      console.error('Delete error:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
 
-  // Helper methods
-  private async createClient(config: { url: string; anonKey: string; serviceKey?: string }): Promise<SupabaseClient> {
-    // Create a simple client interface that works with your existing backend
-    return {
-      from: (table: string) => ({
-        select: () => ({ data: [], error: null }),
-        insert: () => ({ data: null, error: null }),
-        update: () => ({ data: null, error: null }),
-        delete: () => ({ data: null, error: null })
-      }),
-      rpc: (fn: string, params?: any) => ({ data: null, error: null }),
-      channel: (name: string) => ({
-        on: () => ({}),
-        subscribe: () => ({})
+  async subscribe(options: SubscriptionOptions): Promise<() => void> {
+    if (!this.client) throw new Error('Not connected to Supabase');
+
+    const channel = this.client
+      .channel(`table-${options.table}`)
+      .on('postgres_changes' as any, {
+        event: options.event === '*' ? '*' : options.event,
+        schema: 'public',
+        table: options.table,
+      }, (payload) => {
+        options.callback(payload);
       })
+      .subscribe();
+
+    const subscriptionKey = `${options.table}-${options.event}`;
+    this.subscriptions.set(subscriptionKey, channel);
+
+    return () => {
+      this.client?.removeChannel(channel);
+      this.subscriptions.delete(subscriptionKey);
     };
   }
 
-  private mapPostgresTypeToUniversal(postgresType: string): ColumnSchema['type'] {
-    const typeMap: Record<string, ColumnSchema['type']> = {
-      'text': 'text',
-      'varchar': 'text',
-      'char': 'text',
-      'character': 'text',
-      'integer': 'number',
-      'bigint': 'number',
-      'smallint': 'number',
-      'numeric': 'number',
-      'decimal': 'number',
-      'real': 'number',
-      'double precision': 'number',
-      'boolean': 'boolean',
-      'date': 'date',
-      'timestamp': 'date',
-      'timestamptz': 'date',
-      'time': 'date',
-      'json': 'json',
-      'jsonb': 'json',
-      'uuid': 'uuid',
-      'email': 'email',
-      'url': 'url'
-    };
+  private applyFilter(query: any, filter: QueryFilter): any {
+    const { column, operator, value } = filter;
 
-    return typeMap[postgresType.toLowerCase()] || 'text';
+    switch (operator) {
+      case 'eq':
+        return query.eq(column, value);
+      case 'neq':
+        return query.neq(column, value);
+      case 'gt':
+        return query.gt(column, value);
+      case 'gte':
+        return query.gte(column, value);
+      case 'lt':
+        return query.lt(column, value);
+      case 'lte':
+        return query.lte(column, value);
+      case 'like':
+        return query.like(column, value);
+      case 'ilike':
+        return query.ilike(column, value);
+      case 'in':
+        return query.in(column, Array.isArray(value) ? value : [value]);
+      case 'notin':
+        return query.not(column, 'in', Array.isArray(value) ? value : [value]);
+      case 'is':
+        return query.is(column, value);
+      case 'isnot':
+        return query.not(column, 'is', value);
+      default:
+        return query;
+    }
+  }
+
+  private mapPostgresTypeToUniversal(postgresType: string): ColumnSchema['type'] {
+    switch (postgresType.toLowerCase()) {
+      case 'integer':
+      case 'bigint':
+      case 'smallint':
+      case 'decimal':
+      case 'numeric':
+      case 'real':
+      case 'double precision':
+        return 'number';
+      case 'boolean':
+        return 'boolean';
+      case 'date':
+      case 'timestamp':
+      case 'timestamp with time zone':
+      case 'timestamp without time zone':
+        return 'date';
+      case 'json':
+      case 'jsonb':
+        return 'json';
+      case 'uuid':
+        return 'uuid';
+      default:
+        return 'text';
+    }
   }
 
   escapeValue(value: any): any {
@@ -373,20 +454,25 @@ export class SupabaseAdapter implements DataSourceAdapter {
   }
 
   buildFilterQuery(filters: QueryFilter[]): any {
-    // This would be implemented based on your backend API structure
+    // This is handled in the applyFilter method for Supabase
     return filters;
   }
 
   resolveTemplate(template: string, context: Record<string, any>): any {
-    return template.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
-      const keys = key.trim().split('.');
-      let value = context;
-      
-      for (const k of keys) {
-        value = value?.[k];
-      }
-      
-      return value !== undefined ? String(value) : match;
-    });
+    try {
+      return template.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
+        const keys = key.trim().split('.');
+        let value = context;
+        
+        for (const k of keys) {
+          value = value?.[k];
+        }
+        
+        return value !== undefined ? String(value) : match;
+      });
+    } catch (error) {
+      console.error('Template resolution error:', error);
+      return template;
+    }
   }
 }

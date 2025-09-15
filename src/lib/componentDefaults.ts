@@ -35,7 +35,11 @@ export function getDefaultProps(componentType: string): Record<string, any> {
     Progress: { value: 50 },
     Container: { className: 'p-6' },
     Image: { src: '/placeholder.svg', alt: 'Placeholder image' },
-    Link: { text: 'Link', href: '#', target: '_self' }
+    Link: { text: 'Link', href: '#', target: '_self' },
+    DataTable: { binding: null },
+    KPICard: { binding: null },
+    Chart: { binding: null, chartType: 'bar' },
+    Grid: { binding: null, columns: 3 }
   };
 
   return defaults[componentType] || {};

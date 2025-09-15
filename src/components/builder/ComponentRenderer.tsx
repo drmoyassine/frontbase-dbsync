@@ -20,6 +20,10 @@ import { ComponentStyles, ResponsiveStyles } from '@/types/styles';
 import { cn } from '@/lib/utils';
 import { InlineTextEditor } from './InlineTextEditor';
 import { useBuilderStore } from '@/stores/builder';
+import { UniversalDataTable } from '@/components/data-binding/UniversalDataTable';
+import { KPICard } from '@/components/data-binding/KPICard';
+import { Chart } from '@/components/data-binding/Chart';
+import { Grid } from '@/components/data-binding/Grid';
 
 interface ComponentRendererProps {
   component: {
@@ -368,39 +372,45 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       );
 
     case 'DataTable':
-      const columns = props.columns || ['Name', 'Email', 'Role', 'Status'];
-      const rows = props.rows || [
-        ['John Doe', 'john@example.com', 'Admin', 'Active'],
-        ['Jane Smith', 'jane@example.com', 'User', 'Active'],
-        ['Bob Johnson', 'bob@example.com', 'Editor', 'Inactive'],
-        ['Alice Brown', 'alice@example.com', 'User', 'Active']
-      ];
-      
       return (
-        <div className={cn('w-full', combinedClassName)} style={inlineStyles}>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {columns.map((column: string, index: number) => (
-                  <TableHead key={index}>
-                    {createEditableText(column, 'text', 'font-medium')}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row: string[], rowIndex: number) => (
-                <TableRow key={rowIndex}>
-                  {row.map((cell: string, cellIndex: number) => (
-                    <TableCell key={cellIndex}>
-                      {createEditableText(cell, 'text', '')}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <UniversalDataTable
+          componentId={id || 'datatable'}
+          binding={props.binding}
+          className={combinedClassName}
+          onConfigureBinding={props.onConfigureBinding}
+        />
+      );
+
+    case 'KPICard':
+      return (
+        <KPICard
+          componentId={id || 'kpicard'}
+          binding={props.binding}
+          className={combinedClassName}
+          onConfigureBinding={props.onConfigureBinding}
+        />
+      );
+
+    case 'Chart':
+      return (
+        <Chart
+          componentId={id || 'chart'}
+          binding={props.binding}
+          className={combinedClassName}
+          chartType={props.chartType || 'bar'}
+          onConfigureBinding={props.onConfigureBinding}
+        />
+      );
+
+    case 'Grid':
+      return (
+        <Grid
+          componentId={id || 'grid'}
+          binding={props.binding}
+          className={combinedClassName}
+          columns={props.columns || 3}
+          onConfigureBinding={props.onConfigureBinding}
+        />
       );
 
     default:

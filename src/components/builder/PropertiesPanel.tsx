@@ -5,8 +5,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Database } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
+import { DataBindingModal } from '@/components/builder/data-binding/DataBindingModal';
+import { useDataBindingStore } from '@/stores/data-binding';
 
 export const PropertiesPanel: React.FC = () => {
   const { 
@@ -20,6 +22,8 @@ export const PropertiesPanel: React.FC = () => {
   } = useBuilderStore();
   
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showDataBinding, setShowDataBinding] = useState(false);
+  const { getComponentBinding, setComponentBinding } = useDataBindingStore();
 
   const currentPage = pages.find(page => page.id === currentPageId);
   
@@ -120,6 +124,20 @@ export const PropertiesPanel: React.FC = () => {
     setSelectedComponentId(null);
     setShowDeleteDialog(false);
   };
+
+  const handleDataBindingSave = (binding: any) => {
+    if (selectedComponentId) {
+      setComponentBinding(selectedComponentId, binding);
+      
+      // Update component props with binding
+      updateComponentProp('binding', binding);
+      updateComponentProp('onConfigureBinding', () => setShowDataBinding(true));
+    }
+    setShowDataBinding(false);
+  };
+
+  const isDataComponent = selectedComponent?.type && 
+    ['DataTable', 'KPICard', 'Chart', 'Grid'].includes(selectedComponent.type);
 
   const renderPropertyFields = () => {
     const { type, props } = selectedComponent;
@@ -480,6 +498,101 @@ export const PropertiesPanel: React.FC = () => {
           </>
         );
 
+      case 'DataTable':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Data Binding</Label>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowDataBinding(true)}
+                className="w-full justify-start"
+              >
+                <Database className="mr-2 h-4 w-4" />
+                {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
+              </Button>
+            </div>
+          </div>
+        );
+
+      case 'KPICard':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Data Binding</Label>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowDataBinding(true)}
+                className="w-full justify-start"
+              >
+                <Database className="mr-2 h-4 w-4" />
+                {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
+              </Button>
+            </div>
+          </div>
+        );
+
+      case 'Chart':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="chart-type">Chart Type</Label>
+              <Select value={props.chartType || 'bar'} onValueChange={(value) => updateComponentProp('chartType', value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bar">Bar Chart</SelectItem>
+                  <SelectItem value="line">Line Chart</SelectItem>
+                  <SelectItem value="pie">Pie Chart</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Data Binding</Label>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowDataBinding(true)}
+                className="w-full justify-start"
+              >
+                <Database className="mr-2 h-4 w-4" />
+                {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
+              </Button>
+            </div>
+          </div>
+        );
+
+      case 'Grid':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="grid-columns">Columns</Label>
+              <Select value={(props.columns || 3).toString()} onValueChange={(value) => updateComponentProp('columns', parseInt(value))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 Column</SelectItem>
+                  <SelectItem value="2">2 Columns</SelectItem>
+                  <SelectItem value="3">3 Columns</SelectItem>
+                  <SelectItem value="4">4 Columns</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Data Binding</Label>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowDataBinding(true)}
+                className="w-full justify-start"
+              >
+                <Database className="mr-2 h-4 w-4" />
+                {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
+              </Button>
+            </div>
+          </div>
+        );
+
       default:
         return (
           <p className="text-muted-foreground text-sm">
@@ -520,6 +633,14 @@ export const PropertiesPanel: React.FC = () => {
         open={showDeleteDialog}
         onOpenChange={setShowDeleteDialog}
         onConfirm={deleteComponent}
+      />
+
+      <DataBindingModal
+        open={showDataBinding}
+        onOpenChange={setShowDataBinding}
+        componentId={selectedComponentId || ''}
+        componentType={selectedComponent?.type || ''}
+        onSave={handleDataBindingSave}
       />
     </div>
   );

@@ -24,8 +24,6 @@ const getSessionStmt = db.db.prepare('SELECT * FROM user_sessions WHERE session_
 const deleteSessionStmt = db.db.prepare('DELETE FROM user_sessions WHERE session_token = ?');
 const deleteExpiredSessionsStmt = db.db.prepare('DELETE FROM user_sessions WHERE datetime(expires_at) <= datetime(\'now\')');
 
-// Universal session recovery helpers
-const getAllUsersStmt = db.db.prepare('SELECT * FROM users ORDER BY created_at ASC');
 
 // Authentication middleware with universal session recovery
 const authenticateToken = (req, res, next) => {

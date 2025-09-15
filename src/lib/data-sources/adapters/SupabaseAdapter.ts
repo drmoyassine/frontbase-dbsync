@@ -78,7 +78,7 @@ export class SupabaseAdapter implements DataSourceAdapter {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/api/database/tables`, {
+      const response = await fetch(`${this.baseUrl}/api/database/supabase-tables`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -172,11 +172,15 @@ export class SupabaseAdapter implements DataSourceAdapter {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/api/database/distinct/${encodeURIComponent(tableName)}/${encodeURIComponent(column)}`, {
-        method: 'GET',
+      const response = await fetch(`${this.baseUrl}/api/database/distinct-values`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          tableName,
+          column
+        }),
       });
 
       if (!response.ok) {

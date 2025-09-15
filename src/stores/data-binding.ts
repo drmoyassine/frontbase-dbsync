@@ -114,12 +114,16 @@ export const useDataBindingStore = create<DataBindingState>()(
           });
           
           // Prevent re-initialization if already in progress or completed
-          if (state.dataSources.length > 0 && state.activeDataSourceId) {
-            console.log('[DataBindingStore] Store already initialized, skipping...');
-            return;
-          }
-          
-          console.log('[DataBindingStore] Setting up unified backend API connection...');
+          // Clear any existing data sources with old IDs to prevent conflicts
+          set((state) => ({
+            ...state,
+            dataSources: [],
+            activeDataSourceId: null,
+            schemaCache: new Map(),
+            componentBindings: new Map(),
+            queryCache: new Map(),
+            subscriptions: new Map(),
+          }));
           
           // Use unified SupabaseAdapter for all connections
           const backendDataSource: DataSourceConfig = {
@@ -443,23 +447,25 @@ export const useDataBindingStore = create<DataBindingState>()(
     {
       name: 'data-binding-storage',
       partialize: (state) => ({
-        dataSources: state.dataSources,
-        activeDataSourceId: state.activeDataSourceId,
+        // Don't persist data sources - they should be recreated on each session
         globalColumnConfigs: Array.from(state.globalColumnConfigs.entries()),
-        // Don't persist cache, loading states, or subscriptions
+        // Don't persist cache, loading states, subscriptions, or data sources
       }),
       merge: (persistedState: any, currentState) => ({
         ...currentState,
-        ...persistedState,
-        // Restore Maps from persisted arrays
+        // Only restore globalColumnConfigs, don't restore old data sources
         globalColumnConfigs: new Map(persistedState.globalColumnConfigs || []),
-        // Reset non-persistent state
+        // Reset all other state including old data sources to prevent conflicts
+        dataSources: [],
+        activeDataSourceId: null,
         schemas: new Map(),
         cache: new Map(),
         loading: new Map(),
         errors: new Map(),
         subscriptions: new Map(),
         componentBindings: new Map(),
+        schemaCache: new Map(),
+        queryCache: new Map(),
       }),
     }
   )

@@ -1,53 +1,30 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { DataSourceAdapter, QueryOptions, QueryResult, TableSchema, ColumnSchema, AggregationOptions, AggregationResult, QueryFilter, SubscriptionOptions } from '../types';
 
 export class SupabaseAdapter implements DataSourceAdapter {
-  private client: SupabaseClient | null = null;
+  private baseUrl: string = '';
   private connected: boolean = false;
-  private subscriptions: Map<string, any> = new Map();
 
   async connect(config: Record<string, any>): Promise<boolean> {
-    console.log('[SupabaseAdapter] Attempting connection with config:', {
-      hasUrl: !!config?.url,
-      hasAnonKey: !!config?.anonKey,
-      hasServiceKey: !!config?.serviceKey,
-      url: config?.url ? config.url.substring(0, 30) + '...' : 'none'
-    });
+    console.log('[SupabaseAdapter] Attempting connection with config:', config);
     
     try {
-      const { url, anonKey, serviceKey } = config;
+      this.baseUrl = config?.apiUrl || 'http://localhost:3001';
+      console.log('[SupabaseAdapter] Set base URL to:', this.baseUrl);
       
-      if (!url || (!anonKey && !serviceKey)) {
-        console.error('[SupabaseAdapter] Missing required Supabase connection parameters:', {
-          hasUrl: !!url,
-          hasAnonKey: !!anonKey,
-          hasServiceKey: !!serviceKey
-        });
-        throw new Error('Missing required Supabase connection parameters');
-      }
-
-      // Use service key if available for admin operations, otherwise anon key
-      const key = serviceKey || anonKey;
-      console.log('[SupabaseAdapter] Creating Supabase client with:', {
-        keyType: serviceKey ? 'service' : 'anon',
-        keyLength: key?.length || 0
+      // Test connection by trying to reach the API
+      const response = await fetch(`${this.baseUrl}/api/database/test`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
       
-      this.client = createClient(url, key);
-      console.log('[SupabaseAdapter] Created Supabase client, testing connection...');
-      
-      // Test connection
-      const { error } = await this.client.from('_health_check').select('*').limit(1);
-      console.log('[SupabaseAdapter] Health check result:', { 
-        hasError: !!error, 
-        errorCode: error?.code,
-        errorMessage: error?.message 
+      console.log('[SupabaseAdapter] Connection test response:', {
+        status: response.status,
+        ok: response.ok
       });
       
-      // Connection successful if no auth error or table doesn't exist (expected)
-      this.connected = !error || error.code === 'PGRST116' || error.code === '42P01';
-      console.log('[SupabaseAdapter] Connection status:', this.connected);
-      
+      this.connected = response.ok;
       return this.connected;
     } catch (error) {
       console.error('[SupabaseAdapter] Connection error:', error);
@@ -57,34 +34,36 @@ export class SupabaseAdapter implements DataSourceAdapter {
   }
 
   async disconnect(): Promise<void> {
-    if (this.client) {
-      // Unsubscribe from all active subscriptions
-      for (const [key, subscription] of this.subscriptions) {
-        try {
-          await this.client.removeChannel(subscription);
-        } catch (error) {
-          console.warn(`Failed to unsubscribe from ${key}:`, error);
-        }
-      }
-      this.subscriptions.clear();
-      
-      this.client = null;
-      this.connected = false;
-    }
+    console.log('[SupabaseAdapter] Disconnecting...');
+    this.connected = false;
+    this.baseUrl = '';
   }
 
   isConnected(): boolean {
-    return this.connected && this.client !== null;
+    return this.connected && !!this.baseUrl;
   }
 
   async testConnection(): Promise<boolean> {
-    if (!this.client) return false;
+    console.log('[SupabaseAdapter] Testing connection...');
+    
+    if (!this.baseUrl) {
+      console.log('[SupabaseAdapter] No base URL configured');
+      return false;
+    }
     
     try {
-      // Try to get a list of tables as a connection test
-      const { error } = await this.client.rpc('get_schema_info').limit(1);
-      return !error || error.code === 'PGRST116'; // Function not found is OK
+      const response = await fetch(`${this.baseUrl}/api/database/test`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      const isConnected = response.ok;
+      console.log('[SupabaseAdapter] Connection test result:', isConnected);
+      return isConnected;
     } catch (error) {
+      console.error('[SupabaseAdapter] Connection test failed:', error);
       return false;
     }
   }
@@ -92,119 +71,86 @@ export class SupabaseAdapter implements DataSourceAdapter {
   async getAllTables(): Promise<string[]> {
     console.log('[SupabaseAdapter] Fetching all tables...');
     
-    if (!this.client) {
-      console.error('[SupabaseAdapter] Cannot fetch tables - not connected to Supabase');
-      throw new Error('Not connected to Supabase');
+    if (!this.isConnected()) {
+      console.error('[SupabaseAdapter] Cannot fetch tables - not connected');
+      throw new Error('Not connected to backend API');
     }
 
     try {
-      console.log('[SupabaseAdapter] Querying information_schema.tables...');
-      
-      // Get public schema tables
-      const { data, error } = await this.client
-        .from('information_schema.tables')
-        .select('table_name')
-        .eq('table_schema', 'public')
-        .eq('table_type', 'BASE TABLE');
-
-      console.log('[SupabaseAdapter] Schema query result:', {
-        hasData: !!data,
-        dataLength: data?.length || 0,
-        hasError: !!error,
-        errorCode: error?.code,
-        errorMessage: error?.message
+      const response = await fetch(`${this.baseUrl}/api/database/tables`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
 
-      if (error) {
-        console.log('[SupabaseAdapter] Schema query failed, trying fallback...');
-        
-        // Fallback: try to get tables from pg_tables
-        const { data: fallbackData, error: fallbackError } = await this.client
-          .rpc('get_public_tables');
-        
-        console.log('[SupabaseAdapter] Fallback query result:', {
-          hasData: !!fallbackData,
-          dataLength: fallbackData?.length || 0,
-          hasError: !!fallbackError
-        });
-        
-        if (fallbackError) {
-          console.error('[SupabaseAdapter] Fallback query also failed:', fallbackError);
-          throw fallbackError;
-        }
-        
-        const tables = fallbackData?.map((row: any) => row.tablename) || [];
-        console.log('[SupabaseAdapter] Retrieved tables via fallback:', tables);
-        return tables;
+      console.log('[SupabaseAdapter] Tables API response:', {
+        status: response.status,
+        ok: response.ok
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[SupabaseAdapter] Tables API error:', errorText);
+        throw new Error(`Failed to fetch tables: ${response.status} ${errorText}`);
       }
 
-      const tables = data?.map(row => row.table_name) || [];
-      console.log('[SupabaseAdapter] Retrieved tables:', tables);
-      return tables;
+      const data = await response.json();
+      console.log('[SupabaseAdapter] Retrieved tables:', data);
+      return data.tables || [];
     } catch (error) {
       console.error('[SupabaseAdapter] Error fetching tables:', error);
-      return [];
+      throw error;
     }
   }
 
   async getTableSchema(tableName: string): Promise<TableSchema> {
-    if (!this.client) throw new Error('Not connected to Supabase');
+    console.log('[SupabaseAdapter] Fetching table schema for:', tableName);
+    
+    if (!this.isConnected()) {
+      throw new Error('Not connected to backend API');
+    }
 
     try {
-      // Get column information
-      const { data: columns, error: columnsError } = await this.client
-        .from('information_schema.columns')
-        .select('*')
-        .eq('table_schema', 'public')
-        .eq('table_name', tableName)
-        .order('ordinal_position');
+      const response = await fetch(`${this.baseUrl}/api/database/schema/${encodeURIComponent(tableName)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-      if (columnsError) throw columnsError;
+      console.log('[SupabaseAdapter] Schema API response:', {
+        status: response.status,
+        ok: response.ok
+      });
 
-      // Get primary key information
-      const { data: primaryKeys, error: pkError } = await this.client
-        .from('information_schema.key_column_usage')
-        .select('column_name')
-        .eq('table_schema', 'public')
-        .eq('table_name', tableName);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[SupabaseAdapter] Schema API error:', errorText);
+        throw new Error(`Failed to fetch schema: ${response.status} ${errorText}`);
+      }
 
-      if (pkError) console.warn('Could not fetch primary keys:', pkError);
+      const schema = await response.json();
+      console.log('[SupabaseAdapter] Retrieved schema:', schema);
 
-      // Get foreign key information
-      const { data: foreignKeys, error: fkError } = await this.client
-        .from('information_schema.table_constraints')
-        .select(`
-          column_name,
-          foreign_table_name,
-          foreign_column_name
-        `)
-        .eq('table_schema', 'public')
-        .eq('table_name', tableName)
-        .eq('constraint_type', 'FOREIGN KEY');
-
-      if (fkError) console.warn('Could not fetch foreign keys:', fkError);
-
-      const columnSchemas: ColumnSchema[] = columns?.map(col => ({
-        name: col.column_name,
-        type: this.mapPostgresTypeToUniversal(col.data_type),
-        isPrimaryKey: primaryKeys?.some(pk => pk.column_name === col.column_name) || false,
-        isForeignKey: foreignKeys?.some(fk => fk.column_name === col.column_name) || false,
-        isNullable: col.is_nullable === 'YES',
-        defaultValue: col.column_default,
-        relatedTable: foreignKeys?.find(fk => fk.column_name === col.column_name)?.foreign_table_name,
-        relatedColumn: foreignKeys?.find(fk => fk.column_name === col.column_name)?.foreign_column_name,
+      // Map the response to our TableSchema format
+      const columnSchemas: ColumnSchema[] = schema.columns?.map((col: any) => ({
+        name: col.name,
+        type: this.mapPostgresTypeToUniversal(col.type),
+        isPrimaryKey: col.isPrimaryKey || false,
+        isForeignKey: col.isForeignKey || false,
+        isNullable: col.isNullable !== false,
+        defaultValue: col.defaultValue,
+        relatedTable: col.relatedTable,
+        relatedColumn: col.relatedColumn,
       })) || [];
 
       return {
         name: tableName,
         schema: 'public',
         columns: columnSchemas,
-        primaryKey: primaryKeys?.map(pk => pk.column_name) || [],
-        foreignKeys: foreignKeys?.map(fk => ({
-          column: fk.column_name,
-          referencedTable: fk.foreign_table_name,
-          referencedColumn: fk.foreign_column_name,
-        })) || [],
+        primaryKey: schema.primaryKey || [],
+        foreignKeys: schema.foreignKeys || [],
         permissions: {
           canRead: true,
           canWrite: true,
@@ -212,88 +158,83 @@ export class SupabaseAdapter implements DataSourceAdapter {
         },
       };
     } catch (error) {
-      console.error('Error fetching table schema:', error);
+      console.error('[SupabaseAdapter] Error fetching table schema:', error);
       throw error;
     }
   }
 
   async getDistinctValues(tableName: string, column: string): Promise<any[]> {
-    if (!this.client) throw new Error('Not connected to Supabase');
+    console.log('[SupabaseAdapter] Fetching distinct values for:', { tableName, column });
+    
+    if (!this.isConnected()) {
+      throw new Error('Not connected to backend API');
+    }
 
     try {
-      const { data, error } = await this.client
-        .from(tableName)
-        .select(column)
-        .not(column, 'is', null)
-        .limit(100);
+      const response = await fetch(`${this.baseUrl}/api/database/distinct/${encodeURIComponent(tableName)}/${encodeURIComponent(column)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[SupabaseAdapter] Distinct values API error:', errorText);
+        throw new Error(`Failed to fetch distinct values: ${response.status} ${errorText}`);
+      }
 
-      // Extract unique values
-      const values = data?.map(row => row[column]) || [];
-      return [...new Set(values)];
+      const data = await response.json();
+      console.log('[SupabaseAdapter] Retrieved distinct values:', data);
+      return data.values || [];
     } catch (error) {
-      console.error('Error fetching distinct values:', error);
+      console.error('[SupabaseAdapter] Error fetching distinct values:', error);
       return [];
     }
   }
 
   async query(options: QueryOptions): Promise<QueryResult> {
-    if (!this.client) throw new Error('Not connected to Supabase');
+    console.log('[SupabaseAdapter] Executing query with options:', options);
+    
+    if (!this.isConnected()) {
+      throw new Error('Not connected to backend API');
+    }
 
     try {
-      let query = this.client.from(options.table).select('*', { count: 'exact' });
+      const response = await fetch(`${this.baseUrl}/api/database/query`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(options),
+      });
 
-      // Apply select
-      if (options.select && options.select.length > 0) {
-        query = this.client.from(options.table).select(options.select.join(', '), { count: 'exact' });
+      console.log('[SupabaseAdapter] Query API response:', {
+        status: response.status,
+        ok: response.ok
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[SupabaseAdapter] Query API error:', errorText);
+        throw new Error(`Query failed: ${response.status} ${errorText}`);
       }
 
-      // Apply filters
-      if (options.filters) {
-        for (const filter of options.filters) {
-          query = this.applyFilter(query, filter);
-        }
-      }
-
-      // Apply search
-      if (options.search) {
-        query = query.ilike(options.search.column, `%${options.search.query}%`);
-      }
-
-      // Apply sorting
-      if (options.sort) {
-        for (const sort of options.sort) {
-          query = query.order(sort.column, { ascending: sort.direction === 'asc' });
-        }
-      }
-
-      // Apply pagination
-      if (options.pagination) {
-        const offset = (options.pagination.page - 1) * options.pagination.pageSize;
-        query = query.range(offset, offset + options.pagination.pageSize - 1);
-      } else if (options.limit) {
-        query = query.limit(options.limit);
-        if (options.offset) {
-          query = query.range(options.offset, options.offset + options.limit - 1);
-        }
-      }
-
-      const { data, error, count } = await query;
-
-      if (error) throw error;
+      const result = await response.json();
+      console.log('[SupabaseAdapter] Query result:', {
+        dataLength: result.data?.length || 0,
+        count: result.count,
+        hasError: !!result.error
+      });
 
       return {
-        data: data || [],
-        count: count || data?.length || 0,
-        metadata: options.pagination ? {
-          totalPages: Math.ceil((count || 0) / options.pagination.pageSize),
-          currentPage: options.pagination.page,
-          pageSize: options.pagination.pageSize,
-        } : undefined,
+        data: result.data || [],
+        count: result.count || result.data?.length || 0,
+        metadata: result.metadata,
+        error: result.error,
       };
     } catch (error) {
-      console.error('Query error:', error);
+      console.error('[SupabaseAdapter] Query error:', error);
       return {
         data: [],
         count: 0,
@@ -303,41 +244,41 @@ export class SupabaseAdapter implements DataSourceAdapter {
   }
 
   async aggregate(options: AggregationOptions): Promise<AggregationResult> {
-    if (!this.client) throw new Error('Not connected to Supabase');
+    console.log('[SupabaseAdapter] Executing aggregation with options:', options);
+    
+    if (!this.isConnected()) {
+      throw new Error('Not connected to backend API');
+    }
 
     try {
-      // Build aggregation query
-      const selectParts: string[] = [];
-      
-      if (options.groupBy) {
-        selectParts.push(...options.groupBy);
+      const response = await fetch(`${this.baseUrl}/api/database/aggregate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(options),
+      });
+
+      console.log('[SupabaseAdapter] Aggregation API response:', {
+        status: response.status,
+        ok: response.ok
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[SupabaseAdapter] Aggregation API error:', errorText);
+        throw new Error(`Aggregation failed: ${response.status} ${errorText}`);
       }
 
-      for (const agg of options.aggregations) {
-        const alias = agg.alias || `${agg.function}_${agg.column}`;
-        selectParts.push(`${agg.column}.${agg.function}()`);
-      }
-
-      let query = this.client
-        .from(options.table)
-        .select(selectParts.join(', '));
-
-      // Apply filters
-      if (options.filters) {
-        for (const filter of options.filters) {
-          query = this.applyFilter(query, filter);
-        }
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
+      const result = await response.json();
+      console.log('[SupabaseAdapter] Aggregation result:', result);
 
       return {
-        data: data || [],
+        data: result.data || [],
+        error: result.error,
       };
     } catch (error) {
-      console.error('Aggregation error:', error);
+      console.error('[SupabaseAdapter] Aggregation error:', error);
       return {
         data: [],
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -346,22 +287,48 @@ export class SupabaseAdapter implements DataSourceAdapter {
   }
 
   async insert(tableName: string, data: Record<string, any>): Promise<{ success: boolean; data?: any; error?: string }> {
-    if (!this.client) throw new Error('Not connected to Supabase');
+    console.log('[SupabaseAdapter] Inserting data into table:', { tableName, data });
+    
+    if (!this.isConnected()) {
+      throw new Error('Not connected to backend API');
+    }
 
     try {
-      const { data: result, error } = await this.client
-        .from(tableName)
-        .insert(data)
-        .select();
+      const response = await fetch(`${this.baseUrl}/api/database/insert`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          table: tableName,
+          data: data,
+        }),
+      });
 
-      if (error) throw error;
+      console.log('[SupabaseAdapter] Insert API response:', {
+        status: response.status,
+        ok: response.ok
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[SupabaseAdapter] Insert API error:', errorText);
+        return {
+          success: false,
+          error: `Insert failed: ${response.status} ${errorText}`,
+        };
+      }
+
+      const result = await response.json();
+      console.log('[SupabaseAdapter] Insert result:', result);
 
       return {
-        success: true,
-        data: result,
+        success: result.success || false,
+        data: result.data,
+        error: result.error,
       };
     } catch (error) {
-      console.error('Insert error:', error);
+      console.error('[SupabaseAdapter] Insert error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -370,23 +337,49 @@ export class SupabaseAdapter implements DataSourceAdapter {
   }
 
   async update(tableName: string, id: any, data: Record<string, any>): Promise<{ success: boolean; data?: any; error?: string }> {
-    if (!this.client) throw new Error('Not connected to Supabase');
+    console.log('[SupabaseAdapter] Updating data in table:', { tableName, id, data });
+    
+    if (!this.isConnected()) {
+      throw new Error('Not connected to backend API');
+    }
 
     try {
-      const { data: result, error } = await this.client
-        .from(tableName)
-        .update(data)
-        .eq('id', id)
-        .select();
+      const response = await fetch(`${this.baseUrl}/api/database/update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          table: tableName,
+          id: id,
+          data: data,
+        }),
+      });
 
-      if (error) throw error;
+      console.log('[SupabaseAdapter] Update API response:', {
+        status: response.status,
+        ok: response.ok
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[SupabaseAdapter] Update API error:', errorText);
+        return {
+          success: false,
+          error: `Update failed: ${response.status} ${errorText}`,
+        };
+      }
+
+      const result = await response.json();
+      console.log('[SupabaseAdapter] Update result:', result);
 
       return {
-        success: true,
-        data: result,
+        success: result.success || false,
+        data: result.data,
+        error: result.error,
       };
     } catch (error) {
-      console.error('Update error:', error);
+      console.error('[SupabaseAdapter] Update error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -395,19 +388,47 @@ export class SupabaseAdapter implements DataSourceAdapter {
   }
 
   async delete(tableName: string, id: any): Promise<{ success: boolean; error?: string }> {
-    if (!this.client) throw new Error('Not connected to Supabase');
+    console.log('[SupabaseAdapter] Deleting data from table:', { tableName, id });
+    
+    if (!this.isConnected()) {
+      throw new Error('Not connected to backend API');
+    }
 
     try {
-      const { error } = await this.client
-        .from(tableName)
-        .delete()
-        .eq('id', id);
+      const response = await fetch(`${this.baseUrl}/api/database/delete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          table: tableName,
+          id: id,
+        }),
+      });
 
-      if (error) throw error;
+      console.log('[SupabaseAdapter] Delete API response:', {
+        status: response.status,
+        ok: response.ok
+      });
 
-      return { success: true };
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[SupabaseAdapter] Delete API error:', errorText);
+        return {
+          success: false,
+          error: `Delete failed: ${response.status} ${errorText}`,
+        };
+      }
+
+      const result = await response.json();
+      console.log('[SupabaseAdapter] Delete result:', result);
+
+      return {
+        success: result.success || false,
+        error: result.error,
+      };
     } catch (error) {
-      console.error('Delete error:', error);
+      console.error('[SupabaseAdapter] Delete error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -416,58 +437,47 @@ export class SupabaseAdapter implements DataSourceAdapter {
   }
 
   async subscribe(options: SubscriptionOptions): Promise<() => void> {
-    if (!this.client) throw new Error('Not connected to Supabase');
-
-    const channel = this.client
-      .channel(`table-${options.table}`)
-      .on('postgres_changes' as any, {
-        event: options.event === '*' ? '*' : options.event,
-        schema: 'public',
-        table: options.table,
-      }, (payload) => {
-        options.callback(payload);
-      })
-      .subscribe();
-
-    const subscriptionKey = `${options.table}-${options.event}`;
-    this.subscriptions.set(subscriptionKey, channel);
-
+    console.log('[SupabaseAdapter] Setting up subscription for:', options);
+    
+    // For now, return a no-op function since real-time subscriptions
+    // would need WebSocket support in the backend API
+    console.warn('[SupabaseAdapter] Real-time subscriptions not yet implemented for backend API');
+    
     return () => {
-      this.client?.removeChannel(channel);
-      this.subscriptions.delete(subscriptionKey);
+      console.log('[SupabaseAdapter] Unsubscribing from:', options.table);
     };
   }
 
-  private applyFilter(query: any, filter: QueryFilter): any {
-    const { column, operator, value } = filter;
+  // Utility methods
+  escapeValue(value: any): any {
+    if (typeof value === 'string') {
+      return value.replace(/'/g, "''");
+    }
+    return value;
+  }
 
-    switch (operator) {
-      case 'eq':
-        return query.eq(column, value);
-      case 'neq':
-        return query.neq(column, value);
-      case 'gt':
-        return query.gt(column, value);
-      case 'gte':
-        return query.gte(column, value);
-      case 'lt':
-        return query.lt(column, value);
-      case 'lte':
-        return query.lte(column, value);
-      case 'like':
-        return query.like(column, value);
-      case 'ilike':
-        return query.ilike(column, value);
-      case 'in':
-        return query.in(column, Array.isArray(value) ? value : [value]);
-      case 'notin':
-        return query.not(column, 'in', Array.isArray(value) ? value : [value]);
-      case 'is':
-        return query.is(column, value);
-      case 'isnot':
-        return query.not(column, 'is', value);
-      default:
-        return query;
+  buildFilterQuery(filters: QueryFilter[]): any {
+    // The backend API handles filtering server-side
+    // This method is kept for interface compatibility
+    return filters;
+  }
+
+  resolveTemplate(template: string, context: Record<string, any>): any {
+    try {
+      // Simple mustache-style template resolution
+      return template.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
+        const keys = key.trim().split('.');
+        let value = context;
+        
+        for (const k of keys) {
+          value = value?.[k];
+        }
+        
+        return value !== undefined ? String(value) : match;
+      });
+    } catch (error) {
+      console.error('[SupabaseAdapter] Template resolution error:', error);
+      return template;
     }
   }
 
@@ -495,36 +505,6 @@ export class SupabaseAdapter implements DataSourceAdapter {
         return 'uuid';
       default:
         return 'text';
-    }
-  }
-
-  escapeValue(value: any): any {
-    if (typeof value === 'string') {
-      return value.replace(/'/g, "''");
-    }
-    return value;
-  }
-
-  buildFilterQuery(filters: QueryFilter[]): any {
-    // This is handled in the applyFilter method for Supabase
-    return filters;
-  }
-
-  resolveTemplate(template: string, context: Record<string, any>): any {
-    try {
-      return template.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
-        const keys = key.trim().split('.');
-        let value = context;
-        
-        for (const k of keys) {
-          value = value?.[k];
-        }
-        
-        return value !== undefined ? String(value) : match;
-      });
-    } catch (error) {
-      console.error('Template resolution error:', error);
-      return template;
     }
   }
 }

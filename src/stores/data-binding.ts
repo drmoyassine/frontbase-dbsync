@@ -102,76 +102,77 @@ export const useDataBindingStore = create<DataBindingState>()(
       subscriptions: new Map(),
       globalColumnConfigs: new Map(),
 
-      // Initialize the store
+      // Initialize the store with error boundaries
       initialize: async () => {
         console.log('[DataBindingStore] Initializing store...');
         
-        // Auto-detect stored Supabase connections and initialize data sources
-        const state = get();
-        console.log('[DataBindingStore] Current state:', {
-          dataSourcesCount: state.dataSources.length,
-          activeDataSourceId: state.activeDataSourceId
-        });
-        
-        if (state.dataSources.length === 0) {
-          console.log('[DataBindingStore] No existing data sources, checking for stored credentials...');
+        try {
+          const state = get();
+          console.log('[DataBindingStore] Current state:', {
+            dataSourcesCount: state.dataSources.length,
+            activeDataSourceId: state.activeDataSourceId
+          });
           
-          const storedCredentials = await dataSourceManager.getStoredSupabaseCredentials();
-          
-          if (storedCredentials) {
-            console.log('[DataBindingStore] Found stored Supabase credentials, creating direct connection...');
-            
-            // Create direct Supabase connection
-            const supabaseDataSource: DataSourceConfig = {
-              id: 'supabase-direct',
-              name: 'Supabase Database',
-              type: 'supabase',
-              connection: storedCredentials,
-              isActive: true
-            };
-
-            console.log('[DataBindingStore] Adding Supabase data source to store...');
-            set(state => ({
-              ...state,
-              dataSources: [...state.dataSources, supabaseDataSource],
-              activeDataSourceId: supabaseDataSource.id
-            }));
-
-            // Initialize the data source with the manager
-            console.log('[DataBindingStore] Initializing Supabase data source with manager...');
-            const success = await dataSourceManager.addDataSource(supabaseDataSource);
-            console.log('[DataBindingStore] Supabase data source initialization result:', success);
-          } else {
-            console.log('[DataBindingStore] No stored credentials found, creating backend API connection...');
-            
-            // Add backend API adapter for dashboard compatibility
-            const backendDataSource: DataSourceConfig = {
-              id: 'backend-api',
-              name: 'Backend API',
-              type: 'backend-api',
-              connection: {
-                url: window.location.origin
-              },
-              isActive: true
-            };
-
-            console.log('[DataBindingStore] Adding backend API data source to store...');
-            set(state => ({
-              ...state,
-              dataSources: [...state.dataSources, backendDataSource],
-              activeDataSourceId: backendDataSource.id
-            }));
-
-            // Initialize the data source with the manager
-            console.log('[DataBindingStore] Initializing backend API data source with manager...');
-            const success = await dataSourceManager.addDataSource(backendDataSource);
-            console.log('[DataBindingStore] Backend API data source initialization result:', success);
+          // Prevent re-initialization if already in progress or completed
+          if (state.dataSources.length > 0 && state.activeDataSourceId) {
+            console.log('[DataBindingStore] Store already initialized, skipping...');
+            return;
           }
-        } else {
-          console.log('[DataBindingStore] Existing data sources found, skipping initialization');
+          
+          console.log('[DataBindingStore] Setting up unified backend API connection...');
+          
+          // Use unified SupabaseAdapter for all connections
+          const backendDataSource: DataSourceConfig = {
+            id: 'primary-backend',
+            name: 'Backend API',
+            type: 'supabase', // Use the unified adapter
+            connection: {
+              apiUrl: window.location.origin
+            },
+            isActive: true
+          };
+
+          console.log('[DataBindingStore] Adding backend API data source to store...');
+          set(state => ({
+            ...state,
+            dataSources: [...state.dataSources.filter(ds => ds.id !== backendDataSource.id), backendDataSource],
+            activeDataSourceId: backendDataSource.id,
+            errors: new Map()
+          }));
+
+          // Initialize the data source with the manager
+          console.log('[DataBindingStore] Initializing backend API data source with manager...');
+          const success = await dataSourceManager.addDataSource(backendDataSource);
+          console.log('[DataBindingStore] Backend API data source initialization result:', success);
+          
+          if (!success) {
+            console.warn('[DataBindingStore] Failed to initialize data source, but continuing...');
+          }
+        } catch (error) {
+          console.error('[DataBindingStore] Error during initialization:', error);
+          set(state => ({
+            ...state,
+            errors: new Map([['general', `Initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`]])
+          }));
         }
         
         console.log('[DataBindingStore] Store initialization complete');
+      },
+
+      // Reset store state and clear corrupted data
+      resetStore: () => {
+        console.log('[DataBindingStore] Resetting store state...');
+        set({
+          dataSources: [],
+          activeDataSourceId: null,
+          schemas: new Map(),
+          componentBindings: new Map(),
+          cache: new Map(),
+          loading: new Map(),
+          errors: new Map(),
+          subscriptions: new Map(),
+          globalColumnConfigs: new Map(),
+        });
       },
 
       addDataSource: (config: DataSourceConfig) => {

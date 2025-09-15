@@ -1,6 +1,5 @@
 import { DataSourceAdapter, DataSourceConfig, QueryOptions, QueryResult, TableSchema, AggregationOptions, AggregationResult, DataBindingError } from './types';
 import { SupabaseAdapter } from './adapters/SupabaseAdapter';
-import { BackendAPIAdapter } from './adapters/BackendAPIAdapter';
 
 class DataSourceManager {
   private adapters: Map<string, DataSourceAdapter> = new Map();
@@ -18,14 +17,9 @@ class DataSourceManager {
     switch (type) {
       case 'supabase':
         console.log('[DataSourceManager] Creating SupabaseAdapter with credentials:', { 
-          hasUrl: !!credentials?.url, 
-          hasAnonKey: !!credentials?.anonKey, 
-          hasServiceKey: !!credentials?.serviceKey 
+          hasApiUrl: !!credentials?.apiUrl
         });
         return new SupabaseAdapter();
-      case 'backend-api':
-        console.log('[DataSourceManager] Creating BackendAPIAdapter with config:', credentials);
-        return new BackendAPIAdapter();
       default:
         console.error('[DataSourceManager] Unsupported data source type:', type);
         throw new Error(`Unsupported data source type: ${type}`);

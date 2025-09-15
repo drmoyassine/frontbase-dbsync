@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useEffect } from "react";
 import { useAuthStore } from "@/stores/auth";
+import { useDataBindingStore } from "@/stores/data-binding";
 import Index from "./pages/Index";
 import LoginPage from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
@@ -16,6 +17,7 @@ const queryClient = new QueryClient();
 
 const App = () => {
   const { checkAuth, isLoading, isAuthenticated, user } = useAuthStore();
+  const { initialize } = useDataBindingStore();
 
   console.log('=== APP.TSX DEBUG ===');
   console.log('App rendered, current location:', window.location.href);
@@ -27,7 +29,8 @@ const App = () => {
   useEffect(() => {
     console.log('=== APP USEEFFECT: CHECK AUTH ===');
     checkAuth();
-  }, [checkAuth]);
+    initialize();
+  }, [checkAuth, initialize]);
 
   if (isLoading) {
     return (

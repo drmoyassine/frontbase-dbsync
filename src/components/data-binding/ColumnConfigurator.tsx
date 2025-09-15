@@ -8,87 +8,44 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { GripVertical, Eye, EyeOff } from 'lucide-react';
 import { useTableSchema } from '@/hooks/useUniversalData';
-import { ColumnSchema } from '@/lib/data-sources/types';
-
-interface ColumnConfig {
-  name: string;
-  displayName: string;
-  displayType: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
-  visible: boolean;
-  order: number;
-}
 
 interface ColumnConfiguratorProps {
-  tableName?: string;
-  value: ColumnConfig[];
-  onChange: (columns: ColumnConfig[]) => void;
-  showGlobalOverrides?: boolean;
+  tableName: string;
+  dataSourceId?: string;
+  columnOverrides?: { [columnName: string]: any };
+  onColumnOverridesChange: (overrides: { [columnName: string]: any }) => void;
 }
 
 export function ColumnConfigurator({
   tableName,
-  value,
-  onChange,
-  showGlobalOverrides = true
+  dataSourceId,
+  columnOverrides = {},
+  onColumnOverridesChange
 }: ColumnConfiguratorProps) {
   const { schema, loading } = useTableSchema(tableName);
-  const [columns, setColumns] = useState<ColumnConfig[]>(value);
-
-  // Initialize columns from schema
-  useEffect(() => {
-    if (schema && schema.columns.length > 0) {
-      const newColumns = schema.columns.map((col, index) => {
-        const existing = value.find(c => c.name === col.name);
-        return existing || {
-          name: col.name,
-          displayName: col.globalDisplayName || col.name,
-          displayType: col.globalDisplayType || getDefaultDisplayType(col),
-          visible: true,
-          order: index
-        };
-      });
-      setColumns(newColumns);
-      if (JSON.stringify(newColumns) !== JSON.stringify(value)) {
-        onChange(newColumns);
+  
+  const updateColumnOverride = (columnName: string, updates: any) => {
+    const newOverrides = {
+      ...columnOverrides,
+      [columnName]: {
+        ...columnOverrides[columnName],
+        ...updates
       }
-    }
-  }, [schema, value, onChange]);
-
-  const getDefaultDisplayType = (column: ColumnSchema): ColumnConfig['displayType'] => {
-    if (column.type === 'date') return 'date';
-    if (column.type === 'number') return 'text';
-    if (column.type === 'boolean') return 'badge';
-    if (column.name.toLowerCase().includes('email')) return 'link';
-    if (column.name.toLowerCase().includes('url') || column.name.toLowerCase().includes('link')) return 'link';
-    if (column.name.toLowerCase().includes('image') || column.name.toLowerCase().includes('photo')) return 'image';
-    return 'text';
-  };
-
-  const updateColumn = (index: number, updates: Partial<ColumnConfig>) => {
-    const newColumns = [...columns];
-    newColumns[index] = { ...newColumns[index], ...updates };
-    setColumns(newColumns);
-    onChange(newColumns);
+    };
+    onColumnOverridesChange(newOverrides);
   };
 
   const toggleAllVisible = (visible: boolean) => {
-    const newColumns = columns.map(col => ({ ...col, visible }));
-    setColumns(newColumns);
-    onChange(newColumns);
-  };
-
-  const reorderColumn = (fromIndex: number, toIndex: number) => {
-    const newColumns = [...columns];
-    const [movedColumn] = newColumns.splice(fromIndex, 1);
-    newColumns.splice(toIndex, 0, movedColumn);
+    if (!schema) return;
     
-    // Update order values
-    newColumns.forEach((col, index) => {
-      col.order = index;
+    const newOverrides = { ...columnOverrides };
+    schema.columns.forEach(column => {
+      newOverrides[column.name] = {
+        ...newOverrides[column.name],
+        visible
+      };
     });
-    
-    setColumns(newColumns);
-    onChange(newColumns);
+    onColumnOverridesChange(newOverrides);
   };
 
   if (loading) {
@@ -141,8 +98,8 @@ export function ColumnConfigurator({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {columns.map((column, index) => {
-          const schemaColumn = schema.columns.find(c => c.name === column.name);
+        {schema.columns.map((column, index) => {
+          const override = columnOverrides[column.name] || {};
           
           return (
             <div
@@ -157,8 +114,8 @@ export function ColumnConfigurator({
               {/* Visibility Toggle */}
               <div className="flex items-center gap-2">
                 <Switch
-                  checked={column.visible}
-                  onCheckedChange={(visible) => updateColumn(index, { visible })}
+                  checked={override.visible !== false}
+                  onCheckedChange={(visible) => updateColumnOverride(column.name, { visible })}
                 />
                 <Label className="text-sm">Show</Label>
               </div>
@@ -167,14 +124,14 @@ export function ColumnConfigurator({
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{column.name}</span>
-                  {schemaColumn?.isPrimaryKey && (
+                  {column.isPrimaryKey && (
                     <Badge variant="outline" className="text-xs">PK</Badge>
                   )}
-                  {schemaColumn?.isForeignKey && (
+                  {column.isForeignKey && (
                     <Badge variant="outline" className="text-xs">FK</Badge>
                   )}
                   <Badge variant="secondary" className="text-xs">
-                    {schemaColumn?.type}
+                    {column.type}
                   </Badge>
                 </div>
                 
@@ -183,8 +140,8 @@ export function ColumnConfigurator({
                   <div>
                     <Label className="text-xs text-muted-foreground">Display Name</Label>
                     <Input
-                      value={column.displayName}
-                      onChange={(e) => updateColumn(index, { displayName: e.target.value })}
+                      value={override.displayName || column.name}
+                      onChange={(e) => updateColumnOverride(column.name, { displayName: e.target.value })}
                       placeholder={column.name}
                       className="h-8"
                     />
@@ -194,10 +151,8 @@ export function ColumnConfigurator({
                   <div>
                     <Label className="text-xs text-muted-foreground">Display Type</Label>
                     <Select
-                      value={column.displayType}
-                      onValueChange={(displayType: ColumnConfig['displayType']) => 
-                        updateColumn(index, { displayType })
-                      }
+                      value={override.displayType || 'text'}
+                      onValueChange={(displayType) => updateColumnOverride(column.name, { displayType })}
                     >
                       <SelectTrigger className="h-8">
                         <SelectValue />
@@ -219,7 +174,7 @@ export function ColumnConfigurator({
           );
         })}
         
-        {columns.length === 0 && (
+        {schema.columns.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
             No columns found in the selected table
           </div>

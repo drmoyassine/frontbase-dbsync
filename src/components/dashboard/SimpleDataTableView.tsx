@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { debug } from '@/lib/debug';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,13 +47,14 @@ export const SimpleDataTableView: React.FC = () => {
     }
   }, [selectedTable, offset]);
 
-  // Simplified auto-selection with memoization
-  const shouldAutoSelect = supabaseTables.length > 0 && !selectedTable;
+  // Simplified auto-selection with stable dependencies
   useEffect(() => {
-    if (shouldAutoSelect) {
-      setSelectedTable(supabaseTables[0].name);
+    if (supabaseTables.length > 0 && !selectedTable) {
+      const firstTable = supabaseTables[0].name;
+      setSelectedTable(firstTable);
+      debug.log('SIMPLE_TABLE_VIEW', 'Auto-selecting first table:', firstTable);
     }
-  }, [shouldAutoSelect, supabaseTables]);
+  }, [supabaseTables.length, selectedTable]);
 
   const fetchTableData = async () => {
     if (!selectedTable) return;

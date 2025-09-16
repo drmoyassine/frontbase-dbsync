@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { debug } from '@/lib/debug';
 import { Button } from '@/components/ui/button';
 import { Database, RefreshCw, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -19,7 +20,7 @@ export const SimpleDataTableView: React.FC = () => {
   // Auto-select first table when tables become available (only once)
   React.useEffect(() => {
     if (tables.length > 0 && !selectedTable && !hasAutoSelected && tables[0]?.name) {
-      console.log('[SimpleDataTableView] Auto-selecting first table:', tables[0].name);
+      debug.log('SIMPLE_TABLE_VIEW', 'Auto-selecting first table:', tables[0].name);
       setSelectedTable(tables[0].name);
       setHasAutoSelected(true);
     }

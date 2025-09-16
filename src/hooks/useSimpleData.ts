@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
+import { debug } from '@/lib/debug';
 
 interface ComponentDataBinding {
   componentId: string;
@@ -127,7 +128,7 @@ export function useSimpleData({
       clearError(componentId);
       await queryData(componentId, effectiveBinding);
     } catch (error) {
-      console.error('[useSimpleData] Fetch error:', error);
+      debug.error('SIMPLE_DATA', 'Fetch error:', error);
     }
   }, [componentId, getEffectiveBinding, connected, queryData, clearError]);
 

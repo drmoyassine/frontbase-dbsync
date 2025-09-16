@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { debug } from '@/lib/debug';
+import { requestDeduplicator, generateRequestKey } from '@/lib/request-deduplicator';
 
 interface User {
   id: string;
@@ -99,7 +101,7 @@ export const useAuthStore = create<AuthState>()(
             credentials: 'include',
           });
         } catch (error) {
-          console.error('Logout error:', error);
+          debug.error('AUTH', 'Logout error:', error);
         } finally {
           set({ 
             user: null, 
@@ -110,104 +112,83 @@ export const useAuthStore = create<AuthState>()(
       },
 
       checkAuth: async () => {
-        console.log('=== AUTH STORE: CHECK AUTH ===');
-        console.log('Starting authentication check...');
-        console.log('Current URL:', window.location.href);
-        console.log('Current cookies:', document.cookie);
+        const requestKey = generateRequestKey('/api/auth/me');
         
-        const currentState = get();
-        console.log('Current localStorage state:', {
-          hasUser: !!currentState.user,
-          isAuthenticated: currentState.isAuthenticated,
-          userId: currentState.user?.id
-        });
-        
-        try {
-          set({ isLoading: true });
+        return requestDeduplicator.dedupe(requestKey, async () => {
+          debug.critical('AUTH', 'Starting authentication check');
+          const currentState = get();
           
-          const response = await fetch('/api/auth/me', {
-            credentials: 'include',
-          });
-
-          console.log('Auth check response status:', response.status);
-          console.log('Auth check response ok:', response.ok);
-          console.log('Auth check response headers:', Object.fromEntries(response.headers.entries()));
-
-          if (response.ok) {
-            const data = await response.json();
-            console.log('Auth check successful, user data:', data);
+          try {
+            set({ isLoading: true });
             
-            if (data.recovered) {
-              console.log('🔄 Session was recovered automatically');
-            }
-            
-            set({ 
-              user: data.user, 
-              isAuthenticated: true, 
-              isLoading: false 
+            const response = await fetch('/api/auth/me', {
+              credentials: 'include',
             });
-            console.log('User is authenticated:', data.user);
-          } else {
-            // Check if we should attempt session recovery
-            // Skip recovery if we're on the login page - user should authenticate properly
-            const isOnLoginPage = window.location.pathname.includes('/auth/login');
-            
-            if (response.status === 401 && currentState.user && currentState.isAuthenticated && !isOnLoginPage) {
-              console.log('🔄 AUTH STORE: Attempting session recovery...');
-              console.log('🔄 AUTH STORE: User in localStorage:', currentState.user.id);
-              
-              try {
-                const recoveryResponse = await fetch('/api/auth/me', {
-                  credentials: 'include',
-                  headers: {
-                    'X-Recovery-User-Id': currentState.user.id,
-                    'Authorization': 'Bearer recovery-token'
-                  }
-                });
 
-                if (recoveryResponse.ok) {
-                  const recoveryData = await recoveryResponse.json();
-                  console.log('🔄 AUTH STORE: Session recovery successful:', recoveryData);
-                  
-                  set({ 
-                    user: recoveryData.user, 
-                    isAuthenticated: true, 
-                    isLoading: false 
+            if (response.ok) {
+              const data = await response.json();
+              
+              if (data.recovered) {
+                debug.auth.recovery('CHECK', data.user?.id);
+              } else {
+                debug.auth.success('CHECK', data.user?.id);
+              }
+              
+              set({ 
+                user: data.user, 
+                isAuthenticated: true, 
+                isLoading: false 
+              });
+            } else {
+              // Check if we should attempt session recovery
+              const isOnLoginPage = window.location.pathname.includes('/auth/login');
+              
+              if (response.status === 401 && currentState.user && currentState.isAuthenticated && !isOnLoginPage) {
+                debug.critical('AUTH', 'Attempting session recovery for user:', currentState.user.id);
+                
+                try {
+                  const recoveryResponse = await fetch('/api/auth/me', {
+                    credentials: 'include',
+                    headers: {
+                      'X-Recovery-User-Id': currentState.user.id,
+                      'Authorization': 'Bearer recovery-token'
+                    }
                   });
-                  console.log('🔄 User session recovered successfully');
-                  return;
+
+                  if (recoveryResponse.ok) {
+                    const recoveryData = await recoveryResponse.json();
+                    debug.auth.recovery('RECOVERY', recoveryData.user?.id);
+                    
+                    set({ 
+                      user: recoveryData.user, 
+                      isAuthenticated: true, 
+                      isLoading: false 
+                    });
+                    return;
+                  }
+                } catch (recoveryError) {
+                  debug.error('AUTH', 'Session recovery failed:', recoveryError);
                 }
-              } catch (recoveryError) {
-                console.error('🔄 AUTH STORE: Session recovery failed:', recoveryError);
+              } else if (isOnLoginPage && currentState.user && currentState.isAuthenticated) {
+                debug.critical('AUTH', 'Clearing stale auth data on login page');
               }
-            } else if (isOnLoginPage) {
-              console.log('🔄 AUTH STORE: Skipping session recovery on login page');
-              // Clear stale localStorage data when on login page
-              if (currentState.user && currentState.isAuthenticated) {
-                console.log('🔄 AUTH STORE: Clearing stale auth data on login page');
-              }
+              
+              debug.auth.failure('CHECK', `Status: ${response.status}`);
+              set({ 
+                user: null, 
+                isAuthenticated: false, 
+                isLoading: false 
+              });
             }
-            
-            const errorText = await response.text();
-            console.log('Auth check failed with status:', response.status);
-            console.log('Auth check error response:', errorText);
+          } catch (error) {
+            debug.error('AUTH', 'Network/parse error:', error);
             set({ 
               user: null, 
               isAuthenticated: false, 
               isLoading: false 
             });
-            console.log('User is NOT authenticated');
           }
-        } catch (error) {
-          console.error('Auth check network/parse error:', error);
-          set({ 
-            user: null, 
-            isAuthenticated: false, 
-            isLoading: false 
-          });
-          console.log('User is NOT authenticated due to error');
-        }
-        console.log('=== AUTH CHECK COMPLETED ===');
+        });
       },
 
       setUser: (user: User | null) => {

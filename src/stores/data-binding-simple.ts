@@ -1,5 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { immer } from 'zustand/middleware/immer';
+import { debug } from '@/lib/debug';
+import { requestDeduplicator, generateRequestKey } from '@/lib/request-deduplicator';
+import { useDashboardStore } from './dashboard';
 
 // Simplified interfaces matching dashboard pattern
 interface SupabaseTable {

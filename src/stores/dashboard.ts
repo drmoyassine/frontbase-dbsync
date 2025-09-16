@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { debug } from '@/lib/debug';
+import { requestDeduplicator, generateRequestKey } from '@/lib/request-deduplicator';
 
 interface DatabaseConnection {
   connected: boolean;
@@ -74,18 +76,25 @@ export const useDashboardStore = create<DashboardState>()(
   setSelectedTable: (table) => set({ selectedTable: table }),
   
   fetchConnections: async () => {
-    try {
-      const response = await fetch('/api/database/connections', {
-        credentials: 'include'
-      });
-      
-      if (response.ok) {
-        const connections = await response.json();
-        set({ connections });
+    const requestKey = generateRequestKey('/api/database/connections');
+    
+    return requestDeduplicator.dedupe(requestKey, async () => {
+      try {
+        const response = await fetch('/api/database/connections', {
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          const connections = await response.json();
+          set({ connections });
+          debug.critical('DASHBOARD', 'Connections updated:', Object.keys(connections));
+        } else {
+          debug.error('DASHBOARD', 'Failed to fetch connections:', response.status);
+        }
+      } catch (error) {
+        debug.error('DASHBOARD', 'Connection fetch error:', error);
       }
-    } catch (error) {
-      console.error('Failed to fetch connections:', error);
-    }
+    });
   },
 
   fetchSupabaseTables: async () => {

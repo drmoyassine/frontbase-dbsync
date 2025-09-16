@@ -3,9 +3,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { useAuthStore } from "@/stores/auth";
-import { useDataBindingStore } from "@/stores/data-binding-simple";
+import { useDashboardStore } from "@/stores/dashboard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import LoginPage from "./pages/LoginPage";
@@ -17,25 +17,41 @@ import ProtectedRoute from "./components/ProtectedRoute";
 const queryClient = new QueryClient();
 
 const App = () => {
-  const { checkAuth, isLoading, isAuthenticated, user } = useAuthStore();
-  const { initialize } = useDataBindingStore();
+  const { checkAuth, isLoading, isAuthenticated } = useAuthStore();
+  const { fetchConnections } = useDashboardStore();
+  const [appInitialized, setAppInitialized] = useState(false);
 
-  // Memoize functions to prevent unnecessary re-renders
-  const initializeApp = useCallback(() => {
-    checkAuth();
-    initialize();
-  }, []); // Empty dependency array is intentional
+  // Sequential initialization: Auth → Dashboard → Ready
+  const initializeApp = useCallback(async () => {
+    try {
+      // Step 1: Check authentication
+      await checkAuth();
+      
+      // Step 2: If authenticated, fetch dashboard connections
+      if (isAuthenticated && !isLoading) {
+        await fetchConnections();
+        setAppInitialized(true);
+      }
+    } catch (error) {
+      console.error('App initialization failed:', error);
+      setAppInitialized(true); // Still show the app even if connections fail
+    }
+  }, [checkAuth, fetchConnections, isAuthenticated, isLoading]);
 
   useEffect(() => {
-    initializeApp();
-  }, [initializeApp]);
+    if (!isLoading) {
+      initializeApp();
+    }
+  }, [initializeApp, isLoading]);
 
-  if (isLoading) {
+  if (isLoading || !appInitialized) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground">
+            {isLoading ? 'Checking authentication...' : 'Loading connections...'}
+          </p>
         </div>
       </div>
     );

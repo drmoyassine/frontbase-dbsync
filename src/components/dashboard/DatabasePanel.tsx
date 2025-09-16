@@ -4,8 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Database, ExternalLink, AlertCircle, CheckCircle, Plus, Settings, Trash2 } from 'lucide-react';
 import { useDashboardStore } from '@/stores/dashboard';
-import { useDataBindingStore } from '@/stores/data-binding-simple';
-import { useAuthStore } from '@/stores/auth';
+import { useDataBindingConditional } from '@/hooks/useDataBindingConditional';
 import { SupabaseConnectionModal } from './SupabaseConnectionModal';
 import { SimpleDataTableView } from '@/components/admin/SimpleDataTableView';
 import { useToast } from '@/hooks/use-toast';
@@ -22,20 +21,11 @@ import {
 } from '@/components/ui/alert-dialog';
 
 export const DatabasePanel: React.FC = () => {
-  const { connections, setSupabaseModalOpen } = useDashboardStore();
-  const { connected } = useDataBindingStore();
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { connections, setSupabaseModalOpen, fetchConnections } = useDashboardStore();
   const { toast } = useToast();
-
-  // Get stable store functions - only fetch connections, not data binding initialization
-  const fetchConnections = useDashboardStore(state => state.fetchConnections);
-
-  // Initialize connections only (data binding is handled by App.tsx)
-  useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      fetchConnections();
-    }
-  }, [isAuthenticated, isLoading, fetchConnections]);
+  
+  // Conditionally initialize data-binding only for this component (which needs it for SimpleDataTableView)
+  const { connected: bindingConnected } = useDataBindingConditional();
 
   const handleDisconnectSupabase = async () => {
     try {
@@ -234,6 +224,18 @@ export const DatabasePanel: React.FC = () => {
         </Card>
       </div>
 
+      {/* Data Tables Section - Only show when connected */}
+      {connections.supabase.connected && bindingConnected && (
+        <div className="mt-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold tracking-tight">Database Tables</h2>
+            <p className="text-muted-foreground">
+              View and manage your Supabase database tables
+            </p>
+          </div>
+          <SimpleDataTableView />
+        </div>
+      )}
 
       <SupabaseConnectionModal />
     </div>

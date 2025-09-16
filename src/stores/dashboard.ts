@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { useCallback } from 'react';
 
 interface DatabaseConnection {
   connected: boolean;
@@ -73,7 +74,7 @@ export const useDashboardStore = create<DashboardState>()(
   setTableDataModalOpen: (open) => set({ tableDataModalOpen: open }),
   setSelectedTable: (table) => set({ selectedTable: table }),
   
-  fetchConnections: async () => {
+  fetchConnections: useCallback(async () => {
     try {
       const response = await fetch('/api/database/connections', {
         credentials: 'include'
@@ -86,41 +87,31 @@ export const useDashboardStore = create<DashboardState>()(
     } catch (error) {
       console.error('Failed to fetch connections:', error);
     }
-  },
+  }, []),
 
-  fetchSupabaseTables: async () => {
-    console.log('=== DASHBOARD STORE: FETCH SUPABASE TABLES ===');
+  fetchSupabaseTables: useCallback(async () => {
     set({ tablesLoading: true, tablesError: null });
     try {
       const response = await fetch('/api/database/supabase-tables', {
         credentials: 'include'
       });
-      console.log('Tables API response status:', response.status);
-      console.log('Tables API response ok:', response.ok);
       
       if (response.ok) {
         const result = await response.json();
-        console.log('Tables API result:', result);
-        console.log('Tables API success:', result.success);
         
         if (result.success) {
-          console.log('Tables data:', result.data.tables);
           set({ supabaseTables: result.data.tables, tablesLoading: false });
         } else {
-          console.error('Tables API returned success=false:', result.message);
           set({ tablesError: result.message, tablesLoading: false });
         }
       } else {
-        console.error('Tables API failed with status:', response.status);
-        const errorText = await response.text();
-        console.error('Tables API error response:', errorText);
         set({ tablesError: 'Failed to fetch tables', tablesLoading: false });
       }
     } catch (error) {
-      console.error('Failed to fetch Supabase tables - network/parse error:', error);
+      console.error('Failed to fetch Supabase tables:', error);
       set({ tablesError: 'Failed to fetch tables', tablesLoading: false });
     }
-  },
+  }, []),
     }),
     {
       name: 'dashboard-storage',

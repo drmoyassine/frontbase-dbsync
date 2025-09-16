@@ -33,7 +33,7 @@ export const DatabasePanel: React.FC = () => {
       await fetchConnections();
       await initializeDataBinding();
     }
-  }, [fetchConnections, isAuthenticated, isLoading, initializeDataBinding]);
+  }, [isAuthenticated, isLoading]);
 
   // Add automatic connection restoration on mount for persistent connections
   useEffect(() => {

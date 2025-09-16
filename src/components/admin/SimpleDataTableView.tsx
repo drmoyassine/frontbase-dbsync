@@ -12,12 +12,12 @@ export const SimpleDataTableView: React.FC = () => {
   const { connected, connectionError, tables, tablesLoading, tablesError, fetchTables } = useDataBindingStore();
   const [selectedTable, setSelectedTable] = useState<string>('');
 
-  // Auto-select first table when tables become available
+  // Auto-select first table when tables become available and none is selected
   React.useEffect(() => {
-    if (tables.length > 0 && !selectedTable) {
+    if (tables.length > 0 && !selectedTable && tables[0]?.name) {
       setSelectedTable(tables[0].name);
     }
-  }, [tables.length, selectedTable]);
+  }, [tables, selectedTable]);
 
   // Show connection error if any
   if (connectionError) {

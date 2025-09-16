@@ -89,13 +89,11 @@ export function useSimpleData({
   const sortingKey = `${sorting.column || ''}-${sorting.direction || ''}`;
   const filtersKey = JSON.stringify(filters);
   
-  // Build effective binding with current state - now properly memoized
+  // Build effective binding with current state - properly memoized and debounced
   const getEffectiveBinding = useCallback((): ComponentDataBinding | null => {
-    console.log('[useSimpleData] Building effective binding for:', componentId);
-    
     if (!binding || !binding.tableName) return null;
 
-    const effectiveBinding = {
+    return {
       ...binding,
       pagination: {
         enabled: binding.pagination.enabled,
@@ -116,20 +114,15 @@ export function useSimpleData({
         },
       },
     };
-    
-    console.log('[useSimpleData] Effective binding:', effectiveBinding);
-    return effectiveBinding;
   }, [bindingKey, paginationKey, sortingKey, filtersKey, searchQuery]);
 
-  // Fetch data function - memoized to prevent excessive calls
+  // Fetch data function - memoized and debounced to prevent excessive calls
   const fetchData = useCallback(async () => {
     const effectiveBinding = getEffectiveBinding();
     if (!effectiveBinding || !connected) {
-      console.log('[useSimpleData] Skipping fetch - no binding or not connected');
       return;
     }
 
-    console.log('[useSimpleData] Fetching data for:', componentId);
     try {
       clearError(componentId);
       await queryData(componentId, effectiveBinding);
@@ -141,30 +134,26 @@ export function useSimpleData({
   // Load schema when table changes - only once per table
   useEffect(() => {
     if (binding?.tableName && connected && !schema) {
-      console.log('[useSimpleData] Loading schema for:', binding.tableName);
       loadTableSchema(binding.tableName);
     }
   }, [binding?.tableName, connected, schema, loadTableSchema]);
 
-  // Auto-fetch data with debouncing to prevent excessive calls
+  // Auto-fetch data with optimized debouncing
   useEffect(() => {
     if (!autoFetch || !binding?.tableName || !connected) return;
     
-    console.log('[useSimpleData] Auto-fetch triggered for:', componentId);
-    
-    // Debounce data fetching to prevent rapid successive calls
+    // Longer debounce to prevent excessive calls during rapid state changes
     const timeoutId = setTimeout(() => {
       fetchData();
-    }, 100);
+    }, 300);
 
     return () => clearTimeout(timeoutId);
   }, [autoFetch, bindingKey, connected, fetchData]);
 
-  // Update component binding only when necessary - prevent circular updates
+  // Update component binding with optimized frequency
   useEffect(() => {
     const effectiveBinding = getEffectiveBinding();
     if (effectiveBinding) {
-      console.log('[useSimpleData] Updating component binding for:', componentId);
       setComponentBinding(componentId, effectiveBinding);
     }
   }, [componentId, bindingKey, paginationKey, sortingKey, filtersKey, searchQuery, setComponentBinding]);

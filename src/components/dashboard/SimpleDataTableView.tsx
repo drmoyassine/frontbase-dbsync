@@ -25,17 +25,6 @@ export const SimpleDataTableView: React.FC = () => {
     connections
   } = useDashboardStore();
 
-  // Add extensive logging for debugging
-  console.log('=== SimpleDataTableView DEBUG ===');
-  console.log('Component mounted/re-rendered');
-  console.log('Connections state:', connections);
-  console.log('Supabase connected:', connections.supabase.connected);
-  console.log('Supabase URL:', connections.supabase.url);
-  console.log('Tables loading:', tablesLoading);
-  console.log('Tables error:', tablesError);
-  console.log('Supabase tables:', supabaseTables);
-  console.log('=== END DEBUG ===');
-
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [tableData, setTableData] = useState<TableData | null>(null);
@@ -44,146 +33,84 @@ export const SimpleDataTableView: React.FC = () => {
   const [offset, setOffset] = useState(0);
   const limit = 20;
 
+  // Optimized effects with reduced logging
   useEffect(() => {
-    console.log('=== USEEFFECT: FETCH TABLES ===');
-    console.log('Supabase connected:', connections.supabase.connected);
     if (connections.supabase.connected) {
-      console.log('Fetching Supabase tables...');
       fetchSupabaseTables();
-    } else {
-      console.log('Supabase not connected, skipping table fetch');
     }
   }, [connections.supabase.connected, fetchSupabaseTables]);
 
   useEffect(() => {
-    console.log('=== USEEFFECT: FETCH TABLE DATA ===');
-    console.log('Selected table:', selectedTable);
-    console.log('Offset:', offset);
     if (selectedTable) {
-      console.log('Fetching table data for:', selectedTable);
       fetchTableData();
-    } else {
-      console.log('No table selected, skipping data fetch');
     }
   }, [selectedTable, offset]);
 
+  // Simplified auto-selection with memoization
+  const shouldAutoSelect = supabaseTables.length > 0 && !selectedTable;
   useEffect(() => {
-    console.log('=== USEEFFECT: AUTO SELECT TABLE ===');
-    console.log('Tables available:', supabaseTables.length);
-    console.log('Current selected table:', selectedTable);
-    if (supabaseTables.length > 0 && !selectedTable) {
-      console.log('Auto-selecting first table:', supabaseTables[0].name);
+    if (shouldAutoSelect) {
       setSelectedTable(supabaseTables[0].name);
     }
-  }, [supabaseTables, selectedTable]);
+  }, [shouldAutoSelect, supabaseTables]);
 
   const fetchTableData = async () => {
     if (!selectedTable) return;
-
-    console.log('=== FETCHING TABLE DATA ===');
-    console.log('Selected table:', selectedTable);
-    console.log('Limit:', limit);
-    console.log('Offset:', offset);
 
     setDataLoading(true);
     setDataError(null);
 
     try {
       const url = `/api/database/table-data/${selectedTable}?limit=${limit}&offset=${offset}`;
-      console.log('Fetching from URL:', url);
-      
       const response = await fetch(url, {
         credentials: 'include'
       });
 
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Response error text:', errorText);
         throw new Error(`Failed to fetch table data: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
-      console.log('Raw API result:', result);
-      console.log('Result success:', result.success);
-      console.log('Result data type:', typeof result.data);
-      console.log('Result data:', result.data);
-      console.log('Result data length:', result.data?.length);
-      
       if (!result.success) {
-        console.error('API returned success=false:', result.message);
         throw new Error(result.message || 'Failed to fetch table data');
       }
 
       // Get schema for columns
-      console.log('Fetching schema for table:', selectedTable);
       const schemaResponse = await fetch(`/api/database/table-schema/${selectedTable}`, {
         credentials: 'include'
       });
 
-      console.log('Schema response status:', schemaResponse.status);
-      
       let columns: { column_name: string; data_type: string }[] = [];
       if (schemaResponse.ok) {
         const schemaResult = await schemaResponse.json();
-        console.log('Schema result:', schemaResult);
-        console.log('Schema result.data:', schemaResult.data);
         if (schemaResult.success && schemaResult.data) {
-          // Try different possible locations for columns in the schema response
           columns = schemaResult.data.columns || schemaResult.columns || schemaResult.data || [];
-          console.log('Columns from schema:', columns);
         }
       }
 
-      // Add defensive programming - check if result.data exists and is array
-      console.log('Checking result.data existence...');
-      console.log('result.data exists:', !!result.data);
-      console.log('result.data is array:', Array.isArray(result.data));
-      
-      // If no schema from API, infer from data (with null check)
+      // If no schema from API, infer from data
       if (columns.length === 0 && result.data && Array.isArray(result.data) && result.data.length > 0) {
-        console.log('Inferring columns from first row');
         const firstRow = result.data[0];
-        console.log('First row:', firstRow);
         columns = Object.keys(firstRow).map(key => ({
           column_name: key,
           data_type: typeof firstRow[key]
         }));
-        console.log('Inferred columns:', columns);
-      } else if (!result.data || !Array.isArray(result.data)) {
-        console.error('result.data is not a valid array:', result.data);
-        // Set empty columns if data is invalid
-        columns = [];
       }
 
       // Ensure we have valid data before setting state
       const validData = result.data && Array.isArray(result.data) ? result.data : [];
-      console.log('Valid data length:', validData.length);
       
-      const tableDataToSet = {
+      setTableData({
         data: validData,
         columns,
         total: validData.length
-      };
-      
-      console.log('Setting table data:', tableDataToSet);
-      setTableData(tableDataToSet);
-      console.log('=== TABLE DATA FETCH COMPLETED ===');
+      });
       
     } catch (error) {
-      console.error('=== ERROR FETCHING TABLE DATA ===');
-      console.error('Error details:', error);
-      console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
-      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
-      
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch table data';
-      console.log('Setting error message:', errorMessage);
       setDataError(errorMessage);
     } finally {
-      console.log('Setting dataLoading to false');
       setDataLoading(false);
     }
   };

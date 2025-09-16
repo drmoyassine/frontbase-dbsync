@@ -27,27 +27,15 @@ export const DatabasePanel: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuthStore();
   const { toast } = useToast();
 
-  // Get stable store functions
+  // Get stable store functions - only fetch connections, not data binding initialization
   const fetchConnections = useDashboardStore(state => state.fetchConnections);
-  const initializeDataBinding = useDataBindingStore(state => state.initialize);
 
-  // Initialize only once when authenticated
+  // Initialize connections only (data binding is handled by App.tsx)
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      console.log('[DatabasePanel] Initializing connections and data binding...');
-      
-      const initializeAll = async () => {
-        try {
-          await fetchConnections();
-          await initializeDataBinding();
-        } catch (error) {
-          console.error('[DatabasePanel] Initialization error:', error);
-        }
-      };
-      
-      initializeAll();
+      fetchConnections();
     }
-  }, [isAuthenticated, isLoading, fetchConnections, initializeDataBinding]);
+  }, [isAuthenticated, isLoading, fetchConnections]);
 
   const handleDisconnectSupabase = async () => {
     try {

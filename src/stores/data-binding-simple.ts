@@ -107,8 +107,6 @@ export const useDataBindingStore = create<DataBindingState>()(
           return state.initializationPromise;
         }
 
-        console.log('[DataBindingStore] Starting initialization...');
-        
         const initPromise = (async () => {
           set({ initializing: true, connectionError: null });
 
@@ -123,8 +121,6 @@ export const useDataBindingStore = create<DataBindingState>()(
             if (response.ok) {
               const connections = await response.json();
               const connected = connections.supabase?.connected || false;
-              
-              console.log('[DataBindingStore] Connection status:', connected);
               
               set({ 
                 connected,
@@ -168,8 +164,6 @@ export const useDataBindingStore = create<DataBindingState>()(
           return state.tablesPromise;
         }
 
-        console.log('[DataBindingStore] Fetching tables...');
-        
         const fetchPromise = (async () => {
           set({ tablesLoading: true, tablesError: null });
           
@@ -181,7 +175,6 @@ export const useDataBindingStore = create<DataBindingState>()(
             if (response.ok) {
               const result = await response.json();
               if (result.success && result.data?.tables) {
-                console.log('[DataBindingStore] Tables loaded:', result.data.tables.length);
                 set({ 
                   tables: result.data.tables,
                   tablesLoading: false,
@@ -217,7 +210,6 @@ export const useDataBindingStore = create<DataBindingState>()(
       },
 
       loadTableSchema: async (tableName: string): Promise<TableSchema | null> => {
-        
         // Check cache first
         const cached = get().schemas.get(tableName);
         if (cached) {
@@ -232,8 +224,6 @@ export const useDataBindingStore = create<DataBindingState>()(
           if (response.ok) {
             const result = await response.json();
             if (result.success && result.data) {
-              console.log('[DataBindingStore] Raw schema data:', result.data);
-              
               // Transform database column structure to frontend format
               const transformedColumns = result.data.columns.map((col: any) => ({
                 name: col.column_name || col.name, // Handle both formats
@@ -242,8 +232,6 @@ export const useDataBindingStore = create<DataBindingState>()(
                 default: col.column_default || col.default,
                 isPrimaryKey: col.is_primary || col.isPrimaryKey
               }));
-              
-              console.log('[DataBindingStore] Transformed columns:', transformedColumns);
               
               const schema: TableSchema = { columns: transformedColumns };
               

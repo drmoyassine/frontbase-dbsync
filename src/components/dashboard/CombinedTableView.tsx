@@ -33,6 +33,8 @@ import {
 } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { EnhancedDataTableView } from '@/components/admin/EnhancedDataTableView';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface TableData {
   columns: string[];
@@ -226,7 +228,18 @@ export const CombinedTableView: React.FC = () => {
 
   return (
     <>
-      <Card>
+      <Tabs defaultValue="enhanced" className="mb-6">
+        <TabsList>
+          <TabsTrigger value="enhanced">Enhanced Admin Kit</TabsTrigger>
+          <TabsTrigger value="classic">Classic View</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="enhanced">
+          <EnhancedDataTableView />
+        </TabsContent>
+        
+        <TabsContent value="classic">
+          <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
@@ -445,6 +458,8 @@ export const CombinedTableView: React.FC = () => {
           ) : null}
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
 
       <TableSchemaModal
         open={tableSchemaModalOpen}

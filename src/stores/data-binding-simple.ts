@@ -96,12 +96,33 @@ export const useDataBindingStore = create<DataBindingState>()(
         
         // Check connection status
         try {
+          console.log('[DataBindingStore] Testing API connectivity to /api/database/connections');
           const response = await fetch('/api/database/connections', {
-            credentials: 'include'
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+            }
           });
           
+          console.log('[DataBindingStore] API response status:', response.status);
+          console.log('[DataBindingStore] API response ok:', response.ok);
+          console.log('[DataBindingStore] API response headers:', Object.fromEntries(response.headers.entries()));
+          
           if (response.ok) {
-            const connections = await response.json();
+            const responseText = await response.text();
+            console.log('[DataBindingStore] Raw response text (first 200 chars):', responseText.substring(0, 200));
+            
+            // Check if response is actually JSON
+            let connections;
+            try {
+              connections = JSON.parse(responseText);
+              console.log('[DataBindingStore] Parsed JSON response:', connections);
+            } catch (parseError) {
+              console.error('[DataBindingStore] Response is not valid JSON:', parseError);
+              console.error('[DataBindingStore] Full response text:', responseText);
+              throw new Error('API returned non-JSON response (likely HTML from SPA route)');
+            }
+            
             const connected = connections.supabase?.connected || false;
             console.log('[DataBindingStore] Connection status:', connected);
             
@@ -115,16 +136,18 @@ export const useDataBindingStore = create<DataBindingState>()(
               await get().fetchTables();
             }
           } else {
+            const errorText = await response.text();
+            console.error('[DataBindingStore] API request failed:', response.status, errorText.substring(0, 200));
             set({ 
               connected: false,
-              connectionError: 'Failed to check connection status'
+              connectionError: `Failed to check connection status: ${response.status} - ${errorText.substring(0, 100)}`
             });
           }
         } catch (error) {
           console.error('[DataBindingStore] Initialization error:', error);
           set({ 
             connected: false,
-            connectionError: 'Connection check failed'
+            connectionError: `Connection check failed: ${error instanceof Error ? error.message : 'Unknown error'}`
           });
         }
       },

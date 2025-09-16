@@ -356,11 +356,19 @@ app.get('/debug/builder', (req, res) => {
   }
 });
 
+// Add API request debugging middleware
+app.use('/api', (req, res, next) => {
+  console.log(`🔍 API Request: ${req.method} ${req.originalUrl}`);
+  console.log(`🎯 Headers: ${JSON.stringify(req.headers, null, 2)}`);
+  next();
+});
+
 // API Routes
 console.log('🔧 Setting up API routes...');
 
 // API root endpoint - shows available endpoints
 app.get('/api', (req, res) => {
+  console.log('🔍 API root endpoint hit');
   res.json({
     success: true,
     message: 'Frontbase API',
@@ -368,7 +376,8 @@ app.get('/api', (req, res) => {
     endpoints: {
       project: '/api/project',
       pages: '/api/pages', 
-      variables: '/api/variables'
+      variables: '/api/variables',
+      database: '/api/database'
     },
     documentation: 'Visit /builder for the visual page builder interface'
   });
@@ -410,8 +419,10 @@ try {
 }
 
 try {
-  app.use('/api/database', require('./routes/api/database'));
+  const databaseRouter = require('./routes/api/database');
+  app.use('/api/database', databaseRouter);
   console.log('✅ Database API routes loaded');
+  console.log('✅ Database routes registered: /api/database/connections, /api/database/supabase-tables, etc.');
 } catch (error) {
   console.error('❌ Failed to load database routes:', error);
   process.exit(1);
@@ -571,7 +582,9 @@ app.get('/builder/*', (req, res) => {
 });
 
 // SPA fallback for frontend app routes (auth, dashboard, etc.)
+// IMPORTANT: These must come AFTER API routes to prevent conflicts
 app.get('/auth/*', (req, res) => {
+  console.log(`🔍 Auth SPA route: ${req.originalUrl}`);
   const indexPath = path.join(__dirname, 'public', 'index.html');
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
@@ -581,6 +594,13 @@ app.get('/auth/*', (req, res) => {
 });
 
 app.get('/dashboard/*', (req, res) => {
+  console.log(`🔍 Dashboard SPA route: ${req.originalUrl}`);
+  // Make sure this doesn't interfere with API calls
+  if (req.originalUrl.startsWith('/dashboard/api')) {
+    console.log(`❌ Dashboard route intercepted API call: ${req.originalUrl}`);
+    return res.status(404).send('API route not found');
+  }
+  
   const indexPath = path.join(__dirname, 'public', 'index.html');
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);

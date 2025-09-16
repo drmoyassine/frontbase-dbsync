@@ -19,39 +19,29 @@ const queryClient = new QueryClient();
 const App = () => {
   const { checkAuth, isLoading, isAuthenticated } = useAuthStore();
   const { fetchConnections } = useDashboardStore();
-  const [appInitialized, setAppInitialized] = useState(false);
 
-  // Sequential initialization: Auth → Dashboard → Ready
-  const initializeApp = useCallback(async () => {
-    try {
-      // Step 1: Check authentication
+  // Initialize app on mount - always call checkAuth
+  useEffect(() => {
+    const initializeApp = async () => {
       await checkAuth();
       
-      // Step 2: If authenticated, fetch dashboard connections
-      if (isAuthenticated && !isLoading) {
-        await fetchConnections();
-        setAppInitialized(true);
+      // Fetch dashboard connections if authenticated
+      if (isAuthenticated) {
+        await fetchConnections().catch(console.error);
       }
-    } catch (error) {
-      console.error('App initialization failed:', error);
-      setAppInitialized(true); // Still show the app even if connections fail
-    }
-  }, [checkAuth, fetchConnections, isAuthenticated, isLoading]);
+    };
 
-  useEffect(() => {
-    if (!isLoading) {
-      initializeApp();
-    }
-  }, [initializeApp, isLoading]);
+    initializeApp();
+  }, [checkAuth, fetchConnections, isAuthenticated]);
 
-  if (isLoading || !appInitialized) {
+  // Show loading only when actively checking auth and not on login page
+  const isOnLoginPage = window.location.pathname === '/auth/login';
+  if (isLoading && !isOnLoginPage) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">
-            {isLoading ? 'Checking authentication...' : 'Loading connections...'}
-          </p>
+          <p className="text-muted-foreground">Checking authentication...</p>
         </div>
       </div>
     );

@@ -19,10 +19,22 @@ const LoginPage: React.FC = () => {
     const checkDemoMode = async () => {
       try {
         const response = await fetch('/api/auth/demo-info');
+        
+        // Check if response is actually JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          // If we get HTML instead of JSON, assume demo mode in preview environment
+          console.warn('Demo info endpoint returned non-JSON response, assuming demo mode');
+          setIsDemoMode(true);
+          return;
+        }
+        
         const data = await response.json();
         setIsDemoMode(data.isDemoMode);
       } catch (error) {
         console.error('Failed to check demo mode:', error);
+        // Fallback: assume demo mode if API call fails
+        setIsDemoMode(true);
       }
     };
     
@@ -106,9 +118,14 @@ const LoginPage: React.FC = () => {
           </form>
           
           {isDemoMode && (
-            <div className="mt-6 text-center text-sm text-muted-foreground">
-              <p>Demo credentials:</p>
-              <p className="font-mono">Username: admin | Password: admin123</p>
+            <div className="mt-6 p-4 bg-muted/50 rounded-lg border">
+              <div className="text-center text-sm">
+                <p className="text-muted-foreground mb-2">Demo Mode - Use these credentials:</p>
+                <div className="font-mono text-foreground">
+                  <p><strong>Username:</strong> admin</p>
+                  <p><strong>Password:</strong> admin123</p>
+                </div>
+              </div>
             </div>
           )}
         </CardContent>

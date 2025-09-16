@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { EnhancedDataTableView } from '@/components/admin/EnhancedDataTableView';
+import { SimpleDataTableView } from '@/components/admin/SimpleDataTableView';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface TableData {
@@ -235,7 +235,7 @@ export const CombinedTableView: React.FC = () => {
         </TabsList>
         
         <TabsContent value="enhanced">
-          <EnhancedDataTableView />
+          <SimpleDataTableView />
         </TabsContent>
         
         <TabsContent value="classic">

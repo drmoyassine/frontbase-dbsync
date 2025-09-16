@@ -2,8 +2,33 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
-import { useUniversalData } from '@/hooks/useUniversalData';
-import { ComponentDataBinding } from '@/lib/data-sources/types';
+import { useSimpleData } from '@/hooks/useSimpleData';
+
+interface ComponentDataBinding {
+  componentId: string;
+  dataSourceId: string;
+  tableName: string;
+  refreshInterval?: number;
+  pagination: {
+    enabled: boolean;
+    pageSize: number;
+    page: number;
+  };
+  sorting: {
+    enabled: boolean;
+    column?: string;
+    direction?: 'asc' | 'desc';
+  };
+  filtering: {
+    searchEnabled: boolean;
+    filters: Record<string, any>;
+  };
+  columnOverrides: Record<string, {
+    displayName?: string;
+    visible?: boolean;
+    displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
+  }>;
+}
 
 interface ChartProps {
   componentId: string;
@@ -26,7 +51,7 @@ export function Chart({
     data,
     loading,
     error
-  } = useUniversalData({
+  } = useSimpleData({
     componentId,
     binding: binding || null
   });
@@ -164,7 +189,7 @@ export function Chart({
     <Card className={className}>
       <CardHeader>
         <CardTitle className="capitalize">
-          {binding.queryOptions.table?.replace(/_/g, ' ')} Chart
+          {binding.tableName?.replace(/_/g, ' ')} Chart
         </CardTitle>
       </CardHeader>
       <CardContent>

@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Database, ExternalLink, AlertCircle, CheckCircle, Plus, Settings, Trash2 } from 'lucide-react';
 import { useDashboardStore } from '@/stores/dashboard';
+import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useAuthStore } from '@/stores/auth';
 import { SupabaseConnectionModal } from './SupabaseConnectionModal';
-import { EnhancedDataTableView } from '@/components/admin/EnhancedDataTableView';
+import { SimpleDataTableView } from '@/components/admin/SimpleDataTableView';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -22,6 +23,7 @@ import {
 
 export const DatabasePanel: React.FC = () => {
   const { connections, setSupabaseModalOpen, fetchConnections } = useDashboardStore();
+  const { connected, initialize: initializeDataBinding } = useDataBindingStore();
   const { isAuthenticated, isLoading } = useAuthStore();
   const { toast } = useToast();
 
@@ -44,10 +46,12 @@ export const DatabasePanel: React.FC = () => {
     if (!isLoading && isAuthenticated) {
       console.log('Fetching connections after auth completion...');
       fetchConnections();
+      // Also initialize the simple data binding store
+      initializeDataBinding();
     } else {
       console.log('Waiting for authentication to complete before fetching connections...');
     }
-  }, [fetchConnections, isAuthenticated, isLoading]);
+  }, [fetchConnections, isAuthenticated, isLoading, initializeDataBinding]);
 
   const handleDisconnectSupabase = async () => {
     try {
@@ -246,9 +250,9 @@ export const DatabasePanel: React.FC = () => {
         </Card>
       </div>
 
-      {connections.supabase.connected && (
+      {(connections.supabase.connected || connected) && (
         <div className="space-y-6">
-          <EnhancedDataTableView />
+          <SimpleDataTableView />
         </div>
       )}
 

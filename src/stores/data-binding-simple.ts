@@ -94,6 +94,12 @@ export const useDataBindingStore = create<DataBindingState>()(
       initialize: async () => {
         console.log('[DataBindingStore] Initializing...');
         
+        // Don't auto-initialize if already connected
+        if (get().connected) {
+          console.log('[DataBindingStore] Already connected, skipping initialization');
+          return;
+        }
+        
         // Check connection status
         try {
           console.log('[DataBindingStore] Testing API connectivity to /api/database/connections');

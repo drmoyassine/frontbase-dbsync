@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Trash2, Database } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 import { DataBindingModal } from '@/components/builder/data-binding/DataBindingModal';
-import { useDataBindingStore } from '@/stores/data-binding';
+import { useDataBindingStore } from '@/stores/data-binding-simple';
 
 export const PropertiesPanel: React.FC = () => {
   const { 

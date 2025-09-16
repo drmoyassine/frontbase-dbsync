@@ -2,8 +2,33 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { useUniversalData } from '@/hooks/useUniversalData';
-import { ComponentDataBinding } from '@/lib/data-sources/types';
+import { useSimpleData } from '@/hooks/useSimpleData';
+
+interface ComponentDataBinding {
+  componentId: string;
+  dataSourceId: string;
+  tableName: string;
+  refreshInterval?: number;
+  pagination: {
+    enabled: boolean;
+    pageSize: number;
+    page: number;
+  };
+  sorting: {
+    enabled: boolean;
+    column?: string;
+    direction?: 'asc' | 'desc';
+  };
+  filtering: {
+    searchEnabled: boolean;
+    filters: Record<string, any>;
+  };
+  columnOverrides: Record<string, {
+    displayName?: string;
+    visible?: boolean;
+    displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
+  }>;
+}
 
 interface KPICardProps {
   componentId: string;
@@ -17,7 +42,7 @@ export function KPICard({ componentId, binding, className = '', onConfigureBindi
     data,
     loading,
     error
-  } = useUniversalData({
+  } = useSimpleData({
     componentId,
     binding: binding || null
   });
@@ -76,7 +101,7 @@ export function KPICard({ componentId, binding, className = '', onConfigureBindi
 
   // Calculate KPI value from data
   const kpiValue = data?.length > 0 ? data[0] : {};
-  const valueField = binding.queryOptions.select?.[0] || Object.keys(kpiValue)[0];
+  const valueField = Object.keys(kpiValue)[0] || 'count';
   const value = kpiValue[valueField] || 0;
 
   // Format value based on display type

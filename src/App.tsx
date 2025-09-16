@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useEffect, useCallback } from "react";
 import { useAuthStore } from "@/stores/auth";
-import { useDataBindingStore } from "@/stores/data-binding";
+import { useDataBindingStore } from "@/stores/data-binding-simple";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import LoginPage from "./pages/LoginPage";

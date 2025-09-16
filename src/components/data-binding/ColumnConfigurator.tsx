@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { GripVertical, Eye, EyeOff } from 'lucide-react';
-import { useTableSchema } from '@/hooks/useUniversalData';
+import { useDataBindingStore } from '@/stores/data-binding-simple';
 
 interface ColumnConfiguratorProps {
   tableName: string;
@@ -22,7 +22,24 @@ export function ColumnConfigurator({
   columnOverrides = {},
   onColumnOverridesChange
 }: ColumnConfiguratorProps) {
-  const { schema, loading } = useTableSchema(tableName);
+  const { loadTableSchema } = useDataBindingStore();
+  const [schema, setSchema] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (tableName) {
+      setLoading(true);
+      loadTableSchema(tableName)
+        .then((result) => {
+          setSchema(result);
+          setLoading(false);
+        })
+        .catch(() => {
+          setSchema(null);
+          setLoading(false);
+        });
+    }
+  }, [tableName, loadTableSchema]);
   
   const updateColumnOverride = (columnName: string, updates: any) => {
     const newOverrides = {
@@ -127,7 +144,7 @@ export function ColumnConfigurator({
                   {column.isPrimaryKey && (
                     <Badge variant="outline" className="text-xs">PK</Badge>
                   )}
-                  {column.isForeignKey && (
+                  {(column as any).isForeignKey && (
                     <Badge variant="outline" className="text-xs">FK</Badge>
                   )}
                   <Badge variant="secondary" className="text-xs">

@@ -1,8 +1,33 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useUniversalData } from '@/hooks/useUniversalData';
-import { ComponentDataBinding } from '@/lib/data-sources/types';
+import { useSimpleData } from '@/hooks/useSimpleData';
+
+interface ComponentDataBinding {
+  componentId: string;
+  dataSourceId: string;
+  tableName: string;
+  refreshInterval?: number;
+  pagination: {
+    enabled: boolean;
+    pageSize: number;
+    page: number;
+  };
+  sorting: {
+    enabled: boolean;
+    column?: string;
+    direction?: 'asc' | 'desc';
+  };
+  filtering: {
+    searchEnabled: boolean;
+    filters: Record<string, any>;
+  };
+  columnOverrides: Record<string, {
+    displayName?: string;
+    visible?: boolean;
+    displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
+  }>;
+}
 
 interface GridProps {
   componentId: string;
@@ -23,7 +48,7 @@ export function Grid({
     data,
     loading,
     error
-  } = useUniversalData({
+  } = useSimpleData({
     componentId,
     binding: binding || null
   });

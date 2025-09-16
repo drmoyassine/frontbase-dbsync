@@ -248,7 +248,9 @@ export const DatabasePanel: React.FC = () => {
 
       {(connections.supabase.connected || connected) && (
         <div className="space-y-6">
-          <SimpleDataTableView />
+          <div style={{ overflowX: 'auto' }}>
+            <SimpleDataTableView />
+          </div>
         </div>
       )}
 

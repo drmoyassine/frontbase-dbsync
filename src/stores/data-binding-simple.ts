@@ -132,11 +132,6 @@ export const useDataBindingStore = create<DataBindingState>()(
           });
           
           debug.critical('DATA_BINDING', 'Synced connection status:', { connected });
-          
-          // If connected and no tables yet, fetch them
-          if (connected && get().tables.length === 0 && !get().tablesLoading) {
-            await get().fetchTables();
-          }
         } catch (error) {
           debug.error('DATA_BINDING', 'Failed to sync connection status:', error);
         }

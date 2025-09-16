@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Database, ExternalLink, AlertCircle, CheckCircle, Plus, Settings, Trash2 } from 'lucide-react';
 import { useDashboardStore } from '@/stores/dashboard';
-import { useDataBindingConditional } from '@/hooks/useDataBindingConditional';
+import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { SupabaseConnectionModal } from './SupabaseConnectionModal';
 import { SimpleDataTableView } from '@/components/admin/SimpleDataTableView';
 import { useToast } from '@/hooks/use-toast';
@@ -24,8 +24,14 @@ export const DatabasePanel: React.FC = () => {
   const { connections, setSupabaseModalOpen, fetchConnections } = useDashboardStore();
   const { toast } = useToast();
   
-  // Conditionally initialize data-binding only for this component (which needs it for SimpleDataTableView)
-  const { connected: bindingConnected } = useDataBindingConditional();
+  // Initialize data-binding when dashboard is connected
+  const { connected: bindingConnected, initialize } = useDataBindingStore();
+  
+  useEffect(() => {
+    if (connections.supabase.connected && !bindingConnected) {
+      initialize();
+    }
+  }, [connections.supabase.connected, bindingConnected, initialize]);
 
   const handleDisconnectSupabase = async () => {
     try {
@@ -39,7 +45,7 @@ export const DatabasePanel: React.FC = () => {
           title: "Disconnected",
           description: "Supabase connection has been removed",
         });
-        await fetchConnections();
+        // Connection will be updated by the main app flow
       } else {
         const errorData = await response.json().catch(() => ({}));
         toast({

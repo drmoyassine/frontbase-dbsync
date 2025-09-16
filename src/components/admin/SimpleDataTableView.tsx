@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Database, Table, RefreshCw, AlertCircle } from 'lucide-react';
+import { Database, RefreshCw, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SimpleDataTable } from '@/components/data-binding/SimpleDataTable';
+import { TableSelectorDropdown } from './TableSelectorDropdown';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 
 export const SimpleDataTableView: React.FC = () => {
@@ -116,85 +116,82 @@ export const SimpleDataTableView: React.FC = () => {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
-            Database Tables
-            {tables.length > 0 && (
-              <Badge variant="secondary">{tables.length} tables</Badge>
-            )}
-          </CardTitle>
-          <Button
-            onClick={fetchTables}
-            variant="outline"
-            size="sm"
-            disabled={tablesLoading}
-          >
-            <RefreshCw className={`h-4 w-4 ${tablesLoading ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
-      </CardHeader>
-
-      <CardContent>
-        {tablesLoading ? (
-          <div className="text-center py-8">
-            <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">Loading tables...</p>
-          </div>
-        ) : tables.length > 0 ? (
-          <Tabs value={selectedTable} onValueChange={setSelectedTable}>
-            <TabsList className="grid w-full grid-cols-auto mb-6">
-              {tables.slice(0, 6).map((table) => (
-                <TabsTrigger key={table.name} value={table.name} className="flex items-center gap-2">
-                  <Table className="h-3 w-3" />
-                  {table.name}
-                </TabsTrigger>
-              ))}
-              {tables.length > 6 && (
-                <TabsTrigger value="" className="flex items-center gap-2">
-                  <span>+{tables.length - 6} more</span>
-                </TabsTrigger>
+    <div className="space-y-6">
+      {/* Container 1: Table Controls Area */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5" />
+              Database Tables
+              {tables.length > 0 && (
+                <Badge variant="secondary">{tables.length} tables</Badge>
               )}
-            </TabsList>
-            
-            {tables.map((table) => (
-              <TabsContent key={table.name} value={table.name}>
-                <SimpleDataTable 
-                  componentId={`table-${table.name}`}
-                  binding={{
-                    componentId: `table-${table.name}`,
-                    dataSourceId: "backend",
-                    tableName: table.name,
-                    refreshInterval: 30000,
-                    pagination: {
-                      enabled: true,
-                      pageSize: 25,
-                      page: 1
-                    },
-                    sorting: {
-                      enabled: true,
-                      column: '',
-                      direction: 'asc'
-                    },
-                    filtering: {
-                      searchEnabled: true,
-                      filters: {}
-                    },
-                    columnOverrides: {}
-                  }}
-                />
-              </TabsContent>
-            ))}
-          </Tabs>
-        ) : (
-          <div className="text-center py-8">
-            <Database className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">Select a table to view its data</p>
+            </CardTitle>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </CardHeader>
+        <CardContent>
+          {tablesLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="h-6 w-6 animate-spin mr-3 text-muted-foreground" />
+              <p className="text-muted-foreground">Loading tables...</p>
+            </div>
+          ) : tables.length > 0 ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <TableSelectorDropdown
+                    selectedTable={selectedTable}
+                    onTableChange={setSelectedTable}
+                  />
+                </div>
+              </div>
+              {selectedTable && (
+                <div className="flex items-center justify-between text-sm text-muted-foreground border-t pt-4">
+                  <span>Viewing table: <strong>{selectedTable}</strong></span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Database className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+              <p className="text-muted-foreground">No tables available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Container 2: Data Table */}
+      {selectedTable && (
+        <Card>
+          <CardContent className="p-0">
+            <SimpleDataTable 
+              componentId={`table-${selectedTable}`}
+              binding={{
+                componentId: `table-${selectedTable}`,
+                dataSourceId: "backend",
+                tableName: selectedTable,
+                refreshInterval: 30000,
+                pagination: {
+                  enabled: true,
+                  pageSize: 25,
+                  page: 1
+                },
+                sorting: {
+                  enabled: true,
+                  column: '',
+                  direction: 'asc'
+                },
+                filtering: {
+                  searchEnabled: true,
+                  filters: {}
+                },
+                columnOverrides: {}
+              }}
+            />
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 };

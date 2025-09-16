@@ -25,12 +25,6 @@ interface DashboardState {
     supabase: DatabaseConnection;
   };
   
-  // Supabase tables
-  supabaseTables: SupabaseTable[];
-  tablesLoading: boolean;
-  tablesError: string | null;
-  selectedTable: string | null;
-  
   // Modal states
   supabaseModalOpen: boolean;
   tableSchemaModalOpen: boolean;
@@ -44,9 +38,8 @@ interface DashboardState {
   setSupabaseModalOpen: (open: boolean) => void;
   setTableSchemaModalOpen: (open: boolean) => void;
   setTableDataModalOpen: (open: boolean) => void;
-  setSelectedTable: (table: string | null) => void;
   fetchConnections: () => Promise<void>;
-  fetchSupabaseTables: () => Promise<void>;
+  notifyConnectionChange: () => void;
 }
 
 export const useDashboardStore = create<DashboardState>()(
@@ -58,10 +51,6 @@ export const useDashboardStore = create<DashboardState>()(
   connections: {
     supabase: { connected: false }
   },
-  supabaseTables: [],
-  tablesLoading: false,
-  tablesError: null,
-  selectedTable: null,
   supabaseModalOpen: false,
   tableSchemaModalOpen: false,
   tableDataModalOpen: false,
@@ -69,11 +58,14 @@ export const useDashboardStore = create<DashboardState>()(
   setActiveSection: (section) => set({ activeSection: section }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setFilterStatus: (status) => set({ filterStatus: status }),
-  setConnections: (connections) => set({ connections }),
+  setConnections: (connections) => {
+    set({ connections });
+    // Notify data-binding store of connection changes
+    get().notifyConnectionChange();
+  },
   setSupabaseModalOpen: (open) => set({ supabaseModalOpen: open }),
   setTableSchemaModalOpen: (open) => set({ tableSchemaModalOpen: open }),
   setTableDataModalOpen: (open) => set({ tableDataModalOpen: open }),
-  setSelectedTable: (table) => set({ selectedTable: table }),
   
   fetchConnections: async () => {
     const requestKey = generateRequestKey('/api/database/connections');
@@ -87,6 +79,7 @@ export const useDashboardStore = create<DashboardState>()(
         if (response.ok) {
           const connections = await response.json();
           set({ connections });
+          get().notifyConnectionChange();
           debug.critical('DASHBOARD', 'Connections updated:', Object.keys(connections));
         } else {
           debug.error('DASHBOARD', 'Failed to fetch connections:', response.status);
@@ -97,28 +90,9 @@ export const useDashboardStore = create<DashboardState>()(
     });
   },
 
-  fetchSupabaseTables: async () => {
-    set({ tablesLoading: true, tablesError: null });
-    try {
-      const response = await fetch('/api/database/supabase-tables', {
-        credentials: 'include'
-      });
-      
-      if (response.ok) {
-        const result = await response.json();
-        
-        if (result.success) {
-          set({ supabaseTables: result.data.tables, tablesLoading: false });
-        } else {
-          set({ tablesError: result.message, tablesLoading: false });
-        }
-      } else {
-        set({ tablesError: 'Failed to fetch tables', tablesLoading: false });
-      }
-    } catch (error) {
-      console.error('Failed to fetch Supabase tables:', error);
-      set({ tablesError: 'Failed to fetch tables', tablesLoading: false });
-    }
+  notifyConnectionChange: () => {
+    // This will be used by data-binding store to react to connection changes
+    debug.critical('DASHBOARD', 'Connection change notification sent');
   },
     }),
     {

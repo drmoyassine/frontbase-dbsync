@@ -51,12 +51,13 @@ interface ComponentDataBinding {
 }
 
 interface DataBindingState {
-  // Connection status (now derived from dashboard store)
+  // Connection status (derived from dashboard store)
   connected: boolean;
   connectionError: string | null;
   
-  // Tables (now derived from dashboard store)
+  // Tables (owned by data-binding store)
   tables: SupabaseTable[];
+  tablesLoading: boolean;
   tablesError: string | null;
   
   // Schema cache
@@ -72,7 +73,8 @@ interface DataBindingState {
   
   // Actions
   initialize: () => void;
-  syncWithDashboard: () => Promise<void>;
+  syncConnectionStatus: () => Promise<void>;
+  fetchTables: () => Promise<void>;
   loadTableSchema: (tableName: string) => Promise<TableSchema | null>;
   queryData: (componentId: string, binding: ComponentDataBinding) => Promise<any>;
   setComponentBinding: (componentId: string, binding: ComponentDataBinding) => void;
@@ -88,6 +90,7 @@ export const useDataBindingStore = create<DataBindingState>()(
       connected: false,
       connectionError: null,
       tables: [],
+      tablesLoading: false,
       tablesError: null,
       schemas: new Map(),
       componentBindings: new Map(),
@@ -95,15 +98,22 @@ export const useDataBindingStore = create<DataBindingState>()(
       loadingStates: new Map(),
       errors: new Map(),
 
-      // Initialize by syncing with dashboard store
+      // Initialize by syncing connection status and fetching tables
       initialize: () => {
-        get().syncWithDashboard().catch(error => {
-          debug.error('DATA_BINDING', 'Initialization sync failed:', error);
+        const initializeAsync = async () => {
+          await get().syncConnectionStatus();
+          if (get().connected) {
+            await get().fetchTables();
+          }
+        };
+        
+        initializeAsync().catch(error => {
+          debug.error('DATA_BINDING', 'Initialization failed:', error);
         });
       },
 
-      // Sync connection and table state from dashboard store
-      syncWithDashboard: async () => {
+      // Sync only connection status from dashboard store
+      syncConnectionStatus: async () => {
         try {
           // Use dynamic import to avoid circular dependency
           if (!getDashboardState) {
@@ -115,23 +125,70 @@ export const useDataBindingStore = create<DataBindingState>()(
           
           const connected = dashboardState.connections.supabase?.connected || false;
           const connectionError = connected ? null : 'Not connected to database';
-          const tables = dashboardState.supabaseTables || [];
-          const tablesError = dashboardState.tablesError;
           
           set({ 
             connected,
-            connectionError,
-            tables,
-            tablesError
+            connectionError
           });
           
-          debug.critical('DATA_BINDING', 'Synced with dashboard store:', { 
-            connected, 
-            tablesCount: tables.length 
-          });
+          debug.critical('DATA_BINDING', 'Synced connection status:', { connected });
+          
+          // If connected and no tables yet, fetch them
+          if (connected && get().tables.length === 0 && !get().tablesLoading) {
+            await get().fetchTables();
+          }
         } catch (error) {
-          debug.error('DATA_BINDING', 'Failed to sync with dashboard store:', error);
+          debug.error('DATA_BINDING', 'Failed to sync connection status:', error);
         }
+      },
+
+      // Fetch tables from API (owns this responsibility)
+      fetchTables: async () => {
+        if (!get().connected) {
+          debug.error('DATA_BINDING', 'Cannot fetch tables: not connected');
+          return;
+        }
+
+        const requestKey = generateRequestKey('/api/database/supabase-tables');
+        
+        return requestDeduplicator.dedupe(requestKey, async () => {
+          set({ tablesLoading: true, tablesError: null });
+          
+          try {
+            const response = await fetch('/api/database/supabase-tables', {
+              credentials: 'include'
+            });
+            
+            if (response.ok) {
+              const result = await response.json();
+              
+              if (result.success) {
+                set({ 
+                  tables: result.data.tables, 
+                  tablesLoading: false,
+                  tablesError: null 
+                });
+                debug.critical('DATA_BINDING', 'Tables fetched:', result.data.tables.length);
+              } else {
+                set({ 
+                  tablesError: result.message, 
+                  tablesLoading: false 
+                });
+              }
+            } else {
+              set({ 
+                tablesError: 'Failed to fetch tables', 
+                tablesLoading: false 
+              });
+            }
+          } catch (error) {
+            console.error('Failed to fetch Supabase tables:', error);
+            set({ 
+              tablesError: 'Failed to fetch tables', 
+              tablesLoading: false 
+            });
+          }
+        });
       },
 
       loadTableSchema: async (tableName: string): Promise<TableSchema | null> => {

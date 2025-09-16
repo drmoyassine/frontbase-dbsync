@@ -16,8 +16,7 @@ export const TableSelectorDropdown: React.FC<TableSelectorDropdownProps> = ({
   selectedTable,
   onTableChange
 }) => {
-  const { tables, syncWithDashboard } = useDataBindingStore();
-  const { tablesLoading, fetchSupabaseTables } = useDashboardStore();
+  const { tables, tablesLoading, fetchTables } = useDataBindingStore();
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredTables = tables.filter(table =>
@@ -81,8 +80,7 @@ export const TableSelectorDropdown: React.FC<TableSelectorDropdownProps> = ({
       
       <Button
         onClick={async () => { 
-          await fetchSupabaseTables(); 
-          await syncWithDashboard(); 
+          await fetchTables(); 
         }}
         variant="outline"
         size="sm"

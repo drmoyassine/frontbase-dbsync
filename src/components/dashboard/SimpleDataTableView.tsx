@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { RefreshCw, Search, Database, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useDashboardStore } from '@/stores/dashboard';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,12 +20,14 @@ interface TableData {
 
 export const SimpleDataTableView: React.FC = () => {
   const {
-    supabaseTables,
+    tables,
     tablesLoading,
     tablesError,
-    fetchSupabaseTables,
-    connections
-  } = useDashboardStore();
+    fetchTables,
+    connected
+  } = useDataBindingStore();
+  
+  const { connections } = useDashboardStore();
 
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -36,10 +39,10 @@ export const SimpleDataTableView: React.FC = () => {
 
   // Optimized effects with reduced logging
   useEffect(() => {
-    if (connections.supabase.connected) {
-      fetchSupabaseTables();
+    if (connected) {
+      fetchTables();
     }
-  }, [connections.supabase.connected, fetchSupabaseTables]);
+  }, [connected, fetchTables]);
 
   useEffect(() => {
     if (selectedTable) {
@@ -49,12 +52,12 @@ export const SimpleDataTableView: React.FC = () => {
 
   // Simplified auto-selection with stable dependencies
   useEffect(() => {
-    if (supabaseTables.length > 0 && !selectedTable) {
-      const firstTable = supabaseTables[0].name;
+    if (tables.length > 0 && !selectedTable) {
+      const firstTable = tables[0].name;
       setSelectedTable(firstTable);
       debug.log('SIMPLE_TABLE_VIEW', 'Auto-selecting first table:', firstTable);
     }
-  }, [supabaseTables.length, selectedTable]);
+  }, [tables.length, selectedTable]);
 
   const fetchTableData = async () => {
     if (!selectedTable) return;
@@ -173,7 +176,7 @@ export const SimpleDataTableView: React.FC = () => {
         <CardContent>
           <div className="text-center py-8">
             <p className="text-muted-foreground mb-4">{tablesError}</p>
-            <Button onClick={fetchSupabaseTables} variant="outline">
+            <Button onClick={fetchTables} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               Try Again
             </Button>
@@ -183,7 +186,7 @@ export const SimpleDataTableView: React.FC = () => {
     );
   }
 
-  if (supabaseTables.length === 0 && !tablesLoading) {
+  if (tables.length === 0 && !tablesLoading) {
     return (
       <Card>
         <CardHeader>
@@ -209,8 +212,8 @@ export const SimpleDataTableView: React.FC = () => {
           <CardTitle className="flex items-center gap-2">
             <Database className="h-5 w-5" />
             Database Table Viewer
-            {supabaseTables.length > 0 && (
-              <Badge variant="secondary">{supabaseTables.length} tables</Badge>
+            {tables.length > 0 && (
+              <Badge variant="secondary">{tables.length} tables</Badge>
             )}
           </CardTitle>
           <div className="flex items-center gap-2">
@@ -225,7 +228,7 @@ export const SimpleDataTableView: React.FC = () => {
               </Button>
             )}
             <Button
-              onClick={fetchSupabaseTables}
+              onClick={fetchTables}
               variant="outline"
               size="sm"
               disabled={tablesLoading}
@@ -242,7 +245,7 @@ export const SimpleDataTableView: React.FC = () => {
                 <SelectValue placeholder="Select a table" />
               </SelectTrigger>
               <SelectContent>
-                {supabaseTables.map((table) => (
+                {tables.map((table) => (
                   <SelectItem key={table.name} value={table.name}>
                     <div className="flex items-center gap-2">
                       <Database className="h-4 w-4" />

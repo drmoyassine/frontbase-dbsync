@@ -15,8 +15,7 @@ interface AdminAppProps {
 export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
   console.log('[AdminApp] Component initialized');
   
-  const { connected, tables, tablesError, initialize, syncWithDashboard } = useDataBindingStore();
-  const { tablesLoading, fetchSupabaseTables } = useDashboardStore();
+  const { connected, tables, tablesError, tablesLoading, initialize, syncConnectionStatus, fetchTables } = useDataBindingStore();
   const [selectedTable, setSelectedTable] = useState<string>('');
 
   console.log('[AdminApp] State:', { 
@@ -30,11 +29,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
   useEffect(() => {
     console.log('[AdminApp] Initializing data binding store');
     initialize();
-    // Trigger sync to get latest table data
-    syncWithDashboard().catch(error => {
-      console.error('[AdminApp] Sync failed:', error);
-    });
-  }, [initialize, syncWithDashboard]);
+  }, [initialize]);
 
   useEffect(() => {
     if (tables.length > 0 && !selectedTable) {
@@ -75,8 +70,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
           <div className="text-center py-8">
             <p className="text-destructive mb-4">{tablesError}</p>
             <Button onClick={async () => { 
-              await fetchSupabaseTables(); 
-              await syncWithDashboard(); 
+              await fetchTables(); 
             }} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               Try Again
@@ -124,8 +118,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
             <Database className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <p className="text-muted-foreground">No tables found in your database</p>
             <Button onClick={async () => { 
-              await fetchSupabaseTables(); 
-              await syncWithDashboard(); 
+              await fetchTables(); 
             }} variant="outline" className="mt-4">
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
@@ -147,8 +140,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
               <Badge variant="secondary">{tables.length} tables</Badge>
             </CardTitle>
             <Button onClick={async () => { 
-              await fetchSupabaseTables(); 
-              await syncWithDashboard(); 
+              await fetchTables(); 
             }} variant="outline" size="sm">
               <RefreshCw className="h-4 w-4" />
             </Button>

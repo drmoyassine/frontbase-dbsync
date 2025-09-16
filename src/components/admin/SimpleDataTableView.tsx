@@ -11,8 +11,7 @@ import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useDashboardStore } from '@/stores/dashboard';
 
 export const SimpleDataTableView: React.FC = () => {
-  const { connected, connectionError, tables, tablesError, syncWithDashboard } = useDataBindingStore();
-  const { tablesLoading, fetchSupabaseTables } = useDashboardStore();
+  const { connected, connectionError, tables, tablesError, tablesLoading, syncConnectionStatus, fetchTables } = useDataBindingStore();
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
@@ -64,8 +63,7 @@ export const SimpleDataTableView: React.FC = () => {
             <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
             <p className="text-muted-foreground mb-4">{tablesError}</p>
             <Button onClick={async () => { 
-              await fetchSupabaseTables(); 
-              await syncWithDashboard(); 
+              await fetchTables(); 
             }} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               Try Again
@@ -91,8 +89,7 @@ export const SimpleDataTableView: React.FC = () => {
             <Database className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <p className="text-muted-foreground mb-4">No tables found in your database</p>
             <Button onClick={async () => { 
-              await fetchSupabaseTables(); 
-              await syncWithDashboard(); 
+              await fetchTables(); 
             }} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh Tables

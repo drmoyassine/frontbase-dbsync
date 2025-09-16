@@ -25,14 +25,12 @@ export function TableSelector({
   disabled = false,
   showRefresh = true
 }: TableSelectorProps) {
-  const { tables, tablesError, connected, syncWithDashboard } = useDataBindingStore();
-  const { tablesLoading, fetchSupabaseTables } = useDashboardStore();
+  const { tables, tablesError, connected, tablesLoading, fetchTables } = useDataBindingStore();
 
   const loadTables = React.useCallback(async () => {
     if (!connected) return;
-    await fetchSupabaseTables();
-    await syncWithDashboard();
-  }, [connected, fetchSupabaseTables, syncWithDashboard]);
+    await fetchTables();
+  }, [connected, fetchTables]);
 
   React.useEffect(() => {
     loadTables();

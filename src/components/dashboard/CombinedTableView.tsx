@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Check
 } from 'lucide-react';
+import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useDashboardStore } from '@/stores/dashboard';
 import { TableSchemaModal } from './TableSchemaModal';
 import { TableDataModal } from './TableDataModal';
@@ -44,18 +45,22 @@ interface TableData {
 
 export const CombinedTableView: React.FC = () => {
   const {
-    supabaseTables,
+    tables,
     tablesLoading,
     tablesError,
-    selectedTable,
+    fetchTables,
+    connected
+  } = useDataBindingStore();
+
+  const {
     tableSchemaModalOpen,
     tableDataModalOpen,
-    setSelectedTable,
     setTableSchemaModalOpen,
     setTableDataModalOpen,
-    fetchSupabaseTables,
     connections
   } = useDashboardStore();
+
+  const [selectedTable, setSelectedTable] = useState<string>('');
 
   const [tableDropdownOpen, setTableDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -65,16 +70,16 @@ export const CombinedTableView: React.FC = () => {
   const [dataError, setDataError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (connections.supabase.connected) {
-      fetchSupabaseTables();
+    if (connected) {
+      fetchTables();
     }
-  }, [connections.supabase.connected, fetchSupabaseTables]);
+  }, [connected, fetchTables]);
 
   useEffect(() => {
-    if (supabaseTables.length > 0 && !currentTable) {
-      setCurrentTable(supabaseTables[0].name);
+    if (tables.length > 0 && !currentTable) {
+      setCurrentTable(tables[0].name);
     }
-  }, [supabaseTables, currentTable]);
+  }, [tables, currentTable]);
 
   useEffect(() => {
     if (currentTable) {
@@ -197,7 +202,7 @@ export const CombinedTableView: React.FC = () => {
         <CardContent>
           <div className="text-center py-8">
             <p className="text-muted-foreground mb-4">{tablesError}</p>
-            <Button onClick={fetchSupabaseTables} variant="outline">
+            <Button onClick={fetchTables} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               Try Again
             </Button>
@@ -207,7 +212,7 @@ export const CombinedTableView: React.FC = () => {
     );
   }
 
-  if (supabaseTables.length === 0 && !tablesLoading) {
+  if (tables.length === 0 && !tablesLoading) {
     return (
       <Card>
         <CardHeader>
@@ -245,13 +250,13 @@ export const CombinedTableView: React.FC = () => {
             <CardTitle className="flex items-center gap-2">
               <Database className="h-5 w-5" />
               Database Tables
-              {supabaseTables.length > 0 && (
-                <Badge variant="secondary">{supabaseTables.length}</Badge>
+              {tables.length > 0 && (
+                <Badge variant="secondary">{tables.length}</Badge>
               )}
             </CardTitle>
             <div className="flex gap-2">
               <Button
-                onClick={fetchSupabaseTables}
+                onClick={fetchTables}
                 variant="outline"
                 size="sm"
                 disabled={tablesLoading}
@@ -295,7 +300,7 @@ export const CombinedTableView: React.FC = () => {
                     <CommandList>
                       <CommandEmpty>No tables found.</CommandEmpty>
                       <CommandGroup>
-                        {supabaseTables.map((table) => (
+                        {tables.map((table) => (
                           <CommandItem
                             key={table.name}
                             value={table.name}

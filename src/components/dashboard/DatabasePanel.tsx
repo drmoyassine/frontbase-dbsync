@@ -234,13 +234,6 @@ export const DatabasePanel: React.FC = () => {
         </Card>
       </div>
 
-      {(connections.supabase.connected || connected) && (
-        <div className="space-y-6">
-          <div style={{ overflowX: 'auto' }}>
-            <SimpleDataTableView />
-          </div>
-        </div>
-      )}
 
       <SupabaseConnectionModal />
     </div>

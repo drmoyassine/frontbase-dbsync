@@ -4,34 +4,39 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { RefreshCw, Search, Database, Eye, FileText, ExternalLink } from 'lucide-react';
+import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useDashboardStore } from '@/stores/dashboard';
 import { TableSchemaModal } from './TableSchemaModal';
 import { TableDataModal } from './TableDataModal';
 
 export const SimpleTableView: React.FC = () => {
   const {
-    supabaseTables,
+    tables,
     tablesLoading,
     tablesError,
-    selectedTable,
+    fetchTables,
+    connected
+  } = useDataBindingStore();
+
+  const {
     tableSchemaModalOpen,
     tableDataModalOpen,
-    setSelectedTable,
     setTableSchemaModalOpen,
     setTableDataModalOpen,
-    fetchSupabaseTables,
     connections
   } = useDashboardStore();
+
+  const [selectedTable, setSelectedTable] = useState<string>('');
 
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    if (connections.supabase.connected) {
-      fetchSupabaseTables();
+    if (connected) {
+      fetchTables();
     }
-  }, [connections.supabase.connected, fetchSupabaseTables]);
+  }, [connected, fetchTables]);
 
-  const filteredTables = supabaseTables.filter(table =>
+  const filteredTables = tables.filter(table =>
     table.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -67,7 +72,7 @@ export const SimpleTableView: React.FC = () => {
         <CardContent>
           <div className="text-center py-8">
             <p className="text-muted-foreground mb-4">{tablesError}</p>
-            <Button onClick={fetchSupabaseTables} variant="outline">
+            <Button onClick={fetchTables} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               Try Again
             </Button>
@@ -77,7 +82,7 @@ export const SimpleTableView: React.FC = () => {
     );
   }
 
-  if (supabaseTables.length === 0 && !tablesLoading) {
+  if (tables.length === 0 && !tablesLoading) {
     return (
       <Card>
         <CardHeader>
@@ -104,12 +109,12 @@ export const SimpleTableView: React.FC = () => {
             <CardTitle className="flex items-center gap-2">
               <Database className="h-5 w-5" />
               Database Tables
-              {supabaseTables.length > 0 && (
-                <Badge variant="secondary">{supabaseTables.length}</Badge>
+              {tables.length > 0 && (
+                <Badge variant="secondary">{tables.length}</Badge>
               )}
             </CardTitle>
             <Button
-              onClick={fetchSupabaseTables}
+              onClick={fetchTables}
               variant="outline"
               size="sm"
               disabled={tablesLoading}
@@ -118,7 +123,7 @@ export const SimpleTableView: React.FC = () => {
             </Button>
           </div>
           
-          {supabaseTables.length > 0 && (
+          {tables.length > 0 && (
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input

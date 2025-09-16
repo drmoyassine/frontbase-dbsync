@@ -36,8 +36,7 @@ export const DataList: React.FC<DataListProps> = ({
 }) => {
   console.log(`[DataList] Initializing for resource: ${resource}`);
   
-  const { connected, tables, syncWithDashboard } = useDataBindingStore();
-  const { fetchSupabaseTables } = useDashboardStore();
+  const { connected, tables, tablesLoading, fetchTables } = useDataBindingStore();
   const [loading, setLoading] = useState(true);
 
   console.log(`[DataList] State:`, { 
@@ -49,14 +48,14 @@ export const DataList: React.FC<DataListProps> = ({
 
   useEffect(() => {
     console.log(`[DataList] Effect - connected: ${connected}, tablesLength: ${tables.length}`);
-    if (connected && tables.length === 0) {
+    if (connected && tables.length === 0 && !tablesLoading) {
       console.log('[DataList] Fetching tables');
-      fetchSupabaseTables().then(() => syncWithDashboard()).catch(error => {
-        console.error('[DataList] Fetch/sync failed:', error);
+      fetchTables().catch(error => {
+        console.error('[DataList] Fetch failed:', error);
       });
     }
     setLoading(false);
-  }, [connected, tables, fetchSupabaseTables, syncWithDashboard]);
+  }, [connected, tables, tablesLoading, fetchTables]);
 
   if (loading) {
     return (

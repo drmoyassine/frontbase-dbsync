@@ -3,7 +3,9 @@ import { persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { debug } from '@/lib/debug';
 import { requestDeduplicator, generateRequestKey } from '@/lib/request-deduplicator';
-import { useDashboardStore } from './dashboard';
+
+// Import dashboard store for connection/table state synchronization
+let getDashboardState: () => any;
 
 // Simplified interfaces matching dashboard pattern
 interface SupabaseTable {
@@ -49,14 +51,12 @@ interface ComponentDataBinding {
 }
 
 interface DataBindingState {
-  // Connection status (simplified)
+  // Connection status (now derived from dashboard store)
   connected: boolean;
   connectionError: string | null;
-  initializing: boolean;
   
-  // Tables
+  // Tables (now derived from dashboard store)
   tables: SupabaseTable[];
-  tablesLoading: boolean;
   tablesError: string | null;
   
   // Schema cache
@@ -70,13 +70,9 @@ interface DataBindingState {
   loadingStates: Map<string, boolean>;
   errors: Map<string, string>;
   
-  // Promise tracking to prevent duplicate requests
-  initializationPromise: Promise<void> | null;
-  tablesPromise: Promise<void> | null;
-  
   // Actions
-  initialize: () => Promise<void>;
-  fetchTables: () => Promise<void>;
+  initialize: () => void;
+  syncWithDashboard: () => void;
   loadTableSchema: (tableName: string) => Promise<TableSchema | null>;
   queryData: (componentId: string, binding: ComponentDataBinding) => Promise<any>;
   setComponentBinding: (componentId: string, binding: ComponentDataBinding) => void;
@@ -91,126 +87,44 @@ export const useDataBindingStore = create<DataBindingState>()(
     (set, get) => ({
       connected: false,
       connectionError: null,
-      initializing: false,
       tables: [],
-      tablesLoading: false,
       tablesError: null,
       schemas: new Map(),
       componentBindings: new Map(),
       dataCache: new Map(),
       loadingStates: new Map(),
       errors: new Map(),
-      initializationPromise: null,
-      tablesPromise: null,
 
-      initialize: async () => {
-        const state = get();
-        
-        // Prevent duplicate initialization with stronger protection
-        if (state.initializing || state.initializationPromise) {
-          return state.initializationPromise;
-        }
-
-        const initPromise = (async () => {
-          set({ initializing: true, connectionError: null });
-
-          try {
-            const response = await fetch('/api/database/connections', {
-              credentials: 'include',
-              headers: {
-                'Content-Type': 'application/json',
-              }
-            });
-            
-            if (response.ok) {
-              const connections = await response.json();
-              const connected = connections.supabase?.connected || false;
-              
-              set({ 
-                connected,
-                connectionError: connected ? null : 'Not connected to database',
-                initializing: false,
-                initializationPromise: null
-              });
-              
-              // Fetch tables if connected
-              if (connected) {
-                await get().fetchTables();
-              }
-            } else {
-              set({ 
-                connected: false,
-                connectionError: `Failed to check connection status: ${response.status}`,
-                initializing: false,
-                initializationPromise: null
-              });
-            }
-          } catch (error) {
-            console.error('[DataBindingStore] Initialization error:', error);
-            set({ 
-              connected: false,
-              connectionError: `Connection check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-              initializing: false,
-              initializationPromise: null
-            });
-          }
-        })();
-
-        set({ initializationPromise: initPromise });
-        return initPromise;
+      // Initialize by syncing with dashboard store
+      initialize: () => {
+        get().syncWithDashboard();
       },
 
-      fetchTables: async () => {
-        const state = get();
-        
-        // Prevent duplicate requests with stronger protection
-        if (state.tablesLoading || state.tablesPromise) {
-          return state.tablesPromise;
+      // Sync connection and table state from dashboard store
+      syncWithDashboard: () => {
+        // Lazy import to avoid circular dependency
+        if (!getDashboardState) {
+          getDashboardState = require('./dashboard').useDashboardStore.getState;
         }
-
-        const fetchPromise = (async () => {
-          set({ tablesLoading: true, tablesError: null });
-          
-          try {
-            const response = await fetch('/api/database/supabase-tables', {
-              credentials: 'include'
-            });
-            
-            if (response.ok) {
-              const result = await response.json();
-              if (result.success && result.data?.tables) {
-                set({ 
-                  tables: result.data.tables,
-                  tablesLoading: false,
-                  tablesError: null,
-                  tablesPromise: null
-                });
-              } else {
-                set({ 
-                  tablesError: result.message || 'Failed to fetch tables',
-                  tablesLoading: false,
-                  tablesPromise: null
-                });
-              }
-            } else {
-              set({ 
-                tablesError: 'Failed to fetch tables',
-                tablesLoading: false,
-                tablesPromise: null
-              });
-            }
-          } catch (error) {
-            console.error('[DataBindingStore] Error fetching tables:', error);
-            set({ 
-              tablesError: 'Network error fetching tables',
-              tablesLoading: false,
-              tablesPromise: null
-            });
-          }
-        })();
-
-        set({ tablesPromise: fetchPromise });
-        return fetchPromise;
+        
+        const dashboardState = getDashboardState();
+        
+        const connected = dashboardState.connections.supabase?.connected || false;
+        const connectionError = connected ? null : 'Not connected to database';
+        const tables = dashboardState.supabaseTables || [];
+        const tablesError = dashboardState.tablesError;
+        
+        set({ 
+          connected,
+          connectionError,
+          tables,
+          tablesError
+        });
+        
+        debug.critical('DATA_BINDING', 'Synced with dashboard store:', { 
+          connected, 
+          tablesCount: tables.length 
+        });
       },
 
       loadTableSchema: async (tableName: string): Promise<TableSchema | null> => {
@@ -407,19 +321,15 @@ export const useDataBindingStore = create<DataBindingState>()(
         ...currentState,
         // Restore component bindings
         componentBindings: new Map(persistedState.componentBindings || []),
-        // Reset all other state
+        // Reset all other state - connection will be synced from dashboard
         connected: false,
         connectionError: null,
-        initializing: false,
         tables: [],
-        tablesLoading: false,
         tablesError: null,
         schemas: new Map(),
         dataCache: new Map(),
         loadingStates: new Map(),
         errors: new Map(),
-        initializationPromise: null,
-        tablesPromise: null,
       }),
     }
   )

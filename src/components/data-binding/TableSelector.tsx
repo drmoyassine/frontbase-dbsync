@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
+import { useDashboardStore } from '@/stores/dashboard';
 
 interface TableSelectorProps {
   value?: string;
@@ -24,12 +25,14 @@ export function TableSelector({
   disabled = false,
   showRefresh = true
 }: TableSelectorProps) {
-  const { tables, tablesLoading, tablesError, fetchTables, connected } = useDataBindingStore();
+  const { tables, tablesError, connected, syncWithDashboard } = useDataBindingStore();
+  const { tablesLoading, fetchSupabaseTables } = useDashboardStore();
 
   const loadTables = React.useCallback(async () => {
     if (!connected) return;
-    await fetchTables();
-  }, [connected, fetchTables]);
+    await fetchSupabaseTables();
+    syncWithDashboard();
+  }, [connected, fetchSupabaseTables, syncWithDashboard]);
 
   React.useEffect(() => {
     loadTables();

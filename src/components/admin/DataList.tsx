@@ -8,6 +8,7 @@ import { RefreshCw, Search, Database, ChevronLeft, ChevronRight, Filter, SortAsc
 import { Skeleton } from '@/components/ui/skeleton';
 import { DataTable } from './DataTable';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
+import { useDashboardStore } from '@/stores/dashboard';
 
 interface DataListProps {
   resource: string;
@@ -35,7 +36,8 @@ export const DataList: React.FC<DataListProps> = ({
 }) => {
   console.log(`[DataList] Initializing for resource: ${resource}`);
   
-  const { connected, tables, fetchTables } = useDataBindingStore();
+  const { connected, tables, syncWithDashboard } = useDataBindingStore();
+  const { fetchSupabaseTables } = useDashboardStore();
   const [loading, setLoading] = useState(true);
 
   console.log(`[DataList] State:`, { 
@@ -49,10 +51,10 @@ export const DataList: React.FC<DataListProps> = ({
     console.log(`[DataList] Effect - connected: ${connected}, tablesLength: ${tables.length}`);
     if (connected && tables.length === 0) {
       console.log('[DataList] Fetching tables');
-      fetchTables();
+      fetchSupabaseTables().then(() => syncWithDashboard());
     }
     setLoading(false);
-  }, [connected, tables, fetchTables]);
+  }, [connected, tables, fetchSupabaseTables, syncWithDashboard]);
 
   if (loading) {
     return (

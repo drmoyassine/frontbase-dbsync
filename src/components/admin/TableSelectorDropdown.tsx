@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, Search, RefreshCw } from 'lucide-react';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
+import { useDashboardStore } from '@/stores/dashboard';
 
 interface TableSelectorDropdownProps {
   selectedTable: string;
@@ -15,7 +16,8 @@ export const TableSelectorDropdown: React.FC<TableSelectorDropdownProps> = ({
   selectedTable,
   onTableChange
 }) => {
-  const { tables, tablesLoading, fetchTables } = useDataBindingStore();
+  const { tables, syncWithDashboard } = useDataBindingStore();
+  const { tablesLoading, fetchSupabaseTables } = useDashboardStore();
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredTables = tables.filter(table =>
@@ -78,7 +80,7 @@ export const TableSelectorDropdown: React.FC<TableSelectorDropdownProps> = ({
       </div>
       
       <Button
-        onClick={fetchTables}
+        onClick={() => { fetchSupabaseTables(); syncWithDashboard(); }}
         variant="outline"
         size="sm"
         disabled={tablesLoading}

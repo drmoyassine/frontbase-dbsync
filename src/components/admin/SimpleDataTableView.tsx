@@ -8,14 +8,15 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SimpleDataTable } from '@/components/data-binding/SimpleDataTable';
 import { TableSelectorDropdown } from './TableSelectorDropdown';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
+import { useDashboardStore } from '@/stores/dashboard';
 
 export const SimpleDataTableView: React.FC = () => {
-  const { connected, connectionError, tables, tablesLoading, tablesError } = useDataBindingStore();
+  const { connected, connectionError, tables, tablesError, syncWithDashboard } = useDataBindingStore();
+  const { tablesLoading, fetchSupabaseTables } = useDashboardStore();
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
-  // Get stable function reference
-  const fetchTables = useDataBindingStore(state => state.fetchTables);
+  // Get stable function reference - removed since fetchTables no longer exists
 
   // Auto-select first table when tables become available (only once)
   React.useEffect(() => {
@@ -62,7 +63,7 @@ export const SimpleDataTableView: React.FC = () => {
           <div className="text-center py-8">
             <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
             <p className="text-muted-foreground mb-4">{tablesError}</p>
-            <Button onClick={fetchTables} variant="outline">
+            <Button onClick={() => { fetchSupabaseTables(); syncWithDashboard(); }} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               Try Again
             </Button>
@@ -86,7 +87,7 @@ export const SimpleDataTableView: React.FC = () => {
           <div className="text-center py-8">
             <Database className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <p className="text-muted-foreground mb-4">No tables found in your database</p>
-            <Button onClick={fetchTables} variant="outline">
+            <Button onClick={() => { fetchSupabaseTables(); syncWithDashboard(); }} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh Tables
             </Button>

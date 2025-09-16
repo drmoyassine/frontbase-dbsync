@@ -6,6 +6,7 @@ import { DataList } from './DataList';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
+import { useDashboardStore } from '@/stores/dashboard';
 
 interface AdminAppProps {
   className?: string;
@@ -14,7 +15,8 @@ interface AdminAppProps {
 export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
   console.log('[AdminApp] Component initialized');
   
-  const { connected, tables, tablesLoading, tablesError, fetchTables, initialize } = useDataBindingStore();
+  const { connected, tables, tablesError, initialize, syncWithDashboard } = useDataBindingStore();
+  const { tablesLoading, fetchSupabaseTables } = useDashboardStore();
   const [selectedTable, setSelectedTable] = useState<string>('');
 
   console.log('[AdminApp] State:', { 
@@ -28,7 +30,9 @@ export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
   useEffect(() => {
     console.log('[AdminApp] Initializing data binding store');
     initialize();
-  }, [initialize]);
+    // Trigger sync to get latest table data
+    syncWithDashboard();
+  }, [initialize, syncWithDashboard]);
 
   useEffect(() => {
     if (tables.length > 0 && !selectedTable) {
@@ -68,7 +72,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
         <CardContent>
           <div className="text-center py-8">
             <p className="text-destructive mb-4">{tablesError}</p>
-            <Button onClick={fetchTables} variant="outline">
+            <Button onClick={() => { fetchSupabaseTables(); syncWithDashboard(); }} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               Try Again
             </Button>
@@ -114,7 +118,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
           <div className="text-center py-8">
             <Database className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <p className="text-muted-foreground">No tables found in your database</p>
-            <Button onClick={fetchTables} variant="outline" className="mt-4">
+            <Button onClick={() => { fetchSupabaseTables(); syncWithDashboard(); }} variant="outline" className="mt-4">
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
@@ -134,7 +138,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
               Database Admin Dashboard
               <Badge variant="secondary">{tables.length} tables</Badge>
             </CardTitle>
-            <Button onClick={fetchTables} variant="outline" size="sm">
+            <Button onClick={() => { fetchSupabaseTables(); syncWithDashboard(); }} variant="outline" size="sm">
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>

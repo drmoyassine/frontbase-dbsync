@@ -77,9 +77,10 @@ export function useSimpleData({
   const error = errors.get(componentId) || null;
   const schema = binding?.tableName ? schemas.get(binding.tableName) : null;
 
-  // Initialize store if not connected
+  // Auto fetch data when connected and binding is set
   useEffect(() => {
     if (!connected) {
+      // Initialize to sync with dashboard store
       initialize();
     }
   }, [connected, initialize]);

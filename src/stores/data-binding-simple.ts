@@ -72,7 +72,7 @@ interface DataBindingState {
   
   // Actions
   initialize: () => void;
-  syncWithDashboard: () => void;
+  syncWithDashboard: () => Promise<void>;
   loadTableSchema: (tableName: string) => Promise<TableSchema | null>;
   queryData: (componentId: string, binding: ComponentDataBinding) => Promise<any>;
   setComponentBinding: (componentId: string, binding: ComponentDataBinding) => void;
@@ -97,34 +97,41 @@ export const useDataBindingStore = create<DataBindingState>()(
 
       // Initialize by syncing with dashboard store
       initialize: () => {
-        get().syncWithDashboard();
+        get().syncWithDashboard().catch(error => {
+          debug.error('DATA_BINDING', 'Initialization sync failed:', error);
+        });
       },
 
       // Sync connection and table state from dashboard store
-      syncWithDashboard: () => {
-        // Lazy import to avoid circular dependency
-        if (!getDashboardState) {
-          getDashboardState = require('./dashboard').useDashboardStore.getState;
+      syncWithDashboard: async () => {
+        try {
+          // Use dynamic import to avoid circular dependency
+          if (!getDashboardState) {
+            const dashboardModule = await import('./dashboard');
+            getDashboardState = dashboardModule.useDashboardStore.getState;
+          }
+          
+          const dashboardState = getDashboardState();
+          
+          const connected = dashboardState.connections.supabase?.connected || false;
+          const connectionError = connected ? null : 'Not connected to database';
+          const tables = dashboardState.supabaseTables || [];
+          const tablesError = dashboardState.tablesError;
+          
+          set({ 
+            connected,
+            connectionError,
+            tables,
+            tablesError
+          });
+          
+          debug.critical('DATA_BINDING', 'Synced with dashboard store:', { 
+            connected, 
+            tablesCount: tables.length 
+          });
+        } catch (error) {
+          debug.error('DATA_BINDING', 'Failed to sync with dashboard store:', error);
         }
-        
-        const dashboardState = getDashboardState();
-        
-        const connected = dashboardState.connections.supabase?.connected || false;
-        const connectionError = connected ? null : 'Not connected to database';
-        const tables = dashboardState.supabaseTables || [];
-        const tablesError = dashboardState.tablesError;
-        
-        set({ 
-          connected,
-          connectionError,
-          tables,
-          tablesError
-        });
-        
-        debug.critical('DATA_BINDING', 'Synced with dashboard store:', { 
-          connected, 
-          tablesCount: tables.length 
-        });
       },
 
       loadTableSchema: async (tableName: string): Promise<TableSchema | null> => {

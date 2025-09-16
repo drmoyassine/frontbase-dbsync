@@ -63,7 +63,10 @@ export const SimpleDataTableView: React.FC = () => {
           <div className="text-center py-8">
             <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
             <p className="text-muted-foreground mb-4">{tablesError}</p>
-            <Button onClick={() => { fetchSupabaseTables(); syncWithDashboard(); }} variant="outline">
+            <Button onClick={async () => { 
+              await fetchSupabaseTables(); 
+              await syncWithDashboard(); 
+            }} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               Try Again
             </Button>
@@ -87,7 +90,10 @@ export const SimpleDataTableView: React.FC = () => {
           <div className="text-center py-8">
             <Database className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <p className="text-muted-foreground mb-4">No tables found in your database</p>
-            <Button onClick={() => { fetchSupabaseTables(); syncWithDashboard(); }} variant="outline">
+            <Button onClick={async () => { 
+              await fetchSupabaseTables(); 
+              await syncWithDashboard(); 
+            }} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh Tables
             </Button>

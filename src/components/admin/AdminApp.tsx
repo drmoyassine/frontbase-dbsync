@@ -31,7 +31,9 @@ export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
     console.log('[AdminApp] Initializing data binding store');
     initialize();
     // Trigger sync to get latest table data
-    syncWithDashboard();
+    syncWithDashboard().catch(error => {
+      console.error('[AdminApp] Sync failed:', error);
+    });
   }, [initialize, syncWithDashboard]);
 
   useEffect(() => {
@@ -72,7 +74,10 @@ export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
         <CardContent>
           <div className="text-center py-8">
             <p className="text-destructive mb-4">{tablesError}</p>
-            <Button onClick={() => { fetchSupabaseTables(); syncWithDashboard(); }} variant="outline">
+            <Button onClick={async () => { 
+              await fetchSupabaseTables(); 
+              await syncWithDashboard(); 
+            }} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               Try Again
             </Button>
@@ -118,7 +123,10 @@ export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
           <div className="text-center py-8">
             <Database className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <p className="text-muted-foreground">No tables found in your database</p>
-            <Button onClick={() => { fetchSupabaseTables(); syncWithDashboard(); }} variant="outline" className="mt-4">
+            <Button onClick={async () => { 
+              await fetchSupabaseTables(); 
+              await syncWithDashboard(); 
+            }} variant="outline" className="mt-4">
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
@@ -138,7 +146,10 @@ export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
               Database Admin Dashboard
               <Badge variant="secondary">{tables.length} tables</Badge>
             </CardTitle>
-            <Button onClick={() => { fetchSupabaseTables(); syncWithDashboard(); }} variant="outline" size="sm">
+            <Button onClick={async () => { 
+              await fetchSupabaseTables(); 
+              await syncWithDashboard(); 
+            }} variant="outline" size="sm">
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>

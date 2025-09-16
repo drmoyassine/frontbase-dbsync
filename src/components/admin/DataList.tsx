@@ -51,7 +51,9 @@ export const DataList: React.FC<DataListProps> = ({
     console.log(`[DataList] Effect - connected: ${connected}, tablesLength: ${tables.length}`);
     if (connected && tables.length === 0) {
       console.log('[DataList] Fetching tables');
-      fetchSupabaseTables().then(() => syncWithDashboard());
+      fetchSupabaseTables().then(() => syncWithDashboard()).catch(error => {
+        console.error('[DataList] Fetch/sync failed:', error);
+      });
     }
     setLoading(false);
   }, [connected, tables, fetchSupabaseTables, syncWithDashboard]);

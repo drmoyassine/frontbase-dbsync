@@ -31,7 +31,7 @@ export function TableSelector({
   const loadTables = React.useCallback(async () => {
     if (!connected) return;
     await fetchSupabaseTables();
-    syncWithDashboard();
+    await syncWithDashboard();
   }, [connected, fetchSupabaseTables, syncWithDashboard]);
 
   React.useEffect(() => {

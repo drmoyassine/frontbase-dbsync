@@ -80,7 +80,10 @@ export const TableSelectorDropdown: React.FC<TableSelectorDropdownProps> = ({
       </div>
       
       <Button
-        onClick={() => { fetchSupabaseTables(); syncWithDashboard(); }}
+        onClick={async () => { 
+          await fetchSupabaseTables(); 
+          await syncWithDashboard(); 
+        }}
         variant="outline"
         size="sm"
         disabled={tablesLoading}

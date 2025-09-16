@@ -40,6 +40,8 @@ export const DataTable: React.FC<DataTableProps> = ({
   filterable = false,
   className
 }) => {
+  console.log(`[DataTable] Initializing for table: ${tableName}`);
+  
   const { connected } = useDataBindingStore();
   const [tableData, setTableData] = useState<TableData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -50,8 +52,12 @@ export const DataTable: React.FC<DataTableProps> = ({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const fetchData = async () => {
-    if (!connected || !tableName) return;
+    if (!connected || !tableName) {
+      console.log(`[DataTable] Skipping fetch - connected: ${connected}, tableName: ${tableName}`);
+      return;
+    }
 
+    console.log(`[DataTable] Fetching data for ${tableName} - page: ${page}, pageSize: ${pageSize}`);
     setLoading(true);
     setError(null);
 
@@ -71,19 +77,23 @@ export const DataTable: React.FC<DataTableProps> = ({
       }
 
       const url = `/api/database/table-data/${encodeURIComponent(tableName)}?${params}`;
+      console.log(`[DataTable] Fetching from: ${url}`);
       const response = await fetch(url, { credentials: 'include' });
 
+      console.log(`[DataTable] Response status: ${response.status}`);
       if (!response.ok) {
         throw new Error(`Failed to fetch data: ${response.status}`);
       }
 
       const result = await response.json();
+      console.log(`[DataTable] API result:`, { success: result.success, dataLength: result.data?.length });
       
       if (!result.success) {
         throw new Error(result.message || 'Failed to fetch table data');
       }
 
       // Get schema
+      console.log(`[DataTable] Fetching schema for ${tableName}`);
       const schemaResponse = await fetch(`/api/database/table-schema/${encodeURIComponent(tableName)}`, {
         credentials: 'include'
       });
@@ -91,6 +101,7 @@ export const DataTable: React.FC<DataTableProps> = ({
       let columns: TableColumn[] = [];
       if (schemaResponse.ok) {
         const schemaResult = await schemaResponse.json();
+        console.log(`[DataTable] Schema result:`, { success: schemaResult.success, dataType: typeof schemaResult.data });
         if (schemaResult.success && schemaResult.data) {
           columns = schemaResult.data;
         }
@@ -98,6 +109,7 @@ export const DataTable: React.FC<DataTableProps> = ({
 
       // Fallback: infer columns from data
       if (columns.length === 0 && result.data && result.data.length > 0) {
+        console.log(`[DataTable] Inferring columns from data`);
         const firstRow = result.data[0];
         columns = Object.keys(firstRow).map(key => ({
           column_name: key,
@@ -105,6 +117,7 @@ export const DataTable: React.FC<DataTableProps> = ({
         }));
       }
 
+      console.log(`[DataTable] Final columns:`, columns.map(c => c.column_name));
       setTableData({
         data: result.data || [],
         columns,
@@ -112,23 +125,28 @@ export const DataTable: React.FC<DataTableProps> = ({
       });
 
     } catch (err) {
+      console.error(`[DataTable] Error fetching data for ${tableName}:`, err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch data';
       setError(errorMessage);
     } finally {
+      console.log(`[DataTable] Fetch completed for ${tableName}`);
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    console.log(`[DataTable] Effect triggered - table: ${tableName}, page: ${page}, sort: ${sortColumn}:${sortDirection}`);
     fetchData();
   }, [tableName, page, sortColumn, sortDirection, connected]);
 
   useEffect(() => {
+    console.log(`[DataTable] Search query changed: "${searchQuery}"`);
     // Reset to first page when search changes
     const timeoutId = setTimeout(() => {
       if (page === 0) {
         fetchData();
       } else {
+        console.log(`[DataTable] Resetting to page 0 due to search`);
         setPage(0);
       }
     }, 300);
@@ -139,9 +157,13 @@ export const DataTable: React.FC<DataTableProps> = ({
   const handleSort = (column: string) => {
     if (!sortable) return;
     
+    console.log(`[DataTable] Sort requested for column: ${column}`);
     if (sortColumn === column) {
-      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+      const newDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      console.log(`[DataTable] Toggling sort direction to: ${newDirection}`);
+      setSortDirection(newDirection);
     } else {
+      console.log(`[DataTable] Setting new sort column: ${column}`);
       setSortColumn(column);
       setSortDirection('asc');
     }

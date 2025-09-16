@@ -9,12 +9,24 @@ import { DataList } from './DataList';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 
 export const EnhancedDataTableView: React.FC = () => {
+  console.log('[EnhancedDataTableView] Component initialized');
+  
   const { connected, tables, tablesLoading, tablesError, fetchTables } = useDataBindingStore();
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [viewMode, setViewMode] = useState<'table' | 'list'>('list');
 
+  console.log('[EnhancedDataTableView] State:', { 
+    connected, 
+    tablesCount: tables.length, 
+    tablesLoading, 
+    tablesError,
+    selectedTable,
+    viewMode
+  });
+
   React.useEffect(() => {
     if (tables.length > 0 && !selectedTable) {
+      console.log(`[EnhancedDataTableView] Auto-selecting first table: ${tables[0].name}`);
       setSelectedTable(tables[0].name);
     }
   }, [tables, selectedTable]);

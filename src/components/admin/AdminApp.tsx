@@ -12,15 +12,27 @@ interface AdminAppProps {
 }
 
 export const AdminApp: React.FC<AdminAppProps> = ({ className }) => {
+  console.log('[AdminApp] Component initialized');
+  
   const { connected, tables, tablesLoading, tablesError, fetchTables, initialize } = useDataBindingStore();
   const [selectedTable, setSelectedTable] = useState<string>('');
 
+  console.log('[AdminApp] State:', { 
+    connected, 
+    tablesCount: tables.length, 
+    tablesLoading, 
+    tablesError,
+    selectedTable
+  });
+
   useEffect(() => {
+    console.log('[AdminApp] Initializing data binding store');
     initialize();
   }, [initialize]);
 
   useEffect(() => {
     if (tables.length > 0 && !selectedTable) {
+      console.log(`[AdminApp] Auto-selecting first table: ${tables[0].name}`);
       setSelectedTable(tables[0].name);
     }
   }, [tables, selectedTable]);

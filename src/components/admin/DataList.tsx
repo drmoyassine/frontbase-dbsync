@@ -33,11 +33,22 @@ export const DataList: React.FC<DataListProps> = ({
   perPage = 25,
   className
 }) => {
+  console.log(`[DataList] Initializing for resource: ${resource}`);
+  
   const { connected, tables, fetchTables } = useDataBindingStore();
   const [loading, setLoading] = useState(true);
 
+  console.log(`[DataList] State:`, { 
+    connected, 
+    tablesCount: tables.length, 
+    resource,
+    tableExists: tables.some(t => t.name === resource)
+  });
+
   useEffect(() => {
+    console.log(`[DataList] Effect - connected: ${connected}, tablesLength: ${tables.length}`);
     if (connected && tables.length === 0) {
+      console.log('[DataList] Fetching tables');
       fetchTables();
     }
     setLoading(false);

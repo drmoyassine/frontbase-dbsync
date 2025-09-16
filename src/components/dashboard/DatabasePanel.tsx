@@ -6,7 +6,7 @@ import { Database, ExternalLink, AlertCircle, CheckCircle, Plus, Settings, Trash
 import { useDashboardStore } from '@/stores/dashboard';
 import { useAuthStore } from '@/stores/auth';
 import { SupabaseConnectionModal } from './SupabaseConnectionModal';
-import { SimpleDataTableView } from './SimpleDataTableView';
+import { EnhancedDataTableView } from '@/components/admin/EnhancedDataTableView';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -248,7 +248,7 @@ export const DatabasePanel: React.FC = () => {
 
       {connections.supabase.connected && (
         <div className="space-y-6">
-          <SimpleDataTableView />
+          <EnhancedDataTableView />
         </div>
       )}
 

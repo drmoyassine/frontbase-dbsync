@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { useCallback } from 'react';
 
 // Simplified interfaces matching dashboard pattern
 interface SupabaseTable {
@@ -92,7 +91,7 @@ export const useDataBindingStore = create<DataBindingState>()(
       loadingStates: new Map(),
       errors: new Map(),
 
-      initialize: useCallback(async () => {
+      initialize: async () => {
         const state = get();
         
         // Prevent duplicate initialization
@@ -134,9 +133,9 @@ export const useDataBindingStore = create<DataBindingState>()(
             connectionError: `Connection check failed: ${error instanceof Error ? error.message : 'Unknown error'}`
           });
         }
-      }, []),
+      },
 
-      fetchTables: useCallback(async () => {
+      fetchTables: async () => {
         const state = get();
         
         // Prevent duplicate requests
@@ -178,7 +177,7 @@ export const useDataBindingStore = create<DataBindingState>()(
             tablesLoading: false
           });
         }
-      }, []),
+      },
 
       loadTableSchema: async (tableName: string): Promise<TableSchema | null> => {
         

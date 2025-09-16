@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { useCallback } from 'react';
 
 interface DatabaseConnection {
   connected: boolean;
@@ -74,7 +73,7 @@ export const useDashboardStore = create<DashboardState>()(
   setTableDataModalOpen: (open) => set({ tableDataModalOpen: open }),
   setSelectedTable: (table) => set({ selectedTable: table }),
   
-  fetchConnections: useCallback(async () => {
+  fetchConnections: async () => {
     try {
       const response = await fetch('/api/database/connections', {
         credentials: 'include'
@@ -87,9 +86,9 @@ export const useDashboardStore = create<DashboardState>()(
     } catch (error) {
       console.error('Failed to fetch connections:', error);
     }
-  }, []),
+  },
 
-  fetchSupabaseTables: useCallback(async () => {
+  fetchSupabaseTables: async () => {
     set({ tablesLoading: true, tablesError: null });
     try {
       const response = await fetch('/api/database/supabase-tables', {
@@ -111,7 +110,7 @@ export const useDashboardStore = create<DashboardState>()(
       console.error('Failed to fetch Supabase tables:', error);
       set({ tablesError: 'Failed to fetch tables', tablesLoading: false });
     }
-  }, []),
+  },
     }),
     {
       name: 'dashboard-storage',

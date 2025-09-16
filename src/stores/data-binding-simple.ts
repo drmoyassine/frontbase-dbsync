@@ -92,17 +92,14 @@ export const useDataBindingStore = create<DataBindingState>()(
       errors: new Map(),
 
       initialize: async () => {
-        console.log('[DataBindingStore] Initializing...');
+        const state = get();
         
-        // Don't auto-initialize if already connected
-        if (get().connected) {
-          console.log('[DataBindingStore] Already connected, skipping initialization');
+        // Prevent duplicate initialization
+        if (state.connected || state.tablesLoading) {
           return;
         }
         
-        // Check connection status
         try {
-          console.log('[DataBindingStore] Testing API connectivity to /api/database/connections');
           const response = await fetch('/api/database/connections', {
             credentials: 'include',
             headers: {
@@ -110,27 +107,9 @@ export const useDataBindingStore = create<DataBindingState>()(
             }
           });
           
-          console.log('[DataBindingStore] API response status:', response.status);
-          console.log('[DataBindingStore] API response ok:', response.ok);
-          console.log('[DataBindingStore] API response headers:', Object.fromEntries(response.headers.entries()));
-          
           if (response.ok) {
-            const responseText = await response.text();
-            console.log('[DataBindingStore] Raw response text (first 200 chars):', responseText.substring(0, 200));
-            
-            // Check if response is actually JSON
-            let connections;
-            try {
-              connections = JSON.parse(responseText);
-              console.log('[DataBindingStore] Parsed JSON response:', connections);
-            } catch (parseError) {
-              console.error('[DataBindingStore] Response is not valid JSON:', parseError);
-              console.error('[DataBindingStore] Full response text:', responseText);
-              throw new Error('API returned non-JSON response (likely HTML from SPA route)');
-            }
-            
+            const connections = await response.json();
             const connected = connections.supabase?.connected || false;
-            console.log('[DataBindingStore] Connection status:', connected);
             
             set({ 
               connected,
@@ -142,11 +121,9 @@ export const useDataBindingStore = create<DataBindingState>()(
               await get().fetchTables();
             }
           } else {
-            const errorText = await response.text();
-            console.error('[DataBindingStore] API request failed:', response.status, errorText.substring(0, 200));
             set({ 
               connected: false,
-              connectionError: `Failed to check connection status: ${response.status} - ${errorText.substring(0, 100)}`
+              connectionError: `Failed to check connection status: ${response.status}`
             });
           }
         } catch (error) {
@@ -159,7 +136,13 @@ export const useDataBindingStore = create<DataBindingState>()(
       },
 
       fetchTables: async () => {
-        console.log('[DataBindingStore] Fetching tables...');
+        const state = get();
+        
+        // Prevent duplicate requests
+        if (state.tablesLoading) {
+          return;
+        }
+        
         set({ tablesLoading: true, tablesError: null });
         
         try {
@@ -197,7 +180,6 @@ export const useDataBindingStore = create<DataBindingState>()(
       },
 
       loadTableSchema: async (tableName: string): Promise<TableSchema | null> => {
-        console.log('[DataBindingStore] Loading schema for:', tableName);
         
         // Check cache first
         const cached = get().schemas.get(tableName);
@@ -233,7 +215,12 @@ export const useDataBindingStore = create<DataBindingState>()(
       },
 
       queryData: async (componentId: string, binding: ComponentDataBinding) => {
-        console.log('[DataBindingStore] Querying data for component:', componentId);
+        const state = get();
+        
+        // Prevent duplicate requests
+        if (state.loadingStates.get(componentId)) {
+          return state.dataCache.get(componentId);
+        }
         
         // Set loading state
         set((state) => {

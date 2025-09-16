@@ -74,25 +74,17 @@ export const useDashboardStore = create<DashboardState>()(
   setSelectedTable: (table) => set({ selectedTable: table }),
   
   fetchConnections: async () => {
-    console.log('=== DASHBOARD STORE: FETCH CONNECTIONS ===');
     try {
       const response = await fetch('/api/database/connections', {
         credentials: 'include'
       });
-      console.log('Connections API response status:', response.status);
-      console.log('Connections API response ok:', response.ok);
       
       if (response.ok) {
         const connections = await response.json();
-        console.log('Connections data received:', connections);
         set({ connections });
-      } else {
-        console.error('Failed to fetch connections - non-200 status:', response.status);
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
       }
     } catch (error) {
-      console.error('Failed to fetch connections - network/parse error:', error);
+      console.error('Failed to fetch connections:', error);
     }
   },
 

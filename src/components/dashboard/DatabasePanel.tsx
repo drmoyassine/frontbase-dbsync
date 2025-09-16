@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,31 +27,18 @@ export const DatabasePanel: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuthStore();
   const { toast } = useToast();
 
-  // Add extensive logging for debugging
-  console.log('=== DATABASE PANEL DEBUG ===');
-  console.log('Database Panel rendered');
-  console.log('Connections state:', connections);
-  console.log('Current URL:', window.location.href);
-  console.log('Current pathname:', window.location.pathname);
-  console.log('Cookies:', document.cookie);
-  console.log('=== END DATABASE PANEL DEBUG ===');
+  // Memoize the initialization function to prevent infinite loops
+  const handleInitialization = useCallback(async () => {
+    if (!isLoading && isAuthenticated) {
+      await fetchConnections();
+      await initializeDataBinding();
+    }
+  }, [fetchConnections, isAuthenticated, isLoading, initializeDataBinding]);
 
   // Add automatic connection restoration on mount for persistent connections
   useEffect(() => {
-    console.log('=== DATABASE PANEL USEEFFECT ===');
-    console.log('Auth loading:', isLoading, 'Auth authenticated:', isAuthenticated);
-    console.log('Persisted connections:', connections);
-    
-    // Only fetch connections when auth is complete and user is authenticated
-    if (!isLoading && isAuthenticated) {
-      console.log('Fetching connections after auth completion...');
-      fetchConnections();
-      // Also initialize the simple data binding store
-      initializeDataBinding();
-    } else {
-      console.log('Waiting for authentication to complete before fetching connections...');
-    }
-  }, [fetchConnections, isAuthenticated, isLoading, initializeDataBinding]);
+    handleInitialization();
+  }, [handleInitialization]);
 
   const handleDisconnectSupabase = async () => {
     try {

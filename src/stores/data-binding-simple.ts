@@ -232,7 +232,20 @@ export const useDataBindingStore = create<DataBindingState>()(
           if (response.ok) {
             const result = await response.json();
             if (result.success && result.data) {
-              const schema: TableSchema = { columns: result.data.columns };
+              console.log('[DataBindingStore] Raw schema data:', result.data);
+              
+              // Transform database column structure to frontend format
+              const transformedColumns = result.data.columns.map((col: any) => ({
+                name: col.column_name || col.name, // Handle both formats
+                type: col.data_type || col.type,
+                nullable: col.is_nullable === 'YES' || col.nullable,
+                default: col.column_default || col.default,
+                isPrimaryKey: col.is_primary || col.isPrimaryKey
+              }));
+              
+              console.log('[DataBindingStore] Transformed columns:', transformedColumns);
+              
+              const schema: TableSchema = { columns: transformedColumns };
               
               // Cache the schema
               set((state) => {

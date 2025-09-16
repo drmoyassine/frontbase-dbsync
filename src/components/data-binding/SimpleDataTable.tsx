@@ -82,6 +82,11 @@ export function SimpleDataTable({
 
   const [searchInput, setSearchInput] = React.useState('');
 
+  // Debug logging for data and schema
+  console.log('[SimpleDataTable] Schema:', schema);
+  console.log('[SimpleDataTable] Data:', data);
+  console.log('[SimpleDataTable] Count:', count);
+
   // Handle search input changes
   const handleSearchChange = (value: string) => {
     setSearchInput(value);

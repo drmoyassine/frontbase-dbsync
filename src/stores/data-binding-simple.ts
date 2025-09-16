@@ -232,7 +232,7 @@ export const useDataBindingStore = create<DataBindingState>()(
           if (response.ok) {
             const result = await response.json();
             if (result.success && result.data) {
-              const schema: TableSchema = { columns: result.data };
+              const schema: TableSchema = { columns: result.data.columns };
               
               // Cache the schema
               set((state) => {

@@ -8,6 +8,13 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuthStore();
+  
+  // Check for auth bypass in development/preview mode
+  const urlParams = new URLSearchParams(window.location.search);
+  const skipAuth = urlParams.get('skip_auth') === 'true';
+  const isDevMode = window.location.hostname.includes('lovable') || 
+                   window.location.hostname.includes('localhost') ||
+                   import.meta.env.DEV;
 
   if (isLoading) {
     return (
@@ -20,11 +27,21 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     );
   }
 
-  if (!isAuthenticated) {
+  // Allow bypass in development mode only
+  if (!isAuthenticated && !(isDevMode && skipAuth)) {
     return <Navigate to="/auth/login" replace />;
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {isDevMode && skipAuth && (
+        <div className="fixed top-0 left-0 z-50 bg-yellow-500/90 text-black px-3 py-1 text-xs font-medium">
+          🎨 Visual Edit Mode (Auth Bypassed)
+        </div>
+      )}
+      {children}
+    </>
+  );
 };
 
 export default ProtectedRoute;

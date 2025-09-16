@@ -22,23 +22,32 @@ import {
 } from '@/components/ui/alert-dialog';
 
 export const DatabasePanel: React.FC = () => {
-  const { connections, setSupabaseModalOpen, fetchConnections } = useDashboardStore();
-  const { connected, initialize: initializeDataBinding } = useDataBindingStore();
+  const { connections, setSupabaseModalOpen } = useDashboardStore();
+  const { connected } = useDataBindingStore();
   const { isAuthenticated, isLoading } = useAuthStore();
   const { toast } = useToast();
 
-  // Memoize the initialization function to prevent infinite loops
-  const handleInitialization = useCallback(async () => {
-    if (!isLoading && isAuthenticated) {
-      await fetchConnections();
-      await initializeDataBinding();
-    }
-  }, [fetchConnections, initializeDataBinding, isAuthenticated, isLoading]);
+  // Get stable store functions
+  const fetchConnections = useDashboardStore(state => state.fetchConnections);
+  const initializeDataBinding = useDataBindingStore(state => state.initialize);
 
-  // Add automatic connection restoration on mount for persistent connections
+  // Initialize only once when authenticated
   useEffect(() => {
-    handleInitialization();
-  }, [handleInitialization]);
+    if (!isLoading && isAuthenticated) {
+      console.log('[DatabasePanel] Initializing connections and data binding...');
+      
+      const initializeAll = async () => {
+        try {
+          await fetchConnections();
+          await initializeDataBinding();
+        } catch (error) {
+          console.error('[DatabasePanel] Initialization error:', error);
+        }
+      };
+      
+      initializeAll();
+    }
+  }, [isAuthenticated, isLoading, fetchConnections, initializeDataBinding]);
 
   const handleDisconnectSupabase = async () => {
     try {

@@ -9,15 +9,21 @@ import { SimpleDataTable } from '@/components/data-binding/SimpleDataTable';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 
 export const SimpleDataTableView: React.FC = () => {
-  const { connected, connectionError, tables, tablesLoading, tablesError, fetchTables } = useDataBindingStore();
+  const { connected, connectionError, tables, tablesLoading, tablesError } = useDataBindingStore();
   const [selectedTable, setSelectedTable] = useState<string>('');
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
-  // Auto-select first table when tables become available and none is selected
+  // Get stable function reference
+  const fetchTables = useDataBindingStore(state => state.fetchTables);
+
+  // Auto-select first table when tables become available (only once)
   React.useEffect(() => {
-    if (tables.length > 0 && !selectedTable && tables[0]?.name) {
+    if (tables.length > 0 && !selectedTable && !hasAutoSelected && tables[0]?.name) {
+      console.log('[SimpleDataTableView] Auto-selecting first table:', tables[0].name);
       setSelectedTable(tables[0].name);
+      setHasAutoSelected(true);
     }
-  }, [tables, selectedTable]);
+  }, [tables, selectedTable, hasAutoSelected]);
 
   // Show connection error if any
   if (connectionError) {

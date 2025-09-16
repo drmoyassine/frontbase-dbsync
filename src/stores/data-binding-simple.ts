@@ -48,6 +48,7 @@ interface DataBindingState {
   // Connection status (simplified)
   connected: boolean;
   connectionError: string | null;
+  initializing: boolean;
   
   // Tables
   tables: SupabaseTable[];
@@ -64,6 +65,10 @@ interface DataBindingState {
   dataCache: Map<string, any>;
   loadingStates: Map<string, boolean>;
   errors: Map<string, string>;
+  
+  // Promise tracking to prevent duplicate requests
+  initializationPromise: Promise<void> | null;
+  tablesPromise: Promise<void> | null;
   
   // Actions
   initialize: () => Promise<void>;
@@ -82,6 +87,7 @@ export const useDataBindingStore = create<DataBindingState>()(
     (set, get) => ({
       connected: false,
       connectionError: null,
+      initializing: false,
       tables: [],
       tablesLoading: false,
       tablesError: null,
@@ -90,93 +96,124 @@ export const useDataBindingStore = create<DataBindingState>()(
       dataCache: new Map(),
       loadingStates: new Map(),
       errors: new Map(),
+      initializationPromise: null,
+      tablesPromise: null,
 
       initialize: async () => {
         const state = get();
         
-        // Prevent duplicate initialization
-        if (state.connected || state.tablesLoading) {
-          return;
+        // Prevent duplicate initialization with stronger protection
+        if (state.initializing || state.initializationPromise) {
+          return state.initializationPromise;
         }
+
+        console.log('[DataBindingStore] Starting initialization...');
         
-        try {
-          const response = await fetch('/api/database/connections', {
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-            }
-          });
-          
-          if (response.ok) {
-            const connections = await response.json();
-            const connected = connections.supabase?.connected || false;
-            
-            set({ 
-              connected,
-              connectionError: connected ? null : 'Not connected to database'
+        const initPromise = (async () => {
+          set({ initializing: true, connectionError: null });
+
+          try {
+            const response = await fetch('/api/database/connections', {
+              credentials: 'include',
+              headers: {
+                'Content-Type': 'application/json',
+              }
             });
             
-            // Fetch tables if connected
-            if (connected) {
-              await get().fetchTables();
+            if (response.ok) {
+              const connections = await response.json();
+              const connected = connections.supabase?.connected || false;
+              
+              console.log('[DataBindingStore] Connection status:', connected);
+              
+              set({ 
+                connected,
+                connectionError: connected ? null : 'Not connected to database',
+                initializing: false,
+                initializationPromise: null
+              });
+              
+              // Fetch tables if connected
+              if (connected) {
+                await get().fetchTables();
+              }
+            } else {
+              set({ 
+                connected: false,
+                connectionError: `Failed to check connection status: ${response.status}`,
+                initializing: false,
+                initializationPromise: null
+              });
             }
-          } else {
+          } catch (error) {
+            console.error('[DataBindingStore] Initialization error:', error);
             set({ 
               connected: false,
-              connectionError: `Failed to check connection status: ${response.status}`
+              connectionError: `Connection check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              initializing: false,
+              initializationPromise: null
             });
           }
-        } catch (error) {
-          console.error('[DataBindingStore] Initialization error:', error);
-          set({ 
-            connected: false,
-            connectionError: `Connection check failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-          });
-        }
+        })();
+
+        set({ initializationPromise: initPromise });
+        return initPromise;
       },
 
       fetchTables: async () => {
         const state = get();
         
-        // Prevent duplicate requests
-        if (state.tablesLoading) {
-          return;
+        // Prevent duplicate requests with stronger protection
+        if (state.tablesLoading || state.tablesPromise) {
+          return state.tablesPromise;
         }
+
+        console.log('[DataBindingStore] Fetching tables...');
         
-        set({ tablesLoading: true, tablesError: null });
-        
-        try {
-          const response = await fetch('/api/database/supabase-tables', {
-            credentials: 'include'
-          });
+        const fetchPromise = (async () => {
+          set({ tablesLoading: true, tablesError: null });
           
-          if (response.ok) {
-            const result = await response.json();
-            if (result.success && result.data?.tables) {
-              set({ 
-                tables: result.data.tables,
-                tablesLoading: false,
-                tablesError: null
-              });
+          try {
+            const response = await fetch('/api/database/supabase-tables', {
+              credentials: 'include'
+            });
+            
+            if (response.ok) {
+              const result = await response.json();
+              if (result.success && result.data?.tables) {
+                console.log('[DataBindingStore] Tables loaded:', result.data.tables.length);
+                set({ 
+                  tables: result.data.tables,
+                  tablesLoading: false,
+                  tablesError: null,
+                  tablesPromise: null
+                });
+              } else {
+                set({ 
+                  tablesError: result.message || 'Failed to fetch tables',
+                  tablesLoading: false,
+                  tablesPromise: null
+                });
+              }
             } else {
               set({ 
-                tablesError: result.message || 'Failed to fetch tables',
-                tablesLoading: false
+                tablesError: 'Failed to fetch tables',
+                tablesLoading: false,
+                tablesPromise: null
               });
             }
-          } else {
+          } catch (error) {
+            console.error('[DataBindingStore] Error fetching tables:', error);
             set({ 
-              tablesError: 'Failed to fetch tables',
-              tablesLoading: false
+              tablesError: 'Network error fetching tables',
+              tablesLoading: false,
+              tablesPromise: null
             });
           }
-        } catch (error) {
-          console.error('[DataBindingStore] Error fetching tables:', error);
-          set({ 
-            tablesError: 'Network error fetching tables',
-            tablesLoading: false
-          });
-        }
+        })();
+
+        set({ tablesPromise: fetchPromise });
+        return fetchPromise;
       },
 
       loadTableSchema: async (tableName: string): Promise<TableSchema | null> => {
@@ -368,6 +405,7 @@ export const useDataBindingStore = create<DataBindingState>()(
         // Reset all other state
         connected: false,
         connectionError: null,
+        initializing: false,
         tables: [],
         tablesLoading: false,
         tablesError: null,
@@ -375,6 +413,8 @@ export const useDataBindingStore = create<DataBindingState>()(
         dataCache: new Map(),
         loadingStates: new Map(),
         errors: new Map(),
+        initializationPromise: null,
+        tablesPromise: null,
       }),
     }
   )

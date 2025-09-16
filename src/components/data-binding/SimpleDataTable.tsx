@@ -61,6 +61,8 @@ export function SimpleDataTable({
   className,
   onConfigureBinding 
 }: SimpleDataTableProps) {
+  console.log('[SimpleDataTable] Rendering with componentId:', componentId, 'binding:', binding?.tableName);
+  
   const {
     data,
     count,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -8,14 +8,12 @@ import { Switch } from '@/components/ui/switch';
 import { TableSelector } from '@/components/data-binding/TableSelector';
 import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
-import { useDashboardStore } from '@/stores/dashboard';
 import { useToast } from '@/hooks/use-toast';
 import { Settings, Save, RotateCcw } from 'lucide-react';
 
 export function UserContactConfigPanel() {
   const { config, setConfig, setContactsTable, updateColumnMapping, setEnabled, resetConfig } = useUserContactConfig();
-  const { tables, loadTableSchema, schemas, initialize, connected, connectionError } = useDataBindingStore();
-  const { fetchConnections } = useDashboardStore();
+  const { tables, loadTableSchema, schemas } = useDataBindingStore();
   const { toast } = useToast();
   
   const [selectedTable, setSelectedTable] = useState(config?.contactsTable || '');
@@ -28,15 +26,6 @@ export function UserContactConfigPanel() {
 
   const tableSchema = selectedTable ? schemas.get(selectedTable) : null;
   const availableColumns = tableSchema?.columns || [];
-
-  // Initialize data binding store and fetch connections on mount
-  useEffect(() => {
-    const initializeStores = async () => {
-      await fetchConnections();
-      initialize();
-    };
-    initializeStores();
-  }, [fetchConnections, initialize]);
 
   const handleTableChange = async (tableName: string) => {
     setSelectedTable(tableName);
@@ -115,14 +104,6 @@ export function UserContactConfigPanel() {
           <Label htmlFor="enable-user-sync">Enable user contact data sync</Label>
         </div>
 
-        {!connected && (
-          <div className="p-4 border border-amber-200 bg-amber-50 rounded-lg">
-            <p className="text-sm text-amber-800">
-              {connectionError || 'Database not connected. Please configure your Supabase connection first.'}
-            </p>
-          </div>
-        )}
-
         <div className="space-y-4">
           <div>
             <Label htmlFor="contacts-table">Contacts Table</Label>
@@ -130,7 +111,6 @@ export function UserContactConfigPanel() {
               value={selectedTable}
               onValueChange={handleTableChange}
               placeholder="Select the table containing contact data"
-              disabled={!connected}
             />
           </div>
 

@@ -25,12 +25,16 @@ export function TableSelector({
   disabled = false,
   showRefresh = true
 }: TableSelectorProps) {
-  const { tables, tablesError, connected, tablesLoading, fetchTables } = useDataBindingStore();
+  const { tables, tablesError, connected, tablesLoading, fetchTables, initialize } = useDataBindingStore();
 
   const loadTables = React.useCallback(async () => {
-    if (!connected) return;
+    if (!connected) {
+      // Try to initialize the connection first
+      initialize();
+      return;
+    }
     await fetchTables();
-  }, [connected, fetchTables]);
+  }, [connected, fetchTables, initialize]);
 
   React.useEffect(() => {
     loadTables();
@@ -76,7 +80,10 @@ export function TableSelector({
       </Select>
       {!isLoading && tableList.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          {tablesError || 'No tables found. Make sure your database is properly connected.'}
+          {!connected 
+            ? 'Database not connected. Please configure your Supabase connection.'
+            : (tablesError || 'No tables found. Make sure your database is properly connected.')
+          }
         </p>
       )}
     </div>

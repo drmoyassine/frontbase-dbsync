@@ -179,7 +179,90 @@ export const useBuilderStore = create<BuilderState>()(
       })),
 
       setCurrentPage: (id) => set({ currentPageId: id }),
+      setCurrentPageId: (id) => set({ currentPageId: id }),
+      setSelectedComponentId: (id) => set({ selectedComponentId: id }),
+      setDraggedComponentId: (id) => set({ draggedComponentId: id }),
+      setEditingComponentId: (id) => set({ editingComponentId: id }),
+      setPreviewMode: (isPreview) => set({ isPreviewMode: isPreview }),
+
       setShowDeviceFrame: (show: boolean) => set({ showDeviceFrame: show }),
+      setCurrentViewport: (viewport) => set({ currentViewport: viewport }),
+      setZoomLevel: (zoom) => set({ zoomLevel: zoom }),
+
+      setSupabaseConnection: (connected, tables) => set({ isSupabaseConnected: connected, supabaseTables: tables || [] }),
+
+      moveComponent: (pageId, componentId, component, targetIndex, parentId, sourceParentId) => {
+        set((state) => {
+          const pageIndex = state.pages.findIndex(p => p.id === pageId);
+          if (pageIndex === -1) return state;
+
+          const newPages = [...state.pages];
+          const page = { ...newPages[pageIndex] };
+
+          // Helper to find and remove component
+          const removeComponent = (items: ComponentData[], id: string): ComponentData[] => {
+            return items.filter(item => {
+              if (item.id === id) return false;
+              if (item.children) {
+                item.children = removeComponent(item.children, id);
+              }
+              return true;
+            });
+          };
+
+          // Helper to insert component
+          const insertComponent = (items: ComponentData[], targetId: string | undefined, comp: ComponentData, index: number): ComponentData[] => {
+            if (!targetId) {
+              // Insert at root level
+              const newItems = [...items];
+              newItems.splice(index, 0, comp);
+              return newItems;
+            }
+
+            return items.map(item => {
+              if (item.id === targetId) {
+                const newChildren = item.children ? [...item.children] : [];
+                newChildren.splice(index, 0, comp);
+                return { ...item, children: newChildren };
+              }
+              if (item.children) {
+                return { ...item, children: insertComponent(item.children, targetId, comp, index) };
+              }
+              return item;
+            });
+          };
+
+          let content = page.layoutData?.content || [];
+
+          // If moving an existing component (componentId is provided), remove it first
+          if (componentId) {
+            content = removeComponent(content, componentId);
+          }
+
+          // Insert the component at the new location
+          if (parentId) {
+            content = insertComponent(content, parentId, component, targetIndex);
+          } else {
+            // Root level insertion
+            const newContent = [...content];
+            newContent.splice(targetIndex, 0, component);
+            content = newContent;
+          }
+
+          page.layoutData = {
+            ...page.layoutData,
+            content
+          };
+
+          newPages[pageIndex] = page;
+
+          return {
+            ...state,
+            pages: newPages,
+            hasUnsavedChanges: true
+          };
+        });
+      },
 
       updateComponentText: (componentId: string, textProperty: string, text: string) => {
         set((state) => {

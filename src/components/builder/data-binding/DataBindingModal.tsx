@@ -11,6 +11,7 @@ import { TableSelector } from '@/components/data-binding/TableSelector';
 import { ColumnConfigurator } from '@/components/data-binding/ColumnConfigurator';
 import { PropertyMapper } from '@/components/builder/data-binding/PropertyMapper';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
+import { Separator } from '@/components/ui/separator';
 
 interface ComponentDataBinding {
   componentId: string;
@@ -93,6 +94,168 @@ export function DataBindingModal({
     setBinding(prev => ({ ...prev, ...updates }));
   };
 
+  // Check if this is a DataTable component - use simplified UI
+  const isDataTable = componentType === 'DataTable';
+
+  // Simplified single-view UI for DataTable
+  if (isDataTable) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle>Configure Data Table</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto space-y-6 p-1">
+            {/* Data Source Section */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Data Source</h3>
+              <DataSourceSelector
+                value={binding.dataSourceId}
+                onValueChange={(value) => updateBinding({ dataSourceId: value })}
+              />
+              <TableSelector
+                value={binding.tableName}
+                onValueChange={(value) => updateBinding({ tableName: value })}
+                dataSourceId={binding.dataSourceId}
+              />
+            </div>
+
+            <Separator />
+
+            {/* Table Options Section */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Table Options</h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Pagination */}
+                <div className="space-y-3 p-4 border rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="pagination-enabled"
+                      checked={binding.pagination?.enabled || false}
+                      onCheckedChange={(checked) =>
+                        updateBinding({
+                          pagination: { ...binding.pagination!, enabled: checked }
+                        })
+                      }
+                    />
+                    <Label htmlFor="pagination-enabled" className="font-medium">Enable Pagination</Label>
+                  </div>
+                  {binding.pagination?.enabled && (
+                    <div className="space-y-2">
+                      <Label htmlFor="page-size">Rows per page</Label>
+                      <Input
+                        id="page-size"
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={binding.pagination?.pageSize || 10}
+                        onChange={(e) =>
+                          updateBinding({
+                            pagination: {
+                              ...binding.pagination!,
+                              pageSize: parseInt(e.target.value) || 10
+                            }
+                          })
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Sorting */}
+                <div className="space-y-3 p-4 border rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="sorting-enabled"
+                      checked={binding.sorting?.enabled || false}
+                      onCheckedChange={(checked) =>
+                        updateBinding({
+                          sorting: { ...binding.sorting!, enabled: checked }
+                        })
+                      }
+                    />
+                    <Label htmlFor="sorting-enabled" className="font-medium">Enable Sorting</Label>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Users can click column headers to sort
+                  </p>
+                </div>
+
+                {/* Search */}
+                <div className="space-y-3 p-4 border rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="search-enabled"
+                      checked={binding.filtering?.searchEnabled || false}
+                      onCheckedChange={(checked) =>
+                        updateBinding({
+                          filtering: { ...binding.filtering!, searchEnabled: checked }
+                        })
+                      }
+                    />
+                    <Label htmlFor="search-enabled" className="font-medium">Enable Search</Label>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Show search bar above table
+                  </p>
+                </div>
+
+                {/* Refresh Interval */}
+                <div className="space-y-3 p-4 border rounded-lg">
+                  <Label htmlFor="refresh-interval" className="font-medium">Refresh Interval</Label>
+                  <Select
+                    value={binding.refreshInterval?.toString() || '-1'}
+                    onValueChange={(value) => updateBinding({ refreshInterval: parseInt(value) })}
+                  >
+                    <SelectTrigger id="refresh-interval">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="-1">Manual</SelectItem>
+                      <SelectItem value="0">Real-time</SelectItem>
+                      <SelectItem value="5">Every 5 seconds</SelectItem>
+                      <SelectItem value="30">Every 30 seconds</SelectItem>
+                      <SelectItem value="60">Every minute</SelectItem>
+                      <SelectItem value="300">Every 5 minutes</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Column Configuration */}
+            {binding.tableName && (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Column Configuration</h3>
+                  <ColumnConfigurator
+                    tableName={binding.tableName}
+                    dataSourceId={binding.dataSourceId}
+                    columnOverrides={binding.columnOverrides || {}}
+                    onColumnOverridesChange={(overrides) => updateBinding({ columnOverrides: overrides })}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t border-border flex-shrink-0">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!binding.tableName}>
+              Save Configuration
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Original tabbed UI for other component types
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">

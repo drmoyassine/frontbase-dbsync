@@ -47,10 +47,10 @@ interface UseSimpleDataResult {
   setSearchQuery: (query: string) => void;
 }
 
-export function useSimpleData({ 
-  componentId, 
-  binding, 
-  autoFetch = true 
+export function useSimpleData({
+  componentId,
+  binding,
+  autoFetch = true
 }: UseSimpleDataOptions): UseSimpleDataResult {
   const {
     connected,
@@ -90,7 +90,7 @@ export function useSimpleData({
   const paginationKey = `${pagination.page}-${pagination.pageSize}`;
   const sortingKey = `${sorting.column || ''}-${sorting.direction || ''}`;
   const filtersKey = JSON.stringify(filters);
-  
+
   // Build effective binding with current state - properly memoized and debounced
   const getEffectiveBinding = useCallback((): ComponentDataBinding | null => {
     if (!binding || !binding.tableName) return null;
@@ -142,13 +142,23 @@ export function useSimpleData({
 
   // Auto-fetch data with optimized debouncing
   useEffect(() => {
-    if (!autoFetch || !binding?.tableName || !connected) return;
-    
+    console.log('[useSimpleData] Auto-fetch check:', {
+      autoFetch,
+      tableName: binding?.tableName,
+      connected,
+      componentId
+    });
+
+    if (!autoFetch || !binding?.tableName || !connected) {
+      console.log('[useSimpleData] Skipping fetch - conditions not met');
+      return;
+    }
+
     // Longer debounce to prevent excessive calls during rapid state changes
     const timeoutId = setTimeout(() => {
+      console.log('[useSimpleData] Fetching data for componentId:', componentId);
       fetchData();
     }, 300);
-
     return () => clearTimeout(timeoutId);
   }, [autoFetch, bindingKey, connected, fetchData]);
 
@@ -171,9 +181,9 @@ export function useSimpleData({
   }, []);
 
   const setPagination = useCallback((page: number, pageSize?: number) => {
-    setPaginationState(prev => ({ 
-      page, 
-      pageSize: pageSize ?? prev.pageSize 
+    setPaginationState(prev => ({
+      page,
+      pageSize: pageSize ?? prev.pageSize
     }));
   }, []);
 
@@ -210,10 +220,10 @@ export function useTableSchema(tableName?: string) {
 
   const loadSchema = useCallback(async (table: string) => {
     if (!connected) return;
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       await loadTableSchema(table);
     } catch (err) {

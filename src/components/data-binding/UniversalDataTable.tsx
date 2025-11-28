@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChevronLeft, ChevronRight, Search, Settings, ArrowUpDown } from 'lucide-react';
 import { useSimpleData } from '@/hooks/useSimpleData';
 import { cn } from '@/lib/utils';
+import { useDataBindingStore } from '@/stores/data-binding-simple';
 
 interface ComponentDataBinding {
   componentId: string;
@@ -43,10 +44,13 @@ interface UniversalDataTableProps {
 
 export function UniversalDataTable({
   componentId,
-  binding,
+  binding: bindingProp,
   className,
   onConfigureBinding
 }: UniversalDataTableProps) {
+  // Get binding from store as fallback if props don't have it
+  const { getComponentBinding } = useDataBindingStore();
+  const binding = bindingProp || getComponentBinding(componentId);
   const {
     data,
     count,
@@ -68,7 +72,7 @@ export function UniversalDataTable({
 
   const handleSort = (column: string) => {
     if (!binding?.sorting.enabled) return;
-    
+
     const currentDirection = binding.sorting.column === column ? binding.sorting.direction : undefined;
     const newDirection = currentDirection === 'asc' ? 'desc' : 'asc';
     setSorting(column, newDirection);
@@ -93,25 +97,25 @@ export function UniversalDataTable({
       case 'date':
         return new Date(value).toLocaleDateString();
       case 'currency':
-        return new Intl.NumberFormat('en-US', { 
-          style: 'currency', 
-          currency: 'USD' 
+        return new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD'
         }).format(Number(value));
       case 'percentage':
         return `${(Number(value) * 100).toFixed(1)}%`;
       case 'image':
         return (
-          <img 
-            src={String(value)} 
-            alt="Image" 
+          <img
+            src={String(value)}
+            alt="Image"
             className="w-8 h-8 rounded object-cover"
           />
         );
       case 'link':
         return (
-          <a 
-            href={String(value)} 
-            target="_blank" 
+          <a
+            href={String(value)}
+            target="_blank"
             rel="noopener noreferrer"
             className="text-primary hover:underline"
           >
@@ -198,20 +202,20 @@ export function UniversalDataTable({
             Configure
           </Button>
         </CardTitle>
-        
-         {binding.filtering?.searchEnabled && (
-           <div className="relative max-w-sm">
-             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-             <Input
-               placeholder="Search..."
-               value={searchInput}
-               onChange={(e) => handleSearchChange(e.target.value)}
-               className="pl-9"
-             />
-           </div>
-         )}
+
+        {binding.filtering?.searchEnabled && (
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search..."
+              value={searchInput}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        )}
       </CardHeader>
-      
+
       <CardContent>
         {loading ? (
           <div className="space-y-2">
@@ -266,33 +270,33 @@ export function UniversalDataTable({
               </Table>
             </div>
 
-             {binding.pagination?.enabled && data.length > 0 && (
-               <div className="flex items-center justify-between px-2 py-4">
-                 <div className="text-sm text-muted-foreground">
-                   Showing {data.length} entries (Page {(binding.pagination.page || 0) + 1})
-                 </div>
-                 <div className="flex items-center space-x-2">
-                   <Button
-                     variant="outline"
-                     size="sm"
-                     onClick={() => setPagination(Math.max(0, (binding.pagination.page || 0) - 1))}
-                     disabled={binding.pagination.page === 0 || loading}
-                   >
-                     <ChevronLeft className="h-4 w-4" />
-                     Previous
-                   </Button>
-                   <Button
-                     variant="outline"
-                     size="sm"
-                     onClick={() => setPagination((binding.pagination.page || 0) + 1)}
-                     disabled={data.length < binding.pagination.pageSize || loading}
-                   >
-                     Next
-                     <ChevronRight className="h-4 w-4" />
-                   </Button>
-                 </div>
-               </div>
-             )}
+            {binding.pagination?.enabled && data.length > 0 && (
+              <div className="flex items-center justify-between px-2 py-4">
+                <div className="text-sm text-muted-foreground">
+                  Showing {data.length} entries (Page {(binding.pagination.page || 0) + 1})
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPagination(Math.max(0, (binding.pagination.page || 0) - 1))}
+                    disabled={binding.pagination.page === 0 || loading}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPagination((binding.pagination.page || 0) + 1)}
+                    disabled={data.length < binding.pagination.pageSize || loading}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </CardContent>

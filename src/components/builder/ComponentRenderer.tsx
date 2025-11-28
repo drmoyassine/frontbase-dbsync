@@ -55,10 +55,27 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
 
   // Data Binding Logic
   const binding = props.binding as ComponentDataBinding | undefined;
+
+  // DEBUG: Check if binding is in props
+  if (type === 'DataTable') {
+    console.log('[ComponentRenderer] DataTable render:', {
+      componentId: id,
+      hasBinding: !!props.binding,
+      binding: props.binding,
+      tableName: binding?.tableName
+    });
+  }
+
+  // For DataTable, we don't need fieldMapping (it shows all columns)
+  // For other components, we need fieldMapping to know which props to bind
+  const shouldAutoFetch = type === 'DataTable'
+    ? !!binding?.tableName
+    : !!binding?.tableName && !!binding?.fieldMapping;
+
   const { data: boundData } = useSimpleData({
     componentId: id || '',
     binding: binding,
-    autoFetch: !!binding?.tableName && !!binding?.fieldMapping
+    autoFetch: shouldAutoFetch
   });
 
   // Calculate effective props with data binding

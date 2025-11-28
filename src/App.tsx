@@ -11,6 +11,7 @@ import Index from "./pages/Index";
 import LoginPage from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
 import BuilderPage from "./pages/BuilderPage";
+import VariablesPage from "./pages/VariablesPage";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -24,7 +25,7 @@ const App = () => {
   useEffect(() => {
     const initializeApp = async () => {
       await checkAuth();
-      
+
       // Fetch dashboard connections if authenticated
       if (isAuthenticated) {
         await fetchConnections().catch(console.error);
@@ -55,24 +56,29 @@ const App = () => {
           <Sonner />
           <BrowserRouter>
             <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/auth/login" element={<LoginPage />} />
-            <Route path="/dashboard/*" element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            } />
-            <Route path="/builder/:pageId" element={
-              <ProtectedRoute>
-                <BuilderPage />
-              </ProtectedRoute>
-            } />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+              <Route path="/" element={<Index />} />
+              <Route path="/auth/login" element={<LoginPage />} />
+              <Route path="/dashboard/*" element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/builder/:pageId" element={
+                <ProtectedRoute>
+                  <BuilderPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/variables" element={
+                <ProtectedRoute>
+                  <VariablesPage />
+                </ProtectedRoute>
+              } />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
     </ErrorBoundary>
   );
 };

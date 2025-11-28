@@ -24,6 +24,8 @@ import { UniversalDataTable } from '@/components/data-binding/UniversalDataTable
 import { KPICard } from '@/components/data-binding/KPICard';
 import { Chart } from '@/components/data-binding/Chart';
 import { Grid } from '@/components/data-binding/Grid';
+import { useSimpleData } from '@/hooks/useSimpleData';
+import { ComponentDataBinding } from '@/lib/data-sources/types';
 
 interface ComponentRendererProps {
   component: {
@@ -41,20 +43,46 @@ interface ComponentRendererProps {
   onDoubleClick?: (componentId: string, event: React.MouseEvent) => void;
 }
 
-export const ComponentRenderer: React.FC<ComponentRendererProps> = ({ 
-  component, 
-  isSelected, 
-  children, 
+export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
+  component,
+  isSelected,
+  children,
   onComponentClick,
-  onDoubleClick 
+  onDoubleClick
 }) => {
   const { id, type, props, styles = {}, className = '' } = component;
   const { editingComponentId, setEditingComponentId, updateComponentText, isPreviewMode, currentViewport } = useBuilderStore();
-  
+
+  // Data Binding Logic
+  const binding = props.binding as ComponentDataBinding | undefined;
+  const { data: boundData } = useSimpleData({
+    componentId: id || '',
+    binding: binding,
+    autoFetch: !!binding?.tableName && !!binding?.fieldMapping
+  });
+
+  // Calculate effective props with data binding
+  const effectiveProps = React.useMemo(() => {
+    if (!binding?.fieldMapping || !boundData || boundData.length === 0) {
+      return props;
+    }
+
+    const record = boundData[0];
+    const newProps = { ...props };
+
+    Object.entries(binding.fieldMapping).forEach(([propName, fieldName]) => {
+      if (record[fieldName] !== undefined) {
+        newProps[propName] = record[fieldName];
+      }
+    });
+
+    return newProps;
+  }, [props, binding, boundData]);
+
   // Generate styles from the styles object
   const { classes: generatedClasses, inlineStyles } = generateStyles(
-    styles, 
-    component.responsiveStyles, 
+    styles,
+    component.responsiveStyles,
     currentViewport
   );
   const combinedClassName = cn(
@@ -92,7 +120,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     }
 
     return (
-      <span 
+      <span
         className={cn(
           className,
           !isPreviewMode && 'cursor-text hover:bg-accent/20 rounded-sm transition-colors duration-200'
@@ -114,34 +142,34 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   switch (type) {
     case 'Button':
       return (
-        <Button 
-          variant={props.variant || 'default'} 
-          size={props.size || 'default'}
+        <Button
+          variant={effectiveProps.variant || 'default'}
+          size={effectiveProps.size || 'default'}
           className={combinedClassName}
           style={inlineStyles}
         >
-          {createEditableText(props.text || 'Button', 'text', '')}
+          {createEditableText(effectiveProps.text || 'Button', 'text', '')}
         </Button>
       );
 
     case 'Text':
-      const TextComponent = props.size === 'sm' ? 'p' : props.size === 'lg' ? 'p' : 'p';
+      const TextComponent = effectiveProps.size === 'sm' ? 'p' : effectiveProps.size === 'lg' ? 'p' : 'p';
       const textClasses = {
         sm: 'text-sm',
         base: 'text-base',
         lg: 'text-lg'
       };
       return (
-        <TextComponent 
-          className={cn(textClasses[props.size as keyof typeof textClasses] || 'text-base', combinedClassName)}
+        <TextComponent
+          className={cn(textClasses[effectiveProps.size as keyof typeof textClasses] || 'text-base', combinedClassName)}
           style={inlineStyles}
         >
-          {createEditableText(props.text || 'Sample text', 'text', textClasses[props.size as keyof typeof textClasses] || 'text-base', inlineStyles)}
+          {createEditableText(effectiveProps.text || 'Sample text', 'text', textClasses[effectiveProps.size as keyof typeof textClasses] || 'text-base', inlineStyles)}
         </TextComponent>
       );
 
     case 'Heading':
-      const HeadingTag = `h${props.level || '2'}` as keyof JSX.IntrinsicElements;
+      const HeadingTag = `h${effectiveProps.level || '2'}` as keyof JSX.IntrinsicElements;
       const headingClasses = {
         '1': 'text-4xl font-bold',
         '2': 'text-3xl font-semibold',
@@ -151,11 +179,11 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         '6': 'text-base font-semibold'
       };
       return (
-        <HeadingTag 
-          className={cn(headingClasses[props.level as keyof typeof headingClasses] || 'text-2xl font-semibold', combinedClassName)}
+        <HeadingTag
+          className={cn(headingClasses[effectiveProps.level as keyof typeof headingClasses] || 'text-2xl font-semibold', combinedClassName)}
           style={inlineStyles}
         >
-          {createEditableText(props.text || 'Heading', 'text', headingClasses[props.level as keyof typeof headingClasses] || 'text-2xl font-semibold', inlineStyles)}
+          {createEditableText(effectiveProps.text || 'Heading', 'text', headingClasses[effectiveProps.level as keyof typeof headingClasses] || 'text-2xl font-semibold', inlineStyles)}
         </HeadingTag>
       );
 
@@ -163,12 +191,12 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       return (
         <Card className={combinedClassName} style={inlineStyles}>
           <CardHeader>
-            <CardTitle>{props.title || 'Card Title'}</CardTitle>
-            {props.description && <CardDescription>{props.description}</CardDescription>}
+            <CardTitle>{effectiveProps.title || 'Card Title'}</CardTitle>
+            {effectiveProps.description && <CardDescription>{effectiveProps.description}</CardDescription>}
           </CardHeader>
-          {props.content && (
+          {effectiveProps.content && (
             <CardContent>
-              <p>{props.content}</p>
+              <p>{effectiveProps.content}</p>
             </CardContent>
           )}
         </Card>
@@ -176,9 +204,9 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
 
     case 'Input':
       return (
-        <Input 
-          placeholder={props.placeholder || 'Enter text...'} 
-          type={props.type || 'text'}
+        <Input
+          placeholder={effectiveProps.placeholder || 'Enter text...'}
+          type={effectiveProps.type || 'text'}
           className={combinedClassName}
           style={inlineStyles}
           readOnly
@@ -187,8 +215,8 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
 
     case 'Badge':
       return (
-        <Badge variant={props.variant || 'default'}>
-          {createEditableText(props.text || 'Badge', 'text', '')}
+        <Badge variant={effectiveProps.variant || 'default'}>
+          {createEditableText(effectiveProps.text || 'Badge', 'text', '')}
         </Badge>
       );
 
@@ -202,9 +230,9 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         !combinedClassName.includes('border') && !styles?.borderWidth ? 'border border-border' : '',
         !combinedClassName.includes('rounded') && !styles?.borderRadius ? 'rounded-lg' : ''
       );
-      
+
       return (
-        <div 
+        <div
           className={containerClassName}
           style={inlineStyles}
         >
@@ -216,20 +244,20 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
 
     case 'Image':
       return (
-        <img 
-          src={props.src || '/placeholder.svg'} 
-          alt={props.alt || 'Image'} 
+        <img
+          src={effectiveProps.src || '/placeholder.svg'}
+          alt={effectiveProps.alt || 'Image'}
           className="max-w-full h-auto rounded-lg"
         />
       );
 
     case 'Textarea':
       return (
-        <Textarea 
-          placeholder={props.placeholder || 'Enter text...'}
+        <Textarea
+          placeholder={effectiveProps.placeholder || 'Enter text...'}
           className={combinedClassName}
           style={inlineStyles}
-          rows={props.rows || 3}
+          rows={effectiveProps.rows || 3}
           readOnly
         />
       );
@@ -238,10 +266,10 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       return (
         <Select>
           <SelectTrigger className={combinedClassName} style={inlineStyles}>
-            <SelectValue placeholder={props.placeholder || 'Select an option'} />
+            <SelectValue placeholder={effectiveProps.placeholder || 'Select an option'} />
           </SelectTrigger>
           <SelectContent>
-            {(props.options || ['Option 1', 'Option 2', 'Option 3']).map((option: string, index: number) => (
+            {(effectiveProps.options || ['Option 1', 'Option 2', 'Option 3']).map((option: string, index: number) => (
               <SelectItem key={index} value={option.toLowerCase().replace(/\s+/g, '-')}>
                 {option}
               </SelectItem>
@@ -255,7 +283,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         <div className={cn('flex items-center space-x-2', combinedClassName)} style={inlineStyles}>
           <Checkbox id={`checkbox-${Math.random()}`} />
           <label htmlFor={`checkbox-${Math.random()}`} className="text-sm">
-            {props.label || 'Checkbox'}
+            {effectiveProps.label || 'Checkbox'}
           </label>
         </div>
       );
@@ -265,7 +293,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         <div className={cn('flex items-center space-x-2', combinedClassName)} style={inlineStyles}>
           <Switch />
           <label className="text-sm">
-            {props.label || 'Toggle'}
+            {effectiveProps.label || 'Toggle'}
           </label>
         </div>
       );
@@ -274,7 +302,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       return (
         <Alert className={combinedClassName} style={inlineStyles}>
           <AlertDescription>
-            {props.message || 'This is an alert message.'}
+            {effectiveProps.message || 'This is an alert message.'}
           </AlertDescription>
         </Alert>
       );
@@ -285,7 +313,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       );
 
     case 'Tabs':
-      const tabs = props.tabs || [
+      const tabs = effectiveProps.tabs || [
         { label: 'Tab 1', content: 'Content for tab 1' },
         { label: 'Tab 2', content: 'Content for tab 2' }
       ];
@@ -307,7 +335,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       );
 
     case 'Accordion':
-      const items = props.items || [
+      const items = effectiveProps.items || [
         { title: 'Item 1', content: 'Content for item 1' },
         { title: 'Item 2', content: 'Content for item 2' }
       ];
@@ -325,13 +353,13 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     case 'Avatar':
       return (
         <Avatar className={combinedClassName} style={inlineStyles}>
-          <AvatarImage src={props.src} alt={props.alt || 'Avatar'} />
-          <AvatarFallback>{props.fallback || 'U'}</AvatarFallback>
+          <AvatarImage src={effectiveProps.src} alt={effectiveProps.alt || 'Avatar'} />
+          <AvatarFallback>{effectiveProps.fallback || 'U'}</AvatarFallback>
         </Avatar>
       );
 
     case 'Breadcrumb':
-      const crumbs = props.items || [
+      const crumbs = effectiveProps.items || [
         { label: 'Home', href: '/' },
         { label: 'Page', href: '/page' }
       ];
@@ -352,8 +380,8 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
 
     case 'Progress':
       return (
-        <Progress 
-          value={props.value || 50} 
+        <Progress
+          value={effectiveProps.value || 50}
           className={combinedClassName}
           style={inlineStyles}
         />
@@ -361,13 +389,13 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
 
     case 'Link':
       return (
-        <a 
-          href={props.href || '#'} 
-          target={props.target || '_self'}
+        <a
+          href={effectiveProps.href || '#'}
+          target={effectiveProps.target || '_self'}
           className={cn('text-primary hover:underline', combinedClassName)}
           style={inlineStyles}
         >
-          {createEditableText(props.text || 'Link', 'text', 'text-primary hover:underline', inlineStyles)}
+          {createEditableText(effectiveProps.text || 'Link', 'text', 'text-primary hover:underline', inlineStyles)}
         </a>
       );
 
@@ -375,9 +403,9 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       return (
         <UniversalDataTable
           componentId={id || 'datatable'}
-          binding={props.binding}
+          binding={effectiveProps.binding}
           className={combinedClassName}
-          onConfigureBinding={props.onConfigureBinding}
+          onConfigureBinding={effectiveProps.onConfigureBinding}
         />
       );
 
@@ -385,9 +413,9 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       return (
         <KPICard
           componentId={id || 'kpicard'}
-          binding={props.binding}
+          binding={effectiveProps.binding}
           className={combinedClassName}
-          onConfigureBinding={props.onConfigureBinding}
+          onConfigureBinding={effectiveProps.onConfigureBinding}
         />
       );
 
@@ -395,10 +423,10 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       return (
         <Chart
           componentId={id || 'chart'}
-          binding={props.binding}
+          binding={effectiveProps.binding}
           className={combinedClassName}
-          chartType={props.chartType || 'bar'}
-          onConfigureBinding={props.onConfigureBinding}
+          chartType={effectiveProps.chartType || 'bar'}
+          onConfigureBinding={effectiveProps.onConfigureBinding}
         />
       );
 
@@ -406,10 +434,10 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       return (
         <Grid
           componentId={id || 'grid'}
-          binding={props.binding}
+          binding={effectiveProps.binding}
           className={combinedClassName}
-          columns={props.columns || 3}
-          onConfigureBinding={props.onConfigureBinding}
+          columns={effectiveProps.columns || 3}
+          onConfigureBinding={effectiveProps.onConfigureBinding}
         />
       );
 

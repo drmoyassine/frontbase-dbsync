@@ -88,11 +88,89 @@ export const pageAPI = {
   // Delete page
   deletePage: async (id: string): Promise<APIResponse> => {
     try {
-      const response = await fetch(`/api/pages/${id}`, { 
+      const response = await fetch(`/api/pages/${id}`, {
         method: 'DELETE',
         credentials: 'include'
       });
       if (!response.ok) throw new Error('Failed to delete page');
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+};
+
+export const variableAPI = {
+  // Get all variables
+  getAllVariables: async (): Promise<APIResponse> => {
+    try {
+      const response = await fetch('/api/variables', {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch variables');
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  },
+
+  // Get single variable
+  getVariable: async (id: string): Promise<APIResponse> => {
+    try {
+      const response = await fetch(`/api/variables/${id}`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch variable');
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  },
+
+  // Create new variable
+  createVariable: async (variableData: any): Promise<APIResponse> => {
+    try {
+      const response = await fetch('/api/variables', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(variableData)
+      });
+      if (!response.ok) throw new Error('Failed to create variable');
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  },
+
+  // Update variable
+  updateVariable: async (id: string, variableData: any): Promise<APIResponse> => {
+    try {
+      const response = await fetch(`/api/variables/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(variableData)
+      });
+      if (!response.ok) throw new Error('Failed to update variable');
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  },
+
+  // Delete variable
+  deleteVariable: async (id: string): Promise<APIResponse> => {
+    try {
+      const response = await fetch(`/api/variables/${id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to delete variable');
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };

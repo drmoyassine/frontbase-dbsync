@@ -53,11 +53,11 @@ export interface AppVariable {
 interface BuilderState {
   // Project config
   project: ProjectConfig | null;
-  
+
   // Pages
   pages: Page[];
   currentPageId: string | null;
-  
+
   // Builder state
   selectedComponentId: string | null;
   isPreviewMode: boolean;
@@ -66,47 +66,47 @@ interface BuilderState {
   isLoading: boolean;
   hasUnsavedChanges: boolean;
   editingComponentId: string | null;
-  
+
   // Responsive state
   currentViewport: 'mobile' | 'tablet' | 'desktop';
   zoomLevel: number;
   showDeviceFrame: boolean;
-  
+
   // Variables
   appVariables: AppVariable[];
-  
+
   // Supabase connection
   isSupabaseConnected: boolean;
   supabaseTables: any[];
-  
+
   // Actions
   setProject: (project: ProjectConfig) => void;
   updateProject: (updates: Partial<ProjectConfig>) => void;
-  
+
   createPage: (page: Omit<Page, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updatePage: (id: string, updates: Partial<Page>) => void;
   deletePage: (id: string) => void;
   setCurrentPage: (id: string) => void;
-  
+
   setSelectedComponentId: (id: string | null) => void;
   setCurrentPageId: (id: string | null) => void;
   setPreviewMode: (isPreview: boolean) => void;
-  
+
   addAppVariable: (variable: Omit<AppVariable, 'id' | 'createdAt'>) => void;
   updateAppVariable: (id: string, updates: Partial<AppVariable>) => void;
   deleteAppVariable: (id: string) => void;
-  
+
   setSupabaseConnection: (connected: boolean, tables?: any[]) => void;
   moveComponent: (pageId: string, componentId: string | null, component: ComponentData, targetIndex: number, parentId?: string, sourceParentId?: string) => void;
   setDraggedComponentId: (componentId: string | null) => void;
   setEditingComponentId: (id: string | null) => void;
   updateComponentText: (componentId: string, textProperty: string, text: string) => void;
-  
+
   // Responsive actions
   setCurrentViewport: (viewport: 'mobile' | 'tablet' | 'desktop') => void;
   setZoomLevel: (zoom: number) => void;
   setShowDeviceFrame: (show: boolean) => void;
-  
+
   // New actions for database integration
   savePageToDatabase: (pageId: string) => Promise<void>;
   publishPage: (pageId: string) => Promise<void>;
@@ -133,23 +133,23 @@ export const useBuilderStore = create<BuilderState>()(
       isLoading: false,
       hasUnsavedChanges: false,
       editingComponentId: null,
-      
+
       // Responsive state
       currentViewport: 'desktop',
       zoomLevel: 100,
       showDeviceFrame: true,
-      
+
       appVariables: [],
       isSupabaseConnected: false,
       supabaseTables: [],
-      
+
       // Actions
       setProject: (project) => set({ project }),
-      
+
       updateProject: (updates) => set((state) => ({
         project: state.project ? { ...state.project, ...updates, updatedAt: new Date().toISOString() } : null
       })),
-      
+
       createPage: (pageData) => {
         const newPage: Page = {
           ...pageData,
@@ -157,171 +157,28 @@ export const useBuilderStore = create<BuilderState>()(
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        
+
         set((state) => ({
           pages: [...state.pages, newPage],
           currentPageId: newPage.id
         }));
       },
-      
+
       updatePage: (id, updates) => set((state) => ({
-        pages: state.pages.map(page => 
-          page.id === id 
+        pages: state.pages.map(page =>
+          page.id === id
             ? { ...page, ...updates, updatedAt: new Date().toISOString() }
             : page
         ),
         hasUnsavedChanges: true
       })),
-      
+
       deletePage: (id) => set((state) => ({
         pages: state.pages.filter(page => page.id !== id),
         currentPageId: state.currentPageId === id ? null : state.currentPageId
       })),
-      
+
       setCurrentPage: (id) => set({ currentPageId: id }),
-      
-      setSelectedComponentId: (id) => set({ selectedComponentId: id }),
-      setCurrentPageId: (id) => set({ currentPageId: id }),
-      
-      setPreviewMode: (isPreview) => set({ isPreviewMode: isPreview }),
-      
-      addAppVariable: (variableData) => {
-        const newVariable: AppVariable = {
-          ...variableData,
-          id: uuidv4(),
-          createdAt: new Date().toISOString(),
-        };
-        
-        set((state) => ({
-          appVariables: [...state.appVariables, newVariable]
-        }));
-      },
-      
-      updateAppVariable: (id, updates) => set((state) => ({
-        appVariables: state.appVariables.map(variable =>
-          variable.id === id ? { ...variable, ...updates } : variable
-        )
-      })),
-      
-      deleteAppVariable: (id) => set((state) => ({
-        appVariables: state.appVariables.filter(variable => variable.id !== id)
-      })),
-      
-      setSupabaseConnection: (connected, tables = []) => set({
-        isSupabaseConnected: connected,
-        supabaseTables: tables
-      }),
-
-      moveComponent: (pageId, componentId, component, targetIndex, parentId, sourceParentId) => {
-        set((state) => {
-          const pages = [...state.pages];
-          const pageIndex = pages.findIndex(p => p.id === pageId);
-          
-          if (pageIndex === -1) return state;
-          
-          const page = { ...pages[pageIndex] };
-          const content = [...(page.layoutData?.content || [])];
-          
-          // Helper function to find and remove component from nested structure
-          const removeComponent = (items: ComponentData[], id: string, parentId?: string): ComponentData | null => {
-            if (parentId) {
-              // Remove from parent's children
-              const parent = findComponentById(items, parentId);
-              if (parent?.children) {
-                const childIndex = parent.children.findIndex(c => c.id === id);
-                if (childIndex !== -1) {
-                  const removed = parent.children[childIndex];
-                  parent.children.splice(childIndex, 1);
-                  return removed;
-                }
-              }
-            } else {
-              // Remove from root level
-              const index = items.findIndex(c => c.id === id);
-              if (index !== -1) {
-                return items.splice(index, 1)[0];
-              }
-            }
-            return null;
-          };
-          
-          // Helper function to find component by ID in nested structure
-          const findComponentById = (items: ComponentData[], id: string): ComponentData | null => {
-            for (const item of items) {
-              if (item.id === id) return item;
-              if (item.children) {
-                const found = findComponentById(item.children, id);
-                if (found) return found;
-              }
-            }
-            return null;
-          };
-          
-          // Helper function to insert component at target position
-          const insertComponent = (items: ComponentData[], comp: ComponentData, index: number, parentId?: string) => {
-            if (parentId) {
-              // Insert into parent's children
-              const parent = findComponentById(items, parentId);
-              if (parent) {
-                if (!parent.children) parent.children = [];
-                parent.children.splice(index, 0, { ...comp, children: comp.children || [] });
-              }
-            } else {
-              // Insert at root level
-              items.splice(index, 0, { ...comp, children: comp.children || [] });
-            }
-          };
-          
-          let componentToMove = component;
-          
-          // If moving existing component, remove it first and adjust target index
-          if (componentId) {
-            const removed = removeComponent(content, componentId, sourceParentId);
-            if (removed) {
-              componentToMove = removed;
-              
-              // Adjust target index if moving within same parent and target is after source
-              if (!parentId && !sourceParentId) {
-                // Both at root level - find original index
-                const originalIndex = content.findIndex(c => c.id === componentId);
-                if (originalIndex !== -1 && originalIndex < targetIndex) {
-                  // Component was removed from before target position, adjust index down
-                  targetIndex = Math.max(0, targetIndex - 1);
-                }
-              }
-            }
-          }
-          
-          // Prevent dropping component on itself at same position
-          if (componentId && componentId === componentToMove.id) {
-            const currentIndex = content.findIndex(c => c.id === componentId);
-            if (currentIndex === targetIndex) {
-              return state;
-            }
-          }
-          
-          // Insert component at target position
-          insertComponent(content, componentToMove, targetIndex, parentId);
-          
-          // Update the page
-          page.layoutData = {
-            ...page.layoutData,
-            content,
-            root: page.layoutData?.root || {}
-          };
-          pages[pageIndex] = page;
-          
-          return { ...state, pages, hasUnsavedChanges: true };
-        });
-      },
-
-      setDraggedComponentId: (componentId) => set({ draggedComponentId: componentId }),
-      
-      setEditingComponentId: (id) => set({ editingComponentId: id }),
-
-      // Responsive actions
-      setCurrentViewport: (viewport: 'mobile' | 'tablet' | 'desktop') => set({ currentViewport: viewport }),
-      setZoomLevel: (zoom: number) => set({ zoomLevel: Math.max(25, Math.min(200, zoom)) }),
       setShowDeviceFrame: (show: boolean) => set({ showDeviceFrame: show }),
 
       updateComponentText: (componentId: string, textProperty: string, text: string) => {
@@ -333,7 +190,7 @@ export const useBuilderStore = create<BuilderState>()(
           if (pageIndex === -1) return state;
 
           const page = { ...pages[pageIndex] };
-          
+
           // Helper function to update component text in nested structure
           const updateComponentInContent = (content: ComponentData[]): ComponentData[] => {
             return content.map(component => {
@@ -362,11 +219,11 @@ export const useBuilderStore = create<BuilderState>()(
 
           const updatedPages = [...state.pages];
           updatedPages[pageIndex] = page;
-          
-          return { 
-            ...state, 
-            pages: updatedPages, 
-            hasUnsavedChanges: true 
+
+          return {
+            ...state,
+            pages: updatedPages,
+            hasUnsavedChanges: true
           };
         });
       },
@@ -384,14 +241,14 @@ export const useBuilderStore = create<BuilderState>()(
         try {
           const { pageAPI } = await import('@/lib/api');
           const result = await pageAPI.updatePage(pageId, page);
-          
+
           if (!result.success) {
             throw new Error(result.error || 'Failed to save page');
           }
-          
+
           // Reset unsaved changes flag on successful save
           setUnsavedChanges(false);
-          
+
           toast({
             title: "Page saved",
             description: "Page has been saved successfully"
@@ -415,16 +272,16 @@ export const useBuilderStore = create<BuilderState>()(
         setSaving(true);
         try {
           updatePage(pageId, { isPublic: true });
-          
+
           const { pageAPI } = await import('@/lib/api');
           const result = await pageAPI.updatePage(pageId, { ...page, isPublic: true });
-          
+
           if (!result.success) {
             throw new Error(result.error || 'Failed to publish page');
           }
-          
+
           setUnsavedChanges(false);
-          
+
           toast({
             title: "Page published",
             description: "Page has been published successfully"
@@ -449,14 +306,14 @@ export const useBuilderStore = create<BuilderState>()(
         try {
           const newVisibility = !page.isPublic;
           updatePage(pageId, { isPublic: newVisibility });
-          
+
           const { pageAPI } = await import('@/lib/api');
           const result = await pageAPI.updatePage(pageId, { ...page, isPublic: newVisibility });
-          
+
           if (!result.success) {
             throw new Error(result.error || 'Failed to update page visibility');
           }
-          
+
           toast({
             title: "Page updated",
             description: `Page ${newVisibility ? 'published' : 'made private'}`
@@ -493,14 +350,14 @@ export const useBuilderStore = create<BuilderState>()(
           const newPages = [...state.pages];
           const page = { ...newPages[pageIndex] };
           const content = page.layoutData?.content || [];
-          
+
           page.layoutData = {
             ...page.layoutData,
             content: deleteFromContent([...content])
           };
-          
+
           newPages[pageIndex] = page;
-          
+
           return {
             ...state,
             pages: newPages,
@@ -518,22 +375,125 @@ export const useBuilderStore = create<BuilderState>()(
       loadPagesFromDatabase: async () => {
         const { setLoading } = get();
         setLoading(true);
-        
         try {
+          const { pageAPI } = await import('@/lib/api');
           const result = await pageAPI.getAllPages();
-          
+
           if (result.success && result.data) {
             set({ pages: result.data.data || result.data, hasUnsavedChanges: false });
           }
         } catch (error) {
-          console.error('Failed to load pages from database:', error);
+          console.error('Failed to load pages:', error);
           toast({
             title: "Error loading pages",
-            description: error instanceof Error ? error.message : "Failed to load pages from database",
+            description: "Failed to load pages from database",
             variant: "destructive"
           });
         } finally {
           setLoading(false);
+        }
+      },
+
+      loadVariablesFromDatabase: async () => {
+        try {
+          const { variableAPI } = await import('@/lib/api');
+          const result = await variableAPI.getAllVariables();
+
+          if (result.success && result.data) {
+            set({ appVariables: result.data.data || result.data });
+          }
+        } catch (error) {
+          console.error('Failed to load variables:', error);
+        }
+      },
+
+      addAppVariable: async (variableData) => {
+        const { setSaving } = get();
+        setSaving(true);
+        try {
+          const { variableAPI } = await import('@/lib/api');
+          const result = await variableAPI.createVariable(variableData);
+
+          if (result.success && result.data) {
+            set((state) => ({
+              appVariables: [...state.appVariables, result.data.data || result.data]
+            }));
+            toast({
+              title: "Variable created",
+              description: "App variable has been created successfully"
+            });
+          } else {
+            throw new Error(result.error || 'Failed to create variable');
+          }
+        } catch (error) {
+          toast({
+            title: "Error creating variable",
+            description: error instanceof Error ? error.message : "Failed to create variable",
+            variant: "destructive"
+          });
+        } finally {
+          setSaving(false);
+        }
+      },
+
+      updateAppVariable: async (id, updates) => {
+        const { setSaving } = get();
+        setSaving(true);
+        try {
+          const { variableAPI } = await import('@/lib/api');
+          const result = await variableAPI.updateVariable(id, updates);
+
+          if (result.success && result.data) {
+            const updatedVar = result.data.data || result.data;
+            set((state) => ({
+              appVariables: state.appVariables.map(variable =>
+                variable.id === id ? updatedVar : variable
+              )
+            }));
+            toast({
+              title: "Variable updated",
+              description: "App variable has been updated successfully"
+            });
+          } else {
+            throw new Error(result.error || 'Failed to update variable');
+          }
+        } catch (error) {
+          toast({
+            title: "Error updating variable",
+            description: error instanceof Error ? error.message : "Failed to update variable",
+            variant: "destructive"
+          });
+        } finally {
+          setSaving(false);
+        }
+      },
+
+      deleteAppVariable: async (id) => {
+        const { setSaving } = get();
+        setSaving(true);
+        try {
+          const { variableAPI } = await import('@/lib/api');
+          const result = await variableAPI.deleteVariable(id);
+
+          if (result.success) {
+            set((state) => ({
+              appVariables: state.appVariables.filter(variable => variable.id !== id)
+            }));
+            toast({
+              title: "Variable deleted",
+              description: "App variable has been deleted successfully"
+            });
+          } else {
+            throw new Error(result.error || 'Failed to delete variable');
+          }
+        } catch (error) {
+          toast({
+            title: "Error deleting variable",
+            description: error instanceof Error ? error.message : "Failed to delete variable",
+            variant: "destructive"
+          });
+        } finally {
+          setSaving(false);
         }
       },
 
@@ -542,22 +502,23 @@ export const useBuilderStore = create<BuilderState>()(
       createPageInDatabase: async (pageData) => {
         const { setSaving } = get();
         setSaving(true);
-        
+
         try {
+          const { pageAPI } = await import('@/lib/api');
           const result = await pageAPI.createPage(pageData);
-          
+
           if (result.success && result.data) {
             const newPage = result.data.data || result.data;
             set((state) => ({
               pages: [...state.pages, newPage],
               hasUnsavedChanges: false
             }));
-            
+
             toast({
               title: "Page created",
               description: "Page has been created successfully"
             });
-            
+
             return newPage.id;
           } else {
             throw new Error(result.error || 'Failed to create page');
@@ -576,6 +537,12 @@ export const useBuilderStore = create<BuilderState>()(
     }),
     {
       name: 'frontbase-builder-storage',
+      partialize: (state) => ({
+        project: state.project,
+        // Don't persist pages or variables in local storage as we load from DB
+        // pages: state.pages,
+        // appVariables: state.appVariables
+      }),
     }
   )
 );

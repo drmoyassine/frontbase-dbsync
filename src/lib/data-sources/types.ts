@@ -18,7 +18,7 @@ export interface ColumnSchema {
   constraints?: string[];
   relatedTable?: string;
   relatedColumn?: string;
-  
+
   // Global display configuration
   globalDisplayName?: string;
   globalDisplayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
@@ -140,7 +140,7 @@ export interface ComponentDataBinding {
   queryOptions?: QueryOptions;
   aggregationOptions?: AggregationOptions;
   refreshInterval?: number; // in seconds, 0 = realtime, -1 = manual
-  
+
   // Component-specific overrides
   columnOverrides?: {
     [columnName: string]: {
@@ -150,46 +150,25 @@ export interface ComponentDataBinding {
       visible?: boolean;
     };
   };
-  
+
   // Component configuration
   pagination?: {
     enabled: boolean;
     pageSize: number;
     serverSide: boolean;
   };
-  
+
   sorting?: {
     enabled: boolean;
     defaultColumn?: string;
     defaultDirection?: 'asc' | 'desc';
     serverSide: boolean;
   };
-  
+
   filtering?: {
     visibleFilters: {
       column: string;
       type: 'dropdown' | 'multiselect' | 'text' | 'date' | 'number' | 'toggle';
       label?: string;
-      position?: 'header' | 'sidebar' | 'top';
-    }[];
-    hiddenFilters: QueryFilter[];
-    searchEnabled: boolean;
-  };
-  
-  bulkActions?: {
-    enabled: boolean;
-    actions: {
-      id: string;
-      label: string;
-      type: 'delete' | 'update' | 'custom';
-      confirmation?: boolean;
-    }[];
-  };
-}
-
-export interface DataBindingError {
-  code: string;
-  message: string;
-  details?: any;
-  timestamp: Date;
-}
+      timestamp: Date;
+    }

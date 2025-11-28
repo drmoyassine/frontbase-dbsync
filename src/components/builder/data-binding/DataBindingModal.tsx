@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { DataSourceSelector } from '@/components/data-binding/DataSourceSelector';
 import { TableSelector } from '@/components/data-binding/TableSelector';
 import { ColumnConfigurator } from '@/components/data-binding/ColumnConfigurator';
+import { PropertyMapper } from '@/components/builder/data-binding/PropertyMapper';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 
 interface ComponentDataBinding {
@@ -35,6 +36,7 @@ interface ComponentDataBinding {
     visible?: boolean;
     displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
   }>;
+  fieldMapping?: Record<string, string>;
 }
 
 interface DataBindingModalProps {
@@ -54,7 +56,7 @@ export function DataBindingModal({
 }: DataBindingModalProps) {
   const store = useDataBindingStore();
   const existingBinding = store.getComponentBinding(componentId);
-  
+
   const [binding, setBinding] = useState<ComponentDataBinding>({
     componentId,
     dataSourceId: 'backend',
@@ -72,7 +74,8 @@ export function DataBindingModal({
       searchEnabled: true,
       filters: {}
     },
-    columnOverrides: {}
+    columnOverrides: {},
+    fieldMapping: {}
   });
 
   useEffect(() => {
@@ -99,8 +102,9 @@ export function DataBindingModal({
 
         <div className="flex-1 overflow-hidden">
           <Tabs defaultValue="basic" className="w-full h-full flex flex-col">
-            <TabsList className="grid w-full grid-cols-4 flex-shrink-0">
+            <TabsList className="grid w-full grid-cols-5 flex-shrink-0">
               <TabsTrigger value="basic">Basic</TabsTrigger>
+              <TabsTrigger value="mapping">Mapping</TabsTrigger>
               <TabsTrigger value="columns">Columns</TabsTrigger>
               <TabsTrigger value="display">Display</TabsTrigger>
               <TabsTrigger value="advanced">Advanced</TabsTrigger>
@@ -112,7 +116,7 @@ export function DataBindingModal({
                   value={binding.dataSourceId}
                   onValueChange={(value) => updateBinding({ dataSourceId: value })}
                 />
-                
+
                 <TableSelector
                   value={binding.tableName}
                   onValueChange={(value) => updateBinding({ tableName: value })}
@@ -120,28 +124,37 @@ export function DataBindingModal({
                 />
               </div>
 
-            <div className="space-y-4">
-              <div>
-                <Label>Refresh Interval</Label>
-                <Select
-                  value={binding.refreshInterval?.toString() || '-1'}
-                  onValueChange={(value) => updateBinding({ refreshInterval: parseInt(value) })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="-1">Manual</SelectItem>
-                    <SelectItem value="0">Real-time</SelectItem>
-                    <SelectItem value="5">Every 5 seconds</SelectItem>
-                    <SelectItem value="30">Every 30 seconds</SelectItem>
-                    <SelectItem value="60">Every minute</SelectItem>
-                    <SelectItem value="300">Every 5 minutes</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="space-y-4">
+                <div>
+                  <Label>Refresh Interval</Label>
+                  <Select
+                    value={binding.refreshInterval?.toString() || '-1'}
+                    onValueChange={(value) => updateBinding({ refreshInterval: parseInt(value) })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="-1">Manual</SelectItem>
+                      <SelectItem value="0">Real-time</SelectItem>
+                      <SelectItem value="5">Every 5 seconds</SelectItem>
+                      <SelectItem value="30">Every 30 seconds</SelectItem>
+                      <SelectItem value="60">Every minute</SelectItem>
+                      <SelectItem value="300">Every 5 minutes</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </div>
-          </TabsContent>
+            </TabsContent>
+
+            <TabsContent value="mapping" className="space-y-4 flex-1 overflow-y-auto">
+              <PropertyMapper
+                tableName={binding.tableName}
+                componentType={componentType}
+                mapping={binding.fieldMapping || {}}
+                onMappingChange={(mapping) => updateBinding({ fieldMapping: mapping })}
+              />
+            </TabsContent>
 
             <TabsContent value="columns" className="space-y-4 flex-1 overflow-y-auto">
               {binding.tableName && (
@@ -155,70 +168,70 @@ export function DataBindingModal({
             </TabsContent>
 
             <TabsContent value="display" className="space-y-4 flex-1 overflow-y-auto">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-4">
-                <h4 className="font-medium">Pagination</h4>
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    checked={binding.pagination?.enabled || false}
-                    onCheckedChange={(checked) => 
-                      updateBinding({
-                        pagination: { ...binding.pagination!, enabled: checked }
-                      })
-                    }
-                  />
-                  <Label>Enable Pagination</Label>
-                </div>
-                {binding.pagination?.enabled && (
-                  <div>
-                    <Label>Page Size</Label>
-                    <Input
-                      type="number"
-                      value={binding.pagination?.pageSize || 10}
-                      onChange={(e) => 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-4">
+                  <h4 className="font-medium">Pagination</h4>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      checked={binding.pagination?.enabled || false}
+                      onCheckedChange={(checked) =>
                         updateBinding({
-                          pagination: { 
-                            ...binding.pagination!, 
-                            pageSize: parseInt(e.target.value) || 10 
-                          }
+                          pagination: { ...binding.pagination!, enabled: checked }
                         })
                       }
                     />
+                    <Label>Enable Pagination</Label>
                   </div>
-                )}
+                  {binding.pagination?.enabled && (
+                    <div>
+                      <Label>Page Size</Label>
+                      <Input
+                        type="number"
+                        value={binding.pagination?.pageSize || 10}
+                        onChange={(e) =>
+                          updateBinding({
+                            pagination: {
+                              ...binding.pagination!,
+                              pageSize: parseInt(e.target.value) || 10
+                            }
+                          })
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="font-medium">Sorting</h4>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      checked={binding.sorting?.enabled || false}
+                      onCheckedChange={(checked) =>
+                        updateBinding({
+                          sorting: { ...binding.sorting!, enabled: checked }
+                        })
+                      }
+                    />
+                    <Label>Enable Sorting</Label>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-4">
-                <h4 className="font-medium">Sorting</h4>
+                <h4 className="font-medium">Search & Filtering</h4>
                 <div className="flex items-center space-x-2">
                   <Switch
-                    checked={binding.sorting?.enabled || false}
-                    onCheckedChange={(checked) => 
+                    checked={binding.filtering?.searchEnabled || false}
+                    onCheckedChange={(checked) =>
                       updateBinding({
-                        sorting: { ...binding.sorting!, enabled: checked }
+                        filtering: { ...binding.filtering!, searchEnabled: checked }
                       })
                     }
                   />
-                  <Label>Enable Sorting</Label>
+                  <Label>Enable Search</Label>
                 </div>
               </div>
-            </div>
-
-            <div className="space-y-4">
-              <h4 className="font-medium">Search & Filtering</h4>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  checked={binding.filtering?.searchEnabled || false}
-                  onCheckedChange={(checked) => 
-                    updateBinding({
-                      filtering: { ...binding.filtering!, searchEnabled: checked }
-                    })
-                  }
-                />
-                <Label>Enable Search</Label>
-              </div>
-            </div>
-          </TabsContent>
+            </TabsContent>
 
             <TabsContent value="advanced" className="space-y-4 flex-1 overflow-y-auto">
               <div className="space-y-4">
@@ -226,7 +239,7 @@ export function DataBindingModal({
                 <div className="flex items-center space-x-2">
                   <Switch
                     checked={false}
-                    onCheckedChange={() => {}}
+                    onCheckedChange={() => { }}
                     disabled
                   />
                   <Label>Enable Bulk Actions (Coming Soon)</Label>

@@ -11,23 +11,23 @@ import { DataBindingModal } from '@/components/builder/data-binding/DataBindingM
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 
 export const PropertiesPanel: React.FC = () => {
-  const { 
-    selectedComponentId, 
-    currentPageId, 
-    pages, 
+  const {
+    selectedComponentId,
+    currentPageId,
+    pages,
     updatePage,
     setSelectedComponentId,
     editingComponentId,
     setEditingComponentId
   } = useBuilderStore();
-  
+
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDataBinding, setShowDataBinding] = useState(false);
   const [lastSelectedComponent, setLastSelectedComponent] = useState<string | null>(null);
   const { getComponentBinding, setComponentBinding, initialize } = useDataBindingStore();
 
   const currentPage = pages.find(page => page.id === currentPageId);
-  
+
   // Recursive function to find component by ID
   const findComponentById = (components: any[], id: string): any => {
     for (const comp of components) {
@@ -39,8 +39,8 @@ export const PropertiesPanel: React.FC = () => {
     }
     return null;
   };
-  
-  const selectedComponent = currentPage?.layoutData?.content ? 
+
+  const selectedComponent = currentPage?.layoutData?.content ?
     findComponentById(currentPage.layoutData.content, selectedComponentId || '') : null;
 
   // Remove duplicate initialize call - it's already called in App.tsx
@@ -49,15 +49,15 @@ export const PropertiesPanel: React.FC = () => {
   useEffect(() => {
     if (selectedComponent && selectedComponentId && selectedComponentId !== lastSelectedComponent) {
       setLastSelectedComponent(selectedComponentId);
-      
+
       // Check if this is a new data component without binding
       const isDataComponent = ['DataTable', 'KPICard', 'Chart', 'Grid'].includes(selectedComponent.type);
       const hasBinding = getComponentBinding(selectedComponentId);
-      
+
       // Check if component was just dropped by looking at props timestamp
-      const isNewComponent = selectedComponent.props?.createdAt && 
+      const isNewComponent = selectedComponent.props?.createdAt &&
         (Date.now() - new Date(selectedComponent.props.createdAt).getTime()) < 5000; // 5 seconds
-      
+
       if (isDataComponent && !hasBinding && isNewComponent) {
         // Small delay to ensure component is properly selected
         setTimeout(() => {
@@ -125,7 +125,7 @@ export const PropertiesPanel: React.FC = () => {
 
   const deleteComponent = () => {
     if (!currentPage) return;
-    
+
     // Recursive function to remove component from nested structure
     const removeComponentFromContent = (components: any[], componentId: string): any[] => {
       return components.filter(comp => {
@@ -136,7 +136,7 @@ export const PropertiesPanel: React.FC = () => {
         return true;
       });
     };
-    
+
     const updatedContent = removeComponentFromContent(currentPage.layoutData.content, selectedComponentId!);
 
     updatePage(currentPage.id, {
@@ -153,7 +153,7 @@ export const PropertiesPanel: React.FC = () => {
   const handleDataBindingSave = (binding: any) => {
     if (selectedComponentId) {
       setComponentBinding(selectedComponentId, binding);
-      
+
       // Update component props with binding
       updateComponentProp('binding', binding);
       updateComponentProp('onConfigureBinding', () => setShowDataBinding(true));
@@ -161,11 +161,25 @@ export const PropertiesPanel: React.FC = () => {
     setShowDataBinding(false);
   };
 
-  const isDataComponent = selectedComponent?.type && 
+  const isDataComponent = selectedComponent?.type &&
     ['DataTable', 'KPICard', 'Chart', 'Grid'].includes(selectedComponent.type);
 
   const renderPropertyFields = () => {
     const { type, props } = selectedComponent;
+
+    const renderDataBindingButton = () => (
+      <div className="space-y-2 mt-4 border-t pt-4">
+        <Label>Data Binding</Label>
+        <Button
+          variant="outline"
+          onClick={() => setShowDataBinding(true)}
+          className="w-full justify-start"
+        >
+          <Database className="mr-2 h-4 w-4" />
+          {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
+        </Button>
+      </div>
+    );
 
     switch (type) {
       case 'Button':
@@ -237,6 +251,7 @@ export const PropertiesPanel: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+            {renderDataBindingButton()}
           </>
         );
 
@@ -267,6 +282,7 @@ export const PropertiesPanel: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+            {renderDataBindingButton()}
           </>
         );
 
@@ -326,6 +342,7 @@ export const PropertiesPanel: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+            {renderDataBindingButton()}
           </>
         );
 
@@ -349,6 +366,7 @@ export const PropertiesPanel: React.FC = () => {
                 onChange={(e) => updateComponentProp('rows', parseInt(e.target.value))}
               />
             </div>
+            {renderDataBindingButton()}
           </>
         );
 
@@ -372,20 +390,24 @@ export const PropertiesPanel: React.FC = () => {
                 rows={4}
               />
             </div>
+            {renderDataBindingButton()}
           </>
         );
 
       case 'Checkbox':
       case 'Switch':
         return (
-          <div className="space-y-2">
-            <Label htmlFor="label-text">Label</Label>
-            <Input
-              id="label-text"
-              value={props.label || ''}
-              onChange={(e) => updateComponentProp('label', e.target.value)}
-            />
-          </div>
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="label-text">Label</Label>
+              <Input
+                id="label-text"
+                value={props.label || ''}
+                onChange={(e) => updateComponentProp('label', e.target.value)}
+              />
+            </div>
+            {renderDataBindingButton()}
+          </>
         );
 
       case 'Alert':
@@ -426,6 +448,7 @@ export const PropertiesPanel: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+            {renderDataBindingButton()}
           </>
         );
 
@@ -449,22 +472,26 @@ export const PropertiesPanel: React.FC = () => {
                 maxLength={2}
               />
             </div>
+            {renderDataBindingButton()}
           </>
         );
 
       case 'Progress':
         return (
-          <div className="space-y-2">
-            <Label htmlFor="progress-value">Value (0-100)</Label>
-            <Input
-              id="progress-value"
-              type="number"
-              min="0"
-              max="100"
-              value={props.value || 50}
-              onChange={(e) => updateComponentProp('value', parseInt(e.target.value))}
-            />
-          </div>
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="progress-value">Value (0-100)</Label>
+              <Input
+                id="progress-value"
+                type="number"
+                min="0"
+                max="100"
+                value={props.value || 50}
+                onChange={(e) => updateComponentProp('value', parseInt(e.target.value))}
+              />
+            </div>
+            {renderDataBindingButton()}
+          </>
         );
 
       case 'Image':
@@ -486,6 +513,7 @@ export const PropertiesPanel: React.FC = () => {
                 onChange={(e) => updateComponentProp('alt', e.target.value)}
               />
             </div>
+            {renderDataBindingButton()}
           </>
         );
 
@@ -520,6 +548,7 @@ export const PropertiesPanel: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+            {renderDataBindingButton()}
           </>
         );
 
@@ -528,8 +557,8 @@ export const PropertiesPanel: React.FC = () => {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Data Binding</Label>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => setShowDataBinding(true)}
                 className="w-full justify-start"
               >
@@ -545,8 +574,8 @@ export const PropertiesPanel: React.FC = () => {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Data Binding</Label>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => setShowDataBinding(true)}
                 className="w-full justify-start"
               >
@@ -575,8 +604,8 @@ export const PropertiesPanel: React.FC = () => {
             </div>
             <div className="space-y-2">
               <Label>Data Binding</Label>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => setShowDataBinding(true)}
                 className="w-full justify-start"
               >
@@ -606,8 +635,8 @@ export const PropertiesPanel: React.FC = () => {
             </div>
             <div className="space-y-2">
               <Label>Data Binding</Label>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => setShowDataBinding(true)}
                 className="w-full justify-start"
               >
@@ -631,9 +660,9 @@ export const PropertiesPanel: React.FC = () => {
     <div className="p-4 h-full flex flex-col">
       <div className="border-b border-border pb-4 mb-4 flex justify-between items-center">
         <h2 className="font-semibold text-foreground">Properties</h2>
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => setShowDeleteDialog(true)}
           className="text-destructive hover:text-destructive"
         >

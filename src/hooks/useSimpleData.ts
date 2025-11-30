@@ -97,7 +97,7 @@ export function useSimpleData({
   const getEffectiveBinding = useCallback((): ComponentDataBinding | null => {
     if (!binding || !binding.tableName) return null;
 
-    return {
+    const effectiveBinding = {
       ...binding,
       pagination: {
         enabled: binding.pagination.enabled,
@@ -118,6 +118,14 @@ export function useSimpleData({
         },
       },
     };
+
+    console.log('[useSimpleData] getEffectiveBinding:', {
+      localSorting: sorting,
+      bindingSorting: binding.sorting,
+      effectiveSorting: effectiveBinding.sorting
+    });
+
+    return effectiveBinding;
   }, [binding, pagination, sorting, filters, searchQuery]);
 
   // Fetch data function - memoized and debounced to prevent excessive calls
@@ -165,6 +173,7 @@ export function useSimpleData({
   }, []);
 
   const setSorting = useCallback((column: string, direction: 'asc' | 'desc') => {
+    console.log('[useSimpleData] setSorting called:', { column, direction });
     setSortingState({ column, direction });
   }, []);
 

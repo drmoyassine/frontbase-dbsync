@@ -236,6 +236,7 @@ export const useDataBindingStore = create<DataBindingState>()(
 
         // Prevent duplicate requests
         if (state.loadingStates.get(componentId)) {
+          console.log('[DataBindingStore] Request already in progress for:', componentId);
           return state.dataCache.get(componentId);
         }
 
@@ -261,6 +262,16 @@ export const useDataBindingStore = create<DataBindingState>()(
           Object.entries(binding.filtering.filters).forEach(([key, value]) => {
             if (value !== undefined && value !== null && value !== '') {
               params.append(`filter_${key}`, value.toString());
+            }
+          });
+
+          console.log('[DataBindingStore] Query params:', {
+            url: `/api/database/table-data/${encodeURIComponent(binding.tableName)}`,
+            params: params.toString(),
+            binding: {
+              sorting: binding.sorting,
+              filtering: binding.filtering,
+              pagination: binding.pagination
             }
           });
 

@@ -83,6 +83,36 @@ export function UniversalDataTable({
     setSearchQuery(value);
   };
 
+  const getBadgeColor = (value: string) => {
+    const colors = [
+      "bg-red-100 text-red-800 hover:bg-red-100/80",
+      "bg-orange-100 text-orange-800 hover:bg-orange-100/80",
+      "bg-amber-100 text-amber-800 hover:bg-amber-100/80",
+      "bg-yellow-100 text-yellow-800 hover:bg-yellow-100/80",
+      "bg-lime-100 text-lime-800 hover:bg-lime-100/80",
+      "bg-green-100 text-green-800 hover:bg-green-100/80",
+      "bg-emerald-100 text-emerald-800 hover:bg-emerald-100/80",
+      "bg-teal-100 text-teal-800 hover:bg-teal-100/80",
+      "bg-cyan-100 text-cyan-800 hover:bg-cyan-100/80",
+      "bg-sky-100 text-sky-800 hover:bg-sky-100/80",
+      "bg-blue-100 text-blue-800 hover:bg-blue-100/80",
+      "bg-indigo-100 text-indigo-800 hover:bg-indigo-100/80",
+      "bg-violet-100 text-violet-800 hover:bg-violet-100/80",
+      "bg-purple-100 text-purple-800 hover:bg-purple-100/80",
+      "bg-fuchsia-100 text-fuchsia-800 hover:bg-fuchsia-100/80",
+      "bg-pink-100 text-pink-800 hover:bg-pink-100/80",
+      "bg-rose-100 text-rose-800 hover:bg-rose-100/80",
+    ];
+
+    let hash = 0;
+    for (let i = 0; i < value.length; i++) {
+      hash = value.charCodeAt(i) + ((hash << 5) - hash);
+    }
+
+    const index = Math.abs(hash) % colors.length;
+    return colors[index];
+  };
+
   const formatValue = (value: any, columnName: string): React.ReactNode => {
     if (value === null || value === undefined) {
       return <span className="text-muted-foreground">—</span>;
@@ -93,7 +123,7 @@ export function UniversalDataTable({
 
     switch (displayType) {
       case 'badge':
-        return <Badge variant="secondary">{String(value)}</Badge>;
+        return <Badge variant="outline" className={cn("border-0 font-medium", getBadgeColor(String(value)))}>{String(value)}</Badge>;
       case 'date':
         return new Date(value).toLocaleDateString();
       case 'currency':
@@ -248,7 +278,7 @@ export function UniversalDataTable({
                     ))}
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+                <TableBody className="[&_tr:nth-child(even)]:bg-muted/50">
                   {data.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={visibleColumns.length} className="text-center py-8">
@@ -270,10 +300,18 @@ export function UniversalDataTable({
               </Table>
             </div>
 
-            {binding.pagination?.enabled && data.length > 0 && (
+            {binding.pagination?.enabled && (
               <div className="flex items-center justify-between px-2 py-4">
                 <div className="text-sm text-muted-foreground">
-                  Showing {data.length} entries (Page {(binding.pagination.page || 0) + 1})
+                  {(() => {
+                    const page = binding.pagination.page || 0;
+                    const pageSize = binding.pagination.pageSize || 20;
+                    const start = count === 0 ? 0 : page * pageSize + 1;
+                    const end = Math.min((page + 1) * pageSize, count);
+                    const totalPages = Math.ceil(count / pageSize);
+
+                    return `Showing ${start}-${end} of ${count} entries (Page ${page + 1} of ${totalPages || 1})`;
+                  })()}
                 </div>
                 <div className="flex items-center space-x-2">
                   <Button
@@ -289,7 +327,7 @@ export function UniversalDataTable({
                     variant="outline"
                     size="sm"
                     onClick={() => setPagination((binding.pagination.page || 0) + 1)}
-                    disabled={data.length < binding.pagination.pageSize || loading}
+                    disabled={((binding.pagination.page || 0) + 1) * binding.pagination.pageSize >= count || loading}
                   >
                     Next
                     <ChevronRight className="h-4 w-4" />

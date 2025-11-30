@@ -54,23 +54,24 @@ interface DataBindingState {
   // Connection status (derived from dashboard store)
   connected: boolean;
   connectionError: string | null;
-  
+
   // Tables (owned by data-binding store)
   tables: SupabaseTable[];
   tablesLoading: boolean;
   tablesError: string | null;
-  
+
   // Schema cache
   schemas: Map<string, TableSchema>;
-  
+
   // Component bindings
   componentBindings: Map<string, ComponentDataBinding>;
-  
+
   // Query cache and loading states
   dataCache: Map<string, any>;
   loadingStates: Map<string, boolean>;
   errors: Map<string, string>;
-  
+  counts: Map<string, number>;
+
   // Actions
   initialize: () => void;
   syncConnectionStatus: () => Promise<void>;
@@ -97,6 +98,7 @@ export const useDataBindingStore = create<DataBindingState>()(
       dataCache: new Map(),
       loadingStates: new Map(),
       errors: new Map(),
+      counts: new Map(),
 
       // Initialize by syncing connection status and fetching tables
       initialize: () => {
@@ -106,7 +108,7 @@ export const useDataBindingStore = create<DataBindingState>()(
             await get().fetchTables();
           }
         };
-        
+
         initializeAsync().catch(error => {
           debug.error('DATA_BINDING', 'Initialization failed:', error);
         });
@@ -120,17 +122,17 @@ export const useDataBindingStore = create<DataBindingState>()(
             const dashboardModule = await import('./dashboard');
             getDashboardState = dashboardModule.useDashboardStore.getState;
           }
-          
+
           const dashboardState = getDashboardState();
-          
+
           const connected = dashboardState.connections.supabase?.connected || false;
           const connectionError = connected ? null : 'Not connected to database';
-          
-          set({ 
+
+          set({
             connected,
             connectionError
           });
-          
+
           debug.critical('DATA_BINDING', 'Synced connection status:', { connected });
         } catch (error) {
           debug.error('DATA_BINDING', 'Failed to sync connection status:', error);
@@ -145,42 +147,42 @@ export const useDataBindingStore = create<DataBindingState>()(
         }
 
         const requestKey = generateRequestKey('/api/database/supabase-tables');
-        
+
         return requestDeduplicator.dedupe(requestKey, async () => {
           set({ tablesLoading: true, tablesError: null });
-          
+
           try {
             const response = await fetch('/api/database/supabase-tables', {
               credentials: 'include'
             });
-            
+
             if (response.ok) {
               const result = await response.json();
-              
+
               if (result.success) {
-                set({ 
-                  tables: result.data.tables, 
+                set({
+                  tables: result.data.tables,
                   tablesLoading: false,
-                  tablesError: null 
+                  tablesError: null
                 });
                 debug.critical('DATA_BINDING', 'Tables fetched:', result.data.tables.length);
               } else {
-                set({ 
-                  tablesError: result.message, 
-                  tablesLoading: false 
+                set({
+                  tablesError: result.message,
+                  tablesLoading: false
                 });
               }
             } else {
-              set({ 
-                tablesError: 'Failed to fetch tables', 
-                tablesLoading: false 
+              set({
+                tablesError: 'Failed to fetch tables',
+                tablesLoading: false
               });
             }
           } catch (error) {
             console.error('Failed to fetch Supabase tables:', error);
-            set({ 
-              tablesError: 'Failed to fetch tables', 
-              tablesLoading: false 
+            set({
+              tablesError: 'Failed to fetch tables',
+              tablesLoading: false
             });
           }
         });
@@ -192,12 +194,12 @@ export const useDataBindingStore = create<DataBindingState>()(
         if (cached) {
           return cached;
         }
-        
+
         try {
           const response = await fetch(`/api/database/table-schema/${encodeURIComponent(tableName)}`, {
             credentials: 'include'
           });
-          
+
           if (response.ok) {
             const result = await response.json();
             if (result.success && result.data) {
@@ -209,63 +211,63 @@ export const useDataBindingStore = create<DataBindingState>()(
                 default: col.column_default || col.default,
                 isPrimaryKey: col.is_primary || col.isPrimaryKey
               }));
-              
+
               const schema: TableSchema = { columns: transformedColumns };
-              
+
               // Cache the schema
               set((state) => {
                 const newSchemas = new Map(state.schemas);
                 newSchemas.set(tableName, schema);
                 return { schemas: newSchemas };
               });
-              
+
               return schema;
             }
           }
         } catch (error) {
           console.error('[DataBindingStore] Error loading schema:', error);
         }
-        
+
         return null;
       },
 
       queryData: async (componentId: string, binding: ComponentDataBinding) => {
         const state = get();
-        
+
         // Prevent duplicate requests
         if (state.loadingStates.get(componentId)) {
           return state.dataCache.get(componentId);
         }
-        
+
         // Set loading state
         set((state) => {
           const newLoadingStates = new Map(state.loadingStates);
           newLoadingStates.set(componentId, true);
           return { loadingStates: newLoadingStates };
         });
-        
+
         try {
           // Build query parameters
           const params = new URLSearchParams();
           params.append('limit', binding.pagination.pageSize.toString());
           params.append('offset', (binding.pagination.page * binding.pagination.pageSize).toString());
-          
+
           if (binding.sorting.enabled && binding.sorting.column) {
             params.append('orderBy', binding.sorting.column);
             params.append('orderDirection', binding.sorting.direction || 'asc');
           }
-          
+
           // Add filters
           Object.entries(binding.filtering.filters).forEach(([key, value]) => {
             if (value !== undefined && value !== null && value !== '') {
               params.append(`filter_${key}`, value.toString());
             }
           });
-          
+
           const response = await fetch(`/api/database/table-data/${encodeURIComponent(binding.tableName)}?${params}`, {
             credentials: 'include'
           });
-          
+
           if (response.ok) {
             const result = await response.json();
             if (result.success) {
@@ -274,18 +276,24 @@ export const useDataBindingStore = create<DataBindingState>()(
                 const newDataCache = new Map(state.dataCache);
                 const newLoadingStates = new Map(state.loadingStates);
                 const newErrors = new Map(state.errors);
-                
+                const newCounts = new Map(state.counts);
+
                 newDataCache.set(componentId, result.data);
                 newLoadingStates.delete(componentId);
                 newErrors.delete(componentId);
-                
-                return { 
+
+                if (typeof result.total === 'number') {
+                  newCounts.set(componentId, result.total);
+                }
+
+                return {
                   dataCache: newDataCache,
                   loadingStates: newLoadingStates,
-                  errors: newErrors
+                  errors: newErrors,
+                  counts: newCounts
                 };
               });
-              
+
               return result.data;
             } else {
               throw new Error(result.message || 'Query failed');
@@ -295,21 +303,21 @@ export const useDataBindingStore = create<DataBindingState>()(
           }
         } catch (error) {
           console.error('[DataBindingStore] Query error:', error);
-          
+
           // Set error state
           set((state) => {
             const newLoadingStates = new Map(state.loadingStates);
             const newErrors = new Map(state.errors);
-            
+
             newLoadingStates.delete(componentId);
             newErrors.set(componentId, error instanceof Error ? error.message : 'Query failed');
-            
-            return { 
+
+            return {
               loadingStates: newLoadingStates,
               errors: newErrors
             };
           });
-          
+
           throw error;
         }
       },
@@ -332,17 +340,20 @@ export const useDataBindingStore = create<DataBindingState>()(
           const newDataCache = new Map(state.dataCache);
           const newLoadingStates = new Map(state.loadingStates);
           const newErrors = new Map(state.errors);
-          
+          const newCounts = new Map(state.counts);
+
           newBindings.delete(componentId);
           newDataCache.delete(componentId);
           newLoadingStates.delete(componentId);
           newErrors.delete(componentId);
-          
-          return { 
+          newCounts.delete(componentId);
+
+          return {
             componentBindings: newBindings,
             dataCache: newDataCache,
             loadingStates: newLoadingStates,
-            errors: newErrors
+            errors: newErrors,
+            counts: newCounts
           };
         });
       },
@@ -362,9 +373,10 @@ export const useDataBindingStore = create<DataBindingState>()(
             newDataCache.delete(componentId);
             return { dataCache: newDataCache };
           } else {
-            return { 
+            return {
               dataCache: new Map(),
-              schemas: new Map()
+              schemas: new Map(),
+              counts: new Map()
             };
           }
         });
@@ -389,6 +401,7 @@ export const useDataBindingStore = create<DataBindingState>()(
         dataCache: new Map(),
         loadingStates: new Map(),
         errors: new Map(),
+        counts: new Map(),
       }),
     }
   )

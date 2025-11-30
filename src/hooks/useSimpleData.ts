@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { debug } from '@/lib/debug';
 
@@ -58,6 +58,7 @@ export function useSimpleData({
     loadingStates,
     errors,
     schemas,
+    counts,
     queryData,
     loadTableSchema,
     setComponentBinding,
@@ -75,6 +76,7 @@ export function useSimpleData({
   const data = dataCache.get(componentId) || [];
   const loading = loadingStates.get(componentId) || false;
   const error = errors.get(componentId) || null;
+  const count = counts.get(componentId) || 0;
   const schema = binding?.tableName ? schemas.get(binding.tableName) : null;
 
   // Auto fetch data when connected and binding is set
@@ -116,7 +118,7 @@ export function useSimpleData({
         },
       },
     };
-  }, [bindingKey, paginationKey, sortingKey, filtersKey, searchQuery]);
+  }, [binding, pagination, sorting, filters, searchQuery]);
 
   // Fetch data function - memoized and debounced to prevent excessive calls
   const fetchData = useCallback(async () => {
@@ -142,33 +144,19 @@ export function useSimpleData({
 
   // Auto-fetch data with optimized debouncing
   useEffect(() => {
-    console.log('[useSimpleData] Auto-fetch check:', {
-      autoFetch,
-      tableName: binding?.tableName,
-      connected,
-      componentId
-    });
-
     if (!autoFetch || !binding?.tableName || !connected) {
-      console.log('[useSimpleData] Skipping fetch - conditions not met');
       return;
     }
 
     // Longer debounce to prevent excessive calls during rapid state changes
     const timeoutId = setTimeout(() => {
-      console.log('[useSimpleData] Fetching data for componentId:', componentId);
       fetchData();
     }, 300);
     return () => clearTimeout(timeoutId);
-  }, [autoFetch, bindingKey, connected, fetchData]);
+  }, [autoFetch, bindingKey, paginationKey, sortingKey, filtersKey, searchQuery, connected, fetchData]);
 
-  // Update component binding with optimized frequency
-  useEffect(() => {
-    const effectiveBinding = getEffectiveBinding();
-    if (effectiveBinding) {
-      setComponentBinding(componentId, effectiveBinding);
-    }
-  }, [componentId, bindingKey, paginationKey, sortingKey, filtersKey, searchQuery, setComponentBinding]);
+  // Update component binding - REMOVED to prevent infinite loop
+  // The binding is already managed by the component itself
 
   // Action functions
   const setFilters = useCallback((newFilters: Record<string, any>) => {
@@ -198,7 +186,7 @@ export function useSimpleData({
 
   return {
     data: Array.isArray(data) ? data : [],
-    count: Array.isArray(data) ? data.length : 0,
+    count,
     loading,
     error,
     schema,

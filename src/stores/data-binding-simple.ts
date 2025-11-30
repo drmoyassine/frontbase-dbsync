@@ -1,54 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { immer } from 'zustand/middleware/immer';
 import { debug } from '@/lib/debug';
 import { requestDeduplicator, generateRequestKey } from '@/lib/request-deduplicator';
+import { databaseApi, SupabaseTable, TableSchema } from '@/services/database-api';
+import { ComponentDataBinding } from '@/hooks/data/useSimpleData';
 
 // Import dashboard store for connection/table state synchronization
 let getDashboardState: () => any;
-
-// Simplified interfaces matching dashboard pattern
-interface SupabaseTable {
-  name: string;
-  schema: string;
-  path?: string;
-}
-
-interface TableSchema {
-  columns: Array<{
-    name: string;
-    type: string;
-    nullable: boolean;
-    default?: any;
-    isPrimaryKey?: boolean;
-  }>;
-}
-
-interface ComponentDataBinding {
-  componentId: string;
-  dataSourceId: string;
-  tableName: string;
-  refreshInterval?: number;
-  pagination: {
-    enabled: boolean;
-    pageSize: number;
-    page: number;
-  };
-  sorting: {
-    enabled: boolean;
-    column?: string;
-    direction?: 'asc' | 'desc';
-  };
-  filtering: {
-    searchEnabled: boolean;
-    filters: Record<string, any>;
-  };
-  columnOverrides: Record<string, {
-    displayName?: string;
-    visible?: boolean;
-    displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
-  }>;
-}
 
 interface DataBindingState {
   // Connection status (derived from dashboard store)
@@ -152,29 +110,18 @@ export const useDataBindingStore = create<DataBindingState>()(
           set({ tablesLoading: true, tablesError: null });
 
           try {
-            const response = await fetch('/api/database/supabase-tables', {
-              credentials: 'include'
-            });
+            const result = await databaseApi.fetchTables();
 
-            if (response.ok) {
-              const result = await response.json();
-
-              if (result.success) {
-                set({
-                  tables: result.data.tables,
-                  tablesLoading: false,
-                  tablesError: null
-                });
-                debug.critical('DATA_BINDING', 'Tables fetched:', result.data.tables.length);
-              } else {
-                set({
-                  tablesError: result.message,
-                  tablesLoading: false
-                });
-              }
+            if (result.success) {
+              set({
+                tables: result.data.tables,
+                tablesLoading: false,
+                tablesError: null
+              });
+              debug.critical('DATA_BINDING', 'Tables fetched:', result.data.tables.length);
             } else {
               set({
-                tablesError: 'Failed to fetch tables',
+                tablesError: result.message || 'Failed to fetch tables',
                 tablesLoading: false
               });
             }
@@ -196,33 +143,28 @@ export const useDataBindingStore = create<DataBindingState>()(
         }
 
         try {
-          const response = await fetch(`/api/database/table-schema/${encodeURIComponent(tableName)}`, {
-            credentials: 'include'
-          });
+          const result = await databaseApi.fetchTableSchema(tableName);
 
-          if (response.ok) {
-            const result = await response.json();
-            if (result.success && result.data) {
-              // Transform database column structure to frontend format
-              const transformedColumns = result.data.columns.map((col: any) => ({
-                name: col.column_name || col.name, // Handle both formats
-                type: col.data_type || col.type,
-                nullable: col.is_nullable === 'YES' || col.nullable,
-                default: col.column_default || col.default,
-                isPrimaryKey: col.is_primary || col.isPrimaryKey
-              }));
+          if (result.success && result.data) {
+            // Transform database column structure to frontend format
+            const transformedColumns = result.data.columns.map((col: any) => ({
+              name: col.column_name || col.name, // Handle both formats
+              type: col.data_type || col.type,
+              nullable: col.is_nullable === 'YES' || col.nullable,
+              default: col.column_default || col.default,
+              isPrimaryKey: col.is_primary || col.isPrimaryKey
+            }));
 
-              const schema: TableSchema = { columns: transformedColumns };
+            const schema: TableSchema = { columns: transformedColumns };
 
-              // Cache the schema
-              set((state) => {
-                const newSchemas = new Map(state.schemas);
-                newSchemas.set(tableName, schema);
-                return { schemas: newSchemas };
-              });
+            // Cache the schema
+            set((state) => {
+              const newSchemas = new Map(state.schemas);
+              newSchemas.set(tableName, schema);
+              return { schemas: newSchemas };
+            });
 
-              return schema;
-            }
+            return schema;
           }
         } catch (error) {
           console.error('[DataBindingStore] Error loading schema:', error);
@@ -266,7 +208,7 @@ export const useDataBindingStore = create<DataBindingState>()(
           });
 
           console.log('[DataBindingStore] Query params:', {
-            url: `/api/database/table-data/${encodeURIComponent(binding.tableName)}`,
+            tableName: binding.tableName,
             params: params.toString(),
             binding: {
               sorting: binding.sorting,
@@ -275,42 +217,35 @@ export const useDataBindingStore = create<DataBindingState>()(
             }
           });
 
-          const response = await fetch(`/api/database/table-data/${encodeURIComponent(binding.tableName)}?${params}`, {
-            credentials: 'include'
-          });
+          const result = await databaseApi.queryData(binding.tableName, params);
 
-          if (response.ok) {
-            const result = await response.json();
-            if (result.success) {
-              // Cache the result
-              set((state) => {
-                const newDataCache = new Map(state.dataCache);
-                const newLoadingStates = new Map(state.loadingStates);
-                const newErrors = new Map(state.errors);
-                const newCounts = new Map(state.counts);
+          if (result.success) {
+            // Cache the result
+            set((state) => {
+              const newDataCache = new Map(state.dataCache);
+              const newLoadingStates = new Map(state.loadingStates);
+              const newErrors = new Map(state.errors);
+              const newCounts = new Map(state.counts);
 
-                newDataCache.set(componentId, result.data);
-                newLoadingStates.delete(componentId);
-                newErrors.delete(componentId);
+              newDataCache.set(componentId, result.data);
+              newLoadingStates.delete(componentId);
+              newErrors.delete(componentId);
 
-                if (typeof result.total === 'number') {
-                  newCounts.set(componentId, result.total);
-                }
+              if (typeof result.total === 'number') {
+                newCounts.set(componentId, result.total);
+              }
 
-                return {
-                  dataCache: newDataCache,
-                  loadingStates: newLoadingStates,
-                  errors: newErrors,
-                  counts: newCounts
-                };
-              });
+              return {
+                dataCache: newDataCache,
+                loadingStates: newLoadingStates,
+                errors: newErrors,
+                counts: newCounts
+              };
+            });
 
-              return result.data;
-            } else {
-              throw new Error(result.message || 'Query failed');
-            }
+            return result.data;
           } else {
-            throw new Error(`HTTP ${response.status}: Failed to query data`);
+            throw new Error(result.message || 'Query failed');
           }
         } catch (error) {
           console.error('[DataBindingStore] Query error:', error);

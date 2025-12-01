@@ -1,175 +1,96 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useBuilderStore } from '@/stores/builder';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Trash2, Database } from 'lucide-react';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
-import { DataBindingModal } from '@/components/builder/data-binding/DataBindingModal';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Trash2, Database } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { DataBindingModal } from './data-binding/DataBindingModal';
 import { DataTablePropertiesPanel } from '@/components/builder/data-table/DataTablePropertiesPanel';
+
+// Helper to find component recursively
+const findComponent = (components: any[], id: string): any => {
+  for (const component of components) {
+    if (component.id === id) return component;
+    if (component.children) {
+      const found = findComponent(component.children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+};
 
 export const PropertiesPanel = () => {
   const {
-    currentPageId,
     selectedComponentId,
     pages,
-    updatePage,
-    setSelectedComponentId,
-    editingComponentId,
-    setEditingComponentId
+    currentPageId,
+    updateComponent,
+    removeComponent
   } = useBuilderStore();
+
+  const { getComponentBinding, setComponentBinding, initialize } = useDataBindingStore();
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDataBinding, setShowDataBinding] = useState(false);
-  const [lastSelectedComponent, setLastSelectedComponent] = useState<string | null>(null);
-  const { getComponentBinding, setComponentBinding, initialize } = useDataBindingStore();
 
-  const currentPage = pages.find(page => page.id === currentPageId);
+  // Initialize data binding store when panel opens
+  React.useEffect(() => {
+    initialize();
+  }, [initialize]);
 
-  // Recursive function to find component by ID
-  const findComponentById = (components: any[], id: string): any => {
-    for (const comp of components) {
-      if (comp.id === id) return comp;
-      if (comp.children) {
-        const found = findComponentById(comp.children, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
-
-  const selectedComponent = currentPage?.layoutData?.content ?
-    findComponentById(currentPage.layoutData.content, selectedComponentId || '') : null;
-
-  // Remove duplicate initialize call - it's already called in App.tsx
-
-  // Auto-open data binding modal for new data components
-  useEffect(() => {
-    if (selectedComponent && selectedComponentId && selectedComponentId !== lastSelectedComponent) {
-      setLastSelectedComponent(selectedComponentId);
-
-      // Check if this is a new data component without binding
-      const isDataComponent = ['DataTable', 'KPICard', 'Chart', 'Grid'].includes(selectedComponent.type);
-      const hasBinding = getComponentBinding(selectedComponentId);
-
-      // Check if component was just dropped by looking at props timestamp
-      const isNewComponent = selectedComponent.props?.createdAt &&
-        (Date.now() - new Date(selectedComponent.props.createdAt).getTime()) < 5000; // 5 seconds
-
-      if (isDataComponent && !hasBinding && isNewComponent) {
-        // Small delay to ensure component is properly selected
-        setTimeout(() => {
-          setShowDataBinding(true);
-        }, 100);
-      }
-    }
-  }, [selectedComponent, selectedComponentId, lastSelectedComponent, getComponentBinding]);
-
-  if (!selectedComponent) {
+  if (!selectedComponentId || !currentPageId) {
     return (
-      <div className="p-4">
-        <div className="border-b border-border pb-4 mb-4">
-          <h2 className="font-semibold text-foreground">Properties</h2>
-        </div>
-        <p className="text-muted-foreground text-center py-8">
-          Select a component to edit its properties
-        </p>
+      <div className="p-4 text-center text-muted-foreground">
+        Select a component to view its properties.
       </div>
     );
   }
 
-  // Recursive function to update component in nested structure
-  const updateComponentInContent = (components: any[], componentId: string, updates: any): any[] => {
-    return components.map(comp => {
-      if (comp.id === componentId) {
-        return { ...comp, ...updates };
-      }
-      if (comp.children) {
-        return {
-          ...comp,
-          children: updateComponentInContent(comp.children, componentId, updates)
-        };
-      }
-      return comp;
-    });
-  };
+  const currentPage = pages.find(p => p.id === currentPageId);
+  const selectedComponent = currentPage?.layoutData?.content
+    ? findComponent(currentPage.layoutData.content, selectedComponentId)
+    : null;
+
+  if (!selectedComponent) {
+    return (
+      <div className="p-4 text-center text-muted-foreground">
+        Component not found.
+      </div>
+    );
+  }
 
   const updateComponentProp = (key: string, value: any) => {
-    if (!currentPage) return;
-
-    const updatedContent = updateComponentInContent(
-      currentPage.layoutData.content,
-      selectedComponentId!,
-      {
-        props: {
-          ...selectedComponent.props,
-          [key]: value
-        }
-      }
-    );
-
-    updatePage(currentPage.id, {
-      layoutData: {
-        ...currentPage.layoutData,
-        content: updatedContent
-      }
-    });
-
-    // If we're editing this component inline, exit edit mode to show updated text
-    if (editingComponentId === selectedComponentId) {
-      setEditingComponentId(null);
-    }
+    updateComponent(selectedComponentId, { [key]: value });
   };
 
   const deleteComponent = () => {
-    if (!currentPage) return;
-
-    // Recursive function to remove component from nested structure
-    const removeComponentFromContent = (components: any[], componentId: string): any[] => {
-      return components.filter(comp => {
-        if (comp.id === componentId) return false;
-        if (comp.children) {
-          comp.children = removeComponentFromContent(comp.children, componentId);
-        }
-        return true;
-      });
-    };
-
-    const updatedContent = removeComponentFromContent(currentPage.layoutData.content, selectedComponentId!);
-
-    updatePage(currentPage.id, {
-      layoutData: {
-        ...currentPage.layoutData,
-        content: updatedContent
-      }
-    });
-
-    setSelectedComponentId(null);
+    removeComponent(selectedComponentId);
     setShowDeleteDialog(false);
   };
 
   const handleDataBindingSave = (binding: any) => {
-    if (selectedComponentId) {
-      setComponentBinding(selectedComponentId, binding);
-
-      // Update component props with binding
-      updateComponentProp('binding', binding);
-      updateComponentProp('onConfigureBinding', () => setShowDataBinding(true));
-    }
-    setShowDataBinding(false);
+    setComponentBinding(selectedComponentId, binding);
+    updateComponentProp('binding', binding);
   };
 
-  const isDataComponent = selectedComponent?.type &&
-    ['DataTable', 'KPICard', 'Chart', 'Grid'].includes(selectedComponent.type);
-
-  const renderPropertyFields = () => {
-    const { type, props } = selectedComponent;
-
-    const renderDataBindingButton = () => (
-      <div className="space-y-2 mt-4 border-t pt-4">
+  const renderDataBindingButton = () => {
+    const binding = getComponentBinding(selectedComponentId);
+    return (
+      <div className="space-y-2 pt-2 border-t">
         <Label>Data Binding</Label>
         <Button
           variant="outline"
@@ -177,82 +98,60 @@ export const PropertiesPanel = () => {
           className="w-full justify-start"
         >
           <Database className="mr-2 h-4 w-4" />
-          {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
+          {binding ? 'Edit Data Binding' : 'Configure Data Binding'}
         </Button>
       </div>
     );
+  };
+
+  const renderPropertyFields = () => {
+    const { type, props } = selectedComponent;
 
     switch (type) {
-      case 'Button':
+      case 'Container':
         return (
           <>
             <div className="space-y-2">
-              <Label htmlFor="button-text">Text</Label>
-              <Input
-                id="button-text"
-                value={props.text || ''}
-                onChange={(e) => updateComponentProp('text', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="button-variant">Variant</Label>
-              <Select value={props.variant || 'default'} onValueChange={(value) => updateComponentProp('variant', value)}>
+              <Label htmlFor="container-padding">Padding</Label>
+              <Select value={props.padding || 'p-4'} onValueChange={(value) => updateComponentProp('padding', value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">Default</SelectItem>
-                  <SelectItem value="destructive">Destructive</SelectItem>
-                  <SelectItem value="outline">Outline</SelectItem>
-                  <SelectItem value="secondary">Secondary</SelectItem>
-                  <SelectItem value="ghost">Ghost</SelectItem>
-                  <SelectItem value="link">Link</SelectItem>
+                  <SelectItem value="p-0">None</SelectItem>
+                  <SelectItem value="p-2">Small</SelectItem>
+                  <SelectItem value="p-4">Medium</SelectItem>
+                  <SelectItem value="p-8">Large</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="button-size">Size</Label>
-              <Select value={props.size || 'default'} onValueChange={(value) => updateComponentProp('size', value)}>
+              <Label htmlFor="container-layout">Layout</Label>
+              <Select value={props.layout || 'flex-col'} onValueChange={(value) => updateComponentProp('layout', value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">Default</SelectItem>
-                  <SelectItem value="sm">Small</SelectItem>
-                  <SelectItem value="lg">Large</SelectItem>
-                  <SelectItem value="icon">Icon</SelectItem>
+                  <SelectItem value="flex-col">Vertical</SelectItem>
+                  <SelectItem value="flex-row">Horizontal</SelectItem>
+                  <SelectItem value="grid">Grid</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-          </>
-        );
-
-      case 'Text':
-        return (
-          <>
             <div className="space-y-2">
-              <Label htmlFor="text-content">Content</Label>
-              <Textarea
-                id="text-content"
-                value={props.text || ''}
-                onChange={(e) => updateComponentProp('text', e.target.value)}
-                rows={3}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="text-size">Size</Label>
-              <Select value={props.size || 'base'} onValueChange={(value) => updateComponentProp('size', value)}>
+              <Label htmlFor="container-gap">Gap</Label>
+              <Select value={props.gap || 'gap-4'} onValueChange={(value) => updateComponentProp('gap', value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="sm">Small</SelectItem>
-                  <SelectItem value="base">Base</SelectItem>
-                  <SelectItem value="lg">Large</SelectItem>
+                  <SelectItem value="gap-0">None</SelectItem>
+                  <SelectItem value="gap-2">Small</SelectItem>
+                  <SelectItem value="gap-4">Medium</SelectItem>
+                  <SelectItem value="gap-8">Large</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            {renderDataBindingButton()}
           </>
         );
 
@@ -269,17 +168,17 @@ export const PropertiesPanel = () => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="heading-level">Level</Label>
-              <Select value={props.level || '2'} onValueChange={(value) => updateComponentProp('level', value)}>
+              <Select value={props.level || 'h1'} onValueChange={(value) => updateComponentProp('level', value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1">H1</SelectItem>
-                  <SelectItem value="2">H2</SelectItem>
-                  <SelectItem value="3">H3</SelectItem>
-                  <SelectItem value="4">H4</SelectItem>
-                  <SelectItem value="5">H5</SelectItem>
-                  <SelectItem value="6">H6</SelectItem>
+                  <SelectItem value="h1">H1</SelectItem>
+                  <SelectItem value="h2">H2</SelectItem>
+                  <SelectItem value="h3">H3</SelectItem>
+                  <SelectItem value="h4">H4</SelectItem>
+                  <SelectItem value="h5">H5</SelectItem>
+                  <SelectItem value="h6">H6</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -287,40 +186,64 @@ export const PropertiesPanel = () => {
           </>
         );
 
-      case 'Card':
+      case 'Text':
         return (
           <>
             <div className="space-y-2">
-              <Label htmlFor="card-title">Title</Label>
-              <Input
-                id="card-title"
-                value={props.title || ''}
-                onChange={(e) => updateComponentProp('title', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="card-description">Description</Label>
-              <Input
-                id="card-description"
-                value={props.description || ''}
-                onChange={(e) => updateComponentProp('description', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="card-content">Content</Label>
+              <Label htmlFor="text-content">Content</Label>
               <Textarea
-                id="card-content"
-                value={props.content || ''}
-                onChange={(e) => updateComponentProp('content', e.target.value)}
-                rows={3}
+                id="text-content"
+                value={props.text || ''}
+                onChange={(e) => updateComponentProp('text', e.target.value)}
+                rows={4}
               />
             </div>
+            {renderDataBindingButton()}
+          </>
+        );
+
+      case 'Button':
+        return (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="btn-text">Text</Label>
+              <Input
+                id="btn-text"
+                value={props.text || ''}
+                onChange={(e) => updateComponentProp('text', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="btn-variant">Variant</Label>
+              <Select value={props.variant || 'default'} onValueChange={(value) => updateComponentProp('variant', value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Default</SelectItem>
+                  <SelectItem value="secondary">Secondary</SelectItem>
+                  <SelectItem value="destructive">Destructive</SelectItem>
+                  <SelectItem value="outline">Outline</SelectItem>
+                  <SelectItem value="ghost">Ghost</SelectItem>
+                  <SelectItem value="link">Link</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {renderDataBindingButton()}
           </>
         );
 
       case 'Input':
         return (
           <>
+            <div className="space-y-2">
+              <Label htmlFor="input-label">Label</Label>
+              <Input
+                id="input-label"
+                value={props.label || ''}
+                onChange={(e) => updateComponentProp('label', e.target.value)}
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="input-placeholder">Placeholder</Label>
               <Input
@@ -331,7 +254,7 @@ export const PropertiesPanel = () => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="input-type">Type</Label>
-              <Select value={props.type || 'text'} onValueChange={(value) => updateComponentProp('type', value)}>
+              <Select value={props.inputType || 'text'} onValueChange={(value) => updateComponentProp('inputType', value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -350,6 +273,14 @@ export const PropertiesPanel = () => {
       case 'Textarea':
         return (
           <>
+            <div className="space-y-2">
+              <Label htmlFor="textarea-label">Label</Label>
+              <Input
+                id="textarea-label"
+                value={props.label || ''}
+                onChange={(e) => updateComponentProp('label', e.target.value)}
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="textarea-placeholder">Placeholder</Label>
               <Input
@@ -386,8 +317,8 @@ export const PropertiesPanel = () => {
               <Label htmlFor="select-options">Options (one per line)</Label>
               <Textarea
                 id="select-options"
-                value={(props.options || []).join('\\n')}
-                onChange={(e) => updateComponentProp('options', e.target.value.split('\\n').filter(Boolean))}
+                value={(props.options || []).join('\n')}
+                onChange={(e) => updateComponentProp('options', e.target.value.split('\n').filter(Boolean))}
                 rows={4}
               />
             </div>
@@ -557,151 +488,151 @@ export const PropertiesPanel = () => {
                 {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
               </Button>
             </div>
-          </div >
+          </>
         );
 
       case 'Chart':
-return (
-  <div className="space-y-4">
-    <div className="space-y-2">
-      <Label htmlFor="chart-type">Chart Type</Label>
-      <Select value={props.chartType || 'bar'} onValueChange={(value) => updateComponentProp('chartType', value)}>
-        <SelectTrigger>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="bar">Bar Chart</SelectItem>
-          <SelectItem value="line">Line Chart</SelectItem>
-          <SelectItem value="pie">Pie Chart</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
-    <div className="space-y-2">
-      <Label>Data Binding</Label>
-      <Button
-        variant="outline"
-        onClick={() => setShowDataBinding(true)}
-        className="w-full justify-start"
-      >
-        <Database className="mr-2 h-4 w-4" />
-        {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
-      </Button>
-    </div>
-  </div>
-);
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="chart-type">Chart Type</Label>
+              <Select value={props.chartType || 'bar'} onValueChange={(value) => updateComponentProp('chartType', value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bar">Bar Chart</SelectItem>
+                  <SelectItem value="line">Line Chart</SelectItem>
+                  <SelectItem value="pie">Pie Chart</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Data Binding</Label>
+              <Button
+                variant="outline"
+                onClick={() => setShowDataBinding(true)}
+                className="w-full justify-start"
+              >
+                <Database className="mr-2 h-4 w-4" />
+                {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
+              </Button>
+            </div>
+          </div>
+        );
 
       case 'Grid':
-return (
-  <div className="space-y-4">
-    <div className="space-y-2">
-      <Label htmlFor="grid-columns">Columns</Label>
-      <Select value={(props.columns || 3).toString()} onValueChange={(value) => updateComponentProp('columns', parseInt(value))}>
-        <SelectTrigger>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="1">1 Column</SelectItem>
-          <SelectItem value="2">2 Columns</SelectItem>
-          <SelectItem value="3">3 Columns</SelectItem>
-          <SelectItem value="4">4 Columns</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
-    <div className="space-y-2">
-      <Label>Data Binding</Label>
-      <Button
-        variant="outline"
-        onClick={() => setShowDataBinding(true)}
-        className="w-full justify-start"
-      >
-        <Database className="mr-2 h-4 w-4" />
-        {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
-      </Button>
-    </div>
-  </div>
-);
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="grid-columns">Columns</Label>
+              <Select value={(props.columns || 3).toString()} onValueChange={(value) => updateComponentProp('columns', parseInt(value))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 Column</SelectItem>
+                  <SelectItem value="2">2 Columns</SelectItem>
+                  <SelectItem value="3">3 Columns</SelectItem>
+                  <SelectItem value="4">4 Columns</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Data Binding</Label>
+              <Button
+                variant="outline"
+                onClick={() => setShowDataBinding(true)}
+                className="w-full justify-start"
+              >
+                <Database className="mr-2 h-4 w-4" />
+                {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
+              </Button>
+            </div>
+          </div>
+        );
 
       case 'DataTable':
-const dataTableBinding = getComponentBinding(selectedComponentId!);
-return (
-  <DataTablePropertiesPanel
-    componentId={selectedComponentId!}
-    binding={dataTableBinding}
-    onBindingUpdate={(binding) => {
-      setComponentBinding(selectedComponentId!, binding);
-      updateComponentProp('binding', binding);
-    }}
-  />
-);
+        const dataTableBinding = getComponentBinding(selectedComponentId!);
+        return (
+          <DataTablePropertiesPanel
+            componentId={selectedComponentId!}
+            binding={dataTableBinding}
+            onBindingUpdate={(binding) => {
+              setComponentBinding(selectedComponentId!, binding);
+              updateComponentProp('binding', binding);
+            }}
+          />
+        );
 
       default:
-return (
-  <p className="text-muted-foreground text-sm">
-    No properties available for {type} component.
-  </p>
-);
+        return (
+          <p className="text-muted-foreground text-sm">
+            No properties available for {type} component.
+          </p>
+        );
     }
   };
 
-const DeleteConfirmationDialog = ({ open, onOpenChange, onConfirm }: any) => (
-  <AlertDialog open={open} onOpenChange={onOpenChange}>
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-        <AlertDialogDescription>
-          This action cannot be undone. This will permanently delete the selected component.
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel>Cancel</AlertDialogCancel>
-        <AlertDialogAction onClick={onConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-          Delete
-        </AlertDialogAction>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  </AlertDialog>
-);
+  const DeleteConfirmationDialog = ({ open, onOpenChange, onConfirm }: any) => (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This action cannot be undone. This will permanently delete the selected component.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 
-return (
-  <div className="p-4 h-full flex flex-col">
-    <div className="border-b border-border pb-4 mb-4 flex justify-between items-center">
-      <h2 className="font-semibold text-foreground">Properties</h2>
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => setShowDeleteDialog(true)}
-        className="text-destructive hover:text-destructive"
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
-    </div>
-
-    <div className="flex-1 overflow-y-auto">
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">Component Type</Label>
-          <div className="px-3 py-2 bg-muted rounded-md text-sm">
-            {selectedComponent.type}
-          </div>
-        </div>
-
-        {renderPropertyFields()}
+  return (
+    <div className="p-4 h-full flex flex-col">
+      <div className="border-b border-border pb-4 mb-4 flex justify-between items-center">
+        <h2 className="font-semibold text-foreground">Properties</h2>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setShowDeleteDialog(true)}
+          className="text-destructive hover:text-destructive"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Component Type</Label>
+            <div className="px-3 py-2 bg-muted rounded-md text-sm">
+              {selectedComponent.type}
+            </div>
+          </div>
+
+          {renderPropertyFields()}
+        </div>
+      </div>
+
+      <DeleteConfirmationDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        onConfirm={deleteComponent}
+      />
+
+      <DataBindingModal
+        open={showDataBinding}
+        onOpenChange={setShowDataBinding}
+        componentId={selectedComponentId || ''}
+        componentType={selectedComponent?.type || ''}
+        onSave={handleDataBindingSave}
+      />
     </div>
-
-    <DeleteConfirmationDialog
-      open={showDeleteDialog}
-      onOpenChange={setShowDeleteDialog}
-      onConfirm={deleteComponent}
-    />
-
-    <DataBindingModal
-      open={showDataBinding}
-      onOpenChange={setShowDataBinding}
-      componentId={selectedComponentId || ''}
-      componentType={selectedComponent?.type || ''}
-      onSave={handleDataBindingSave}
-    />
-  </div>
-);
+  );
 };

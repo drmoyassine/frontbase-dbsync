@@ -101,6 +101,8 @@ interface BuilderState {
   setDraggedComponentId: (componentId: string | null) => void;
   setEditingComponentId: (id: string | null) => void;
   updateComponentText: (componentId: string, textProperty: string, text: string) => void;
+  updateComponent: (componentId: string, propsUpdates: Record<string, any>) => void;
+  removeComponent: (componentId: string) => void;
 
   // Responsive actions
   setCurrentViewport: (viewport: 'mobile' | 'tablet' | 'desktop') => void;
@@ -306,6 +308,79 @@ export const useBuilderStore = create<BuilderState>()(
           return {
             ...state,
             pages: updatedPages,
+            hasUnsavedChanges: true
+          };
+        });
+      },
+
+      updateComponent: (componentId: string, propsUpdates: Record<string, any>) => {
+        set((state) => {
+          const { pages, currentPageId } = state;
+          if (!currentPageId) return state;
+
+          const pageIndex = pages.findIndex(p => p.id === currentPageId);
+          if (pageIndex === -1) return state;
+
+          const page = { ...pages[pageIndex] };
+
+          const updateInContent = (content: ComponentData[]): ComponentData[] => {
+            return content.map(comp => {
+              if (comp.id === componentId) {
+                return { ...comp, props: { ...comp.props, ...propsUpdates } };
+              }
+              if (comp.children) {
+                return { ...comp, children: updateInContent(comp.children) };
+              }
+              return comp;
+            });
+          };
+
+          if (page.layoutData?.content) {
+            page.layoutData.content = updateInContent(page.layoutData.content);
+          }
+
+          const newPages = [...state.pages];
+          newPages[pageIndex] = page;
+
+          return {
+            ...state,
+            pages: newPages,
+            hasUnsavedChanges: true
+          };
+        });
+      },
+
+      removeComponent: (componentId: string) => {
+        set((state) => {
+          const { pages, currentPageId } = state;
+          if (!currentPageId) return state;
+
+          const pageIndex = pages.findIndex(p => p.id === currentPageId);
+          if (pageIndex === -1) return state;
+
+          const page = { ...pages[pageIndex] };
+
+          const deleteFromContent = (items: ComponentData[]): ComponentData[] => {
+            return items.filter(item => {
+              if (item.id === componentId) return false;
+              if (item.children) {
+                item.children = deleteFromContent(item.children);
+              }
+              return true;
+            });
+          };
+
+          if (page.layoutData?.content) {
+            page.layoutData.content = deleteFromContent(page.layoutData.content);
+          }
+
+          const newPages = [...state.pages];
+          newPages[pageIndex] = page;
+
+          return {
+            ...state,
+            pages: newPages,
+            selectedComponentId: state.selectedComponentId === componentId ? null : state.selectedComponentId,
             hasUnsavedChanges: true
           };
         });

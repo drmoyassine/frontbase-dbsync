@@ -87,8 +87,12 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
         if (orderBy) {
             console.log(`Sorting by: ${orderBy} (${orderDirection})`);
             const direction = orderDirection === 'desc' ? 'desc' : 'asc';
+
+            // Handle potential dot notation (e.g. table.column) and quote parts
+            const quotedOrderBy = orderBy.split('.').map(part => `"${part}"`).join('.');
+
             // Ensure column name is properly encoded
-            queryUrl += `&order=${encodeURIComponent(orderBy)}.${direction}`;
+            queryUrl += `&order=${encodeURIComponent(quotedOrderBy)}.${direction}`;
         }
 
         // Add specific column filters
@@ -169,7 +173,12 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
                 success: true,
                 data: responseData,
                 authMethod,
-                total: total
+                total: total,
+                debug: {
+                    queryUrl,
+                    orderBy,
+                    orderDirection
+                }
             });
         } else {
             const errorText = await response.text();

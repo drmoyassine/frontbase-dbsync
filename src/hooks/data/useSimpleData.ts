@@ -2,6 +2,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { debug } from '@/lib/debug';
 
+export interface FilterConfig {
+    id: string;
+    column: string;
+    filterType: 'dropdown' | 'multiselect' | 'text' | 'number' | 'dateRange' | 'boolean';
+    options?: string[]; // For dropdown/multiselect, auto-fetched
+    value?: any; // Current filter value
+    label?: string; // Custom label for the filter  
+}
+
 export interface ComponentDataBinding {
     componentId: string;
     dataSourceId: string;
@@ -26,6 +35,14 @@ export interface ComponentDataBinding {
         visible?: boolean;
         displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
     }>;
+    // NEW: Column order for drag-and-drop
+    columnOrder?: string[];
+
+    // NEW: Search column selection (if undefined, search all text columns)
+    searchColumns?: string[];
+
+    // NEW: Frontend filters
+    frontendFilters?: FilterConfig[];
 }
 
 export interface UseSimpleDataOptions {
@@ -133,8 +150,11 @@ export function useSimpleData({
             return;
         }
 
+        // Determine mode: builder if on /builder route, otherwise published
+        const mode = window.location.pathname.startsWith('/builder') ? 'builder' : 'published';
+
         try {
-            await queryData(componentId, effectiveBinding);
+            await queryData(componentId, effectiveBinding, mode);
         } catch (error) {
             debug.error('SIMPLE_DATA', 'Fetch error:', error);
         }

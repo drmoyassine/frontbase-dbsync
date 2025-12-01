@@ -23,7 +23,7 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
         const project = db.db.prepare('SELECT supabase_url, supabase_anon_key, supabase_service_key_encrypted FROM project WHERE id = ?').get('default');
 
         const { tableName } = req.params;
-        const { limit = 20, offset = 0, orderBy, orderDirection } = req.query;
+        const { limit = 20, offset = 0, orderBy, orderDirection, mode = 'builder' } = req.query;
 
         // Extract filter parameters
         const filters = {};
@@ -33,12 +33,17 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
             }
         });
 
+        // Extract searchColumns parameter
+        const searchColumns = req.query.searchColumns ? req.query.searchColumns.split(',') : undefined;
+
         console.log(`🔍 Fetching data for table: ${tableName}`, {
             limit,
             offset,
             orderBy,
             orderDirection,
-            filters
+            filters,
+            mode,
+            searchColumns
         });
 
         const anonKey = project?.supabase_anon_key;
@@ -51,29 +56,52 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
             });
         }
 
-        let authMethod = 'service';
-        let response;
+        let authKey;
+        let authMethod;
 
-        // Use service key exclusively for dashboard access (bypasses RLS)
-        if (!encryptedServiceKey) {
+        // Determine which key to use based on mode and authentication
+        if (mode === 'builder') {
+            // Builder mode: Use service key (admin access, bypasses RLS)
+            if (!encryptedServiceKey) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Service key required for builder mode. Please reconnect to Supabase.'
+                });
+            }
+
+            console.log('🔐 Builder mode: Using PROJECT-level service key for admin access...');
+            try {
+                authKey = decrypt(JSON.parse(encryptedServiceKey));
+                if (!authKey) {
+                    throw new Error('Failed to decrypt service key');
+                }
+                authMethod = 'service';
+            } catch (decryptError) {
+                console.error('Service key decryption failed:', decryptError);
+                return res.status(500).json({
+                    success: false,
+                    message: 'Failed to decrypt service key. Please reconnect to Supabase.'
+                });
+            }
+        } else if (mode === 'published') {
+            // Published mode: Use anon key or user JWT
+            const userJWT = req.headers.authorization?.replace('Bearer ', '');
+
+            if (userJWT && userJWT !== anonKey) {
+                // User is authenticated: Forward JWT for RLS
+                authKey = userJWT;
+                authMethod = 'user-jwt';
+                console.log('🔐 Published mode: Using user JWT for RLS-aware access...');
+            } else {
+                // Anonymous access: Use anon key
+                authKey = anonKey;
+                authMethod = 'anon';
+                console.log('🔐 Published mode: Using anon key for public access...');
+            }
+        } else {
             return res.status(400).json({
                 success: false,
-                message: 'Service key required for dashboard database access. Please reconnect to Supabase.'
-            });
-        }
-
-        console.log('🔐 Using PROJECT-level service key for admin dashboard access...');
-        let serviceKey;
-        try {
-            serviceKey = decrypt(JSON.parse(encryptedServiceKey));
-            if (!serviceKey) {
-                throw new Error('Failed to decrypt service key');
-            }
-        } catch (decryptError) {
-            console.error('Service key decryption failed:', decryptError);
-            return res.status(500).json({
-                success: false,
-                message: 'Failed to decrypt service key. Please reconnect to Supabase.'
+                message: `Invalid mode: ${mode}. Expected 'builder' or 'published'.`
             });
         }
 
@@ -108,44 +136,48 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
         // Handle global search if present
         if (filters.search) {
             try {
-                // We need to know text columns for global search
-                // Reuse the schema fetching logic or make a quick call to get columns
-                const schemaUrl = `${project.supabase_url}/rest/v1/${tableName}?limit=1`;
-                const schemaResponse = await fetch(schemaUrl, {
-                    headers: {
-                        'Authorization': `Bearer ${serviceKey}`,
-                        'apikey': serviceKey
-                    }
-                });
+                // If searchColumns specified, use them; otherwise fetch schema
+                let textColumns = searchColumns;
 
-                if (schemaResponse.ok) {
-                    const sampleData = await schemaResponse.json();
-                    if (sampleData.length > 0) {
-                        // Find string columns from the sample data
-                        const textColumns = Object.keys(sampleData[0]).filter(key =>
-                            typeof sampleData[0][key] === 'string'
-                        );
+                if (!textColumns || textColumns.length === 0) {
+                    // Auto-detect text columns from sample data
+                    const schemaUrl = `${project.supabase_url}/rest/v1/${tableName}?limit=1`;
+                    const schemaResponse = await fetch(schemaUrl, {
+                        headers: {
+                            'Authorization': `Bearer ${authKey}`,
+                            'apikey': anonKey
+                        }
+                    });
 
-                        if (textColumns.length > 0) {
-                            // Construct OR filter: col1.ilike.*val*,col2.ilike.*val*
-                            const searchVal = `*${filters.search}*`;
-                            const orFilter = textColumns.map(col => `${col}.ilike.${searchVal}`).join(',');
-                            queryUrl += `&or=(${orFilter})`;
+                    if (schemaResponse.ok) {
+                        const sampleData = await schemaResponse.json();
+                        if (sampleData.length > 0) {
+                            // Find string columns from the sample data
+                            textColumns = Object.keys(sampleData[0]).filter(key =>
+                                typeof sampleData[0][key] === 'string'
+                            );
                         }
                     }
                 }
+
+                if (textColumns && textColumns.length > 0) {
+                    // Construct OR filter: col1.ilike.*val*,col2.ilike.*val*
+                    const searchVal = `*${filters.search}*`;
+                    const orFilter = textColumns.map(col => `${col}.ilike.${searchVal}`).join(',');
+                    queryUrl += `&or=(${orFilter})`;
+                }
             } catch (err) {
-                console.warn('Failed to infer columns for search, skipping search filter', err);
+                console.warn('Failed to process search filter', err);
             }
         }
 
         console.log('Query URL:', queryUrl);
 
-        response = await fetch(queryUrl, {
+        const response = await fetch(queryUrl, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${serviceKey}`,
-                'apikey': serviceKey,
+                'Authorization': `Bearer ${authKey}`,
+                'apikey': anonKey,
                 'Content-Type': 'application/json',
                 'Prefer': 'count=exact' // Request total count
             }
@@ -180,7 +212,8 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
                 debug: {
                     queryUrl,
                     orderBy,
-                    orderDirection
+                    orderDirection,
+                    mode
                 }
             });
         } else {
@@ -213,47 +246,71 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
 // Get distinct values for a column
 router.post('/distinct-values', authenticateToken, async (req, res) => {
     try {
-        const { tableName, column } = req.body;
+        const { tableName, column, mode = 'builder' } = req.body;
 
         if (!tableName || !column) {
             return res.status(400).json({ error: 'Table name and column required' });
         }
 
         // Get PROJECT level Supabase connection including service key
-        const project = db.db.prepare('SELECT supabase_url, supabase_service_key_encrypted FROM project WHERE id = ?').get('default');
+        const project = db.db.prepare('SELECT supabase_url, supabase_anon_key, supabase_service_key_encrypted FROM project WHERE id = ?').get('default');
 
-        if (!project?.supabase_service_key_encrypted || !project?.supabase_url) {
+        if (!project?.supabase_url) {
             return res.status(400).json({ error: 'Supabase credentials not found' });
         }
 
-        const serviceKey = decrypt(JSON.parse(project.supabase_service_key_encrypted));
-        if (!serviceKey) {
-            return res.status(500).json({ error: 'Failed to decrypt service key' });
+        const anonKey = project?.supabase_anon_key;
+        const encryptedServiceKey = project?.supabase_service_key_encrypted;
+
+        let authKey;
+
+        // Determine which key to use based on mode
+        if (mode === 'builder') {
+            // Builder mode: Use service key (admin access, bypasses RLS)
+            if (!encryptedServiceKey) {
+                return res.status(400).json({ error: 'Service key required for builder mode' });
+            }
+
+            authKey = decrypt(JSON.parse(encryptedServiceKey));
+            if (!authKey) {
+                return res.status(500).json({ error: 'Failed to decrypt service key' });
+            }
+        } else if (mode === 'published') {
+            // Published mode: Use anon key or user JWT
+            const userJWT = req.headers.authorization?.replace('Bearer ', '');
+
+            if (userJWT && userJWT !== anonKey) {
+                // User is authenticated: Forward JWT for RLS
+                authKey = userJWT;
+            } else {
+                // Anonymous access: Use anon key
+                authKey = anonKey;
+            }
+        } else {
+            return res.status(400).json({ error: `Invalid mode: ${mode}` });
         }
 
-        // Use RPC if available or direct query with distinct
-        // Note: PostgREST doesn't support SELECT DISTINCT directly in the URL in older versions, 
-        // but we can try using a group by or just fetching unique values if the dataset is small.
-        // Better approach: Use a custom RPC or just fetch the column and dedupe in memory (limit to reasonable amount)
-
-        const queryUrl = `${project.supabase_url}/rest/v1/${tableName}?select=${column}&limit=1000`; // Limit to 1000 to avoid performance issues
+        // Fetch distinct values (limit to 1000 to avoid performance issues)
+        const queryUrl = `${project.supabase_url}/rest/v1/${tableName}?select=${column}&limit=1000`;
 
         const response = await fetch(queryUrl, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${serviceKey}`,
-                'apikey': serviceKey,
+                'Authorization': `Bearer ${authKey}`,
+                'apikey': anonKey,
                 'Content-Type': 'application/json'
             }
         });
 
         if (response.ok) {
             const data = await response.json();
-            // Deduplicate
+            // Deduplicate and filter null values
             const values = [...new Set(data.map(item => item[column]))].filter(val => val !== null && val !== undefined).sort();
 
             res.json({ success: true, data: values });
         } else {
+            const errorText = await response.text();
+            console.error('Failed to fetch distinct values:', errorText);
             res.status(400).json({ error: 'Failed to fetch values' });
         }
     } catch (error) {

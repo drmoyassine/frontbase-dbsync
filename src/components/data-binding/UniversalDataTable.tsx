@@ -64,13 +64,13 @@ export function UniversalDataTable({
     setSearchQuery
   } = useSimpleData({
     componentId,
-    binding,
     autoFetch: true
   });
 
   const [searchInput, setSearchInput] = useState('');
 
   const handleSort = (column: string) => {
+    console.log('[UniversalDataTable] handleSort triggered for:', column);
     if (!binding?.sorting.enabled) return;
 
     const currentDirection = binding.sorting.column === column ? binding.sorting.direction : undefined;

@@ -85,8 +85,10 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
 
         // Add sorting
         if (orderBy) {
+            console.log(`Sorting by: ${orderBy} (${orderDirection})`);
             const direction = orderDirection === 'desc' ? 'desc' : 'asc';
-            queryUrl += `&order=${orderBy}.${direction}`;
+            // Ensure column name is properly encoded
+            queryUrl += `&order=${encodeURIComponent(orderBy)}.${direction}`;
         }
 
         // Add specific column filters

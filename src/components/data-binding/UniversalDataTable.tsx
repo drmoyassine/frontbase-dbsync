@@ -64,6 +64,7 @@ export function UniversalDataTable({
     setSearchQuery
   } = useSimpleData({
     componentId,
+    binding,
     autoFetch: true
   });
 

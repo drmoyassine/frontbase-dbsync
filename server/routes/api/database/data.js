@@ -85,14 +85,17 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
 
         // Add sorting
         if (orderBy) {
-            console.log(`Sorting by: ${orderBy} (${orderDirection})`);
             const direction = orderDirection === 'desc' ? 'desc' : 'asc';
 
-            // Handle potential dot notation (e.g. table.column) and quote parts
-            const quotedOrderBy = orderBy.split('.').map(part => `"${part}"`).join('.');
+            console.log(`🔍 SORTING DEBUG:`);
+            console.log(`  - orderBy: ${orderBy}`);
+            console.log(`  - orderDirection: ${orderDirection}`);
+            console.log(`  - direction: ${direction}`);
 
-            // Ensure column name is properly encoded
-            queryUrl += `&order=${encodeURIComponent(quotedOrderBy)}.${direction}`;
+            // PostgREST order syntax: order=columnName.direction
+            queryUrl += `&order=${orderBy}.${direction}`;
+
+            console.log(`  - Final order param: order=${orderBy}.${direction}`);
         }
 
         // Add specific column filters

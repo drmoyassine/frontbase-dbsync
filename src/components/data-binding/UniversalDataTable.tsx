@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, Search, Settings, ArrowUpDown } from 'lucide
 import { useSimpleData } from '@/hooks/useSimpleData';
 import { cn } from '@/lib/utils';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
+import { FilterConfig } from '@/hooks/data/useSimpleData';
 
 interface ComponentDataBinding {
   componentId: string;
@@ -33,6 +34,9 @@ interface ComponentDataBinding {
     visible?: boolean;
     displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
   }>;
+  columnOrder?: string[];
+  searchColumns?: string[];
+  frontendFilters?: FilterConfig[];
 }
 
 interface UniversalDataTableProps {
@@ -163,7 +167,26 @@ export function UniversalDataTable({
 
   const getVisibleColumns = () => {
     if (!schema) return [];
-    return schema.columns.filter(col => {
+
+    // If columnOrder is defined, use it to determine order
+    if (binding?.columnOrder && binding.columnOrder.length > 0) {
+      // Create a map for quick lookup
+      const schemaColumnsMap = new Map(schema.columns.map((col: any) => [col.name, col]));
+
+      // Get columns in the specified order
+      const orderedColumns = binding.columnOrder
+        .map(name => schemaColumnsMap.get(name))
+        .filter(col => col !== undefined);
+
+      // Filter by visibility override
+      return orderedColumns.filter(col => {
+        const override = binding?.columnOverrides?.[col.name];
+        return override?.visible !== false;
+      });
+    }
+
+    // Fallback to default schema order
+    return schema.columns.filter((col: any) => {
       const override = binding?.columnOverrides?.[col.name];
       return override?.visible !== false;
     });
@@ -180,15 +203,11 @@ export function UniversalDataTable({
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             Data Table
-            <Button variant="outline" size="sm" onClick={onConfigureBinding}>
-              <Settings className="w-4 h-4 mr-2" />
-              Configure
-            </Button>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center text-muted-foreground py-8">
-            No data source configured. Click Configure to set up data binding.
+            No data source configured. Select this component to configure data binding.
           </div>
         </CardContent>
       </Card>
@@ -201,10 +220,6 @@ export function UniversalDataTable({
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             Data Table
-            <Button variant="outline" size="sm" onClick={onConfigureBinding}>
-              <Settings className="w-4 h-4 mr-2" />
-              Configure
-            </Button>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -228,10 +243,6 @@ export function UniversalDataTable({
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           Data Table
-          <Button variant="outline" size="sm" onClick={onConfigureBinding}>
-            <Settings className="w-4 h-4 mr-2" />
-            Configure
-          </Button>
         </CardTitle>
 
         {binding.filtering?.searchEnabled && (
@@ -260,7 +271,7 @@ export function UniversalDataTable({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {visibleColumns.map((column) => (
+                    {visibleColumns.map((column: any) => (
                       <TableHead key={column.name}>
                         <div className="flex items-center space-x-1">
                           <span>{getColumnDisplayName(column.name)}</span>
@@ -289,7 +300,7 @@ export function UniversalDataTable({
                   ) : (
                     data.map((row, index) => (
                       <TableRow key={index}>
-                        {visibleColumns.map((column) => (
+                        {visibleColumns.map((column: any) => (
                           <TableCell key={column.name}>
                             {formatValue(row[column.name], column.name)}
                           </TableCell>

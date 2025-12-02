@@ -154,7 +154,7 @@ export function useSimpleData({
         const mode = window.location.pathname.startsWith('/builder') ? 'builder' : 'published';
 
         try {
-            await queryData(componentId, effectiveBinding, mode);
+            await queryData(componentId, effectiveBinding);
         } catch (error) {
             debug.error('SIMPLE_DATA', 'Fetch error:', error);
         }

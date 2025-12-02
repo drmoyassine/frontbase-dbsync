@@ -179,7 +179,7 @@ export function UniversalDataTable({
         .filter(col => col !== undefined);
 
       // Filter by visibility override
-      return orderedColumns.filter(col => {
+      return orderedColumns.filter((col: any) => {
         const override = binding?.columnOverrides?.[col.name];
         return override?.visible !== false;
       });

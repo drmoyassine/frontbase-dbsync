@@ -4,6 +4,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { ComponentWithStyles } from '@/types/styles';
 import { pageAPI } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
+import {
+  removeComponentFromTree,
+  insertComponentIntoTree,
+  updateComponentInTree
+} from '@/lib/tree-utils';
 
 export interface ComponentData {
   id: string;
@@ -201,55 +206,15 @@ export const useBuilderStore = create<BuilderState>()(
           const newPages = [...state.pages];
           const page = { ...newPages[pageIndex] };
 
-          // Helper to find and remove component
-          const removeComponent = (items: ComponentData[], id: string): ComponentData[] => {
-            return items.filter(item => {
-              if (item.id === id) return false;
-              if (item.children) {
-                item.children = removeComponent(item.children, id);
-              }
-              return true;
-            });
-          };
-
-          // Helper to insert component
-          const insertComponent = (items: ComponentData[], targetId: string | undefined, comp: ComponentData, index: number): ComponentData[] => {
-            if (!targetId) {
-              // Insert at root level
-              const newItems = [...items];
-              newItems.splice(index, 0, comp);
-              return newItems;
-            }
-
-            return items.map(item => {
-              if (item.id === targetId) {
-                const newChildren = item.children ? [...item.children] : [];
-                newChildren.splice(index, 0, comp);
-                return { ...item, children: newChildren };
-              }
-              if (item.children) {
-                return { ...item, children: insertComponent(item.children, targetId, comp, index) };
-              }
-              return item;
-            });
-          };
-
           let content = page.layoutData?.content || [];
 
           // If moving an existing component (componentId is provided), remove it first
           if (componentId) {
-            content = removeComponent(content, componentId);
+            content = removeComponentFromTree(content, componentId);
           }
 
           // Insert the component at the new location
-          if (parentId) {
-            content = insertComponent(content, parentId, component, targetIndex);
-          } else {
-            // Root level insertion
-            const newContent = [...content];
-            newContent.splice(targetIndex, 0, component);
-            content = newContent;
-          }
+          content = insertComponentIntoTree(content, parentId, component, targetIndex);
 
           page.layoutData = {
             ...page.layoutData,
@@ -276,30 +241,18 @@ export const useBuilderStore = create<BuilderState>()(
 
           const page = { ...pages[pageIndex] };
 
-          // Helper function to update component text in nested structure
-          const updateComponentInContent = (content: ComponentData[]): ComponentData[] => {
-            return content.map(component => {
-              if (component.id === componentId) {
-                return {
-                  ...component,
-                  props: {
-                    ...component.props,
-                    [textProperty]: text
-                  }
-                };
-              }
-              if (component.children) {
-                return {
-                  ...component,
-                  children: updateComponentInContent(component.children)
-                };
-              }
-              return component;
-            });
-          };
-
           if (page.layoutData?.content) {
-            page.layoutData.content = updateComponentInContent(page.layoutData.content);
+            page.layoutData.content = updateComponentInTree(
+              page.layoutData.content,
+              componentId,
+              (comp) => ({
+                ...comp,
+                props: {
+                  ...comp.props,
+                  [textProperty]: text
+                }
+              })
+            );
           }
 
           const updatedPages = [...state.pages];
@@ -323,20 +276,12 @@ export const useBuilderStore = create<BuilderState>()(
 
           const page = { ...pages[pageIndex] };
 
-          const updateInContent = (content: ComponentData[]): ComponentData[] => {
-            return content.map(comp => {
-              if (comp.id === componentId) {
-                return { ...comp, props: { ...comp.props, ...propsUpdates } };
-              }
-              if (comp.children) {
-                return { ...comp, children: updateInContent(comp.children) };
-              }
-              return comp;
-            });
-          };
-
           if (page.layoutData?.content) {
-            page.layoutData.content = updateInContent(page.layoutData.content);
+            page.layoutData.content = updateComponentInTree(
+              page.layoutData.content,
+              componentId,
+              (comp) => ({ ...comp, props: { ...comp.props, ...propsUpdates } })
+            );
           }
 
           const newPages = [...state.pages];
@@ -360,18 +305,8 @@ export const useBuilderStore = create<BuilderState>()(
 
           const page = { ...pages[pageIndex] };
 
-          const deleteFromContent = (items: ComponentData[]): ComponentData[] => {
-            return items.filter(item => {
-              if (item.id === componentId) return false;
-              if (item.children) {
-                item.children = deleteFromContent(item.children);
-              }
-              return true;
-            });
-          };
-
           if (page.layoutData?.content) {
-            page.layoutData.content = deleteFromContent(page.layoutData.content);
+            page.layoutData.content = removeComponentFromTree(page.layoutData.content, componentId);
           }
 
           const newPages = [...state.pages];
@@ -494,16 +429,6 @@ export const useBuilderStore = create<BuilderState>()(
         const pageIndex = pages.findIndex(p => p.id === currentPageId);
         if (pageIndex === -1) return;
 
-        const deleteFromContent = (items: ComponentData[]): ComponentData[] => {
-          return items.filter(item => {
-            if (item.id === selectedComponentId) return false;
-            if (item.children) {
-              item.children = deleteFromContent(item.children);
-            }
-            return true;
-          });
-        };
-
         set((state) => {
           const newPages = [...state.pages];
           const page = { ...newPages[pageIndex] };
@@ -511,7 +436,7 @@ export const useBuilderStore = create<BuilderState>()(
 
           page.layoutData = {
             ...page.layoutData,
-            content: deleteFromContent([...content])
+            content: removeComponentFromTree([...content], selectedComponentId)
           };
 
           newPages[pageIndex] = page;

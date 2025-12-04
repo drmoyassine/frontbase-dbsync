@@ -24,6 +24,10 @@ chmod 755 "$DB_DIR/uploads" "$DB_DIR/exports" 2>/dev/null || echo "⚠️  Could
 trap 'echo "🛑 Received SIGTERM, shutting down..."; exit 0' TERM
 trap 'echo "🛑 Received SIGINT, shutting down..."; exit 0' INT
 
+# Run database migrations
+echo "🔄 Running database migrations..."
+node scripts/migrate-soft-delete.js || echo "⚠️ Migration script failed (check logs)"
+
 # Start the Node.js server
 echo "🚀 Starting Node.js server..."
 echo "Process ID: $$"

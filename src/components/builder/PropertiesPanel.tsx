@@ -596,7 +596,7 @@ export const PropertiesPanel = () => {
   return (
     <div className="p-4 h-full flex flex-col">
       <div className="border-b border-border pb-4 mb-4 flex justify-between items-center">
-        <h2 className="font-semibold text-foreground">Properties</h2>
+        <h2 className="font-semibold text-foreground">Properties <span className="text-muted-foreground font-normal">{selectedComponent.type}</span></h2>
         <Button
           variant="ghost"
           size="icon"
@@ -610,10 +610,13 @@ export const PropertiesPanel = () => {
       <div className="flex-1 overflow-y-auto">
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Component Type</Label>
-            <div className="px-3 py-2 bg-muted rounded-md text-sm">
-              {selectedComponent.type}
-            </div>
+            <Label htmlFor="component-title" className="text-sm font-medium">Component Title</Label>
+            <Input
+              id="component-title"
+              value={selectedComponent.props.title || ''}
+              onChange={(e) => updateComponentProp('title', e.target.value)}
+              placeholder="Enter component title"
+            />
           </div>
 
           {renderPropertyFields()}

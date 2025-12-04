@@ -39,17 +39,17 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
 
     return (
         <Tabs defaultValue="binding" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="binding">Data Binding</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="binding">Data</TabsTrigger>
                 <TabsTrigger value="options">Options</TabsTrigger>
                 <TabsTrigger value="filters">Filters</TabsTrigger>
+                <TabsTrigger value="actions">Actions</TabsTrigger>
             </TabsList>
 
             {/* Data Binding Tab */}
             <TabsContent value="binding" className="space-y-4 p-4">
                 <div className="space-y-4">
                     <div>
-                        <Label>Data Source</Label>
                         <DataSourceSelector
                             value={binding.dataSourceId}
                             onValueChange={(value) => updateBinding({ dataSourceId: value })}
@@ -57,7 +57,6 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                     </div>
 
                     <div>
-                        <Label>Table</Label>
                         <TableSelector
                             value={binding.tableName}
                             onValueChange={(value) => updateBinding({ tableName: value })}
@@ -180,7 +179,6 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                 </div>
             </TabsContent>
 
-            {/* Filters Tab */}
             <TabsContent value="filters" className="space-y-4 p-4">
                 <FilterConfigurator
                     tableName={binding.tableName}
@@ -188,6 +186,13 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                     filters={binding.frontendFilters || []}
                     onFiltersChange={(filters) => updateBinding({ frontendFilters: filters })}
                 />
+            </TabsContent>
+
+            {/* Actions Tab */}
+            <TabsContent value="actions" className="space-y-4 p-4">
+                <div className="text-sm text-muted-foreground text-center py-4">
+                    Actions configuration coming soon.
+                </div>
             </TabsContent>
         </Tabs>
     );

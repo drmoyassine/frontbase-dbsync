@@ -90,9 +90,32 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     ? false // DataTable handles its own fetching internally
     : !!binding?.tableName && !!binding?.fieldMapping;
 
+  // Transform binding to include componentId for useSimpleData
+  const simpleDataBinding = binding ? {
+    componentId: id || '',
+    dataSourceId: binding.dataSourceId || '',
+    tableName: binding.tableName || '',
+    refreshInterval: binding.refreshInterval,
+    pagination: {
+      enabled: binding.pagination?.enabled ?? false,
+      pageSize: binding.pagination?.pageSize ?? 20,
+      page: binding.pagination?.page ?? 0,
+    },
+    sorting: {
+      enabled: binding.sorting?.enabled ?? false,
+      column: binding.sorting?.column,
+      direction: binding.sorting?.direction,
+    },
+    filtering: {
+      searchEnabled: binding.filtering?.searchEnabled ?? false,
+      filters: binding.filtering?.filters ?? {},
+    },
+    columnOverrides: binding.columnOverrides ?? {},
+  } : null;
+
   const { data: boundData } = useSimpleData({
     componentId: id || '',
-    binding: binding,
+    binding: simpleDataBinding,
     autoFetch: shouldAutoFetch
   });
 

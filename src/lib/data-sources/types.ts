@@ -135,11 +135,15 @@ export interface DataSourceAdapter {
 }
 
 export interface ComponentDataBinding {
+  componentId?: string;
   dataSourceId?: string;
   tableName?: string;
   queryOptions?: QueryOptions;
   aggregationOptions?: AggregationOptions;
   refreshInterval?: number; // in seconds, 0 = realtime, -1 = manual
+
+  // Field mapping for binding component props to table columns
+  fieldMapping?: Record<string, string>;
 
   // Component-specific overrides
   columnOverrides?: {
@@ -155,20 +159,28 @@ export interface ComponentDataBinding {
   pagination?: {
     enabled: boolean;
     pageSize: number;
-    serverSide: boolean;
+    serverSide?: boolean;
+    page?: number;
   };
 
   sorting?: {
     enabled: boolean;
     defaultColumn?: string;
     defaultDirection?: 'asc' | 'desc';
-    serverSide: boolean;
+    column?: string;
+    direction?: 'asc' | 'desc';
+    serverSide?: boolean;
   };
 
   filtering?: {
-    visibleFilters: {
+    searchEnabled?: boolean;
+    filters?: Record<string, any>;
+    visibleFilters?: {
       column: string;
       type: 'dropdown' | 'multiselect' | 'text' | 'date' | 'number' | 'toggle';
       label?: string;
-      timestamp: Date;
-    }
+      timestamp?: Date;
+    }[];
+    serverSide?: boolean;
+  };
+}

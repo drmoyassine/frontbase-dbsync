@@ -120,6 +120,7 @@ interface BuilderState {
   togglePageVisibility: (pageId: string) => Promise<void>;
   deleteSelectedComponent: () => void;
   loadPagesFromDatabase: () => Promise<void>;
+  loadVariablesFromDatabase: () => Promise<void>;
   setSaving: (saving: boolean) => void;
   setLoading: (loading: boolean) => void;
   setUnsavedChanges: (hasChanges: boolean) => void;

@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { GripVertical, Eye, EyeOff } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { GripVertical, Eye, EyeOff, Pencil } from 'lucide-react';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 
 interface Column {
@@ -61,62 +62,85 @@ const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
     return (
         <div
             ref={(node) => preview(drop(node))}
-            className={`flex items-center gap-2 p-2 border rounded bg-background ${isDragging ? 'opacity-50' : ''
+            className={`flex items-center gap-2 p-1.5 border-b last:border-0 bg-background hover:bg-muted/30 transition-colors ${isDragging ? 'opacity-50' : ''
                 }`}
         >
             {/* Drag Handle */}
-            <div ref={drag} className="cursor-move text-muted-foreground hover:text-foreground">
-                <GripVertical className="w-4 h-4" />
+            <div ref={drag} className="cursor-move text-muted-foreground hover:text-foreground p-1">
+                <GripVertical className="w-3.5 h-3.5" />
             </div>
+
+            {/* Column Name & Edit Trigger */}
+            <Popover>
+                <PopoverTrigger asChild>
+                    <div className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer group">
+                        <span className="font-medium text-sm truncate select-none">
+                            {override.displayName || column.name}
+                        </span>
+                        <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        {column.isPrimaryKey && (
+                            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">PK</Badge>
+                        )}
+                    </div>
+                </PopoverTrigger>
+                <PopoverContent className="w-80" align="start">
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <h4 className="font-medium leading-none">Column Settings</h4>
+                            <p className="text-sm text-muted-foreground">
+                                Configure how {column.name} appears in the table.
+                            </p>
+                        </div>
+                        <div className="grid gap-2">
+                            <div className="grid grid-cols-3 items-center gap-4">
+                                <Label htmlFor="display-name">Label</Label>
+                                <Input
+                                    id="display-name"
+                                    value={override.displayName || ''}
+                                    onChange={(e) => updateColumnOverride(column.name, { displayName: e.target.value })}
+                                    placeholder={column.name}
+                                    className="col-span-2 h-8"
+                                />
+                            </div>
+                            <div className="grid grid-cols-3 items-center gap-4">
+                                <Label htmlFor="display-type">Type</Label>
+                                <Select
+                                    value={override.displayType || 'text'}
+                                    onValueChange={(displayType) => updateColumnOverride(column.name, { displayType })}
+                                >
+                                    <SelectTrigger id="display-type" className="col-span-2 h-8">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="text">Text</SelectItem>
+                                        <SelectItem value="badge">Badge</SelectItem>
+                                        <SelectItem value="date">Date</SelectItem>
+                                        <SelectItem value="currency">Currency</SelectItem>
+                                        <SelectItem value="percentage">%</SelectItem>
+                                        <SelectItem value="image">Image</SelectItem>
+                                        <SelectItem value="link">Link</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid grid-cols-3 items-center gap-4">
+                                <Label>Original Type</Label>
+                                <div className="col-span-2">
+                                    <Badge variant="secondary" className="text-xs font-normal">
+                                        {column.type}
+                                    </Badge>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </PopoverContent>
+            </Popover>
 
             {/* Visibility Toggle */}
             <Switch
                 checked={override.visible !== false}
                 onCheckedChange={(visible) => updateColumnOverride(column.name, { visible })}
-                className="flex-shrink-0"
+                className="scale-75 origin-right"
             />
-
-            {/* Column Info */}
-            <div className="flex-1 min-w-0 space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-sm truncate">{column.name}</span>
-                    {column.isPrimaryKey && (
-                        <Badge variant="outline" className="text-xs px-1 py-0">PK</Badge>
-                    )}
-                    <Badge variant="secondary" className="text-xs px-1 py-0">
-                        {column.type}
-                    </Badge>
-                </div>
-
-                <div className="grid grid-cols-2 gap-1.5">
-                    {/* Display Name */}
-                    <Input
-                        value={override.displayName || ''}
-                        onChange={(e) => updateColumnOverride(column.name, { displayName: e.target.value })}
-                        placeholder={column.name}
-                        className="h-7 text-xs"
-                    />
-
-                    {/* Display Type */}
-                    <Select
-                        value={override.displayType || 'text'}
-                        onValueChange={(displayType) => updateColumnOverride(column.name, { displayType })}
-                    >
-                        <SelectTrigger className="h-7 text-xs">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="text">Text</SelectItem>
-                            <SelectItem value="badge">Badge</SelectItem>
-                            <SelectItem value="date">Date</SelectItem>
-                            <SelectItem value="currency">Currency</SelectItem>
-                            <SelectItem value="percentage">%</SelectItem>
-                            <SelectItem value="image">Image</SelectItem>
-                            <SelectItem value="link">Link</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-            </div>
         </div>
     );
 };
@@ -240,31 +264,36 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
 
     return (
         <DndProvider backend={HTML5Backend}>
-            <div className="space-y-3">
+            <div className="space-y-2">
                 {/* Quick Actions */}
-                <div className="flex gap-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => toggleAllVisible(true)}
-                        className="h-7 text-xs"
-                    >
-                        <Eye className="w-3 h-3 mr-1" />
-                        Show All
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => toggleAllVisible(false)}
-                        className="h-7 text-xs"
-                    >
-                        <EyeOff className="w-3 h-3 mr-1" />
-                        Hide All
-                    </Button>
+                <div className="flex justify-between items-center px-1">
+                    <Label className="text-xs font-medium text-muted-foreground">
+                        {orderedColumns.length} Columns
+                    </Label>
+                    <div className="flex gap-1">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => toggleAllVisible(true)}
+                            className="h-6 w-6"
+                            title="Show All"
+                        >
+                            <Eye className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => toggleAllVisible(false)}
+                            className="h-6 w-6"
+                            title="Hide All"
+                        >
+                            <EyeOff className="w-3.5 h-3.5" />
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Column List */}
-                <div className="space-y-2 max-h-96 overflow-y-auto">
+                <div className="border rounded-md divide-y max-h-[400px] overflow-y-auto bg-card">
                     {orderedColumns.map((column, index) => {
                         const override = columnOverrides[column.name] || {};
 
@@ -290,3 +319,4 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
         </DndProvider>
     );
 };
+

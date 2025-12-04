@@ -7,30 +7,44 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { Plus, Search, MoreHorizontal, Eye, Edit, Copy, Trash2, FileText } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger
+} from '@/components/ui/alert-dialog';
+import { Plus, Search, MoreHorizontal, Eye, Edit, Copy, Trash2, FileText, RotateCcw, Trash } from 'lucide-react';
 import { toast } from 'sonner';
+import { CreatePageDialog } from './CreatePageDialog';
 
 export const PagesPanel: React.FC = () => {
   const navigate = useNavigate();
-  const { pages, createPage, deletePage, setCurrentPageId, loadPagesFromDatabase } = useBuilderStore();
+  const { pages, createPage, deletePage, restorePage, permanentDeletePage, setCurrentPageId, loadPagesFromDatabase } = useBuilderStore();
   const { isAuthenticated, isLoading } = useAuthStore();
   const { searchQuery, setSearchQuery, filterStatus } = useDashboardStore();
   const [isCreating, setIsCreating] = useState(false);
   const [isLoadingPages, setIsLoadingPages] = useState(true);
+  const [showTrash, setShowTrash] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
-  // Load pages from database when component mounts
+  // Load pages from database when component mounts or trash mode changes
   useEffect(() => {
     const loadPages = async () => {
       if (!isLoading && isAuthenticated) {
         try {
           setIsLoadingPages(true);
-          await loadPagesFromDatabase();
+          await loadPagesFromDatabase(showTrash);
         } catch (error) {
           console.error('Failed to load pages:', error);
           toast.error('Failed to load pages from database');
@@ -43,61 +57,25 @@ export const PagesPanel: React.FC = () => {
     };
 
     loadPages();
-  }, [loadPagesFromDatabase, isAuthenticated, isLoading]);
+  }, [loadPagesFromDatabase, isAuthenticated, isLoading, showTrash]);
 
   const filteredPages = pages.filter(page => {
+    // Filter by trash state
+    const isDeleted = !!page.deletedAt;
+    const matchesTrashView = showTrash ? isDeleted : !isDeleted;
+
     const matchesSearch = page.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         page.slug.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || 
-                         (filterStatus === 'published' && page.isPublic) ||
-                         (filterStatus === 'draft' && !page.isPublic);
-    return matchesSearch && matchesFilter;
+      page.slug.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFilter = filterStatus === 'all' ||
+      (filterStatus === 'published' && page.isPublic) ||
+      (filterStatus === 'draft' && !page.isPublic);
+    return matchesTrashView && matchesSearch && matchesFilter;
   });
 
-  const handleCreatePage = async () => {
-    setIsCreating(true);
-    try {
-      const pageData = {
-        name: `New Page ${pages.length + 1}`,
-        slug: `new-page-${pages.length + 1}`,
-        title: `New Page ${pages.length + 1}`,
-        description: 'A new page created with Frontbase',
-        keywords: 'new, page',
-        isPublic: false,
-        isHomepage: false,
-        layoutData: {
-          content: [
-            {
-              id: 'heading-1',
-              type: 'Heading',
-              props: {
-                text: 'New Page',
-                level: '1'
-              },
-              children: []
-            }
-          ],
-          root: {}
-        }
-      };
-
-      // Create page in database first, then update local state
-      const { createPageInDatabase } = useBuilderStore.getState();
-      const newPageId = await createPageInDatabase(pageData);
-      
-      if (newPageId) {
-        setCurrentPageId(newPageId);
-        navigate(`/builder/${newPageId}`);
-        toast.success('Page created successfully!');
-      } else {
-        throw new Error('Failed to create page in database');
-      }
-    } catch (error) {
-      console.error('Page creation failed:', error);
-      toast.error('Failed to create page');
-    } finally {
-      setIsCreating(false);
-    }
+  const handlePageCreated = (pageId: string) => {
+    setCurrentPageId(pageId);
+    navigate(`/builder/${pageId}`);
+    toast.success('Page created successfully!');
   };
 
   const handleEditPage = (pageId: string) => {
@@ -110,7 +88,7 @@ export const PagesPanel: React.FC = () => {
       toast.error('Cannot delete the last page');
       return;
     }
-    
+
     try {
       await deletePage(pageId);
       toast.success('Page deleted successfully!');
@@ -127,7 +105,7 @@ export const PagesPanel: React.FC = () => {
         slug: `${page.slug}-copy`,
         isHomepage: false
       });
-      
+
       toast.success('Page duplicated successfully!');
     } catch (error) {
       toast.error('Failed to duplicate page');
@@ -138,15 +116,27 @@ export const PagesPanel: React.FC = () => {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Pages</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{showTrash ? 'Trashed Pages' : 'Pages'}</h1>
           <p className="text-muted-foreground">
-            Manage your website pages and content
+            {showTrash ? 'Pages will be permanently deleted after 14 days' : 'Manage your website pages and content'}
           </p>
         </div>
-        <Button onClick={handleCreatePage} disabled={isCreating}>
-          <Plus className="mr-2 h-4 w-4" />
-          {isCreating ? 'Creating...' : 'New Page'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={showTrash ? "secondary" : "ghost"}
+            onClick={() => setShowTrash(!showTrash)}
+            className="gap-2"
+          >
+            <Trash className="h-4 w-4" />
+            {showTrash ? 'View Pages' : 'Trash'}
+          </Button>
+          {!showTrash && (
+            <Button onClick={() => setShowCreateDialog(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Page
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center space-x-2">
@@ -177,21 +167,78 @@ export const PagesPanel: React.FC = () => {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleEditPage(page.id)}>
-                      <Edit className="mr-2 h-4 w-4" />
-                      Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleDuplicatePage(page)}>
-                      <Copy className="mr-2 h-4 w-4" />
-                      Duplicate
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      onClick={() => handleDeletePage(page.id)}
-                      className="text-destructive"
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
+                    {showTrash ? (
+                      <>
+                        <DropdownMenuItem onClick={() => restorePage(page.id)}>
+                          <RotateCcw className="mr-2 h-4 w-4" />
+                          Restore
+                        </DropdownMenuItem>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <DropdownMenuItem
+                              onSelect={(e) => e.preventDefault()}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete Forever
+                            </DropdownMenuItem>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Permanently Delete Page?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete the page and all its data.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => permanentDeletePage(page.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Delete Forever
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </>
+                    ) : (
+                      <>
+                        <DropdownMenuItem onClick={() => handleEditPage(page.id)}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDuplicatePage(page)}>
+                          <Copy className="mr-2 h-4 w-4" />
+                          Duplicate
+                        </DropdownMenuItem>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <DropdownMenuItem
+                              onSelect={(e) => e.preventDefault()}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Page?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will move the page to trash. You can restore it later or permanently delete it.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeletePage(page.id)}>
+                                Move to Trash
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -199,17 +246,23 @@ export const PagesPanel: React.FC = () => {
             <CardContent>
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <Badge variant={page.isPublic ? "default" : "secondary"}>
-                    {page.isPublic ? 'Published' : 'Draft'}
-                  </Badge>
-                  {page.isHomepage && (
-                    <Badge variant="outline">Homepage</Badge>
+                  {showTrash ? (
+                    <Badge variant="destructive">Trashed</Badge>
+                  ) : (
+                    <>
+                      <Badge variant={page.isPublic ? "default" : "secondary"}>
+                        {page.isPublic ? 'Published' : 'Draft'}
+                      </Badge>
+                      {page.isHomepage && (
+                        <Badge variant="outline">Homepage</Badge>
+                      )}
+                    </>
                   )}
                 </div>
-                
+
                 <div className="flex gap-2">
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     onClick={() => handleEditPage(page.id)}
                     className="flex-1"
                   >
@@ -250,6 +303,12 @@ export const PagesPanel: React.FC = () => {
           </p>
         </div>
       ) : null}
+
+      <CreatePageDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onPageCreated={handlePageCreated}
+      />
     </div>
   );
 };

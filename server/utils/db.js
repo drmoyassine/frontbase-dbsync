@@ -182,8 +182,13 @@ class DatabaseManager {
     if (!current) return null;
     // Handle soft delete via deletedAt
     if ('deletedAt' in updates) {
-      const stmt = this.db.prepare("UPDATE pages SET deleted_at = ?, updated_at = datetime('now') WHERE id = ?");
-      stmt.run(updates.deletedAt, id);
+      if ('slug' in updates) {
+        const stmt = this.db.prepare("UPDATE pages SET deleted_at = ?, slug = ?, updated_at = datetime('now') WHERE id = ?");
+        stmt.run(updates.deletedAt, updates.slug, id);
+      } else {
+        const stmt = this.db.prepare("UPDATE pages SET deleted_at = ?, updated_at = datetime('now') WHERE id = ?");
+        stmt.run(updates.deletedAt, id);
+      }
       return this.getPage(id);
     }
     const {

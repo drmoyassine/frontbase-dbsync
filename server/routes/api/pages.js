@@ -50,14 +50,19 @@ module.exports = (db) => {
   // POST /api/pages - Create new page
   router.post('/', (req, res) => {
     try {
+      console.log('📝 Create page request body:', JSON.stringify(req.body, null, 2));
+
       const pageData = {
         id: uuidv4(),
         ...req.body,
         layoutData: req.body.layoutData || { content: [], root: {} }
       };
 
+      console.log('📝 Processed pageData:', JSON.stringify(pageData, null, 2));
+
       // Validate required fields
       if (!pageData.name || !pageData.slug) {
+        console.error('❌ Validation failed - name:', pageData.name, 'slug:', pageData.slug);
         return res.status(400).json({
           success: false,
           error: 'Name and slug are required'
@@ -129,14 +134,21 @@ module.exports = (db) => {
   router.delete('/:id', (req, res) => {
     try {
       const { id } = req.params;
-      const page = db.updatePage(id, { deletedAt: new Date().toISOString() });
-
+      const page = db.getPage(id);
       if (!page) {
         return res.status(404).json({
           success: false,
           error: 'Page not found'
         });
       }
+
+      // Append timestamp to slug to allow reuse of the original slug
+      const newSlug = `${page.slug}-deleted-${Date.now()}`;
+
+      db.updatePage(id, {
+        deletedAt: new Date().toISOString(),
+        slug: newSlug
+      });
 
       res.json({
         success: true,
@@ -190,8 +202,7 @@ module.exports = (db) => {
   router.post('/:id/restore', (req, res) => {
     try {
       const { id } = req.params;
-      const page = db.updatePage(id, { deletedAt: null });
-
+      const page = db.getPage(id);
       if (!page) {
         return res.status(404).json({
           success: false,
@@ -199,9 +210,29 @@ module.exports = (db) => {
         });
       }
 
+      // Try to restore original slug
+      let newSlug = page.slug;
+      if (newSlug.includes('-deleted-')) {
+        newSlug = newSlug.split('-deleted-')[0];
+      }
+
+      try {
+        db.updatePage(id, { deletedAt: null, slug: newSlug });
+      } catch (error) {
+        // If slug is taken, append -restored suffix
+        if (error.message.includes('UNIQUE constraint')) {
+          newSlug = `${newSlug}-restored-${Date.now()}`;
+          db.updatePage(id, { deletedAt: null, slug: newSlug });
+        } else {
+          throw error;
+        }
+      }
+
+      const updatedPage = db.getPage(id);
+
       res.json({
         success: true,
-        data: page,
+        data: updatedPage,
         message: 'Page restored successfully'
       });
     } catch (error) {

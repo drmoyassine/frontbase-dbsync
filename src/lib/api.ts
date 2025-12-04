@@ -7,9 +7,10 @@ export interface APIResponse<T = any> {
 
 export const pageAPI = {
   // Get all pages
-  getAllPages: async (): Promise<APIResponse> => {
+  getAllPages: async (includeDeleted = false): Promise<APIResponse> => {
     try {
-      const response = await fetch('/api/pages', {
+      const url = includeDeleted ? '/api/pages?includeDeleted=true' : '/api/pages';
+      const response = await fetch(url, {
         credentials: 'include' // Include session cookies
       });
       if (!response.ok) throw new Error('Failed to fetch pages');

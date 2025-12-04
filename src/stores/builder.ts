@@ -33,6 +33,7 @@ export interface Page {
   };
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string | null;
 }
 
 export interface ProjectConfig {
@@ -91,6 +92,8 @@ interface BuilderState {
   createPage: (page: Omit<Page, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updatePage: (id: string, updates: Partial<Page>) => void;
   deletePage: (id: string) => Promise<void>;
+  restorePage: (id: string) => Promise<void>;
+  permanentDeletePage: (id: string) => Promise<void>;
   setCurrentPage: (id: string) => void;
 
   setSelectedComponentId: (id: string | null) => void;
@@ -119,7 +122,7 @@ interface BuilderState {
   publishPage: (pageId: string) => Promise<void>;
   togglePageVisibility: (pageId: string) => Promise<void>;
   deleteSelectedComponent: () => void;
-  loadPagesFromDatabase: () => Promise<void>;
+  loadPagesFromDatabase: (includeDeleted?: boolean) => Promise<void>;
   loadVariablesFromDatabase: () => Promise<void>;
   setSaving: (saving: boolean) => void;
   setLoading: (loading: boolean) => void;
@@ -187,17 +190,17 @@ export const useBuilderStore = create<BuilderState>()(
         try {
           const { pageAPI } = await import('@/lib/api');
           const result = await pageAPI.deletePage(id);
-          
+
           if (!result.success) {
             throw new Error(result.error || 'Failed to delete page');
           }
-          
+
           // Remove from local state
           set((state) => ({
             pages: state.pages.filter(page => page.id !== id),
             currentPageId: state.currentPageId === id ? null : state.currentPageId
           }));
-          
+
           toast({
             title: "Page moved to trash",
             description: "Page has been moved to trash successfully"
@@ -206,6 +209,68 @@ export const useBuilderStore = create<BuilderState>()(
           toast({
             title: "Error deleting page",
             description: error instanceof Error ? error.message : "Failed to delete page",
+            variant: "destructive"
+          });
+        } finally {
+          setSaving(false);
+        }
+      },
+
+      restorePage: async (id) => {
+        const { setSaving } = get();
+        setSaving(true);
+        try {
+          const { pageAPI } = await import('@/lib/api');
+          const result = await pageAPI.restorePage(id);
+
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to restore page');
+          }
+
+          // Reload pages to get the restored page back in the list
+          // or we could manually update the local state if we had the full page object
+          await get().loadPagesFromDatabase(true);
+
+          toast({
+            title: "Page restored",
+            description: "Page has been restored successfully"
+          });
+        } catch (error) {
+          toast({
+            title: "Error restoring page",
+            description: error instanceof Error ? error.message : "Failed to restore page",
+            variant: "destructive"
+          });
+        } finally {
+          setSaving(false);
+        }
+      },
+
+      permanentDeletePage: async (id) => {
+        const { setSaving } = get();
+        setSaving(true);
+        try {
+          const { pageAPI } = await import('@/lib/api');
+          const result = await pageAPI.permanentDeletePage(id);
+
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to permanently delete page');
+          }
+
+          // Remove from local state
+          set((state) => ({
+            pages: state.pages.filter(page => page.id !== id),
+            currentPageId: state.currentPageId === id ? null : state.currentPageId
+          }));
+
+          toast({
+            title: "Page permanently deleted",
+            description: "Page has been permanently deleted"
+          });
+        } catch (error) {
+          toast({
+            title: "Error deleting page",
+            description: error instanceof Error ? error.message : "Failed to permanently delete page",
             variant: "destructive"
           });
         } finally {
@@ -483,12 +548,12 @@ export const useBuilderStore = create<BuilderState>()(
         });
       },
 
-      loadPagesFromDatabase: async () => {
+      loadPagesFromDatabase: async (includeDeleted = false) => {
         const { setLoading } = get();
         setLoading(true);
         try {
           const { pageAPI } = await import('@/lib/api');
-          const result = await pageAPI.getAllPages();
+          const result = await pageAPI.getAllPages(includeDeleted);
 
           if (result.success && result.data) {
             set({ pages: result.data.data || result.data, hasUnsavedChanges: false });

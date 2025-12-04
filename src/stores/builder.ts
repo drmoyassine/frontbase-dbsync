@@ -90,7 +90,7 @@ interface BuilderState {
 
   createPage: (page: Omit<Page, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updatePage: (id: string, updates: Partial<Page>) => void;
-  deletePage: (id: string) => void;
+  deletePage: (id: string) => Promise<void>;
   setCurrentPage: (id: string) => void;
 
   setSelectedComponentId: (id: string | null) => void;
@@ -181,10 +181,37 @@ export const useBuilderStore = create<BuilderState>()(
         hasUnsavedChanges: true
       })),
 
-      deletePage: (id) => set((state) => ({
-        pages: state.pages.filter(page => page.id !== id),
-        currentPageId: state.currentPageId === id ? null : state.currentPageId
-      })),
+      deletePage: async (id) => {
+        const { setSaving } = get();
+        setSaving(true);
+        try {
+          const { pageAPI } = await import('@/lib/api');
+          const result = await pageAPI.deletePage(id);
+          
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to delete page');
+          }
+          
+          // Remove from local state
+          set((state) => ({
+            pages: state.pages.filter(page => page.id !== id),
+            currentPageId: state.currentPageId === id ? null : state.currentPageId
+          }));
+          
+          toast({
+            title: "Page moved to trash",
+            description: "Page has been moved to trash successfully"
+          });
+        } catch (error) {
+          toast({
+            title: "Error deleting page",
+            description: error instanceof Error ? error.message : "Failed to delete page",
+            variant: "destructive"
+          });
+        } finally {
+          setSaving(false);
+        }
+      },
 
       setCurrentPage: (id) => set({ currentPageId: id }),
       setCurrentPageId: (id) => set({ currentPageId: id }),

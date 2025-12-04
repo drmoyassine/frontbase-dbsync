@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS pages (
   is_homepage BOOLEAN DEFAULT false,
   layout_data TEXT NOT NULL, -- JSON string of complete layoutData with component styles
   seo_data TEXT,             -- JSON: Open Graph, Twitter cards, etc.
+  deleted_at TEXT,           -- Timestamp for soft delete
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

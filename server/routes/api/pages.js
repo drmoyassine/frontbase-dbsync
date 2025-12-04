@@ -6,7 +6,8 @@ module.exports = (db) => {
   // GET /api/pages - Get all pages
   router.get('/', (req, res) => {
     try {
-      const pages = db.getAllPages();
+      const includeDeleted = req.query.includeDeleted === 'true';
+      const pages = db.getAllPages(includeDeleted);
       res.json({
         success: true,
         data: pages
@@ -25,14 +26,14 @@ module.exports = (db) => {
     try {
       const { id } = req.params;
       const page = db.getPage(id);
-      
+
       if (!page) {
         return res.status(404).json({
           success: false,
           error: 'Page not found'
         });
       }
-      
+
       res.json({
         success: true,
         data: page
@@ -54,7 +55,7 @@ module.exports = (db) => {
         ...req.body,
         layoutData: req.body.layoutData || { content: [], root: {} }
       };
-      
+
       // Validate required fields
       if (!pageData.name || !pageData.slug) {
         return res.status(400).json({
@@ -62,16 +63,16 @@ module.exports = (db) => {
           error: 'Name and slug are required'
         });
       }
-      
+
       const page = db.createPage(pageData);
-      
+
       res.status(201).json({
         success: true,
         data: page
       });
     } catch (error) {
       console.error('Error creating page:', error);
-      
+
       // Handle unique constraint violation for slug
       if (error.message.includes('UNIQUE constraint failed: pages.slug')) {
         return res.status(400).json({
@@ -79,7 +80,7 @@ module.exports = (db) => {
           error: 'A page with this slug already exists'
         });
       }
-      
+
       res.status(500).json({
         success: false,
         error: error.message
@@ -92,23 +93,23 @@ module.exports = (db) => {
     try {
       const { id } = req.params;
       const updates = req.body;
-      
+
       const page = db.updatePage(id, updates);
-      
+
       if (!page) {
         return res.status(404).json({
           success: false,
           error: 'Page not found'
         });
       }
-      
+
       res.json({
         success: true,
         data: page
       });
     } catch (error) {
       console.error('Error updating page:', error);
-      
+
       // Handle unique constraint violation for slug
       if (error.message.includes('UNIQUE constraint failed: pages.slug')) {
         return res.status(400).json({
@@ -116,7 +117,7 @@ module.exports = (db) => {
           error: 'A page with this slug already exists'
         });
       }
-      
+
       res.status(500).json({
         success: false,
         error: error.message
@@ -124,22 +125,22 @@ module.exports = (db) => {
     }
   });
 
-  // DELETE /api/pages/:id - Delete page
+  // DELETE /api/pages/:id - Soft delete page
   router.delete('/:id', (req, res) => {
     try {
       const { id } = req.params;
-      const success = db.deletePage(id);
-      
-      if (!success) {
+      const page = db.updatePage(id, { deletedAt: new Date().toISOString() });
+
+      if (!page) {
         return res.status(404).json({
           success: false,
           error: 'Page not found'
         });
       }
-      
+
       res.json({
         success: true,
-        message: 'Page deleted successfully'
+        message: 'Page moved to trash successfully'
       });
     } catch (error) {
       console.error('Error deleting page:', error);
@@ -155,29 +156,82 @@ module.exports = (db) => {
     try {
       const { id } = req.params;
       const { layoutData } = req.body;
-      
+
       if (!layoutData) {
         return res.status(400).json({
           success: false,
           error: 'layoutData is required'
         });
       }
-      
+
       const page = db.updatePage(id, { layoutData });
-      
+
       if (!page) {
         return res.status(404).json({
           success: false,
           error: 'Page not found'
         });
       }
-      
+
       res.json({
         success: true,
         data: page
       });
     } catch (error) {
       console.error('Error updating page layout:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  // POST /api/pages/:id/restore - Restore deleted page
+  router.post('/:id/restore', (req, res) => {
+    try {
+      const { id } = req.params;
+      const page = db.updatePage(id, { deletedAt: null });
+
+      if (!page) {
+        return res.status(404).json({
+          success: false,
+          error: 'Page not found'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: page,
+        message: 'Page restored successfully'
+      });
+    } catch (error) {
+      console.error('Error restoring page:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  // DELETE /api/pages/:id/permanent - Permanently delete page
+  router.delete('/:id/permanent', (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = db.deletePage(id);
+
+      if (!success) {
+        return res.status(404).json({
+          success: false,
+          error: 'Page not found'
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Page permanently deleted'
+      });
+    } catch (error) {
+      console.error('Error permanently deleting page:', error);
       res.status(500).json({
         success: false,
         error: error.message

@@ -6,12 +6,13 @@ import { toast } from '@/hooks/use-toast';
 
 const BuilderPage: React.FC = () => {
   const { pageId } = useParams<{ pageId: string }>();
-  const { 
-    pages, 
-    setCurrentPageId, 
-    currentPageId, 
+  const {
+    pages,
+    setCurrentPageId,
+    currentPageId,
     loadPagesFromDatabase,
-    createPageInDatabase 
+    createPageInDatabase,
+    isLoading
   } = useBuilderStore();
 
   useEffect(() => {
@@ -48,6 +49,17 @@ const BuilderPage: React.FC = () => {
       }
     }
   }, [pageId, setCurrentPageId, currentPageId, pages]);
+
+  if (isLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading builder...</p>
+        </div>
+      </div>
+    );
+  }
 
   // If no pageId or page doesn't exist, redirect to dashboard
   if (!pageId || !pages.find(page => page.id === pageId)) {

@@ -85,7 +85,7 @@ export const pageAPI = {
     }
   },
 
-  // Delete page
+  // Delete page (soft delete)
   deletePage: async (id: string): Promise<APIResponse> => {
     try {
       const response = await fetch(`/api/pages/${id}`, {
@@ -93,6 +93,35 @@ export const pageAPI = {
         credentials: 'include'
       });
       if (!response.ok) throw new Error('Failed to delete page');
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  },
+
+  // Restore deleted page
+  restorePage: async (id: string): Promise<APIResponse> => {
+    try {
+      const response = await fetch(`/api/pages/${id}/restore`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to restore page');
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  },
+
+  // Permanently delete page
+  permanentDeletePage: async (id: string): Promise<APIResponse> => {
+    try {
+      const response = await fetch(`/api/pages/${id}/permanent`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to permanently delete page');
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };

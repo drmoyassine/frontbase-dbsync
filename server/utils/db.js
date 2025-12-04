@@ -6,11 +6,11 @@ class DatabaseManager {
     const dbPath = process.env.DB_PATH || path.join(__dirname, '../data/frontbase.db');
     this.db = new Database(dbPath);
     this.db.pragma('foreign_keys = ON');
-    
+
     // Prepare statements for better performance
     this.prepareStatements();
   }
-  
+
   prepareStatements() {
     // Project statements
     this.getProjectStmt = this.db.prepare('SELECT * FROM project WHERE id = ?');
@@ -19,20 +19,21 @@ class DatabaseManager {
       SET name = ?, description = ?, supabase_url = ?, supabase_anon_key = ?, supabase_service_key_encrypted = ?, updated_at = datetime('now')
       WHERE id = ?
     `);
-    
+
     // Service key specific statements
     this.updateProjectServiceKeyStmt = this.db.prepare(`
       UPDATE project 
       SET supabase_service_key_encrypted = ?, updated_at = datetime('now')
       WHERE id = ?
     `);
-    
+
     this.getProjectServiceKeyStmt = this.db.prepare(`
       SELECT supabase_service_key_encrypted FROM project WHERE id = ?
     `);
-    
+
     // Pages statements
-    this.getAllPagesStmt = this.db.prepare('SELECT * FROM pages ORDER BY created_at DESC');
+    this.getAllPagesStmt = this.db.prepare('SELECT * FROM pages WHERE deleted_at IS NULL ORDER BY created_at DESC');
+    this.getAllPagesWithDeletedStmt = this.db.prepare('SELECT * FROM pages ORDER BY created_at DESC');
     this.getPageStmt = this.db.prepare('SELECT * FROM pages WHERE id = ?');
     this.getPageBySlugStmt = this.db.prepare('SELECT * FROM pages WHERE slug = ?');
     this.getPublicPagesStmt = this.db.prepare('SELECT * FROM pages WHERE is_public = true ORDER BY created_at DESC');
@@ -46,7 +47,7 @@ class DatabaseManager {
       WHERE id = ?
     `);
     this.deletePageStmt = this.db.prepare('DELETE FROM pages WHERE id = ?');
-    
+
     // Variables statements
     this.getAllVariablesStmt = this.db.prepare('SELECT * FROM app_variables ORDER BY created_at DESC');
     this.getVariableStmt = this.db.prepare('SELECT * FROM app_variables WHERE id = ?');
@@ -60,7 +61,7 @@ class DatabaseManager {
       WHERE id = ?
     `);
     this.deleteVariableStmt = this.db.prepare('DELETE FROM app_variables WHERE id = ?');
-    
+
     // Assets statements
     this.getAllAssetsStmt = this.db.prepare('SELECT * FROM assets ORDER BY created_at DESC');
     this.getAssetStmt = this.db.prepare('SELECT * FROM assets WHERE id = ?');
@@ -69,7 +70,7 @@ class DatabaseManager {
       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
     `);
     this.deleteAssetStmt = this.db.prepare('DELETE FROM assets WHERE id = ?');
-    
+
     // User settings statements
     this.getUserSettingsStmt = this.db.prepare('SELECT * FROM user_settings WHERE user_id = ?');
     this.createUserSettingsStmt = this.db.prepare(`
@@ -82,46 +83,48 @@ class DatabaseManager {
       WHERE user_id = ?
     `);
   }
-  
+
   // Project methods
   getProject() {
     return this.getProjectStmt.get('default');
   }
-  
+
   updateProject(updates) {
     const current = this.getProject();
     const { name, description, supabase_url, supabase_anon_key, supabase_service_key_encrypted } = { ...current, ...updates };
     this.updateProjectStmt.run(name, description, supabase_url, supabase_anon_key, supabase_service_key_encrypted, 'default');
     return this.getProject();
   }
-  
+
   // Project-level service key methods
   updateProjectServiceKey(encryptedServiceKey) {
     console.log('🔐 DatabaseManager: Storing service key at PROJECT level');
     this.updateProjectServiceKeyStmt.run(encryptedServiceKey, 'default');
-    
+
     // Verify storage immediately
     const stored = this.getProjectServiceKey();
     console.log('🔐 DatabaseManager: Service key storage verification:', !!stored);
     return stored;
   }
-  
+
   getProjectServiceKey() {
     const result = this.getProjectServiceKeyStmt.get('default');
     return result?.supabase_service_key_encrypted || null;
   }
-  
+
   // Pages methods
-  getAllPages() {
-    return this.getAllPagesStmt.all().map(page => ({
+  getAllPages(includeDeleted = false) {
+    const stmt = includeDeleted ? this.getAllPagesWithDeletedStmt : this.getAllPagesStmt;
+    return stmt.all().map(page => ({
       ...page,
       layoutData: page.layout_data ? JSON.parse(page.layout_data) : { content: [], root: {} },
       seoData: page.seo_data ? JSON.parse(page.seo_data) : {},
       isPublic: Boolean(page.is_public),
-      isHomepage: Boolean(page.is_homepage)
+      isHomepage: Boolean(page.is_homepage),
+      deletedAt: page.deleted_at || null
     }));
   }
-  
+
   getPage(id) {
     const page = this.getPageStmt.get(id);
     if (!page) return null;
@@ -133,7 +136,7 @@ class DatabaseManager {
       isHomepage: Boolean(page.is_homepage)
     };
   }
-  
+
   getPageBySlug(slug) {
     const page = this.getPageBySlugStmt.get(slug);
     if (!page) return null;
@@ -145,7 +148,7 @@ class DatabaseManager {
       isHomepage: Boolean(page.is_homepage)
     };
   }
-  
+
   getPublicPages() {
     return this.getPublicPagesStmt.all().map(page => ({
       ...page,
@@ -155,7 +158,7 @@ class DatabaseManager {
       isHomepage: Boolean(page.is_homepage)
     }));
   }
-  
+
   createPage(pageData) {
     const {
       id, name, slug, title, description, keywords,
@@ -163,26 +166,31 @@ class DatabaseManager {
       layoutData = { content: [], root: {} },
       seoData = {}
     } = pageData;
-    
+
     this.createPageStmt.run(
       id, name, slug, title, description, keywords,
       isPublic ? 1 : 0, isHomepage ? 1 : 0,
       JSON.stringify(layoutData),
       JSON.stringify(seoData)
     );
-    
+
     return this.getPage(id);
   }
-  
+
   updatePage(id, updates) {
     const current = this.getPage(id);
     if (!current) return null;
-    
+    // Handle soft delete via deletedAt
+    if ('deletedAt' in updates) {
+      const stmt = this.db.prepare("UPDATE pages SET deleted_at = ?, updated_at = datetime('now') WHERE id = ?");
+      stmt.run(updates.deletedAt, id);
+      return this.getPage(id);
+    }
     const {
       name, slug, title, description, keywords,
       isPublic, isHomepage, layoutData, seoData
     } = { ...current, ...updates };
-    
+
     this.updatePageStmt.run(
       name, slug, title, description, keywords,
       isPublic ? 1 : 0, isHomepage ? 1 : 0,
@@ -190,74 +198,74 @@ class DatabaseManager {
       JSON.stringify(seoData),
       id
     );
-    
+
     return this.getPage(id);
   }
-  
+
   deletePage(id) {
     const result = this.deletePageStmt.run(id);
     return result.changes > 0;
   }
-  
+
   // Variables methods
   getAllVariables() {
     return this.getAllVariablesStmt.all();
   }
-  
+
   getVariable(id) {
     return this.getVariableStmt.get(id);
   }
-  
+
   createVariable(variableData) {
     const { id, name, type, value, formula, description } = variableData;
     this.createVariableStmt.run(id, name, type, value, formula, description);
     return this.getVariable(id);
   }
-  
+
   updateVariable(id, updates) {
     const current = this.getVariable(id);
     if (!current) return null;
-    
+
     const { name, type, value, formula, description } = { ...current, ...updates };
     this.updateVariableStmt.run(name, type, value, formula, description, id);
     return this.getVariable(id);
   }
-  
+
   deleteVariable(id) {
     const result = this.deleteVariableStmt.run(id);
     return result.changes > 0;
   }
-  
+
   // Assets methods
   getAllAssets() {
     return this.getAllAssetsStmt.all();
   }
-  
+
   getAsset(id) {
     return this.getAssetStmt.get(id);
   }
-  
+
   createAsset(assetData) {
     const { id, filename, original_name, mime_type, size, file_path } = assetData;
     this.createAssetStmt.run(id, filename, original_name, mime_type, size, file_path);
     return this.getAsset(id);
   }
-  
+
   deleteAsset(id) {
     const result = this.deleteAssetStmt.run(id);
     return result.changes > 0;
   }
-  
+
   // User settings methods
   getUserSettings(userId) {
     const userSettings = this.getUserSettingsStmt.get(userId);
     if (!userSettings) return {};
-    
+
     const result = {
       supabase_url: userSettings.supabase_url,
       supabase_anon_key: userSettings.supabase_anon_key,
     };
-    
+
     // Parse additional settings from JSON
     if (userSettings.settings_data) {
       try {
@@ -267,14 +275,14 @@ class DatabaseManager {
         console.error('Error parsing settings_data:', error);
       }
     }
-    
+
     return result;
   }
 
   updateUserSettings(userId, settings) {
     const { supabase_url, supabase_anon_key, ...otherSettings } = settings;
     const settingsData = Object.keys(otherSettings).length > 0 ? JSON.stringify(otherSettings) : null;
-    
+
     const current = this.getUserSettingsStmt.get(userId);
     if (current) {
       this.updateUserSettingsStmt.run(supabase_url, supabase_anon_key, settingsData, userId);
@@ -289,7 +297,7 @@ class DatabaseManager {
     const updated = { ...current, [key]: value };
     this.updateUserSettings(userId, updated);
   }
-  
+
   close() {
     this.db.close();
   }

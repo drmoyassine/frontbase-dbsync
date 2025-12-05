@@ -87,7 +87,7 @@ const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
                     )}
                 </button>
             ) : (
-                <div className="w-5" /> {/* Spacer for non-FK columns */}
+                <div className="w-5" />
             )}
 
             {/* Drag Handle */}

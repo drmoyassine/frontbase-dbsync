@@ -190,14 +190,18 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
 
     // Load schema
     useEffect(() => {
+        console.log('[CompactColumnConfigurator] useEffect triggered', { tableName });
         if (tableName) {
             setLoading(true);
+            console.log('[CompactColumnConfigurator] Loading schema for table:', tableName);
             loadTableSchema(tableName)
                 .then((result) => {
+                    console.log('[CompactColumnConfigurator] Schema loaded successfully:', result);
                     setSchema(result);
                     setLoading(false);
                 })
-                .catch(() => {
+                .catch((error) => {
+                    console.error('[CompactColumnConfigurator] Schema load failed:', error);
                     setSchema(null);
                     setLoading(false);
                 });

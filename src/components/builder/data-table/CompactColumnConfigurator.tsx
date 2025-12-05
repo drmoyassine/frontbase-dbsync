@@ -15,6 +15,10 @@ interface Column {
     name: string;
     type: string;
     isPrimaryKey?: boolean;
+    foreignKey?: {
+        table: string;
+        column: string;
+    };
 }
 
 interface ColumnConfiguratorProps {
@@ -80,6 +84,9 @@ const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
                         <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                         {column.isPrimaryKey && (
                             <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">PK</Badge>
+                        )}
+                        {column.foreignKey && (
+                            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-blue-50 text-blue-700 border-blue-200">FK</Badge>
                         )}
                     </div>
                 </PopoverTrigger>

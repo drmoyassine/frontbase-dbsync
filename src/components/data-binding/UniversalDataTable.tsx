@@ -118,8 +118,15 @@ export function UniversalDataTable({
     return colors[index];
   };
 
-  const formatValue = (value: any, columnName: string): React.ReactNode => {
-    if (value === null || value === undefined) {
+  const formatValue = (value: any, columnName: string, row?: any): React.ReactNode => {
+    // Handle related columns (e.g., "institutions.name")
+    let actualValue = value;
+    if (row && columnName.includes('.')) {
+      const [tableName, colName] = columnName.split('.');
+      actualValue = row[tableName]?.[colName];
+    }
+
+    if (actualValue === null || actualValue === undefined) {
       return <span className="text-muted-foreground">—</span>;
     }
 
@@ -128,20 +135,20 @@ export function UniversalDataTable({
 
     switch (displayType) {
       case 'badge':
-        return <Badge variant="outline" className={cn("border-0 font-medium", getBadgeColor(String(value)))}>{String(value)}</Badge>;
+        return <Badge variant="outline" className={cn("border-0 font-medium", getBadgeColor(String(actualValue)))}>{String(actualValue)}</Badge>;
       case 'date':
-        return new Date(value).toLocaleDateString();
+        return new Date(actualValue).toLocaleDateString();
       case 'currency':
         return new Intl.NumberFormat('en-US', {
           style: 'currency',
           currency: 'USD'
-        }).format(Number(value));
+        }).format(Number(actualValue));
       case 'percentage':
-        return `${(Number(value) * 100).toFixed(1)}%`;
+        return `${(Number(actualValue) * 100).toFixed(1)}%`;
       case 'image':
         return (
           <img
-            src={String(value)}
+            src={String(actualValue)}
             alt="Image"
             className="w-8 h-8 rounded object-cover"
           />
@@ -149,47 +156,51 @@ export function UniversalDataTable({
       case 'link':
         return (
           <a
-            href={String(value)}
+            href={String(actualValue)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary hover:underline"
           >
-            {String(value)}
+            {String(actualValue)}
           </a>
         );
       default:
-        if (typeof value === 'object') {
-          return <code className="text-xs">{JSON.stringify(value)}</code>;
+        if (typeof actualValue === 'object') {
+          return <code className="text-xs">{JSON.stringify(actualValue)}</code>;
         }
-        return String(value);
+        return String(actualValue);
     }
   };
 
   const getVisibleColumns = () => {
     if (!schema) return [];
 
-    // If columnOrder is defined, use it to determine order
-    if (binding?.columnOrder && binding.columnOrder.length > 0) {
-      // Create a map for quick lookup
-      const schemaColumnsMap = new Map(schema.columns.map((col: any) => [col.name, col]));
+    const columns: any[] = [];
 
-      // Get columns in the specified order
-      const orderedColumns = binding.columnOrder
-        .map(name => schemaColumnsMap.get(name))
-        .filter(col => col !== undefined);
+    // Get base table columns from schema
+    schema.columns.forEach((col: any) => {
+      const override = binding?.columnOverrides?.[col.name];
+      if (override?.visible !== false) {
+        columns.push(col);
+      }
+    });
 
-      // Filter by visibility override
-      return orderedColumns.filter((col: any) => {
-        const override = binding?.columnOverrides?.[col.name];
-        return override?.visible !== false;
+    // Add visible related columns (e.g., "institutions.name")
+    if (binding?.columnOverrides) {
+      Object.keys(binding.columnOverrides).forEach(key => {
+        if (key.includes('.') && binding.columnOverrides[key].visible !== false) {
+          const [tableName, columnName] = key.split('.');
+          columns.push({ 
+            name: key, 
+            type: 'text',
+            relatedTable: tableName, 
+            relatedColumn: columnName 
+          });
+        }
       });
     }
 
-    // Fallback to default schema order
-    return schema.columns.filter((col: any) => {
-      const override = binding?.columnOverrides?.[col.name];
-      return override?.visible !== false;
-    });
+    return columns;
   };
 
   const getColumnDisplayName = (columnName: string) => {
@@ -302,7 +313,7 @@ export function UniversalDataTable({
                       <TableRow key={index}>
                         {visibleColumns.map((column: any) => (
                           <TableCell key={column.name}>
-                            {formatValue(row[column.name], column.name)}
+                            {formatValue(row[column.name], column.name, row)}
                           </TableCell>
                         ))}
                       </TableRow>

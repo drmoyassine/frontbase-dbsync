@@ -197,36 +197,38 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
                     columns: columns
                 }
             });
-            console.log('Both schema queries failed, using fallback');
-            // Fallback: try to get schema from first row
-            const fallbackResponse = await fetch(`${project.supabase_url}/rest/v1/${tableName}?limit=1`, {
-                headers: {
-                    'Authorization': `Bearer ${serviceKey}`,
-                    'apikey': serviceKey
-                }
-            });
+            return; // Exit function after successful response
+        }
 
-            if (fallbackResponse.ok) {
-                const data = await fallbackResponse.json();
-                const columns = data.length > 0 ? Object.keys(data[0]).map(col => ({
-                    column_name: col,
-                    data_type: typeof data[0][col],
-                    is_nullable: 'YES'
-                })) : [];
-
-                console.log('Fallback schema extracted:', columns);
-
-                res.json({
-                    success: true,
-                    data: { table_name: tableName, columns }
-                });
-            } else {
-                console.log('Fallback also failed');
-                res.json({
-                    success: true,
-                    data: { table_name: tableName, columns: [] }
-                });
+        console.log('Both schema queries failed, using fallback');
+        // Fallback: try to get schema from first row
+        const fallbackResponse = await fetch(`${project.supabase_url}/rest/v1/${tableName}?limit=1`, {
+            headers: {
+                'Authorization': `Bearer ${serviceKey}`,
+                'apikey': serviceKey
             }
+        });
+
+        if (fallbackResponse.ok) {
+            const data = await fallbackResponse.json();
+            const columns = data.length > 0 ? Object.keys(data[0]).map(col => ({
+                column_name: col,
+                data_type: typeof data[0][col],
+                is_nullable: 'YES'
+            })) : [];
+
+            console.log('Fallback schema extracted:', columns);
+
+            res.json({
+                success: true,
+                data: { table_name: tableName, columns }
+            });
+        } else {
+            console.log('Fallback also failed');
+            res.json({
+                success: true,
+                data: { table_name: tableName, columns: [] }
+            });
         }
     } catch (error) {
         console.error('Error fetching table schema:', error);

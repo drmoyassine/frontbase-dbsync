@@ -152,7 +152,11 @@ export const useDataBindingStore = create<DataBindingState>()(
               type: col.data_type || col.type,
               nullable: col.is_nullable === 'YES' || col.nullable,
               default: col.column_default || col.default,
-              isPrimaryKey: col.is_primary || col.isPrimaryKey
+              isPrimaryKey: col.is_primary || col.isPrimaryKey,
+              foreignKey: (col.is_foreign || col.isForeign) && (col.foreign_table || col.foreignTable) ? {
+                table: col.foreign_table || col.foreignTable,
+                column: col.foreign_column || col.foreignColumn
+              } : undefined
             }));
 
             const schema: TableSchema = { columns: transformedColumns };
@@ -194,6 +198,29 @@ export const useDataBindingStore = create<DataBindingState>()(
           const params = new URLSearchParams();
           params.append('limit', binding.pagination.pageSize.toString());
           params.append('offset', (binding.pagination.page * binding.pagination.pageSize).toString());
+
+          // Construct select parameter with joins
+          const selectParts = ['*'];
+          const relatedTables = new Set<string>();
+
+          // Check column overrides for related columns (e.g., "institutions.name")
+          if (binding.columnOverrides) {
+            Object.keys(binding.columnOverrides).forEach(key => {
+              if (key.includes('.')) {
+                const [table, column] = key.split('.');
+                if (table && column) {
+                  relatedTables.add(table);
+                }
+              }
+            });
+          }
+
+          // Add related tables to select (e.g., "institutions(*)")
+          relatedTables.forEach(table => {
+            selectParts.push(`${table}(*)`);
+          });
+
+          params.append('select', selectParts.join(','));
 
           if (binding.sorting.enabled && binding.sorting.column) {
             params.append('orderBy', binding.sorting.column);
@@ -352,3 +379,4 @@ export const useDataBindingStore = create<DataBindingState>()(
     }
   )
 );
+

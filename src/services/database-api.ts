@@ -13,6 +13,10 @@ export interface TableSchema {
         nullable: boolean;
         default?: any;
         isPrimaryKey?: boolean;
+        foreignKey?: {
+            table: string;
+            column: string;
+        };
     }>;
 }
 

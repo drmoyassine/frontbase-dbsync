@@ -125,20 +125,24 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
         const schemaUrl = `${project.supabase_url}/rest/v1/rpc/exec_sql`;
         const schemaQuery = `
       SELECT 
-        column_name,
-        data_type,
-        is_nullable,
-        column_default,
-        character_maximum_length,
-        numeric_precision,
-        numeric_scale,
+        c.column_name,
+        c.data_type,
+        c.is_nullable,
+        c.column_default,
+        c.character_maximum_length,
+        c.numeric_precision,
+        c.numeric_scale,
         CASE WHEN tc.constraint_type = 'PRIMARY KEY' THEN true ELSE false END as is_primary,
-        CASE WHEN tc.constraint_type = 'FOREIGN KEY' THEN true ELSE false END as is_foreign
+        CASE WHEN tc.constraint_type = 'FOREIGN KEY' THEN true ELSE false END as is_foreign,
+        ccu.table_name as foreign_table,
+        ccu.column_name as foreign_column
       FROM information_schema.columns c
       LEFT JOIN information_schema.key_column_usage kcu 
         ON c.table_name = kcu.table_name AND c.column_name = kcu.column_name
       LEFT JOIN information_schema.table_constraints tc 
         ON kcu.constraint_name = tc.constraint_name
+      LEFT JOIN information_schema.constraint_column_usage ccu
+        ON tc.constraint_name = ccu.constraint_name AND tc.constraint_type = 'FOREIGN KEY'
       WHERE c.table_name = '${tableName}' 
         AND c.table_schema = 'public'
       ORDER BY c.ordinal_position

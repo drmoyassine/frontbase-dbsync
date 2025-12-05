@@ -164,17 +164,116 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
         });
 
         if (!response.ok) {
-            console.log('Schema RPC failed, trying direct query approach');
-            // Alternative: direct query to columns table
-            const directUrl = `${project.supabase_url}/rest/v1/information_schema.columns?table_name=eq.${tableName}&table_schema=eq.public&select=column_name,data_type,is_nullable,column_default`;
+            console.log('Schema RPC failed, trying direct query approach with FK metadata');
 
-            response = await fetch(directUrl, {
-                headers: {
-                    'Authorization': `Bearer ${serviceKey}`,
-                    'apikey': serviceKey,
-                    'Content-Type': 'application/json'
+            // Get basic column info
+            const columnsUrl = `${project.supabase_url}/rest/v1/rpc/exec_sql`;
+            const columnsQuery = `
+                SELECT 
+                    c.column_name,
+                    c.data_type,
+                    c.is_nullable,
+                    c.column_default,
+                    c.character_maximum_length,
+                    c.numeric_precision,
+                    c.numeric_scale,
+                    c.ordinal_position
+                FROM information_schema.columns c
+                WHERE c.table_name = '${tableName}' AND c.table_schema = 'public'
+                ORDER BY c.ordinal_position
+            `;
+
+            // Get FK relationships
+            const fkQuery = `
+                SELECT 
+                    kcu.column_name,
+                    ccu.table_name AS foreign_table,
+                    ccu.column_name AS foreign_column
+                FROM information_schema.table_constraints AS tc
+                JOIN information_schema.key_column_usage AS kcu
+                    ON tc.constraint_name = kcu.constraint_name
+                JOIN information_schema.constraint_column_usage AS ccu
+                    ON ccu.constraint_name = tc.constraint_name
+                WHERE tc.constraint_type = 'FOREIGN KEY' 
+                    AND tc.table_name = '${tableName}'
+                    AND tc.table_schema = 'public'
+            `;
+
+            // Get PK columns
+            const pkQuery = `
+                SELECT kcu.column_name
+                FROM information_schema.table_constraints AS tc
+                JOIN information_schema.key_column_usage AS kcu
+                    ON tc.constraint_name = kcu.constraint_name
+                WHERE tc.constraint_type = 'PRIMARY KEY' 
+                    AND tc.table_name = '${tableName}'
+                    AND tc.table_schema = 'public'
+            `;
+
+            try {
+                const [columnsRes, fkRes, pkRes] = await Promise.all([
+                    fetch(columnsUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${serviceKey}`,
+                            'apikey': serviceKey,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ query: columnsQuery })
+                    }),
+                    fetch(columnsUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${serviceKey}`,
+                            'apikey': serviceKey,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ query: fkQuery })
+                    }),
+                    fetch(columnsUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${serviceKey}`,
+                            'apikey': serviceKey,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ query: pkQuery })
+                    })
+                ]);
+
+                if (columnsRes.ok) {
+                    const columnsData = await columnsRes.json();
+                    const fkData = fkRes.ok ? await fkRes.json() : [];
+                    const pkData = pkRes.ok ? await pkRes.json() : [];
+
+                    // Create FK and PK lookup maps
+                    const fkMap = new Map();
+                    (Array.isArray(fkData) ? fkData : (fkData.data || [])).forEach(fk => {
+                        fkMap.set(fk.column_name, {
+                            table: fk.foreign_table,
+                            column: fk.foreign_column
+                        });
+                    });
+
+                    const pkSet = new Set();
+                    (Array.isArray(pkData) ? pkData : (pkData.data || [])).forEach(pk => {
+                        pkSet.add(pk.column_name);
+                    });
+
+                    // Merge column info with FK and PK data
+                    const columns = (Array.isArray(columnsData) ? columnsData : (columnsData.data || [])).map(col => ({
+                        ...col,
+                        is_primary: pkSet.has(col.column_name),
+                        is_foreign: fkMap.has(col.column_name),
+                        foreign_table: fkMap.get(col.column_name)?.table,
+                        foreign_column: fkMap.get(col.column_name)?.column
+                    }));
+
+                    response = { ok: true, json: async () => columns };
                 }
-            });
+            } catch (error) {
+                console.error('Fallback FK query failed:', error);
+            }
         }
 
         if (response.ok) {

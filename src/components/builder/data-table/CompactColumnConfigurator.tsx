@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { GripVertical, Eye, EyeOff, Pencil } from 'lucide-react';
+import { GripVertical, Eye, EyeOff, Pencil, ChevronRight, ChevronDown } from 'lucide-react';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 
 interface Column {
@@ -36,6 +36,8 @@ interface DraggableColumnItemProps {
     override: any;
     moveColumn: (dragIndex: number, hoverIndex: number) => void;
     updateColumnOverride: (columnName: string, updates: any) => void;
+    isExpanded?: boolean;
+    onToggleExpand?: (columnName: string) => void;
 }
 
 const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
@@ -43,7 +45,9 @@ const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
     index,
     override,
     moveColumn,
-    updateColumnOverride
+    updateColumnOverride,
+    isExpanded = false,
+    onToggleExpand
 }) => {
     const [{ isDragging }, drag, preview] = useDrag({
         type: 'COLUMN',
@@ -69,6 +73,23 @@ const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
             className={`flex items-center gap-2 p-1.5 border-b last:border-0 bg-background hover:bg-muted/30 transition-colors ${isDragging ? 'opacity-50' : ''
                 }`}
         >
+            {/* Expand/Collapse Button for FK columns */}
+            {column.foreignKey ? (
+                <button
+                    onClick={() => onToggleExpand?.(column.name)}
+                    className="p-1 hover:bg-muted rounded transition-colors"
+                    title={isExpanded ? `Collapse ${column.foreignKey.table}` : `Expand ${column.foreignKey.table}`}
+                >
+                    {isExpanded ? (
+                        <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                    ) : (
+                        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                    )}
+                </button>
+            ) : (
+                <div className="w-5" /> {/* Spacer for non-FK columns */}
+            )}
+
             {/* Drag Handle */}
             <div ref={drag} className="cursor-move text-muted-foreground hover:text-foreground p-1">
                 <GripVertical className="w-3.5 h-3.5" />
@@ -164,6 +185,8 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
     const [schema, setSchema] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [orderedColumns, setOrderedColumns] = useState<Column[]>([]);
+    const [expandedFKs, setExpandedFKs] = useState<Set<string>>(new Set());
+    const [relatedSchemas, setRelatedSchemas] = useState<Map<string, any>>(new Map());
 
     // Load schema
     useEffect(() => {
@@ -240,6 +263,31 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
         onColumnOrderChange(newOrder.map(c => c.name));
     };
 
+    const toggleFKExpansion = async (columnName: string) => {
+        const newExpanded = new Set(expandedFKs);
+
+        if (newExpanded.has(columnName)) {
+            newExpanded.delete(columnName);
+        } else {
+            newExpanded.add(columnName);
+
+            // Fetch related table schema if not already loaded
+            const column = orderedColumns.find(c => c.name === columnName);
+            if (column?.foreignKey && !relatedSchemas.has(column.foreignKey.table)) {
+                try {
+                    const relatedSchema = await loadTableSchema(column.foreignKey.table);
+                    if (relatedSchema) {
+                        setRelatedSchemas(prev => new Map(prev).set(column.foreignKey!.table, relatedSchema));
+                    }
+                } catch (error) {
+                    console.error('Failed to load related schema:', error);
+                }
+            }
+        }
+
+        setExpandedFKs(newExpanded);
+    };
+
     const toggleAllVisible = (visible: boolean) => {
         if (!schema) return;
 
@@ -303,16 +351,48 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
                 <div className="border rounded-md divide-y max-h-[400px] overflow-y-auto bg-card">
                     {orderedColumns.map((column, index) => {
                         const override = columnOverrides[column.name] || {};
+                        const isExpanded = expandedFKs.has(column.name);
+                        const relatedSchema = column.foreignKey ? relatedSchemas.get(column.foreignKey.table) : null;
 
                         return (
-                            <DraggableColumnItem
-                                key={column.name}
-                                column={column}
-                                index={index}
-                                override={override}
-                                moveColumn={moveColumn}
-                                updateColumnOverride={updateColumnOverride}
-                            />
+                            <React.Fragment key={column.name}>
+                                <DraggableColumnItem
+                                    column={column}
+                                    index={index}
+                                    override={override}
+                                    moveColumn={moveColumn}
+                                    updateColumnOverride={updateColumnOverride}
+                                    isExpanded={isExpanded}
+                                    onToggleExpand={toggleFKExpansion}
+                                />
+
+                                {/* Render related columns when expanded */}
+                                {isExpanded && relatedSchema && column.foreignKey && (
+                                    <div className="bg-muted/30 pl-12">
+                                        {relatedSchema.columns.map((relatedCol: any) => {
+                                            const relatedKey = `${column.foreignKey!.table}.${relatedCol.name}`;
+                                            const relatedOverride = columnOverrides[relatedKey] || {};
+
+                                            return (
+                                                <div
+                                                    key={relatedKey}
+                                                    className="flex items-center gap-2 p-1.5 border-b last:border-0 hover:bg-muted/50 transition-colors"
+                                                >
+                                                    <div className="w-5" /> {/* Spacer */}
+                                                    <span className="flex-1 text-sm text-muted-foreground">
+                                                        {relatedCol.name}
+                                                    </span>
+                                                    <Switch
+                                                        checked={relatedOverride.visible !== false}
+                                                        onCheckedChange={(visible) => updateColumnOverride(relatedKey, { visible })}
+                                                        className="scale-75 origin-right"
+                                                    />
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </React.Fragment>
                         );
                     })}
                 </div>

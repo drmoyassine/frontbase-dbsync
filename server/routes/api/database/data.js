@@ -25,7 +25,85 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
         const { tableName } = req.params;
         const { limit = 20, offset = 0, orderBy, orderDirection, mode = 'builder', select = '*' } = req.query;
 
-        // ... existing code ...
+        // Extract filter parameters
+        const filters = {};
+        Object.keys(req.query).forEach(key => {
+            if (key.startsWith('filter_')) {
+                filters[key.replace('filter_', '')] = req.query[key];
+            }
+        });
+
+        // Extract searchColumns parameter
+        const searchColumns = req.query.searchColumns ? req.query.searchColumns.split(',') : undefined;
+
+        console.log(`🔍 Fetching data for table: ${tableName}`, {
+            limit,
+            offset,
+            orderBy,
+            orderDirection,
+            filters,
+            mode,
+            searchColumns
+        });
+
+        const anonKey = project?.supabase_anon_key;
+        const encryptedServiceKey = project?.supabase_service_key_encrypted;
+
+        if (!anonKey || !project?.supabase_url) {
+            return res.status(400).json({
+                success: false,
+                message: 'Supabase credentials not found at PROJECT level'
+            });
+        }
+
+        let authKey;
+        let authMethod;
+
+        // Determine which key to use based on mode and authentication
+        if (mode === 'builder') {
+            // Builder mode: Use service key (admin access, bypasses RLS)
+            if (!encryptedServiceKey) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Service key required for builder mode. Please reconnect to Supabase.'
+                });
+            }
+
+            console.log('🔐 Builder mode: Using PROJECT-level service key for admin access...');
+            try {
+                authKey = decrypt(JSON.parse(encryptedServiceKey));
+                if (!authKey) {
+                    throw new Error('Failed to decrypt service key');
+                }
+                authMethod = 'service';
+            } catch (decryptError) {
+                console.error('Service key decryption failed:', decryptError);
+                return res.status(500).json({
+                    success: false,
+                    message: 'Failed to decrypt service key. Please reconnect to Supabase.'
+                });
+            }
+        } else if (mode === 'published') {
+            // Published mode: Use anon key or user JWT
+            const userJWT = req.headers.authorization?.replace('Bearer ', '');
+
+            if (userJWT && userJWT !== anonKey) {
+                // User is authenticated: Forward JWT for RLS
+                authKey = userJWT;
+                authMethod = 'user-jwt';
+                console.log('🔐 Published mode: Using user JWT for RLS-aware access...');
+            } else {
+                // Anonymous access: Use anon key
+                authKey = anonKey;
+                authMethod = 'anon';
+                console.log('🔐 Published mode: Using anon key for public access...');
+            }
+        } else {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid mode: ${mode}. Expected 'builder' or 'published'.`
+            });
+        }
 
         // Construct query URL
         let queryUrl = `${project.supabase_url}/rest/v1/${tableName}?select=${select}`;

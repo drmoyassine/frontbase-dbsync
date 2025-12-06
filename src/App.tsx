@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useEffect, useCallback, useState } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { useDashboardStore } from "@/stores/dashboard";
+import { useBuilderStore } from "@/stores/builder";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import LoginPage from "./pages/LoginPage";
@@ -21,19 +22,25 @@ const App = () => {
   const { checkAuth, isLoading, isAuthenticated } = useAuthStore();
   const { fetchConnections } = useDashboardStore();
 
+  const { loadPagesFromDatabase, loadVariablesFromDatabase } = useBuilderStore();
+
   // Initialize app on mount - always call checkAuth
   useEffect(() => {
     const initializeApp = async () => {
       await checkAuth();
 
-      // Fetch dashboard connections if authenticated
+      // Fetch dashboard connections and builder data if authenticated
       if (isAuthenticated) {
-        await fetchConnections().catch(console.error);
+        await Promise.all([
+          fetchConnections().catch(console.error),
+          loadPagesFromDatabase().catch(console.error),
+          loadVariablesFromDatabase().catch(console.error)
+        ]);
       }
     };
 
     initializeApp();
-  }, [checkAuth, fetchConnections, isAuthenticated]);
+  }, [checkAuth, fetchConnections, loadPagesFromDatabase, loadVariablesFromDatabase, isAuthenticated]);
 
   // Show loading only when actively checking auth and not on login page
   const isOnLoginPage = window.location.pathname === '/auth/login';

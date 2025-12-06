@@ -190,11 +190,11 @@ export function UniversalDataTable({
       Object.keys(binding.columnOverrides).forEach(key => {
         if (key.includes('.') && binding.columnOverrides[key].visible !== false) {
           const [tableName, columnName] = key.split('.');
-          columns.push({ 
-            name: key, 
+          columns.push({
+            name: key,
             type: 'text',
-            relatedTable: tableName, 
-            relatedColumn: columnName 
+            relatedTable: tableName,
+            relatedColumn: columnName
           });
         }
       });
@@ -207,6 +207,25 @@ export function UniversalDataTable({
     const override = binding?.columnOverrides?.[columnName];
     return override?.displayName || columnName;
   };
+
+  // Render loading state if schema is fetching
+  if (binding?.tableName && !schema) {
+    return (
+      <Card className={cn('w-full', className)}>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            Data Table
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center justify-center py-8 space-y-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <p className="text-sm text-muted-foreground">Loading table schema...</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!binding || !binding.tableName) {
     return (
@@ -248,6 +267,21 @@ export function UniversalDataTable({
   }
 
   const visibleColumns = getVisibleColumns();
+
+  if (visibleColumns.length === 0) {
+    return (
+      <Card className={cn('w-full', className)}>
+        <CardHeader>
+          <CardTitle>Data Table</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center text-muted-foreground py-8">
+            No columns visible. Configure columns in the properties panel.
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className={cn('w-full', className)}>

@@ -84,6 +84,7 @@ interface BuilderState {
   // Supabase connection
   isSupabaseConnected: boolean;
   supabaseTables: any[];
+  isInitialized: boolean;
 
   // Actions
   setProject: (project: ProjectConfig) => void;
@@ -153,6 +154,7 @@ export const useBuilderStore = create<BuilderState>()(
       appVariables: [],
       isSupabaseConnected: false,
       supabaseTables: [],
+      isInitialized: false, // Track if initial data load is complete
 
       // Actions
       setProject: (project) => set({ project }),
@@ -556,7 +558,11 @@ export const useBuilderStore = create<BuilderState>()(
           const result = await pageAPI.getAllPages(includeDeleted);
 
           if (result.success && result.data) {
-            set({ pages: result.data.data || result.data, hasUnsavedChanges: false });
+            set({
+              pages: result.data.data || result.data,
+              hasUnsavedChanges: false,
+              isInitialized: true
+            });
           }
         } catch (error) {
           console.error('Failed to load pages:', error);
@@ -565,6 +571,8 @@ export const useBuilderStore = create<BuilderState>()(
             description: "Failed to load pages from database",
             variant: "destructive"
           });
+          // Even on error, we mark as initialized so we don't spam loading state
+          set({ isInitialized: true });
         } finally {
           setLoading(false);
         }

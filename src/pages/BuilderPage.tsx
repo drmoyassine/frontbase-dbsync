@@ -12,7 +12,8 @@ const BuilderPage: React.FC = () => {
     currentPageId,
     loadPagesFromDatabase,
     createPageInDatabase,
-    isLoading
+    isLoading,
+    isInitialized
   } = useBuilderStore();
 
   useEffect(() => {
@@ -50,7 +51,7 @@ const BuilderPage: React.FC = () => {
     }
   }, [pageId, setCurrentPageId, currentPageId, pages]);
 
-  if (isLoading) {
+  if (isLoading || !isInitialized) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
         <div className="text-center">

@@ -99,6 +99,13 @@ module.exports = (db) => {
       const { id } = req.params;
       const updates = req.body;
 
+      console.log('📝 Update page request:', {
+        id,
+        hasLayoutData: !!updates.layoutData,
+        layoutDataSize: updates.layoutData ? JSON.stringify(updates.layoutData).length : 0,
+        updateKeys: Object.keys(updates)
+      });
+
       const page = db.updatePage(id, updates);
 
       if (!page) {
@@ -107,6 +114,11 @@ module.exports = (db) => {
           error: 'Page not found'
         });
       }
+
+      console.log('📝 Page updated successfully:', {
+        id,
+        hasLayoutData: !!page.layoutData
+      });
 
       res.json({
         success: true,

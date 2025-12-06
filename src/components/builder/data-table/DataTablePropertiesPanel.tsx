@@ -22,19 +22,22 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
     binding,
     onBindingUpdate
 }) => {
-    const updateBinding = (updates: Partial<ComponentDataBinding>) => {
-        if (!binding) return;
-        onBindingUpdate({ ...binding, ...updates });
-    };
-
-    const effectiveBinding = binding || {
+    const defaultBinding: ComponentDataBinding = {
+        componentId: componentId,
         dataSourceId: '',
         tableName: '',
         columnOverrides: {},
         columnOrder: [],
         filtering: { searchEnabled: false, filters: {} },
-        pagination: { enabled: true, pageSize: 20 },
+        pagination: { enabled: true, pageSize: 20, page: 0 },
+        sorting: { enabled: true },
         refreshInterval: 0
+    };
+
+    const effectiveBinding = binding || defaultBinding;
+
+    const updateBinding = (updates: Partial<ComponentDataBinding>) => {
+        onBindingUpdate({ ...effectiveBinding, ...updates });
     };
 
     return (

@@ -28,35 +28,54 @@ interface SearchColumnSelectorProps {
     tableName: string;
     selectedColumns: string[];
     onColumnsChange: (columns: string[]) => void;
+    columnOrder?: string[]; // To detect foreign columns
 }
 
 const SearchColumnSelector: React.FC<SearchColumnSelectorProps> = ({
     tableName,
     selectedColumns,
-    onColumnsChange
+    onColumnsChange,
+    columnOrder = []
 }) => {
     const { loadTableSchema, globalSchema } = useDataBindingStore();
-    const [columns, setColumns] = useState<{ name: string; type: string }[]>([]);
+    const [columns, setColumns] = useState<{ name: string; type: string; isRelated?: boolean }[]>([]);
     const [searchFilter, setSearchFilter] = useState('');
     const [open, setOpen] = useState(false);
 
-    // Load columns for the table
+    // Load columns for the table + foreign columns from columnOrder
     useEffect(() => {
         if (!tableName) return;
 
-        // Get columns from globalSchema if available
+        const allColumns: { name: string; type: string; isRelated?: boolean }[] = [];
+
+        // Get base columns from globalSchema
         const gTable = globalSchema.tables.find((t: any) => t.table_name === tableName);
         if (gTable && gTable.columns) {
-            setColumns(gTable.columns.map((c: any) => ({ name: c.column_name, type: c.data_type })));
-        } else {
-            // Fallback to loading schema
-            loadTableSchema(tableName).then((schema: any) => {
-                if (schema?.columns) {
-                    setColumns(schema.columns.map((c: any) => ({ name: c.name, type: c.type })));
-                }
+            gTable.columns.forEach((c: any) => {
+                allColumns.push({ name: c.column_name, type: c.data_type, isRelated: false });
             });
         }
-    }, [tableName, globalSchema, loadTableSchema]);
+
+        // Add foreign columns from columnOrder (format: "table.column")
+        columnOrder.forEach(col => {
+            if (col.includes('.')) {
+                const [relTable, relCol] = col.split('.');
+                // Try to get type from globalSchema
+                const relTableSchema = globalSchema.tables.find((t: any) => t.table_name === relTable);
+                let colType = 'text'; // Default
+                if (relTableSchema?.columns) {
+                    const foundCol = relTableSchema.columns.find((c: any) => c.column_name === relCol);
+                    if (foundCol) colType = foundCol.data_type;
+                }
+                // Avoid duplicates
+                if (!allColumns.some(c => c.name === col)) {
+                    allColumns.push({ name: col, type: colType, isRelated: true });
+                }
+            }
+        });
+
+        setColumns(allColumns);
+    }, [tableName, globalSchema, columnOrder]);
 
     const toggleColumn = (columnName: string) => {
         if (selectedColumns.includes(columnName)) {
@@ -70,13 +89,16 @@ const SearchColumnSelector: React.FC<SearchColumnSelectorProps> = ({
         c.name.toLowerCase().includes(searchFilter.toLowerCase())
     );
 
-    const textColumns = filteredColumns.filter(c =>
-        ['text', 'character varying', 'varchar', 'char'].includes(c.type)
+    // Group columns: Text (base), Other (base), Related
+    const baseTextColumns = filteredColumns.filter(c =>
+        !c.isRelated && ['text', 'character varying', 'varchar', 'char'].includes(c.type)
     );
 
-    const otherColumns = filteredColumns.filter(c =>
-        !['text', 'character varying', 'varchar', 'char'].includes(c.type)
+    const baseOtherColumns = filteredColumns.filter(c =>
+        !c.isRelated && !['text', 'character varying', 'varchar', 'char'].includes(c.type)
     );
+
+    const relatedColumns = filteredColumns.filter(c => c.isRelated);
 
     return (
         <div className="space-y-2 pt-2">
@@ -124,12 +146,12 @@ const SearchColumnSelector: React.FC<SearchColumnSelectorProps> = ({
                     </div>
                     <ScrollArea className="h-[200px]">
                         <div className="p-2 space-y-1">
-                            {textColumns.length > 0 && (
+                            {baseTextColumns.length > 0 && (
                                 <>
                                     <div className="text-xs font-medium text-muted-foreground px-2 py-1">
                                         Text Columns
                                     </div>
-                                    {textColumns.map(col => (
+                                    {baseTextColumns.map(col => (
                                         <label
                                             key={col.name}
                                             className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted rounded cursor-pointer"
@@ -146,12 +168,12 @@ const SearchColumnSelector: React.FC<SearchColumnSelectorProps> = ({
                                     ))}
                                 </>
                             )}
-                            {otherColumns.length > 0 && (
+                            {baseOtherColumns.length > 0 && (
                                 <>
                                     <div className="text-xs font-medium text-muted-foreground px-2 py-1 mt-2">
                                         Other Columns
                                     </div>
-                                    {otherColumns.map(col => (
+                                    {baseOtherColumns.map(col => (
                                         <label
                                             key={col.name}
                                             className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted rounded cursor-pointer"
@@ -162,6 +184,28 @@ const SearchColumnSelector: React.FC<SearchColumnSelectorProps> = ({
                                             />
                                             <span className="text-sm">{col.name}</span>
                                             <Badge variant="outline" className="text-[10px] ml-auto">
+                                                {col.type}
+                                            </Badge>
+                                        </label>
+                                    ))}
+                                </>
+                            )}
+                            {relatedColumns.length > 0 && (
+                                <>
+                                    <div className="text-xs font-medium text-purple-600 px-2 py-1 mt-2">
+                                        Related Columns
+                                    </div>
+                                    {relatedColumns.map(col => (
+                                        <label
+                                            key={col.name}
+                                            className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted rounded cursor-pointer"
+                                        >
+                                            <Checkbox
+                                                checked={selectedColumns.includes(col.name)}
+                                                onCheckedChange={() => toggleColumn(col.name)}
+                                            />
+                                            <span className="text-sm">{col.name}</span>
+                                            <Badge variant="outline" className="text-[10px] ml-auto bg-purple-50 text-purple-700 border-purple-200">
                                                 {col.type}
                                             </Badge>
                                         </label>
@@ -289,6 +333,7 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                                     tableName={binding.tableName}
                                     selectedColumns={binding.searchColumns || []}
                                     onColumnsChange={(columns) => updateBinding({ searchColumns: columns.length > 0 ? columns : undefined })}
+                                    columnOrder={binding.columnOrder}
                                 />
                             )}
                         </div>

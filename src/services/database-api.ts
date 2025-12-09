@@ -84,5 +84,17 @@ export const databaseApi = {
             credentials: 'include',
         });
         return response.json();
+    },
+
+    advancedQuery: async (rpcName: string, params: object): Promise<{ success: boolean; rows?: any[]; total?: number; message?: string }> => {
+        const response = await fetch('/api/database/advanced-query', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({ rpcName, params }),
+        });
+        return response.json();
     }
 };

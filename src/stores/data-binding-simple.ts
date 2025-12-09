@@ -20,6 +20,15 @@ interface DataBindingState {
 
   // Schema cache
   schemas: Map<string, TableSchema>;
+  globalSchema: {
+    tables: any[];
+    foreign_keys: Array<{
+      table_name: string;
+      column_name: string;
+      foreign_table_name: string;
+      foreign_column_name: string;
+    }>;
+  };
 
   // Component bindings
   componentBindings: Map<string, ComponentDataBinding>;
@@ -34,6 +43,7 @@ interface DataBindingState {
   initialize: () => void;
   syncConnectionStatus: () => Promise<void>;
   fetchTables: () => Promise<void>;
+  fetchGlobalSchema: () => Promise<void>;
   loadTableSchema: (tableName: string) => Promise<TableSchema | null>;
   queryData: (componentId: string, binding: ComponentDataBinding) => Promise<any>;
   setComponentBinding: (componentId: string, binding: ComponentDataBinding) => void;
@@ -51,6 +61,7 @@ export const useDataBindingStore = create<DataBindingState>()(
       tables: [],
       tablesLoading: false,
       tablesError: null,
+      globalSchema: { tables: [], foreign_keys: [] },
       schemas: new Map(),
       componentBindings: new Map(),
       dataCache: new Map(),
@@ -97,12 +108,33 @@ export const useDataBindingStore = create<DataBindingState>()(
         }
       },
 
+      fetchGlobalSchema: async () => {
+        try {
+          const result = await databaseApi.advancedQuery('frontbase_get_schema_info', {});
+          const schemaResult = result as any;
+          if (result.success && schemaResult.tables && schemaResult.foreign_keys) {
+            set({
+              globalSchema: {
+                tables: schemaResult.tables,
+                foreign_keys: schemaResult.foreign_keys
+              }
+            });
+            debug.log('DATA_BINDING', 'Global schema fetched:', schemaResult.foreign_keys.length, 'FKs');
+          }
+        } catch (error) {
+          console.error('Failed to fetch global schema:', error);
+        }
+      },
+
       // Fetch tables from API (owns this responsibility)
       fetchTables: async () => {
         if (!get().connected) {
           debug.error('DATA_BINDING', 'Cannot fetch tables: not connected');
           return;
         }
+
+        // Fetch global schema first for better intellipense
+        get().fetchGlobalSchema();
 
         const requestKey = generateRequestKey('/api/database/supabase-tables');
 
@@ -194,75 +226,90 @@ export const useDataBindingStore = create<DataBindingState>()(
         });
 
         try {
-          // Build query parameters
-          const params = new URLSearchParams();
-          params.append('limit', binding.pagination.pageSize.toString());
-          params.append('offset', (binding.pagination.page * binding.pagination.pageSize).toString());
-
-          // Construct select parameter with joins
-          const selectParts = ['*'];
+          // Construct columns and joins for RPC
+          let columns = `"${binding.tableName}".*`;
+          const joins = [];
           const relatedTables = new Set<string>();
 
-          // Check column overrides for related columns (e.g., "institutions.name")
+          // Check column overrides
           if (binding.columnOverrides) {
             Object.keys(binding.columnOverrides).forEach(key => {
-              if (key.includes('.')) {
-                const [table, column] = key.split('.');
-                if (table && column) {
-                  relatedTables.add(table);
-                }
-              }
+              const [t] = key.split('.');
+              if (t && t !== binding.tableName) relatedTables.add(t);
             });
           }
-
-          // Also check columnOrder to ensure we fetch data for ordered columns even if missing from overrides
+          // Check column order
           if (binding.columnOrder) {
             binding.columnOrder.forEach(key => {
-              if (key.includes('.')) {
-                const [table, column] = key.split('.');
-                if (table && column) {
-                  relatedTables.add(table);
-                }
-              }
+              const [t] = key.split('.');
+              if (t && t !== binding.tableName) relatedTables.add(t);
             });
           }
 
-          // Add related tables to select (e.g., "institutions(*)")
-          relatedTables.forEach(table => {
-            // Prevent adding self-reference as a relation unless it's distinct (which this logic doesn't support yet)
-            // If we are querying 'institutions', we don't need to join 'institutions' to get columns already on it.
-            // However, usually 'institutions.name' on 'institutions' table is just 'name'.
-            // If the user managed to configure 'institutions.name' while on 'institutions' table, we should just NOT add the join.
-            if (table !== binding.tableName) {
-              selectParts.push(`${table}(*)`);
+          // Build Joins based on Schema Graph
+          const globalSchema = get().globalSchema;
+
+          relatedTables.forEach(relatedTable => {
+            // 1. Try Find Forward FK (binding.tableName -> relatedTable)
+            let fk = globalSchema?.foreign_keys?.find(k => k.table_name === binding.tableName && k.foreign_table_name === relatedTable);
+
+            if (fk) {
+              // Belongs To
+              joins.push({
+                type: 'left',
+                table: relatedTable,
+                on: `${binding.tableName}.${fk.column_name} = ${relatedTable}.${fk.foreign_column_name}`
+              });
+              // Add to columns as JSON
+              columns += `, to_jsonb("${relatedTable}".*) as "${relatedTable}"`;
+            } else {
+              // 2. Try Find Reverse FK (relatedTable -> binding.tableName)
+              fk = globalSchema?.foreign_keys?.find(k => k.table_name === relatedTable && k.foreign_table_name === binding.tableName);
+              if (fk) {
+                // Has Many
+                // For HasMany, we generally don't JOIN in the main query for 1:N unless we want weird row duplication.
+                // Instead we use a scalar subquery for the JSON array.
+                // But if the user wants to SORT by it? (Not supported usually).
+                // We will use the subquery approach for projection to match PostgREST.
+                columns += `, (SELECT json_agg(x) FROM "${relatedTable}" x WHERE x.${fk.column_name} = "${binding.tableName}".${fk.foreign_column_name}) as "${relatedTable}"`;
+              }
             }
           });
 
-          params.append('select', selectParts.join(','));
-
+          // Sorting
+          let sort_col = '';
+          let sort_dir = 'asc';
           if (binding.sorting.enabled && binding.sorting.column) {
-            params.append('orderBy', binding.sorting.column);
-            params.append('orderDirection', binding.sorting.direction || 'asc');
+            sort_col = binding.sorting.column;
+            sort_dir = binding.sorting.direction || 'asc';
           }
 
-          // Add filters
-          Object.entries(binding.filtering.filters).forEach(([key, value]) => {
-            if (value !== undefined && value !== null && value !== '') {
-              params.append(`filter_${key}`, value.toString());
-            }
-          });
+          // Filtering
+          const search_query = binding.filtering.filters['search'] || '';
 
-          console.log('[DataBindingStore] Query params:', {
-            tableName: binding.tableName,
-            params: params.toString(),
-            binding: {
-              sorting: binding.sorting,
-              filtering: binding.filtering,
-              pagination: binding.pagination
-            }
-          });
-
-          const result = await databaseApi.queryData(binding.tableName, params);
+          // Execute RPC
+          let result;
+          if (search_query) {
+            result = await databaseApi.advancedQuery('frontbase_search_rows', {
+              table_name: binding.tableName,
+              columns, // This is SQL selects
+              joins,
+              search_query,
+              search_cols: [],
+              page: binding.pagination.page + 1, // 1-based
+              page_size: binding.pagination.pageSize
+            });
+          } else {
+            result = await databaseApi.advancedQuery('frontbase_get_rows', {
+              table_name: binding.tableName,
+              columns, // This is SQL selects
+              joins,
+              sort_col,
+              sort_dir,
+              page: binding.pagination.page + 1, // 1-based
+              page_size: binding.pagination.pageSize
+            });
+          }
 
           if (result.success) {
             // Cache the result
@@ -272,7 +319,7 @@ export const useDataBindingStore = create<DataBindingState>()(
               const newErrors = new Map(state.errors);
               const newCounts = new Map(state.counts);
 
-              newDataCache.set(componentId, result.data);
+              newDataCache.set(componentId, result.rows || []); // RPC returns rows
               newLoadingStates.delete(componentId);
               newErrors.delete(componentId);
 
@@ -288,10 +335,20 @@ export const useDataBindingStore = create<DataBindingState>()(
               };
             });
 
-            return result.data;
+            return result.rows || [];
           } else {
             throw new Error(result.message || 'Query failed');
           }
+
+          /* OLD LOGIC REPLACED
+          params.append('select', selectParts.join(','));
+          // ... (rest of old logic)
+          const result = await databaseApi.queryData(binding.tableName, params);
+          */
+
+          /*
+          if (result.success) { ... } else { ... }
+          */
         } catch (error) {
           console.error('[DataBindingStore] Query error:', error);
 

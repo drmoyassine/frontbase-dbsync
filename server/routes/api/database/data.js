@@ -440,4 +440,73 @@ router.delete('/table-data/:tableName/:id', authenticateToken, async (req, res) 
     }
 });
 
+
+// Advanced Query (RPC Proxy)
+router.post('/advanced-query', authenticateToken, async (req, res) => {
+    try {
+        const { tableName, rpcName, params, mode = 'builder' } = req.body;
+
+        if (!rpcName) {
+            return res.status(400).json({ error: 'RPC Function name required' });
+        }
+
+        // Get PROJECT level Supabase connection
+        const project = db.db.prepare('SELECT supabase_url, supabase_anon_key, supabase_service_key_encrypted FROM project WHERE id = ?').get('default');
+
+        if (!project?.supabase_url) {
+            return res.status(400).json({ error: 'Supabase credentials not found' });
+        }
+
+        const anonKey = project?.supabase_anon_key;
+        const encryptedServiceKey = project?.supabase_service_key_encrypted;
+        let authKey;
+
+        // Determine Auth Key
+        if (mode === 'builder') {
+            if (!encryptedServiceKey) {
+                return res.status(400).json({ error: 'Service key required for builder mode' });
+            }
+            try {
+                authKey = decrypt(JSON.parse(encryptedServiceKey));
+            } catch (e) {
+                return res.status(500).json({ error: 'Failed to decrypt service key' });
+            }
+        } else {
+            // Published/User mode
+            const userJWT = req.headers.authorization?.replace('Bearer ', '');
+            if (userJWT && userJWT !== anonKey) {
+                authKey = userJWT;
+            } else {
+                authKey = anonKey;
+            }
+        }
+
+        // Call Supabase RPC
+        const response = await fetch(`${project.supabase_url}/rest/v1/rpc/${rpcName}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authKey}`,
+                'apikey': anonKey, // apikey header is always required by Supabase/Kong
+                'Content-Type': 'application/json',
+                'Prefer': 'params=single-object' // Force single JSON object argument
+            },
+            body: JSON.stringify(params || {})
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            // RPCs usually return the result directly.
+            // frontbase_get_rows returns { rows: [], total: ... }
+            res.json({ success: true, ...data });
+        } else {
+            const errorText = await response.text();
+            console.error(`RPC ${rpcName} failed:`, errorText);
+            res.status(response.status).json({ success: false, message: errorText });
+        }
+    } catch (error) {
+        console.error('Advanced query error:', error);
+        res.status(500).json({ error: 'Failed to execute advanced query' });
+    }
+});
+
 module.exports = router;

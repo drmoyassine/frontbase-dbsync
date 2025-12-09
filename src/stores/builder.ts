@@ -428,7 +428,25 @@ export const useBuilderStore = create<BuilderState>()(
         setSaving(true);
         try {
           const { pageAPI } = await import('@/lib/api');
-          const result = await pageAPI.updatePage(pageId, page);
+
+          // Create a sanitized copy of the page to send to the API
+          // We strictly remove layout_data (snake_case) to prevent sending stale data
+          // and ensure only the active layoutData (camelCase) is sent.
+          const { layout_data, ...sanitizedPage } = page as any;
+
+          // Explicitly ensure layoutData is the current state
+          // (This handles the mixed mutable/immutable state patterns in the store)
+          if (page.layoutData) {
+            sanitizedPage.layoutData = page.layoutData;
+          }
+
+          console.log('💾 Saving page:', {
+            id: pageId,
+            componentCount: page.layoutData?.content?.length || 0,
+            hasLayoutData: !!sanitizedPage.layoutData
+          });
+
+          const result = await pageAPI.updatePage(pageId, sanitizedPage);
 
           if (!result.success) {
             throw new Error(result.error || 'Failed to save page');

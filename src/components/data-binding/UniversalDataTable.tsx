@@ -175,28 +175,76 @@ export function UniversalDataTable({
   const getVisibleColumns = () => {
     if (!schema) return [];
 
-    const columns: any[] = [];
+    let columns: any[] = [];
 
-    // Get base table columns from schema
+    // 1. Get all potential columns (base + related from overrides)
+    const allColumnsMap = new Map<string, any>();
+
+    // Add base columns
     schema.columns.forEach((col: any) => {
-      const override = binding?.columnOverrides?.[col.name];
+      allColumnsMap.set(col.name, col);
+    });
+
+    // Add related columns from overrides
+    if (binding?.columnOverrides) {
+      Object.keys(binding.columnOverrides).forEach(key => {
+        if (key.includes('.')) {
+          // Ensure we haven't already added this (unlikely for valid schema, but good safety)
+          if (!allColumnsMap.has(key)) {
+            const [tableName, columnName] = key.split('.');
+            allColumnsMap.set(key, {
+              name: key,
+              type: 'text',
+              relatedTable: tableName,
+              relatedColumn: columnName
+            });
+          }
+        }
+      });
+    }
+
+    // 2. Determine visible columns based on overrides
+    const visibleKeys = new Set<string>();
+    allColumnsMap.forEach((col, key) => {
+      const override = binding?.columnOverrides?.[key];
+      // Default to visible if no override, unless it's a related column (which we only show if explicitly added/visible usually, 
+      // but here we just check 'visible !== false' to be permissive, as the Configurator controls the specific list)
+      // Actually, related columns without overrides shouldn't just appear. 
+      // But the map only has related columns IF they are in overrides.
+      // Base columns appear by default.
       if (override?.visible !== false) {
-        columns.push(col);
+        visibleKeys.add(key);
       }
     });
 
-    // Add visible related columns (e.g., "institutions.name")
-    if (binding?.columnOverrides) {
-      Object.keys(binding.columnOverrides).forEach(key => {
-        if (key.includes('.') && binding.columnOverrides[key].visible !== false) {
-          const [tableName, columnName] = key.split('.');
-          columns.push({
-            name: key,
-            type: 'text',
-            relatedTable: tableName,
-            relatedColumn: columnName
-          });
+    // 3. Sort based on columnOrder
+    if (binding?.columnOrder && binding.columnOrder.length > 0) {
+      // Add columns in order
+      binding.columnOrder.forEach(key => {
+        if (visibleKeys.has(key)) {
+          columns.push(allColumnsMap.get(key));
+          visibleKeys.delete(key); // Remove so we don't add again
         }
+      });
+      // Add remaining visible columns (fallback for those not in order list)
+      visibleKeys.forEach(key => {
+        const col = allColumnsMap.get(key);
+        if (col) columns.push(col);
+      });
+    } else {
+      // Default order: Base columns then Related columns
+      // Actually, just use Schema order for base, then alpha for others? 
+      // Let's stick to the previous behavior: Schema order first.
+      schema.columns.forEach((col: any) => {
+        if (visibleKeys.has(col.name)) {
+          columns.push(col);
+          visibleKeys.delete(col.name);
+        }
+      });
+      // Then remaining (foreign)
+      visibleKeys.forEach(key => {
+        const col = allColumnsMap.get(key);
+        if (col) columns.push(col);
       });
     }
 

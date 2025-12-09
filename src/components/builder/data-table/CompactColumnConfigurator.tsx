@@ -19,6 +19,9 @@ interface Column {
         table: string;
         column: string;
     };
+    // Used for foreign columns promoted to main list
+    relatedTable?: string;
+    relatedColumn?: string;
 }
 
 interface ColumnConfiguratorProps {
@@ -38,6 +41,7 @@ interface DraggableColumnItemProps {
     updateColumnOverride: (columnName: string, updates: any) => void;
     isExpanded?: boolean;
     onToggleExpand?: (columnName: string) => void;
+    isForeignIncluded?: Boolean;
 }
 
 const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
@@ -74,7 +78,7 @@ const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
                 }`}
         >
             {/* Expand/Collapse Button for FK columns */}
-            {column.foreignKey ? (
+            {column.foreignKey && !column.relatedTable ? (
                 <button
                     onClick={() => onToggleExpand?.(column.name)}
                     className="p-1 hover:bg-muted rounded transition-colors"
@@ -100,7 +104,7 @@ const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
                 <PopoverTrigger asChild>
                     <div className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer group">
                         <span className="font-medium text-sm truncate select-none">
-                            {override.displayName || column.name}
+                            {override.displayName || (column.relatedTable ? `${column.relatedTable}.${column.relatedColumn}` : column.name)}
                         </span>
                         <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                         {column.isPrimaryKey && (
@@ -108,6 +112,9 @@ const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
                         )}
                         {column.foreignKey && (
                             <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-blue-50 text-blue-700 border-blue-200">FK</Badge>
+                        )}
+                        {column.relatedTable && (
+                            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-purple-50 text-purple-700 border-purple-200">Related</Badge>
                         )}
                     </div>
                 </PopoverTrigger>
@@ -190,13 +197,10 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
 
     // Load schema
     useEffect(() => {
-        console.log('[CompactColumnConfigurator] useEffect triggered', { tableName });
         if (tableName) {
             setLoading(true);
-            console.log('[CompactColumnConfigurator] Loading schema for table:', tableName);
             loadTableSchema(tableName)
                 .then((result) => {
-                    console.log('[CompactColumnConfigurator] Schema loaded successfully:', result);
                     setSchema(result);
                     setLoading(false);
                 })
@@ -215,36 +219,54 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
             return;
         }
 
-        const columns = schema.columns as Column[];
+        const baseColumns = schema.columns as Column[];
+        const baseColumnMap = new Map(baseColumns.map(c => [c.name, c]));
 
+        // Final ordered list
+        const ordered: Column[] = [];
+
+        // Track what we've added to avoid duplicates
+        const addedKeys = new Set<string>();
+
+        // 1. If we have a stored order, respect it
         if (columnOrder && columnOrder.length > 0) {
-            // Order according to columnOrder
-            const ordered: Column[] = [];
-            const columnMap = new Map(columns.map(c => [c.name, c]));
-
-            // Add columns in the specified order
-            columnOrder.forEach(name => {
-                const col = columnMap.get(name);
-                if (col) {
-                    ordered.push(col);
-                    columnMap.delete(name);
+            columnOrder.forEach(key => {
+                // Is it a base column?
+                if (baseColumnMap.has(key)) {
+                    ordered.push(baseColumnMap.get(key)!);
+                    addedKeys.add(key);
+                }
+                // Is it a known related column from overrides? 
+                // We construct the object from the key since we don't have the full schema for all relations handy always,
+                // but we can trust the key format "table.column" if it's in the order list.
+                // However, better to verify it's a valid related key format.
+                else if (key.includes('.')) {
+                    const [relTable, relCol] = key.split('.');
+                    ordered.push({
+                        name: key,
+                        type: 'text', // Default, will be updated if we load schema
+                        relatedTable: relTable,
+                        relatedColumn: relCol
+                    });
+                    addedKeys.add(key);
                 }
             });
-
-            // Add any new columns that weren't in the order (at the end, hidden by default)
-            columnMap.forEach((col) => {
-                ordered.push(col);
-                // Mark new columns as hidden by default
-                if (columnOverrides[col.name]?.visible === undefined) {
-                    updateColumnOverride(col.name, { visible: false });
-                }
-            });
-
-            setOrderedColumns(ordered);
-        } else {
-            // No order specified, use schema order and mark all as visible
-            setOrderedColumns(columns);
         }
+
+        // 2. Add any missing base columns (at the end)
+        baseColumns.forEach(col => {
+            if (!addedKeys.has(col.name)) {
+                ordered.push(col);
+                addedKeys.add(col.name);
+                // Ensure default base columns are visible unless overridden
+                // Actually, if we are in "custom order mode" (i.e. columnOrder exists), 
+                // newly discovered columns should probably be hidden by default to not disrupt layout?
+                // But currently we don't strictly enforce "custom order mode".
+                // Let's leave visibility as is (default true).
+            }
+        });
+
+        setOrderedColumns(ordered);
     }, [schema, columnOrder]);
 
     const updateColumnOverride = (columnName: string, updates: any) => {
@@ -256,6 +278,79 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
             }
         };
         onColumnOverridesChange(newOverrides);
+    };
+
+    const handleToggleColumn = (column: Column, visible: boolean) => {
+        // If it's a related column being turned ON:
+        if (column.relatedTable && visible) {
+            // It MUST be in orderedColumns.
+            // If it's not already in orderedColumns (it shouldn't be if it was OFF and we just removed it per the old logic, 
+            // BUT wait, my new logic in useEffect puts everything in `orderedColumns` ONLY if it's in `columnOrder`.
+            // So if I toggle it ON from the Expansion panel, I need to:
+            // 1. Add it to columnOrder.
+            // 2. Set visible: true override.
+
+            const newOrder = [...orderedColumns.map(c => c.name)];
+            if (!newOrder.includes(column.name)) {
+                newOrder.push(column.name);
+                onColumnOrderChange(newOrder);
+            }
+            updateColumnOverride(column.name, { visible: true });
+        }
+        // If it's a related column being turned OFF:
+        else if (column.relatedTable && !visible) {
+            // We can keep it in the list (so user can re-enable easily) or remove it.
+            // User asked for "clean" way. Keeping hidden columns in the main list clutters it if you have many relations.
+            // But if I remove it, I lose its position.
+            // Let's KEEP it in the main list if it's already there. 
+            // The user can remove it by unchecking it.
+            // Wait, if I uncheck it, it stays? 
+            // Let's say: If I uncheck it, it stays but `visible: false`.
+            updateColumnOverride(column.name, { visible: false });
+        }
+        else {
+            // Base column
+            updateColumnOverride(column.name, { visible });
+        }
+    };
+
+    const handleAddRelatedColumn = (relatedKey: string, relatedTable: string, relatedColName: string) => {
+        // 1. Add to overrides as visible
+        const newOverrides = {
+            ...columnOverrides,
+            [relatedKey]: {
+                ...columnOverrides[relatedKey],
+                visible: true
+            }
+        };
+        onColumnOverridesChange(newOverrides);
+
+        // 2. Add to column order immediately (at the end or after parent?)
+        // Let's add to end for predictability
+        const currentOrder = orderedColumns.map(c => c.name);
+        if (!currentOrder.includes(relatedKey)) {
+            onColumnOrderChange([...currentOrder, relatedKey]);
+        }
+    };
+
+    const handleRemoveRelatedColumn = (relatedKey: string) => {
+        // Set visible false
+        const newOverrides = {
+            ...columnOverrides,
+            [relatedKey]: {
+                ...columnOverrides[relatedKey],
+                visible: false
+            }
+        };
+        onColumnOverridesChange(newOverrides);
+
+        // Remove from order?
+        // If we remove from order, it disappears from the draggable list.
+        // This keeps the list clean. To show it again, go back to FK expansion.
+        // This seems to match the "phantom columns" complaint - if they are OFF, they shouldn't haunt the list unless necessary.
+        const currentOrder = orderedColumns.map(c => c.name);
+        const newOrder = currentOrder.filter(k => k !== relatedKey);
+        onColumnOrderChange(newOrder);
     };
 
     const moveColumn = (dragIndex: number, hoverIndex: number) => {
@@ -296,12 +391,24 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
         if (!schema) return;
 
         const newOverrides = { ...columnOverrides };
+        // Base columns
         schema.columns.forEach((column: Column) => {
             newOverrides[column.name] = {
                 ...newOverrides[column.name],
                 visible
             };
         });
+        // We probably shouldn't auto-enable ALL foreign columns as it would flood the table.
+        // But we can enable/disable already known ones.
+        orderedColumns.forEach(col => {
+            if (col.relatedTable) {
+                newOverrides[col.name] = {
+                    ...(newOverrides[col.name] || {}),
+                    visible
+                };
+            }
+        })
+
         onColumnOverridesChange(newOverrides);
     };
 
@@ -327,7 +434,7 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
                 {/* Quick Actions */}
                 <div className="flex justify-between items-center px-1">
                     <Label className="text-xs font-medium text-muted-foreground">
-                        {orderedColumns.length} Columns
+                        {orderedColumns.length} Active Columns
                     </Label>
                     <div className="flex gap-1">
                         <Button
@@ -365,17 +472,31 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
                                     index={index}
                                     override={override}
                                     moveColumn={moveColumn}
-                                    updateColumnOverride={updateColumnOverride}
+                                    updateColumnOverride={(name, up) => {
+                                        // Intercept visibility toggle for related columns to handle remove logic
+                                        if (column.relatedTable && up.visible === false) {
+                                            handleRemoveRelatedColumn(name);
+                                        } else {
+                                            updateColumnOverride(name, up);
+                                        }
+                                    }}
                                     isExpanded={isExpanded}
                                     onToggleExpand={toggleFKExpansion}
                                 />
 
-                                {/* Render related columns when expanded */}
+                                {/* Render related columns when expanded - CATALOG MODE */}
                                 {isExpanded && relatedSchema && column.foreignKey && (
-                                    <div className="bg-muted/30 pl-12">
+                                    <div className="bg-muted/30 pl-12 border-b">
+                                        <div className="px-1.5 py-1 text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">
+                                            Available Columns from {column.foreignKey.table}
+                                        </div>
                                         {relatedSchema.columns.map((relatedCol: any) => {
                                             const relatedKey = `${column.foreignKey!.table}.${relatedCol.name}`;
-                                            const relatedOverride = columnOverrides[relatedKey] || {};
+                                            const isActive = orderedColumns.some(c => c.name === relatedKey);
+                                            // Calculate check state: It is checked if it is In the Order AND Visible.
+                                            // If it is in the order but hidden, it's checked? No, let's say checked = active.
+
+                                            // Wait, if I remove it from order when hidden, then isActive is strictly about presence in order.
 
                                             return (
                                                 <div
@@ -387,8 +508,14 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
                                                         {relatedCol.name}
                                                     </span>
                                                     <Switch
-                                                        checked={relatedOverride.visible !== false}
-                                                        onCheckedChange={(visible) => updateColumnOverride(relatedKey, { visible })}
+                                                        checked={isActive}
+                                                        onCheckedChange={(checked) => {
+                                                            if (checked) {
+                                                                handleAddRelatedColumn(relatedKey, column.foreignKey!.table, relatedCol.name);
+                                                            } else {
+                                                                handleRemoveRelatedColumn(relatedKey);
+                                                            }
+                                                        }}
                                                         className="scale-75 origin-right"
                                                     />
                                                 </div>
@@ -403,11 +530,10 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
 
                 {orderedColumns.length === 0 && (
                     <div className="text-center py-8 text-muted-foreground text-sm">
-                        No columns found in the selected table
+                        No columns visible. Enable columns to start.
                     </div>
                 )}
             </div>
         </DndProvider>
     );
 };
-

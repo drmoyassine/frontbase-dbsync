@@ -487,8 +487,7 @@ router.post('/advanced-query', authenticateToken, async (req, res) => {
             headers: {
                 'Authorization': `Bearer ${authKey}`,
                 'apikey': anonKey, // apikey header is always required by Supabase/Kong
-                'Content-Type': 'application/json',
-                'Prefer': 'params=single-object' // Force single JSON object argument
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify(params || {})
         });

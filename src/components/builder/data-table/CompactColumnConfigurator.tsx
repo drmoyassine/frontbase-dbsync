@@ -172,7 +172,7 @@ const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
 
             {/* Visibility Toggle */}
             <Switch
-                checked={override.visible !== false}
+                checked={override.visible === true}
                 onCheckedChange={(visible) => updateColumnOverride(column.name, { visible })}
                 className="scale-75 origin-right"
             />

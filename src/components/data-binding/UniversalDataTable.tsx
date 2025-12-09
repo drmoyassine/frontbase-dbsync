@@ -248,9 +248,10 @@ export function UniversalDataTable({
     }
 
     // 2. Determine visible columns based on overrides
+    // Columns are OFF by default - must have explicit visible: true
     const isVisible = (key: string) => {
       const override = binding?.columnOverrides?.[key];
-      return override?.visible !== false;
+      return override?.visible === true;  // Hidden by default unless explicitly enabled
     };
 
     const visibleKeys = new Set<string>();
@@ -420,12 +421,12 @@ export function UniversalDataTable({
           </div>
         ) : (
           <>
-            <div className="rounded-md border">
-              <Table>
+            <div className="rounded-md border overflow-x-auto">
+              <Table className="min-w-max">
                 <TableHeader>
                   <TableRow>
                     {visibleColumns.map((column: any) => (
-                      <TableHead key={column.name}>
+                      <TableHead key={column.name} className="whitespace-nowrap">
                         <div className="flex items-center space-x-1">
                           <span>{getColumnDisplayName(column.name)}</span>
                           {binding.sorting?.enabled && (
@@ -452,9 +453,9 @@ export function UniversalDataTable({
                     </TableRow>
                   ) : (
                     data.map((row, index) => (
-                      <TableRow key={index}>
+                      <TableRow key={index} className="h-12">
                         {visibleColumns.map((column: any) => (
-                          <TableCell key={column.name}>
+                          <TableCell key={column.name} className="max-w-[200px] truncate whitespace-nowrap py-2">
                             {formatValue(row[column.name], column.name, row)}
                           </TableCell>
                         ))}

@@ -1,197 +1,194 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
+import { DndProvider, useDrag, useDrop } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { GripVertical, Plus, X, Pencil, Filter } from 'lucide-react';
 import { FilterConfig } from '@/hooks/data/useSimpleData';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
-import { databaseApi } from '@/services/database-api';
-import { Checkbox } from '@/components/ui/checkbox';
 
 interface FilterConfiguratorProps {
     tableName: string;
     dataSourceId?: string;
     filters: FilterConfig[];
     onFiltersChange: (filters: FilterConfig[]) => void;
-    columnOrder?: string[]; // To include related columns
+    columnOrder?: string[];
 }
 
-interface FilterItemProps {
+interface DraggableFilterItemProps {
     filter: FilterConfig;
-    columns: { name: string; type: string }[];
-    tableName: string; // Added tableName prop
-    onUpdate: (filter: FilterConfig) => void;
-    onRemove: () => void;
+    index: number;
+    columns: { name: string; type: string; isRelated?: boolean }[];
+    moveFilter: (dragIndex: number, hoverIndex: number) => void;
+    updateFilter: (filter: FilterConfig) => void;
+    removeFilter: () => void;
 }
 
-const FilterItem: React.FC<FilterItemProps> = ({
+const FILTER_TYPE_LABELS: Record<string, string> = {
+    text: 'Text',
+    dropdown: 'Dropdown',
+    multiselect: 'Multi-Select',
+    number: 'Number Range',
+    dateRange: 'Date Range',
+    boolean: 'Boolean'
+};
+
+const DraggableFilterItem: React.FC<DraggableFilterItemProps> = ({
     filter,
+    index,
     columns,
-    tableName,
-    onUpdate,
-    onRemove
+    moveFilter,
+    updateFilter,
+    removeFilter
 }) => {
-    const [options, setOptions] = useState<string[]>([]);
-    const [loadingOptions, setLoadingOptions] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
+    const [{ isDragging }, drag, preview] = useDrag({
+        type: 'FILTER',
+        item: { index },
+        collect: (monitor) => ({
+            isDragging: monitor.isDragging()
+        })
+    });
 
-    // Auto-fetch options for dropdown/multiselect filters
-    useEffect(() => {
-        if (
-            filter.column &&
-            (filter.filterType === 'dropdown' || filter.filterType === 'multiselect')
-        ) {
-            setLoadingOptions(true);
-            // Determine correct table and column
-            // If column contains '.', it's a foreign column like "providers.provider_name"
-            let queryTable = tableName;
-            let queryColumn = filter.column;
-
-            if (filter.column.includes('.')) {
-                const [relTable, relCol] = filter.column.split('.');
-                queryTable = relTable;
-                queryColumn = relCol;
+    const [, drop] = useDrop({
+        accept: 'FILTER',
+        hover: (item: { index: number }) => {
+            if (item.index !== index) {
+                moveFilter(item.index, index);
+                item.index = index;
             }
-
-            console.log('[FilterItem] Fetching distinct values:', { queryTable, queryColumn });
-
-            databaseApi
-                .fetchDistinctValues(queryTable, queryColumn)
-                .then((result) => {
-                    if (result.success) {
-                        setOptions(result.data || []);
-                    }
-                    setLoadingOptions(false);
-                })
-                .catch(() => {
-                    setLoadingOptions(false);
-                });
         }
-    }, [filter.column, filter.filterType, tableName]);
+    });
 
-    const filteredOptions = options.filter(opt =>
-        opt.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const displayName = filter.label || filter.column || 'Unconfigured';
+    const filterTypeLabel = FILTER_TYPE_LABELS[filter.filterType] || 'Text';
+    const selectedColumn = columns.find(c => c.name === filter.column);
 
     return (
-        <div className="p-3 border rounded-lg space-y-3 bg-background">
-            <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 grid grid-cols-2 gap-2">
-                    {/* Column Selection */}
-                    <div>
-                        <Label className="text-xs">Column</Label>
-                        <Select
-                            value={filter.column}
-                            onValueChange={(column) => onUpdate({ ...filter, column })}
-                        >
-                            <SelectTrigger className="h-8">
-                                <SelectValue placeholder="Select column" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {columns.map((col) => (
-                                    <SelectItem key={col.name} value={col.name}>
-                                        {col.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {/* Filter Type */}
-                    <div>
-                        <Label className="text-xs">Filter Type</Label>
-                        <Select
-                            value={filter.filterType}
-                            onValueChange={(filterType: any) => onUpdate({ ...filter, filterType })}
-                        >
-                            <SelectTrigger className="h-8">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="text">Text Input</SelectItem>
-                                <SelectItem value="dropdown">Dropdown</SelectItem>
-                                <SelectItem value="multiselect">Multi-Select</SelectItem>
-                                <SelectItem value="number">Number Range</SelectItem>
-                                <SelectItem value="dateRange">Date Range</SelectItem>
-                                <SelectItem value="boolean">Boolean Toggle</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </div>
-
-                {/* Remove Button */}
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive hover:text-destructive mt-4"
-                    onClick={onRemove}
-                >
-                    <X className="h-4 w-4" />
-                </Button>
+        <div
+            ref={(node) => preview(drop(node))}
+            className={`flex items-center gap-2 p-1.5 border-b last:border-0 bg-background hover:bg-muted/30 transition-colors ${isDragging ? 'opacity-50' : ''
+                }`}
+        >
+            {/* Drag Handle */}
+            <div ref={drag} className="cursor-move text-muted-foreground hover:text-foreground p-1">
+                <GripVertical className="w-3.5 h-3.5" />
             </div>
 
-            {/* Filter Options Preview (for dropdown/multiselect) */}
-            {(filter.filterType === 'dropdown' || filter.filterType === 'multiselect') && (
-                <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">
-                        {loadingOptions ? 'Loading options...' : `${options.length} options available`}
-                    </Label>
-
-                    {options.length > 0 && (
+            {/* Filter Name & Edit Trigger */}
+            <Popover>
+                <PopoverTrigger asChild>
+                    <div className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer group">
+                        <span className={`font-medium text-sm truncate select-none ${!filter.column ? 'text-muted-foreground italic' : ''}`}>
+                            {displayName}
+                        </span>
+                        <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 ml-auto">
+                            {filterTypeLabel}
+                        </Badge>
+                        {selectedColumn?.isRelated && (
+                            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-purple-50 text-purple-700 border-purple-200">
+                                Related
+                            </Badge>
+                        )}
+                    </div>
+                </PopoverTrigger>
+                <PopoverContent className="w-80" align="start">
+                    <div className="space-y-4">
                         <div className="space-y-2">
-                            <Input
-                                placeholder="Search options..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="h-7 text-xs"
-                            />
-                            <div className="max-h-32 overflow-y-auto border rounded p-2 space-y-1">
-                                {filteredOptions.slice(0, 10).map((opt, idx) => (
-                                    <div key={idx} className="text-xs px-2 py-1 hover:bg-muted rounded">
-                                        {opt}
-                                    </div>
-                                ))}
-                                {filteredOptions.length > 10 && (
-                                    <div className="text-xs text-muted-foreground px-2 py-1">
-                                        +{filteredOptions.length - 10} more
-                                    </div>
-                                )}
-                            </div>
+                            <h4 className="font-medium leading-none">Filter Settings</h4>
+                            <p className="text-sm text-muted-foreground">
+                                Configure this filter's column, type, and display label.
+                            </p>
                         </div>
-                    )}
-                </div>
-            )}
+                        <div className="grid gap-3">
+                            {/* Column Selection */}
+                            <div className="grid grid-cols-3 items-center gap-4">
+                                <Label>Column</Label>
+                                <Select
+                                    value={filter.column || ''}
+                                    onValueChange={(column) => updateFilter({ ...filter, column })}
+                                >
+                                    <SelectTrigger className="col-span-2 h-8">
+                                        <SelectValue placeholder="Select column" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {columns.map((col) => (
+                                            <SelectItem key={col.name} value={col.name}>
+                                                <div className="flex items-center gap-2">
+                                                    <span>{col.name}</span>
+                                                    {col.isRelated && (
+                                                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 bg-purple-50 text-purple-700 border-purple-200">
+                                                            Related
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
 
-            {/* Date Range Configuration */}
-            {filter.filterType === 'dateRange' && (
-                <div className="space-y-2">
-                    <Label className="text-xs">Last X Days</Label>
-                    <Input
-                        type="number"
-                        placeholder="e.g., 7, 30, 90"
-                        value={filter.value?.lastDays || ''}
-                        onChange={(e) => onUpdate({
-                            ...filter,
-                            value: { lastDays: parseInt(e.target.value) || undefined }
-                        })}
-                        className="h-7 text-xs"
-                    />
-                </div>
-            )}
+                            {/* Filter Type */}
+                            <div className="grid grid-cols-3 items-center gap-4">
+                                <Label>Type</Label>
+                                <Select
+                                    value={filter.filterType}
+                                    onValueChange={(filterType: any) => updateFilter({ ...filter, filterType })}
+                                >
+                                    <SelectTrigger className="col-span-2 h-8">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="text">Text Input</SelectItem>
+                                        <SelectItem value="dropdown">Dropdown</SelectItem>
+                                        <SelectItem value="multiselect">Multi-Select</SelectItem>
+                                        <SelectItem value="number">Number Range</SelectItem>
+                                        <SelectItem value="dateRange">Date Range</SelectItem>
+                                        <SelectItem value="boolean">Boolean Toggle</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
 
-            {/* Custom Label */}
-            <div>
-                <Label className="text-xs text-muted-foreground">
-                    Custom Label (optional)
-                </Label>
-                <Input
-                    placeholder={filter.column || 'Filter label'}
-                    value={filter.label || ''}
-                    onChange={(e) => onUpdate({ ...filter, label: e.target.value })}
-                    className="h-7 text-xs"
-                />
-            </div>
+                            {/* Custom Label */}
+                            <div className="grid grid-cols-3 items-center gap-4">
+                                <Label>Label</Label>
+                                <Input
+                                    value={filter.label || ''}
+                                    onChange={(e) => updateFilter({ ...filter, label: e.target.value })}
+                                    placeholder={filter.column || 'Filter label'}
+                                    className="col-span-2 h-8"
+                                />
+                            </div>
+
+                            {/* Original Column Type */}
+                            {selectedColumn && (
+                                <div className="grid grid-cols-3 items-center gap-4">
+                                    <Label className="text-muted-foreground">Column Type</Label>
+                                    <div className="col-span-2">
+                                        <Badge variant="secondary" className="text-xs font-normal">
+                                            {selectedColumn.type}
+                                        </Badge>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </PopoverContent>
+            </Popover>
+
+            {/* Remove Button */}
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                onClick={removeFilter}
+            >
+                <X className="h-3.5 w-3.5" />
+            </Button>
         </div>
     );
 };
@@ -223,6 +220,31 @@ export const FilterConfigurator: React.FC<FilterConfiguratorProps> = ({
         }
     }, [tableName, loadTableSchema]);
 
+    // Build columns list including related columns from columnOrder
+    const columns: { name: string; type: string; isRelated?: boolean }[] = [];
+
+    if (schema?.columns) {
+        schema.columns.forEach((c: any) => {
+            columns.push({ name: c.name, type: c.type, isRelated: false });
+        });
+    }
+
+    // Add related columns from columnOrder
+    columnOrder.forEach(col => {
+        if (col.includes('.')) {
+            const [relTable, relCol] = col.split('.');
+            const relTableSchema = globalSchema.tables.find((t: any) => t.table_name === relTable);
+            let colType = 'text';
+            if (relTableSchema?.columns) {
+                const foundCol = relTableSchema.columns.find((c: any) => c.column_name === relCol);
+                if (foundCol) colType = foundCol.data_type;
+            }
+            if (!columns.some(c => c.name === col)) {
+                columns.push({ name: col, type: colType, isRelated: true });
+            }
+        }
+    });
+
     const addFilter = () => {
         const newFilter: FilterConfig = {
             id: `filter-${Date.now()}`,
@@ -243,10 +265,17 @@ export const FilterConfigurator: React.FC<FilterConfiguratorProps> = ({
         onFiltersChange(newFilters);
     };
 
+    const moveFilter = (dragIndex: number, hoverIndex: number) => {
+        const newFilters = [...filters];
+        const [draggedItem] = newFilters.splice(dragIndex, 1);
+        newFilters.splice(hoverIndex, 0, draggedItem);
+        onFiltersChange(newFilters);
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center p-4">
-                <div className="text-sm text-muted-foreground">Loading columns...</div>
+                <div className="text-sm text-muted-foreground">Loading...</div>
             </div>
         );
     }
@@ -259,66 +288,45 @@ export const FilterConfigurator: React.FC<FilterConfiguratorProps> = ({
         );
     }
 
-    // Build columns list including related columns from columnOrder
-    const baseColumns: { name: string; type: string; isRelated?: boolean }[] = (schema.columns || []).map((c: any) => ({
-        name: c.name,
-        type: c.type,
-        isRelated: false
-    }));
-
-    // Add related columns from columnOrder
-    const relatedColumns: { name: string; type: string; isRelated: boolean }[] = [];
-    columnOrder.forEach(col => {
-        if (col.includes('.')) {
-            const [relTable, relCol] = col.split('.');
-            // Get type from globalSchema
-            const relTableSchema = globalSchema.tables.find((t: any) => t.table_name === relTable);
-            let colType = 'text';
-            if (relTableSchema?.columns) {
-                const foundCol = relTableSchema.columns.find((c: any) => c.column_name === relCol);
-                if (foundCol) colType = foundCol.data_type;
-            }
-            if (!baseColumns.some(c => c.name === col)) {
-                relatedColumns.push({ name: col, type: colType, isRelated: true });
-            }
-        }
-    });
-
-    const columns = [...baseColumns, ...relatedColumns];
-
     return (
-        <div className="space-y-3">
-            <div className="flex items-center justify-between">
-                <Label>Frontend Filters</Label>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={addFilter}
-                    className="h-8"
-                >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Filter
-                </Button>
-            </div>
+        <DndProvider backend={HTML5Backend}>
+            <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <Filter className="w-4 h-4 text-muted-foreground" />
+                        <Label className="font-medium">Frontend Filters</Label>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={addFilter}
+                        className="h-7 text-xs"
+                    >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add
+                    </Button>
+                </div>
 
-            {filters.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg">
-                    No filters configured. Click "Add Filter" to create one.
-                </div>
-            ) : (
-                <div className="space-y-3">
-                    {filters.map((filter, index) => (
-                        <FilterItem
-                            key={filter.id}
-                            filter={filter}
-                            columns={columns}
-                            tableName={tableName}
-                            onUpdate={(updated) => updateFilter(index, updated)}
-                            onRemove={() => removeFilter(index)}
-                        />
-                    ))}
-                </div>
-            )}
-        </div>
+                {filters.length === 0 ? (
+                    <div className="text-center py-6 text-muted-foreground text-sm border rounded-lg bg-muted/20">
+                        No filters. Click "Add" to create one.
+                    </div>
+                ) : (
+                    <div className="border rounded-lg overflow-hidden">
+                        {filters.map((filter, index) => (
+                            <DraggableFilterItem
+                                key={filter.id}
+                                filter={filter}
+                                index={index}
+                                columns={columns}
+                                moveFilter={moveFilter}
+                                updateFilter={(updated) => updateFilter(index, updated)}
+                                removeFilter={() => removeFilter(index)}
+                            />
+                        ))}
+                    </div>
+                )}
+            </div>
+        </DndProvider>
     );
 };

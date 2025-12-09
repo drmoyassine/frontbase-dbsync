@@ -54,31 +54,44 @@ BEGIN
   LOOP
     join_clause := join_clause || ' ' || (join_item->>'type') || ' JOIN ' || (join_item->>'table') || ' ON ' || (join_item->>'on');
   END LOOP;
-
   -- Build ORDER BY clause
   IF sort_col IS NOT NULL AND sort_col != '' THEN
-    -- Use LOWER() for case-insensitive text sorting implies converting to text
-    -- We assume sort_col is safe or simple enough. 
-    -- For robust ASCII sorting of text, LOWER() is usually sufficient for "A vs a" confusion.
-    order_clause := 'ORDER BY ' || sort_col || ' ' || sort_dir;
-    
-    -- Heuristic: If it looks like a text column, try wrap in LOWER? 
-    -- Hard to know type here without introspection. 
-    -- For now, let's rely on the caller passing "LOWER(col)" if they want, OR we can default simple cols to LOWER.
-    -- Better strategy: The Prompt requested fixing "Text columns do NOT sort correctly". 
-    -- So we should force case-insensitive sort if possible.
-    -- But we don't know the type. 
-    -- Let's try to detect if it's a simple column name and wrap it.
-    -- IF sort_col ~ '^[a-zA-Z0-9_.]+$' THEN
-    --    order_clause := 'ORDER BY LOWER(' || sort_col || '::text) ' || sort_dir;
-    -- END IF;
-    -- To play it safe and generic, we will trust the input or upgrade this later.
-    -- User specifically mentioned: "Move sorting logic... NO client-side sorting".
-    -- "Example: ACAP appears AFTER City".
-    -- We will wrap in LOWER() cast to text for safety on unspecified types, 
-    -- assuming the user passes a column name.
-    
-    order_clause := 'ORDER BY LOWER(' || sort_col || '::text) ' || sort_dir;
+    DECLARE
+        sort_table text;
+        clean_sort_col text;
+        col_type text;
+    BEGIN
+        -- Attempt to detect table and column name
+        -- Handle "table"."column" format
+        IF sort_col LIKE '%.%' THEN
+           sort_table := split_part(sort_col, '.', 1);
+           clean_sort_col := split_part(sort_col, '.', 2);
+        ELSE
+           sort_table := table_name;
+           clean_sort_col := sort_col;
+        END IF;
+
+        -- Clean quotes
+        sort_table := replace(sort_table, '"', '');
+        clean_sort_col := replace(clean_sort_col, '"', '');
+
+        -- Lookup Type
+        SELECT data_type INTO col_type
+        FROM information_schema.columns
+        WHERE table_schema = 'public' 
+          AND table_name = sort_table 
+          AND column_name = clean_sort_col;
+        
+        -- Apply LOWER if Text
+        IF col_type IN ('text', 'character varying', 'varchar', 'char', 'citext') THEN
+             order_clause := 'ORDER BY LOWER(' || sort_col || '::text) ' || sort_dir;
+        ELSE
+             order_clause := 'ORDER BY ' || sort_col || ' ' || sort_dir;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        -- Fallback if something goes wrong (e.g. strict permissions or weird identifiers)
+        order_clause := 'ORDER BY ' || sort_col || ' ' || sort_dir;
+    END;
   ELSE
     order_clause := ''; 
   END IF;

@@ -185,34 +185,35 @@ export function UniversalDataTable({
       allColumnsMap.set(col.name, col);
     });
 
+    // Helper to ensure related column exists in map
+    const ensureRelatedColumn = (key: string) => {
+      if (!allColumnsMap.has(key) && key.includes('.')) {
+        const [tableName, columnName] = key.split('.');
+        allColumnsMap.set(key, {
+          name: key,
+          type: 'text',
+          relatedTable: tableName,
+          relatedColumn: columnName
+        });
+      }
+    };
+
     // Add related columns from overrides
     if (binding?.columnOverrides) {
       Object.keys(binding.columnOverrides).forEach(key => {
-        if (key.includes('.')) {
-          // Ensure we haven't already added this (unlikely for valid schema, but good safety)
-          if (!allColumnsMap.has(key)) {
-            const [tableName, columnName] = key.split('.');
-            allColumnsMap.set(key, {
-              name: key,
-              type: 'text',
-              relatedTable: tableName,
-              relatedColumn: columnName
-            });
-          }
-        }
+        ensureRelatedColumn(key);
       });
     }
 
     // 2. Determine visible columns based on overrides
+    const isVisible = (key: string) => {
+      const override = binding?.columnOverrides?.[key];
+      return override?.visible !== false;
+    };
+
     const visibleKeys = new Set<string>();
     allColumnsMap.forEach((col, key) => {
-      const override = binding?.columnOverrides?.[key];
-      // Default to visible if no override, unless it's a related column (which we only show if explicitly added/visible usually, 
-      // but here we just check 'visible !== false' to be permissive, as the Configurator controls the specific list)
-      // Actually, related columns without overrides shouldn't just appear. 
-      // But the map only has related columns IF they are in overrides.
-      // Base columns appear by default.
-      if (override?.visible !== false) {
+      if (isVisible(key)) {
         visibleKeys.add(key);
       }
     });
@@ -221,9 +222,17 @@ export function UniversalDataTable({
     if (binding?.columnOrder && binding.columnOrder.length > 0) {
       // Add columns in order
       binding.columnOrder.forEach(key => {
-        if (visibleKeys.has(key)) {
-          columns.push(allColumnsMap.get(key));
-          visibleKeys.delete(key); // Remove so we don't add again
+        // Ensure related columns in order exist in map (robustness)
+        ensureRelatedColumn(key);
+
+        // Re-check visibility for potentially newly added columns
+        if (isVisible(key)) {
+          // Note: We don't check visibleKeys here strictly because we might have just added it to map
+          const col = allColumnsMap.get(key);
+          if (col) {
+            columns.push(col);
+            visibleKeys.delete(key);
+          }
         }
       });
       // Add remaining visible columns (fallback for those not in order list)
@@ -233,8 +242,6 @@ export function UniversalDataTable({
       });
     } else {
       // Default order: Base columns then Related columns
-      // Actually, just use Schema order for base, then alpha for others? 
-      // Let's stick to the previous behavior: Schema order first.
       schema.columns.forEach((col: any) => {
         if (visibleKeys.has(col.name)) {
           columns.push(col);

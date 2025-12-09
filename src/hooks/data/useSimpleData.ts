@@ -181,7 +181,8 @@ export function useSimpleData({
             fetchData();
         }, 300);
         return () => clearTimeout(timeoutId);
-    }, [autoFetch, bindingKey, paginationKey, sortingKey, filtersKey, searchQuery, connected, fetchData]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoFetch, bindingKey, paginationKey, sortingKey, filtersKey, searchQuery, connected]);
 
     // Action functions
     const setFilters = useCallback((newFilters: Record<string, any>) => {

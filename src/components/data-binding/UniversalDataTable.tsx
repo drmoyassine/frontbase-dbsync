@@ -604,10 +604,7 @@ export function UniversalDataTable({
                       <TableRow key={index} className="h-12">
                         {visibleColumns.map((column: any) => (
                           <TableCell key={column.name} className="max-w-[200px] truncate whitespace-nowrap py-2">
-                            {renderColumnWithSettings(
-                              column.name,
-                              formatValue(row[column.name], column.name, row)
-                            )}
+                            {formatValue(row[column.name], column.name, row)}
                           </TableCell>
                         ))}
                       </TableRow>

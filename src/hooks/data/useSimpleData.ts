@@ -57,6 +57,7 @@ export interface UseSimpleDataResult {
     loading: boolean;
     error: string | null;
     schema: any;
+    currentSorting: { column?: string; direction?: 'asc' | 'desc' };
     refetch: () => Promise<void>;
     setFilters: (filters: Record<string, any>) => void;
     setSorting: (column: string, direction: 'asc' | 'desc') => void;
@@ -218,5 +219,6 @@ export function useSimpleData({
         setSorting,
         setPagination,
         setSearchQuery,
+        currentSorting: sorting,
     };
 }

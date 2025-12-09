@@ -65,7 +65,8 @@ export function UniversalDataTable({
     setFilters,
     setSorting,
     setPagination,
-    setSearchQuery
+    setSearchQuery,
+    currentSorting
   } = useSimpleData({
     componentId,
     binding,
@@ -75,11 +76,13 @@ export function UniversalDataTable({
   const [searchInput, setSearchInput] = useState('');
 
   const handleSort = (column: string) => {
-    console.log('[UniversalDataTable] handleSort triggered for:', column);
+    console.log('[UniversalDataTable] handleSort triggered for:', column, 'currentSorting:', currentSorting);
     if (!binding?.sorting.enabled) return;
 
-    const currentDirection = binding.sorting.column === column ? binding.sorting.direction : undefined;
+    // Use currentSorting from useSimpleData (local state) instead of binding prop
+    const currentDirection = currentSorting?.column === column ? currentSorting?.direction : undefined;
     const newDirection = currentDirection === 'asc' ? 'desc' : 'asc';
+    console.log('[UniversalDataTable] Toggle:', currentDirection, '->', newDirection);
     setSorting(column, newDirection);
   };
 

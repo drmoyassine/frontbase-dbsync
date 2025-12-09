@@ -123,7 +123,16 @@ export function UniversalDataTable({
     let actualValue = value;
     if (row && columnName.includes('.')) {
       const [tableName, colName] = columnName.split('.');
-      const relationData = row[tableName];
+      let relationData = row[tableName];
+
+      // Fallback: Case-insensitive lookup if direct access fails
+      if (!relationData) {
+        const lowerTableName = tableName.toLowerCase();
+        const matchingKey = Object.keys(row).find(k => k.toLowerCase() === lowerTableName);
+        if (matchingKey) {
+          relationData = row[matchingKey];
+        }
+      }
 
       // Handle array response (common in PostgREST for relations) or single object
       if (Array.isArray(relationData)) {

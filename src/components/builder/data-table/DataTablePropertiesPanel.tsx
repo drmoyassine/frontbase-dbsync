@@ -412,6 +412,7 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                         dataSourceId={binding.dataSourceId}
                         filters={binding.frontendFilters || []}
                         onFiltersChange={(filters) => updateBinding({ frontendFilters: filters })}
+                        columnOrder={binding.columnOrder}
                     />
                 ) : (
                     <div className="text-center py-8 text-muted-foreground">

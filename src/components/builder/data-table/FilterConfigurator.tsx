@@ -14,6 +14,7 @@ interface FilterConfiguratorProps {
     dataSourceId?: string;
     filters: FilterConfig[];
     onFiltersChange: (filters: FilterConfig[]) => void;
+    columnOrder?: string[]; // To include related columns
 }
 
 interface FilterItemProps {
@@ -199,9 +200,10 @@ export const FilterConfigurator: React.FC<FilterConfiguratorProps> = ({
     tableName,
     dataSourceId,
     filters,
-    onFiltersChange
+    onFiltersChange,
+    columnOrder = []
 }) => {
-    const { loadTableSchema } = useDataBindingStore();
+    const { loadTableSchema, globalSchema } = useDataBindingStore();
     const [schema, setSchema] = useState<any>(null);
     const [loading, setLoading] = useState(false);
 
@@ -257,7 +259,32 @@ export const FilterConfigurator: React.FC<FilterConfiguratorProps> = ({
         );
     }
 
-    const columns = schema.columns || [];
+    // Build columns list including related columns from columnOrder
+    const baseColumns: { name: string; type: string; isRelated?: boolean }[] = (schema.columns || []).map((c: any) => ({
+        name: c.name,
+        type: c.type,
+        isRelated: false
+    }));
+
+    // Add related columns from columnOrder
+    const relatedColumns: { name: string; type: string; isRelated: boolean }[] = [];
+    columnOrder.forEach(col => {
+        if (col.includes('.')) {
+            const [relTable, relCol] = col.split('.');
+            // Get type from globalSchema
+            const relTableSchema = globalSchema.tables.find((t: any) => t.table_name === relTable);
+            let colType = 'text';
+            if (relTableSchema?.columns) {
+                const foundCol = relTableSchema.columns.find((c: any) => c.column_name === relCol);
+                if (foundCol) colType = foundCol.data_type;
+            }
+            if (!baseColumns.some(c => c.name === col)) {
+                relatedColumns.push({ name: col, type: colType, isRelated: true });
+            }
+        }
+    });
+
+    const columns = [...baseColumns, ...relatedColumns];
 
     return (
         <div className="space-y-3">

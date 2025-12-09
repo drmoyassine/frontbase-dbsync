@@ -306,14 +306,22 @@ export const useDataBindingStore = create<DataBindingState>()(
           // Execute RPC
           let result;
 
-          // Build filters array from frontendFilters (only include filters with values)
+          // Build filters array from frontendFilters, merging runtime values from binding.filtering.filters
+          // Runtime values are stored as { [column]: { filterType, value } }
+          const runtimeFilterValues = binding.filtering?.filters || {};
+
           const filters = (binding.frontendFilters || [])
-            .filter(f => f.column && f.value !== undefined && f.value !== null && f.value !== '')
-            .map(f => ({
-              column: f.column,
-              filterType: f.filterType,
-              value: f.value
-            }));
+            .map(f => {
+              // Check if there's a runtime value for this filter
+              const runtimeValue = runtimeFilterValues[f.column];
+              const value = runtimeValue?.value !== undefined ? runtimeValue.value : f.value;
+              return {
+                column: f.column,
+                filterType: f.filterType,
+                value
+              };
+            })
+            .filter(f => f.column && f.value !== undefined && f.value !== null && f.value !== '');
 
           console.log('[DEBUG] RPC Params:', {
             table_name: binding.tableName,

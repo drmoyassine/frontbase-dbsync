@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,7 @@ import { useSimpleData } from '@/hooks/useSimpleData';
 import { cn } from '@/lib/utils';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { FilterConfig } from '@/hooks/data/useSimpleData';
+import { FilterBar } from './FilterBar';
 
 interface ComponentDataBinding {
   componentId: string;
@@ -75,6 +76,27 @@ export function UniversalDataTable({
   });
 
   const [searchInput, setSearchInput] = useState('');
+  const [runtimeFilters, setRuntimeFilters] = useState<FilterConfig[]>([]);
+
+  // Sync runtimeFilters with binding.frontendFilters
+  useEffect(() => {
+    if (binding?.frontendFilters) {
+      setRuntimeFilters(binding.frontendFilters);
+    }
+  }, [binding?.frontendFilters]);
+
+  // Update filters when runtime filter values change
+  const handleFilterValuesChange = (updatedFilters: FilterConfig[]) => {
+    setRuntimeFilters(updatedFilters);
+    // Convert to format expected by setFilters: { [column]: value }
+    const filterRecord: Record<string, any> = {};
+    updatedFilters.forEach(f => {
+      if (f.column && f.value !== undefined && f.value !== null && f.value !== '') {
+        filterRecord[f.column] = { filterType: f.filterType, value: f.value };
+      }
+    });
+    setFilters(filterRecord);
+  };
 
   const handleSort = (column: string) => {
     console.log('[UniversalDataTable] handleSort triggered for:', column, 'currentSorting:', currentSorting);
@@ -377,6 +399,17 @@ export function UniversalDataTable({
           </div>
         )}
       </CardHeader>
+
+      {/* Filter Bar */}
+      {runtimeFilters.length > 0 && (
+        <div className="px-6 pb-4">
+          <FilterBar
+            filters={runtimeFilters}
+            tableName={binding.tableName}
+            onFilterValuesChange={handleFilterValuesChange}
+          />
+        </div>
+      )}
 
       <CardContent>
         {loading ? (

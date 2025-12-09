@@ -306,6 +306,15 @@ export const useDataBindingStore = create<DataBindingState>()(
           // Execute RPC
           let result;
 
+          // Build filters array from frontendFilters (only include filters with values)
+          const filters = (binding.frontendFilters || [])
+            .filter(f => f.column && f.value !== undefined && f.value !== null && f.value !== '')
+            .map(f => ({
+              column: f.column,
+              filterType: f.filterType,
+              value: f.value
+            }));
+
           console.log('[DEBUG] RPC Params:', {
             table_name: binding.tableName,
             columns,
@@ -314,6 +323,7 @@ export const useDataBindingStore = create<DataBindingState>()(
             sort_dir,
             search_query,
             search_cols,
+            filters,
             page: binding.pagination.page + 1,
             page_size: binding.pagination.pageSize
           });
@@ -335,6 +345,7 @@ export const useDataBindingStore = create<DataBindingState>()(
               joins,
               sort_col,
               sort_dir,
+              filters, // NEW: Pass filters to RPC
               page: binding.pagination.page + 1, // 1-based
               page_size: binding.pagination.pageSize
             });

@@ -33,7 +33,8 @@ CREATE OR REPLACE FUNCTION frontbase_get_rows(
   sort_col text DEFAULT NULL,
   sort_dir text DEFAULT 'asc',
   page int DEFAULT 1,
-  page_size int DEFAULT 10
+  page_size int DEFAULT 10,
+  filters jsonb DEFAULT '[]'::jsonb  -- NEW: Array of filter objects
 )
 RETURNS json
 LANGUAGE plpgsql
@@ -48,12 +49,102 @@ DECLARE
   join_item jsonb;
   join_clause text := '';
   order_clause text := '';
+  where_clause text := '';
+  filter_item jsonb;
+  filter_col text;
+  filter_type text;
+  filter_value jsonb;
+  condition text;
 BEGIN
   -- Build JOIN clause
   FOR join_item IN SELECT * FROM jsonb_array_elements(joins)
   LOOP
     join_clause := join_clause || ' ' || (join_item->>'type') || ' JOIN ' || (join_item->>'table') || ' ON ' || (join_item->>'on');
   END LOOP;
+  
+  -- Build WHERE clause from filters
+  FOR filter_item IN SELECT * FROM jsonb_array_elements(filters)
+  LOOP
+    filter_col := filter_item->>'column';
+    filter_type := filter_item->>'filterType';
+    filter_value := filter_item->'value';
+    
+    -- Skip if no column or value
+    IF filter_col IS NULL OR filter_col = '' OR filter_value IS NULL THEN
+      CONTINUE;
+    END IF;
+    
+    -- Build condition based on filter type
+    condition := NULL;
+    
+    CASE filter_type
+      WHEN 'text' THEN
+        -- Text search with ILIKE
+        IF filter_value::text != 'null' AND filter_value::text != '""' THEN
+          condition := format('%I ILIKE %L', filter_col, '%' || (filter_value#>>'{}') || '%');
+        END IF;
+        
+      WHEN 'dropdown' THEN
+        -- Exact match
+        IF filter_value::text != 'null' AND filter_value::text != '""' THEN
+          condition := format('%I = %L', filter_col, filter_value#>>'{}');
+        END IF;
+        
+      WHEN 'multiselect' THEN
+        -- IN clause for array of values
+        IF jsonb_array_length(filter_value) > 0 THEN
+          condition := format('%I IN (SELECT jsonb_array_elements_text(%L::jsonb))', filter_col, filter_value::text);
+        END IF;
+        
+      WHEN 'number' THEN
+        -- Number range: expects {min: X, max: Y}
+        IF filter_value->>'min' IS NOT NULL THEN
+          condition := format('%I >= %s', filter_col, (filter_value->>'min')::numeric);
+        END IF;
+        IF filter_value->>'max' IS NOT NULL THEN
+          IF condition IS NOT NULL THEN
+            condition := condition || ' AND ';
+          END IF;
+          condition := COALESCE(condition, '') || format('%I <= %s', filter_col, (filter_value->>'max')::numeric);
+        END IF;
+        
+      WHEN 'dateRange' THEN
+        -- Date range: expects {start: 'YYYY-MM-DD', end: 'YYYY-MM-DD'} or {lastDays: N}
+        IF filter_value->>'lastDays' IS NOT NULL THEN
+          condition := format('%I >= NOW() - INTERVAL %L', filter_col, (filter_value->>'lastDays')::int || ' days');
+        ELSE
+          IF filter_value->>'start' IS NOT NULL THEN
+            condition := format('%I >= %L', filter_col, filter_value->>'start');
+          END IF;
+          IF filter_value->>'end' IS NOT NULL THEN
+            IF condition IS NOT NULL THEN
+              condition := condition || ' AND ';
+            END IF;
+            condition := COALESCE(condition, '') || format('%I <= %L', filter_col, filter_value->>'end');
+          END IF;
+        END IF;
+        
+      WHEN 'boolean' THEN
+        -- Boolean comparison
+        IF filter_value::text = 'true' OR filter_value::text = 'false' THEN
+          condition := format('%I = %s', filter_col, filter_value::boolean);
+        END IF;
+        
+      ELSE
+        -- Unknown filter type, skip
+        condition := NULL;
+    END CASE;
+    
+    -- Append condition to WHERE clause
+    IF condition IS NOT NULL AND condition != '' THEN
+      IF where_clause = '' THEN
+        where_clause := 'WHERE ' || condition;
+      ELSE
+        where_clause := where_clause || ' AND ' || condition;
+      END IF;
+    END IF;
+  END LOOP;
+  
   -- Build ORDER BY clause
   IF sort_col IS NOT NULL AND sort_col != '' THEN
     DECLARE
@@ -79,7 +170,7 @@ BEGIN
         SELECT data_type INTO col_type
         FROM information_schema.columns
         WHERE table_schema = 'public' 
-          AND table_name = sort_table 
+          AND information_schema.columns.table_name = sort_table 
           AND column_name = clean_sort_col;
         
         -- Build quoted column reference for ORDER BY
@@ -110,12 +201,13 @@ BEGIN
 
   offset_val := (page - 1) * page_size;
 
-  -- Construct Main Query
+  -- Construct Main Query (now with WHERE clause)
   query := format(
-    'SELECT %s FROM %I %s %s LIMIT %s OFFSET %s',
+    'SELECT %s FROM %I %s %s %s LIMIT %s OFFSET %s',
     columns,
     table_name,
     join_clause,
+    where_clause,
     order_clause,
     page_size,
     offset_val
@@ -124,11 +216,12 @@ BEGIN
   -- Execute Main Query
   EXECUTE 'SELECT json_agg(t) FROM (' || query || ') t' INTO result;
 
-  -- Construct Count Query (for pagination)
+  -- Construct Count Query (for pagination - also needs WHERE clause)
   count_query := format(
-    'SELECT COUNT(*) FROM %I %s',
+    'SELECT COUNT(*) FROM %I %s %s',
     table_name,
-    join_clause
+    join_clause,
+    where_clause
   );
   
   EXECUTE count_query INTO total_count;
@@ -139,7 +232,8 @@ BEGIN
     'total', total_count,
     'page', page,
     'page_size', page_size,
-    '_debug_order', order_clause
+    '_debug_order', order_clause,
+    '_debug_where', where_clause
   );
 END;
 $$;

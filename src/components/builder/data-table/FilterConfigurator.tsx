@@ -19,6 +19,7 @@ interface FilterConfiguratorProps {
 interface FilterItemProps {
     filter: FilterConfig;
     columns: { name: string; type: string }[];
+    tableName: string; // Added tableName prop
     onUpdate: (filter: FilterConfig) => void;
     onRemove: () => void;
 }
@@ -26,6 +27,7 @@ interface FilterItemProps {
 const FilterItem: React.FC<FilterItemProps> = ({
     filter,
     columns,
+    tableName,
     onUpdate,
     onRemove
 }) => {
@@ -40,8 +42,21 @@ const FilterItem: React.FC<FilterItemProps> = ({
             (filter.filterType === 'dropdown' || filter.filterType === 'multiselect')
         ) {
             setLoadingOptions(true);
+            // Determine correct table and column
+            // If column contains '.', it's a foreign column like "providers.provider_name"
+            let queryTable = tableName;
+            let queryColumn = filter.column;
+
+            if (filter.column.includes('.')) {
+                const [relTable, relCol] = filter.column.split('.');
+                queryTable = relTable;
+                queryColumn = relCol;
+            }
+
+            console.log('[FilterItem] Fetching distinct values:', { queryTable, queryColumn });
+
             databaseApi
-                .fetchDistinctValues(filter.column.split('.')[0], filter.column.split('.').pop() || filter.column)
+                .fetchDistinctValues(queryTable, queryColumn)
                 .then((result) => {
                     if (result.success) {
                         setOptions(result.data || []);
@@ -52,7 +67,7 @@ const FilterItem: React.FC<FilterItemProps> = ({
                     setLoadingOptions(false);
                 });
         }
-    }, [filter.column, filter.filterType]);
+    }, [filter.column, filter.filterType, tableName]);
 
     const filteredOptions = options.filter(opt =>
         opt.toLowerCase().includes(searchQuery.toLowerCase())
@@ -270,6 +285,7 @@ export const FilterConfigurator: React.FC<FilterConfiguratorProps> = ({
                             key={filter.id}
                             filter={filter}
                             columns={columns}
+                            tableName={tableName}
                             onUpdate={(updated) => updateFilter(index, updated)}
                             onRemove={() => removeFilter(index)}
                         />

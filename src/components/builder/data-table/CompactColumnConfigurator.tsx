@@ -463,7 +463,9 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
                     {orderedColumns.map((column, index) => {
                         const override = columnOverrides[column.name] || {};
                         const isExpanded = expandedFKs.has(column.name);
-                        const relatedSchema = column.foreignKey ? relatedSchemas.get(column.foreignKey.table) : null;
+                        // Prevent expanding self-referencing foreign keys (matches backend limitation)
+                        const isSelfReference = column.foreignKey?.table === tableName;
+                        const relatedSchema = column.foreignKey && !isSelfReference ? relatedSchemas.get(column.foreignKey.table) : null;
 
                         return (
                             <React.Fragment key={column.name}>
@@ -481,11 +483,11 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
                                         }
                                     }}
                                     isExpanded={isExpanded}
-                                    onToggleExpand={toggleFKExpansion}
+                                    onToggleExpand={!isSelfReference ? toggleFKExpansion : undefined}
                                 />
 
                                 {/* Render related columns when expanded - CATALOG MODE */}
-                                {isExpanded && relatedSchema && column.foreignKey && (
+                                {isExpanded && relatedSchema && column.foreignKey && !isSelfReference && (
                                     <div className="bg-muted/30 pl-12 border-b">
                                         <div className="px-1.5 py-1 text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">
                                             Available Columns from {column.foreignKey.table}

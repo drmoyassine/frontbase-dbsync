@@ -215,6 +215,18 @@ export const useDataBindingStore = create<DataBindingState>()(
             });
           }
 
+          // Also check columnOrder to ensure we fetch data for ordered columns even if missing from overrides
+          if (binding.columnOrder) {
+            binding.columnOrder.forEach(key => {
+              if (key.includes('.')) {
+                const [table, column] = key.split('.');
+                if (table && column) {
+                  relatedTables.add(table);
+                }
+              }
+            });
+          }
+
           // Add related tables to select (e.g., "institutions(*)")
           relatedTables.forEach(table => {
             // Prevent adding self-reference as a relation unless it's distinct (which this logic doesn't support yet)

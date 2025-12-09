@@ -123,7 +123,14 @@ export function UniversalDataTable({
     let actualValue = value;
     if (row && columnName.includes('.')) {
       const [tableName, colName] = columnName.split('.');
-      actualValue = row[tableName]?.[colName];
+      const relationData = row[tableName];
+
+      // Handle array response (common in PostgREST for relations) or single object
+      if (Array.isArray(relationData)) {
+        actualValue = relationData[0]?.[colName];
+      } else {
+        actualValue = relationData?.[colName];
+      }
     }
 
     if (actualValue === null || actualValue === undefined) {

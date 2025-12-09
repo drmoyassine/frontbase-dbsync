@@ -66,7 +66,8 @@ export function UniversalDataTable({
     setSorting,
     setPagination,
     setSearchQuery,
-    currentSorting
+    currentSorting,
+    currentPagination
   } = useSimpleData({
     componentId,
     binding,
@@ -435,8 +436,8 @@ export function UniversalDataTable({
               <div className="flex items-center justify-between px-2 py-4">
                 <div className="text-sm text-muted-foreground">
                   {(() => {
-                    const page = binding.pagination.page || 0;
-                    const pageSize = binding.pagination.pageSize || 20;
+                    const page = currentPagination.page;
+                    const pageSize = currentPagination.pageSize;
                     const start = count === 0 ? 0 : page * pageSize + 1;
                     const end = Math.min((page + 1) * pageSize, count);
                     const totalPages = Math.ceil(count / pageSize);
@@ -448,8 +449,8 @@ export function UniversalDataTable({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setPagination(Math.max(0, (binding.pagination.page || 0) - 1))}
-                    disabled={binding.pagination.page === 0 || loading}
+                    onClick={() => setPagination(Math.max(0, currentPagination.page - 1))}
+                    disabled={currentPagination.page === 0 || loading}
                   >
                     <ChevronLeft className="h-4 w-4" />
                     Previous
@@ -457,8 +458,8 @@ export function UniversalDataTable({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setPagination((binding.pagination.page || 0) + 1)}
-                    disabled={((binding.pagination.page || 0) + 1) * binding.pagination.pageSize >= count || loading}
+                    onClick={() => setPagination(currentPagination.page + 1)}
+                    disabled={(currentPagination.page + 1) * currentPagination.pageSize >= count || loading}
                   >
                     Next
                     <ChevronRight className="h-4 w-4" />

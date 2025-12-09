@@ -181,21 +181,8 @@ class DatabaseManager {
     const current = this.getPage(id);
     if (!current) return null;
     // Handle soft delete via deletedAt
-    // Handle soft delete via deletedAt
-    // Only proceed with special delete logic if deletedAt is actually changing
-    // This prevents "save" operations from being hijacked if they accidentally include { deletedAt: current.deletedAt }
-    if ('deletedAt' in updates && updates.deletedAt !== current.deletedAt) {
-      if ('slug' in updates) {
-        const stmt = this.db.prepare("UPDATE pages SET deleted_at = ?, slug = ?, updated_at = datetime('now') WHERE id = ?");
-        stmt.run(updates.deletedAt, updates.slug, id);
-      } else {
-        const stmt = this.db.prepare("UPDATE pages SET deleted_at = ?, updated_at = datetime('now') WHERE id = ?");
-        stmt.run(updates.deletedAt, id);
-      }
-      return this.getPage(id);
-    }
-
-    // If deletedAt is present but unchanged (e.g. null -> null), remove it from updates to prevent DB errors if the column isn't in the updatePageStmt
+    // Ensure we don't accidentally trigger a soft delete or restore via update
+    // All delete/restore operations should go through their dedicated API endpoints
     if ('deletedAt' in updates) {
       delete updates.deletedAt;
     }

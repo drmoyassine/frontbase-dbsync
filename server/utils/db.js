@@ -191,10 +191,24 @@ class DatabaseManager {
       }
       return this.getPage(id);
     }
+    // Handle potential snake_case from client
+    if (updates.layout_data && !updates.layoutData) {
+      console.log('⚠️ Normalizing layout_data (snake_case) to layoutData (camelCase)');
+      updates.layoutData = updates.layout_data;
+    }
+
     const {
       name, slug, title, description, keywords,
       isPublic, isHomepage, layoutData, seoData
     } = { ...current, ...updates };
+
+    // Log what we are about to save for layoutData
+    if (layoutData) {
+      const contentSize = layoutData.content ? layoutData.content.length : 0;
+      console.log(`💾 Saving page ${id} with ${contentSize} components`);
+    } else {
+      console.log(`⚠️ Saving page ${id} WITHOUT layoutData update (preserving existing)`);
+    }
 
     this.updatePageStmt.run(
       name, slug, title, description, keywords,

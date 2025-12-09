@@ -64,6 +64,14 @@ export function UniversalDataTable({
   // Get binding from store as fallback if props don't have it
   const { getComponentBinding } = useDataBindingStore();
   const binding = bindingProp || getComponentBinding(componentId);
+
+  useEffect(() => {
+    console.log('[UniversalDataTable] Binding updated:', {
+      componentId,
+      columnOverrides: binding?.columnOverrides
+    });
+  }, [binding, componentId]);
+
   const {
     data,
     count,

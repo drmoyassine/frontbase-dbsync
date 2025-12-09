@@ -153,6 +153,14 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     if (!id || !binding) return;
 
     const currentOverrides = binding.columnOverrides || {};
+
+    console.log('[ComponentRenderer] Updating column override:', {
+      columnName,
+      updates,
+      currentOverrides: currentOverrides[columnName],
+      newOverride: { ...currentOverrides[columnName], ...updates }
+    });
+
     const newOverrides = {
       ...currentOverrides,
       [columnName]: {

@@ -65,12 +65,7 @@ export function UniversalDataTable({
   const { getComponentBinding } = useDataBindingStore();
   const binding = bindingProp || getComponentBinding(componentId);
 
-  useEffect(() => {
-    console.log('[UniversalDataTable] Binding updated:', {
-      componentId,
-      columnOverrides: binding?.columnOverrides
-    });
-  }, [binding, componentId]);
+
 
   const {
     data,

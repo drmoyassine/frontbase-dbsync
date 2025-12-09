@@ -154,13 +154,6 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
 
     const currentOverrides = binding.columnOverrides || {};
 
-    console.log('[ComponentRenderer] Updating column override:', {
-      columnName,
-      updates,
-      currentOverrides: currentOverrides[columnName],
-      newOverride: { ...currentOverrides[columnName], ...updates }
-    });
-
     const newOverrides = {
       ...currentOverrides,
       [columnName]: {
@@ -172,15 +165,12 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     // Update the component props in the builder store
     const store = useBuilderStore.getState();
     store.updateComponent(id, {
-      props: {
-        ...props,
-        binding: {
-          ...binding,
-          columnOverrides: newOverrides
-        }
+      binding: {
+        ...binding,
+        columnOverrides: newOverrides
       }
     });
-  }, [id, binding, props]);
+  }, [id, binding]);
 
   const rendererProps = {
     effectiveProps,

@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon, X, Filter, ChevronDown } from 'lucide-react';
+import { CalendarIcon, X, Filter, ChevronDown, Search } from 'lucide-react';
 import { FilterConfig } from '@/hooks/data/useSimpleData';
 import { databaseApi } from '@/services/database-api';
 import { format } from 'date-fns';
@@ -35,10 +35,12 @@ const TextFilterInput: React.FC<FilterInputProps> = ({ filter, onValueChange }) 
     />
 );
 
-// Dropdown filter
+// Dropdown filter with embedded search
 const DropdownFilterInput: React.FC<FilterInputProps> = ({ filter, tableName, onValueChange }) => {
     const [options, setOptions] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [open, setOpen] = useState(false);
 
     useEffect(() => {
         if (filter.column) {
@@ -63,29 +65,71 @@ const DropdownFilterInput: React.FC<FilterInputProps> = ({ filter, tableName, on
         }
     }, [filter.column, tableName]);
 
+    const filteredOptions = options.filter(opt =>
+        opt.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const displayLabel = filter.label || filter.column;
+
     return (
-        <Select
-            value={(filter.value as string) || ''}
-            onValueChange={(val) => onValueChange(val || undefined)}
-        >
-            <SelectTrigger className="h-8 w-40">
-                <SelectValue placeholder={loading ? 'Loading...' : (filter.label || filter.column)} />
-            </SelectTrigger>
-            <SelectContent>
-                <SelectItem value="">All</SelectItem>
-                {options.map((opt) => (
-                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                ))}
-            </SelectContent>
-        </Select>
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button variant="outline" className="h-8 w-40 justify-between px-2">
+                    <span className={filter.value ? '' : 'text-muted-foreground'}>
+                        {filter.value || displayLabel}
+                    </span>
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-52 p-0" align="start">
+                <div className="p-2 border-b">
+                    <div className="relative">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-8 h-8"
+                        />
+                    </div>
+                </div>
+                <ScrollArea className="h-[180px]">
+                    <div className="p-1">
+                        <button
+                            className="w-full text-left px-2 py-1.5 hover:bg-muted rounded text-sm"
+                            onClick={() => { onValueChange(undefined); setOpen(false); }}
+                        >
+                            All
+                        </button>
+                        {loading ? (
+                            <div className="text-sm text-muted-foreground p-2">Loading...</div>
+                        ) : (
+                            filteredOptions.map((opt) => (
+                                <button
+                                    key={opt}
+                                    className={`w-full text-left px-2 py-1.5 hover:bg-muted rounded text-sm ${filter.value === opt ? 'bg-muted font-medium' : ''}`}
+                                    onClick={() => { onValueChange(opt); setOpen(false); }}
+                                >
+                                    {opt}
+                                </button>
+                            ))
+                        )}
+                        {!loading && filteredOptions.length === 0 && (
+                            <div className="text-sm text-muted-foreground p-2 text-center">No results</div>
+                        )}
+                    </div>
+                </ScrollArea>
+            </PopoverContent>
+        </Popover>
     );
 };
 
-// Multi-select filter
+// Multi-select filter with embedded search
 const MultiselectFilterInput: React.FC<FilterInputProps> = ({ filter, tableName, onValueChange }) => {
     const [options, setOptions] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const [open, setOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
     const selectedValues = (filter.value as string[]) || [];
 
     useEffect(() => {
@@ -120,13 +164,19 @@ const MultiselectFilterInput: React.FC<FilterInputProps> = ({ filter, tableName,
         }
     };
 
+    const filteredOptions = options.filter(opt =>
+        opt.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const displayLabel = filter.label || filter.column;
+
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 <Button variant="outline" className="h-8 w-40 justify-between px-2">
                     <div className="flex items-center gap-1 truncate">
                         {selectedValues.length === 0 ? (
-                            <span className="text-muted-foreground">{filter.label || filter.column}</span>
+                            <span className="text-muted-foreground">{displayLabel}</span>
                         ) : (
                             <span className="text-xs">{selectedValues.length} selected</span>
                         )}
@@ -134,13 +184,24 @@ const MultiselectFilterInput: React.FC<FilterInputProps> = ({ filter, tableName,
                     <ChevronDown className="h-4 w-4 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-48 p-0" align="start">
-                <ScrollArea className="h-[200px]">
+            <PopoverContent className="w-52 p-0" align="start">
+                <div className="p-2 border-b">
+                    <div className="relative">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-8 h-8"
+                        />
+                    </div>
+                </div>
+                <ScrollArea className="h-[180px]">
                     <div className="p-2 space-y-1">
                         {loading ? (
                             <div className="text-sm text-muted-foreground p-2">Loading...</div>
                         ) : (
-                            options.map((opt) => (
+                            filteredOptions.map((opt) => (
                                 <label
                                     key={opt}
                                     className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted rounded cursor-pointer"
@@ -152,6 +213,9 @@ const MultiselectFilterInput: React.FC<FilterInputProps> = ({ filter, tableName,
                                     <span className="text-sm truncate">{opt}</span>
                                 </label>
                             ))
+                        )}
+                        {!loading && filteredOptions.length === 0 && (
+                            <div className="text-sm text-muted-foreground p-2 text-center">No results</div>
                         )}
                     </div>
                 </ScrollArea>
@@ -322,9 +386,6 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 
             {activeFilters.map((filter) => (
                 <div key={filter.id} className="flex items-center gap-1">
-                    {filter.label && (
-                        <Label className="text-xs text-muted-foreground">{filter.label}:</Label>
-                    )}
                     {renderFilterInput(filter)}
                 </div>
             ))}

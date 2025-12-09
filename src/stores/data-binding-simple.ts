@@ -217,7 +217,13 @@ export const useDataBindingStore = create<DataBindingState>()(
 
           // Add related tables to select (e.g., "institutions(*)")
           relatedTables.forEach(table => {
-            selectParts.push(`${table}(*)`);
+            // Prevent adding self-reference as a relation unless it's distinct (which this logic doesn't support yet)
+            // If we are querying 'institutions', we don't need to join 'institutions' to get columns already on it.
+            // However, usually 'institutions.name' on 'institutions' table is just 'name'.
+            // If the user managed to configure 'institutions.name' while on 'institutions' table, we should just NOT add the join.
+            if (table !== binding.tableName) {
+              selectParts.push(`${table}(*)`);
+            }
           });
 
           params.append('select', selectParts.join(','));

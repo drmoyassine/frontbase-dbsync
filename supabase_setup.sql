@@ -82,12 +82,24 @@ BEGIN
           AND table_name = sort_table 
           AND column_name = clean_sort_col;
         
-        -- Apply LOWER if Text
-        IF col_type IN ('text', 'character varying', 'varchar', 'char', 'citext') THEN
-             order_clause := 'ORDER BY LOWER(' || sort_col || '::text) ' || COALESCE(sort_dir, 'asc');
-        ELSE
-             order_clause := 'ORDER BY ' || sort_col || ' ' || COALESCE(sort_dir, 'asc');
-        END IF;
+        -- Build quoted column reference for ORDER BY
+        DECLARE
+            quoted_sort_col text;
+        BEGIN
+            IF sort_col LIKE '%.%' THEN
+                -- Quote both parts: table.column -> "table"."column"
+                quoted_sort_col := format('%I.%I', sort_table, clean_sort_col);
+            ELSE
+                quoted_sort_col := format('%I', clean_sort_col);
+            END IF;
+
+            -- Apply LOWER if Text
+            IF col_type IN ('text', 'character varying', 'varchar', 'char', 'citext') THEN
+                 order_clause := 'ORDER BY LOWER(' || quoted_sort_col || '::text) ' || COALESCE(sort_dir, 'asc');
+            ELSE
+                 order_clause := 'ORDER BY ' || quoted_sort_col || ' ' || COALESCE(sort_dir, 'asc');
+            END IF;
+        END;
     EXCEPTION WHEN OTHERS THEN
         -- Fallback if something goes wrong (e.g. strict permissions or weird identifiers)
         order_clause := 'ORDER BY ' || sort_col || ' ' || COALESCE(sort_dir, 'asc');

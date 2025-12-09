@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -9,13 +9,190 @@ import { TableSelector } from '@/components/data-binding/TableSelector';
 import { CompactColumnConfigurator } from './CompactColumnConfigurator';
 import { FilterConfigurator } from './FilterConfigurator';
 import { ComponentDataBinding } from '@/hooks/data/useSimpleData';
-import { useBuilderStore } from '@/stores/builder';
+import { useDataBindingStore } from '@/stores/data-binding-simple';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ChevronDown, X, Search } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface DataTablePropertiesPanelProps {
     componentId: string;
     binding: ComponentDataBinding | null;
     onBindingUpdate: (binding: ComponentDataBinding) => void;
 }
+
+// ============ SearchColumnSelector Component ============
+interface SearchColumnSelectorProps {
+    tableName: string;
+    selectedColumns: string[];
+    onColumnsChange: (columns: string[]) => void;
+}
+
+const SearchColumnSelector: React.FC<SearchColumnSelectorProps> = ({
+    tableName,
+    selectedColumns,
+    onColumnsChange
+}) => {
+    const { loadTableSchema, globalSchema } = useDataBindingStore();
+    const [columns, setColumns] = useState<{ name: string; type: string }[]>([]);
+    const [searchFilter, setSearchFilter] = useState('');
+    const [open, setOpen] = useState(false);
+
+    // Load columns for the table
+    useEffect(() => {
+        if (!tableName) return;
+
+        // Get columns from globalSchema if available
+        const gTable = globalSchema.tables.find((t: any) => t.table_name === tableName);
+        if (gTable && gTable.columns) {
+            setColumns(gTable.columns.map((c: any) => ({ name: c.column_name, type: c.data_type })));
+        } else {
+            // Fallback to loading schema
+            loadTableSchema(tableName).then((schema: any) => {
+                if (schema?.columns) {
+                    setColumns(schema.columns.map((c: any) => ({ name: c.name, type: c.type })));
+                }
+            });
+        }
+    }, [tableName, globalSchema, loadTableSchema]);
+
+    const toggleColumn = (columnName: string) => {
+        if (selectedColumns.includes(columnName)) {
+            onColumnsChange(selectedColumns.filter(c => c !== columnName));
+        } else {
+            onColumnsChange([...selectedColumns, columnName]);
+        }
+    };
+
+    const filteredColumns = columns.filter(c =>
+        c.name.toLowerCase().includes(searchFilter.toLowerCase())
+    );
+
+    const textColumns = filteredColumns.filter(c =>
+        ['text', 'character varying', 'varchar', 'char'].includes(c.type)
+    );
+
+    const otherColumns = filteredColumns.filter(c =>
+        !['text', 'character varying', 'varchar', 'char'].includes(c.type)
+    );
+
+    return (
+        <div className="space-y-2 pt-2">
+            <Label className="text-sm text-muted-foreground">
+                Searchable Columns (leave empty for all text columns)
+            </Label>
+            <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>
+                    <Button
+                        variant="outline"
+                        className="w-full justify-between h-auto min-h-9 px-3 py-2"
+                    >
+                        <div className="flex flex-wrap gap-1 items-center">
+                            {selectedColumns.length === 0 ? (
+                                <span className="text-muted-foreground">All text columns</span>
+                            ) : (
+                                selectedColumns.map(col => (
+                                    <Badge key={col} variant="secondary" className="text-xs">
+                                        {col}
+                                        <X
+                                            className="w-3 h-3 ml-1 cursor-pointer hover:text-destructive"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleColumn(col);
+                                            }}
+                                        />
+                                    </Badge>
+                                ))
+                            )}
+                        </div>
+                        <ChevronDown className="w-4 h-4 shrink-0 opacity-50" />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[300px] p-0" align="start">
+                    <div className="p-2 border-b">
+                        <div className="relative">
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Search columns..."
+                                value={searchFilter}
+                                onChange={(e) => setSearchFilter(e.target.value)}
+                                className="pl-8 h-8"
+                            />
+                        </div>
+                    </div>
+                    <ScrollArea className="h-[200px]">
+                        <div className="p-2 space-y-1">
+                            {textColumns.length > 0 && (
+                                <>
+                                    <div className="text-xs font-medium text-muted-foreground px-2 py-1">
+                                        Text Columns
+                                    </div>
+                                    {textColumns.map(col => (
+                                        <label
+                                            key={col.name}
+                                            className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted rounded cursor-pointer"
+                                        >
+                                            <Checkbox
+                                                checked={selectedColumns.includes(col.name)}
+                                                onCheckedChange={() => toggleColumn(col.name)}
+                                            />
+                                            <span className="text-sm">{col.name}</span>
+                                            <Badge variant="outline" className="text-[10px] ml-auto">
+                                                {col.type}
+                                            </Badge>
+                                        </label>
+                                    ))}
+                                </>
+                            )}
+                            {otherColumns.length > 0 && (
+                                <>
+                                    <div className="text-xs font-medium text-muted-foreground px-2 py-1 mt-2">
+                                        Other Columns
+                                    </div>
+                                    {otherColumns.map(col => (
+                                        <label
+                                            key={col.name}
+                                            className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted rounded cursor-pointer"
+                                        >
+                                            <Checkbox
+                                                checked={selectedColumns.includes(col.name)}
+                                                onCheckedChange={() => toggleColumn(col.name)}
+                                            />
+                                            <span className="text-sm">{col.name}</span>
+                                            <Badge variant="outline" className="text-[10px] ml-auto">
+                                                {col.type}
+                                            </Badge>
+                                        </label>
+                                    ))}
+                                </>
+                            )}
+                            {filteredColumns.length === 0 && (
+                                <div className="text-center py-4 text-muted-foreground text-sm">
+                                    No columns found
+                                </div>
+                            )}
+                        </div>
+                    </ScrollArea>
+                    {selectedColumns.length > 0 && (
+                        <div className="p-2 border-t">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full text-xs"
+                                onClick={() => onColumnsChange([])}
+                            >
+                                Clear selection
+                            </Button>
+                        </div>
+                    )}
+                </PopoverContent>
+            </Popover>
+        </div>
+    );
+};
+
 
 export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> = ({
     componentId,
@@ -108,22 +285,11 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                                 />
                             </div>
                             {binding.filtering?.searchEnabled && (
-                                <div className="space-y-2 pt-2">
-                                    <Label className="text-sm text-muted-foreground">
-                                        Searchable Columns (leave empty for all text columns)
-                                    </Label>
-                                    <Input
-                                        placeholder="e.g., name, email, description"
-                                        value={binding.searchColumns?.join(', ') || ''}
-                                        onChange={(e) => {
-                                            const columns = e.target.value
-                                                .split(',')
-                                                .map(c => c.trim())
-                                                .filter(Boolean);
-                                            updateBinding({ searchColumns: columns.length > 0 ? columns : undefined });
-                                        }}
-                                    />
-                                </div>
+                                <SearchColumnSelector
+                                    tableName={binding.tableName}
+                                    selectedColumns={binding.searchColumns || []}
+                                    onColumnsChange={(columns) => updateBinding({ searchColumns: columns.length > 0 ? columns : undefined })}
+                                />
                             )}
                         </div>
 

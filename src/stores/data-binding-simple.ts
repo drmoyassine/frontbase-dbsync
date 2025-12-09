@@ -287,6 +287,22 @@ export const useDataBindingStore = create<DataBindingState>()(
           // Filtering
           const search_query = binding.filtering.filters['search'] || '';
 
+          // Build search_cols: Use binding.searchColumns if defined, otherwise auto-detect text columns
+          let search_cols: string[] = [];
+          if (binding.searchColumns && binding.searchColumns.length > 0) {
+            search_cols = binding.searchColumns;
+          } else if (search_query) {
+            // Auto-detect text columns from globalSchema
+            const gTable = get().globalSchema.tables.find((t: any) => t.table_name === binding.tableName);
+            if (gTable && gTable.columns) {
+              gTable.columns.forEach((col: any) => {
+                if (['text', 'character varying', 'varchar', 'char'].includes(col.data_type)) {
+                  search_cols.push(`"${binding.tableName}"."${col.column_name}"`);
+                }
+              });
+            }
+          }
+
           // Execute RPC
           let result;
 
@@ -297,6 +313,7 @@ export const useDataBindingStore = create<DataBindingState>()(
             sort_col,
             sort_dir,
             search_query,
+            search_cols,
             page: binding.pagination.page + 1,
             page_size: binding.pagination.pageSize
           });
@@ -307,7 +324,7 @@ export const useDataBindingStore = create<DataBindingState>()(
               columns, // This is SQL selects
               joins,
               search_query,
-              search_cols: [],
+              search_cols,
               page: binding.pagination.page + 1, // 1-based
               page_size: binding.pagination.pageSize
             });

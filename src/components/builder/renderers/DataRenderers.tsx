@@ -5,12 +5,13 @@ import { Chart } from '@/components/data-binding/Chart';
 import { Grid } from '@/components/data-binding/Grid';
 import { RendererProps } from './types';
 
-export const DataTableRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, componentId, onConfigureBinding }) => (
+export const DataTableRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, componentId, onConfigureBinding, onColumnOverrideChange }) => (
     <UniversalDataTable
         componentId={componentId || 'datatable'}
         binding={effectiveProps.binding}
         className={combinedClassName}
         onConfigureBinding={onConfigureBinding}
+        onColumnOverrideChange={onColumnOverrideChange}
     />
 );
 

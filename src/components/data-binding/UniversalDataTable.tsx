@@ -4,7 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ChevronLeft, ChevronRight, Search, Settings, ArrowUpDown } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ChevronLeft, ChevronRight, Search, Settings, ArrowUpDown, Check, X, Pencil } from 'lucide-react';
 import { useSimpleData } from '@/hooks/useSimpleData';
 import { cn } from '@/lib/utils';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
@@ -33,7 +36,8 @@ interface ComponentDataBinding {
   columnOverrides: Record<string, {
     displayName?: string;
     visible?: boolean;
-    displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
+    displayType?: 'text' | 'badge' | 'date' | 'boolean' | 'currency' | 'percentage' | 'image' | 'link';
+    dateFormat?: string;
   }>;
   columnOrder?: string[];
   searchColumns?: string[];
@@ -45,14 +49,18 @@ interface UniversalDataTableProps {
   binding?: ComponentDataBinding | null;
   className?: string;
   onConfigureBinding?: () => void;
+  onColumnOverrideChange?: (columnName: string, updates: any) => void; // For builder mode column editing
 }
 
 export function UniversalDataTable({
   componentId,
   binding: bindingProp,
   className,
-  onConfigureBinding
+  onConfigureBinding,
+  onColumnOverrideChange
 }: UniversalDataTableProps) {
+  // Detect builder mode
+  const isBuilderMode = typeof window !== 'undefined' && window.location.pathname.startsWith('/builder');
   // Get binding from store as fallback if props don't have it
   const { getComponentBinding } = useDataBindingStore();
   const binding = bindingProp || getComponentBinding(componentId);
@@ -77,6 +85,8 @@ export function UniversalDataTable({
 
   const [searchInput, setSearchInput] = useState('');
   const [runtimeFilters, setRuntimeFilters] = useState<FilterConfig[]>([]);
+  const [selectedColumn, setSelectedColumn] = useState<string | null>(null);
+  const [columnPopoverOpen, setColumnPopoverOpen] = useState(false);
 
   // Sync runtimeFilters with binding.frontendFilters
   useEffect(() => {
@@ -178,8 +188,53 @@ export function UniversalDataTable({
     switch (displayType) {
       case 'badge':
         return <Badge variant="outline" className={cn("border-0 font-medium", getBadgeColor(String(actualValue)))}>{String(actualValue)}</Badge>;
+      case 'boolean':
+        // Render boolean as tick or X
+        const boolVal = actualValue === true || actualValue === 'true' || actualValue === 1;
+        return boolVal ? (
+          <Check className="h-4 w-4 text-green-600" />
+        ) : (
+          <X className="h-4 w-4 text-red-500" />
+        );
       case 'date':
-        return new Date(actualValue).toLocaleDateString();
+        // Use custom date format if specified
+        const dateFormat = columnConfig?.dateFormat || 'MMM dd, yyyy';
+        const dateVal = new Date(actualValue);
+        if (isNaN(dateVal.getTime())) return String(actualValue);
+
+        if (dateFormat === 'relative') {
+          // Relative date formatting
+          const now = new Date();
+          const diffMs = now.getTime() - dateVal.getTime();
+          const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+          if (diffDays === 0) return 'Today';
+          if (diffDays === 1) return 'Yesterday';
+          if (diffDays < 7) return `${diffDays} days ago`;
+          if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+          if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+          return `${Math.floor(diffDays / 365)} years ago`;
+        }
+
+        // Standard date formats using Intl
+        const formatMap: Record<string, Intl.DateTimeFormatOptions> = {
+          'MMM dd, yyyy': { month: 'short', day: '2-digit', year: 'numeric' },
+          'dd/MM/yyyy': { day: '2-digit', month: '2-digit', year: 'numeric' },
+          'MM/dd/yyyy': { month: '2-digit', day: '2-digit', year: 'numeric' },
+          'yyyy-MM-dd': { year: 'numeric', month: '2-digit', day: '2-digit' },
+          'dd MMM yyyy': { day: '2-digit', month: 'short', year: 'numeric' },
+          'EEEE, MMM dd': { weekday: 'long', month: 'short', day: '2-digit' }
+        };
+
+        const options = formatMap[dateFormat] || formatMap['MMM dd, yyyy'];
+
+        // Handle locale-specific formatting
+        if (dateFormat === 'dd/MM/yyyy') {
+          return dateVal.toLocaleDateString('en-GB', options);
+        } else if (dateFormat === 'yyyy-MM-dd') {
+          return dateVal.toISOString().split('T')[0];
+        }
+
+        return dateVal.toLocaleDateString('en-US', options);
       case 'currency':
         return new Intl.NumberFormat('en-US', {
           style: 'currency',
@@ -306,6 +361,95 @@ export function UniversalDataTable({
     return override?.displayName || columnName;
   };
 
+  // Column Settings Popover for builder mode
+  const renderColumnWithSettings = (columnName: string, content: React.ReactNode, isHeader: boolean = false) => {
+    if (!isBuilderMode || !onColumnOverrideChange) {
+      return content;
+    }
+
+    const columnConfig = binding?.columnOverrides?.[columnName] || {};
+
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <div
+            className={cn(
+              "cursor-pointer hover:bg-primary/5 transition-colors -m-2 p-2 rounded",
+              isHeader && "flex items-center gap-1"
+            )}
+            title="Click to configure column"
+          >
+            {content}
+            {isHeader && <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100" />}
+          </div>
+        </PopoverTrigger>
+        <PopoverContent className="w-80" align="start">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <h4 className="font-medium leading-none">Column Settings</h4>
+              <p className="text-sm text-muted-foreground">
+                Configure how {columnName} appears in the table.
+              </p>
+            </div>
+            <div className="grid gap-3">
+              <div className="grid grid-cols-3 items-center gap-4">
+                <Label>Label</Label>
+                <Input
+                  value={columnConfig.displayName || ''}
+                  onChange={(e) => onColumnOverrideChange(columnName, { displayName: e.target.value })}
+                  placeholder={columnName}
+                  className="col-span-2 h-8"
+                />
+              </div>
+              <div className="grid grid-cols-3 items-center gap-4">
+                <Label>Type</Label>
+                <Select
+                  value={columnConfig.displayType || 'text'}
+                  onValueChange={(displayType) => onColumnOverrideChange(columnName, { displayType })}
+                >
+                  <SelectTrigger className="col-span-2 h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="text">Text</SelectItem>
+                    <SelectItem value="badge">Badge</SelectItem>
+                    <SelectItem value="date">Date</SelectItem>
+                    <SelectItem value="boolean">Boolean (✓/✗)</SelectItem>
+                    <SelectItem value="currency">Currency</SelectItem>
+                    <SelectItem value="percentage">%</SelectItem>
+                    <SelectItem value="image">Image</SelectItem>
+                    <SelectItem value="link">Link</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {columnConfig.displayType === 'date' && (
+                <div className="grid grid-cols-3 items-center gap-4">
+                  <Label>Format</Label>
+                  <Select
+                    value={columnConfig.dateFormat || 'MMM dd, yyyy'}
+                    onValueChange={(dateFormat) => onColumnOverrideChange(columnName, { dateFormat })}
+                  >
+                    <SelectTrigger className="col-span-2 h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MMM dd, yyyy">Dec 10, 2024</SelectItem>
+                      <SelectItem value="dd/MM/yyyy">10/12/2024</SelectItem>
+                      <SelectItem value="MM/dd/yyyy">12/10/2024</SelectItem>
+                      <SelectItem value="yyyy-MM-dd">2024-12-10</SelectItem>
+                      <SelectItem value="dd MMM yyyy">10 Dec 2024</SelectItem>
+                      <SelectItem value="relative">Relative</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  };
+
   // Render loading state if schema is fetching
   if (binding?.tableName && !schema) {
     return (
@@ -426,20 +570,24 @@ export function UniversalDataTable({
                 <TableHeader>
                   <TableRow>
                     {visibleColumns.map((column: any) => (
-                      <TableHead key={column.name} className="whitespace-nowrap">
-                        <div className="flex items-center space-x-1">
-                          <span>{getColumnDisplayName(column.name)}</span>
-                          {binding.sorting?.enabled && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-auto p-0"
-                              onClick={() => handleSort(column.name)}
-                            >
-                              <ArrowUpDown className="h-3 w-3" />
-                            </Button>
-                          )}
-                        </div>
+                      <TableHead key={column.name} className="whitespace-nowrap group">
+                        {renderColumnWithSettings(
+                          column.name,
+                          <div className="flex items-center space-x-1">
+                            <span>{getColumnDisplayName(column.name)}</span>
+                            {binding.sorting?.enabled && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto p-0"
+                                onClick={(e) => { e.stopPropagation(); handleSort(column.name); }}
+                              >
+                                <ArrowUpDown className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>,
+                          true
+                        )}
                       </TableHead>
                     ))}
                   </TableRow>
@@ -456,7 +604,10 @@ export function UniversalDataTable({
                       <TableRow key={index} className="h-12">
                         {visibleColumns.map((column: any) => (
                           <TableCell key={column.name} className="max-w-[200px] truncate whitespace-nowrap py-2">
-                            {formatValue(row[column.name], column.name, row)}
+                            {renderColumnWithSettings(
+                              column.name,
+                              formatValue(row[column.name], column.name, row)
+                            )}
                           </TableCell>
                         ))}
                       </TableRow>

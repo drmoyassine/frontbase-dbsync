@@ -148,6 +148,32 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     className
   );
 
+  // Handler for column configuration changes from the table
+  const handleColumnOverrideChange = React.useCallback((columnName: string, updates: any) => {
+    if (!id || !binding) return;
+
+    const currentOverrides = binding.columnOverrides || {};
+    const newOverrides = {
+      ...currentOverrides,
+      [columnName]: {
+        ...currentOverrides[columnName],
+        ...updates
+      }
+    };
+
+    // Update the component props in the builder store
+    const store = useBuilderStore.getState();
+    store.updateComponent(id, {
+      props: {
+        ...props,
+        binding: {
+          ...binding,
+          columnOverrides: newOverrides
+        }
+      }
+    });
+  }, [id, binding, props]);
+
   const rendererProps = {
     effectiveProps,
     combinedClassName,
@@ -156,6 +182,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     children,
     componentId: id,
     onConfigureBinding: effectiveProps.onConfigureBinding,
+    onColumnOverrideChange: type === 'DataTable' ? handleColumnOverrideChange : undefined,
     styles // Passed for ContainerRenderer
   };
 

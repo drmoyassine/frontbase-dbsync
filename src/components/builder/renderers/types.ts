@@ -8,5 +8,6 @@ export interface RendererProps {
     children?: React.ReactNode;
     componentId?: string;
     onConfigureBinding?: any;
+    onColumnOverrideChange?: (columnName: string, updates: any) => void;
     styles?: any;
 }

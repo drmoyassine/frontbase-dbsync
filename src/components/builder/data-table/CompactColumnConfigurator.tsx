@@ -150,6 +150,7 @@ const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
                                         <SelectItem value="text">Text</SelectItem>
                                         <SelectItem value="badge">Badge</SelectItem>
                                         <SelectItem value="date">Date</SelectItem>
+                                        <SelectItem value="boolean">Boolean (✓/✗)</SelectItem>
                                         <SelectItem value="currency">Currency</SelectItem>
                                         <SelectItem value="percentage">%</SelectItem>
                                         <SelectItem value="image">Image</SelectItem>
@@ -157,6 +158,29 @@ const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
                                     </SelectContent>
                                 </Select>
                             </div>
+                            {/* Date Format - only shown when type is date */}
+                            {(override.displayType === 'date') && (
+                                <div className="grid grid-cols-3 items-center gap-4">
+                                    <Label>Format</Label>
+                                    <Select
+                                        value={override.dateFormat || 'MMM dd, yyyy'}
+                                        onValueChange={(dateFormat) => updateColumnOverride(column.name, { dateFormat })}
+                                    >
+                                        <SelectTrigger className="col-span-2 h-8">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="MMM dd, yyyy">Dec 10, 2024</SelectItem>
+                                            <SelectItem value="dd/MM/yyyy">10/12/2024</SelectItem>
+                                            <SelectItem value="MM/dd/yyyy">12/10/2024</SelectItem>
+                                            <SelectItem value="yyyy-MM-dd">2024-12-10</SelectItem>
+                                            <SelectItem value="dd MMM yyyy">10 Dec 2024</SelectItem>
+                                            <SelectItem value="EEEE, MMM dd">Tuesday, Dec 10</SelectItem>
+                                            <SelectItem value="relative">Relative (2 days ago)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
                             <div className="grid grid-cols-3 items-center gap-4">
                                 <Label>Original Type</Label>
                                 <div className="col-span-2">

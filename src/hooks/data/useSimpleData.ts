@@ -33,7 +33,8 @@ export interface ComponentDataBinding {
     columnOverrides: Record<string, {
         displayName?: string;
         visible?: boolean;
-        displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
+        displayType?: 'text' | 'badge' | 'date' | 'boolean' | 'currency' | 'percentage' | 'image' | 'link';
+        dateFormat?: string;
     }>;
     // NEW: Column order for drag-and-drop
     columnOrder?: string[];

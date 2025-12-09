@@ -84,13 +84,13 @@ BEGIN
         
         -- Apply LOWER if Text
         IF col_type IN ('text', 'character varying', 'varchar', 'char', 'citext') THEN
-             order_clause := 'ORDER BY LOWER(' || sort_col || '::text) ' || sort_dir;
+             order_clause := 'ORDER BY LOWER(' || sort_col || '::text) ' || COALESCE(sort_dir, 'asc');
         ELSE
-             order_clause := 'ORDER BY ' || sort_col || ' ' || sort_dir;
+             order_clause := 'ORDER BY ' || sort_col || ' ' || COALESCE(sort_dir, 'asc');
         END IF;
     EXCEPTION WHEN OTHERS THEN
         -- Fallback if something goes wrong (e.g. strict permissions or weird identifiers)
-        order_clause := 'ORDER BY ' || sort_col || ' ' || sort_dir;
+        order_clause := 'ORDER BY ' || sort_col || ' ' || COALESCE(sort_dir, 'asc');
     END;
   ELSE
     order_clause := ''; 
@@ -126,7 +126,8 @@ BEGIN
     'rows', COALESCE(result, '[]'::json),
     'total', total_count,
     'page', page,
-    'page_size', page_size
+    'page_size', page_size,
+    '_debug_order', order_clause
   );
 END;
 $$;

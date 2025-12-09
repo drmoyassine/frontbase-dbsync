@@ -289,6 +289,18 @@ export const useDataBindingStore = create<DataBindingState>()(
 
           // Execute RPC
           let result;
+
+          console.log('[DEBUG] RPC Params:', {
+            table_name: binding.tableName,
+            columns,
+            joins,
+            sort_col,
+            sort_dir,
+            search_query,
+            page: binding.pagination.page + 1,
+            page_size: binding.pagination.pageSize
+          });
+
           if (search_query) {
             result = await databaseApi.advancedQuery('frontbase_search_rows', {
               table_name: binding.tableName,
@@ -310,6 +322,8 @@ export const useDataBindingStore = create<DataBindingState>()(
               page_size: binding.pagination.pageSize
             });
           }
+
+          console.log('[DEBUG] RPC Result:', result);
 
           if (result.success) {
             // Cache the result

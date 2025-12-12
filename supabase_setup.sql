@@ -74,6 +74,21 @@ BEGIN
       CONTINUE;
     END IF;
     
+    -- Handle schema/table qualification for column (e.g. "auth.users.email" or "table.col")
+    DECLARE
+        parts text[];
+    BEGIN
+        IF filter_col LIKE '%.%' THEN
+            parts := string_to_array(filter_col, '.');
+            -- Format as "part1"."part2" (supports unlimited depth effectively, but usually 2)
+            -- For simplicity in common case of table.col:
+            quoted_col := format('%I.%I', parts[1], parts[2]);
+            -- If 3 parts (schema.table.col): quoted_col := format('%I.%I.%I', parts[1], parts[2], parts[3]);
+        ELSE
+            quoted_col := format('%I', filter_col);
+        END IF;
+    END;
+
     -- Build condition based on filter type
     condition := NULL;
     
@@ -81,53 +96,53 @@ BEGIN
       WHEN 'text' THEN
         -- Text search with ILIKE
         IF filter_value::text != 'null' AND filter_value::text != '""' THEN
-          condition := format('%I ILIKE %L', filter_col, '%' || (filter_value#>>'{}') || '%');
+          condition := format('%s ILIKE %L', quoted_col, '%' || (filter_value#>>'{}') || '%');
         END IF;
         
       WHEN 'dropdown' THEN
         -- Exact match
         IF filter_value::text != 'null' AND filter_value::text != '""' THEN
-          condition := format('%I = %L', filter_col, filter_value#>>'{}');
+          condition := format('%s = %L', quoted_col, filter_value#>>'{}');
         END IF;
         
       WHEN 'multiselect' THEN
         -- IN clause for array of values
         IF jsonb_array_length(filter_value) > 0 THEN
-          condition := format('%I IN (SELECT jsonb_array_elements_text(%L::jsonb))', filter_col, filter_value::text);
+          condition := format('%s IN (SELECT jsonb_array_elements_text(%L::jsonb))', quoted_col, filter_value::text);
         END IF;
         
       WHEN 'number' THEN
         -- Number range: expects {min: X, max: Y}
         IF filter_value->>'min' IS NOT NULL THEN
-          condition := format('%I >= %s', filter_col, (filter_value->>'min')::numeric);
+          condition := format('%s >= %s', quoted_col, (filter_value->>'min')::numeric);
         END IF;
         IF filter_value->>'max' IS NOT NULL THEN
           IF condition IS NOT NULL THEN
             condition := condition || ' AND ';
           END IF;
-          condition := COALESCE(condition, '') || format('%I <= %s', filter_col, (filter_value->>'max')::numeric);
+          condition := COALESCE(condition, '') || format('%s <= %s', quoted_col, (filter_value->>'max')::numeric);
         END IF;
         
       WHEN 'dateRange' THEN
         -- Date range: expects {start: 'YYYY-MM-DD', end: 'YYYY-MM-DD'} or {lastDays: N}
         IF filter_value->>'lastDays' IS NOT NULL THEN
-          condition := format('%I >= NOW() - INTERVAL %L', filter_col, (filter_value->>'lastDays')::int || ' days');
+          condition := format('%s >= NOW() - INTERVAL %L', quoted_col, (filter_value->>'lastDays')::int || ' days');
         ELSE
           IF filter_value->>'start' IS NOT NULL THEN
-            condition := format('%I >= %L', filter_col, filter_value->>'start');
+            condition := format('%s >= %L', quoted_col, filter_value->>'start');
           END IF;
           IF filter_value->>'end' IS NOT NULL THEN
             IF condition IS NOT NULL THEN
               condition := condition || ' AND ';
             END IF;
-            condition := COALESCE(condition, '') || format('%I <= %L', filter_col, filter_value->>'end');
+            condition := COALESCE(condition, '') || format('%s <= %L', quoted_col, filter_value->>'end');
           END IF;
         END IF;
         
       WHEN 'boolean' THEN
         -- Boolean comparison
         IF filter_value::text = 'true' OR filter_value::text = 'false' THEN
-          condition := format('%I = %s', filter_col, filter_value::boolean);
+          condition := format('%s = %s', quoted_col, filter_value::boolean);
         END IF;
         
       ELSE

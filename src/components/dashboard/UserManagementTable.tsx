@@ -65,9 +65,17 @@ export const UserManagementTable = () => {
             const result = await databaseApi.advancedQuery('frontbase_get_distinct_values', rpcParams);
 
             if (result.success && result.rows) {
-              // Result format: [{ "val": "value" }, ...]
-              const values = result.rows.map(row => row.val).filter(Boolean);
-              newOptions[filter.id] = values;
+              // Result can be flat array of strings/numbers or array of objects depending on RPC
+              // parse safely
+              const values = result.rows.map((row: any) => {
+                if (typeof row === 'object' && row !== null) {
+                  // If object, try 'val' property (from alias) or first value
+                  return row.val || Object.values(row)[0];
+                }
+                return row;
+              }).filter((v: any) => v !== null && v !== undefined && v !== '');
+
+              newOptions[filter.id] = values as string[];
             }
           } catch (e) {
             console.error('Failed to fetch options for', filter.column, e);

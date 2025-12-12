@@ -9,10 +9,12 @@ import { TableSelector } from '@/components/data-binding/TableSelector';
 import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useDashboardStore } from '@/stores/dashboard';
+import { useBuilderStore } from '@/stores/builder';
 import { useToast } from '@/hooks/use-toast';
 import { Settings, Save, RotateCcw, Plus, Trash2, HelpCircle } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Page } from '@/types/builder';
 
 // Helper for Key-Value editors with internal state to prevent focus loss
 function KeyValueEditor({ title, description, data, onChange }: { title: string, description: string, data: Record<string, string>, onChange: (d: Record<string, string>) => void }) {
@@ -114,10 +116,150 @@ function KeyValueEditor({ title, description, data, onChange }: { title: string,
   );
 }
 
+// Special Editor for Contact Types that includes Home Page selection
+function ContactTypeEditor({
+  title,
+  description,
+  data,
+  homePageMapping,
+  availablePages,
+  onChange,
+  onHomePageChange
+}: {
+  title: string,
+  description: string,
+  data: Record<string, string>,
+  homePageMapping: Record<string, string>,
+  availablePages: Page[],
+  onChange: (d: Record<string, string>) => void,
+  onHomePageChange: (mapping: Record<string, string>) => void
+}) {
+  const [items, setItems] = useState<{ id: string, key: string, label: string, homePageId: string }[]>([]);
+
+  useEffect(() => {
+    const newItems = Object.entries(data).map(([k, v], i) => ({
+      id: `item-${i}-${k}`,
+      key: k,
+      label: v,
+      homePageId: homePageMapping[k] || ''
+    }));
+
+    if (items.length === 0 && newItems.length > 0) {
+      setItems(newItems);
+    }
+  }, [data, homePageMapping, items.length]);
+
+  const updateParent = (currentItems: typeof items) => {
+    const newRecord: Record<string, string> = {};
+    const newMapping: Record<string, string> = {};
+
+    currentItems.forEach(item => {
+      if (item.key) {
+        newRecord[item.key] = item.label;
+        if (item.homePageId) {
+          newMapping[item.key] = item.homePageId;
+        }
+      }
+    });
+
+    onChange(newRecord);
+    onHomePageChange(newMapping);
+  };
+
+  const addItem = () => {
+    const newItem = { id: `new-${Date.now()}`, key: `new_type_${items.length + 1}`, label: 'New Type', homePageId: '' };
+    const newItems = [...items, newItem];
+    setItems(newItems);
+    updateParent(newItems);
+  };
+
+  const updateItem = (id: string, field: 'key' | 'label' | 'homePageId', value: string) => {
+    const newItems = items.map(item => item.id === id ? { ...item, [field]: value } : item);
+    setItems(newItems);
+    updateParent(newItems);
+  };
+
+  const removeItem = (id: string) => {
+    const newItems = items.filter(item => item.id !== id);
+    setItems(newItems);
+    updateParent(newItems);
+  };
+
+  const publicPages = availablePages.filter(p => p.isPublic || p.isHomepage);
+
+  return (
+    <div className="space-y-3 border p-4 rounded-md bg-slate-50/50">
+      <div className="flex justify-between items-start">
+        <div>
+          <h4 className="text-sm font-medium flex items-center gap-2">
+            {title}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger><HelpCircle className="h-3.5 w-3.5 text-muted-foreground" /></TooltipTrigger>
+                <TooltipContent className="max-w-xs">{description}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </h4>
+        </div>
+        <Button variant="outline" size="sm" onClick={addItem} className="h-8">
+          <Plus className="h-3.5 w-3.5 mr-1" /> Add
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-[1fr,1.5fr,1.5fr,auto] gap-2 px-1 text-xs text-muted-foreground font-medium uppercase tracking-wider">
+        <div>Value (DB)</div>
+        <div>Label (UI)</div>
+        <div>Home Page</div>
+        <div className="w-8"></div>
+      </div>
+
+      <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+        {items.map((item) => (
+          <div key={item.id} className="grid grid-cols-[1fr,1.5fr,1.5fr,auto] gap-2 items-center">
+            <Input
+              className="h-8 text-sm"
+              value={item.key}
+              onChange={(e) => updateItem(item.id, 'key', e.target.value)}
+              placeholder="e.g. admin"
+            />
+            <Input
+              className="h-8 text-sm"
+              value={item.label}
+              onChange={(e) => updateItem(item.id, 'label', e.target.value)}
+              placeholder="e.g. Administrator"
+            />
+            <Select
+              value={item.homePageId}
+              onValueChange={(val) => updateItem(item.id, 'homePageId', val)}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Select Page" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_default_">Default Dashboard</SelectItem>
+                {publicPages.map(page => (
+                  <SelectItem key={page.id} value={page.id}>
+                    {page.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => removeItem(item.id)}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        ))}
+        {items.length === 0 && <p className="text-sm text-muted-foreground text-center py-4 italic">No items defined</p>}
+      </div>
+    </div>
+  );
+}
+
 export function UserContactConfigPanel() {
   const { config, setConfig, setContactsTable, resetConfig } = useUserContactConfig();
   const { schemas, loadTableSchema, initialize, connected, connectionError } = useDataBindingStore();
   const { fetchConnections } = useDashboardStore();
+  const { pages } = useBuilderStore();
   const { toast } = useToast();
 
   // Local state for form
@@ -130,6 +272,7 @@ export function UserContactConfigPanel() {
   });
   const [enabled, setEnabledState] = useState(true);
   const [contactTypes, setContactTypes] = useState<Record<string, string>>({});
+  const [contactTypeHomePages, setContactTypeHomePages] = useState<Record<string, string>>({});
   const [permissionLevels, setPermissionLevels] = useState<Record<string, string>>({});
 
   // Initialize data binding store
@@ -152,6 +295,7 @@ export function UserContactConfigPanel() {
         permissionLevelColumn: config.columnMapping.permissionLevelColumn || '',
       });
       setContactTypes(config.contactTypes || {});
+      setContactTypeHomePages(config.contactTypeHomePages || {});
       setPermissionLevels(config.permissionLevels || {});
       setEnabledState(config.enabled);
 
@@ -201,6 +345,7 @@ export function UserContactConfigPanel() {
         permissionLevelColumn: columns.permissionLevelColumn,
       },
       contactTypes,
+      contactTypeHomePages,
       permissionLevels,
       enabled
     });
@@ -210,8 +355,6 @@ export function UserContactConfigPanel() {
       description: "User contact data configuration has been updated",
     });
   };
-
-
 
   const ColumnSelect = ({ label, field, required = false }: { label: string, field: keyof typeof columns, required?: boolean }) => (
     <div>
@@ -284,19 +427,26 @@ export function UserContactConfigPanel() {
 
               <div className="space-y-4">
                 <h4 className="font-medium text-sm">Definitions</h4>
-                <div className="grid grid-cols-2 gap-6">
-                  <KeyValueEditor
-                    title="Contact Types"
-                    description="Define the types of users in your system (e.g. Vendor, Customer, Team Member). These are high-level categories."
-                    data={contactTypes}
-                    onChange={setContactTypes}
-                  />
-                  <KeyValueEditor
-                    title="Permission Levels"
-                    description="Define access levels (e.g. read_only, editor, admin). These can apply to any Contact Type, creating a matrix of roles."
-                    data={permissionLevels}
-                    onChange={setPermissionLevels}
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="md:col-span-2 lg:col-span-1">
+                    <ContactTypeEditor
+                      title="Contact Types"
+                      description="Define the types of users in your system (e.g. Vendor, Customer, Team Member) and their landing page."
+                      data={contactTypes}
+                      homePageMapping={contactTypeHomePages}
+                      availablePages={pages}
+                      onChange={setContactTypes}
+                      onHomePageChange={setContactTypeHomePages}
+                    />
+                  </div>
+                  <div className="md:col-span-2 lg:col-span-1">
+                    <KeyValueEditor
+                      title="Permission Levels"
+                      description="Define access levels (e.g. read_only, editor, admin). These can apply to any Contact Type, creating a matrix of roles."
+                      data={permissionLevels}
+                      onChange={setPermissionLevels}
+                    />
+                  </div>
                 </div>
               </div>
             </div>

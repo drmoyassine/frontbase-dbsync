@@ -37,6 +37,7 @@ export interface UserContactConfig {
         avatarColumn?: string;
     };
     contactTypes: Record<string, string>; // key -> label (e.g. 'admin' -> 'Administrator')
+    contactTypeHomePages?: Record<string, string>; // key (contact type value) -> pageId
     permissionLevels: Record<string, string>; // key -> label
     enabled: boolean;
 }

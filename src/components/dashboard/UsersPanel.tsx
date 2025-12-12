@@ -1,3 +1,8 @@
+import React from 'react';
+import { UserContactConfigPanel } from './UserContactConfigPanel';
+import { UserStatsCards } from './UserStatsCards';
+import { UserManagementTable } from './UserManagementTable';
+import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import { AddBuilderDialog } from './AddBuilderDialog';
 
 export function UsersPanel() {

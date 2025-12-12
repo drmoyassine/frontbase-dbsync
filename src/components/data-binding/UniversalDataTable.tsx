@@ -285,31 +285,65 @@ export function UniversalDataTable({
       allColumnsMap.set(col.name, col);
     });
 
-    // Helper to ensure related column exists in map
-    const ensureRelatedColumn = (key: string) => {
-      if (!allColumnsMap.has(key) && key.includes('.')) {
-        const [tableName, columnName] = key.split('.');
-        allColumnsMap.set(key, {
-          name: key,
-          type: 'text',
-          relatedTable: tableName,
-          relatedColumn: columnName
-        });
+    // Helper to ensure related or virtual column exists in map
+    const ensureVirtualColumn = (key: string) => {
+      if (!allColumnsMap.has(key)) {
+        if (key.includes('.')) {
+          const [tableName, columnName] = key.split('.');
+          allColumnsMap.set(key, {
+            name: key,
+            type: 'text',
+            relatedTable: tableName,
+            relatedColumn: columnName
+          });
+        } else {
+          // Treat as virtual column (e.g. from RPC or calculated)
+          allColumnsMap.set(key, {
+            name: key,
+            type: 'text',
+            isVirtual: true
+          });
+        }
       }
     };
 
-    // Add related columns from overrides
+    // Add virtual/related columns from overrides
     if (binding?.columnOverrides) {
       Object.keys(binding.columnOverrides).forEach(key => {
-        ensureRelatedColumn(key);
+        ensureVirtualColumn(key);
       });
     }
 
     // 2. Determine visible columns based on overrides
     // Columns are OFF by default - must have explicit visible: true
+    // UNLESS it's a virtual column from RPC that we want to show?
+    // Actually, overrides follow standard rules: hidden unless visible: true/undefined logic?
+    // Wait, typical logic is: if explicitly hidden=true, hide. If visible=false, hide.
+    // The current logic says: `return override?.visible === true;` -> Hidden by default?
+    // Let's check how config panel sets it. Usually toggle sets `hidden: false`.
+    // Actually, if I look at UserManagementTable:
+    // [config.columnMapping.authUserIdColumn]: { hidden: false, ... }
+    // 'email': { ... } -> visible is undefined.
+
+    // Logic check: `override?.visible === true` means everything is HIDDEN unless explicitly set to visible: true.
+    // But in UserManagementTable I didn't set `visible: true` for 'email', I just set displayName etc.
+    // So 'email' is hidden by default. Use `hidden` property instead?
+
+    // Let's check ComponentDataBinding interface
+    // visible?: boolean;
+    // But UniversalDataTable uses `hidden` in other places? No, interface says `visible`.
+
+    // In UserManagementTable I used `hidden: false` or `hidden: true`.
+    // But the interface in UniversalDataTable defines `visible?: boolean`.
+    // I need to align them.
+    // UserManagementTable passes `hidden`. UniversalDataTable expects `visible`.
+
+    // I will update UniversalDataTable to handle `hidden` as well (legacy/compat).
     const isVisible = (key: string) => {
-      const override = binding?.columnOverrides?.[key];
-      return override?.visible === true;  // Hidden by default unless explicitly enabled
+      const override = binding?.columnOverrides?.[key] as any;
+      if (override?.hidden !== undefined) return !override.hidden; // Respect 'hidden' prop if present
+      if (override?.visible !== undefined) return override.visible;
+      return false; // Default hidden if neither set (current behavior)
     };
 
     const visibleKeys = new Set<string>();
@@ -324,7 +358,7 @@ export function UniversalDataTable({
       // Add columns in order
       binding.columnOrder.forEach(key => {
         // Ensure related columns in order exist in map (robustness)
-        ensureRelatedColumn(key);
+        ensureVirtualColumn(key);
 
         // Re-check visibility for potentially newly added columns
         if (isVisible(key)) {

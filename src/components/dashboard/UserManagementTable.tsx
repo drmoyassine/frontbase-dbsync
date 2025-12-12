@@ -37,17 +37,20 @@ export function UserManagementTable() {
         'email': {
           displayName: 'Auth Email',
           width: 250,
-          sortable: true
+          sortable: true,
+          hidden: false
         },
         'auth_created_at': {
           displayName: 'Joined (Auth)',
           width: 180,
-          sortable: true
+          sortable: true,
+          hidden: false
         },
         'last_sign_in_at': {
           displayName: 'Last Login',
           width: 180,
-          sortable: true
+          sortable: true,
+          hidden: false
         },
 
         // Mapped Columns from Contacts Table

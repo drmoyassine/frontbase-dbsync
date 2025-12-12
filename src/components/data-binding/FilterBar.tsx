@@ -37,12 +37,18 @@ const TextFilterInput: React.FC<FilterInputProps> = ({ filter, onValueChange }) 
 
 // Dropdown filter with embedded search
 const DropdownFilterInput: React.FC<FilterInputProps> = ({ filter, tableName, onValueChange }) => {
-    const [options, setOptions] = useState<string[]>([]);
+    const [fetchedOptions, setFetchedOptions] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [open, setOpen] = useState(false);
 
+    // Use provided options if available, otherwise use fetched options
+    const options = filter.options || fetchedOptions;
+
     useEffect(() => {
+        // Skip fetch if options are already provided
+        if (filter.options) return;
+
         if (filter.column) {
             setLoading(true);
             let queryTable = tableName;
@@ -57,13 +63,13 @@ const DropdownFilterInput: React.FC<FilterInputProps> = ({ filter, tableName, on
             databaseApi.fetchDistinctValues(queryTable, queryColumn)
                 .then((result) => {
                     if (result.success) {
-                        setOptions(result.data || []);
+                        setFetchedOptions(result.data || []);
                     }
                     setLoading(false);
                 })
                 .catch(() => setLoading(false));
         }
-    }, [filter.column, tableName]);
+    }, [filter.column, tableName, filter.options]);
 
     const filteredOptions = options.filter(opt =>
         opt.toLowerCase().includes(searchQuery.toLowerCase())
@@ -101,7 +107,7 @@ const DropdownFilterInput: React.FC<FilterInputProps> = ({ filter, tableName, on
                         >
                             All
                         </button>
-                        {loading ? (
+                        {loading && !filter.options ? (
                             <div className="text-sm text-muted-foreground p-2">Loading...</div>
                         ) : (
                             filteredOptions.map((opt) => (
@@ -126,13 +132,19 @@ const DropdownFilterInput: React.FC<FilterInputProps> = ({ filter, tableName, on
 
 // Multi-select filter with embedded search
 const MultiselectFilterInput: React.FC<FilterInputProps> = ({ filter, tableName, onValueChange }) => {
-    const [options, setOptions] = useState<string[]>([]);
+    const [fetchedOptions, setFetchedOptions] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const [open, setOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const selectedValues = (filter.value as string[]) || [];
 
+    // Use provided options if available, otherwise use fetched options
+    const options = filter.options || fetchedOptions;
+
     useEffect(() => {
+        // Skip fetch if options are already provided
+        if (filter.options) return;
+
         if (filter.column) {
             setLoading(true);
             let queryTable = tableName;
@@ -147,13 +159,13 @@ const MultiselectFilterInput: React.FC<FilterInputProps> = ({ filter, tableName,
             databaseApi.fetchDistinctValues(queryTable, queryColumn)
                 .then((result) => {
                     if (result.success) {
-                        setOptions(result.data || []);
+                        setFetchedOptions(result.data || []);
                     }
                     setLoading(false);
                 })
                 .catch(() => setLoading(false));
         }
-    }, [filter.column, tableName]);
+    }, [filter.column, tableName, filter.options]);
 
     const toggleValue = (val: string) => {
         if (selectedValues.includes(val)) {
@@ -198,7 +210,7 @@ const MultiselectFilterInput: React.FC<FilterInputProps> = ({ filter, tableName,
                 </div>
                 <ScrollArea className="h-[180px]">
                     <div className="p-2 space-y-1">
-                        {loading ? (
+                        {loading && !filter.options ? (
                             <div className="text-sm text-muted-foreground p-2">Loading...</div>
                         ) : (
                             filteredOptions.map((opt) => (

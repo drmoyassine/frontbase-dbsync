@@ -10,6 +10,8 @@ export function UserManagementTable() {
   const binding = useMemo(() => {
     if (!isConfigured || !config) return null;
 
+    const createdAtCol = config.columnMapping.createdAtColumn || 'created_at';
+
     return {
       componentId: 'user-management-table',
       tableName: config.contactsTable,
@@ -18,11 +20,11 @@ export function UserManagementTable() {
         table: config.contactsTable,
         select: '*',
         filters: [],
-        orderBy: [{ column: 'created_at', ascending: false }]
+        orderBy: [{ column: createdAtCol, ascending: false }]
       },
       refreshInterval: 30000,
       pagination: { enabled: true, pageSize: 25, page: 1 },
-      sorting: { enabled: true, defaultSort: [{ column: 'created_at', direction: 'desc' }] },
+      sorting: { enabled: true, defaultSort: [{ column: createdAtCol, direction: 'desc' }] },
       filtering: { searchEnabled: true, filters: {} },
       columnOverrides: {
         // Hide sensitive columns by default
@@ -66,13 +68,8 @@ export function UserManagementTable() {
           width: 150,
           sortable: true
         },
-        created_at: {
+        [createdAtCol]: {
           displayName: 'Registered',
-          width: 150,
-          sortable: true
-        },
-        updated_at: {
-          displayName: 'Last Updated',
           width: 150,
           sortable: true
         }

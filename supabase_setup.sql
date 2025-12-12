@@ -465,12 +465,17 @@ BEGIN
   END IF;
 
   -- Sorting
-  -- Default to auth.users.created_at if ambiguous or not provided
-  IF sort_col = 'created_at' OR sort_col = 'email' OR sort_col = 'last_sign_in_at' THEN
-    order_clause := 'ORDER BY au.' || sort_col || ' ' || sort_dir;
+  -- explicit mapping for auth columns
+  IF sort_col = 'created_at' OR sort_col = 'auth_created_at' THEN
+    order_clause := 'ORDER BY au.created_at ' || sort_dir;
+  ELSIF sort_col = 'email' THEN
+    order_clause := 'ORDER BY au.email ' || sort_dir;
+  ELSIF sort_col = 'last_sign_in_at' THEN
+    order_clause := 'ORDER BY au.last_sign_in_at ' || sort_dir;
   ELSE
-    -- Try sorting by contact column
-    order_clause := 'ORDER BY c.' || sort_col || ' ' || sort_dir; 
+    -- Default to contact column for anything else
+    -- Use quote_ident to prevent SQL injection on column names
+    order_clause := format('ORDER BY c.%I %s', sort_col, sort_dir); 
   END IF;
 
   -- Dynamic Query

@@ -10,8 +10,9 @@ import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useToast } from '@/hooks/use-toast';
-import { Settings, Save, RotateCcw, Plus, Trash2 } from 'lucide-react';
+import { Settings, Save, RotateCcw, Plus, Trash2, HelpCircle } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export function UserContactConfigPanel() {
   const { config, setConfig, setContactsTable, resetConfig } = useUserContactConfig();
@@ -26,10 +27,6 @@ export function UserContactConfigPanel() {
     contactIdColumn: '',
     contactTypeColumn: '',
     permissionLevelColumn: '',
-    nameColumn: '',
-    emailColumn: '',
-    phoneColumn: '',
-    avatarColumn: ''
   });
   const [enabled, setEnabledState] = useState(true);
   const [contactTypes, setContactTypes] = useState<Record<string, string>>({});
@@ -53,10 +50,6 @@ export function UserContactConfigPanel() {
         contactIdColumn: config.columnMapping.contactIdColumn || '',
         contactTypeColumn: config.columnMapping.contactTypeColumn || '',
         permissionLevelColumn: config.columnMapping.permissionLevelColumn || '',
-        nameColumn: config.columnMapping.nameColumn || '',
-        emailColumn: config.columnMapping.emailColumn || '',
-        phoneColumn: config.columnMapping.phoneColumn || '',
-        avatarColumn: config.columnMapping.avatarColumn || ''
       });
       setContactTypes(config.contactTypes || {});
       setPermissionLevels(config.permissionLevels || {});
@@ -69,7 +62,18 @@ export function UserContactConfigPanel() {
   }, [config, loadTableSchema]);
 
   const tableSchema = selectedTable ? schemas.get(selectedTable) : null;
-  const availableColumns = tableSchema?.columns || [];
+
+  // Deduplicate and filter columns
+  const availableColumns = React.useMemo(() => {
+    if (!tableSchema?.columns) return [];
+    const unique = new Map();
+    tableSchema.columns.forEach(c => {
+      if (!unique.has(c.name)) {
+        unique.set(c.name, c);
+      }
+    });
+    return Array.from(unique.values());
+  }, [tableSchema]);
 
   const handleTableChange = async (tableName: string) => {
     setSelectedTable(tableName);
@@ -95,10 +99,6 @@ export function UserContactConfigPanel() {
         contactIdColumn: columns.contactIdColumn,
         contactTypeColumn: columns.contactTypeColumn,
         permissionLevelColumn: columns.permissionLevelColumn,
-        nameColumn: columns.nameColumn || undefined,
-        emailColumn: columns.emailColumn || undefined,
-        phoneColumn: columns.phoneColumn || undefined,
-        avatarColumn: columns.avatarColumn || undefined,
       },
       contactTypes,
       permissionLevels,
@@ -111,46 +111,101 @@ export function UserContactConfigPanel() {
     });
   };
 
-  // Helper for Key-Value editors
-  const KeyValueEditor = ({ title, data, onChange }: { title: string, data: Record<string, string>, onChange: (d: Record<string, string>) => void }) => {
+  // Helper for Key-Value editors with internal state to prevent focus loss
+  const KeyValueEditor = ({ title, description, data, onChange }: { title: string, description: string, data: Record<string, string>, onChange: (d: Record<string, string>) => void }) => {
+    // Convert Record to Array for stable editing
+    const [items, setItems] = useState<{ id: string, key: string, label: string }[]>([]);
+
+    useEffect(() => {
+      // Only sync from props if the length changes or it's empty (initial load)
+      // This avoids cursor jumping if we synced on every keystroke roundtrip
+      // Ideally we should have a more robust sync, but for now this fixes the focus loss
+      const newItems = Object.entries(data).map(([k, v], i) => ({
+        id: `item-${i}-${k}`, // Stable ID
+        key: k,
+        label: v
+      }));
+
+      // Simple check to avoid loop - if we have same number of items and keys match, assume local state is fresher
+      // Actually, let's just use local state as source of truth while editing, and push up on change
+      if (items.length === 0 && newItems.length > 0) {
+        setItems(newItems);
+      }
+    }, [data, items.length]);
+
+    const updateParent = (currentItems: typeof items) => {
+      const newRecord: Record<string, string> = {};
+      currentItems.forEach(item => {
+        if (item.key) newRecord[item.key] = item.label;
+      });
+      onChange(newRecord);
+    };
+
+    const addItem = () => {
+      const newItem = { id: `new-${Date.now()}`, key: `new_type_${items.length + 1}`, label: 'New Type' };
+      const newItems = [...items, newItem];
+      setItems(newItems);
+      updateParent(newItems);
+    };
+
+    const updateItem = (id: string, field: 'key' | 'label', value: string) => {
+      const newItems = items.map(item => item.id === id ? { ...item, [field]: value } : item);
+      setItems(newItems);
+      updateParent(newItems);
+    };
+
+    const removeItem = (id: string) => {
+      const newItems = items.filter(item => item.id !== id);
+      setItems(newItems);
+      updateParent(newItems);
+    };
+
     return (
-      <div className="space-y-2 border p-3 rounded-md">
-        <div className="flex justify-between items-center">
-          <h4 className="text-sm font-medium">{title}</h4>
-          <Button variant="ghost" size="sm" onClick={() => onChange({ ...data, [`new_${Object.keys(data).length + 1}`]: 'New Item' })}>
-            <Plus className="h-4 w-4" />
+      <div className="space-y-3 border p-4 rounded-md bg-slate-50/50">
+        <div className="flex justify-between items-start">
+          <div>
+            <h4 className="text-sm font-medium flex items-center gap-2">
+              {title}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger><HelpCircle className="h-3.5 w-3.5 text-muted-foreground" /></TooltipTrigger>
+                  <TooltipContent className="max-w-xs">{description}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </h4>
+          </div>
+          <Button variant="outline" size="sm" onClick={addItem} className="h-8">
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add
           </Button>
         </div>
-        <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
-          {Object.entries(data).map(([key, value], idx) => (
-            <div key={idx} className="flexgap-2 items-center">
+
+        <div className="grid grid-cols-[1fr,1.5fr,auto] gap-2 px-1 text-xs text-muted-foreground font-medium uppercase tracking-wider">
+          <div>Value (DB)</div>
+          <div>Label (UI)</div>
+          <div className="w-8"></div>
+        </div>
+
+        <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+          {items.map((item) => (
+            <div key={item.id} className="grid grid-cols-[1fr,1.5fr,auto] gap-2 items-center">
               <Input
-                className="h-8 text-xs w-1/3"
-                value={key}
-                onChange={(e) => {
-                  const newData = { ...data };
-                  delete newData[key];
-                  newData[e.target.value] = value;
-                  onChange(newData);
-                }}
-                placeholder="Key (e.g. admin)"
+                className="h-8 text-sm"
+                value={item.key}
+                onChange={(e) => updateItem(item.id, 'key', e.target.value)}
+                placeholder="e.g. admin"
               />
               <Input
-                className="h-8 text-xs flex-1"
-                value={value}
-                onChange={(e) => onChange({ ...data, [key]: e.target.value })}
-                placeholder="Label"
+                className="h-8 text-sm"
+                value={item.label}
+                onChange={(e) => updateItem(item.id, 'label', e.target.value)}
+                placeholder="e.g. Administrator"
               />
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => {
-                const newData = { ...data };
-                delete newData[key];
-                onChange(newData);
-              }}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => removeItem(item.id)}>
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
           ))}
-          {Object.keys(data).length === 0 && <p className="text-xs text-muted-foreground text-center py-2">No items defined</p>}
+          {items.length === 0 && <p className="text-sm text-muted-foreground text-center py-4 italic">No items defined</p>}
         </div>
       </div>
     );
@@ -158,16 +213,16 @@ export function UserContactConfigPanel() {
 
   const ColumnSelect = ({ label, field, required = false }: { label: string, field: keyof typeof columns, required?: boolean }) => (
     <div>
-      <Label className="text-xs">
+      <Label className="text-xs font-medium mb-1.5 block">
         {label} {required && <span className="text-red-500">*</span>}
       </Label>
       <Select value={columns[field]} onValueChange={(val) => setColumns(prev => ({ ...prev, [field]: val }))}>
-        <SelectTrigger className="h-8">
+        <SelectTrigger className="h-9">
           <SelectValue placeholder="Select column" />
         </SelectTrigger>
         <SelectContent>
           {availableColumns.map((c) => (
-            <SelectItem key={c.name} value={c.name}>{c.name} ({c.type})</SelectItem>
+            <SelectItem key={c.name} value={c.name}>{c.name} <span className="text-muted-foreground text-xs ml-1">({c.type})</span></SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -182,7 +237,7 @@ export function UserContactConfigPanel() {
           User Contact Data Configuration
         </CardTitle>
         <CardDescription>
-          Map your Supabase contact table to system users
+          Map your database table to system user roles and permissions
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -197,9 +252,9 @@ export function UserContactConfigPanel() {
           </div>
         )}
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div>
-            <Label htmlFor="contacts-table">Contacts Table</Label>
+            <Label htmlFor="contacts-table" className="text-sm font-medium mb-1.5 block">Contacts Table</Label>
             <TableSelector
               value={selectedTable}
               onValueChange={handleTableChange}
@@ -209,34 +264,44 @@ export function UserContactConfigPanel() {
           </div>
 
           {selectedTable && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <Separator />
-              <h4 className="font-medium text-sm">Required Mapping</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <ColumnSelect label="Contact ID (PK)" field="contactIdColumn" required />
-                <ColumnSelect label="Auth User ID (FK)" field="authUserIdColumn" required />
-                <ColumnSelect label="Contact Type" field="contactTypeColumn" required />
-                <ColumnSelect label="Permission Level" field="permissionLevelColumn" required />
+
+              <div className="space-y-4">
+                <h4 className="font-medium text-sm flex items-center gap-2">
+                  Column Mapping
+                  <span className="text-xs font-normal text-muted-foreground px-2 py-0.5 rounded-full bg-slate-100">Required</span>
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <ColumnSelect label="Contact ID (Primary Key)" field="contactIdColumn" required />
+                  <ColumnSelect label="Auth User ID (Foreign Key)" field="authUserIdColumn" required />
+                  <ColumnSelect label="Contact Type Column" field="contactTypeColumn" required />
+                  <ColumnSelect label="Permission Level Column" field="permissionLevelColumn" required />
+                </div>
               </div>
 
-              <h4 className="font-medium text-sm mt-4">Optional Display Mapping</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <ColumnSelect label="Name" field="nameColumn" />
-                <ColumnSelect label="Email" field="emailColumn" />
-                <ColumnSelect label="Phone" field="phoneColumn" />
-                <ColumnSelect label="Avatar" field="avatarColumn" />
-              </div>
-
-              <Separator />
-              <div className="grid grid-cols-2 gap-4">
-                <KeyValueEditor title="Contact Types (User Groups)" data={contactTypes} onChange={setContactTypes} />
-                <KeyValueEditor title="Permission Levels" data={permissionLevels} onChange={setPermissionLevels} />
+              <div className="space-y-4">
+                <h4 className="font-medium text-sm">Definitions</h4>
+                <div className="grid grid-cols-2 gap-6">
+                  <KeyValueEditor
+                    title="Contact Types"
+                    description="Define the types of users in your system (e.g. Vendor, Customer, Team Member). These are high-level categories."
+                    data={contactTypes}
+                    onChange={setContactTypes}
+                  />
+                  <KeyValueEditor
+                    title="Permission Levels"
+                    description="Define access levels (e.g. read_only, editor, admin). These can apply to any Contact Type, creating a matrix of roles."
+                    data={permissionLevels}
+                    onChange={setPermissionLevels}
+                  />
+                </div>
               </div>
             </div>
           )}
         </div>
 
-        <div className="flex gap-2 justify-end">
+        <div className="flex gap-2 justify-end pt-4">
           <Button variant="outline" onClick={resetConfig}>
             <RotateCcw className="h-4 w-4 mr-2" />
             Reset

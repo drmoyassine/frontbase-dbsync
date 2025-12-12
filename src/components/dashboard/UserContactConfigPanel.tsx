@@ -14,6 +14,106 @@ import { Settings, Save, RotateCcw, Plus, Trash2, HelpCircle } from 'lucide-reac
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
+// Helper for Key-Value editors with internal state to prevent focus loss
+function KeyValueEditor({ title, description, data, onChange }: { title: string, description: string, data: Record<string, string>, onChange: (d: Record<string, string>) => void }) {
+  // Convert Record to Array for stable editing
+  const [items, setItems] = useState<{ id: string, key: string, label: string }[]>([]);
+
+  useEffect(() => {
+    // Only sync from props if the length changes or it's empty (initial load)
+    // This avoids cursor jumping if we synced on every keystroke roundtrip
+    // Ideally we should have a more robust sync, but for now this fixes the focus loss
+    const newItems = Object.entries(data).map(([k, v], i) => ({
+      id: `item-${i}-${k}`, // Stable ID
+      key: k,
+      label: v
+    }));
+
+    // Simple check to avoid loop - if we have same number of items and keys match, assume local state is fresher
+    // Actually, let's just use local state as source of truth while editing, and push up on change
+    if (items.length === 0 && newItems.length > 0) {
+      setItems(newItems);
+    }
+  }, [data, items.length]);
+
+  const updateParent = (currentItems: typeof items) => {
+    const newRecord: Record<string, string> = {};
+    currentItems.forEach(item => {
+      if (item.key) newRecord[item.key] = item.label;
+    });
+    onChange(newRecord);
+  };
+
+  const addItem = () => {
+    const newItem = { id: `new-${Date.now()}`, key: `new_type_${items.length + 1}`, label: 'New Type' };
+    const newItems = [...items, newItem];
+    setItems(newItems);
+    updateParent(newItems);
+  };
+
+  const updateItem = (id: string, field: 'key' | 'label', value: string) => {
+    const newItems = items.map(item => item.id === id ? { ...item, [field]: value } : item);
+    setItems(newItems);
+    updateParent(newItems);
+  };
+
+  const removeItem = (id: string) => {
+    const newItems = items.filter(item => item.id !== id);
+    setItems(newItems);
+    updateParent(newItems);
+  };
+
+  return (
+    <div className="space-y-3 border p-4 rounded-md bg-slate-50/50">
+      <div className="flex justify-between items-start">
+        <div>
+          <h4 className="text-sm font-medium flex items-center gap-2">
+            {title}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger><HelpCircle className="h-3.5 w-3.5 text-muted-foreground" /></TooltipTrigger>
+                <TooltipContent className="max-w-xs">{description}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </h4>
+        </div>
+        <Button variant="outline" size="sm" onClick={addItem} className="h-8">
+          <Plus className="h-3.5 w-3.5 mr-1" /> Add
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-[1fr,1.5fr,auto] gap-2 px-1 text-xs text-muted-foreground font-medium uppercase tracking-wider">
+        <div>Value (DB)</div>
+        <div>Label (UI)</div>
+        <div className="w-8"></div>
+      </div>
+
+      <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+        {items.map((item) => (
+          <div key={item.id} className="grid grid-cols-[1fr,1.5fr,auto] gap-2 items-center">
+            <Input
+              className="h-8 text-sm"
+              value={item.key}
+              onChange={(e) => updateItem(item.id, 'key', e.target.value)}
+              placeholder="e.g. admin"
+            />
+            <Input
+              className="h-8 text-sm"
+              value={item.label}
+              onChange={(e) => updateItem(item.id, 'label', e.target.value)}
+              placeholder="e.g. Administrator"
+            />
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => removeItem(item.id)}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        ))}
+        {items.length === 0 && <p className="text-sm text-muted-foreground text-center py-4 italic">No items defined</p>}
+      </div>
+    </div>
+  );
+}
+
 export function UserContactConfigPanel() {
   const { config, setConfig, setContactsTable, resetConfig } = useUserContactConfig();
   const { schemas, loadTableSchema, initialize, connected, connectionError } = useDataBindingStore();
@@ -111,105 +211,7 @@ export function UserContactConfigPanel() {
     });
   };
 
-  // Helper for Key-Value editors with internal state to prevent focus loss
-  const KeyValueEditor = ({ title, description, data, onChange }: { title: string, description: string, data: Record<string, string>, onChange: (d: Record<string, string>) => void }) => {
-    // Convert Record to Array for stable editing
-    const [items, setItems] = useState<{ id: string, key: string, label: string }[]>([]);
 
-    useEffect(() => {
-      // Only sync from props if the length changes or it's empty (initial load)
-      // This avoids cursor jumping if we synced on every keystroke roundtrip
-      // Ideally we should have a more robust sync, but for now this fixes the focus loss
-      const newItems = Object.entries(data).map(([k, v], i) => ({
-        id: `item-${i}-${k}`, // Stable ID
-        key: k,
-        label: v
-      }));
-
-      // Simple check to avoid loop - if we have same number of items and keys match, assume local state is fresher
-      // Actually, let's just use local state as source of truth while editing, and push up on change
-      if (items.length === 0 && newItems.length > 0) {
-        setItems(newItems);
-      }
-    }, [data, items.length]);
-
-    const updateParent = (currentItems: typeof items) => {
-      const newRecord: Record<string, string> = {};
-      currentItems.forEach(item => {
-        if (item.key) newRecord[item.key] = item.label;
-      });
-      onChange(newRecord);
-    };
-
-    const addItem = () => {
-      const newItem = { id: `new-${Date.now()}`, key: `new_type_${items.length + 1}`, label: 'New Type' };
-      const newItems = [...items, newItem];
-      setItems(newItems);
-      updateParent(newItems);
-    };
-
-    const updateItem = (id: string, field: 'key' | 'label', value: string) => {
-      const newItems = items.map(item => item.id === id ? { ...item, [field]: value } : item);
-      setItems(newItems);
-      updateParent(newItems);
-    };
-
-    const removeItem = (id: string) => {
-      const newItems = items.filter(item => item.id !== id);
-      setItems(newItems);
-      updateParent(newItems);
-    };
-
-    return (
-      <div className="space-y-3 border p-4 rounded-md bg-slate-50/50">
-        <div className="flex justify-between items-start">
-          <div>
-            <h4 className="text-sm font-medium flex items-center gap-2">
-              {title}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger><HelpCircle className="h-3.5 w-3.5 text-muted-foreground" /></TooltipTrigger>
-                  <TooltipContent className="max-w-xs">{description}</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </h4>
-          </div>
-          <Button variant="outline" size="sm" onClick={addItem} className="h-8">
-            <Plus className="h-3.5 w-3.5 mr-1" /> Add
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-[1fr,1.5fr,auto] gap-2 px-1 text-xs text-muted-foreground font-medium uppercase tracking-wider">
-          <div>Value (DB)</div>
-          <div>Label (UI)</div>
-          <div className="w-8"></div>
-        </div>
-
-        <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-          {items.map((item) => (
-            <div key={item.id} className="grid grid-cols-[1fr,1.5fr,auto] gap-2 items-center">
-              <Input
-                className="h-8 text-sm"
-                value={item.key}
-                onChange={(e) => updateItem(item.id, 'key', e.target.value)}
-                placeholder="e.g. admin"
-              />
-              <Input
-                className="h-8 text-sm"
-                value={item.label}
-                onChange={(e) => updateItem(item.id, 'label', e.target.value)}
-                placeholder="e.g. Administrator"
-              />
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => removeItem(item.id)}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-          {items.length === 0 && <p className="text-sm text-muted-foreground text-center py-4 italic">No items defined</p>}
-        </div>
-      </div>
-    );
-  };
 
   const ColumnSelect = ({ label, field, required = false }: { label: string, field: keyof typeof columns, required?: boolean }) => (
     <div>

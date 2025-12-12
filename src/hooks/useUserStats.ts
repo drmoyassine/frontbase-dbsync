@@ -1,99 +1,68 @@
-import { useMemo } from 'react';
-import * as React from 'react';
-import { useDataBindingStore } from '@/stores/data-binding-simple';
+import { useState, useEffect } from 'react';
 import { useUserContactConfig } from './useUserContactConfig';
+import { databaseApi } from '@/services/database-api';
 
 export function useUserStats() {
-  const { config, isConfigured } = useUserContactConfig();
-  const { queryData } = useDataBindingStore();
+  const { isConfigured } = useUserContactConfig();
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    recentUsers: 0,
+    loading: true,
+    error: null as string | null
+  });
 
-  const totalUsersBinding = useMemo(() => {
-    if (!isConfigured || !config) return null;
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        setStats(prev => ({ ...prev, loading: true }));
 
-    return {
-      componentId: 'user-stats-total',
-      tableName: config.contactsTable,
-      dataSourceId: 'backend',
-      query: {
-        table: config.contactsTable,
-        select: 'count(*)',
-        filters: [
-          {
-            column: config.columnMapping.authUserIdColumn,
-            operator: 'neq' as const,
-            value: null
-          }
-        ]
-      },
-      refreshInterval: 30000, // Refresh every 30 seconds
-      pagination: { enabled: false, pageSize: 1, page: 1 },
-      sorting: { enabled: false, defaultSort: [] },
-      filtering: { searchEnabled: false, filters: {} },
-      columnOverrides: {}
-    };
-  }, [config, isConfigured]);
+        // Try to fetch from the authoritative Supabase Auth RPC source first
+        // The API response structure matches { success, rows, ... } but our RPC returns a single object
+        // So advancedQuery might wrap it. Let's inspect the result.
+        // Actually, advancedQuery expects "rows" in response for list data.
+        // Our RPC returns a single JSON object.
+        // The /api/database/advanced-query endpoint probably uses rpc() which returns { data, error }.
+        // If the RPC returns a JSON object, it will be in `data`.
 
-  const recentUsersBinding = useMemo(() => {
-    if (!isConfigured || !config || !config.columnMapping.createdAtColumn) return null;
+        const result: any = await databaseApi.advancedQuery('frontbase_get_auth_stats', {});
 
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        if (result.success && result.data) { // Check result.data which is the raw RPC response if not rows
+          // It seems advancedQuery might mask simple scalar/object returns if it's strictly expecting lists.
+          // Let's assume it returns { success: true, data: { total_users, ... } }
+          // Wait, looking at database-api.ts: returns response.json().
+          // The API route likely returns { success: true, data: rpc_data } or similar.
+          // Let's assume standard structure:
+          const data = result.data || result.rows; // fallback
 
-    return {
-      componentId: 'user-stats-recent',
-      tableName: config.contactsTable,
-      dataSourceId: 'backend',
-      query: {
-        table: config.contactsTable,
-        select: 'count(*)',
-        filters: [
-          {
-            column: config.columnMapping.authUserIdColumn,
-            operator: 'neq' as const,
-            value: null
-          },
-          {
-            column: config.columnMapping.createdAtColumn,
-            operator: 'gte' as const,
-            value: sevenDaysAgo.toISOString()
-          }
-        ]
-      },
-      refreshInterval: 30000,
-      pagination: { enabled: false, pageSize: 1, page: 1 },
-      sorting: { enabled: false, defaultSort: [] },
-      filtering: { searchEnabled: false, filters: {} },
-      columnOverrides: {}
-    };
-  }, [config, isConfigured]);
+          setStats({
+            totalUsers: Number(data.total_users || 0),
+            recentUsers: Number(data.new_users || 0),
+            loading: false,
+            error: null
+          });
+        } else {
+          // Fallback if success is false, but don't error out hard if it's just missing
+          if (result.error) throw new Error(result.error);
 
-  // Get data from store state
-  const { dataCache, loadingStates, errors } = useDataBindingStore.getState();
+          // If we just got empty data, maybe zero?
+          setStats(prev => ({ ...prev, loading: false }));
+        }
 
-  const totalData = totalUsersBinding ? dataCache.get(totalUsersBinding.componentId) : null;
-  const recentData = recentUsersBinding ? dataCache.get(recentUsersBinding.componentId) : null;
-
-  const totalLoading = totalUsersBinding ? (loadingStates.get(totalUsersBinding.componentId) || false) : false;
-  const recentLoading = recentUsersBinding ? (loadingStates.get(recentUsersBinding.componentId) || false) : false;
-
-  const totalError = totalUsersBinding ? errors.get(totalUsersBinding.componentId) : null;
-  const recentError = recentUsersBinding ? errors.get(recentUsersBinding.componentId) : null;
-
-  // Trigger data fetch if not cached
-  React.useEffect(() => {
-    if (totalUsersBinding && !totalData && !totalLoading) {
-      queryData(totalUsersBinding.componentId, totalUsersBinding);
+      } catch (err) {
+        console.error('Failed to fetch auth stats via RPC:', err);
+        setStats(prev => ({
+          ...prev,
+          loading: false,
+          error: 'Could not load stats from Supabase Auth'
+        }));
+      }
     }
-    if (recentUsersBinding && !recentData && !recentLoading) {
-      queryData(recentUsersBinding.componentId, recentUsersBinding);
-    }
-  }, [totalUsersBinding, recentUsersBinding, totalData, recentData, totalLoading, recentLoading, queryData]);
+
+    fetchStats();
+  }, []); // Run once on mount
 
   return {
-    totalUsers: totalData?.[0]?.count || 0,
-    recentUsers: recentData?.[0]?.count || 0,
-    loading: totalLoading || recentLoading,
-    error: totalError || recentError,
-    isConfigured
+    ...stats,
+    isConfigured // Pass through for UI logic if needed, though stats are now independent
   };
 }

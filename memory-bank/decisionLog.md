@@ -1,5 +1,15 @@
 # Decision Log
 
+## [2025-12-12] Refactor Builder Store and Enable Strict Types
+- **Context**: The `builder.ts` store file was becoming unmanageable (>750 lines) and mixed various concerns (UI, Data, Logic). Additionally, strict type checking was disabled.
+- **Decision**: 
+    1. Split `builder.ts` into modular slices (`PageSlice`, `ProjectSlice`, `BuilderSlice`, etc.) using Zustand's slice pattern.
+    2. Enable `noImplicitAny` in `tsconfig.json` to improve type safety.
+- **Consequences**: 
+    - Improved maintainability and testability of the store.
+    - Better type safety across the codebase.
+    - Minor risk of breaking imports (mitigated by re-exporting types).
+
 This file records architectural and implementation decisions using a list format.
 2025-12-04 23:44:46 - Decision logging system initialized
 

@@ -3,6 +3,9 @@
 This file documents recurring patterns and standards used in the project.
 2025-12-04 23:45:04 - System patterns documentation initialized
 
+## Architecture
+- **State Management**: Zustand with Sliced Pattern. Large stores (like Builder) are split into smaller, domain-specific slices (`PageSlice`, `BuilderSlice`) and combined in the main store file. This promotes modularity and separation of concerns.
+
 ## Coding Patterns
 
 ### Component Architecture Patterns

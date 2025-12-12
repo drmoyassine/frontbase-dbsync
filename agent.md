@@ -71,12 +71,12 @@ The builder uses a component-based architecture where each UI element is a dragg
 ### 2. State Management
 
 #### Builder Store (`stores/builder.ts`)
-Manages the page builder state:
-- Pages and their layout data
-- Selected component
-- Preview mode
-- Viewport settings
-- Component CRUD operations
+Manages the page builder state using a sliced architecture:
+- **Project Slice**: Project settings
+- **Page Slice**: Page CRUD and database sync
+- **Builder Slice**: Component manipulation (move, update, delete)
+- **UI Slice**: Tooling state (preview, viewport, zoom)
+- **Variables Slice**: App variables
 
 #### Dashboard Store (`stores/dashboard.ts`)
 Manages dashboard state:
@@ -225,6 +225,11 @@ npm run build
 4. **Type Safety**: Use TypeScript interfaces for all data structures
 
 ## Recent Refactorings
+
+### Builder Store Refactoring (Dec 2025)
+- Split monolithic `builder.ts` into modular slices (`createPageSlice`, `createBuilderSlice`, etc.)
+- Enforced stricter TypeScript configuration (`noImplicitAny: true`)
+- Centralized shared types in `src/types/builder.ts`
 
 ### ComponentRenderer Refactoring
 - Split large switch statement into categorized renderer files

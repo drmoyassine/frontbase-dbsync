@@ -95,8 +95,11 @@ export const UserManagementTable = () => {
       frontendFilters: config.frontendFilters || [], // Use saved filters
       pagination: {
         pageSize: 10,
-        enabled: true
+        enabled: true,
+        page: 1
       },
+      sorting: { enabled: true, defaultSort: [{ column: createdAtCol, direction: 'desc' }] },
+      filtering: { searchEnabled: true, filters: {} },
       refreshInterval: 30000,
     };
   }, [config, isConfigured]);
@@ -170,7 +173,7 @@ export const UserManagementTable = () => {
       </div>
 
       <div className="border rounded-md">
-        <UniversalDataTable binding={binding} />
+        <UniversalDataTable componentId="user-management-table" binding={binding} />
       </div>
     </div>
   );

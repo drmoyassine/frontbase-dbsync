@@ -540,20 +540,39 @@ AS $$
 DECLARE
   query text;
   result json;
+  target_table_ident text;
+  join_table_ident text;
 BEGIN
   -- Basic Validation
   IF target_table IS NULL OR target_col IS NULL THEN
      RAISE EXCEPTION 'target_table and target_col are required';
   END IF;
 
+  -- Handle Schema Qualification for Target Table
+  IF target_table LIKE '%.%' THEN
+    target_table_ident := format('%I.%I', split_part(target_table, '.', 1), split_part(target_table, '.', 2));
+  ELSE
+    target_table_ident := format('%I', target_table);
+  END IF;
+
+  -- Handle Schema Qualification for Join Table
+  IF join_table IS NOT NULL THEN
+    IF join_table LIKE '%.%' THEN
+      join_table_ident := format('%I.%I', split_part(join_table, '.', 1), split_part(join_table, '.', 2));
+    ELSE
+      join_table_ident := format('%I', join_table);
+    END IF;
+  END IF;
+
   -- Construct Query
-  query := format('SELECT DISTINCT t.%I FROM %I t', target_col, target_table);
+  -- Note: We use %s for table identifiers because they are already safely formatted above using %I
+  query := format('SELECT DISTINCT t.%I FROM %s t', target_col, target_table_ident);
 
   -- Optional Inner Join
   IF join_table IS NOT NULL AND target_join_col IS NOT NULL AND join_table_col IS NOT NULL THEN
      query := query || format(
-       ' INNER JOIN %I j ON t.%I = j.%I', 
-       join_table, target_join_col, join_table_col
+       ' INNER JOIN %s j ON t.%I = j.%I', 
+       join_table_ident, target_join_col, join_table_col
      );
   END IF;
 

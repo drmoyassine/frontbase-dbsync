@@ -23,8 +23,17 @@ module.exports = (db) => {
   router.put('/', (req, res) => {
     try {
       const updates = req.body;
+
+      // Handle camelCase to snake_case mapping for specific fields
+      if (updates.usersConfig) {
+        updates.users_config = typeof updates.usersConfig === 'object'
+          ? JSON.stringify(updates.usersConfig)
+          : updates.usersConfig;
+        delete updates.usersConfig;
+      }
+
       const project = db.updateProject(updates);
-      
+
       res.json({
         success: true,
         data: project

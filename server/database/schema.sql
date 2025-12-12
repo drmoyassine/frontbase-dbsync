@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS project (
   supabase_url TEXT,
   supabase_anon_key TEXT,
   supabase_service_key_encrypted TEXT,
+  users_config TEXT, -- JSON configuration for user contact mapping
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

@@ -5,13 +5,13 @@ const { migrateServiceKeyToProjectLevel } = require('./migrate-service-key');
 
 function initializeDatabase() {
   const dbPath = process.env.DB_PATH || path.join(__dirname, '../data/frontbase.db');
-  
+
   console.log('📍 Database path:', dbPath);
-  
+
   // Ensure data directory exists
   const dataDir = path.dirname(dbPath);
   console.log('📁 Data directory:', dataDir);
-  
+
   if (!fs.existsSync(dataDir)) {
     console.log('📁 Creating data directory...');
     fs.mkdirSync(dataDir, { recursive: true });
@@ -19,7 +19,7 @@ function initializeDatabase() {
   } else {
     console.log('✅ Data directory exists');
   }
-  
+
   // Check directory permissions
   try {
     const testFile = path.join(dataDir, '.write-test');
@@ -30,7 +30,7 @@ function initializeDatabase() {
     console.error('❌ Data directory is not writable:', error.message);
     throw error;
   }
-  
+
   // Create database connection
   console.log('🔗 Creating database connection...');
   let db;
@@ -41,7 +41,7 @@ function initializeDatabase() {
     console.error('❌ Failed to create database connection:', error.message);
     throw error;
   }
-  
+
   // Enable foreign keys
   console.log('🔧 Enabling foreign keys...');
   try {
@@ -51,11 +51,11 @@ function initializeDatabase() {
     console.error('❌ Failed to enable foreign keys:', error.message);
     throw error;
   }
-  
+
   // Read and execute schema
   const schemaPath = path.join(__dirname, 'schema.sql');
   console.log('📖 Reading schema from:', schemaPath);
-  
+
   let schemaSQL;
   try {
     schemaSQL = fs.readFileSync(schemaPath, 'utf8');
@@ -65,11 +65,11 @@ function initializeDatabase() {
     console.error('❌ Failed to read schema file:', error.message);
     throw error;
   }
-  
+
   // Execute schema (split by semicolons and filter empty statements)
   const statements = schemaSQL.split(';').filter(stmt => stmt.trim());
   console.log('📝 Executing', statements.length, 'SQL statements...');
-  
+
   try {
     db.transaction(() => {
       statements.forEach((statement, index) => {
@@ -90,10 +90,10 @@ function initializeDatabase() {
     console.error('❌ Transaction failed:', error.message);
     throw error;
   }
-  
+
   console.log('✅ Database initialized successfully');
   console.log(`📍 Database location: ${dbPath}`);
-  
+
   // Run service key migration after database initialization
   try {
     console.log('🔄 Running service key migration...');
@@ -106,7 +106,21 @@ function initializeDatabase() {
     console.warn('⚠️  Service key migration failed:', migrationError.message);
     // Don't fail the entire initialization for migration issues
   }
-  
+
+  // Auto-migration for users_config column
+  try {
+    const tableInfo = db.pragma('table_info(project)');
+    const hasUsersConfig = tableInfo.some(col => col.name === 'users_config');
+
+    if (!hasUsersConfig) {
+      console.log('🔄 Adding users_config column to project table...');
+      db.prepare('ALTER TABLE project ADD COLUMN users_config TEXT').run();
+      console.log('✅ users_config column added successfully');
+    }
+  } catch (error) {
+    console.warn('⚠️ Failed to add users_config column:', error.message);
+  }
+
   return db;
 }
 

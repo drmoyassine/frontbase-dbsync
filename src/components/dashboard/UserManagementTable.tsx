@@ -26,7 +26,7 @@ export function UserManagementTable() {
       filtering: { searchEnabled: true, filters: {} },
       columnOverrides: {
         // Hide sensitive columns by default
-        [config.columnMapping.authUserIdColumn]: { 
+        [config.columnMapping.authUserIdColumn]: {
           hidden: false,
           displayName: 'User ID',
           width: 200
@@ -51,6 +51,21 @@ export function UserManagementTable() {
             width: 150
           }
         }),
+        [config.columnMapping.contactIdColumn]: {
+          displayName: 'Contact ID',
+          hidden: true,
+          width: 100
+        },
+        [config.columnMapping.contactTypeColumn]: {
+          displayName: 'Type',
+          width: 150,
+          sortable: true
+        },
+        [config.columnMapping.permissionLevelColumn]: {
+          displayName: 'Permission',
+          width: 150,
+          sortable: true
+        },
         created_at: {
           displayName: 'Registered',
           width: 150,
@@ -110,9 +125,9 @@ export function UserManagementTable() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <UniversalDataTable 
+        <UniversalDataTable
           componentId={binding.componentId}
-          binding={binding} 
+          binding={binding}
         />
       </CardContent>
     </Card>

@@ -5,6 +5,26 @@ export interface APIResponse<T = any> {
   error?: string;
 }
 
+// Project API
+export const projectAPI = {
+  // Update project settings (including users config)
+  updateProject: async (projectData: any): Promise<APIResponse> => {
+    try {
+      const response = await fetch('/api/project', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(projectData)
+      });
+      if (!response.ok) throw new Error('Failed to update project');
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+};
+
 export const pageAPI = {
   // Get all pages
   getAllPages: async (includeDeleted = false): Promise<APIResponse> => {

@@ -24,12 +24,30 @@ export interface Page {
     deletedAt?: string | null;
 }
 
+export interface UserContactConfig {
+    contactsTable: string;
+    columnMapping: {
+        authUserIdColumn: string;
+        contactIdColumn: string;
+        contactTypeColumn: string;
+        permissionLevelColumn: string;
+        nameColumn?: string;
+        emailColumn?: string;
+        phoneColumn?: string;
+        avatarColumn?: string;
+    };
+    contactTypes: Record<string, string>; // key -> label (e.g. 'admin' -> 'Administrator')
+    permissionLevels: Record<string, string>; // key -> label
+    enabled: boolean;
+}
+
 export interface ProjectConfig {
     id: string;
     name: string;
     description?: string;
     supabaseUrl?: string;
     supabaseAnonKey?: string;
+    usersConfig?: UserContactConfig;
     createdAt: string;
     updatedAt: string;
 }

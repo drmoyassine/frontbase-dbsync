@@ -16,7 +16,7 @@ class DatabaseManager {
     this.getProjectStmt = this.db.prepare('SELECT * FROM project WHERE id = ?');
     this.updateProjectStmt = this.db.prepare(`
       UPDATE project 
-      SET name = ?, description = ?, supabase_url = ?, supabase_anon_key = ?, supabase_service_key_encrypted = ?, updated_at = datetime('now')
+      SET name = ?, description = ?, supabase_url = ?, supabase_anon_key = ?, supabase_service_key_encrypted = ?, users_config = ?, updated_at = datetime('now')
       WHERE id = ?
     `);
 
@@ -91,8 +91,8 @@ class DatabaseManager {
 
   updateProject(updates) {
     const current = this.getProject();
-    const { name, description, supabase_url, supabase_anon_key, supabase_service_key_encrypted } = { ...current, ...updates };
-    this.updateProjectStmt.run(name, description, supabase_url, supabase_anon_key, supabase_service_key_encrypted, 'default');
+    const { name, description, supabase_url, supabase_anon_key, supabase_service_key_encrypted, users_config } = { ...current, ...updates };
+    this.updateProjectStmt.run(name, description, supabase_url, supabase_anon_key, supabase_service_key_encrypted, users_config, 'default');
     return this.getProject();
   }
 

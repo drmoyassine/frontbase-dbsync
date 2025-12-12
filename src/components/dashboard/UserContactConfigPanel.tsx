@@ -269,6 +269,7 @@ export function UserContactConfigPanel() {
     contactIdColumn: '',
     contactTypeColumn: '',
     permissionLevelColumn: '',
+    createdAtColumn: '',
   });
   const [enabled, setEnabledState] = useState(true);
   const [contactTypes, setContactTypes] = useState<Record<string, string>>({});
@@ -293,6 +294,7 @@ export function UserContactConfigPanel() {
         contactIdColumn: config.columnMapping.contactIdColumn || '',
         contactTypeColumn: config.columnMapping.contactTypeColumn || '',
         permissionLevelColumn: config.columnMapping.permissionLevelColumn || '',
+        createdAtColumn: config.columnMapping.createdAtColumn || '',
       });
       setContactTypes(config.contactTypes || {});
       setContactTypeHomePages(config.contactTypeHomePages || {});
@@ -343,6 +345,7 @@ export function UserContactConfigPanel() {
         contactIdColumn: columns.contactIdColumn,
         contactTypeColumn: columns.contactTypeColumn,
         permissionLevelColumn: columns.permissionLevelColumn,
+        createdAtColumn: columns.createdAtColumn,
       },
       contactTypes,
       contactTypeHomePages,
@@ -422,6 +425,7 @@ export function UserContactConfigPanel() {
                   <ColumnSelect label="Auth User ID (Foreign Key)" field="authUserIdColumn" required />
                   <ColumnSelect label="Contact Type Column" field="contactTypeColumn" required />
                   <ColumnSelect label="Permission Level Column" field="permissionLevelColumn" required />
+                  <ColumnSelect label="Created At (User Since)" field="createdAtColumn" />
                 </div>
               </div>
 

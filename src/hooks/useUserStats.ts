@@ -17,7 +17,13 @@ export function useUserStats() {
       query: {
         table: config.contactsTable,
         select: 'count(*)',
-        filters: []
+        filters: [
+          {
+            column: config.columnMapping.authUserIdColumn,
+            operator: 'neq' as const,
+            value: null
+          }
+        ]
       },
       refreshInterval: 30000, // Refresh every 30 seconds
       pagination: { enabled: false, pageSize: 1, page: 1 },
@@ -28,7 +34,7 @@ export function useUserStats() {
   }, [config, isConfigured]);
 
   const recentUsersBinding = useMemo(() => {
-    if (!isConfigured || !config) return null;
+    if (!isConfigured || !config || !config.columnMapping.createdAtColumn) return null;
 
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -42,7 +48,12 @@ export function useUserStats() {
         select: 'count(*)',
         filters: [
           {
-            column: 'created_at',
+            column: config.columnMapping.authUserIdColumn,
+            operator: 'neq' as const,
+            value: null
+          },
+          {
+            column: config.columnMapping.createdAtColumn,
             operator: 'gte' as const,
             value: sevenDaysAgo.toISOString()
           }
@@ -58,13 +69,13 @@ export function useUserStats() {
 
   // Get data from store state
   const { dataCache, loadingStates, errors } = useDataBindingStore.getState();
-  
+
   const totalData = totalUsersBinding ? dataCache.get(totalUsersBinding.componentId) : null;
   const recentData = recentUsersBinding ? dataCache.get(recentUsersBinding.componentId) : null;
-  
+
   const totalLoading = totalUsersBinding ? (loadingStates.get(totalUsersBinding.componentId) || false) : false;
   const recentLoading = recentUsersBinding ? (loadingStates.get(recentUsersBinding.componentId) || false) : false;
-  
+
   const totalError = totalUsersBinding ? errors.get(totalUsersBinding.componentId) : null;
   const recentError = recentUsersBinding ? errors.get(recentUsersBinding.componentId) : null;
 

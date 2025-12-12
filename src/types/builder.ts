@@ -35,6 +35,7 @@ export interface UserContactConfig {
         emailColumn?: string;
         phoneColumn?: string;
         avatarColumn?: string;
+        createdAtColumn?: string; // For tracking new users/growth
     };
     contactTypes: Record<string, string>; // key -> label (e.g. 'admin' -> 'Administrator')
     contactTypeHomePages?: Record<string, string>; // key (contact type value) -> pageId

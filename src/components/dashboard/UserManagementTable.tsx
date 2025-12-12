@@ -33,20 +33,40 @@ export const UserManagementTable = () => {
       for (const filter of config.frontendFilters || []) {
         if ((filter.filterType === 'dropdown' || filter.filterType === 'multiselect') && filter.column) {
           try {
-            const result = await databaseApi.advancedQuery('frontbase_get_users_filter_options', {
-              table_name: config.contactsTable,
-              auth_id_col: config.columnMapping.authUserIdColumn,
-              column_name: filter.column
-            });
+            // Determine join parameters based on column type
+            let rpcParams: any = {};
+
+            if (filter.column.startsWith('auth_') || filter.column === 'last_sign_in_at') {
+              // Fetching from Auth, joined with Contacts
+              // Target: auth.users (email/created_at)
+              // Join: contacts (auth_user_id)
+              const colName = filter.column === 'auth_email' ? 'email' : filter.column.replace('auth_', '');
+              rpcParams = {
+                target_table: 'auth.users',
+                target_col: colName,
+                join_table: config.contactsTable,
+                target_join_col: 'id', // auth.users.id
+                join_table_col: config.columnMapping.authUserIdColumn // contacts.auth_user_id
+              };
+            } else {
+              // Fetching from Contacts, joined with Auth
+              // Target: contacts (status/role)
+              // Join: auth.users (id)
+              // Logic: distinct contact.col inner join auth on contact.auth_id = auth.id
+              rpcParams = {
+                target_table: config.contactsTable,
+                target_col: filter.column,
+                join_table: 'auth.users',
+                target_join_col: config.columnMapping.authUserIdColumn, // contacts.auth_user_id
+                join_table_col: 'id' // auth.users.id
+              };
+            }
+
+            const result = await databaseApi.advancedQuery('frontbase_get_distinct_values', rpcParams);
 
             if (result.success && result.rows) {
-              // Extract values from rows (format: [{ "colName": "value" }])
-              // The RPC returns json_agg of row objects, but depending on how we wrote it...
-              // Wait, the RPC returns `json_agg(t)` where t is `SELECT DISTINCT c.col ...`
-              // So rows will be `[{ "colname": "value" }, ...]`
-
-              // We need to robustly extract the first value of each object
-              const values = result.rows.map(row => Object.values(row)[0] as string).filter(Boolean);
+              // Result format: [{ "val": "value" }, ...]
+              const values = result.rows.map(row => row.val).filter(Boolean);
               newOptions[filter.id] = values;
             }
           } catch (e) {

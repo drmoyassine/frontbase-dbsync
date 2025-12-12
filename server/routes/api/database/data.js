@@ -496,7 +496,11 @@ router.post('/advanced-query', authenticateToken, async (req, res) => {
             const data = await response.json();
             // RPCs usually return the result directly.
             // frontbase_get_rows returns { rows: [], total: ... }
-            res.json({ success: true, ...data });
+            if (Array.isArray(data)) {
+                res.json({ success: true, data: data, rows: data });
+            } else {
+                res.json({ success: true, ...data });
+            }
         } else {
             const errorText = await response.text();
             console.error(`RPC ${rpcName} failed:`, errorText);

@@ -31,6 +31,7 @@ interface ColumnConfiguratorProps {
     columnOrder?: string[];
     onColumnOverridesChange: (overrides: { [columnName: string]: any }) => void;
     onColumnOrderChange: (order: string[]) => void;
+    additionalColumns?: Column[];
 }
 
 interface DraggableColumnItemProps {
@@ -210,7 +211,8 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
     columnOverrides = {},
     columnOrder,
     onColumnOverridesChange,
-    onColumnOrderChange
+    onColumnOrderChange,
+    additionalColumns
 }) => {
     const { loadTableSchema } = useDataBindingStore();
     const [schema, setSchema] = useState<any>(null);
@@ -238,12 +240,22 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
 
     // Order columns based on columnOrder
     useEffect(() => {
-        if (!schema?.columns) {
+        // Base columns from schema + additional virtual columns
+        let baseColumns: Column[] = [];
+
+        if (schema?.columns) {
+            baseColumns = [...schema.columns];
+        }
+
+        if (additionalColumns) {
+            baseColumns = [...baseColumns, ...additionalColumns];
+        }
+
+        if (baseColumns.length === 0) {
             setOrderedColumns([]);
             return;
         }
 
-        const baseColumns = schema.columns as Column[];
         const baseColumnMap = new Map(baseColumns.map(c => [c.name, c]));
 
         // Final ordered list
@@ -291,7 +303,7 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
         });
 
         setOrderedColumns(ordered);
-    }, [schema, columnOrder]);
+    }, [schema, columnOrder, additionalColumns]);
 
     const updateColumnOverride = (columnName: string, updates: any) => {
         const newOverrides = {

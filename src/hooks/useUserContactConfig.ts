@@ -90,6 +90,7 @@ export const useUserContactConfig = () => {
     config,
     isConfigured,
     setConfig,
+    saveConfig, // Expose direct save
     updateColumnMapping,
     setContactsTable,
     setEnabled,

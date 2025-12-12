@@ -41,6 +41,11 @@ export interface UserContactConfig {
     contactTypeHomePages?: Record<string, string>; // key (contact type value) -> pageId
     permissionLevels: Record<string, string>; // key -> label
     enabled: boolean;
+
+    // Table Configuration Persistence
+    columnOverrides?: Record<string, any>;
+    columnOrder?: string[];
+    frontendFilters?: any[]; // Using any[] to avoid circular dependency with FilterConfig, or simple array of objects
 }
 
 export interface ProjectConfig {

@@ -439,7 +439,8 @@ CREATE OR REPLACE FUNCTION frontbase_get_users_list(
   page_size int DEFAULT 10,
   search_query text DEFAULT '',
   sort_col text DEFAULT 'created_at',
-  sort_dir text DEFAULT 'desc'
+  sort_dir text DEFAULT 'desc',
+  filters json DEFAULT '[]'::json
 )
 RETURNS json
 LANGUAGE plpgsql

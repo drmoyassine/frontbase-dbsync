@@ -17,12 +17,12 @@ export function UserManagementTable() {
       tableName: config.contactsTable,
       dataSourceId: 'backend',
       rpcName: 'frontbase_get_users_list',
+      params: {
+        table_name: config.contactsTable,
+        auth_id_col: config.columnMapping.authUserIdColumn
+      },
       query: {
         table: config.contactsTable, // Needed for UniversalDataTable context, though RPC uses logic
-        params: {
-          table_name: config.contactsTable,
-          auth_id_col: config.columnMapping.authUserIdColumn
-        },
         select: '*',
         filters: [],
         orderBy: [{ column: 'created_at', ascending: false }]

@@ -425,7 +425,6 @@ export function UserContactConfigPanel() {
                   <ColumnSelect label="Auth User ID (Foreign Key)" field="authUserIdColumn" required />
                   <ColumnSelect label="Contact Type Column" field="contactTypeColumn" required />
                   <ColumnSelect label="Permission Level Column" field="permissionLevelColumn" required />
-                  <ColumnSelect label="Created At (User Since)" field="createdAtColumn" />
                 </div>
               </div>
 

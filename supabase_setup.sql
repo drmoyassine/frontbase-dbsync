@@ -429,3 +429,91 @@ BEGIN
   );
 END;
 $$;
+
+-- 7. Get Users List (Auth + Contacts Join)
+-- Usage: Returns paginated list of users with their contact details
+CREATE OR REPLACE FUNCTION frontbase_get_users_list(
+  table_name text,
+  auth_id_col text,
+  page int DEFAULT 1,
+  page_size int DEFAULT 10,
+  search_query text DEFAULT '',
+  sort_col text DEFAULT 'created_at',
+  sort_dir text DEFAULT 'desc'
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  query text;
+  count_query text;
+  result json;
+  total_count bigint;
+  offset_val int;
+  order_clause text;
+  where_clause text;
+BEGIN
+  offset_val := (page - 1) * page_size;
+
+  -- Base Where Clause
+  where_clause := 'WHERE 1=1';
+  
+  -- Search (Simple search on email or contact id for now)
+  IF search_query IS NOT NULL AND search_query != '' THEN
+    where_clause := where_clause || format(' AND (au.email ILIKE %L OR c.id::text ILIKE %L)', '%' || search_query || '%', '%' || search_query || '%');
+  END IF;
+
+  -- Sorting
+  -- Default to auth.users.created_at if ambiguous or not provided
+  IF sort_col = 'created_at' OR sort_col = 'email' OR sort_col = 'last_sign_in_at' THEN
+    order_clause := 'ORDER BY au.' || sort_col || ' ' || sort_dir;
+  ELSE
+    -- Try sorting by contact column
+    order_clause := 'ORDER BY c.' || sort_col || ' ' || sort_dir; 
+  END IF;
+
+  -- Dynamic Query
+  query := format(
+    'SELECT 
+       au.id as auth_id,
+       au.email,
+       au.created_at as auth_created_at,
+       au.last_sign_in_at,
+       c.*
+     FROM auth.users au
+     LEFT JOIN %I c ON au.id = c.%I
+     %s
+     %s
+     LIMIT %s OFFSET %s',
+    table_name,
+    auth_id_col,
+    where_clause,
+    order_clause,
+    page_size,
+    offset_val
+  );
+
+  -- Execute Main Query
+  EXECUTE 'SELECT json_agg(t) FROM (' || query || ') t' INTO result;
+
+  -- Count Query
+  count_query := format(
+    'SELECT COUNT(*) 
+     FROM auth.users au
+     LEFT JOIN %I c ON au.id = c.%I
+     %s',
+    table_name,
+    auth_id_col,
+    where_clause
+  );
+
+  EXECUTE count_query INTO total_count;
+
+  RETURN json_build_object(
+    'rows', COALESCE(result, '[]'::json),
+    'total', total_count,
+    'page', page
+  );
+END;
+$$;

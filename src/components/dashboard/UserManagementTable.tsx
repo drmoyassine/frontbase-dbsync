@@ -16,11 +16,16 @@ export function UserManagementTable() {
       componentId: 'user-management-table',
       tableName: config.contactsTable,
       dataSourceId: 'backend',
+      rpcName: 'frontbase_get_users_list',
       query: {
-        table: config.contactsTable,
+        table: config.contactsTable, // Needed for UniversalDataTable context, though RPC uses logic
+        params: {
+          table_name: config.contactsTable,
+          auth_id_col: config.columnMapping.authUserIdColumn
+        },
         select: '*',
         filters: [],
-        orderBy: [{ column: createdAtCol, ascending: false }]
+        orderBy: [{ column: 'created_at', ascending: false }]
       },
       refreshInterval: 30000,
       pagination: { enabled: true, pageSize: 25, page: 1 },
@@ -28,21 +33,40 @@ export function UserManagementTable() {
       filtering: { searchEnabled: true, filters: {} },
       columnOverrides: {
         // Hide sensitive columns by default
+        // Auth Columns from RPC
+        'email': {
+          displayName: 'Auth Email',
+          width: 250,
+          sortable: true
+        },
+        'auth_created_at': {
+          displayName: 'Joined (Auth)',
+          width: 180,
+          sortable: true
+        },
+        'last_sign_in_at': {
+          displayName: 'Last Login',
+          width: 180,
+          sortable: true
+        },
+
+        // Mapped Columns from Contacts Table
+        // Hide authUserIdColumn as it matches auth_id
         [config.columnMapping.authUserIdColumn]: {
-          hidden: false,
-          displayName: 'User ID',
+          hidden: true,
+          displayName: 'Auth Link ID',
           width: 200
         },
         ...(config.columnMapping.nameColumn && {
           [config.columnMapping.nameColumn]: {
-            displayName: 'Name',
+            displayName: 'Contact Name',
             width: 200,
             sortable: true
           }
         }),
         ...(config.columnMapping.emailColumn && {
           [config.columnMapping.emailColumn]: {
-            displayName: 'Email',
+            displayName: 'Contact Email',
             width: 250,
             sortable: true
           }
@@ -69,7 +93,8 @@ export function UserManagementTable() {
           sortable: true
         },
         [createdAtCol]: {
-          displayName: 'Registered',
+          displayName: 'Contact Created',
+          hidden: true, // Prefer Auth created_at
           width: 150,
           sortable: true
         }

@@ -482,12 +482,12 @@ BEGIN
   query := format(
     'SELECT 
        au.id as auth_id,
-       au.email,
+       au.email as auth_email,
        au.created_at as auth_created_at,
        au.last_sign_in_at,
        c.*
      FROM auth.users au
-     LEFT JOIN %I c ON au.id = c.%I
+     INNER JOIN %I c ON au.id = c.%I
      %s
      %s
      LIMIT %s OFFSET %s',
@@ -506,7 +506,7 @@ BEGIN
   count_query := format(
     'SELECT COUNT(*) 
      FROM auth.users au
-     LEFT JOIN %I c ON au.id = c.%I
+     INNER JOIN %I c ON au.id = c.%I
      %s',
     table_name,
     auth_id_col,

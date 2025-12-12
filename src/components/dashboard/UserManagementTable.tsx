@@ -34,7 +34,7 @@ export function UserManagementTable() {
       columnOverrides: {
         // Hide sensitive columns by default
         // Auth Columns from RPC
-        'email': {
+        'auth_email': {
           displayName: 'Auth Email',
           width: 250,
           sortable: true,

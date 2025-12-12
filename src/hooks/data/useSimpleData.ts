@@ -44,6 +44,10 @@ export interface ComponentDataBinding {
 
     // NEW: Frontend filters
     frontendFilters?: FilterConfig[];
+
+    // NEW: RPC support
+    rpcName?: string;
+    params?: Record<string, any>;
 }
 
 export interface UseSimpleDataOptions {

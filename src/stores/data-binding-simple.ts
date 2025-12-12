@@ -303,6 +303,7 @@ export const useDataBindingStore = create<DataBindingState>()(
             }
           }
 
+
           // Execute RPC
           let result;
 
@@ -323,20 +324,22 @@ export const useDataBindingStore = create<DataBindingState>()(
             })
             .filter(f => f.column && f.value !== undefined && f.value !== null && f.value !== '');
 
-          console.log('[DEBUG] RPC Params:', {
-            table_name: binding.tableName,
-            columns,
-            joins,
-            sort_col,
-            sort_dir,
-            search_query,
-            search_cols,
-            filters,
-            page: binding.pagination.page + 1,
-            page_size: binding.pagination.pageSize
-          });
+          if (binding.rpcName) {
+            // CUSTOM RPC CALL
+            console.log('[DEBUG] Custom RPC Call:', binding.rpcName);
+            result = await databaseApi.advancedQuery(binding.rpcName, {
+              ...binding.params,
+              // Standard pagination/sorting params usually expected by our RPCs
+              page: binding.pagination.page + 1,
+              page_size: binding.pagination.pageSize,
+              search_query: search_query,
+              sort_col: sort_col || 'created_at',
+              sort_dir: sort_dir,
+              filters: filters
+            });
 
-          if (search_query) {
+          } else if (search_query) {
+            // Standard Search
             result = await databaseApi.advancedQuery('frontbase_search_rows', {
               table_name: binding.tableName,
               columns, // This is SQL selects
@@ -347,6 +350,7 @@ export const useDataBindingStore = create<DataBindingState>()(
               page_size: binding.pagination.pageSize
             });
           } else {
+            // Standard Get Rows
             result = await databaseApi.advancedQuery('frontbase_get_rows', {
               table_name: binding.tableName,
               columns, // This is SQL selects

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { UniversalDataTable } from '@/components/data-binding/UniversalDataTable';
 import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import {
@@ -9,10 +9,12 @@ import { Button } from '@/components/ui/button';
 import { Settings2 } from 'lucide-react';
 import { CompactColumnConfigurator } from '@/components/builder/data-table/CompactColumnConfigurator';
 import { FilterConfigurator } from '@/components/builder/data-table/FilterConfigurator';
+import { databaseApi } from '@/services/database-api';
 
 export const UserManagementTable = () => {
   const { config, isConfigured, saveConfig } = useUserContactConfig();
   const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [filterOptions, setFilterOptions] = useState<Record<string, string[]>>({});
 
   // Auth Columns Definition (Virtual)
   const authColumns = [
@@ -20,6 +22,43 @@ export const UserManagementTable = () => {
     { name: 'auth_created_at', type: 'date' },
     { name: 'last_sign_in_at', type: 'date' }
   ];
+
+  // Fetch filter options contextually
+  useEffect(() => {
+    if (!config?.frontendFilters || !isConfigured) return;
+
+    const fetchOptions = async () => {
+      const newOptions: Record<string, string[]> = {};
+
+      for (const filter of config.frontendFilters || []) {
+        if ((filter.filterType === 'dropdown' || filter.filterType === 'multiselect') && filter.column) {
+          try {
+            const result = await databaseApi.advancedQuery('frontbase_get_users_filter_options', {
+              table_name: config.contactsTable,
+              auth_id_col: config.columnMapping.authUserIdColumn,
+              column_name: filter.column
+            });
+
+            if (result.success && result.rows) {
+              // Extract values from rows (format: [{ "colName": "value" }])
+              // The RPC returns json_agg of row objects, but depending on how we wrote it...
+              // Wait, the RPC returns `json_agg(t)` where t is `SELECT DISTINCT c.col ...`
+              // So rows will be `[{ "colname": "value" }, ...]`
+
+              // We need to robustly extract the first value of each object
+              const values = result.rows.map(row => Object.values(row)[0] as string).filter(Boolean);
+              newOptions[filter.id] = values;
+            }
+          } catch (e) {
+            console.error('Failed to fetch options for', filter.column, e);
+          }
+        }
+      }
+      setFilterOptions(newOptions);
+    };
+
+    fetchOptions();
+  }, [config?.frontendFilters, config?.contactsTable, isConfigured]);
 
   const binding = useMemo(() => {
     if (!isConfigured || !config) return null;
@@ -75,6 +114,12 @@ export const UserManagementTable = () => {
     const savedOverrides = config.columnOverrides || {};
     const mergedOverrides = { ...baseOverrides, ...savedOverrides };
 
+    // Inject options into filters
+    const enrichedFilters = (config.frontendFilters || []).map((f: any) => ({
+      ...f,
+      options: filterOptions[f.id] || undefined
+    }));
+
     return {
       componentId: 'user-management-table',
       tableName: config.contactsTable,
@@ -92,7 +137,7 @@ export const UserManagementTable = () => {
       },
       columnOverrides: mergedOverrides,
       columnOrder: config.columnOrder, // Use saved order if exists
-      frontendFilters: config.frontendFilters || [], // Use saved filters
+      frontendFilters: enrichedFilters, // Use filters with options
       pagination: {
         pageSize: 10,
         enabled: true,
@@ -102,7 +147,7 @@ export const UserManagementTable = () => {
       filtering: { searchEnabled: true, filters: {} },
       refreshInterval: 30000,
     };
-  }, [config, isConfigured]);
+  }, [config, isConfigured, filterOptions]);
 
   const handleUpdateColumnOverrides = (overrides: any) => {
     if (!config) return;

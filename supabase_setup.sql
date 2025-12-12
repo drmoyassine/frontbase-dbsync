@@ -402,3 +402,30 @@ BEGIN
   RETURN result;
 END;
 $$;
+
+-- 6. Auth Stats (Direct from Supabase Auth)
+-- Usage: Returns total users and new users from auth.users
+CREATE OR REPLACE FUNCTION frontbase_get_auth_stats()
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  total_count bigint;
+  new_count bigint;
+BEGIN
+  -- Count all users in auth schema
+  SELECT count(*) INTO total_count FROM auth.users;
+  
+  -- Count users created in the last 7 days
+  SELECT count(*) INTO new_count 
+  FROM auth.users 
+  WHERE created_at >= NOW() - INTERVAL '7 days';
+  
+  RETURN json_build_object(
+    'total_users', total_count,
+    'new_users', new_count,
+    'source', 'auth.users'
+  );
+END;
+$$;

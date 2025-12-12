@@ -55,6 +55,7 @@ DECLARE
   filter_type text;
   filter_value jsonb;
   condition text;
+  quoted_col text;
 BEGIN
   -- Build JOIN clause
   FOR join_item IN SELECT * FROM jsonb_array_elements(joins)

@@ -9,16 +9,16 @@
     "init-db": "node database/init.js"
   },
   "dependencies": {
-    "express": "^4.21.2",
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.2.0",
-    "cors": "^2.8.5",
-    "multer": "^2.0.2",
-    "helmet": "^8.1.0",
     "compression": "^1.7.4",
-    "mustache": "^4.2.0",
-    "uuid": "^9.0.1",
     "cookie-parser": "^1.4.6",
-    "bcrypt": "^5.1.1"
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "helmet": "^8.1.0",
+    "multer": "^2.0.2",
+    "mustache": "^4.2.0",
+    "uuid": "^9.0.1"
   },
   "engines": {
     "node": ">=18.0.0"

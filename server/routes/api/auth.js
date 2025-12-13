@@ -1,5 +1,5 @@
 const express = require('express');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const DatabaseManager = require('../../utils/db');
 
@@ -32,14 +32,14 @@ const authenticateToken = (req, res, next) => {
   console.log('🔐 AUTH MIDDLEWARE: Request method:', req.method);
   console.log('🔐 AUTH MIDDLEWARE: Cookie header:', req.headers.cookie);
   console.log('🔐 AUTH MIDDLEWARE: Parsed cookies:', req.cookies);
-  
+
   const token = req.cookies?.session_token;
   console.log('🔐 AUTH MIDDLEWARE: Session token present:', !!token);
   console.log('🔐 AUTH MIDDLEWARE: Token length:', token ? token.length : 0);
-  
+
   if (!token) {
     console.log('🔐 AUTH MIDDLEWARE: No session token - rejecting');
-    return res.status(401).json({ 
+    return res.status(401).json({
       error: 'Authentication required',
       debug: 'No session_token cookie found'
     });
@@ -57,7 +57,7 @@ const authenticateToken = (req, res, next) => {
   console.log('🔐 AUTH MIDDLEWARE: Looking up session in database');
   const session = getSessionStmt.get(token);
   console.log('🔐 AUTH MIDDLEWARE: Session found:', !!session);
-  
+
   if (session) {
     console.log('🔐 AUTH MIDDLEWARE: Session details:', {
       id: session.id,
@@ -65,14 +65,14 @@ const authenticateToken = (req, res, next) => {
       expires_at: session.expires_at,
       created_at: session.created_at
     });
-    
+
     console.log('🔐 AUTH MIDDLEWARE: Looking up user in database');
     const user = getUserByIdStmt.get(session.user_id);
     console.log('🔐 AUTH MIDDLEWARE: User found:', !!user);
-    
+
     if (!user) {
       console.log('🔐 AUTH MIDDLEWARE: User not found - rejecting');
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: 'User not found',
         debug: 'User ID from session not found in users table'
       });
@@ -82,28 +82,28 @@ const authenticateToken = (req, res, next) => {
     req.user = user;
     return next();
   }
-  
+
   // Session not found - attempt universal session recovery
   console.log('🔄 UNIVERSAL RECOVERY: Session not found, attempting automatic recovery');
-  
+
   try {
     // Get all users to determine recovery strategy
     const allUsers = getAllUsersStmt.all();
     console.log('🔄 UNIVERSAL RECOVERY: Total users in database:', allUsers.length);
-    
+
     if (allUsers.length === 0) {
       console.log('🔄 UNIVERSAL RECOVERY: No users found, cannot recover');
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: 'Invalid or expired session',
         debug: 'Session not found in database or expired'
       });
     }
-    
+
     // Recovery strategy: Use the first/oldest user (typically the admin)
     // This works well for single-user or small team environments
     const userToRecover = allUsers[0];
     console.log('🔄 UNIVERSAL RECOVERY: Attempting recovery for user:', userToRecover.username);
-    
+
     // Create new session automatically
     const sessionId = crypto.randomUUID();
     const sessionToken = crypto.randomBytes(32).toString('hex');
@@ -118,14 +118,14 @@ const authenticateToken = (req, res, next) => {
       secure: isProduction && (req.headers['x-forwarded-proto'] === 'https' || req.secure),
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      ...(req.headers.host && 
-          !req.headers.host.includes('localhost') && 
-          !req.headers.host.includes('127.0.0.1') &&
-          !req.headers.host.includes('easypanel.host') &&
-          !req.headers.host.includes('railway.app') &&
-          !req.headers.host.includes('vercel.app')
-          ? { domain: `.${req.headers.host.split('.').slice(-2).join('.')}` } 
-          : {})
+      ...(req.headers.host &&
+        !req.headers.host.includes('localhost') &&
+        !req.headers.host.includes('127.0.0.1') &&
+        !req.headers.host.includes('easypanel.host') &&
+        !req.headers.host.includes('railway.app') &&
+        !req.headers.host.includes('vercel.app')
+        ? { domain: `.${req.headers.host.split('.').slice(-2).join('.')}` }
+        : {})
     };
 
     res.cookie('session_token', sessionToken, cookieOptions);
@@ -137,7 +137,7 @@ const authenticateToken = (req, res, next) => {
 
   } catch (error) {
     console.error('🔄 UNIVERSAL RECOVERY: Error during automatic recovery:', error);
-    return res.status(401).json({ 
+    return res.status(401).json({
       error: 'Invalid or expired session',
       debug: 'Session not found in database or expired'
     });
@@ -179,7 +179,7 @@ router.post('/login', async (req, res) => {
     // Set secure cookie with environment-aware settings
     const isProduction = process.env.NODE_ENV === 'production';
     const isEasypanel = process.env.EASYPANEL || process.env.RAILWAY || process.env.VERCEL;
-    
+
     console.log('🍪 LOGIN: Setting session cookie');
     console.log('🍪 LOGIN: Environment:', process.env.NODE_ENV);
     console.log('🍪 LOGIN: Production mode:', isProduction);
@@ -189,7 +189,7 @@ router.post('/login', async (req, res) => {
       'x-forwarded-proto': req.headers['x-forwarded-proto'],
       'x-forwarded-host': req.headers['x-forwarded-host']
     });
-    
+
     const cookieOptions = {
       httpOnly: true,
       // Only use secure in production AND when we have HTTPS
@@ -197,18 +197,18 @@ router.post('/login', async (req, res) => {
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       // Add domain only if we're on a custom domain (not localhost or platform hosting)
-      ...(req.headers.host && 
-          !req.headers.host.includes('localhost') && 
-          !req.headers.host.includes('127.0.0.1') &&
-          !req.headers.host.includes('easypanel.host') &&
-          !req.headers.host.includes('railway.app') &&
-          !req.headers.host.includes('vercel.app')
-          ? { domain: `.${req.headers.host.split('.').slice(-2).join('.')}` } 
-          : {})
+      ...(req.headers.host &&
+        !req.headers.host.includes('localhost') &&
+        !req.headers.host.includes('127.0.0.1') &&
+        !req.headers.host.includes('easypanel.host') &&
+        !req.headers.host.includes('railway.app') &&
+        !req.headers.host.includes('vercel.app')
+        ? { domain: `.${req.headers.host.split('.').slice(-2).join('.')}` }
+        : {})
     };
-    
+
     console.log('🍪 LOGIN: Cookie options:', cookieOptions);
-    
+
     res.cookie('session_token', sessionToken, cookieOptions);
 
     res.json({
@@ -260,12 +260,12 @@ router.post('/register', async (req, res) => {
     // Set secure cookie with environment-aware settings
     const isProduction = process.env.NODE_ENV === 'production';
     const isEasypanel = process.env.EASYPANEL || process.env.RAILWAY || process.env.VERCEL;
-    
+
     console.log('🍪 REGISTER: Setting session cookie');
     console.log('🍪 REGISTER: Environment:', process.env.NODE_ENV);
     console.log('🍪 REGISTER: Production mode:', isProduction);
     console.log('🍪 REGISTER: Platform detected:', isEasypanel ? 'platform' : 'local');
-    
+
     const cookieOptions = {
       httpOnly: true,
       // Only use secure in production AND when we have HTTPS
@@ -273,18 +273,18 @@ router.post('/register', async (req, res) => {
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       // Add domain only if we're on a custom domain (not localhost or platform hosting)
-      ...(req.headers.host && 
-          !req.headers.host.includes('localhost') && 
-          !req.headers.host.includes('127.0.0.1') &&
-          !req.headers.host.includes('easypanel.host') &&
-          !req.headers.host.includes('railway.app') &&
-          !req.headers.host.includes('vercel.app')
-          ? { domain: `.${req.headers.host.split('.').slice(-2).join('.')}` } 
-          : {})
+      ...(req.headers.host &&
+        !req.headers.host.includes('localhost') &&
+        !req.headers.host.includes('127.0.0.1') &&
+        !req.headers.host.includes('easypanel.host') &&
+        !req.headers.host.includes('railway.app') &&
+        !req.headers.host.includes('vercel.app')
+        ? { domain: `.${req.headers.host.split('.').slice(-2).join('.')}` }
+        : {})
     };
-    
+
     console.log('🍪 REGISTER: Cookie options:', cookieOptions);
-    
+
     res.cookie('session_token', sessionToken, cookieOptions);
 
     res.status(201).json({
@@ -321,7 +321,7 @@ router.get('/demo-info', (req, res) => {
 // Logout endpoint
 router.post('/logout', (req, res) => {
   const token = req.cookies?.session_token;
-  
+
   if (token) {
     deleteSessionStmt.run(token);
   }

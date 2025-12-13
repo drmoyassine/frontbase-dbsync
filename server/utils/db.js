@@ -7,6 +7,22 @@ class DatabaseManager {
     this.db = new Database(dbPath);
     this.db.pragma('foreign_keys = ON');
 
+    // Create RLS policy metadata table if it doesn't exist
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS rls_policy_metadata (
+        id TEXT PRIMARY KEY,
+        table_name TEXT NOT NULL,
+        policy_name TEXT NOT NULL,
+        form_data TEXT NOT NULL,
+        generated_using TEXT,
+        generated_check TEXT,
+        sql_hash TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(table_name, policy_name)
+      )
+    `);
+
     // Prepare statements for better performance
     this.prepareStatements();
   }
@@ -82,6 +98,26 @@ class DatabaseManager {
       SET supabase_url = ?, supabase_anon_key = ?, settings_data = ?, updated_at = datetime('now')
       WHERE user_id = ?
     `);
+
+    // RLS policy metadata statements
+    this.getRLSMetadataStmt = this.db.prepare(
+      'SELECT * FROM rls_policy_metadata WHERE table_name = ? AND policy_name = ?'
+    );
+    this.getAllRLSMetadataStmt = this.db.prepare(
+      'SELECT * FROM rls_policy_metadata ORDER BY created_at DESC'
+    );
+    this.createRLSMetadataStmt = this.db.prepare(`
+      INSERT INTO rls_policy_metadata (id, table_name, policy_name, form_data, generated_using, generated_check, sql_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    this.updateRLSMetadataStmt = this.db.prepare(`
+      UPDATE rls_policy_metadata 
+      SET policy_name = ?, form_data = ?, generated_using = ?, generated_check = ?, sql_hash = ?, updated_at = datetime('now')
+      WHERE table_name = ? AND policy_name = ?
+    `);
+    this.deleteRLSMetadataStmt = this.db.prepare(
+      'DELETE FROM rls_policy_metadata WHERE table_name = ? AND policy_name = ?'
+    );
   }
 
   // Project methods
@@ -310,6 +346,56 @@ class DatabaseManager {
     const current = this.getUserSettings(userId);
     const updated = { ...current, [key]: value };
     this.updateUserSettings(userId, updated);
+  }
+
+  // RLS Policy Metadata methods
+  getRLSMetadata(tableName, policyName) {
+    const metadata = this.getRLSMetadataStmt.get(tableName, policyName);
+    if (!metadata) return null;
+    return {
+      ...metadata,
+      formData: metadata.form_data ? JSON.parse(metadata.form_data) : null
+    };
+  }
+
+  getAllRLSMetadata() {
+    return this.getAllRLSMetadataStmt.all().map(m => ({
+      ...m,
+      formData: m.form_data ? JSON.parse(m.form_data) : null
+    }));
+  }
+
+  createRLSMetadata(tableName, policyName, formData, generatedUsing, generatedCheck, sqlHash) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = uuidv4();
+    this.createRLSMetadataStmt.run(
+      id,
+      tableName,
+      policyName,
+      JSON.stringify(formData),
+      generatedUsing,
+      generatedCheck,
+      sqlHash
+    );
+    return this.getRLSMetadata(tableName, policyName);
+  }
+
+  updateRLSMetadata(tableName, oldPolicyName, newPolicyName, formData, generatedUsing, generatedCheck, sqlHash) {
+    this.updateRLSMetadataStmt.run(
+      newPolicyName,
+      JSON.stringify(formData),
+      generatedUsing,
+      generatedCheck,
+      sqlHash,
+      tableName,
+      oldPolicyName
+    );
+    return this.getRLSMetadata(tableName, newPolicyName);
+  }
+
+  deleteRLSMetadata(tableName, policyName) {
+    const result = this.deleteRLSMetadataStmt.run(tableName, policyName);
+    return result.changes > 0;
   }
 
   close() {

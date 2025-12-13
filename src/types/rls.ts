@@ -85,6 +85,16 @@ export interface RLSPolicyFormData {
 }
 
 /**
+ * FK-based propagation target
+ */
+export interface RLSPropagationTarget {
+    tableName: string;            // The related table name
+    fkColumn: string;             // The FK column in the related table
+    fkReferencedColumn: string;   // The column in contacts table (usually 'id')
+    selected: boolean;            // User checkbox selection
+}
+
+/**
  * Request body for creating a policy
  */
 export interface CreatePolicyRequest {
@@ -95,6 +105,7 @@ export interface CreatePolicyRequest {
     checkExpression?: string;
     roles?: string[];
     permissive?: boolean;
+    propagateTo?: RLSPropagationTarget[];  // Related tables to create derived policies
 }
 
 /**

@@ -44,6 +44,14 @@ import { RLSPolicyBuilder } from './RLSPolicyBuilder';
 import { useToast } from '@/hooks/use-toast';
 import type { RLSPolicy, RLSPolicyFormData, RLSTableStatus } from '@/types/rls';
 
+// Type for metadata verification result
+interface VerifiedMetadata {
+    hasMetadata: boolean;
+    isVerified: boolean;
+    reason: 'match' | 'modified_externally' | 'no_metadata';
+    formData: RLSPolicyFormData | null;
+}
+
 export function RLSPoliciesPanel() {
     const { toast } = useToast();
     const {
@@ -62,6 +70,7 @@ export function RLSPoliciesPanel() {
     // UI state
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
     const [editingPolicy, setEditingPolicy] = useState<RLSPolicy | null>(null);
+    const [verifiedMetadata, setVerifiedMetadata] = useState<VerifiedMetadata | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterTable, setFilterTable] = useState<string>('_all_');
     const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
@@ -126,10 +135,35 @@ export function RLSPoliciesPanel() {
         });
     };
 
+    // Handle edit - verify metadata before opening dialog
+    const handleEditPolicy = async (policy: RLSPolicy) => {
+        const { rlsApi } = await import('@/services/rls-api');
+        const result = await rlsApi.verifyMetadata(
+            policy.table_name,
+            policy.policy_name,
+            policy.using_expression
+        );
+
+        if (result.success && result.data) {
+            setVerifiedMetadata(result.data as VerifiedMetadata);
+        } else {
+            // No metadata or verification failed - fallback to raw mode
+            setVerifiedMetadata({
+                hasMetadata: false,
+                isVerified: false,
+                reason: 'no_metadata',
+                formData: null
+            });
+        }
+
+        setEditingPolicy(policy);
+    };
+
     // Handle policy creation
     const handleCreatePolicy = async (
         formData: RLSPolicyFormData,
-        sql: { using: string; check: string }
+        sql: { using: string; check: string },
+        propagationTargets?: import('@/types/rls').RLSPropagationTarget[]
     ) => {
         const result = await createPolicy({
             tableName: formData.tableName,
@@ -138,10 +172,21 @@ export function RLSPoliciesPanel() {
             usingExpression: sql.using,
             checkExpression: sql.check || undefined,
             roles: formData.roles,
-            permissive: formData.permissive
+            permissive: formData.permissive,
+            propagateTo: propagationTargets
         });
 
         if (result.success) {
+            // Save metadata for visual editing later
+            const { rlsApi } = await import('@/services/rls-api');
+            await rlsApi.saveMetadata(
+                formData.tableName,
+                formData.policyName,
+                { ...formData, propagationTargets }, // Save propagation targets for restoration
+                sql.using,
+                sql.check
+            );
+
             toast({
                 title: 'Policy Created',
                 description: `Successfully created policy "${formData.policyName}" on table "${formData.tableName}"`
@@ -177,6 +222,17 @@ export function RLSPoliciesPanel() {
         );
 
         if (result.success) {
+            // Update metadata
+            const { rlsApi } = await import('@/services/rls-api');
+            await rlsApi.updateMetadata(
+                editingPolicy.table_name,
+                editingPolicy.policy_name,
+                formData.policyName !== editingPolicy.policy_name ? formData.policyName : undefined,
+                formData,
+                sql.using,
+                sql.check
+            );
+
             toast({
                 title: 'Policy Updated',
                 description: `Successfully updated policy "${formData.policyName}"`
@@ -196,6 +252,10 @@ export function RLSPoliciesPanel() {
         const result = await deletePolicy(tableName, policyName);
 
         if (result.success) {
+            // Delete metadata
+            const { rlsApi } = await import('@/services/rls-api');
+            await rlsApi.deleteMetadata(tableName, policyName);
+
             toast({
                 title: 'Policy Deleted',
                 description: `Successfully deleted policy "${policyName}"`
@@ -380,7 +440,7 @@ export function RLSPoliciesPanel() {
                                                 <RLSPolicyCard
                                                     key={policy.policy_name}
                                                     policy={policy}
-                                                    onEdit={(p) => setEditingPolicy(p)}
+                                                    onEdit={handleEditPolicy}
                                                     onDelete={handleDeletePolicy}
                                                 />
                                             ))}
@@ -410,23 +470,46 @@ export function RLSPoliciesPanel() {
             </Dialog>
 
             {/* Edit Policy Dialog */}
-            <Dialog open={!!editingPolicy} onOpenChange={(open) => !open && setEditingPolicy(null)}>
+            <Dialog open={!!editingPolicy} onOpenChange={(open) => {
+                if (!open) {
+                    setEditingPolicy(null);
+                    setVerifiedMetadata(null);
+                }
+            }}>
                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Edit RLS Policy</DialogTitle>
                         <DialogDescription>
-                            Modify the Row Level Security policy
+                            {verifiedMetadata?.isVerified
+                                ? 'Modify the Row Level Security policy using the Visual Builder'
+                                : verifiedMetadata?.reason === 'modified_externally'
+                                    ? '⚠️ This policy was modified outside Frontbase. Only Raw SQL editing is available.'
+                                    : 'Modify the Row Level Security policy'}
                         </DialogDescription>
                     </DialogHeader>
                     {editingPolicy && (
                         <RLSPolicyBuilder
-                            initialData={{
-                                policyName: editingPolicy.policy_name,
-                                tableName: editingPolicy.table_name,
-                                operation: editingPolicy.operation
+                            initialData={
+                                verifiedMetadata?.isVerified && verifiedMetadata.formData
+                                    ? verifiedMetadata.formData
+                                    : {
+                                        policyName: editingPolicy.policy_name,
+                                        tableName: editingPolicy.table_name,
+                                        operation: editingPolicy.operation,
+                                        roles: editingPolicy.roles || ['authenticated'],
+                                        permissive: editingPolicy.is_permissive
+                                    }
+                            }
+                            existingExpressions={{
+                                using: editingPolicy.using_expression || '',
+                                check: editingPolicy.check_expression || ''
                             }}
+                            forceRawMode={!verifiedMetadata?.isVerified}
                             onSubmit={handleUpdatePolicy}
-                            onCancel={() => setEditingPolicy(null)}
+                            onCancel={() => {
+                                setEditingPolicy(null);
+                                setVerifiedMetadata(null);
+                            }}
                             isEditing
                         />
                     )}

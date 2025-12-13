@@ -115,7 +115,89 @@ export const rlsApi = {
             method: 'POST',
             body: JSON.stringify({ enable })
         });
+    },
+
+    // ============================================
+    // Metadata methods (local storage of form data)
+    // ============================================
+
+    /**
+     * Save metadata when creating a policy
+     */
+    saveMetadata: async (
+        tableName: string,
+        policyName: string,
+        formData: unknown,
+        generatedUsing: string,
+        generatedCheck?: string
+    ): Promise<RLSApiResponse> => {
+        return fetchRLS('/rls/metadata', {
+            method: 'POST',
+            body: JSON.stringify({
+                tableName,
+                policyName,
+                formData,
+                generatedUsing,
+                generatedCheck
+            })
+        });
+    },
+
+    /**
+     * Update metadata when updating a policy
+     */
+    updateMetadata: async (
+        tableName: string,
+        policyName: string,
+        newPolicyName: string | undefined,
+        formData: unknown,
+        generatedUsing: string,
+        generatedCheck?: string
+    ): Promise<RLSApiResponse> => {
+        return fetchRLS(`/rls/metadata/${tableName}/${encodeURIComponent(policyName)}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                newPolicyName,
+                formData,
+                generatedUsing,
+                generatedCheck
+            })
+        });
+    },
+
+    /**
+     * Delete metadata when deleting a policy
+     */
+    deleteMetadata: async (tableName: string, policyName: string): Promise<RLSApiResponse> => {
+        return fetchRLS(`/rls/metadata/${tableName}/${encodeURIComponent(policyName)}`, {
+            method: 'DELETE'
+        });
+    },
+
+    /**
+     * Verify if a policy can be edited visually (matches stored hash)
+     * Returns formData if verified, null otherwise
+     */
+    verifyMetadata: async (
+        tableName: string,
+        policyName: string,
+        currentUsing: string | null
+    ): Promise<RLSApiResponse<{
+        hasMetadata: boolean;
+        isVerified: boolean;
+        reason: 'match' | 'modified_externally' | 'no_metadata';
+        formData: unknown | null;
+    }>> => {
+        return fetchRLS('/rls/metadata/verify', {
+            method: 'POST',
+            body: JSON.stringify({
+                tableName,
+                policyName,
+                currentUsing
+            })
+        });
     }
 };
 
 export default rlsApi;
+

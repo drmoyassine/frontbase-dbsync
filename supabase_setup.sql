@@ -601,3 +601,278 @@ BEGIN
   RETURN COALESCE(result, '[]'::json);
 END;
 $$;
+
+-- ============================================================
+-- RLS POLICY MANAGEMENT FUNCTIONS
+-- ============================================================
+
+-- 9. List All RLS Policies
+-- Returns all RLS policies from pg_policies view
+CREATE OR REPLACE FUNCTION frontbase_list_rls_policies(
+  p_schema_name text DEFAULT 'public'
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  result json;
+BEGIN
+  SELECT json_agg(policy_data) INTO result
+  FROM (
+    SELECT
+      policyname as policy_name,
+      schemaname as schema_name,
+      tablename as table_name,
+      CASE 
+        WHEN cmd = 'r' THEN 'SELECT'
+        WHEN cmd = 'a' THEN 'INSERT'
+        WHEN cmd = 'w' THEN 'UPDATE'
+        WHEN cmd = 'd' THEN 'DELETE'
+        WHEN cmd = '*' THEN 'ALL'
+        ELSE cmd::text
+      END as operation,
+      permissive as is_permissive,
+      roles,
+      qual as using_expression,
+      with_check as check_expression
+    FROM pg_policies
+    WHERE schemaname = p_schema_name
+    ORDER BY tablename, policyname
+  ) policy_data;
+
+  RETURN COALESCE(result, '[]'::json);
+END;
+$$;
+
+-- 10. Get RLS Status for Tables
+-- Returns which tables have RLS enabled
+CREATE OR REPLACE FUNCTION frontbase_get_rls_status(
+  p_schema_name text DEFAULT 'public'
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  result json;
+BEGIN
+  SELECT json_agg(table_data) INTO result
+  FROM (
+    SELECT
+      c.relname as table_name,
+      c.relrowsecurity as rls_enabled,
+      c.relforcerowsecurity as rls_forced,
+      (SELECT count(*) FROM pg_policies WHERE tablename = c.relname AND schemaname = p_schema_name) as policy_count
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = p_schema_name
+      AND c.relkind = 'r'  -- regular tables only
+    ORDER BY c.relname
+  ) table_data;
+
+  RETURN COALESCE(result, '[]'::json);
+END;
+$$;
+
+-- 11. Create RLS Policy
+-- Creates a new RLS policy on a table
+CREATE OR REPLACE FUNCTION frontbase_create_rls_policy(
+  p_table_name text,
+  p_policy_name text,
+  p_operation text,        -- 'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'ALL'
+  p_using_expr text,       -- USING clause expression
+  p_check_expr text DEFAULT NULL,  -- WITH CHECK clause (optional)
+  p_roles text[] DEFAULT ARRAY['authenticated'],
+  p_permissive boolean DEFAULT true
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  sql_stmt text;
+  cmd_type text;
+  policy_type text;
+  roles_str text;
+BEGIN
+  -- Validate operation
+  IF p_operation NOT IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'ALL') THEN
+    RETURN json_build_object('success', false, 'error', 'Invalid operation. Must be SELECT, INSERT, UPDATE, DELETE, or ALL');
+  END IF;
+
+  -- Build command type
+  cmd_type := CASE p_operation
+    WHEN 'SELECT' THEN 'SELECT'
+    WHEN 'INSERT' THEN 'INSERT'
+    WHEN 'UPDATE' THEN 'UPDATE'
+    WHEN 'DELETE' THEN 'DELETE'
+    WHEN 'ALL' THEN 'ALL'
+  END;
+
+  -- Build policy type
+  policy_type := CASE WHEN p_permissive THEN 'PERMISSIVE' ELSE 'RESTRICTIVE' END;
+
+  -- Build roles string
+  roles_str := array_to_string(p_roles, ', ');
+
+  -- Build the CREATE POLICY statement
+  sql_stmt := format(
+    'CREATE POLICY %I ON %I AS %s FOR %s TO %s',
+    p_policy_name,
+    p_table_name,
+    policy_type,
+    cmd_type,
+    roles_str
+  );
+
+  -- Add USING clause
+  IF p_using_expr IS NOT NULL AND p_using_expr != '' THEN
+    sql_stmt := sql_stmt || format(' USING (%s)', p_using_expr);
+  END IF;
+
+  -- Add WITH CHECK clause (only valid for INSERT, UPDATE, ALL)
+  IF p_check_expr IS NOT NULL AND p_check_expr != '' AND p_operation IN ('INSERT', 'UPDATE', 'ALL') THEN
+    sql_stmt := sql_stmt || format(' WITH CHECK (%s)', p_check_expr);
+  END IF;
+
+  -- Execute
+  BEGIN
+    EXECUTE sql_stmt;
+    RETURN json_build_object(
+      'success', true,
+      'message', format('Policy "%s" created on table "%s"', p_policy_name, p_table_name),
+      'sql', sql_stmt
+    );
+  EXCEPTION WHEN OTHERS THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', SQLERRM,
+      'sql', sql_stmt
+    );
+  END;
+END;
+$$;
+
+-- 12. Drop RLS Policy
+CREATE OR REPLACE FUNCTION frontbase_drop_rls_policy(
+  p_table_name text,
+  p_policy_name text
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  sql_stmt text;
+BEGIN
+  sql_stmt := format('DROP POLICY IF EXISTS %I ON %I', p_policy_name, p_table_name);
+
+  BEGIN
+    EXECUTE sql_stmt;
+    RETURN json_build_object(
+      'success', true,
+      'message', format('Policy "%s" dropped from table "%s"', p_policy_name, p_table_name),
+      'sql', sql_stmt
+    );
+  EXCEPTION WHEN OTHERS THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', SQLERRM,
+      'sql', sql_stmt
+    );
+  END;
+END;
+$$;
+
+-- 13. Toggle RLS on Table
+CREATE OR REPLACE FUNCTION frontbase_toggle_table_rls(
+  p_table_name text,
+  p_enable boolean
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  sql_stmt text;
+BEGIN
+  IF p_enable THEN
+    sql_stmt := format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', p_table_name);
+  ELSE
+    sql_stmt := format('ALTER TABLE %I DISABLE ROW LEVEL SECURITY', p_table_name);
+  END IF;
+
+  BEGIN
+    EXECUTE sql_stmt;
+    RETURN json_build_object(
+      'success', true,
+      'message', format('RLS %s on table "%s"', CASE WHEN p_enable THEN 'enabled' ELSE 'disabled' END, p_table_name),
+      'sql', sql_stmt
+    );
+  EXCEPTION WHEN OTHERS THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', SQLERRM,
+      'sql', sql_stmt
+    );
+  END;
+END;
+$$;
+
+-- 14. Update RLS Policy (Drop + Create)
+-- PostgreSQL doesn't support ALTER POLICY for expression changes, so we drop and recreate
+CREATE OR REPLACE FUNCTION frontbase_update_rls_policy(
+  p_table_name text,
+  p_old_policy_name text,
+  p_new_policy_name text,
+  p_operation text,
+  p_using_expr text,
+  p_check_expr text DEFAULT NULL,
+  p_roles text[] DEFAULT ARRAY['authenticated'],
+  p_permissive boolean DEFAULT true
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  drop_result json;
+  create_result json;
+BEGIN
+  -- First drop the old policy
+  SELECT frontbase_drop_rls_policy(p_table_name, p_old_policy_name) INTO drop_result;
+  
+  IF NOT (drop_result->>'success')::boolean THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'Failed to drop old policy: ' || (drop_result->>'error'),
+      'step', 'drop'
+    );
+  END IF;
+
+  -- Then create the new policy
+  SELECT frontbase_create_rls_policy(
+    p_table_name,
+    p_new_policy_name,
+    p_operation,
+    p_using_expr,
+    p_check_expr,
+    p_roles,
+    p_permissive
+  ) INTO create_result;
+
+  IF NOT (create_result->>'success')::boolean THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'Failed to create new policy: ' || (create_result->>'error'),
+      'step', 'create'
+    );
+  END IF;
+
+  RETURN json_build_object(
+    'success', true,
+    'message', format('Policy updated: "%s" -> "%s" on table "%s"', p_old_policy_name, p_new_policy_name, p_table_name)
+  );
+END;
+$$;

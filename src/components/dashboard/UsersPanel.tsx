@@ -2,6 +2,7 @@ import React from 'react';
 import { UserContactConfigPanel } from './UserContactConfigPanel';
 import { UserStatsCards } from './UserStatsCards';
 import { UserManagementTable } from './UserManagementTable';
+import { RLSPoliciesPanel } from './RLSPoliciesPanel';
 import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import { AddBuilderDialog } from './AddBuilderDialog';
 
@@ -26,6 +27,7 @@ export function UsersPanel() {
         <>
           <UserStatsCards />
           <UserManagementTable />
+          <RLSPoliciesPanel />
         </>
       )}
     </div>

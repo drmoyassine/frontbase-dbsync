@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { UniversalDataTable } from '@/components/data-binding/UniversalDataTable';
 import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import {
@@ -9,12 +9,16 @@ import { Button } from '@/components/ui/button';
 import { Settings2 } from 'lucide-react';
 import { CompactColumnConfigurator } from '@/components/builder/data-table/CompactColumnConfigurator';
 import { FilterConfigurator } from '@/components/builder/data-table/FilterConfigurator';
-import { databaseApi } from '@/services/database-api';
+import { useFilterOptions } from '@/hooks/dashboard/useFilterOptions';
+import { useUserTableBinding } from '@/hooks/dashboard/useUserTableBinding';
 
 export const UserManagementTable = () => {
   const { config, isConfigured, saveConfig } = useUserContactConfig();
   const [isConfigOpen, setIsConfigOpen] = useState(false);
-  const [filterOptions, setFilterOptions] = useState<Record<string, string[]>>({});
+
+  // Use custom hooks for logic
+  const filterOptions = useFilterOptions(config, isConfigured);
+  const binding = useUserTableBinding(config, isConfigured, filterOptions);
 
   // Auth Columns Definition (Virtual)
   const authColumns = [
@@ -22,160 +26,6 @@ export const UserManagementTable = () => {
     { name: 'auth_created_at', type: 'date' },
     { name: 'last_sign_in_at', type: 'date' }
   ];
-
-  // Fetch filter options contextually
-  useEffect(() => {
-    if (!config?.frontendFilters || !isConfigured) return;
-
-    const fetchOptions = async () => {
-      const newOptions: Record<string, string[]> = {};
-
-      for (const filter of config.frontendFilters || []) {
-        if ((filter.filterType === 'dropdown' || filter.filterType === 'multiselect') && filter.column) {
-          try {
-            // Determine join parameters based on column type
-            let rpcParams: any = {};
-
-            if (filter.column.startsWith('auth_') || filter.column === 'last_sign_in_at') {
-              // Fetching from Auth, joined with Contacts
-              // Target: auth.users (email/created_at)
-              // Join: contacts (auth_user_id)
-              const colName = filter.column === 'auth_email' ? 'email' : filter.column.replace('auth_', '');
-              rpcParams = {
-                target_table: 'auth.users',
-                target_col: colName,
-                join_table: config.contactsTable,
-                target_join_col: 'id', // auth.users.id
-                join_table_col: config.columnMapping.authUserIdColumn // contacts.auth_user_id
-              };
-            } else {
-              // Fetching from Contacts, joined with Auth
-              // Target: contacts (status/role)
-              // Join: auth.users (id)
-              // Logic: distinct contact.col inner join auth on contact.auth_id = auth.id
-              rpcParams = {
-                target_table: config.contactsTable,
-                target_col: filter.column,
-                join_table: 'auth.users',
-                target_join_col: config.columnMapping.authUserIdColumn, // contacts.auth_user_id
-                join_table_col: 'id' // auth.users.id
-              };
-            }
-
-            const result = await databaseApi.advancedQuery('frontbase_get_distinct_values', rpcParams);
-
-            if (result.success && result.rows) {
-              // Result can be flat array of strings/numbers or array of objects depending on RPC
-              // parse safely
-              const values = result.rows.map((row: any) => {
-                if (typeof row === 'object' && row !== null) {
-                  // If object, try 'val' property (from alias) or first value
-                  return row.val || Object.values(row)[0];
-                }
-                return row;
-              }).filter((v: any) => v !== null && v !== undefined && v !== '');
-
-              newOptions[filter.id] = values as string[];
-            }
-          } catch (e) {
-            console.error('Failed to fetch options for', filter.column, e);
-          }
-        }
-      }
-      setFilterOptions(newOptions);
-    };
-
-    fetchOptions();
-  }, [config?.frontendFilters, config?.contactsTable, isConfigured]);
-
-  const binding = useMemo(() => {
-    if (!isConfigured || !config) return null;
-
-    const createdAtCol = config.columnMapping.createdAtColumn || 'created_at';
-
-    // Base Overrides
-    const baseOverrides = {
-      // Auth Columns from RPC
-      'auth_email': {
-        displayName: 'Auth Email',
-        width: 250,
-        sortable: true,
-        hidden: false
-      },
-      'auth_created_at': {
-        displayName: 'Joined (Auth)',
-        width: 180,
-        sortable: true,
-        hidden: false,
-        displayType: 'date',
-        dateFormat: 'relative'
-      },
-      'last_sign_in_at': {
-        displayName: 'Last Login',
-        width: 180,
-        sortable: true,
-        hidden: false,
-        displayType: 'date',
-        dateFormat: 'relative'
-      },
-
-      // Mapped Columns from Contacts Table
-      [config.columnMapping.authUserIdColumn]: {
-        hidden: true,
-        displayName: 'Auth Link ID',
-        width: 200
-      },
-      [config.columnMapping.contactIdColumn]: {
-        hidden: true,
-        displayName: 'Contact ID',
-        isPrimaryKey: true
-      },
-      [createdAtCol]: {
-        displayName: 'Contact Created',
-        hidden: true, // Prefer Auth created_at
-        width: 150,
-        sortable: true
-      }
-    };
-
-    // User Saved Overrides (merge deeply/safely)
-    const savedOverrides = config.columnOverrides || {};
-    const mergedOverrides = { ...baseOverrides, ...savedOverrides };
-
-    // Inject options into filters
-    const enrichedFilters = (config.frontendFilters || []).map((f: any) => ({
-      ...f,
-      options: filterOptions[f.id] || undefined
-    }));
-
-    return {
-      componentId: 'user-management-table',
-      tableName: config.contactsTable,
-      dataSourceId: 'backend',
-      rpcName: 'frontbase_get_users_list',
-      params: {
-        table_name: config.contactsTable,
-        auth_id_col: config.columnMapping.authUserIdColumn
-      },
-      query: {
-        table: config.contactsTable,
-        select: '*',
-        filters: [],
-        orderBy: [{ column: 'created_at', ascending: false }]
-      },
-      columnOverrides: mergedOverrides,
-      columnOrder: config.columnOrder, // Use saved order if exists
-      frontendFilters: enrichedFilters, // Use filters with options
-      pagination: {
-        pageSize: 10,
-        enabled: true,
-        page: 1
-      },
-      sorting: { enabled: true, defaultSort: [{ column: createdAtCol, direction: 'desc' }] },
-      filtering: { searchEnabled: true, filters: {} },
-      refreshInterval: 30000,
-    };
-  }, [config, isConfigured, filterOptions]);
 
   const handleUpdateColumnOverrides = (overrides: any) => {
     if (!config) return;
@@ -222,6 +72,7 @@ export const UserManagementTable = () => {
               </TabsList>
 
               <TabsContent value="columns" className="flex-1 overflow-y-auto p-1">
+                {/* Note: CompactColumnConfigurator is also slated for refactoring next */}
                 <CompactColumnConfigurator
                   tableName={config.contactsTable}
                   columnOverrides={config.columnOverrides || {}}

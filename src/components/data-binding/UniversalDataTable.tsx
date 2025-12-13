@@ -2,17 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ChevronLeft, ChevronRight, Search, Settings, ArrowUpDown, Check, X, Pencil } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, ArrowUpDown } from 'lucide-react';
 import { useSimpleData } from '@/hooks/useSimpleData';
 import { cn } from '@/lib/utils';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { FilterConfig } from '@/hooks/data/useSimpleData';
 import { FilterBar } from './FilterBar';
+import { DataTableCell } from './table/DataTableCell';
+import { ColumnSettingsPopover } from './table/ColumnSettingsPopover';
 
 interface ComponentDataBinding {
   componentId: string;
@@ -65,8 +63,6 @@ export function UniversalDataTable({
   const { getComponentBinding } = useDataBindingStore();
   const binding = bindingProp || getComponentBinding(componentId);
 
-
-
   const {
     data,
     count,
@@ -88,8 +84,6 @@ export function UniversalDataTable({
 
   const [searchInput, setSearchInput] = useState('');
   const [runtimeFilters, setRuntimeFilters] = useState<FilterConfig[]>([]);
-  const [selectedColumn, setSelectedColumn] = useState<string | null>(null);
-  const [columnPopoverOpen, setColumnPopoverOpen] = useState(false);
 
   // Sync runtimeFilters with binding.frontendFilters
   useEffect(() => {
@@ -125,151 +119,6 @@ export function UniversalDataTable({
   const handleSearchChange = (value: string) => {
     setSearchInput(value);
     setSearchQuery(value);
-  };
-
-  const getBadgeColor = (value: string) => {
-    const colors = [
-      "bg-red-100 text-red-800 hover:bg-red-100/80",
-      "bg-orange-100 text-orange-800 hover:bg-orange-100/80",
-      "bg-amber-100 text-amber-800 hover:bg-amber-100/80",
-      "bg-yellow-100 text-yellow-800 hover:bg-yellow-100/80",
-      "bg-lime-100 text-lime-800 hover:bg-lime-100/80",
-      "bg-green-100 text-green-800 hover:bg-green-100/80",
-      "bg-emerald-100 text-emerald-800 hover:bg-emerald-100/80",
-      "bg-teal-100 text-teal-800 hover:bg-teal-100/80",
-      "bg-cyan-100 text-cyan-800 hover:bg-cyan-100/80",
-      "bg-sky-100 text-sky-800 hover:bg-sky-100/80",
-      "bg-blue-100 text-blue-800 hover:bg-blue-100/80",
-      "bg-indigo-100 text-indigo-800 hover:bg-indigo-100/80",
-      "bg-violet-100 text-violet-800 hover:bg-violet-100/80",
-      "bg-purple-100 text-purple-800 hover:bg-purple-100/80",
-      "bg-fuchsia-100 text-fuchsia-800 hover:bg-fuchsia-100/80",
-      "bg-pink-100 text-pink-800 hover:bg-pink-100/80",
-      "bg-rose-100 text-rose-800 hover:bg-rose-100/80",
-    ];
-
-    let hash = 0;
-    for (let i = 0; i < value.length; i++) {
-      hash = value.charCodeAt(i) + ((hash << 5) - hash);
-    }
-
-    const index = Math.abs(hash) % colors.length;
-    return colors[index];
-  };
-
-  const formatValue = (value: any, columnName: string, row?: any): React.ReactNode => {
-    // Handle related columns (e.g., "institutions.name")
-    let actualValue = value;
-    if (row && columnName.includes('.')) {
-      const [tableName, colName] = columnName.split('.');
-      let relationData = row[tableName];
-
-      // Fallback: Case-insensitive lookup if direct access fails
-      if (!relationData) {
-        const lowerTableName = tableName.toLowerCase();
-        const matchingKey = Object.keys(row).find(k => k.toLowerCase() === lowerTableName);
-        if (matchingKey) {
-          relationData = row[matchingKey];
-        }
-      }
-
-      // Handle array response (common in PostgREST for relations) or single object
-      if (Array.isArray(relationData)) {
-        actualValue = relationData[0]?.[colName];
-      } else {
-        actualValue = relationData?.[colName];
-      }
-    }
-
-    if (actualValue === null || actualValue === undefined) {
-      return <span className="text-muted-foreground">—</span>;
-    }
-
-    const columnConfig = binding?.columnOverrides?.[columnName];
-    const displayType = columnConfig?.displayType || 'text';
-
-    switch (displayType) {
-      case 'badge':
-        return <Badge variant="outline" className={cn("border-0 font-medium", getBadgeColor(String(actualValue)))}>{String(actualValue)}</Badge>;
-      case 'boolean':
-        // Render boolean as tick or X
-        const boolVal = actualValue === true || actualValue === 'true' || actualValue === 1;
-        return boolVal ? (
-          <Check className="h-4 w-4 text-green-600" />
-        ) : (
-          <X className="h-4 w-4 text-red-500" />
-        );
-      case 'date':
-        // Use custom date format if specified
-        const dateFormat = columnConfig?.dateFormat || 'MMM dd, yyyy';
-        const dateVal = new Date(actualValue);
-        if (isNaN(dateVal.getTime())) return String(actualValue);
-
-        if (dateFormat === 'relative') {
-          // Relative date formatting
-          const now = new Date();
-          const diffMs = now.getTime() - dateVal.getTime();
-          const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-          if (diffDays === 0) return 'Today';
-          if (diffDays === 1) return 'Yesterday';
-          if (diffDays < 7) return `${diffDays} days ago`;
-          if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-          if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
-          return `${Math.floor(diffDays / 365)} years ago`;
-        }
-
-        // Standard date formats using Intl
-        const formatMap: Record<string, Intl.DateTimeFormatOptions> = {
-          'MMM dd, yyyy': { month: 'short', day: '2-digit', year: 'numeric' },
-          'dd/MM/yyyy': { day: '2-digit', month: '2-digit', year: 'numeric' },
-          'MM/dd/yyyy': { month: '2-digit', day: '2-digit', year: 'numeric' },
-          'yyyy-MM-dd': { year: 'numeric', month: '2-digit', day: '2-digit' },
-          'dd MMM yyyy': { day: '2-digit', month: 'short', year: 'numeric' },
-          'EEEE, MMM dd': { weekday: 'long', month: 'short', day: '2-digit' }
-        };
-
-        const options = formatMap[dateFormat] || formatMap['MMM dd, yyyy'];
-
-        // Handle locale-specific formatting
-        if (dateFormat === 'dd/MM/yyyy') {
-          return dateVal.toLocaleDateString('en-GB', options);
-        } else if (dateFormat === 'yyyy-MM-dd') {
-          return dateVal.toISOString().split('T')[0];
-        }
-
-        return dateVal.toLocaleDateString('en-US', options);
-      case 'currency':
-        return new Intl.NumberFormat('en-US', {
-          style: 'currency',
-          currency: 'USD'
-        }).format(Number(actualValue));
-      case 'percentage':
-        return `${(Number(actualValue) * 100).toFixed(1)}%`;
-      case 'image':
-        return (
-          <img
-            src={String(actualValue)}
-            alt="Image"
-            className="w-8 h-8 rounded object-cover"
-          />
-        );
-      case 'link':
-        return (
-          <a
-            href={String(actualValue)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline"
-          >
-            {String(actualValue)}
-          </a>
-        );
-      default:
-        if (typeof actualValue === 'object') {
-          return <code className="text-xs">{JSON.stringify(actualValue)}</code>;
-        }
-        return String(actualValue);
-    }
   };
 
   const getVisibleColumns = () => {
@@ -315,30 +164,6 @@ export function UniversalDataTable({
     }
 
     // 2. Determine visible columns based on overrides
-    // Columns are OFF by default - must have explicit visible: true
-    // UNLESS it's a virtual column from RPC that we want to show?
-    // Actually, overrides follow standard rules: hidden unless visible: true/undefined logic?
-    // Wait, typical logic is: if explicitly hidden=true, hide. If visible=false, hide.
-    // The current logic says: `return override?.visible === true;` -> Hidden by default?
-    // Let's check how config panel sets it. Usually toggle sets `hidden: false`.
-    // Actually, if I look at UserManagementTable:
-    // [config.columnMapping.authUserIdColumn]: { hidden: false, ... }
-    // 'email': { ... } -> visible is undefined.
-
-    // Logic check: `override?.visible === true` means everything is HIDDEN unless explicitly set to visible: true.
-    // But in UserManagementTable I didn't set `visible: true` for 'email', I just set displayName etc.
-    // So 'email' is hidden by default. Use `hidden` property instead?
-
-    // Let's check ComponentDataBinding interface
-    // visible?: boolean;
-    // But UniversalDataTable uses `hidden` in other places? No, interface says `visible`.
-
-    // In UserManagementTable I used `hidden: false` or `hidden: true`.
-    // But the interface in UniversalDataTable defines `visible?: boolean`.
-    // I need to align them.
-    // UserManagementTable passes `hidden`. UniversalDataTable expects `visible`.
-
-    // I will update UniversalDataTable to handle `hidden` as well (legacy/compat).
     const isVisible = (key: string) => {
       const override = binding?.columnOverrides?.[key] as any;
       if (override?.hidden !== undefined) return !override.hidden; // Respect 'hidden' prop if present
@@ -396,95 +221,6 @@ export function UniversalDataTable({
   const getColumnDisplayName = (columnName: string) => {
     const override = binding?.columnOverrides?.[columnName];
     return override?.displayName || columnName;
-  };
-
-  // Column Settings Popover for builder mode
-  const renderColumnWithSettings = (columnName: string, content: React.ReactNode, isHeader: boolean = false) => {
-    if (!isBuilderMode || !onColumnOverrideChange) {
-      return content;
-    }
-
-    const columnConfig = binding?.columnOverrides?.[columnName] || {};
-
-    return (
-      <Popover>
-        <PopoverTrigger asChild>
-          <div
-            className={cn(
-              "cursor-pointer hover:bg-primary/5 transition-colors -m-2 p-2 rounded",
-              isHeader && "flex items-center gap-1"
-            )}
-            title="Click to configure column"
-          >
-            {content}
-            {isHeader && <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100" />}
-          </div>
-        </PopoverTrigger>
-        <PopoverContent className="w-80" align="start">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <h4 className="font-medium leading-none">Column Settings</h4>
-              <p className="text-sm text-muted-foreground">
-                Configure how {columnName} appears in the table.
-              </p>
-            </div>
-            <div className="grid gap-3">
-              <div className="grid grid-cols-3 items-center gap-4">
-                <Label>Label</Label>
-                <Input
-                  value={columnConfig.displayName || ''}
-                  onChange={(e) => onColumnOverrideChange(columnName, { displayName: e.target.value })}
-                  placeholder={columnName}
-                  className="col-span-2 h-8"
-                />
-              </div>
-              <div className="grid grid-cols-3 items-center gap-4">
-                <Label>Type</Label>
-                <Select
-                  value={columnConfig.displayType || 'text'}
-                  onValueChange={(displayType) => onColumnOverrideChange(columnName, { displayType })}
-                >
-                  <SelectTrigger className="col-span-2 h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="text">Text</SelectItem>
-                    <SelectItem value="badge">Badge</SelectItem>
-                    <SelectItem value="date">Date</SelectItem>
-                    <SelectItem value="boolean">Boolean (✓/✗)</SelectItem>
-                    <SelectItem value="currency">Currency</SelectItem>
-                    <SelectItem value="percentage">%</SelectItem>
-                    <SelectItem value="image">Image</SelectItem>
-                    <SelectItem value="link">Link</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {columnConfig.displayType === 'date' && (
-                <div className="grid grid-cols-3 items-center gap-4">
-                  <Label>Format</Label>
-                  <Select
-                    value={columnConfig.dateFormat || 'MMM dd, yyyy'}
-                    onValueChange={(dateFormat) => onColumnOverrideChange(columnName, { dateFormat })}
-                  >
-                    <SelectTrigger className="col-span-2 h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MMM dd, yyyy">Dec 10, 2024</SelectItem>
-                      <SelectItem value="dd/MM/yyyy">10/12/2024</SelectItem>
-                      <SelectItem value="MM/dd/yyyy">12/10/2024</SelectItem>
-                      <SelectItem value="yyyy-MM-dd">2024-12-10</SelectItem>
-                      <SelectItem value="dd MMM yyyy">10 Dec 2024</SelectItem>
-                      <SelectItem value="relative">Relative</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-          </div>
-        </PopoverContent>
-      </Popover>
-    );
   };
 
   // Render loading state if schema is fetching
@@ -608,8 +344,13 @@ export function UniversalDataTable({
                   <TableRow>
                     {visibleColumns.map((column: any) => (
                       <TableHead key={column.name} className="whitespace-nowrap group">
-                        {renderColumnWithSettings(
-                          column.name,
+                        <ColumnSettingsPopover
+                          columnName={column.name}
+                          columnConfig={binding?.columnOverrides?.[column.name]}
+                          onColumnOverrideChange={onColumnOverrideChange!}
+                          isBuilderMode={isBuilderMode}
+                          isHeader={true}
+                        >
                           <div className="flex items-center space-x-1">
                             <span>{getColumnDisplayName(column.name)}</span>
                             {binding.sorting?.enabled && (
@@ -622,9 +363,8 @@ export function UniversalDataTable({
                                 <ArrowUpDown className="h-3 w-3" />
                               </Button>
                             )}
-                          </div>,
-                          true
-                        )}
+                          </div>
+                        </ColumnSettingsPopover>
                       </TableHead>
                     ))}
                   </TableRow>
@@ -641,7 +381,19 @@ export function UniversalDataTable({
                       <TableRow key={index} className="h-12">
                         {visibleColumns.map((column: any) => (
                           <TableCell key={column.name} className="max-w-[200px] truncate whitespace-nowrap py-2">
-                            {formatValue(row[column.name], column.name, row)}
+                            <ColumnSettingsPopover
+                              columnName={column.name}
+                              columnConfig={binding?.columnOverrides?.[column.name]}
+                              onColumnOverrideChange={onColumnOverrideChange!}
+                              isBuilderMode={isBuilderMode}
+                            >
+                              <DataTableCell
+                                value={row[column.name]}
+                                columnName={column.name}
+                                row={row}
+                                columnConfig={binding?.columnOverrides?.[column.name]}
+                              />
+                            </ColumnSettingsPopover>
                           </TableCell>
                         ))}
                       </TableRow>

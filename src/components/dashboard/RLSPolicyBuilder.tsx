@@ -139,18 +139,16 @@ export function RLSPolicyBuilder({
         }
     }, [config, initialData]);
 
-    // Detect related tables with FKs pointing to the contacts table
+    // Detect related tables with FKs pointing to the currently selected table
     useEffect(() => {
-        if (!config?.contactsTable || !globalSchema?.foreign_keys?.length) {
+        if (!tableName || !globalSchema?.foreign_keys?.length) {
             setPropagationTargets([]);
             return;
         }
 
-        const contactsTable = config.contactsTable;
-
-        // Find all tables that have FKs pointing TO the contacts table (reverse FKs)
+        // Find all tables that have FKs pointing TO the current table (reverse FKs)
         const relatedTables = globalSchema.foreign_keys
-            .filter(fk => fk.foreign_table_name === contactsTable)
+            .filter(fk => fk.foreign_table_name === tableName)
             .map(fk => ({
                 tableName: fk.table_name,
                 fkColumn: fk.column_name,
@@ -167,7 +165,7 @@ export function RLSPolicyBuilder({
         });
 
         setPropagationTargets(Array.from(uniqueTables.values()));
-    }, [config?.contactsTable, globalSchema?.foreign_keys]);
+    }, [tableName, globalSchema?.foreign_keys]);
 
     // Handle propagation target selection
     const togglePropagationTarget = useCallback((tableNameToToggle: string) => {
@@ -616,16 +614,16 @@ export function RLSPolicyBuilder({
                 </div>
             </div>
 
-            {/* Propagation Settings (only when base table is contacts) */}
-            {propagationTargets.length > 0 && tableName === config?.contactsTable && (
+            {/* Propagation Settings (available for any table with related tables) */}
+            {propagationTargets.length > 0 && (
                 <div className="space-y-4 pt-4 border-t">
                     <div className="flex items-center gap-2">
                         <h3 className="text-sm font-medium">Apply to related tables</h3>
                         <Badge variant="outline" className="text-xs font-normal">Optional</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                        Automatically create policies for tables linked to the contacts table.
-                        Users will only see records related to their contact.
+                        Automatically create policies for tables linked to {tableName}.
+                        Users will only see records in those tables if they are related to the allowed records in {tableName}.
                     </p>
 
                     <div className="grid gap-3 pt-2">

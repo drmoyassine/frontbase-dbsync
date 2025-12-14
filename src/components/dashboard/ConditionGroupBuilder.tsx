@@ -19,6 +19,7 @@ interface ConditionGroupBuilderProps {
     columns: Array<{ name: string; type: string }>; // Target columns for the left side
     sourceColumns?: Array<{ name: string; type: string }>; // Columns for the right side (contacts/user attributes)
     allowedSources?: RLSValueSource[];
+    enumColumns?: Record<string, string[]>; // Map of column name -> possible values
     title?: string;
     showCombinator?: boolean;
 }
@@ -49,6 +50,7 @@ export function ConditionGroupBuilder({
     columns,
     sourceColumns = [],
     allowedSources = ['contacts', 'auth', 'literal'],
+    enumColumns = {},
     title,
     showCombinator = true
 }: ConditionGroupBuilderProps) {
@@ -157,6 +159,7 @@ export function ConditionGroupBuilder({
                                     source={condition.source}
                                     sourceColumn={condition.sourceColumn}
                                     targetColumn={condition.column}
+                                    possibleValues={condition.column ? enumColumns[condition.column] : undefined} // Pass configured enums
                                     userColumns={sourceColumns} // sourceColumns are usually contacts/user columns
                                     targetColumns={columns}     // columns are the target table columns
                                     onChange={(updates) => {

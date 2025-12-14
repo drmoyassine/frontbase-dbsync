@@ -457,6 +457,11 @@ export function RLSPolicyBuilder({
                                         group={actorConditionGroup}
                                         onChange={setActorConditionGroup}
                                         columns={contactsColumns}
+                                        // Pass enums for known columns (e.g. contact_type, permission_level)
+                                        enumColumns={{
+                                            [config?.columnMapping?.contactTypeColumn || 'contact_type']: contactTypes.map(c => c.value),
+                                            [config?.columnMapping?.permissionLevelColumn || 'permission_level']: permissionLevels.map(p => p.value)
+                                        }}
                                         allowedSources={['literal', 'auth']}
                                         showCombinator={true}
                                     />

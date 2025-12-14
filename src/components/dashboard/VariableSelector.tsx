@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
-import { Plus, User, Database, Clock, Key } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Plus, User, Database, Clock, Key, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 export interface VariableOption {
     value: string;
@@ -20,6 +20,8 @@ interface VariableSelectorProps {
     onOpenChange?: (open: boolean) => void;
 }
 
+type MenuLevel = 'root' | 'user' | 'system' | 'target';
+
 export function VariableSelector({
     onSelect,
     userColumns = [],
@@ -28,10 +30,20 @@ export function VariableSelector({
     onOpenChange: controlledOnOpenChange
 }: VariableSelectorProps) {
     const [internalOpen, setInternalOpen] = useState(false);
+    const [view, setView] = useState<MenuLevel>('root');
 
     const isControlled = controlledOpen !== undefined;
     const open = isControlled ? controlledOpen : internalOpen;
     const setOpen = isControlled ? controlledOnOpenChange : setInternalOpen;
+
+    // Reset view when closing
+    useEffect(() => {
+        if (!open) {
+            // Small timeout to allow transition to finish before resetting
+            const timer = setTimeout(() => setView('root'), 200);
+            return () => clearTimeout(timer);
+        }
+    }, [open]);
 
     const handleSelect = (value: string, category: VariableOption['category']) => {
         onSelect(value, category);
@@ -50,82 +62,117 @@ export function VariableSelector({
                     <Plus className="h-4 w-4 text-muted-foreground" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="p-0 w-[280px]" align="start">
+            <PopoverContent className="p-0 w-[240px]" align="start">
                 <Command>
-                    <CommandInput placeholder="Search variables..." />
-                    <CommandList>
-                        <CommandEmpty>No variables found.</CommandEmpty>
+                    {/* Header with Back Button */}
+                    {view !== 'root' && (
+                        <div className="flex items-center border-b p-2">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 mr-2"
+                                onClick={() => setView('root')}
+                            >
+                                <ArrowLeft className="h-3 w-3" />
+                            </Button>
+                            <span className="text-xs font-semibold capitalize">{view} Variables</span>
+                        </div>
+                    )}
 
-                        {/* System Variables */}
-                        <CommandGroup heading="System">
-                            <CommandItem onSelect={() => handleSelect('auth.uid()', 'system')} className="gap-2">
-                                <Key className="h-3 w-3 text-muted-foreground" />
-                                <div className="flex flex-col">
-                                    <span>User ID</span>
-                                    <span className="text-[10px] text-muted-foreground font-mono">auth.uid()</span>
-                                </div>
-                            </CommandItem>
-                            <CommandItem onSelect={() => handleSelect('auth.email()', 'system')} className="gap-2">
-                                <User className="h-3 w-3 text-muted-foreground" />
-                                <div className="flex flex-col">
-                                    <span>User Email</span>
-                                    <span className="text-[10px] text-muted-foreground font-mono">auth.email()</span>
-                                </div>
-                            </CommandItem>
-                            <CommandItem onSelect={() => handleSelect('now()', 'system')} className="gap-2">
-                                <Clock className="h-3 w-3 text-muted-foreground" />
-                                <div className="flex flex-col">
-                                    <span>Current Time</span>
-                                    <span className="text-[10px] text-muted-foreground font-mono">now()</span>
-                                </div>
-                            </CommandItem>
-                        </CommandGroup>
+                    <CommandInput placeholder={view === 'root' ? "Search category..." : "Search variables..."} />
 
-                        <CommandSeparator />
+                    <CommandList className="max-h-[300px] overflow-y-auto">
+                        <CommandEmpty>No results found.</CommandEmpty>
 
-                        {/* User Attributes (from contacts) */}
-                        {userColumns.length > 0 && (
-                            <CommandGroup heading="User Attributes (contacts)">
-                                <ScrollArea className="max-h-[140px]">
-                                    {userColumns.map(col => (
-                                        <CommandItem
-                                            key={`user-${col.name}`}
-                                            onSelect={() => handleSelect(col.name, 'user')}
-                                            className="gap-2"
-                                        >
-                                            <User className="h-3 w-3 text-muted-foreground" />
-                                            <div className="flex flex-col">
-                                                <span>{col.name}</span>
-                                                <span className="text-[10px] text-muted-foreground font-mono">{col.type}</span>
-                                            </div>
-                                        </CommandItem>
-                                    ))}
-                                </ScrollArea>
+                        {/* ROOT VIEW */}
+                        {view === 'root' && (
+                            <CommandGroup heading="Variable Categories">
+                                <CommandItem onSelect={() => setView('user')} className="flex items-center justify-between cursor-pointer">
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="secondary" className="bg-blue-100 text-blue-700 hover:bg-blue-100">User</Badge>
+                                        <span className="text-sm">Attributes</span>
+                                    </div>
+                                    <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                                </CommandItem>
+
+                                <CommandItem onSelect={() => setView('system')} className="flex items-center justify-between cursor-pointer">
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="secondary" className="bg-slate-100 text-slate-700 hover:bg-slate-100">System</Badge>
+                                        <span className="text-sm">Global Vars</span>
+                                    </div>
+                                    <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                                </CommandItem>
+
+                                <CommandItem onSelect={() => setView('target')} className="flex items-center justify-between cursor-pointer">
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="secondary" className="bg-amber-100 text-amber-700 hover:bg-amber-100">Record</Badge>
+                                        <span className="text-sm">Target Columns</span>
+                                    </div>
+                                    <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                                </CommandItem>
                             </CommandGroup>
                         )}
 
-                        {userColumns.length > 0 && <CommandSeparator />}
-
-                        {/* Target Table Columns */}
-                        {targetColumns.length > 0 && (
-                            <CommandGroup heading="Target Table Columns">
-                                <ScrollArea className="max-h-[140px]">
-                                    {targetColumns.map(col => (
-                                        <CommandItem
-                                            key={`target-${col.name}`}
-                                            onSelect={() => handleSelect(col.name, 'target')}
-                                            className="gap-2"
-                                        >
-                                            <Database className="h-3 w-3 text-muted-foreground" />
-                                            <div className="flex flex-col">
-                                                <span>{col.name}</span>
-                                                <span className="text-[10px] text-muted-foreground font-mono">{col.type}</span>
-                                            </div>
-                                        </CommandItem>
-                                    ))}
-                                </ScrollArea>
+                        {/* USER VARIABLES VIEW */}
+                        {view === 'user' && (
+                            <CommandGroup>
+                                {userColumns.map(col => (
+                                    <CommandItem
+                                        key={`user-${col.name}`}
+                                        onSelect={() => handleSelect(col.name, 'user')}
+                                        className="gap-2 cursor-pointer"
+                                    >
+                                        <Badge variant="outline" className="h-5 px-1 font-normal bg-blue-50/50">{col.name}</Badge>
+                                        <span className="text-[10px] text-muted-foreground font-mono ml-auto">{col.type}</span>
+                                    </CommandItem>
+                                ))}
+                                {userColumns.length === 0 && (
+                                    <div className="p-4 text-xs text-center text-muted-foreground">
+                                        No user columns available.
+                                    </div>
+                                )}
                             </CommandGroup>
                         )}
+
+                        {/* SYSTEM VARIABLES VIEW */}
+                        {view === 'system' && (
+                            <CommandGroup>
+                                <CommandItem onSelect={() => handleSelect('auth.uid()', 'system')} className="gap-2 cursor-pointer">
+                                    <Badge variant="outline" className="h-5 px-1 font-normal bg-slate-50">User ID</Badge>
+                                    <span className="text-[10px] text-muted-foreground font-mono ml-auto">auth.uid()</span>
+                                </CommandItem>
+                                <CommandItem onSelect={() => handleSelect('auth.email()', 'system')} className="gap-2 cursor-pointer">
+                                    <Badge variant="outline" className="h-5 px-1 font-normal bg-slate-50">User Email</Badge>
+                                    <span className="text-[10px] text-muted-foreground font-mono ml-auto">auth.email()</span>
+                                </CommandItem>
+                                <CommandItem onSelect={() => handleSelect('now()', 'system')} className="gap-2 cursor-pointer">
+                                    <Badge variant="outline" className="h-5 px-1 font-normal bg-slate-50">Timestamp</Badge>
+                                    <span className="text-[10px] text-muted-foreground font-mono ml-auto">now()</span>
+                                </CommandItem>
+                            </CommandGroup>
+                        )}
+
+                        {/* TARGET VARIABLES VIEW */}
+                        {view === 'target' && (
+                            <CommandGroup>
+                                {targetColumns.map(col => (
+                                    <CommandItem
+                                        key={`target-${col.name}`}
+                                        onSelect={() => handleSelect(col.name, 'target')}
+                                        className="gap-2 cursor-pointer"
+                                    >
+                                        <Badge variant="outline" className="h-5 px-1 font-normal bg-amber-50/50">{col.name}</Badge>
+                                        <span className="text-[10px] text-muted-foreground font-mono ml-auto">{col.type}</span>
+                                    </CommandItem>
+                                ))}
+                                {targetColumns.length === 0 && (
+                                    <div className="p-4 text-xs text-center text-muted-foreground">
+                                        No target columns available.
+                                    </div>
+                                )}
+                            </CommandGroup>
+                        )}
+
                     </CommandList>
                 </Command>
             </PopoverContent>

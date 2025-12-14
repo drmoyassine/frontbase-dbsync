@@ -47,7 +47,12 @@ export type RLSComparisonOperator =
 /**
  * Source type for condition value
  */
-export type RLSValueSource = 'contacts' | 'auth' | 'literal' | 'user_attribute';
+// contacts = From contacts table (legacy implicit)
+// auth = System auth variables
+// literal = Static value
+// user_attribute = Explicit user field (modern)
+// target_column = Another column in the same row (e.g. start_date < end_date)
+export type RLSValueSource = 'contacts' | 'auth' | 'literal' | 'user_attribute' | 'target_column';
 
 /**
  * A single condition in an RLS policy

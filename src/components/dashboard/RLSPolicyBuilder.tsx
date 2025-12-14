@@ -457,7 +457,7 @@ export function RLSPolicyBuilder({
                                         group={actorConditionGroup}
                                         onChange={setActorConditionGroup}
                                         columns={contactsColumns}
-                                        allowedSources={['literal']}
+                                        allowedSources={['literal', 'auth']}
                                         showCombinator={true}
                                     />
                                 </div>

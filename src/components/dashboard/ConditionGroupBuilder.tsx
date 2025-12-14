@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2 } from 'lucide-react';
+import { SmartValueInput } from './SmartValueInput';
 import type {
     RLSCondition,
     RLSConditionGroup,
@@ -151,52 +152,22 @@ export function ConditionGroupBuilder({
 
                             {/* Only show value source if not null check */}
                             {!['is_null', 'is_not_null'].includes(condition.operator) && (
-                                <>
-                                    {/* Value source selector */}
-                                    <Select
-                                        value={condition.source}
-                                        onValueChange={(val) => updateCondition(condition.id, { source: val as RLSValueSource })}
-                                    >
-                                        <SelectTrigger className="w-[120px] h-8">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {allowedSources.includes('literal') && <SelectItem value="literal">value</SelectItem>}
-                                            {allowedSources.includes('contacts') && <SelectItem value="contacts">contacts.</SelectItem>}
-                                            {allowedSources.includes('user_attribute') && <SelectItem value="user_attribute">user.</SelectItem>}
-                                            {allowedSources.includes('auth') && <SelectItem value="auth">auth.uid()</SelectItem>}
-                                        </SelectContent>
-                                    </Select>
-
-                                    {/* Dynamic Value (Right Side) */}
-                                    {(condition.source === 'contacts' || condition.source === 'user_attribute') && (
-                                        <Select
-                                            value={condition.sourceColumn || ''}
-                                            onValueChange={(val) => updateCondition(condition.id, { sourceColumn: val })}
-                                        >
-                                            <SelectTrigger className="w-[140px] h-8">
-                                                <SelectValue placeholder="Attribute" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {sourceColumns.map(col => (
-                                                    <SelectItem key={col.name} value={col.name}>
-                                                        {col.name}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    )}
-
-                                    {/* Literal Value */}
-                                    {condition.source === 'literal' && (
-                                        <Input
-                                            value={condition.literalValue || ''}
-                                            onChange={(e) => updateCondition(condition.id, { literalValue: e.target.value })}
-                                            placeholder="Value"
-                                            className="w-[140px] h-8"
-                                        />
-                                    )}
-                                </>
+                                <SmartValueInput
+                                    value={condition.source === 'literal' ? (condition.literalValue || '') : (condition.sourceColumn || condition.literalValue || '')}
+                                    source={condition.source}
+                                    sourceColumn={condition.sourceColumn}
+                                    targetColumn={condition.column}
+                                    userColumns={sourceColumns} // sourceColumns are usually contacts/user columns
+                                    targetColumns={columns}     // columns are the target table columns
+                                    onChange={(updates) => {
+                                        updateCondition(condition.id, {
+                                            source: updates.source,
+                                            sourceColumn: updates.sourceColumn,
+                                            // Ideally literalValue should be cleared if not literal, but for now we keep it simple or sync
+                                            literalValue: updates.value
+                                        });
+                                    }}
+                                />
                             )}
 
                             {/* Remove button */}

@@ -4,6 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
 import { Plus, User, Database, Clock, Key, ChevronRight, ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export interface VariableOption {
     value: string;
@@ -45,6 +46,25 @@ export function VariableSelector({
         }
     }, [open]);
 
+    // Deduplicate columns to avoid UI issues
+    const uniqueUserColumns = React.useMemo(() => {
+        const seen = new Set();
+        return userColumns.filter(col => {
+            if (seen.has(col.name)) return false;
+            seen.add(col.name);
+            return true;
+        });
+    }, [userColumns]);
+
+    const uniqueTargetColumns = React.useMemo(() => {
+        const seen = new Set();
+        return targetColumns.filter(col => {
+            if (seen.has(col.name)) return false;
+            seen.add(col.name);
+            return true;
+        });
+    }, [targetColumns]);
+
     const handleSelect = (value: string, category: VariableOption['category']) => {
         onSelect(value, category);
         setOpen?.(false);
@@ -81,6 +101,11 @@ export function VariableSelector({
 
                     <CommandInput placeholder={view === 'root' ? "Search category..." : "Search variables..."} />
 
+                    {/* 
+                        Use ScrollArea or rely on CommandList's native scroll. 
+                        CommandList usually has overflow-y-auto. 
+                        We set max-h to ensure it fits on screen.
+                    */}
                     <CommandList className="max-h-[300px] overflow-y-auto">
                         <CommandEmpty>No results found.</CommandEmpty>
 
@@ -116,7 +141,7 @@ export function VariableSelector({
                         {/* USER VARIABLES VIEW */}
                         {view === 'user' && (
                             <CommandGroup>
-                                {userColumns.map(col => (
+                                {uniqueUserColumns.map(col => (
                                     <CommandItem
                                         key={`user-${col.name}`}
                                         onSelect={() => handleSelect(col.name, 'user')}
@@ -126,7 +151,7 @@ export function VariableSelector({
                                         <span className="text-[10px] text-muted-foreground font-mono ml-auto">{col.type}</span>
                                     </CommandItem>
                                 ))}
-                                {userColumns.length === 0 && (
+                                {uniqueUserColumns.length === 0 && (
                                     <div className="p-4 text-xs text-center text-muted-foreground">
                                         No user columns available.
                                     </div>
@@ -155,7 +180,7 @@ export function VariableSelector({
                         {/* TARGET VARIABLES VIEW */}
                         {view === 'target' && (
                             <CommandGroup>
-                                {targetColumns.map(col => (
+                                {uniqueTargetColumns.map(col => (
                                     <CommandItem
                                         key={`target-${col.name}`}
                                         onSelect={() => handleSelect(col.name, 'target')}
@@ -165,7 +190,7 @@ export function VariableSelector({
                                         <span className="text-[10px] text-muted-foreground font-mono ml-auto">{col.type}</span>
                                     </CommandItem>
                                 ))}
-                                {targetColumns.length === 0 && (
+                                {uniqueTargetColumns.length === 0 && (
                                     <div className="p-4 text-xs text-center text-muted-foreground">
                                         No target columns available.
                                     </div>

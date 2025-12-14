@@ -399,7 +399,8 @@ export function RLSPolicyBuilder({
     return (
         <div className="space-y-6">
             {/* Policy name and table */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Policy name */}
+            <div className="grid grid-cols-1 gap-4">
                 <div>
                     <Label htmlFor="policyName" className="text-sm font-medium">Policy Name *</Label>
                     <Input
@@ -410,17 +411,6 @@ export function RLSPolicyBuilder({
                         className="mt-1.5"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Lowercase with underscores only</p>
-                </div>
-
-                <div>
-                    <Label className="text-sm font-medium">Target Table *</Label>
-                    <div className="mt-1.5">
-                        <TableSelector
-                            value={tableName}
-                            onValueChange={setTableName}
-                            placeholder="Select table"
-                        />
-                    </div>
                 </div>
             </div>
 
@@ -457,7 +447,7 @@ export function RLSPolicyBuilder({
                                         group={actorConditionGroup}
                                         onChange={setActorConditionGroup}
                                         columns={contactsColumns}
-                                        // Pass enums for known columns (e.g. contact_type, permission_level)
+                                        // Pass enums for known columns
                                         enumColumns={{
                                             [config?.columnMapping?.contactTypeColumn || 'contact_type']: contactTypes.map(c => c.value),
                                             [config?.columnMapping?.permissionLevelColumn || 'permission_level']: permissionLevels.map(p => p.value)
@@ -470,7 +460,7 @@ export function RLSPolicyBuilder({
                                 <Separator />
 
                                 {/* Permissions */}
-                                <div className="flex items-center gap-2 text-sm">
+                                <div className="flex flex-wrap items-center gap-2 text-sm">
                                     <span className="text-muted-foreground">can</span>
                                     <Select value={operation} onValueChange={(val) => setOperation(val as RLSOperation)}>
                                         <SelectTrigger className="w-[140px] h-8 bg-white">
@@ -485,9 +475,14 @@ export function RLSPolicyBuilder({
                                         </SelectContent>
                                     </Select>
                                     <span className="text-muted-foreground">records in</span>
-                                    <Badge variant="secondary" className="font-mono text-sm">
-                                        {tableName || 'selected table'}
-                                    </Badge>
+                                    {/* Moved Table Selector here */}
+                                    <div className="w-[250px]">
+                                        <TableSelector
+                                            value={tableName}
+                                            onValueChange={setTableName}
+                                            placeholder="Select table..."
+                                        />
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>

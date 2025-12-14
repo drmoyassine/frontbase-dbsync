@@ -47,7 +47,7 @@ export type RLSComparisonOperator =
 /**
  * Source type for condition value
  */
-export type RLSValueSource = 'contacts' | 'auth' | 'literal';
+export type RLSValueSource = 'contacts' | 'auth' | 'literal' | 'user_attribute';
 
 /**
  * A single condition in an RLS policy
@@ -57,7 +57,7 @@ export interface RLSCondition {
     column: string;              // Column from target table
     operator: RLSComparisonOperator;
     source: RLSValueSource;
-    sourceColumn?: string;       // Column from contacts table or auth.uid()
+    sourceColumn?: string;       // Column from contacts table or auth.uid() or user_attribute
     literalValue?: string;       // Literal value for comparison
 }
 
@@ -77,12 +77,19 @@ export interface RLSPolicyFormData {
     policyName: string;
     tableName: string;
     operation: RLSOperation;
-    contactTypes: string[];       // Which contact types this applies to (empty = all)
-    permissionLevels: string[];   // Which permission levels this applies to (empty = all)
-    conditionGroup: RLSConditionGroup;
+
+    // Legacy fields (kept for backward compatibility during migration)
+    contactTypes?: string[];
+    permissionLevels?: string[];
+
+    // New Advanced Fields
+    actorConditionGroup: RLSConditionGroup; // "Who" - Filters contacts table
+    conditionGroup: RLSConditionGroup;      // "Where" - Filters target table (Row Conditions)
+
     roles: string[];              // PostgreSQL roles (default: ['authenticated'])
     permissive: boolean;
 }
+
 
 /**
  * FK-based propagation target

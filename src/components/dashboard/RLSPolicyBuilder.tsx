@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Trash2, Code, AlertCircle, Wand2, FileCode } from 'lucide-react';
 import { TableSelector } from '@/components/data-binding/TableSelector';
+import { ConditionGroupBuilder, createEmptyCondition } from './ConditionGroupBuilder';
 import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import type {
@@ -34,31 +35,11 @@ interface RLSPolicyBuilderProps {
 }
 
 /**
- * Generate a unique ID for conditions
- */
-function generateId(): string {
-    return `cond-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-}
-
-/**
- * Create an empty condition
- */
-function createEmptyCondition(): RLSCondition {
-    return {
-        id: generateId(),
-        column: '',
-        operator: 'equals',
-        source: 'contacts',
-        sourceColumn: ''
-    };
-}
-
-/**
  * Create an empty condition group
  */
 function createEmptyConditionGroup(): RLSConditionGroup {
     return {
-        id: generateId(),
+        id: `group-${Date.now()}`,
         combinator: 'AND',
         conditions: [createEmptyCondition()]
     };
@@ -81,6 +62,13 @@ export function RLSPolicyBuilder({
     const [operation, setOperation] = useState<RLSOperation>(initialData?.operation || 'SELECT');
     const [selectedContactTypes, setSelectedContactTypes] = useState<string[]>(initialData?.contactTypes || []);
     const [selectedPermissionLevels, setSelectedPermissionLevels] = useState<string[]>(initialData?.permissionLevels || []);
+
+    // Actor "Who" conditions (filters contacts table)
+    const [actorConditionGroup, setActorConditionGroup] = useState<RLSConditionGroup>(
+        initialData?.actorConditionGroup || createEmptyConditionGroup()
+    );
+
+    // Row "Where" conditions (filters target table)
     const [conditionGroup, setConditionGroup] = useState<RLSConditionGroup>(
         initialData?.conditionGroup || createEmptyConditionGroup()
     );
@@ -110,6 +98,46 @@ export function RLSPolicyBuilder({
             fetchGlobalSchema();
         }
     }, [globalSchema, fetchGlobalSchema]);
+
+    // Migration: Convert legacy contactTypes/permissionLevels to actor conditions if needed
+    useEffect(() => {
+        // Only run if we have config, initial data, and empty actor group
+        if (!config || !initialData || initialData.actorConditionGroup) return;
+
+        const newConditions: RLSCondition[] = [];
+        let hasChanges = false;
+
+        // Migrate Contact Types
+        if (initialData.contactTypes?.length && config.columnMapping?.contactTypeColumn) {
+            newConditions.push({
+                id: `migrated-type-${Date.now()}`,
+                column: config.columnMapping.contactTypeColumn,
+                operator: 'in',
+                source: 'literal',
+                literalValue: initialData.contactTypes.join(',') // Simplified for IN
+            });
+            hasChanges = true;
+        }
+
+        // Migrate Permission Levels
+        if (initialData.permissionLevels?.length && config.columnMapping?.permissionLevelColumn) {
+            newConditions.push({
+                id: `migrated-perm-${Date.now()}`,
+                column: config.columnMapping.permissionLevelColumn,
+                operator: 'in',
+                source: 'literal',
+                literalValue: initialData.permissionLevels.join(',')
+            });
+            hasChanges = true;
+        }
+
+        if (hasChanges) {
+            setActorConditionGroup(prev => ({
+                ...prev,
+                conditions: newConditions
+            }));
+        }
+    }, [config, initialData]);
 
     // Detect related tables with FKs pointing to the contacts table
     useEffect(() => {
@@ -212,119 +240,117 @@ export function RLSPolicyBuilder({
         return Object.entries(config.permissionLevels).map(([key, label]) => ({ value: key, label }));
     }, [config?.permissionLevels]);
 
-    // Update a condition in the group
-    const updateCondition = useCallback((conditionId: string, updates: Partial<RLSCondition>) => {
-        setConditionGroup(prev => ({
-            ...prev,
-            conditions: prev.conditions.map(c =>
-                'id' in c && c.id === conditionId ? { ...c, ...updates } : c
-            )
-        }));
-    }, []);
 
-    // Add a new condition
-    const addCondition = useCallback(() => {
-        setConditionGroup(prev => ({
-            ...prev,
-            conditions: [...prev.conditions, createEmptyCondition()]
-        }));
-    }, []);
-
-    // Remove a condition
-    const removeCondition = useCallback((conditionId: string) => {
-        setConditionGroup(prev => ({
-            ...prev,
-            conditions: prev.conditions.filter(c => !('id' in c) || c.id !== conditionId)
-        }));
-    }, []);
 
     // Build SQL expression from conditions
     const buildSQLExpression = useCallback((): { using: string; check: string } => {
-        const conditions: string[] = [];
+        const parts: string[] = [];
 
-        // Add contact type filter if specified
-        if (selectedContactTypes.length > 0 && config?.columnMapping?.contactTypeColumn) {
-            const typeValues = selectedContactTypes.map(t => `'${t}'`).join(', ');
-            conditions.push(`(SELECT ${config.columnMapping.contactTypeColumn} FROM ${config.contactsTable} WHERE ${config.columnMapping.authUserIdColumn} = auth.uid()) IN (${typeValues})`);
+        // 1. Build Actor Conditions (Who is the user?)
+        // Generates: EXISTS (SELECT 1 FROM contacts WHERE auth_user_id = auth.uid() AND ...conditions...)
+        const actorConditions: string[] = [];
+
+        // Add implicit auth check
+        if (config?.columnMapping?.authUserIdColumn) {
+            actorConditions.push(`${config.columnMapping.authUserIdColumn} = auth.uid()`);
         }
 
-        // Add permission level filter if specified
-        if (selectedPermissionLevels.length > 0 && config?.columnMapping?.permissionLevelColumn) {
-            const levelValues = selectedPermissionLevels.map(l => `'${l}'`).join(', ');
-            conditions.push(`(SELECT ${config.columnMapping.permissionLevelColumn} FROM ${config.contactsTable} WHERE ${config.columnMapping.authUserIdColumn} = auth.uid()) IN (${levelValues})`);
-        }
+        // Add visual builder conditions for contacts
+        actorConditionGroup.conditions.forEach((cond) => {
+            if (!('column' in cond) || !cond.column) return;
+            const condition = cond as RLSCondition;
+            // Logic similar to row builder but simpler (usually literal comparisons)
+            let sql = `${condition.column} `;
 
-        // Build conditions from the visual builder
+            const val = condition.source === 'literal' && condition.literalValue
+                ? `'${condition.literalValue.replace(/'/g, "''")}'`
+                : 'NULL'; // Should mostly be literals for actor attributes
+
+            switch (condition.operator) {
+                case 'equals': sql += `= ${val}`; break;
+                case 'not_equals': sql += `!= ${val}`; break;
+                case 'greater_than': sql += `> ${val}`; break;
+                case 'less_than': sql += `< ${val}`; break;
+                case 'in': sql += `IN (${val})`; break; // Simplified, assumes comma-sep string if IN used?
+                case 'is_null': sql += `IS NULL`; break;
+                case 'is_not_null': sql += `IS NOT NULL`; break;
+                case 'contains': sql += `ILIKE '%' || ${val} || '%'`; break;
+                case 'starts_with': sql += `ILIKE ${val} || '%'`; break;
+                default: sql += `= ${val}`;
+            }
+            actorConditions.push(sql);
+        });
+
+        // 2. Build Row Conditions (Which rows?)
+        const rowConditions: string[] = [];
         conditionGroup.conditions.forEach((cond) => {
             if (!('column' in cond) || !cond.column) return;
 
             const condition = cond as RLSCondition;
-            let sqlCondition = '';
-
-            // Build left side (target table column)
             const leftSide = condition.column;
-
-            // Build right side based on source
             let rightSide = '';
+
             if (condition.source === 'auth') {
                 rightSide = 'auth.uid()';
             } else if (condition.source === 'contacts' && condition.sourceColumn && config) {
+                // Classic: Linked via specific column in target table to contacts
+                // Wait, source='contacts' usually meant strict FK link?? 
+                // Actually in previous code: source='contacts' meant rightSide is `(SELECT col FROM contacts WHERE auth_user_id = auth.uid())`
+                // This is effectively {user.attribute} logic.
+                rightSide = `(SELECT ${condition.sourceColumn} FROM ${config.contactsTable} WHERE ${config.columnMapping.authUserIdColumn} = auth.uid())`;
+            } else if (condition.source === 'user_attribute' && condition.sourceColumn && config) {
+                // New explicit user attribute injection
                 rightSide = `(SELECT ${condition.sourceColumn} FROM ${config.contactsTable} WHERE ${config.columnMapping.authUserIdColumn} = auth.uid())`;
             } else if (condition.source === 'literal' && condition.literalValue) {
-                // Escape single quotes for SQL
                 rightSide = `'${condition.literalValue.replace(/'/g, "''")}'`;
             }
 
-            // Build comparison
+            let sqlCondition = '';
             switch (condition.operator) {
-                case 'equals':
-                    sqlCondition = `${leftSide} = ${rightSide}`;
-                    break;
-                case 'not_equals':
-                    sqlCondition = `${leftSide} != ${rightSide}`;
-                    break;
-                case 'greater_than':
-                    sqlCondition = `${leftSide} > ${rightSide}`;
-                    break;
-                case 'less_than':
-                    sqlCondition = `${leftSide} < ${rightSide}`;
-                    break;
-                case 'in':
-                    sqlCondition = `${leftSide} IN ${rightSide}`;
-                    break;
-                case 'not_in':
-                    sqlCondition = `${leftSide} NOT IN ${rightSide}`;
-                    break;
-                case 'is_null':
-                    sqlCondition = `${leftSide} IS NULL`;
-                    break;
-                case 'is_not_null':
-                    sqlCondition = `${leftSide} IS NOT NULL`;
-                    break;
-                case 'contains':
-                    sqlCondition = `${leftSide} ILIKE '%' || ${rightSide} || '%'`;
-                    break;
-                case 'starts_with':
-                    sqlCondition = `${leftSide} ILIKE ${rightSide} || '%'`;
-                    break;
+                case 'equals': sqlCondition = `${leftSide} = ${rightSide}`; break;
+                case 'not_equals': sqlCondition = `${leftSide} != ${rightSide}`; break;
+                case 'greater_than': sqlCondition = `${leftSide} > ${rightSide}`; break;
+                case 'less_than': sqlCondition = `${leftSide} < ${rightSide}`; break;
+                case 'in': sqlCondition = `${leftSide} IN ${rightSide}`; break;
+                case 'not_in': sqlCondition = `${leftSide} NOT IN ${rightSide}`; break;
+                case 'is_null': sqlCondition = `${leftSide} IS NULL`; break;
+                case 'is_not_null': sqlCondition = `${leftSide} IS NOT NULL`; break;
+                case 'contains': sqlCondition = `${leftSide} ILIKE '%' || ${rightSide} || '%'`; break;
+                case 'starts_with': sqlCondition = `${leftSide} ILIKE ${rightSide} || '%'`; break;
             }
-
-            if (sqlCondition) {
-                conditions.push(sqlCondition);
-            }
+            if (sqlCondition) rowConditions.push(sqlCondition);
         });
 
-        const combinedUsing = conditions.length > 0
-            ? conditions.join(` ${conditionGroup.combinator} `)
+        // Combined Actor Clause
+        const actorClause = actorConditions.length > 0
+            ? `EXISTS (SELECT 1 FROM ${config?.contactsTable} WHERE ${actorConditions.join(` ${actorConditionGroup.combinator} `)})`
+            : 'true'; // Should ideally be true if no conditions, meaning just "auth user exists" if we added that check
+
+        // Combined Row Clause
+        const rowClause = rowConditions.length > 0
+            ? `(${rowConditions.join(` ${conditionGroup.combinator} `)})`
             : 'true';
 
-        // For INSERT/UPDATE, WITH CHECK is often the same as USING
-        const combinedCheck = ['INSERT', 'UPDATE', 'ALL'].includes(operation)
-            ? combinedUsing
-            : '';
+        // Final Assembly
+        // If Actor conditions exist (other than just auth check), we imply we are filtering by user attributes
+        // The previous logic was simpler. Now we say: (Actor Matches) AND (Row Matches)
 
-        return { using: combinedUsing, check: combinedCheck };
-    }, [conditionGroup, selectedContactTypes, selectedPermissionLevels, config, operation]);
+        let finalUsing = '';
+        if (actorConditionGroup.conditions.some(c => 'column' in c && c.column)) {
+            finalUsing = `(${actorClause}) AND ${rowClause}`;
+        } else {
+            // If no actor conditions defined (defaults), just use row clause. 
+            // BUT we usually want to ensure they are at least authenticated?
+            // The old logic implicitly did that via `auth.uid()` checks in row conditions.
+            finalUsing = rowClause;
+        }
+
+        // For INSERT/UPDATE/ALL, check is same as using
+        const finalCheck = ['INSERT', 'UPDATE', 'ALL'].includes(operation) ? finalUsing : '';
+
+        return { using: finalUsing, check: finalCheck };
+
+    }, [actorConditionGroup, conditionGroup, config, operation]);
 
     // Generated SQL preview - either from visual builder or raw input
     const generatedSQL = useMemo(() => {
@@ -342,6 +368,7 @@ export function RLSPolicyBuilder({
             operation,
             contactTypes: selectedContactTypes,
             permissionLevels: selectedPermissionLevels,
+            actorConditionGroup,
             conditionGroup,
             roles: initialData?.roles || ['authenticated'],
             permissive: initialData?.permissive !== undefined ? initialData.permissive : true
@@ -419,222 +446,62 @@ export function RLSPolicyBuilder({
                         <Label className="text-sm font-medium">Access Rule</Label>
 
                         <Card className="bg-slate-50/50">
-                            <CardContent className="pt-4">
-                                <div className="flex flex-wrap items-center gap-2 text-sm">
-                                    {/* Contact Type Selection */}
-                                    <span className="text-muted-foreground">Users with type</span>
-                                    <Select
-                                        value={selectedContactTypes.length === 1 ? selectedContactTypes[0] : selectedContactTypes.length > 0 ? '_multiple_' : '_any_'}
-                                        onValueChange={(val) => {
-                                            if (val === '_any_') {
-                                                setSelectedContactTypes([]);
-                                            } else if (val === '_multiple_') {
-                                                // Keep current selection
-                                            } else {
-                                                setSelectedContactTypes([val]);
-                                            }
-                                        }}
-                                    >
-                                        <SelectTrigger className="w-[140px] h-8">
-                                            <SelectValue placeholder="Any type" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="_any_">Any type</SelectItem>
-                                            {contactTypes.map(ct => (
-                                                <SelectItem key={ct.value} value={ct.value}>{ct.label}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                            <CardContent className="pt-4 space-y-4">
+                                {/* Actor Conditions */}
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <span>Users where...</span>
+                                        <Badge variant="outline" className="text-xs">contacts table</Badge>
+                                    </div>
+                                    <ConditionGroupBuilder
+                                        group={actorConditionGroup}
+                                        onChange={setActorConditionGroup}
+                                        columns={contactsColumns}
+                                        allowedSources={['literal']}
+                                        showCombinator={true}
+                                    />
+                                </div>
 
-                                    {/* Permission Level Selection */}
-                                    <span className="text-muted-foreground">and permission</span>
-                                    <Select
-                                        value={selectedPermissionLevels.length === 1 ? selectedPermissionLevels[0] : selectedPermissionLevels.length > 0 ? '_multiple_' : '_any_'}
-                                        onValueChange={(val) => {
-                                            if (val === '_any_') {
-                                                setSelectedPermissionLevels([]);
-                                            } else if (val === '_multiple_') {
-                                                // Keep current selection
-                                            } else {
-                                                setSelectedPermissionLevels([val]);
-                                            }
-                                        }}
-                                    >
-                                        <SelectTrigger className="w-[140px] h-8">
-                                            <SelectValue placeholder="Any level" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="_any_">Any level</SelectItem>
-                                            {permissionLevels.map(pl => (
-                                                <SelectItem key={pl.value} value={pl.value}>{pl.label}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                <Separator />
 
-                                    {/* Operation */}
+                                {/* Permissions */}
+                                <div className="flex items-center gap-2 text-sm">
                                     <span className="text-muted-foreground">can</span>
                                     <Select value={operation} onValueChange={(val) => setOperation(val as RLSOperation)}>
-                                        <SelectTrigger className="w-[120px] h-8">
+                                        <SelectTrigger className="w-[140px] h-8 bg-white">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="SELECT">view</SelectItem>
-                                            <SelectItem value="INSERT">create</SelectItem>
-                                            <SelectItem value="UPDATE">edit</SelectItem>
-                                            <SelectItem value="DELETE">delete</SelectItem>
-                                            <SelectItem value="ALL">do anything to</SelectItem>
+                                            <SelectItem value="SELECT">view (SELECT)</SelectItem>
+                                            <SelectItem value="INSERT">create (INSERT)</SelectItem>
+                                            <SelectItem value="UPDATE">edit (UPDATE)</SelectItem>
+                                            <SelectItem value="DELETE">delete (DELETE)</SelectItem>
+                                            <SelectItem value="ALL">do anything (ALL)</SelectItem>
                                         </SelectContent>
                                     </Select>
-
                                     <span className="text-muted-foreground">records in</span>
-                                    <Badge variant="secondary" className="font-mono">
-                                        {tableName || 'table'}
+                                    <Badge variant="secondary" className="font-mono text-sm">
+                                        {tableName || 'selected table'}
                                     </Badge>
                                 </div>
                             </CardContent>
                         </Card>
                     </div>
 
-                    {/* Condition builder */}
-                    <div className="space-y-3">
+                    {/* Row Conditions */}
+                    <div className="space-y-3 pt-2">
                         <div className="flex items-center justify-between">
-                            <Label className="text-sm font-medium">Where (conditions)</Label>
-                            <div className="flex items-center gap-2">
-                                <Select
-                                    value={conditionGroup.combinator}
-                                    onValueChange={(val) => setConditionGroup(prev => ({ ...prev, combinator: val as 'AND' | 'OR' }))}
-                                >
-                                    <SelectTrigger className="w-[80px] h-7 text-xs">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="AND">AND</SelectItem>
-                                        <SelectItem value="OR">OR</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            <Label className="text-sm font-medium">Where (Row Conditions)</Label>
+                            <span className="text-xs text-muted-foreground">Matching records in target table</span>
                         </div>
-
-                        <div className="space-y-2">
-                            {conditionGroup.conditions.map((cond, index) => {
-                                if (!('column' in cond)) return null;
-                                const condition = cond as RLSCondition;
-
-                                return (
-                                    <div key={condition.id} className="flex items-center gap-2 p-3 bg-white rounded-lg border">
-                                        {index > 0 && (
-                                            <Badge variant="outline" className="text-xs shrink-0">
-                                                {conditionGroup.combinator}
-                                            </Badge>
-                                        )}
-
-                                        {/* Target table column */}
-                                        <Select
-                                            value={condition.column}
-                                            onValueChange={(val) => updateCondition(condition.id, { column: val })}
-                                        >
-                                            <SelectTrigger className="w-[140px] h-8">
-                                                <SelectValue placeholder="Column" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {tableColumns.map(col => (
-                                                    <SelectItem key={col.name} value={col.name}>
-                                                        {col.name}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-
-                                        {/* Operator */}
-                                        <Select
-                                            value={condition.operator}
-                                            onValueChange={(val) => updateCondition(condition.id, { operator: val as RLSComparisonOperator })}
-                                        >
-                                            <SelectTrigger className="w-[120px] h-8">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="equals">equals</SelectItem>
-                                                <SelectItem value="not_equals">not equals</SelectItem>
-                                                <SelectItem value="greater_than">greater than</SelectItem>
-                                                <SelectItem value="less_than">less than</SelectItem>
-                                                <SelectItem value="is_null">is empty</SelectItem>
-                                                <SelectItem value="is_not_null">is not empty</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-
-                                        {/* Only show value source if not null check */}
-                                        {!['is_null', 'is_not_null'].includes(condition.operator) && (
-                                            <>
-                                                {/* Value source */}
-                                                <Select
-                                                    value={condition.source}
-                                                    onValueChange={(val) => updateCondition(condition.id, { source: val as RLSValueSource })}
-                                                >
-                                                    <SelectTrigger className="w-[120px] h-8">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="contacts">contacts.</SelectItem>
-                                                        <SelectItem value="auth">auth.uid()</SelectItem>
-                                                        <SelectItem value="literal">value</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-
-                                                {/* Source column or value */}
-                                                {condition.source === 'contacts' && (
-                                                    <Select
-                                                        value={condition.sourceColumn || ''}
-                                                        onValueChange={(val) => updateCondition(condition.id, { sourceColumn: val })}
-                                                    >
-                                                        <SelectTrigger className="w-[140px] h-8">
-                                                            <SelectValue placeholder="Column" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {contactsColumns.map(col => (
-                                                                <SelectItem key={col.name} value={col.name}>
-                                                                    {col.name}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                )}
-
-                                                {condition.source === 'literal' && (
-                                                    <Input
-                                                        value={condition.literalValue || ''}
-                                                        onChange={(e) => updateCondition(condition.id, { literalValue: e.target.value })}
-                                                        placeholder="Value"
-                                                        className="w-[140px] h-8"
-                                                    />
-                                                )}
-                                            </>
-                                        )}
-
-                                        {/* Remove button */}
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                                            onClick={() => removeCondition(condition.id)}
-                                            disabled={conditionGroup.conditions.length <= 1}
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={addCondition}
-                            className="w-full"
-                        >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add Condition
-                        </Button>
+                        <ConditionGroupBuilder
+                            group={conditionGroup}
+                            onChange={setConditionGroup}
+                            columns={tableColumns}
+                            sourceColumns={contactsColumns}
+                            allowedSources={['literal', 'auth', 'user_attribute']}
+                            showCombinator={true}
+                        />
                     </div>
                 </TabsContent>
 

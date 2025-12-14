@@ -2,7 +2,7 @@ import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { X } from 'lucide-react';
-import { VariableSelector } from './VariableSelector';
+import { VariableSelector, VariableOption } from './VariableSelector';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { RLSValueSource } from '@/types/rls';
 
@@ -24,6 +24,7 @@ interface SmartValueInputProps {
     // Available variables for selector
     userColumns?: Array<{ name: string; type: string }>;
     targetColumns?: Array<{ name: string; type: string }>;
+    allowedSources?: RLSValueSource[];
 }
 
 export function SmartValueInput({
@@ -34,8 +35,22 @@ export function SmartValueInput({
     targetColumn,
     possibleValues,
     userColumns,
-    targetColumns
+    targetColumns,
+    allowedSources
 }: SmartValueInputProps) {
+
+    // Compute allowed categories for VariableSelector based on allowedSources
+    const allowedCategories: VariableOption['category'][] = React.useMemo(() => {
+        if (!allowedSources) return ['user', 'system', 'target']; // Default all
+
+        const cats: VariableOption['category'][] = [];
+        // Map RLS sources to VariableSelector categories
+        if (allowedSources.some(s => s === 'contacts' || s === 'user_attribute')) cats.push('user');
+        if (allowedSources.some(s => s === 'auth' || s === 'literal')) cats.push('system');
+        if (allowedSources.some(s => s === 'target_column')) cats.push('target');
+
+        return cats;
+    }, [allowedSources]);
 
     // 1. Variable Chip Mode
     // If source is NOT literal, we show a chip
@@ -96,6 +111,7 @@ export function SmartValueInput({
                     onSelect={(val, cat) => handleVariableSelect(val, cat, onChange)}
                     userColumns={userColumns}
                     targetColumns={targetColumns}
+                    allowedCategories={allowedCategories}
                 />
             </div>
         );
@@ -115,6 +131,7 @@ export function SmartValueInput({
                     onSelect={(val, cat) => handleVariableSelect(val, cat, onChange)}
                     userColumns={userColumns}
                     targetColumns={targetColumns}
+                    allowedCategories={allowedCategories}
                 />
             </div>
         </div>

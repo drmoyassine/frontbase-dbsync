@@ -529,7 +529,7 @@ export function RLSPolicyBuilder({
                             onChange={setConditionGroup}
                             columns={tableColumns}
                             sourceColumns={!isUnauthenticated ? contactsColumns : []}
-                            allowedSources={!isUnauthenticated ? ['literal', 'auth', 'user_attribute'] : ['literal']}
+                            allowedSources={!isUnauthenticated ? ['literal', 'auth', 'user_attribute', 'target_column'] : ['literal', 'target_column']}
                             showCombinator={true}
                         />
                     </div>

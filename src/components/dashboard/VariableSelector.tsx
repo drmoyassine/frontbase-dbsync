@@ -19,6 +19,7 @@ interface VariableSelectorProps {
     targetColumns?: Array<{ name: string; type: string }>; // For 'target' category (comparing row cols)
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
+    allowedCategories?: VariableOption['category'][]; // Control which categories are visible
 }
 
 type MenuLevel = 'root' | 'user' | 'system' | 'target';
@@ -28,7 +29,8 @@ export function VariableSelector({
     userColumns = [],
     targetColumns = [],
     open: controlledOpen,
-    onOpenChange: controlledOnOpenChange
+    onOpenChange: controlledOnOpenChange,
+    allowedCategories
 }: VariableSelectorProps) {
     const [internalOpen, setInternalOpen] = useState(false);
     const [view, setView] = useState<MenuLevel>('root');
@@ -36,6 +38,11 @@ export function VariableSelector({
     const isControlled = controlledOpen !== undefined;
     const open = isControlled ? controlledOpen : internalOpen;
     const setOpen = isControlled ? controlledOnOpenChange : setInternalOpen;
+
+    // Filter categories if allowedCategories is provided
+    const showUser = !allowedCategories || allowedCategories.includes('user');
+    const showSystem = !allowedCategories || allowedCategories.includes('system');
+    const showTarget = !allowedCategories || allowedCategories.includes('target');
 
     // Reset view when closing
     useEffect(() => {
@@ -112,29 +119,35 @@ export function VariableSelector({
                         {/* ROOT VIEW */}
                         {view === 'root' && (
                             <CommandGroup heading="Variable Categories">
-                                <CommandItem onSelect={() => setView('user')} className="flex items-center justify-between cursor-pointer">
-                                    <div className="flex items-center gap-2">
-                                        <Badge variant="secondary" className="bg-blue-100 text-blue-700 hover:bg-blue-100">User</Badge>
-                                        <span className="text-sm">Attributes</span>
-                                    </div>
-                                    <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                                </CommandItem>
+                                {showUser && (
+                                    <CommandItem onSelect={() => setView('user')} className="flex items-center justify-between cursor-pointer">
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="secondary" className="bg-blue-100 text-blue-700 hover:bg-blue-100">User</Badge>
+                                            <span className="text-sm">Attributes</span>
+                                        </div>
+                                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                                    </CommandItem>
+                                )}
 
-                                <CommandItem onSelect={() => setView('system')} className="flex items-center justify-between cursor-pointer">
-                                    <div className="flex items-center gap-2">
-                                        <Badge variant="secondary" className="bg-slate-100 text-slate-700 hover:bg-slate-100">System</Badge>
-                                        <span className="text-sm">Global Vars</span>
-                                    </div>
-                                    <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                                </CommandItem>
+                                {showSystem && (
+                                    <CommandItem onSelect={() => setView('system')} className="flex items-center justify-between cursor-pointer">
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="secondary" className="bg-slate-100 text-slate-700 hover:bg-slate-100">System</Badge>
+                                            <span className="text-sm">Global Vars</span>
+                                        </div>
+                                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                                    </CommandItem>
+                                )}
 
-                                <CommandItem onSelect={() => setView('target')} className="flex items-center justify-between cursor-pointer">
-                                    <div className="flex items-center gap-2">
-                                        <Badge variant="secondary" className="bg-amber-100 text-amber-700 hover:bg-amber-100">Record</Badge>
-                                        <span className="text-sm">Target Columns</span>
-                                    </div>
-                                    <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                                </CommandItem>
+                                {showTarget && (
+                                    <CommandItem onSelect={() => setView('target')} className="flex items-center justify-between cursor-pointer">
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="secondary" className="bg-amber-100 text-amber-700 hover:bg-amber-100">Record</Badge>
+                                            <span className="text-sm">Target Columns</span>
+                                        </div>
+                                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                                    </CommandItem>
+                                )}
                             </CommandGroup>
                         )}
 

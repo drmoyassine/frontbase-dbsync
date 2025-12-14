@@ -159,9 +159,10 @@ export function ConditionGroupBuilder({
                                     source={condition.source}
                                     sourceColumn={condition.sourceColumn}
                                     targetColumn={condition.column}
-                                    possibleValues={condition.column ? enumColumns[condition.column] : undefined} // Pass configured enums
-                                    userColumns={sourceColumns} // sourceColumns are usually contacts/user columns
-                                    targetColumns={columns}     // columns are the target table columns
+                                    possibleValues={condition.column ? enumColumns[condition.column] : undefined}
+                                    userColumns={sourceColumns}
+                                    targetColumns={columns}
+                                    allowedSources={allowedSources}
                                     onChange={(updates) => {
                                         updateCondition(condition.id, {
                                             source: updates.source,

@@ -14,6 +14,7 @@ interface TableSelectorProps {
   placeholder?: string;
   disabled?: boolean;
   showRefresh?: boolean;
+  variant?: 'default' | 'compact';
 }
 
 export function TableSelector({
@@ -23,7 +24,8 @@ export function TableSelector({
   label = "Table",
   placeholder = "Select a table",
   disabled = false,
-  showRefresh = true
+  showRefresh = true,
+  variant = 'default'
 }: TableSelectorProps) {
   const { tables, tablesError, connected, tablesLoading, fetchTables, initialize } = useDataBindingStore();
 
@@ -47,6 +49,41 @@ export function TableSelector({
   const isLoading = tablesLoading;
   const tableList = tables.map(table => table.name);
 
+  if (variant === 'compact') {
+    return (
+      <div className="flex items-center gap-2 w-full">
+        <Select
+          value={value || ''}
+          onValueChange={onValueChange}
+          disabled={disabled || isLoading || tableList.length === 0}
+        >
+          <SelectTrigger className="flex-1">
+            <SelectValue placeholder={isLoading ? "Loading..." : placeholder} />
+          </SelectTrigger>
+          <SelectContent>
+            {tableList.map((table) => (
+              <SelectItem key={table} value={table}>
+                {table}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {showRefresh && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            onClick={handleRefresh}
+            disabled={isLoading}
+            title="Refresh tables"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -62,8 +99,8 @@ export function TableSelector({
           </Button>
         )}
       </div>
-      <Select 
-        value={value || ''} 
+      <Select
+        value={value || ''}
         onValueChange={onValueChange}
         disabled={disabled || isLoading || tableList.length === 0}
       >
@@ -80,7 +117,7 @@ export function TableSelector({
       </Select>
       {!isLoading && tableList.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          {!connected 
+          {!connected
             ? 'Database not connected. Please configure your Supabase connection.'
             : (tablesError || 'No tables found. Make sure your database is properly connected.')
           }

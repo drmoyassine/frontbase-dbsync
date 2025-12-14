@@ -210,7 +210,16 @@ export function RLSPolicyBuilder({
         if (!tableName) return [];
         const schema = schemas.get(tableName);
         if (!schema?.columns) return [];
-        return schema.columns.map(c => ({ name: c.name, type: c.type }));
+
+        // Deduplicate by name
+        const seen = new Set();
+        return schema.columns
+            .filter(c => {
+                if (seen.has(c.name)) return false;
+                seen.add(c.name);
+                return true;
+            })
+            .map(c => ({ name: c.name, type: c.type }));
     }, [tableName, schemas]);
 
     // Get contacts table columns
@@ -218,7 +227,16 @@ export function RLSPolicyBuilder({
         if (!config?.contactsTable) return [];
         const schema = schemas.get(config.contactsTable);
         if (!schema?.columns) return [];
-        return schema.columns.map(c => ({ name: c.name, type: c.type }));
+
+        // Deduplicate by name
+        const seen = new Set();
+        return schema.columns
+            .filter(c => {
+                if (seen.has(c.name)) return false;
+                seen.add(c.name);
+                return true;
+            })
+            .map(c => ({ name: c.name, type: c.type }));
     }, [config?.contactsTable, schemas]);
 
     // Load contacts table schema
@@ -242,6 +260,9 @@ export function RLSPolicyBuilder({
 
 
 
+    // Unauthenticated mode state
+    const [isUnauthenticated, setIsUnauthenticated] = useState(false);
+
     // Build SQL expression from conditions
     const buildSQLExpression = useCallback((): { using: string; check: string } => {
         const parts: string[] = [];
@@ -250,36 +271,38 @@ export function RLSPolicyBuilder({
         // Generates: EXISTS (SELECT 1 FROM contacts WHERE auth_user_id = auth.uid() AND ...conditions...)
         const actorConditions: string[] = [];
 
-        // Add implicit auth check
-        if (config?.columnMapping?.authUserIdColumn) {
-            actorConditions.push(`${config.columnMapping.authUserIdColumn} = auth.uid()`);
-        }
-
-        // Add visual builder conditions for contacts
-        actorConditionGroup.conditions.forEach((cond) => {
-            if (!('column' in cond) || !cond.column) return;
-            const condition = cond as RLSCondition;
-            // Logic similar to row builder but simpler (usually literal comparisons)
-            let sql = `${condition.column} `;
-
-            const val = condition.source === 'literal' && condition.literalValue
-                ? `'${condition.literalValue.replace(/'/g, "''")}'`
-                : 'NULL'; // Should mostly be literals for actor attributes
-
-            switch (condition.operator) {
-                case 'equals': sql += `= ${val}`; break;
-                case 'not_equals': sql += `!= ${val}`; break;
-                case 'greater_than': sql += `> ${val}`; break;
-                case 'less_than': sql += `< ${val}`; break;
-                case 'in': sql += `IN (${val})`; break; // Simplified, assumes comma-sep string if IN used?
-                case 'is_null': sql += `IS NULL`; break;
-                case 'is_not_null': sql += `IS NOT NULL`; break;
-                case 'contains': sql += `ILIKE '%' || ${val} || '%'`; break;
-                case 'starts_with': sql += `ILIKE ${val} || '%'`; break;
-                default: sql += `= ${val}`;
+        // Skip actor checks if Unauthenticated
+        if (!isUnauthenticated) {
+            // Add implicit auth check
+            if (config?.columnMapping?.authUserIdColumn) {
+                actorConditions.push(`${config.columnMapping.authUserIdColumn} = auth.uid()`);
             }
-            actorConditions.push(sql);
-        });
+
+            // Add visual builder conditions for contacts
+            actorConditionGroup.conditions.forEach((cond) => {
+                if (!('column' in cond) || !cond.column) return;
+                const condition = cond as RLSCondition;
+                let sql = `${condition.column} `;
+
+                const val = condition.source === 'literal' && condition.literalValue
+                    ? `'${condition.literalValue.replace(/'/g, "''")}'`
+                    : 'NULL';
+
+                switch (condition.operator) {
+                    case 'equals': sql += `= ${val}`; break;
+                    case 'not_equals': sql += `!= ${val}`; break;
+                    case 'greater_than': sql += `> ${val}`; break;
+                    case 'less_than': sql += `< ${val}`; break;
+                    case 'in': sql += `IN (${val})`; break;
+                    case 'is_null': sql += `IS NULL`; break;
+                    case 'is_not_null': sql += `IS NOT NULL`; break;
+                    case 'contains': sql += `ILIKE '%' || ${val} || '%'`; break;
+                    case 'starts_with': sql += `ILIKE ${val} || '%'`; break;
+                    default: sql += `= ${val}`;
+                }
+                actorConditions.push(sql);
+            });
+        }
 
         // 2. Build Row Conditions (Which rows?)
         const rowConditions: string[] = [];
@@ -292,17 +315,17 @@ export function RLSPolicyBuilder({
 
             if (condition.source === 'auth') {
                 rightSide = 'auth.uid()';
-            } else if (condition.source === 'contacts' && condition.sourceColumn && config) {
-                // Classic: Linked via specific column in target table to contacts
-                // Wait, source='contacts' usually meant strict FK link?? 
-                // Actually in previous code: source='contacts' meant rightSide is `(SELECT col FROM contacts WHERE auth_user_id = auth.uid())`
-                // This is effectively {user.attribute} logic.
+            } else if (condition.source === 'contacts' && condition.sourceColumn && config && !isUnauthenticated) {
                 rightSide = `(SELECT ${condition.sourceColumn} FROM ${config.contactsTable} WHERE ${config.columnMapping.authUserIdColumn} = auth.uid())`;
-            } else if (condition.source === 'user_attribute' && condition.sourceColumn && config) {
-                // New explicit user attribute injection
+            } else if (condition.source === 'user_attribute' && condition.sourceColumn && config && !isUnauthenticated) {
                 rightSide = `(SELECT ${condition.sourceColumn} FROM ${config.contactsTable} WHERE ${config.columnMapping.authUserIdColumn} = auth.uid())`;
             } else if (condition.source === 'literal' && condition.literalValue) {
                 rightSide = `'${condition.literalValue.replace(/'/g, "''")}'`;
+            }
+
+            // Skip invalid condition for unauth
+            if (!rightSide && (condition.source === 'contacts' || condition.source === 'user_attribute') && isUnauthenticated) {
+                return;
             }
 
             let sqlCondition = '';
@@ -322,9 +345,9 @@ export function RLSPolicyBuilder({
         });
 
         // Combined Actor Clause
-        const actorClause = actorConditions.length > 0
+        const actorClause = !isUnauthenticated && actorConditions.length > 0
             ? `EXISTS (SELECT 1 FROM ${config?.contactsTable} WHERE ${actorConditions.join(` ${actorConditionGroup.combinator} `)})`
-            : 'true'; // Should ideally be true if no conditions, meaning just "auth user exists" if we added that check
+            : 'true';
 
         // Combined Row Clause
         const rowClause = rowConditions.length > 0
@@ -332,16 +355,11 @@ export function RLSPolicyBuilder({
             : 'true';
 
         // Final Assembly
-        // If Actor conditions exist (other than just auth check), we imply we are filtering by user attributes
-        // The previous logic was simpler. Now we say: (Actor Matches) AND (Row Matches)
-
         let finalUsing = '';
-        if (actorConditionGroup.conditions.some(c => 'column' in c && c.column)) {
+        if (!isUnauthenticated && actorConditionGroup.conditions.some(c => 'column' in c && c.column)) {
             finalUsing = `(${actorClause}) AND ${rowClause}`;
         } else {
-            // If no actor conditions defined (defaults), just use row clause. 
-            // BUT we usually want to ensure they are at least authenticated?
-            // The old logic implicitly did that via `auth.uid()` checks in row conditions.
+            // Unauthenticated or no actor conditions
             finalUsing = rowClause;
         }
 
@@ -350,7 +368,7 @@ export function RLSPolicyBuilder({
 
         return { using: finalUsing, check: finalCheck };
 
-    }, [actorConditionGroup, conditionGroup, config, operation]);
+    }, [actorConditionGroup, conditionGroup, config, operation, isUnauthenticated]);
 
     // Generated SQL preview - either from visual builder or raw input
     const generatedSQL = useMemo(() => {
@@ -370,7 +388,7 @@ export function RLSPolicyBuilder({
             permissionLevels: selectedPermissionLevels,
             actorConditionGroup,
             conditionGroup,
-            roles: initialData?.roles || ['authenticated'],
+            roles: isUnauthenticated ? ['anon'] : (initialData?.roles || ['authenticated']),
             permissive: initialData?.permissive !== undefined ? initialData.permissive : true
         };
 
@@ -433,35 +451,48 @@ export function RLSPolicyBuilder({
                 <TabsContent value="visual" className="space-y-4 mt-4">
                     {/* Natural language builder */}
                     <div className="space-y-4">
-                        <Label className="text-sm font-medium">Access Rule</Label>
+                        <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">Access Rule</Label>
+                            <div className="flex items-center gap-2">
+                                <Label htmlFor="unauth-mode" className="text-xs text-muted-foreground cursor-pointer">Unauthenticated (Public)</Label>
+                                <Checkbox
+                                    id="unauth-mode"
+                                    checked={isUnauthenticated}
+                                    onCheckedChange={(c) => setIsUnauthenticated(!!c)}
+                                />
+                            </div>
+                        </div>
 
                         <Card className="bg-slate-50/50">
                             <CardContent className="pt-4 space-y-4">
-                                {/* Actor Conditions */}
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <span>Users where...</span>
-                                        <Badge variant="outline" className="text-xs">contacts table</Badge>
+                                {/* Actor Conditions - Hidden if Unauthenticated */}
+                                {!isUnauthenticated && (
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <span>Users where...</span>
+                                            <Badge variant="outline" className="text-xs">contacts table</Badge>
+                                        </div>
+                                        <ConditionGroupBuilder
+                                            group={actorConditionGroup}
+                                            onChange={setActorConditionGroup}
+                                            columns={contactsColumns}
+                                            // Pass enums for known columns
+                                            enumColumns={{
+                                                [config?.columnMapping?.contactTypeColumn || 'contact_type']: contactTypes.map(c => c.value),
+                                                [config?.columnMapping?.permissionLevelColumn || 'permission_level']: permissionLevels.map(p => p.value)
+                                            }}
+                                            allowedSources={['literal', 'auth']}
+                                            showCombinator={true}
+                                        />
+                                        <Separator className="my-2" />
                                     </div>
-                                    <ConditionGroupBuilder
-                                        group={actorConditionGroup}
-                                        onChange={setActorConditionGroup}
-                                        columns={contactsColumns}
-                                        // Pass enums for known columns
-                                        enumColumns={{
-                                            [config?.columnMapping?.contactTypeColumn || 'contact_type']: contactTypes.map(c => c.value),
-                                            [config?.columnMapping?.permissionLevelColumn || 'permission_level']: permissionLevels.map(p => p.value)
-                                        }}
-                                        allowedSources={['literal', 'auth']}
-                                        showCombinator={true}
-                                    />
-                                </div>
-
-                                <Separator />
+                                )}
 
                                 {/* Permissions */}
                                 <div className="flex flex-wrap items-center gap-2 text-sm">
-                                    <span className="text-muted-foreground">can</span>
+                                    <span className="text-muted-foreground">
+                                        {isUnauthenticated ? 'Unauthenticated users can' : 'can'}
+                                    </span>
                                     <Select value={operation} onValueChange={(val) => setOperation(val as RLSOperation)}>
                                         <SelectTrigger className="w-[140px] h-8 bg-white">
                                             <SelectValue />
@@ -475,12 +506,13 @@ export function RLSPolicyBuilder({
                                         </SelectContent>
                                     </Select>
                                     <span className="text-muted-foreground">records in</span>
-                                    {/* Moved Table Selector here */}
-                                    <div className="w-[250px]">
+                                    {/* Compact Table Selector */}
+                                    <div className="w-[200px]">
                                         <TableSelector
                                             value={tableName}
                                             onValueChange={setTableName}
                                             placeholder="Select table..."
+                                            variant="compact"
                                         />
                                     </div>
                                 </div>
@@ -498,8 +530,8 @@ export function RLSPolicyBuilder({
                             group={conditionGroup}
                             onChange={setConditionGroup}
                             columns={tableColumns}
-                            sourceColumns={contactsColumns}
-                            allowedSources={['literal', 'auth', 'user_attribute']}
+                            sourceColumns={!isUnauthenticated ? contactsColumns : []}
+                            allowedSources={!isUnauthenticated ? ['literal', 'auth', 'user_attribute'] : ['literal']}
                             showCombinator={true}
                         />
                     </div>

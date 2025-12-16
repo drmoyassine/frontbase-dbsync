@@ -40,22 +40,22 @@ try {
   } else {
     console.log('✅ Data directory already exists');
   }
-  
+
   // Create subdirectories
-  
+
   [uploadsDir, exportsDir].forEach(dir => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
       console.log('📁 Created directory:', dir);
     }
   });
-  
+
   // Test write access
   const testFile = path.join(dataDir, '.write-test');
   fs.writeFileSync(testFile, 'test');
   fs.unlinkSync(testFile);
   console.log('✅ Data directory is writable');
-  
+
 } catch (error) {
   console.error('❌ Data directory setup failed:', error.message);
   console.error('📂 Working directory:', process.cwd());
@@ -77,26 +77,26 @@ let db;
 try {
   db = initializeDatabase();
   console.log('✅ Database initialized successfully');
-  
+
   // Test database integrity after startup
   console.log('🔍 Testing database integrity...');
   const testQuery = db.prepare('SELECT name FROM sqlite_master WHERE type=\'table\'');
   const tables = testQuery.all();
   console.log('📋 Database tables found:', tables.map(t => t.name).join(', '));
-  
+
   // Check critical tables exist
   const requiredTables = ['users', 'user_sessions', 'project', 'pages'];
-  const missingTables = requiredTables.filter(table => 
+  const missingTables = requiredTables.filter(table =>
     !tables.some(t => t.name === table)
   );
-  
+
   if (missingTables.length > 0) {
     console.error('❌ Missing required tables:', missingTables);
     process.exit(1);
   }
-  
+
   console.log('✅ Database integrity check passed');
-  
+
 } catch (error) {
   console.error('❌ Failed to initialize database:', error.message);
   console.error('📋 Database error details:');
@@ -113,18 +113,18 @@ let dbManager;
 try {
   dbManager = new DatabaseManager();
   console.log('✅ Database manager connected');
-  
+
   // Add session monitoring for debugging
   if (process.env.NODE_ENV !== 'production' || process.env.DEBUG_SESSIONS) {
     const { monitorSessions } = require('./debug/session-monitor');
     monitorSessions(dbManager);
     console.log('🔍 Session monitoring enabled');
   }
-  
+
   // Run comprehensive startup health check
   const { checkStartupHealth } = require('./debug/startup-check');
   const healthResult = checkStartupHealth(dbManager);
-  
+
   if (!healthResult.success) {
     console.error('❌ Startup health check failed');
     if (healthResult.error) {
@@ -132,7 +132,7 @@ try {
     }
     // Don't exit - allow server to start with warnings
   }
-  
+
 } catch (error) {
   console.error('❌ Failed to connect database manager:', error);
   console.error('Stack trace:', error.stack);
@@ -155,21 +155,21 @@ try {
     const supabaseUrl = process.env.SUPABASE_PROJECT_URL;
     const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
-    
+
     console.log('🔍 Checking for Supabase environment variables...');
     console.log(`  SUPABASE_PROJECT_URL: ${supabaseUrl ? '✓ Set' : '✗ Not set'}`);
     console.log(`  SUPABASE_ANON_KEY: ${supabaseAnonKey ? '✓ Set' : '✗ Not set'}`);
     console.log(`  SUPABASE_SERVICE_KEY: ${supabaseServiceKey ? '✓ Set' : '✗ Not set'}`);
-    
+
     if (supabaseUrl && supabaseAnonKey && supabaseServiceKey) {
       console.log('🔗 Auto-configuring Supabase at PROJECT LEVEL from environment variables...');
-      
+
       const { encrypt } = require('./utils/encryption');
-      
+
       // Encrypt the service key
       console.log('🔐 Encrypting service key...');
       const encryptedServiceKey = encrypt(supabaseServiceKey);
-      
+
       // Store ALL Supabase credentials at PROJECT level
       console.log('💾 Storing ALL Supabase credentials at PROJECT level...');
       dbManager.updateProject({
@@ -177,7 +177,7 @@ try {
         supabase_anon_key: supabaseAnonKey,
         supabase_service_key_encrypted: JSON.stringify(encryptedServiceKey)
       });
-      
+
       // Verify storage
       const storedProject = dbManager.getProject();
       console.log('✅ Supabase configuration verification:', {
@@ -185,7 +185,7 @@ try {
         anon_key_stored: !!storedProject.supabase_anon_key,
         service_key_stored: !!storedProject.supabase_service_key_encrypted
       });
-      
+
       // Test the connection
       console.log('🧪 Testing Supabase connection...');
       try {
@@ -195,7 +195,7 @@ try {
             'Authorization': `Bearer ${supabaseAnonKey}`
           }
         });
-        
+
         if (testResponse.ok) {
           console.log('✅ Supabase connection test SUCCESSFUL');
           console.log('✅ Supabase auto-configured successfully at PROJECT level');
@@ -205,7 +205,7 @@ try {
       } catch (testError) {
         console.warn('⚠️ Supabase connection test ERROR:', testError.message);
       }
-      
+
     } else {
       console.log('ℹ️ No Supabase environment variables found, manual configuration will be used');
     }
@@ -239,16 +239,16 @@ app.get('/health', (req, res) => {
   try {
     // Test basic database connectivity
     const dbTest = dbManager.getProject();
-    
+
     // Test session functionality
     const sessionTest = dbManager.db.prepare('SELECT COUNT(*) as count FROM user_sessions').get();
-    
+
     // Test critical tables
     const tableTest = dbManager.db.prepare(`
       SELECT name FROM sqlite_master 
       WHERE type='table' AND name IN ('users', 'user_sessions', 'project_config', 'pages')
     `).all();
-    
+
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -302,7 +302,7 @@ app.get('/debug/builder', (req, res) => {
     const publicDir = path.join(__dirname, 'public');
     const assetsDir = path.join(publicDir, 'assets');
     const indexPath = path.join(publicDir, 'index.html');
-    
+
     const debugInfo = {
       paths: {
         __dirname: __dirname,
@@ -321,16 +321,16 @@ app.get('/debug/builder', (req, res) => {
         staticPath: path.join(__dirname, 'public')
       }
     };
-    
+
     // Get public directory contents
     if (fs.existsSync(publicDir)) {
       debugInfo.contents.public = fs.readdirSync(publicDir);
-      
+
       // Get assets directory contents if it exists
       if (fs.existsSync(assetsDir)) {
         debugInfo.contents.assets = fs.readdirSync(assetsDir);
       }
-      
+
       // Read first few lines of index.html if it exists
       if (fs.existsSync(indexPath)) {
         const indexContent = fs.readFileSync(indexPath, 'utf8');
@@ -341,7 +341,7 @@ app.get('/debug/builder', (req, res) => {
         };
       }
     }
-    
+
     // Show all middleware in order
     debugInfo.middleware = app._router.stack.map((layer, index) => ({
       index,
@@ -349,7 +349,7 @@ app.get('/debug/builder', (req, res) => {
       method: layer.route?.methods || 'middleware',
       name: layer.name || 'anonymous'
     }));
-    
+
     res.json(debugInfo);
   } catch (error) {
     res.status(500).json({ error: error.message, stack: error.stack });
@@ -375,7 +375,7 @@ app.get('/api', (req, res) => {
     version: '1.0.0',
     endpoints: {
       project: '/api/project',
-      pages: '/api/pages', 
+      pages: '/api/pages',
       variables: '/api/variables',
       database: '/api/database'
     },
@@ -428,12 +428,28 @@ try {
   process.exit(1);
 }
 
+try {
+  app.use('/api/auth-forms', require('./routes/api/auth-forms')(dbManager));
+  console.log('✅ Auth Forms API routes loaded');
+} catch (error) {
+  console.error('❌ Failed to load auth-forms routes:', error);
+  process.exit(1);
+}
+
+try {
+  app.use('/embed', require('./routes/embed')(dbManager));
+  console.log('✅ Embed routes loaded');
+} catch (error) {
+  console.error('❌ Failed to load embed routes:', error);
+  process.exit(1);
+}
+
 // Public SSR Routes (for SEO)
 app.get('/sitemap.xml', async (req, res) => {
   try {
     const publicPages = dbManager.getPublicPages();
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    
+
     const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${publicPages.map(page => `  <url>
@@ -443,7 +459,7 @@ ${publicPages.map(page => `  <url>
     <priority>${page.isHomepage ? '1.0' : '0.8'}</priority>
   </url>`).join('\n')}
 </urlset>`;
-    
+
     res.set('Content-Type', 'application/xml');
     res.send(sitemap);
   } catch (error) {
@@ -457,7 +473,7 @@ app.get('/robots.txt', (req, res) => {
 Allow: /
 
 Sitemap: ${req.protocol}://${req.get('host')}/sitemap.xml`;
-  
+
   res.set('Content-Type', 'text/plain');
   res.send(robotsTxt);
 });
@@ -488,13 +504,13 @@ console.log('📂 Builder static exists:', fs.existsSync(builderStaticPath));
 app.use('/builder', (req, res, next) => {
   console.log(`🔍 Builder request: ${req.method} ${req.originalUrl}`);
   console.log(`🎯 Requested file: ${req.path}`);
-  
+
   // Check if this is an asset request
   if (req.path.startsWith('/assets/')) {
     const assetPath = path.join(builderStaticPath, req.path);
     console.log(`📁 Asset path: ${assetPath}`);
     console.log(`📁 Asset exists: ${fs.existsSync(assetPath)}`);
-    
+
     // If asset doesn't exist, log what's in the assets directory
     if (!fs.existsSync(assetPath)) {
       const assetsDir = path.join(builderStaticPath, 'assets');
@@ -505,7 +521,7 @@ app.use('/builder', (req, res, next) => {
       }
     }
   }
-  
+
   next();
 });
 
@@ -526,14 +542,14 @@ app.use('/builder', express.static(builderStaticPath, {
 app.get('/builder/*', (req, res) => {
   const indexPath = path.join(__dirname, 'public', 'index.html');
   const publicDir = path.join(__dirname, 'public');
-  
+
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
     // Provide detailed error information for debugging
     const publicExists = fs.existsSync(publicDir);
     const publicContents = publicExists ? fs.readdirSync(publicDir) : [];
-    
+
     res.status(503).send(`
       <!DOCTYPE html>
       <html>
@@ -600,7 +616,7 @@ app.get('/dashboard/*', (req, res) => {
     console.log(`❌ Dashboard route intercepted API call: ${req.originalUrl}`);
     return res.status(404).send('API route not found');
   }
-  
+
   const indexPath = path.join(__dirname, 'public', 'index.html');
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
@@ -613,12 +629,12 @@ app.get('/dashboard/*', (req, res) => {
 app.get('/:slug?', async (req, res) => {
   try {
     const slug = req.params.slug || 'home';
-    
+
     // Skip API routes and builder routes
     if (slug.startsWith('api') || slug === 'builder' || slug.includes('.')) {
       return res.status(404).send('Not found');
     }
-    
+
     // Find public page by slug or homepage
     let page;
     if (slug === 'home' || slug === '') {
@@ -628,7 +644,7 @@ app.get('/:slug?', async (req, res) => {
     } else {
       page = dbManager.getPageBySlug(slug);
     }
-    
+
     if (!page || !page.isPublic) {
       return res.status(404).send(`
         <!DOCTYPE html>
@@ -648,13 +664,13 @@ app.get('/:slug?', async (req, res) => {
         </html>
       `);
     }
-    
+
     // Get variables for template replacement
     const variables = dbManager.getAllVariables();
-    
+
     // Render page with SSR
     const html = renderPageSSR(page, variables);
-    
+
     res.send(html);
   } catch (error) {
     console.error('SSR Error:', error);
@@ -710,7 +726,7 @@ const server = app.listen(PORT, () => {
     console.log('⚠️ Server already running, ignoring duplicate start');
     return;
   }
-  
+
   serverRunning = true;
   console.log('✅ Server setup complete!');
   console.log(`🌐 Server running on http://localhost:${PORT}`);
@@ -720,12 +736,12 @@ const server = app.listen(PORT, () => {
   console.log(`📍 Database: ${process.env.DB_PATH || path.join(__dirname, 'data/frontbase.db')}`);
   console.log(`🩺 Health check: http://localhost:${PORT}/health`);
   console.log(`🔍 Debug info: http://localhost:${PORT}/debug/filesystem`);
-  
+
   // Test database connection and default page
   try {
     const testConnection = dbManager.getProject();
     console.log('✅ Database connection test passed');
-    
+
     // Verify default homepage exists
     const pages = dbManager.getPublicPages();
     if (pages.length > 0) {

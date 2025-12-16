@@ -13,6 +13,7 @@ import LoginPage from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
 import BuilderPage from "./pages/BuilderPage";
 import VariablesPage from "./pages/VariablesPage";
+import EmbedAuthPage from "./pages/EmbedAuthPage";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -80,6 +81,7 @@ const App = () => {
                   <VariablesPage />
                 </ProtectedRoute>
               } />
+              <Route path="/embed/auth/:formId" element={<EmbedAuthPage />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

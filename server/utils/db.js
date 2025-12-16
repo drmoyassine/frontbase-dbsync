@@ -20,6 +20,18 @@ class DatabaseManager {
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
         UNIQUE(table_name, policy_name)
+      );
+
+      CREATE TABLE IF NOT EXISTS auth_forms (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('login', 'signup')),
+        config TEXT DEFAULT '{}',
+        target_contact_type TEXT,
+        redirect_url TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
       )
     `);
 
@@ -118,6 +130,20 @@ class DatabaseManager {
     this.deleteRLSMetadataStmt = this.db.prepare(
       'DELETE FROM rls_policy_metadata WHERE table_name = ? AND policy_name = ?'
     );
+
+    // Auth Forms statements
+    this.getAllAuthFormsStmt = this.db.prepare('SELECT * FROM auth_forms ORDER BY created_at DESC');
+    this.getAuthFormStmt = this.db.prepare('SELECT * FROM auth_forms WHERE id = ?');
+    this.createAuthFormStmt = this.db.prepare(`
+      INSERT INTO auth_forms (id, name, type, config, target_contact_type, redirect_url, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `);
+    this.updateAuthFormStmt = this.db.prepare(`
+      UPDATE auth_forms 
+      SET name = ?, type = ?, config = ?, target_contact_type = ?, redirect_url = ?, is_active = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `);
+    this.deleteAuthFormStmt = this.db.prepare('DELETE FROM auth_forms WHERE id = ?');
   }
 
   // Project methods
@@ -395,6 +421,76 @@ class DatabaseManager {
 
   deleteRLSMetadata(tableName, policyName) {
     const result = this.deleteRLSMetadataStmt.run(tableName, policyName);
+    return result.changes > 0;
+  }
+
+  // Auth Forms methods
+  getAllAuthForms() {
+    return this.getAllAuthFormsStmt.all().map(f => ({
+      ...f,
+      config: JSON.parse(f.config),
+      isActive: Boolean(f.is_active)
+    }));
+  }
+
+  getAuthForm(id) {
+    const form = this.getAuthFormStmt.get(id);
+    if (!form) return null;
+    return {
+      ...form,
+      config: JSON.parse(form.config),
+      isActive: Boolean(form.is_active)
+    };
+  }
+
+  createAuthForm(formData) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = uuidv4();
+    const { name, type, config = {}, targetContactType, redirectUrl, isActive = true } = formData;
+
+    this.createAuthFormStmt.run(
+      id,
+      name,
+      type,
+      JSON.stringify(config),
+      targetContactType,
+      redirectUrl,
+      isActive ? 1 : 0
+    );
+
+    return this.getAuthForm(id);
+  }
+
+  updateAuthForm(id, updates) {
+    const current = this.getAuthForm(id);
+    if (!current) return null;
+
+    // Merge updates
+    const {
+      name, type, config, target_contact_type, redirect_url, is_active
+    } = {
+      ...current, ...updates,
+      // Handle mixed camelCase/snake_case inputs by preferring updates
+      target_contact_type: updates.targetContactType !== undefined ? updates.targetContactType : current.target_contact_type,
+      redirect_url: updates.redirectUrl !== undefined ? updates.redirectUrl : current.redirect_url,
+      is_active: updates.isActive !== undefined ? updates.isActive : current.is_active
+    };
+
+    this.updateAuthFormStmt.run(
+      name,
+      type,
+      JSON.stringify(config),
+      target_contact_type,
+      redirect_url,
+      is_active ? 1 : 0,
+      id
+    );
+
+    return this.getAuthForm(id);
+  }
+
+  deleteAuthForm(id) {
+    const result = this.deleteAuthFormStmt.run(id);
     return result.changes > 0;
   }
 

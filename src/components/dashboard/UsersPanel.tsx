@@ -6,6 +6,7 @@ import { RLSPoliciesPanel } from './RLSPoliciesPanel';
 import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import { AddBuilderDialog } from './AddBuilderDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AuthFormsList } from './AuthFormsList';
 
 export function UsersPanel() {
   const { isConfigured } = useUserContactConfig();
@@ -35,9 +36,7 @@ export function UsersPanel() {
         </TabsContent>
 
         <TabsContent value="authentication">
-          <div className="flex flex-col items-center justify-center p-8 border rounded-lg bg-slate-50 border-dashed">
-            <p className="text-muted-foreground">Authentication settings coming soon</p>
-          </div>
+          <AuthFormsList />
         </TabsContent>
 
         <TabsContent value="access-rule">

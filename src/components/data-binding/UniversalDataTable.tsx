@@ -48,6 +48,7 @@ interface UniversalDataTableProps {
   className?: string;
   onConfigureBinding?: () => void;
   onColumnOverrideChange?: (columnName: string, updates: any) => void; // For builder mode column editing
+  title?: string;
 }
 
 export function UniversalDataTable({
@@ -55,7 +56,8 @@ export function UniversalDataTable({
   binding: bindingProp,
   className,
   onConfigureBinding,
-  onColumnOverrideChange
+  onColumnOverrideChange,
+  title
 }: UniversalDataTableProps) {
   // Detect builder mode
   const isBuilderMode = typeof window !== 'undefined' && window.location.pathname.startsWith('/builder');
@@ -228,9 +230,11 @@ export function UniversalDataTable({
     return (
       <Card className={cn('w-full', className)}>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            Data Table
-          </CardTitle>
+          {title !== '' && (
+            <CardTitle className="flex items-center justify-between">
+              {title === undefined ? 'Data Table' : title}
+            </CardTitle>
+          )}
         </CardHeader>
         <CardContent>
           <div className="flex flex-col items-center justify-center py-8 space-y-4">
@@ -246,9 +250,11 @@ export function UniversalDataTable({
     return (
       <Card className={cn('w-full', className)}>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            Data Table
-          </CardTitle>
+          {title !== '' && (
+            <CardTitle className="flex items-center justify-between">
+              {title === undefined ? 'Data Table' : title}
+            </CardTitle>
+          )}
         </CardHeader>
         <CardContent>
           <div className="text-center text-muted-foreground py-8">
@@ -263,9 +269,11 @@ export function UniversalDataTable({
     return (
       <Card className={cn('w-full', className)}>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            Data Table
-          </CardTitle>
+          {title !== '' && (
+            <CardTitle className="flex items-center justify-between">
+              {title === undefined ? 'Data Table' : title}
+            </CardTitle>
+          )}
         </CardHeader>
         <CardContent>
           <div className="text-center text-destructive py-8">
@@ -287,7 +295,11 @@ export function UniversalDataTable({
     return (
       <Card className={cn('w-full', className)}>
         <CardHeader>
-          <CardTitle>Data Table</CardTitle>
+          {title !== '' && (
+            <CardTitle>
+              {title === undefined ? 'Data Table' : title}
+            </CardTitle>
+          )}
         </CardHeader>
         <CardContent>
           <div className="text-center text-muted-foreground py-8">
@@ -301,9 +313,11 @@ export function UniversalDataTable({
   return (
     <Card className={cn('w-full', className)}>
       <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          Data Table
-        </CardTitle>
+        {title !== '' && (
+          <CardTitle className="flex items-center justify-between">
+            {title === undefined ? 'Data Table' : title}
+          </CardTitle>
+        )}
 
         {binding.filtering?.searchEnabled && (
           <div className="relative max-w-sm">

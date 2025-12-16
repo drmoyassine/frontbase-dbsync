@@ -32,7 +32,6 @@ export function UsersPanel() {
 
         <TabsContent value="users-config" className="space-y-6">
           <UserContactConfigPanel />
-          {isConfigured && <UserManagementTable />}
         </TabsContent>
 
         <TabsContent value="authentication">
@@ -45,8 +44,9 @@ export function UsersPanel() {
           <RLSPoliciesPanel />
         </TabsContent>
 
-        <TabsContent value="analytics">
+        <TabsContent value="analytics" className="space-y-6">
           <UserStatsCards />
+          {isConfigured && <UserManagementTable />}
         </TabsContent>
       </Tabs>
     </div>

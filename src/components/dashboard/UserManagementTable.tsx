@@ -50,7 +50,7 @@ export const UserManagementTable = () => {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h2 className="text-lg font-semibold">Data Table</h2>
+        <h2 className="text-lg font-semibold">Users Table</h2>
 
         {/* Configuration Dialog */}
         <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
@@ -97,7 +97,7 @@ export const UserManagementTable = () => {
       </div>
 
       <div className="border rounded-md">
-        <UniversalDataTable componentId="user-management-table" binding={binding} />
+        <UniversalDataTable componentId="user-management-table" binding={binding} title="" />
       </div>
     </div>
   );

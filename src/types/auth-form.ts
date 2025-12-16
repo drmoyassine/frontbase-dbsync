@@ -6,14 +6,16 @@ export interface AuthFormConfig {
     providers?: string[]; // 'google', 'github', etc.
     socialLayout?: 'horizontal' | 'vertical';
     showLinks?: boolean; // Show "Don't have an account?" etc.
+    defaultView?: 'sign_in' | 'sign_up'; // For 'both' type
 }
 
 export interface AuthForm {
     id: string;
     name: string;
-    type: 'login' | 'signup';
+    type: 'login' | 'signup' | 'both';
     config: AuthFormConfig;
-    targetContactType?: string; // For signup
+    allowedContactTypes?: string[]; // Multiple types allowed
+    targetContactType?: string; // Legacy/Single (deprecated mostly, but good for fallback)
     redirectUrl?: string;
     isActive: boolean;
     createdAt?: string;

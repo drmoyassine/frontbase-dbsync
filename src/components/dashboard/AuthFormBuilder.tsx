@@ -8,9 +8,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuthForm, AUTH_PROVIDERS } from '@/types/auth-form';
 import { useUserContactConfig } from '@/hooks/useUserContactConfig';
-import { ExternalLink, HelpCircle } from 'lucide-react';
+import { ExternalLink, HelpCircle, Mail, Globe } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface AuthFormBuilderProps {
     form: AuthForm | null;
@@ -35,7 +36,8 @@ export function AuthFormBuilder({ form, open, onOpenChange, onSave }: AuthFormBu
             socialLayout: 'horizontal',
             showLinks: true
         },
-        targetContactType: '',
+        allowedContactTypes: [],
+        targetContactType: '', // Fallback/Legacy
         isActive: true
     });
 
@@ -43,11 +45,14 @@ export function AuthFormBuilder({ form, open, onOpenChange, onSave }: AuthFormBu
         if (form) {
             setFormData(form);
         } else {
+            // Default select the first contact type if available
+            const firstType = Object.keys(contactTypes)[0];
             setFormData({
                 name: '',
-                type: 'login', // Reset to default for new form
+                type: 'login',
                 config: { title: 'Welcome Back', providers: [], socialLayout: 'horizontal', showLinks: true },
-                targetContactType: Object.keys(contactTypes)[0] || '',
+                allowedContactTypes: firstType ? [firstType] : [],
+                targetContactType: firstType || '',
                 isActive: true
             });
         }
@@ -68,10 +73,37 @@ export function AuthFormBuilder({ form, open, onOpenChange, onSave }: AuthFormBu
         updateConfig('providers', newProviders);
     };
 
+    const toggleContactType = (typeKey: string) => {
+        const current = formData.allowedContactTypes || [];
+        // If legacy targetContactType is set but allowed is empty, sync them first
+        let base = current;
+        if (base.length === 0 && formData.targetContactType) {
+            base = [formData.targetContactType];
+        }
+
+        const newTypes = base.includes(typeKey)
+            ? base.filter(t => t !== typeKey)
+            : [...base, typeKey];
+
+        setFormData(prev => ({
+            ...prev,
+            allowedContactTypes: newTypes,
+            // Keep targetContactType as the first one for backwards compat logic
+            targetContactType: newTypes.length > 0 ? newTypes[0] : ''
+        }));
+    };
+
     const handleSave = async () => {
-        await onSave(formData);
+        // Ensure legacy field is populated for safety
+        const finalData = { ...formData };
+        if (finalData.allowedContactTypes && finalData.allowedContactTypes.length > 0) {
+            finalData.targetContactType = finalData.allowedContactTypes[0];
+        }
+        await onSave(finalData);
         onOpenChange(false);
     };
+
+    const isSignup = formData.type === 'signup' || formData.type === 'both';
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -91,45 +123,56 @@ export function AuthFormBuilder({ form, open, onOpenChange, onSave }: AuthFormBu
                                 <Input
                                     value={formData.name}
                                     onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                                    placeholder="e.g. Customer Login"
+                                    placeholder="e.g. Customer Portal"
                                 />
                             </div>
                             <div className="space-y-2">
                                 <Label>Form Type</Label>
                                 <Select
                                     value={formData.type}
-                                    onValueChange={(val: 'login' | 'signup') => setFormData(prev => ({
+                                    onValueChange={(val: 'login' | 'signup' | 'both') => setFormData(prev => ({
                                         ...prev,
                                         type: val,
-                                        config: { ...prev.config, title: val === 'login' ? 'Welcome Back' : 'Create an Account' }
+                                        config: {
+                                            ...prev.config,
+                                            title: val === 'login' ? 'Welcome Back' : (val === 'signup' ? 'Create an Account' : 'Welcome')
+                                        }
                                     }))}
                                 >
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="login">Login</SelectItem>
-                                        <SelectItem value="signup">Sign Up</SelectItem>
+                                        <SelectItem value="login">Login Only</SelectItem>
+                                        <SelectItem value="signup">Sign Up Only</SelectItem>
+                                        <SelectItem value="both">Both (Tabs)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                         </div>
 
-                        {formData.type === 'signup' && (
-                            <div className="space-y-2 p-4 bg-slate-50 border rounded-md">
-                                <Label>Assign Contact Type</Label>
-                                <DialogDescription className="text-xs mb-2">
-                                    Users signing up through this form will be assigned this type.
-                                </DialogDescription>
-                                <Select
-                                    value={formData.targetContactType}
-                                    onValueChange={val => setFormData(prev => ({ ...prev, targetContactType: val }))}
-                                >
-                                    <SelectTrigger><SelectValue placeholder="Select type..." /></SelectTrigger>
-                                    <SelectContent>
-                                        {Object.entries(contactTypes).map(([key, label]) => (
-                                            <SelectItem key={key} value={key}>{label} ({key})</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                        {isSignup && (
+                            <div className="space-y-3 p-4 bg-slate-50 border rounded-md">
+                                <div>
+                                    <Label>Allowed Contact Types</Label>
+                                    <DialogDescription className="text-xs mb-3">
+                                        Users signing up will be assigned these types. If multiple are selected, the user will choose from a dropdown.
+                                    </DialogDescription>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-y-2 gap-x-4">
+                                    {Object.entries(contactTypes).map(([key, label]) => (
+                                        <div key={key} className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id={`ct-${key}`}
+                                                checked={formData.allowedContactTypes?.includes(key) || formData.targetContactType === key}
+                                                onCheckedChange={() => toggleContactType(key)}
+                                            />
+                                            <Label htmlFor={`ct-${key}`} className="text-sm font-normal">
+                                                {label} <span className="text-xs text-muted-foreground">({key})</span>
+                                            </Label>
+                                        </div>
+                                    ))}
+                                </div>
+
                                 {Object.keys(contactTypes).length === 0 && (
                                     <div className="text-amber-600 text-xs">No contact types defined. Go to User Configuration to add them.</div>
                                 )}
@@ -141,18 +184,19 @@ export function AuthFormBuilder({ form, open, onOpenChange, onSave }: AuthFormBu
                                 <TabsTrigger value="appearance" className="flex-1">Appearance</TabsTrigger>
                                 <TabsTrigger value="social" className="flex-1">Social Providers</TabsTrigger>
                                 <TabsTrigger value="advanced" className="flex-1">Advanced</TabsTrigger>
+                                <TabsTrigger value="help" className="flex-1">Help</TabsTrigger>
                             </TabsList>
 
                             <TabsContent value="appearance" className="space-y-4 pt-4">
                                 <div className="space-y-2">
-                                    <Label>Form Title</Label>
+                                    <Label>Heading Title</Label>
                                     <Input
                                         value={formData.config?.title}
                                         onChange={e => updateConfig('title', e.target.value)}
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>Logo URL (Optional)</Label>
+                                    <Label>Logo URL</Label>
                                     <Input
                                         value={formData.config?.logoUrl || ''}
                                         onChange={e => updateConfig('logoUrl', e.target.value)}
@@ -181,7 +225,7 @@ export function AuthFormBuilder({ form, open, onOpenChange, onSave }: AuthFormBu
                                     <h4 className="font-medium mb-4 flex items-center gap-2">
                                         Enable Providers
                                         <span className="text-xs font-normal text-muted-foreground px-2 py-0.5 rounded-full bg-slate-100">
-                                            UI Only
+                                            Display Buttons Only
                                         </span>
                                     </h4>
                                     <div className="grid grid-cols-2 gap-3 mb-6">
@@ -197,30 +241,12 @@ export function AuthFormBuilder({ form, open, onOpenChange, onSave }: AuthFormBu
                                         ))}
                                     </div>
 
-                                    <Separator className="my-4" />
-
-                                    <div className="space-y-4">
-                                        <div className="flex items-center gap-2 text-sm font-medium text-amber-700">
-                                            <HelpCircle className="h-4 w-4" />
-                                            Configuration Required
-                                        </div>
-                                        <p className="text-sm text-muted-foreground">
-                                            To make these buttons work, you must configure the Client ID and Secret in your Supabase Auth settings.
-                                        </p>
-                                        <div className="flex gap-2 flex-wrap">
-                                            <Button variant="outline" size="sm" asChild>
-                                                <a href="https://supabase.com/dashboard/project/_/auth/providers" target="_blank" rel="noopener noreferrer">
-                                                    <ExternalLink className="h-3.5 w-3.5 mr-2" />
-                                                    Open Supabase Auth Settings
-                                                </a>
-                                            </Button>
-                                            {formData.config?.providers?.includes('google') && (
-                                                <Button variant="ghost" size="sm" className="text-xs h-8" asChild>
-                                                    <a href="https://supabase.com/docs/guides/auth/social-login/auth-google" target="_blank" rel="noopener noreferrer">Google Setup Docs</a>
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </div>
+                                    <Alert>
+                                        <AlertTitle className="text-sm font-medium">Important Configuration</AlertTitle>
+                                        <AlertDescription className="text-xs text-muted-foreground mt-1">
+                                            Buttons will only work if the provider is configured in Supabase.
+                                        </AlertDescription>
+                                    </Alert>
                                 </div>
                             </TabsContent>
 
@@ -230,11 +256,42 @@ export function AuthFormBuilder({ form, open, onOpenChange, onSave }: AuthFormBu
                                     <Input
                                         value={formData.redirectUrl || ''}
                                         onChange={e => setFormData(prev => ({ ...prev, redirectUrl: e.target.value }))}
-                                        placeholder="Optimization: leave empty to use 'Home Page' settings"
+                                        placeholder="Default: determined by User Contact Type"
                                     />
                                     <p className="text-xs text-muted-foreground">
-                                        By default, users are redirected based on their Contact Type configuration. Set this to override that behavior.
+                                        Enter a full URL (e.g., https://google.com) to force a redirection after login/signup.
                                     </p>
+                                </div>
+                            </TabsContent>
+
+                            <TabsContent value="help" className="pt-4 space-y-4">
+                                <div className="grid gap-4">
+                                    <a href="https://supabase.com/dashboard/project/_/auth/providers" target="_blank" rel="noopener noreferrer"
+                                        className="flex items-start p-3 border rounded-lg hover:bg-slate-50 transition-colors group">
+                                        <ExternalLink className="h-5 w-5 mr-3 text-blue-600 mt-0.5" />
+                                        <div>
+                                            <div className="font-medium group-hover:text-blue-700">Configure Social Providers</div>
+                                            <div className="text-sm text-muted-foreground">Supabase Dashboard - Enable Google, GitHub, etc.</div>
+                                        </div>
+                                    </a>
+
+                                    <a href="https://supabase.com/dashboard/project/_/auth/templates" target="_blank" rel="noopener noreferrer"
+                                        className="flex items-start p-3 border rounded-lg hover:bg-slate-50 transition-colors group">
+                                        <Mail className="h-5 w-5 mr-3 text-purple-600 mt-0.5" />
+                                        <div>
+                                            <div className="font-medium group-hover:text-purple-700">Email Templates</div>
+                                            <div className="text-sm text-muted-foreground">Customize Confirmation & Reset Password emails.</div>
+                                        </div>
+                                    </a>
+
+                                    <a href="https://supabase.com/dashboard/project/_/auth/url-configuration" target="_blank" rel="noopener noreferrer"
+                                        className="flex items-start p-3 border rounded-lg hover:bg-slate-50 transition-colors group">
+                                        <Globe className="h-5 w-5 mr-3 text-green-600 mt-0.5" />
+                                        <div>
+                                            <div className="font-medium group-hover:text-green-700">Redirect URLs</div>
+                                            <div className="text-sm text-muted-foreground">Add your production domains here (e.g. easypanel.host) to allow redirects.</div>
+                                        </div>
+                                    </a>
                                 </div>
                             </TabsContent>
                         </Tabs>

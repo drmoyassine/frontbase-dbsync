@@ -4,10 +4,10 @@ const path = require('path');
 const fs = require('fs');
 
 module.exports = (dbManager) => {
-    // GET /embed.js - Serve the smart embed script
-    router.get('/embed.js', (req, res) => {
-        res.setHeader('Content-Type', 'application/javascript');
-        res.send(`
+  // GET /embed.js - Serve the smart embed script
+  router.get('/embed.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.send(`
 (function() {
   function initEmbed() {
     const scripts = document.querySelectorAll('script[src*="/embed.js"][data-form-id]');
@@ -53,31 +53,31 @@ module.exports = (dbManager) => {
   }
 })();
     `);
-    });
+  });
 
-    // GET /embed/auth/:id - Serve the actual form container (Iframe content)
-    router.get('/auth/:id', (req, res) => {
-        const { id } = req.params;
-        const form = dbManager.getAuthForm(id);
+  // GET /embed/auth/:id - Serve the actual form container (Iframe content)
+  router.get('/auth/:id', (req, res) => {
+    const { id } = req.params;
+    const form = dbManager.getAuthForm(id);
 
-        // We serve a special HTML that loads the React App but mounted at a specific route?
-        // Actually, to make this work seamlessly with the existing React/Vite setup, 
-        // we should route this to the main index.html but maybe with a special query param 
-        // or just let the React Router handle "/embed/auth/:id" if we add it there.
+    // We serve a special HTML that loads the React App but mounted at a specific route?
+    // Actually, to make this work seamlessly with the existing React/Vite setup, 
+    // we should route this to the main index.html but maybe with a special query param 
+    // or just let the React Router handle "/embed/auth/:id" if we add it there.
 
-        // HOWEVER, to ensure isolation and specific styling, we might want to inject 
-        // the config directly into the HTML to avoid an extra network roundtrip.
+    // HOWEVER, to ensure isolation and specific styling, we might want to inject 
+    // the config directly into the HTML to avoid an extra network roundtrip.
 
-        // For now, let's rely on the React App handling the route `/embed/auth/:id`.
-        // The server just needs to return the main index.html.
+    // For now, let's rely on the React App handling the route `/embed/auth/:id`.
+    // The server just needs to return the main index.html.
 
-        const indexPath = path.join(__dirname, '../../public/index.html');
-        if (fs.existsSync(indexPath)) {
-            res.sendFile(indexPath);
-        } else {
-            res.status(503).send('Builder functionality not available');
-        }
-    });
+    const indexPath = path.join(__dirname, '../public/index.html');
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(503).send('Builder functionality not available');
+    }
+  });
 
-    return router;
+  return router;
 };

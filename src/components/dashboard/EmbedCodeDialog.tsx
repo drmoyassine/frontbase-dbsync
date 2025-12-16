@@ -56,7 +56,7 @@ export function EmbedCodeDialog({ form, open, onOpenChange }: EmbedCodeDialogPro
 
                     <TabsContent value="script" className="space-y-4 pt-4">
                         <div className="relative">
-                            <pre className="p-4 bg-slate-950 text-slate-50 rounded-md text-sm overflow-x-auto font-mono custom-scrollbar">
+                            <pre className="p-4 bg-slate-950 text-slate-50 rounded-md text-sm font-mono overflow-x-auto whitespace-pre-wrap break-all max-w-full custom-scrollbar">
                                 {scriptCode}
                             </pre>
                             <Button

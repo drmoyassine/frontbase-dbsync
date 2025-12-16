@@ -21,19 +21,63 @@ class DatabaseManager {
         updated_at TEXT DEFAULT (datetime('now')),
         UNIQUE(table_name, policy_name)
       );
-
-      CREATE TABLE IF NOT EXISTS auth_forms (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL CHECK (type IN ('login', 'signup')),
-        config TEXT DEFAULT '{}',
-        target_contact_type TEXT,
-        redirect_url TEXT,
-        is_active INTEGER DEFAULT 1,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now'))
-      )
     `);
+
+    // Check if we need to migrate auth_forms (add allowed_contact_types or fix check constraint)
+    const tableInfo = this.db.pragma('table_info(auth_forms)');
+    const hasAllowedContactTypes = tableInfo.some(col => col.name === 'allowed_contact_types');
+
+    // If table exists but missing column, we need to migrate to fix schema and constraints
+    if (tableInfo.length > 0 && !hasAllowedContactTypes) {
+      console.log('🔄 Migrating auth_forms table schema...');
+      this.db.transaction(() => {
+        // 1. Rename existing table
+        this.db.exec('ALTER TABLE auth_forms RENAME TO auth_forms_old');
+
+        // 2. Create new table with updated schema
+        this.db.exec(`
+          CREATE TABLE auth_forms (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL CHECK (type IN ('login', 'signup', 'both')),
+            config TEXT DEFAULT '{}',
+            target_contact_type TEXT,
+            allowed_contact_types TEXT DEFAULT '[]',
+            redirect_url TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+          )
+        `);
+
+        // 3. Copy data
+        this.db.exec(`
+          INSERT INTO auth_forms (id, name, type, config, target_contact_type, redirect_url, is_active, created_at, updated_at)
+          SELECT id, name, type, config, target_contact_type, redirect_url, is_active, created_at, updated_at
+          FROM auth_forms_old
+        `);
+
+        // 4. Drop old table
+        this.db.exec('DROP TABLE auth_forms_old');
+      })();
+      console.log('✅ auth_forms table migration complete.');
+    } else {
+      // Create table if not exists (fresh install)
+      this.db.exec(`
+          CREATE TABLE IF NOT EXISTS auth_forms (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL CHECK (type IN ('login', 'signup', 'both')),
+            config TEXT DEFAULT '{}',
+            target_contact_type TEXT,
+            allowed_contact_types TEXT DEFAULT '[]',
+            redirect_url TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+          )
+        `);
+    }
 
     // Prepare statements for better performance
     this.prepareStatements();
@@ -135,12 +179,12 @@ class DatabaseManager {
     this.getAllAuthFormsStmt = this.db.prepare('SELECT * FROM auth_forms ORDER BY created_at DESC');
     this.getAuthFormStmt = this.db.prepare('SELECT * FROM auth_forms WHERE id = ?');
     this.createAuthFormStmt = this.db.prepare(`
-      INSERT INTO auth_forms (id, name, type, config, target_contact_type, redirect_url, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      INSERT INTO auth_forms (id, name, type, config, target_contact_type, allowed_contact_types, redirect_url, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `);
     this.updateAuthFormStmt = this.db.prepare(`
       UPDATE auth_forms 
-      SET name = ?, type = ?, config = ?, target_contact_type = ?, redirect_url = ?, is_active = ?, updated_at = datetime('now')
+      SET name = ?, type = ?, config = ?, target_contact_type = ?, allowed_contact_types = ?, redirect_url = ?, is_active = ?, updated_at = datetime('now')
       WHERE id = ?
     `);
     this.deleteAuthFormStmt = this.db.prepare('DELETE FROM auth_forms WHERE id = ?');
@@ -429,6 +473,7 @@ class DatabaseManager {
     return this.getAllAuthFormsStmt.all().map(f => ({
       ...f,
       config: JSON.parse(f.config),
+      allowedContactTypes: f.allowed_contact_types ? JSON.parse(f.allowed_contact_types) : [],
       isActive: Boolean(f.is_active)
     }));
   }
@@ -439,6 +484,7 @@ class DatabaseManager {
     return {
       ...form,
       config: JSON.parse(form.config),
+      allowedContactTypes: form.allowed_contact_types ? JSON.parse(form.allowed_contact_types) : [],
       isActive: Boolean(form.is_active)
     };
   }
@@ -446,7 +492,7 @@ class DatabaseManager {
   createAuthForm(formData) {
     const { v4: uuidv4 } = require('uuid');
     const id = uuidv4();
-    const { name, type, config = {}, targetContactType, redirectUrl, isActive = true } = formData;
+    const { name, type, config = {}, targetContactType, allowedContactTypes = [], redirectUrl, isActive = true } = formData;
 
     this.createAuthFormStmt.run(
       id,
@@ -454,6 +500,7 @@ class DatabaseManager {
       type,
       JSON.stringify(config),
       targetContactType,
+      JSON.stringify(allowedContactTypes),
       redirectUrl,
       isActive ? 1 : 0
     );
@@ -467,20 +514,25 @@ class DatabaseManager {
 
     // Merge updates
     const {
-      name, type, config, target_contact_type, redirect_url, is_active
+      name, type, config, target_contact_type, allowed_contact_types, redirect_url, is_active
     } = {
       ...current, ...updates,
       // Handle mixed camelCase/snake_case inputs by preferring updates
       target_contact_type: updates.targetContactType !== undefined ? updates.targetContactType : current.target_contact_type,
+      allowed_contact_types: updates.allowedContactTypes !== undefined ? JSON.stringify(updates.allowedContactTypes) : (current.allowedContactTypes ? JSON.stringify(current.allowedContactTypes) : '[]'),
       redirect_url: updates.redirectUrl !== undefined ? updates.redirectUrl : current.redirect_url,
       is_active: updates.isActive !== undefined ? updates.isActive : current.is_active
     };
 
+    // If config is object, stringify it
+    const configStr = typeof config === 'object' ? JSON.stringify(config) : config;
+
     this.updateAuthFormStmt.run(
       name,
       type,
-      JSON.stringify(config),
+      configStr,
       target_contact_type,
+      allowed_contact_types,
       redirect_url,
       is_active ? 1 : 0,
       id

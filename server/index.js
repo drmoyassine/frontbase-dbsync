@@ -597,16 +597,32 @@ app.get('/builder/*', (req, res) => {
   }
 });
 
+// Helper to serve SPA index.html with runtime env injection
+const serveIndexWithEnv = (res, indexPath) => {
+  if (fs.existsSync(indexPath)) {
+    let html = fs.readFileSync(indexPath, 'utf8');
+
+    // Inject runtime config
+    const runtimeEnv = {
+      VITE_SUPABASE_URL: process.env.SUPABASE_PROJECT_URL,
+      VITE_SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY
+    };
+
+    const script = `<script>window.__FRONTBASE_ENV__ = ${JSON.stringify(runtimeEnv)};</script>`;
+    html = html.replace('</head>', `${script}\n</head>`);
+
+    res.send(html);
+  } else {
+    res.status(503).send('Frontend not available');
+  }
+};
+
 // SPA fallback for frontend app routes (auth, dashboard, etc.)
 // IMPORTANT: These must come AFTER API routes to prevent conflicts
 app.get('/auth/*', (req, res) => {
   console.log(`🔍 Auth SPA route: ${req.originalUrl}`);
   const indexPath = path.join(__dirname, 'public', 'index.html');
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    res.status(503).send('Frontend not available');
-  }
+  serveIndexWithEnv(res, indexPath);
 });
 
 app.get('/dashboard/*', (req, res) => {
@@ -618,11 +634,7 @@ app.get('/dashboard/*', (req, res) => {
   }
 
   const indexPath = path.join(__dirname, 'public', 'index.html');
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    res.status(503).send('Frontend not available');
-  }
+  serveIndexWithEnv(res, indexPath);
 });
 
 // Public page SSR handler

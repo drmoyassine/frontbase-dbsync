@@ -11,6 +11,7 @@ import { FilterConfig } from '@/hooks/data/useSimpleData';
 import { FilterBar } from './FilterBar';
 import { DataTableCell } from './table/DataTableCell';
 import { ColumnSettingsPopover } from './table/ColumnSettingsPopover';
+import { useTableColumns } from '@/hooks/useTableColumns';
 
 interface ComponentDataBinding {
   componentId: string;
@@ -123,107 +124,7 @@ export function UniversalDataTable({
     setSearchQuery(value);
   };
 
-  const getVisibleColumns = () => {
-    if (!schema) return [];
-
-    let columns: any[] = [];
-
-    // 1. Get all potential columns (base + related from overrides)
-    const allColumnsMap = new Map<string, any>();
-
-    // Add base columns
-    schema.columns.forEach((col: any) => {
-      allColumnsMap.set(col.name, col);
-    });
-
-    // Helper to ensure related or virtual column exists in map
-    const ensureVirtualColumn = (key: string) => {
-      if (!allColumnsMap.has(key)) {
-        if (key.includes('.')) {
-          const [tableName, columnName] = key.split('.');
-          allColumnsMap.set(key, {
-            name: key,
-            type: 'text',
-            relatedTable: tableName,
-            relatedColumn: columnName
-          });
-        } else {
-          // Treat as virtual column (e.g. from RPC or calculated)
-          allColumnsMap.set(key, {
-            name: key,
-            type: 'text',
-            isVirtual: true
-          });
-        }
-      }
-    };
-
-    // Add virtual/related columns from overrides
-    if (binding?.columnOverrides) {
-      Object.keys(binding.columnOverrides).forEach(key => {
-        ensureVirtualColumn(key);
-      });
-    }
-
-    // 2. Determine visible columns based on overrides
-    const isVisible = (key: string) => {
-      const override = binding?.columnOverrides?.[key] as any;
-      if (override?.hidden !== undefined) return !override.hidden; // Respect 'hidden' prop if present
-      if (override?.visible !== undefined) return override.visible;
-      return false; // Default hidden if neither set (current behavior)
-    };
-
-    const visibleKeys = new Set<string>();
-    allColumnsMap.forEach((col, key) => {
-      if (isVisible(key)) {
-        visibleKeys.add(key);
-      }
-    });
-
-    // 3. Sort based on columnOrder
-    if (binding?.columnOrder && binding.columnOrder.length > 0) {
-      // Add columns in order
-      binding.columnOrder.forEach(key => {
-        // Ensure related columns in order exist in map (robustness)
-        ensureVirtualColumn(key);
-
-        // Re-check visibility for potentially newly added columns
-        if (isVisible(key)) {
-          // Note: We don't check visibleKeys here strictly because we might have just added it to map
-          const col = allColumnsMap.get(key);
-          if (col) {
-            columns.push(col);
-            visibleKeys.delete(key);
-          }
-        }
-      });
-      // Add remaining visible columns (fallback for those not in order list)
-      visibleKeys.forEach(key => {
-        const col = allColumnsMap.get(key);
-        if (col) columns.push(col);
-      });
-    } else {
-      // Default order: Base columns then Related columns
-      schema.columns.forEach((col: any) => {
-        if (visibleKeys.has(col.name)) {
-          columns.push(col);
-          visibleKeys.delete(col.name);
-        }
-      });
-      // Then remaining (foreign)
-      visibleKeys.forEach(key => {
-        const col = allColumnsMap.get(key);
-        if (col) columns.push(col);
-      });
-    }
-
-    return columns;
-  };
-
-  const getColumnDisplayName = (columnName: string) => {
-    const override = binding?.columnOverrides?.[columnName];
-    return override?.displayName || columnName;
-  };
+  const { visibleColumns, getColumnDisplayName } = useTableColumns(schema, binding);
 
   // Render loading state if schema is fetching
   if (binding?.tableName && !schema) {
@@ -289,7 +190,7 @@ export function UniversalDataTable({
     );
   }
 
-  const visibleColumns = getVisibleColumns();
+
 
   if (visibleColumns.length === 0) {
     return (

@@ -250,6 +250,19 @@ npm run build
   - `UserManagementTable`: Created `useFilterOptions` and `useUserTableBinding` hooks
   - **Backend**: centralized authentication logic in `server/routes/api/database/utils.js`
 
+### Code Quality & Optimization (Dec 2025)
+- **Client Components**:
+  - Extracted `ConditionItem` from `ConditionGroupBuilder`
+  - Extracted `AuthFormCard` from `AuthFormsList`
+  - Deduplicated logic in `VariableSelector`
+- **Logic Extraction**:
+  - `UniversalDataTable`: Extracted `useTableColumns` custom hook
+  - `RLSPolicyBuilder`: Extracted `useRLSSQLGeneration` custom hook
+- **Server Organization**:
+  - Extracted API route registration to `server/routes/index.js`
+  - Consolidated schema definitions into `server/database/schema.sql`
+  - Cleaned up `server/utils/db.js` and `server/index.js`
+
 ## Troubleshooting
 
 ### Build Warnings

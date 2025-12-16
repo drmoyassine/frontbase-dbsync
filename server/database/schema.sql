@@ -95,6 +95,34 @@ CREATE TABLE IF NOT EXISTS page_views (
   FOREIGN KEY (page_id) REFERENCES pages (id)
 );
 
+-- RLS Policy Metadata
+CREATE TABLE IF NOT EXISTS rls_policy_metadata (
+  id TEXT PRIMARY KEY,
+  table_name TEXT NOT NULL,
+  policy_name TEXT NOT NULL,
+  form_data TEXT NOT NULL,
+  generated_using TEXT,
+  generated_check TEXT,
+  sql_hash TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(table_name, policy_name)
+);
+
+-- Auth Forms
+CREATE TABLE IF NOT EXISTS auth_forms (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('login', 'signup', 'both')),
+  config TEXT DEFAULT '{}',
+  target_contact_type TEXT,
+  allowed_contact_types TEXT DEFAULT '[]',
+  redirect_url TEXT,
+  is_active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
 -- Initialize with default project
 INSERT OR IGNORE INTO project (id, name, description, created_at, updated_at) 
 VALUES ('default', 'My Frontbase Project', 'A new project created with Frontbase', datetime('now'), datetime('now'));

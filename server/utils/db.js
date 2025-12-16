@@ -8,20 +8,8 @@ class DatabaseManager {
     this.db.pragma('foreign_keys = ON');
 
     // Create RLS policy metadata table if it doesn't exist
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS rls_policy_metadata (
-        id TEXT PRIMARY KEY,
-        table_name TEXT NOT NULL,
-        policy_name TEXT NOT NULL,
-        form_data TEXT NOT NULL,
-        generated_using TEXT,
-        generated_check TEXT,
-        sql_hash TEXT,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now')),
-        UNIQUE(table_name, policy_name)
-      );
-    `);
+    // Moved to schema.sql, but we can keep this check for existing deployments just in case init.js didn't run it
+    // (Actually, init.js runs before this, so we can verify or just trust it. Let's trust init.js for the CREATE TABLE)
 
     // Check if we need to migrate auth_forms (add allowed_contact_types or fix check constraint)
     const tableInfo = this.db.pragma('table_info(auth_forms)');
@@ -61,22 +49,6 @@ class DatabaseManager {
         this.db.exec('DROP TABLE auth_forms_old');
       })();
       console.log('✅ auth_forms table migration complete.');
-    } else {
-      // Create table if not exists (fresh install)
-      this.db.exec(`
-          CREATE TABLE IF NOT EXISTS auth_forms (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            type TEXT NOT NULL CHECK (type IN ('login', 'signup', 'both')),
-            config TEXT DEFAULT '{}',
-            target_contact_type TEXT,
-            allowed_contact_types TEXT DEFAULT '[]',
-            redirect_url TEXT,
-            is_active INTEGER DEFAULT 1,
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now'))
-          )
-        `);
     }
 
     // Prepare statements for better performance

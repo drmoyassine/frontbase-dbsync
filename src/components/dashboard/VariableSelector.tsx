@@ -24,6 +24,15 @@ interface VariableSelectorProps {
 
 type MenuLevel = 'root' | 'user' | 'system' | 'target';
 
+function getUniqueColumns(columns: Array<{ name: string; type: string }>) {
+    const seen = new Set();
+    return columns.filter(col => {
+        if (seen.has(col.name)) return false;
+        seen.add(col.name);
+        return true;
+    });
+}
+
 export function VariableSelector({
     onSelect,
     userColumns = [],
@@ -54,23 +63,8 @@ export function VariableSelector({
     }, [open]);
 
     // Deduplicate columns to avoid UI issues
-    const uniqueUserColumns = React.useMemo(() => {
-        const seen = new Set();
-        return userColumns.filter(col => {
-            if (seen.has(col.name)) return false;
-            seen.add(col.name);
-            return true;
-        });
-    }, [userColumns]);
-
-    const uniqueTargetColumns = React.useMemo(() => {
-        const seen = new Set();
-        return targetColumns.filter(col => {
-            if (seen.has(col.name)) return false;
-            seen.add(col.name);
-            return true;
-        });
-    }, [targetColumns]);
+    const uniqueUserColumns = React.useMemo(() => getUniqueColumns(userColumns), [userColumns]);
+    const uniqueTargetColumns = React.useMemo(() => getUniqueColumns(targetColumns), [targetColumns]);
 
     const handleSelect = (value: string, category: VariableOption['category']) => {
         onSelect(value, category);

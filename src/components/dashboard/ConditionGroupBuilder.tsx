@@ -1,15 +1,12 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2 } from 'lucide-react';
-import { SmartValueInput } from './SmartValueInput';
+import { Plus } from 'lucide-react';
+import { ConditionItem } from './ConditionItem';
 import type {
     RLSCondition,
     RLSConditionGroup,
-    RLSComparisonOperator,
     RLSValueSource
 } from '@/types/rls';
 
@@ -106,85 +103,20 @@ export function ConditionGroupBuilder({
                     const condition = cond as RLSCondition;
 
                     return (
-                        <div key={condition.id} className="flex flex-wrap items-center gap-2 p-3 bg-white rounded-lg border">
-                            {index > 0 && showCombinator && (
-                                <Badge variant="outline" className="text-xs shrink-0">
-                                    {group.combinator}
-                                </Badge>
-                            )}
-
-                            {/* Target table column (Left Side) */}
-                            <Select
-                                value={condition.column}
-                                onValueChange={(val) => updateCondition(condition.id, { column: val })}
-                            >
-                                <SelectTrigger className="w-[140px] h-8">
-                                    <SelectValue placeholder="Column" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {columns.map(col => (
-                                        <SelectItem key={col.name} value={col.name}>
-                                            {col.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-
-                            {/* Operator */}
-                            <Select
-                                value={condition.operator}
-                                onValueChange={(val) => updateCondition(condition.id, { operator: val as RLSComparisonOperator })}
-                            >
-                                <SelectTrigger className="w-[120px] h-8">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="equals">equals</SelectItem>
-                                    <SelectItem value="not_equals">not equals</SelectItem>
-                                    <SelectItem value="greater_than">greater than</SelectItem>
-                                    <SelectItem value="less_than">less than</SelectItem>
-                                    <SelectItem value="in">is in</SelectItem>
-                                    <SelectItem value="not_in">is not in</SelectItem>
-                                    <SelectItem value="is_null">is empty</SelectItem>
-                                    <SelectItem value="is_not_null">is not empty</SelectItem>
-                                    <SelectItem value="contains">contains</SelectItem>
-                                    <SelectItem value="starts_with">starts with</SelectItem>
-                                </SelectContent>
-                            </Select>
-
-                            {/* Only show value source if not null check */}
-                            {!['is_null', 'is_not_null'].includes(condition.operator) && (
-                                <SmartValueInput
-                                    value={condition.source === 'literal' ? (condition.literalValue || '') : (condition.sourceColumn || condition.literalValue || '')}
-                                    source={condition.source}
-                                    sourceColumn={condition.sourceColumn}
-                                    targetColumn={condition.column}
-                                    possibleValues={condition.column ? enumColumns[condition.column] : undefined}
-                                    userColumns={sourceColumns}
-                                    targetColumns={columns}
-                                    allowedSources={allowedSources}
-                                    onChange={(updates) => {
-                                        updateCondition(condition.id, {
-                                            source: updates.source,
-                                            sourceColumn: updates.sourceColumn,
-                                            // Ideally literalValue should be cleared if not literal, but for now we keep it simple or sync
-                                            literalValue: updates.value
-                                        });
-                                    }}
-                                />
-                            )}
-
-                            {/* Remove button */}
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive ml-auto"
-                                onClick={() => removeCondition(condition.id)}
-                                disabled={group.conditions.length <= 1}
-                            >
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
-                        </div>
+                        <ConditionItem
+                            key={condition.id}
+                            condition={condition}
+                            index={index}
+                            showCombinator={showCombinator}
+                            combinator={group.combinator}
+                            columns={columns}
+                            sourceColumns={sourceColumns}
+                            enumColumns={enumColumns}
+                            allowedSources={allowedSources}
+                            onUpdate={updateCondition}
+                            onRemove={removeCondition}
+                            disableRemove={group.conditions.length <= 1}
+                        />
                     );
                 })}
             </div>

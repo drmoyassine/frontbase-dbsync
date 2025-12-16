@@ -356,93 +356,9 @@ app.get('/debug/builder', (req, res) => {
   }
 });
 
-// Add API request debugging middleware
-app.use('/api', (req, res, next) => {
-  console.log(`🔍 API Request: ${req.method} ${req.originalUrl}`);
-  console.log(`🎯 Headers: ${JSON.stringify(req.headers, null, 2)}`);
-  next();
-});
-
 // API Routes
-console.log('🔧 Setting up API routes...');
-
-// API root endpoint - shows available endpoints
-app.get('/api', (req, res) => {
-  console.log('🔍 API root endpoint hit');
-  res.json({
-    success: true,
-    message: 'Frontbase API',
-    version: '1.0.0',
-    endpoints: {
-      project: '/api/project',
-      pages: '/api/pages',
-      variables: '/api/variables',
-      database: '/api/database'
-    },
-    documentation: 'Visit /builder for the visual page builder interface'
-  });
-});
-
-// Auth routes (must be loaded first - now includes universal session recovery)
-try {
-  const { router: authRouter } = require('./routes/api/auth');
-  app.use('/api/auth', authRouter);
-  console.log('✅ Auth API routes loaded with universal session recovery');
-} catch (error) {
-  console.error('❌ Failed to load auth routes:', error);
-  process.exit(1);
-}
-
-try {
-  app.use('/api/project', require('./routes/api/project')(dbManager));
-  console.log('✅ Project API routes loaded');
-} catch (error) {
-  console.error('❌ Failed to load project routes:', error);
-  process.exit(1);
-}
-
-try {
-  const { authenticateToken } = require('./routes/api/auth');
-  app.use('/api/pages', authenticateToken, require('./routes/api/pages')(dbManager));
-  console.log('✅ Pages API routes loaded with authentication');
-} catch (error) {
-  console.error('❌ Failed to load pages routes:', error);
-  process.exit(1);
-}
-
-try {
-  app.use('/api/variables', require('./routes/api/variables')(dbManager));
-  console.log('✅ Variables API routes loaded');
-} catch (error) {
-  console.error('❌ Failed to load variables routes:', error);
-  process.exit(1);
-}
-
-try {
-  const databaseRouter = require('./routes/api/database');
-  app.use('/api/database', databaseRouter);
-  console.log('✅ Database API routes loaded');
-  console.log('✅ Database routes registered: /api/database/connections, /api/database/supabase-tables, etc.');
-} catch (error) {
-  console.error('❌ Failed to load database routes:', error);
-  process.exit(1);
-}
-
-try {
-  app.use('/api/auth-forms', require('./routes/api/auth-forms')(dbManager));
-  console.log('✅ Auth Forms API routes loaded');
-} catch (error) {
-  console.error('❌ Failed to load auth-forms routes:', error);
-  process.exit(1);
-}
-
-try {
-  app.use('/embed', require('./routes/embed')(dbManager));
-  console.log('✅ Embed routes loaded');
-} catch (error) {
-  console.error('❌ Failed to load embed routes:', error);
-  process.exit(1);
-}
+const setupRoutes = require('./routes/index');
+setupRoutes(app, dbManager);
 
 // Public SSR Routes (for SEO)
 app.get('/sitemap.xml', async (req, res) => {

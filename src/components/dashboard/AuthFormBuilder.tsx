@@ -251,6 +251,24 @@ export function AuthFormBuilder({ form, open, onOpenChange, onSave }: AuthFormBu
                             </TabsContent>
 
                             <TabsContent value="advanced" className="space-y-4 pt-4">
+                                <div className="space-y-4 rounded-md border p-4">
+                                    <div className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id="magic-link"
+                                            checked={formData.config?.magicLink}
+                                            onCheckedChange={(checked) => updateConfig('magicLink', checked)}
+                                        />
+                                        <div className="grid gap-1.5 leading-none">
+                                            <Label htmlFor="magic-link" className="font-medium">Enable Magic Link</Label>
+                                            <p className="text-sm text-muted-foreground">
+                                                Allow users to sign in with an email link (passwordless).
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <Separator />
+
                                 <div className="space-y-2">
                                     <Label>Redirect URL (Override)</Label>
                                     <Input
@@ -298,11 +316,25 @@ export function AuthFormBuilder({ form, open, onOpenChange, onSave }: AuthFormBu
                     </div>
                 </ScrollArea>
 
-                <DialogFooter className="px-6 py-4 border-t">
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                    <Button onClick={handleSave}>
-                        {form ? 'Save Changes' : 'Create Form'}
-                    </Button>
+                <DialogFooter className="px-6 py-4 border-t items-center justify-between">
+                    <div className="flex flex-col gap-1 text-xs text-destructive">
+                        {!formData.name && <span>* Form name is required</span>}
+                        {isSignup && (!formData.allowedContactTypes || formData.allowedContactTypes.length === 0) && (
+                            <span>* At least one contact type is required</span>
+                        )}
+                    </div>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                        <Button
+                            onClick={handleSave}
+                            disabled={
+                                !formData.name?.trim() ||
+                                (isSignup && (!formData.allowedContactTypes || formData.allowedContactTypes.length === 0))
+                            }
+                        >
+                            {form ? 'Save Changes' : 'Create Form'}
+                        </Button>
+                    </div>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

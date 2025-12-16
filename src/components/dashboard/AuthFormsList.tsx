@@ -75,6 +75,33 @@ export function AuthFormsList() {
                                     ? `Assigns: ${form.targetContactType}`
                                     : 'Standard Login'}
                             </CardDescription>
+
+                            <div className="flex flex-wrap gap-2 mt-2">
+                                {/* Contact Types Badge */}
+                                {form.type !== 'login' && (
+                                    <>
+                                        {(form.allowedContactTypes || (form.targetContactType ? [form.targetContactType] : [])).map(type => (
+                                            <Badge key={type} variant="secondary" className="text-[10px] px-1.5 h-5 font-normal border-slate-200">
+                                                {type}
+                                            </Badge>
+                                        ))}
+                                    </>
+                                )}
+
+                                {/* Social Provider Badges */}
+                                {form.config.providers?.map(pid => (
+                                    <Badge key={pid} variant="outline" className="text-[10px] px-1.5 h-5 font-normal bg-slate-50">
+                                        {pid}
+                                    </Badge>
+                                ))}
+
+                                {/* Magic Link Badge */}
+                                {form.config.magicLink && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 h-5 font-normal border-purple-200 text-purple-700 bg-purple-50">
+                                        Magic Link
+                                    </Badge>
+                                )}
+                            </div>
                         </CardHeader>
                         <CardContent>
                             <div className="flex justify-end gap-2 pt-2">
@@ -129,6 +156,6 @@ export function AuthFormsList() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </div>
+        </div >
     );
 }

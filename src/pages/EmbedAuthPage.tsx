@@ -172,6 +172,7 @@ export default function EmbedAuthPage() {
                 providers={enabledProviders as any}
                 socialLayout={form.config.socialLayout || 'horizontal'}
                 showLinks={form.config.showLinks !== false}
+                magicLink={form.config.magicLink}
                 onlyThirdPartyProviders={false}
                 redirectTo={window.location.origin + '/auth/callback'}
                 // Pass metadata to be saved on signup

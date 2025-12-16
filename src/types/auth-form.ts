@@ -7,6 +7,7 @@ export interface AuthFormConfig {
     socialLayout?: 'horizontal' | 'vertical';
     showLinks?: boolean; // Show "Don't have an account?" etc.
     defaultView?: 'sign_in' | 'sign_up'; // For 'both' type
+    magicLink?: boolean; // Enable passwordless magic link
 }
 
 export interface AuthForm {

@@ -25,7 +25,7 @@ module.exports = (db) => {
       const updates = req.body;
 
       // Handle camelCase to snake_case mapping for specific fields
-      if (updates.usersConfig) {
+      if ('usersConfig' in updates) {
         updates.users_config = typeof updates.usersConfig === 'object'
           ? JSON.stringify(updates.usersConfig)
           : updates.usersConfig;

@@ -164,7 +164,21 @@ class DatabaseManager {
 
   // Project methods
   getProject() {
-    return this.getProjectStmt.get('default');
+    const project = this.getProjectStmt.get('default');
+    if (project) {
+      // Parse users_config JSON string to object
+      if (project.users_config) {
+        try {
+          project.usersConfig = JSON.parse(project.users_config);
+        } catch (e) {
+          console.error('Failed to parse users_config:', e);
+          project.usersConfig = null;
+        }
+      } else {
+        project.usersConfig = null;
+      }
+    }
+    return project;
   }
 
   updateProject(updates) {

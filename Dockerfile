@@ -1,4 +1,5 @@
 # Multi-stage Dockerfile for Frontbase
+# Force rebuild: Fix configuration persistence (2025-12-21)
 # Stage 1: Build React frontend
 FROM node:20-alpine AS frontend-builder
 

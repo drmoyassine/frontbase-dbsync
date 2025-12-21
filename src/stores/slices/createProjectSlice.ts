@@ -6,6 +6,7 @@ export interface ProjectSlice {
     project: ProjectConfig | null;
     setProject: (project: ProjectConfig) => void;
     updateProject: (updates: Partial<ProjectConfig>) => void;
+    loadProjectFromDatabase: () => Promise<void>;
 }
 
 export const createProjectSlice: StateCreator<BuilderState, [], [], ProjectSlice> = (set) => ({
@@ -14,4 +15,16 @@ export const createProjectSlice: StateCreator<BuilderState, [], [], ProjectSlice
     updateProject: (updates) => set((state) => ({
         project: state.project ? { ...state.project, ...updates, updatedAt: new Date().toISOString() } : null
     })),
+    loadProjectFromDatabase: async () => {
+        try {
+            const { projectAPI } = await import('@/lib/api');
+            const result = await projectAPI.getProject();
+
+            if (result.success && result.data) {
+                set({ project: result.data });
+            }
+        } catch (error) {
+            console.error('Failed to load project:', error);
+        }
+    },
 });

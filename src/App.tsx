@@ -23,7 +23,7 @@ const App = () => {
   const { checkAuth, isLoading, isAuthenticated } = useAuthStore();
   const { fetchConnections } = useDashboardStore();
 
-  const { loadPagesFromDatabase, loadVariablesFromDatabase } = useBuilderStore();
+  const { loadPagesFromDatabase, loadVariablesFromDatabase, loadProjectFromDatabase } = useBuilderStore();
 
   // Initialize app on mount - always call checkAuth
   useEffect(() => {
@@ -34,6 +34,7 @@ const App = () => {
       if (isAuthenticated) {
         await Promise.all([
           fetchConnections().catch(console.error),
+          loadProjectFromDatabase().catch(console.error),
           loadPagesFromDatabase().catch(console.error),
           loadVariablesFromDatabase().catch(console.error)
         ]);
@@ -41,7 +42,7 @@ const App = () => {
     };
 
     initializeApp();
-  }, [checkAuth, fetchConnections, loadPagesFromDatabase, loadVariablesFromDatabase, isAuthenticated]);
+  }, [checkAuth, fetchConnections, loadProjectFromDatabase, loadPagesFromDatabase, loadVariablesFromDatabase, isAuthenticated]);
 
   // Show loading only when actively checking auth and not on login page
   const isOnLoginPage = window.location.pathname === '/auth/login';

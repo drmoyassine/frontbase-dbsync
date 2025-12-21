@@ -7,6 +7,20 @@ export interface APIResponse<T = any> {
 
 // Project API
 export const projectAPI = {
+  // Get project settings
+  getProject: async (): Promise<APIResponse> => {
+    try {
+      const response = await fetch('/api/project', {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch project');
+      const data = await response.json();
+      return { success: true, data: data.data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  },
+
   // Update project settings (including users config)
   updateProject: async (projectData: any): Promise<APIResponse> => {
     try {

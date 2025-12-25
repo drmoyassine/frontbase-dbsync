@@ -1,5 +1,15 @@
 const express = require('express');
+const { z } = require('zod');
 const { v4: uuidv4 } = require('uuid');
+const {
+  validateBody,
+  validateParams,
+  validateAll
+} = require('../../validation/middleware');
+const {
+  CreateVariableRequestSchema,
+  UpdateVariableRequestSchema
+} = require('../../validation/schemas');
 const router = express.Router();
 
 module.exports = (db) => {
@@ -21,7 +31,9 @@ module.exports = (db) => {
   });
 
   // GET /api/variables/:id - Get specific variable
-  router.get('/:id', (req, res) => {
+  router.get('/:id', validateParams(z.object({
+    id: z.string().min(1, 'Variable ID is required')
+  })), (req, res) => {
     try {
       const { id } = req.params;
       const variable = db.getVariable(id);
@@ -47,28 +59,12 @@ module.exports = (db) => {
   });
 
   // POST /api/variables - Create new variable
-  router.post('/', (req, res) => {
+  router.post('/', validateBody(CreateVariableRequestSchema), (req, res) => {
     try {
       const variableData = {
         id: uuidv4(),
         ...req.body
       };
-      
-      // Validate required fields
-      if (!variableData.name || !variableData.type) {
-        return res.status(400).json({
-          success: false,
-          error: 'Name and type are required'
-        });
-      }
-      
-      // Validate type
-      if (!['variable', 'calculated'].includes(variableData.type)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Type must be either "variable" or "calculated"'
-        });
-      }
       
       const variable = db.createVariable(variableData);
       
@@ -95,18 +91,15 @@ module.exports = (db) => {
   });
 
   // PUT /api/variables/:id - Update variable
-  router.put('/:id', (req, res) => {
+  router.put('/:id', validateAll({
+    params: z.object({
+      id: z.string().min(1, 'Variable ID is required')
+    }),
+    body: UpdateVariableRequestSchema
+  }), (req, res) => {
     try {
       const { id } = req.params;
       const updates = req.body;
-      
-      // Validate type if provided
-      if (updates.type && !['variable', 'calculated'].includes(updates.type)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Type must be either "variable" or "calculated"'
-        });
-      }
       
       const variable = db.updateVariable(id, updates);
       
@@ -140,7 +133,9 @@ module.exports = (db) => {
   });
 
   // DELETE /api/variables/:id - Delete variable
-  router.delete('/:id', (req, res) => {
+  router.delete('/:id', validateParams(z.object({
+    id: z.string().min(1, 'Variable ID is required')
+  })), (req, res) => {
     try {
       const { id } = req.params;
       const success = db.deleteVariable(id);

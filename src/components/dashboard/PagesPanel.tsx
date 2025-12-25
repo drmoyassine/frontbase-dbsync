@@ -59,7 +59,7 @@ export const PagesPanel: React.FC = () => {
     loadPages();
   }, [loadPagesFromDatabase, isAuthenticated, isLoading, showTrash]);
 
-  const filteredPages = pages.filter(page => {
+  const filteredPages = (pages || []).filter(page => {
     // Filter by trash state
     const isDeleted = !!page.deletedAt;
     const matchesTrashView = showTrash ? isDeleted : !isDeleted;

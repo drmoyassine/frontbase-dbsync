@@ -1,0 +1,75 @@
+import sqlite3
+import os
+from passlib.context import CryptContext
+
+print('🔧 Setting up FastAPI database with proper users table...')
+conn = sqlite3.connect('app.db')
+cursor = conn.cursor()
+
+# Create users table if it doesn't exist
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    last_login_at TEXT,
+    is_active BOOLEAN DEFAULT 1
+)
+''')
+
+print('✅ Users table created/verified')
+
+# Use bcrypt scheme compatible with both passlib and bcryptjs
+pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
+
+# Generate a password hash that works with both systems
+password = 'admin123'
+hashed_password = pwd_context.hash(password)
+
+print('Generated bcrypt hash:', hashed_password)
+
+# Check if admin user exists
+cursor.execute('SELECT id FROM users WHERE username = ?', ('admin',))
+existing_user = cursor.fetchone()
+
+if existing_user:
+    print('Admin user exists, updating password...')
+    cursor.execute('UPDATE users SET password_hash = ? WHERE username = ?', (hashed_password, 'admin'))
+else:
+    print('Creating new admin user...')
+    cursor.execute('''
+        INSERT INTO users (id, username, email, password_hash, created_at, updated_at, is_active)
+        VALUES (?, ?, ?, ?, datetime("now"), datetime("now"), ?)
+    ''', ('default-admin', 'admin', 'admin@frontbase.dev', hashed_password, 1))
+
+conn.commit()
+print('✅ Admin user created/updated in FastAPI database')
+
+# Test verification
+cursor.execute('SELECT password_hash FROM users WHERE username = ?', ('admin',))
+user_hash = cursor.fetchone()
+if user_hash:
+    try:
+        is_valid = pwd_context.verify(password, user_hash[0])
+        print(f'✅ Password verification test: {"PASS" if is_valid else "FAIL"}')
+        
+        # Additional verification test - create a new context and verify
+        test_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
+        is_valid2 = test_context.verify(password, user_hash[0])
+        print(f'✅ Second verification test: {"PASS" if is_valid2 else "FAIL"}')
+        
+    except Exception as e:
+        print(f'❌ Password verification error: {e}')
+else:
+    print('❌ Could not find admin user after creation')
+
+# Verify the data
+cursor.execute('SELECT id, username, email FROM users WHERE username = ?', ('admin',))
+user_data = cursor.fetchone()
+print(f'✅ User data verified: {user_data}')
+
+conn.close()
+print('🎉 FastAPI database setup complete!')

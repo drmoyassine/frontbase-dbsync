@@ -2,9 +2,12 @@ import { StateCreator } from 'zustand';
 import { AppVariable } from '@/types/builder';
 import { BuilderState } from '../builder';
 import { toast } from '@/hooks/use-toast';
+import { getVariables as getVariablesApi, createVariable as createVariableApi, updateVariable as updateVariableApi, deleteVariable as deleteVariableApi } from '../../services/variables-api';
 
 export interface VariablesSlice {
     appVariables: AppVariable[];
+    isLoading: boolean;
+    error: string | null;
     addAppVariable: (variable: Omit<AppVariable, 'id' | 'createdAt'>) => void;
     updateAppVariable: (id: string, updates: Partial<AppVariable>) => void;
     deleteAppVariable: (id: string) => void;
@@ -13,17 +16,19 @@ export interface VariablesSlice {
 
 export const createVariablesSlice: StateCreator<BuilderState, [], [], VariablesSlice> = (set, get) => ({
     appVariables: [],
+    isLoading: false,
+    error: null,
 
     loadVariablesFromDatabase: async () => {
+        set({ isLoading: true, error: null });
         try {
-            const { variableAPI } = await import('@/lib/api');
-            const result = await variableAPI.getAllVariables();
-
-            if (result.success && result.data) {
-                set({ appVariables: result.data.data || result.data });
-            }
-        } catch (error) {
-            console.error('Failed to load variables:', error);
+            const variables = await getVariablesApi();
+            set({ appVariables: variables, isLoading: false });
+        } catch (error: any) {
+            set({
+                error: error.response?.data?.message || 'Failed to fetch variables',
+                isLoading: false,
+            });
         }
     },
 
@@ -31,24 +36,18 @@ export const createVariablesSlice: StateCreator<BuilderState, [], [], VariablesS
         const { setSaving } = get();
         setSaving(true);
         try {
-            const { variableAPI } = await import('@/lib/api');
-            const result = await variableAPI.createVariable(variableData);
-
-            if (result.success && result.data) {
-                set((state) => ({
-                    appVariables: [...state.appVariables, result.data.data || result.data]
-                }));
-                toast({
-                    title: "Variable created",
-                    description: "App variable has been created successfully"
-                });
-            } else {
-                throw new Error(result.error || 'Failed to create variable');
-            }
-        } catch (error) {
+            const newVariable = await createVariableApi(variableData);
+            set((state) => ({
+                appVariables: [...state.appVariables, newVariable]
+            }));
+            toast({
+                title: "Variable created",
+                description: "App variable has been created successfully"
+            });
+        } catch (error: any) {
             toast({
                 title: "Error creating variable",
-                description: error instanceof Error ? error.message : "Failed to create variable",
+                description: error.response?.data?.message || error.message || "Failed to create variable",
                 variant: "destructive"
             });
         } finally {
@@ -60,27 +59,20 @@ export const createVariablesSlice: StateCreator<BuilderState, [], [], VariablesS
         const { setSaving } = get();
         setSaving(true);
         try {
-            const { variableAPI } = await import('@/lib/api');
-            const result = await variableAPI.updateVariable(id, updates);
-
-            if (result.success && result.data) {
-                const updatedVar = result.data.data || result.data;
-                set((state) => ({
-                    appVariables: state.appVariables.map(variable =>
-                        variable.id === id ? updatedVar : variable
-                    )
-                }));
-                toast({
-                    title: "Variable updated",
-                    description: "App variable has been updated successfully"
-                });
-            } else {
-                throw new Error(result.error || 'Failed to update variable');
-            }
-        } catch (error) {
+            const updatedVariable = await updateVariableApi(id, updates);
+            set((state) => ({
+                appVariables: state.appVariables.map(variable =>
+                    variable.id === id ? updatedVariable : variable
+                )
+            }));
+            toast({
+                title: "Variable updated",
+                description: "App variable has been updated successfully"
+            });
+        } catch (error: any) {
             toast({
                 title: "Error updating variable",
-                description: error instanceof Error ? error.message : "Failed to update variable",
+                description: error.response?.data?.message || error.message || "Failed to update variable",
                 variant: "destructive"
             });
         } finally {
@@ -92,24 +84,18 @@ export const createVariablesSlice: StateCreator<BuilderState, [], [], VariablesS
         const { setSaving } = get();
         setSaving(true);
         try {
-            const { variableAPI } = await import('@/lib/api');
-            const result = await variableAPI.deleteVariable(id);
-
-            if (result.success) {
-                set((state) => ({
-                    appVariables: state.appVariables.filter(variable => variable.id !== id)
-                }));
-                toast({
-                    title: "Variable deleted",
-                    description: "App variable has been deleted successfully"
-                });
-            } else {
-                throw new Error(result.error || 'Failed to delete variable');
-            }
-        } catch (error) {
+            await deleteVariableApi(id);
+            set((state) => ({
+                appVariables: state.appVariables.filter(variable => variable.id !== id)
+            }));
+            toast({
+                title: "Variable deleted",
+                description: "App variable has been deleted successfully"
+            });
+        } catch (error: any) {
             toast({
                 title: "Error deleting variable",
-                description: error instanceof Error ? error.message : "Failed to delete variable",
+                description: error.response?.data?.message || error.message || "Failed to delete variable",
                 variant: "destructive"
             });
         } finally {

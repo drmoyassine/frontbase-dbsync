@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
+import { useTableData, useTableSchema, useGlobalSchema } from '@/hooks/useDatabase';
 import { debug } from '@/lib/debug';
 
 export interface FilterConfig {
     id: string;
     column: string;
     filterType: 'dropdown' | 'multiselect' | 'text' | 'number' | 'dateRange' | 'boolean';
-    options?: string[]; // For dropdown/multiselect, auto-fetched
-    value?: any; // Current filter value
-    label?: string; // Custom label for the filter  
+    options?: string[];
+    value?: any;
+    label?: string;
 }
 
 export interface ComponentDataBinding {
@@ -36,16 +37,9 @@ export interface ComponentDataBinding {
         displayType?: 'text' | 'badge' | 'date' | 'boolean' | 'currency' | 'percentage' | 'image' | 'link';
         dateFormat?: string;
     }>;
-    // NEW: Column order for drag-and-drop
     columnOrder?: string[];
-
-    // NEW: Search column selection (if undefined, search all text columns)
     searchColumns?: string[];
-
-    // NEW: Frontend filters
     frontendFilters?: FilterConfig[];
-
-    // NEW: RPC support
     rpcName?: string;
     params?: Record<string, any>;
 }
@@ -76,157 +70,111 @@ export function useSimpleData({
     binding,
     autoFetch = true
 }: UseSimpleDataOptions): UseSimpleDataResult {
-    const {
-        connected,
-        dataCache,
-        loadingStates,
-        errors,
-        schemas,
-        counts,
-        queryData,
-        loadTableSchema,
-        initialize
-    } = useDataBindingStore();
+    const { connected, initialize } = useDataBindingStore();
 
-    // Local state for filters, sorting, and pagination
+    // Local state
     const [filters, setFiltersState] = useState<Record<string, any>>({});
     const [sorting, setSortingState] = useState<{ column?: string; direction?: 'asc' | 'desc' }>({});
     const [pagination, setPaginationState] = useState({ page: 0, pageSize: 20 });
     const [searchQuery, setSearchQueryState] = useState('');
 
-    // Get current data, loading, and error states
-    const data = dataCache.get(componentId) || [];
-    const loading = loadingStates.get(componentId) || false;
-    const error = errors.get(componentId) || null;
-    const count = counts.get(componentId) || 0;
-    const schema = binding?.tableName ? schemas.get(binding.tableName) : null;
-
-    // Auto fetch data when connected and binding is set
+    // Initialize connection
     useEffect(() => {
-        if (!connected) {
-            // Initialize to sync with dashboard store
-            initialize();
-        }
+        if (!connected) initialize();
     }, [connected, initialize]);
 
-    // Memoize binding dependencies separately to prevent circular updates
-    const bindingKey = binding ? `${binding.tableName}-${binding.componentId}` : null;
-    const paginationKey = `${pagination.page}-${pagination.pageSize}`;
-    const sortingKey = `${sorting.column || ''}-${sorting.direction || ''}`;
-    const filtersKey = JSON.stringify(filters);
+    // Derived params for React Query
+    const queryParams = useMemo(() => {
+        if (!binding?.tableName) return null;
 
-    // Build effective binding with current state - properly memoized and debounced
-    const getEffectiveBinding = useCallback((): ComponentDataBinding | null => {
-        if (!binding || !binding.tableName) return null;
-
-        const effectiveBinding = {
-            ...binding,
-            pagination: {
-                enabled: binding.pagination.enabled,
-                pageSize: pagination.pageSize,
-                page: pagination.page,
-            },
-            sorting: {
-                enabled: binding.sorting.enabled,
-                column: sorting.column || binding.sorting.column,
-                direction: sorting.direction || binding.sorting.direction,
-            },
-            filtering: {
-                searchEnabled: binding.filtering.searchEnabled,
-                filters: {
-                    ...binding.filtering.filters,
-                    ...filters,
-                    ...(searchQuery && binding.filtering.searchEnabled ? { search: searchQuery } : {}),
-                },
-            },
+        return {
+            page: binding.pagination.enabled ? (pagination.page + 1) : undefined, // API is 1-based? API offset handled in hook
+            pageSize: binding.pagination.enabled ? (binding.pagination.pageSize || pagination.pageSize) : undefined,
+            sort: (sorting.column || binding.sorting.column) ? {
+                column: sorting.column || binding.sorting.column!,
+                direction: sorting.direction || binding.sorting.direction || 'asc'
+            } : null,
+            filters: {
+                ...binding.filtering.filters,
+                ...filters,
+                ...(searchQuery && binding.filtering.searchEnabled ? {
+                    // Search logic: needs to know columns. Hook logic simplistic? 
+                    // databaseApi passes filters directly.
+                    // Special 'search' filter? Or manual OR?
+                    // Backend needs to handle 'search' key or we define it here.
+                    // The original queryData handled search by client-side filtering? 
+                    // NO, database-api passes search query?
+                    // database-api router handles 'filters'.
+                    // For search, we typically need to filter on specific columns.
+                    // Passing 'search' key to backend if supported.
+                    search: searchQuery
+                } : {})
+            }
         };
+    }, [binding, filters, sorting, pagination, searchQuery]);
 
-        console.log('[useSimpleData] getEffectiveBinding:', {
-            localSorting: sorting,
-            bindingSorting: binding.sorting,
-            effectiveSorting: effectiveBinding.sorting
-        });
+    // React Query Hooks
+    const {
+        data: globalSchema,
+        isLoading: isGlobalSchemaLoading,
+        error: globalSchemaError
+    } = useGlobalSchema();
 
-        return effectiveBinding;
-    }, [binding, pagination, sorting, filters, searchQuery]);
+    const { data: schema } = useTableSchema(binding?.tableName || null);
 
-    // Fetch data function - memoized and debounced to prevent excessive calls
-    const fetchData = useCallback(async () => {
-        const effectiveBinding = getEffectiveBinding();
-        if (!effectiveBinding || !connected) {
-            return;
-        }
+    const {
+        data: queryResult,
+        isLoading: isTableLoading,
+        error: queryError,
+        refetch: refetchQuery
+    } = useTableData(binding?.tableName || null, queryParams || {});
 
-        // Determine mode: builder if on /builder route, otherwise published
-        const mode = window.location.pathname.startsWith('/builder') ? 'builder' : 'published';
+    // Ensure array data
+    const data = useMemo(() => Array.isArray(queryResult?.rows) ? queryResult.rows : [], [queryResult]);
+    const count = queryResult?.total || 0;
 
-        try {
-            await queryData(componentId, effectiveBinding);
-        } catch (error) {
-            debug.error('SIMPLE_DATA', 'Fetch error:', error);
-        }
-    }, [componentId, getEffectiveBinding, connected, queryData]);
+    // Combine errors and loading states
+    const error = (globalSchemaError instanceof Error ? globalSchemaError.message : null) ||
+        (queryError instanceof Error ? queryError.message : null);
 
-    // Load schema when table changes - only once per table
-    useEffect(() => {
-        if (binding?.tableName && connected && !schema) {
-            loadTableSchema(binding.tableName);
-        }
-    }, [binding?.tableName, connected, schema, loadTableSchema]);
+    const isLoading = isGlobalSchemaLoading || isTableLoading;
 
-    // Auto-fetch data with optimized debouncing
-    useEffect(() => {
-        if (!autoFetch || !binding?.tableName || !connected) {
-            return;
-        }
-
-        // Longer debounce to prevent excessive calls during rapid state changes
-        const timeoutId = setTimeout(() => {
-            fetchData();
-        }, 300);
-        return () => clearTimeout(timeoutId);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [autoFetch, bindingKey, paginationKey, sortingKey, filtersKey, searchQuery, connected]);
-
-    // Action functions
+    // Actions
     const setFilters = useCallback((newFilters: Record<string, any>) => {
         setFiltersState(newFilters);
-        setPaginationState(prev => ({ ...prev, page: 0 })); // Reset to first page
+        setPaginationState(prev => ({ ...prev, page: 0 }));
     }, []);
 
     const setSorting = useCallback((column: string, direction: 'asc' | 'desc') => {
-        console.log('[useSimpleData] setSorting called:', { column, direction });
         setSortingState({ column, direction });
     }, []);
 
     const setPagination = useCallback((page: number, pageSize?: number) => {
-        setPaginationState(prev => ({
-            page,
-            pageSize: pageSize ?? prev.pageSize
-        }));
+        setPaginationState(prev => ({ page, pageSize: pageSize ?? prev.pageSize }));
     }, []);
 
     const setSearchQuery = useCallback((query: string) => {
         setSearchQueryState(query);
-        setPaginationState(prev => ({ ...prev, page: 0 })); // Reset to first page
+        setPaginationState(prev => ({ ...prev, page: 0 }));
     }, []);
 
-    const refetch = useCallback(async () => {
-        await fetchData();
-    }, [fetchData]);
+    // Wrapper for refetch that returns Promise<void>
+    const refetchWrapper = useCallback(async () => {
+        await refetchQuery();
+    }, [refetchQuery]);
 
     return {
-        data: Array.isArray(data) ? data : [],
+        data,
         count,
-        loading,
+        loading: isLoading,
         error,
         schema,
-        refetch,
+        currentSorting: sorting,
+        currentPagination: pagination,
+        refetch: refetchWrapper,
         setFilters,
         setSorting,
         setPagination,
-        setSearchQuery,
-        currentSorting: sorting,
-        currentPagination: pagination,
+        setSearchQuery
     };
 }

@@ -4,7 +4,7 @@ const path = require('path');
 const { migrateServiceKeyToProjectLevel } = require('./migrate-service-key');
 
 function initializeDatabase() {
-  const dbPath = process.env.DB_PATH || path.join(__dirname, '../data/frontbase.db');
+  const dbPath = process.env.DB_PATH || path.join(__dirname, '../../fastapi-backend/unified.db');
 
   console.log('📍 Database path:', dbPath);
 

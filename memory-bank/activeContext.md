@@ -1,56 +1,60 @@
 # Active Context
 
 This file tracks the project's current status, including recent changes, current goals, and open questions.
-2025-12-04 23:44:19 - Memory Bank initialization and project analysis completed
+2025-12-25 05:20:00 - INITIAL COMMIT READY: FastAPI + React Query Migration Complete
 
 ## Current Focus
 
-**Project Analysis and Documentation Phase**
-- Comprehensive project structure analysis has been completed
-- Technology stack and dependencies have been catalogued
-- Component architecture and data flow patterns have been mapped
-- Memory Bank system has been initialized to maintain project context
-- Ready to transition to implementation or next development phase
+**🚀 INITIAL COMMIT PREPARATION**
+- **COMPLETED**: Full migration from Express.js to FastAPI backend
+- **COMPLETED**: React Query data layer implementation
+- **COMPLETED**: Foreign key data display fix
+- **STATUS**: Ready for initial push to remote repository
+- **ENVIRONMENT**: FastAPI-only architecture operational
+
+### Current Environment Status
+- **FastAPI Backend (Port 8000)**: ✅ Primary - All API endpoints
+- **Express.js Backend (Port 3001)**: ⚠️ Archived - Kept locally, not pushed
+- **Frontend (Port 5173)**: ✅ Active - Vite dev server with HMR
+- **Database**: ✅ Supabase integration via PostgREST
 
 ## Recent Changes
 
-**2025-12-04 23:44:19 - Memory Bank Activation**
-- Successfully activated Memory Bank for project context management
-- Created comprehensive product context documentation covering project goals, features, and architecture
-- Established tracking system for progress, decisions, and system patterns
-- Set foundation for ongoing development workflow management
+**2025-12-25 05:20:00 - 🚀 INITIAL COMMIT PREPARATION**
+- **MIGRATED**: Data layer to React Query (`useDatabase.ts` hooks)
+- **FIXED**: Foreign key "dashes" bug (joins now in PostgREST `select` clause)
+- **UPDATED**: README.md with FastAPI setup instructions
+- **CLEANED**: Removed debug components from push (kept locally)
+- **OPTIMIZED**: Gitignore for clean repository
 
-**Previous Development Phase**
-- Completed extensive codebase analysis covering Frontbase visual page builder
-- Documented React 18 + TypeScript frontend architecture with Vite build system
-- Mapped Node.js + Express backend with SQLite and Supabase integration
-- Identified component-based architecture with drag-and-drop functionality
-- Analyzed state management patterns using Zustand stores
+**2025-12-25 04:40:00 - 🔧 React Query Migration**
+- **CREATED**: `src/hooks/useDatabase.ts` with:
+  - `useGlobalSchema()` - FK relationship fetching
+  - `useTables()` - Table list fetching
+  - `useTableSchema()` - Column schema fetching
+  - `useTableData()` - Data with automatic FK joins
+- **REFACTORED**: `useSimpleData.ts` to use React Query hooks
+- **UPDATED**: `TableSelector.tsx` to use `useTables()` hook
+
+**2025-12-24 - Express to FastAPI Migration**
+- Completed full backend migration
+- Updated Vite proxy to point to FastAPI (port 8000)
+- Archived Express server for reference
 
 ## Open Questions/Issues
 
-**Architecture Considerations**
-- What are the priority areas for immediate development focus?
-- Are there specific features or components that require immediate attention?
-- What is the preferred development workflow for ongoing updates?
+**Resolved ✅**
+- ✅ FK data showing dashes → Fixed with proper `select` clause
+- ✅ Table selector not showing active table → Fixed with React Query
+- ✅ Console logging spam → Removed debug logs
 
-**Performance and Optimization**
-- Bundle size optimization for production deployment
-- Memory usage patterns for large component trees
-- Database query optimization for complex data binding scenarios
+**Post-Push Verification**
+- Deploy in fresh environment to confirm no Express dependencies
+- Test all Supabase features end-to-end
+- Verify authentication flow with FastAPI
 
-**Future Feature Planning**
-- Undo/redo functionality implementation strategy
-- Component templates and presets system design
-- Custom component plugin architecture
-- Multi-user collaboration features roadmap
-
-**Development Environment**
-- Testing strategy and framework selection
-- CI/CD pipeline setup and deployment automation
-- Development workflow documentation and team onboarding
-
-**Technical Debt**
-- Code refactoring priorities for maintainability
-- Deprecated pattern migration strategies
-- Security audit and compliance requirements
+**Future Enhancements (Documented)**
+- User-configurable FK display columns
+- Optimized fetching (select specific columns)
+- Heuristic FK detection fallback
+- Multi-level relation support

@@ -1,0 +1,6 @@
+{
+  "backend": {
+    "type": "express",
+    "baseUrl": "http://localhost:3001"
+  }
+}

@@ -1,16 +1,26 @@
 const express = require('express');
+const { z } = require('zod');
 const crypto = require('crypto');
-const { authenticateToken } = require('../auth');
 const DatabaseManager = require('../../../utils/db');
 const { decrypt } = require('../../../utils/encryption');
+const {
+    validateParams,
+    validateQuery,
+    validateAll
+} = require('../../../validation/middleware');
 
 const router = express.Router();
 const db = new DatabaseManager();
 
+// No-op middleware for authenticateToken since auth is removed
+const authenticateToken = (req, res, next) => next();
+
 // Get Supabase tables (requires service key) - Uses PROJECT level connection
-router.get('/supabase-tables', authenticateToken, async (req, res) => {
+router.get('/supabase-tables', authenticateToken, validateQuery(z.object({
+    schema: z.string().optional().default('public')
+})), async (req, res) => {
     try {
-        console.log('🔍 Fetching Supabase tables for user:', req.user.id);
+        console.log('🔍 Fetching Supabase tables...');
 
         // Get PROJECT level Supabase connection including service key
         const project = db.db.prepare('SELECT supabase_url, supabase_service_key_encrypted FROM project WHERE id = ?').get('default');
@@ -31,10 +41,10 @@ router.get('/supabase-tables', authenticateToken, async (req, res) => {
         console.log('🔐 Attempting to decrypt service key...');
         const serviceKey = decrypt(JSON.parse(project.supabase_service_key_encrypted));
         if (!serviceKey) {
-            console.error('❌ Service key decryption failed - this may indicate encryption key mismatch');
+            console.error('❌ Service key decryption failed');
             return res.status(400).json({
                 success: false,
-                message: 'Failed to decrypt service key. This may indicate an encryption key mismatch. Please check your ENCRYPTION_KEY environment variable or reconnect to Supabase.',
+                message: 'Failed to decrypt service key. Please check your credentials.',
                 requiresReconnection: true
             });
         }
@@ -88,7 +98,14 @@ router.get('/supabase-tables', authenticateToken, async (req, res) => {
 });
 
 // Get table schema
-router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
+router.get('/table-schema/:tableName', authenticateToken, validateAll({
+    params: z.object({
+        tableName: z.string().min(1, 'Table name is required')
+    }),
+    query: z.object({
+        schema: z.string().optional().default('public')
+    })
+}), async (req, res) => {
     // Add stronger cache-busting headers
     res.set({
         'Cache-Control': 'no-cache, no-store, must-revalidate, private',
@@ -113,10 +130,10 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
 
         const serviceKey = decrypt(JSON.parse(project.supabase_service_key_encrypted));
         if (!serviceKey || !project?.supabase_url) {
-            console.error('Service key decryption failed or URL missing - encryption key mismatch possible');
+            console.error('Service key decryption failed or URL missing');
             return res.status(400).json({
                 success: false,
-                message: 'Failed to decrypt Supabase credentials. This may indicate an encryption key mismatch. Please check your ENCRYPTION_KEY environment variable or reconnect to Supabase.',
+                message: 'Failed to decrypt Supabase credentials.',
                 requiresReconnection: true
             });
         }
@@ -165,7 +182,6 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
 
         if (!response.ok) {
             console.warn('⚠️ Schema RPC failed. The "exec_sql" function might be missing.');
-            console.warn('Please run the "supabase_setup.sql" script in your Supabase SQL Editor to enable schema introspection.');
 
             // Try direct query to information_schema.columns (only works if exposed)
             const directUrl = `${project.supabase_url}/rest/v1/information_schema.columns?table_name=eq.${tableName}&table_schema=eq.public&select=column_name,data_type,is_nullable,column_default`;
@@ -197,7 +213,7 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
                     columns: columns
                 }
             });
-            return; // Exit function after successful response
+            return;
         }
 
         console.log('Both schema queries failed, using fallback');
@@ -217,14 +233,11 @@ router.get('/table-schema/:tableName', authenticateToken, async (req, res) => {
                 is_nullable: 'YES'
             })) : [];
 
-            console.log('Fallback schema extracted:', columns);
-
             res.json({
                 success: true,
                 data: { table_name: tableName, columns }
             });
         } else {
-            console.log('Fallback also failed');
             res.json({
                 success: true,
                 data: { table_name: tableName, columns: [] }

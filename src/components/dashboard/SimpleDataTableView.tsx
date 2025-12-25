@@ -26,7 +26,7 @@ export const SimpleDataTableView: React.FC = () => {
     fetchTables,
     connected
   } = useDataBindingStore();
-  
+
   const { connections } = useDashboardStore();
 
   const [selectedTable, setSelectedTable] = useState<string>('');
@@ -105,13 +105,13 @@ export const SimpleDataTableView: React.FC = () => {
 
       // Ensure we have valid data before setting state
       const validData = result.data && Array.isArray(result.data) ? result.data : [];
-      
+
       setTableData({
         data: validData,
         columns,
-        total: validData.length
+        total: result.total || validData.length
       });
-      
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch table data';
       setDataError(errorMessage);
@@ -165,8 +165,8 @@ export const SimpleDataTableView: React.FC = () => {
   };
 
   if (tablesError) {
-  return (
-    <Card className="w-full max-w-full">
+    return (
+      <Card className="w-full max-w-full">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Database className="h-5 w-5" />
@@ -237,7 +237,7 @@ export const SimpleDataTableView: React.FC = () => {
             </Button>
           </div>
         </div>
-        
+
         <div className="flex gap-4">
           <div className="flex-1">
             <Select value={selectedTable} onValueChange={handleTableChange}>
@@ -259,7 +259,7 @@ export const SimpleDataTableView: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
-          
+
           <div className="flex-1">
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -321,7 +321,7 @@ export const SimpleDataTableView: React.FC = () => {
                 </Button>
               </div>
             </div>
-            
+
             <div className="border rounded-md">
               <ScrollArea className="h-96 w-full">
                 <Table>

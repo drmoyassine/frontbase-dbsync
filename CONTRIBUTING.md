@@ -4,17 +4,25 @@
 
 ### Prerequisites
 - Node.js 18+ and npm
+- Python 3.11+
 - Git
 
 ### Installation
 ```bash
 # Clone repository
 git clone <repository-url>
-cd frontbase-now
+cd frontbase
 
-# Install dependencies
+# Install frontend dependencies
 npm install
-cd server && npm install && cd ..
+
+# Setup FastAPI backend
+cd fastapi-backend
+python -m venv venv
+.\venv\Scripts\activate  # Windows
+# source venv/bin/activate  # macOS/Linux
+pip install -r requirements.txt
+cd ..
 
 # Set up environment variables
 cp .env.example .env
@@ -26,8 +34,10 @@ cp .env.example .env
 # Terminal 1: Frontend (http://localhost:5173)
 npm run dev
 
-# Terminal 2: Backend (http://localhost:3001)
-cd server && npm run dev
+# Terminal 2: Backend (http://localhost:8000)
+cd fastapi-backend
+.\venv\Scripts\activate
+python -m uvicorn main:app --port 8000 --reload
 ```
 
 ## Code Style Guidelines
@@ -84,33 +94,11 @@ import type { ComponentStyles } from '@/types/styles';
 3. **Handle loading and error states** explicitly
 4. **Use TypeScript interfaces** for props
 
-Example:
-```typescript
-interface MyComponentProps {
-  title: string;
-  onAction?: () => void;
-  className?: string;
-}
-
-export const MyComponent: React.FC<MyComponentProps> = ({
-  title,
-  onAction,
-  className
-}) => {
-  return (
-    <div className={cn("base-styles", className)}>
-      <h2>{title}</h2>
-      {onAction && <Button onClick={onAction}>Action</Button>}
-    </div>
-  );
-};
-```
-
 ### State Management
 
 - **Local state**: `useState` for component-specific state
+- **Server state**: React Query for API data
 - **Shared state**: Zustand stores for app-wide state
-- **Server state**: React Query for API data (if needed)
 - **Form state**: Controlled components with `useState`
 
 ### Styling
@@ -120,38 +108,41 @@ export const MyComponent: React.FC<MyComponentProps> = ({
 - **Follow Shadcn UI patterns** for consistency
 - **Responsive design**: Mobile-first approach
 
-## API Development
+## API Development (FastAPI)
 
 ### Adding New Endpoints
 
-1. Create route in appropriate file in `server/routes/api/`
-2. Use `authenticateToken` middleware for protected routes
+1. Create route in `fastapi-backend/app/routers/`
+2. Use Pydantic models for request/response validation
 3. Follow RESTful conventions
 4. Return consistent response format
 
 Example:
-```javascript
-router.get('/my-endpoint', authenticateToken, async (req, res) => {
-  try {
-    const data = await fetchData();
-    res.json({ success: true, data });
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to fetch data' 
-    });
-  }
-});
+```python
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+router = APIRouter()
+
+class MyRequest(BaseModel):
+    name: str
+    value: int
+
+@router.post("/my-endpoint")
+async def my_endpoint(request: MyRequest):
+    try:
+        data = process_data(request)
+        return {"success": True, "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 ```
 
 ### Response Format
-```typescript
+```json
 {
-  success: boolean;
-  data?: any;
-  message?: string;
-  total?: number; // For paginated responses
+  "success": true,
+  "data": {},
+  "message": "Optional message"
 }
 ```
 
@@ -184,84 +175,31 @@ Follow conventional commits:
 ```
 feat: add new data table component
 fix: resolve drag-and-drop issue in builder
-refactor: split ComponentRenderer into modules
-docs: update agent.md with new patterns
+refactor: migrate to React Query hooks
+docs: update agent.md with FastAPI patterns
 ```
-
-### Pull Request Process
-1. Create feature branch from `main`
-2. Make changes and commit
-3. Run build and verify no errors
-4. Create PR with description of changes
-5. Request review
-6. Merge after approval
 
 ## Common Tasks
 
-### Adding a New Builder Component
-
-1. **Define defaults** in `src/lib/componentDefaults.ts`:
-```typescript
-MyComponent: {
-  text: 'Default text',
-  variant: 'default'
-}
-```
-
-2. **Create renderer** in appropriate file:
-```typescript
-export const MyComponentRenderer: React.FC<RendererProps> = ({
-  component,
-  isSelected,
-  onComponentClick
-}) => {
-  const { text, variant } = component.props;
-  return <MyComponent text={text} variant={variant} />;
-};
-```
-
-3. **Add to ComponentPalette**:
-```typescript
-{
-  type: 'MyComponent',
-  label: 'My Component',
-  icon: Icon,
-  category: 'basic'
-}
-```
-
-4. **Add properties panel** in `PropertiesPanel.tsx`:
-```typescript
-case 'MyComponent':
-  return (
-    <>
-      <div className="space-y-2">
-        <Label>Text</Label>
-        <Input value={props.text} onChange={...} />
-      </div>
-    </>
-  );
-```
-
 ### Adding a New Data Hook
 
-1. Create in `src/hooks/data/`:
+Create in `src/hooks/useDatabase.ts`:
 ```typescript
-export function useMyData(options: MyDataOptions) {
-  const { connected } = useDataBindingStore();
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(false);
-  
-  // Implementation
-  
-  return { data, loading, refetch };
+export function useMyData(tableName: string) {
+  return useQuery({
+    queryKey: ['myData', tableName],
+    queryFn: async () => {
+      const response = await databaseApi.fetchMyData(tableName);
+      return response.data;
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 }
 ```
 
-2. Export from `src/hooks/useSimpleData.ts`:
-```typescript
-export { useMyData } from './data/useMyData';
-```
+### Adding a New Builder Component
+
+See `/add-component` workflow in `.agent/workflows/`.
 
 ## Troubleshooting
 
@@ -272,25 +210,19 @@ export { useMyData } from './data/useMyData';
 
 ### Runtime Errors
 - Check browser console for errors
-- Verify API endpoints are running
+- Verify FastAPI backend is running (port 8000)
 - Check database connection
 - Verify environment variables
-
-### Performance Issues
-- Use React DevTools Profiler
-- Check for unnecessary re-renders
-- Verify data fetching is debounced
-- Check bundle size with `npm run build`
 
 ## Resources
 
 - [React Documentation](https://react.dev/)
-- [TypeScript Handbook](https://www.typescriptlang.org/docs/)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [TanStack Query](https://tanstack.com/query/)
 - [Tailwind CSS](https://tailwindcss.com/docs)
 - [Shadcn UI](https://ui.shadcn.com/)
 - [Zustand](https://github.com/pmndrs/zustand)
-- [React DND](https://react-dnd.github.io/react-dnd/)
 
 ## Questions?
 
-Refer to `agent.md` for architecture details and common patterns.
+Refer to `agent.md` for architecture details and `memory-bank/` for project context.

@@ -1,10 +1,26 @@
 const express = require('express');
-const { authenticateToken } = require('../auth');
+const { z } = require('zod');
 const DatabaseManager = require('../../../utils/db');
 const { getProjectContext, handleRouteError } = require('./utils');
+const {
+    validateParams,
+    validateBody,
+    validateQuery,
+    validateAll
+} = require('../../../validation/middleware');
+const {
+    CreateRLSPolicySchema,
+    UpdateRLSPolicySchema,
+    ToggleRLSSchema,
+    RLSMetadataSchema,
+    VerifyRLSSchema
+} = require('../../../validation/schemas');
 
 const router = express.Router();
 const db = new DatabaseManager();
+
+// No-op middleware for authenticateToken since auth is removed
+const authenticateToken = (req, res, next) => next();
 
 /**
  * Helper to call Supabase RPC functions for RLS management
@@ -42,7 +58,9 @@ async function callRLSFunction(functionName, params, context) {
  * GET /api/database/rls/policies
  * List all RLS policies in the public schema
  */
-router.get('/rls/policies', authenticateToken, async (req, res) => {
+router.get('/rls/policies', authenticateToken, validateQuery(z.object({
+    schema: z.string().optional().default('public')
+})), async (req, res) => {
     try {
         const context = getProjectContext(db, 'builder', req);
         const schemaName = req.query.schema || 'public';
@@ -64,7 +82,9 @@ router.get('/rls/policies', authenticateToken, async (req, res) => {
  * GET /api/database/rls/tables
  * Get RLS status for all tables
  */
-router.get('/rls/tables', authenticateToken, async (req, res) => {
+router.get('/rls/tables', authenticateToken, validateQuery(z.object({
+    schema: z.string().optional().default('public')
+})), async (req, res) => {
     try {
         const context = getProjectContext(db, 'builder', req);
         const schemaName = req.query.schema || 'public';
@@ -86,7 +106,14 @@ router.get('/rls/tables', authenticateToken, async (req, res) => {
  * GET /api/database/rls/policies/:tableName
  * Get policies for a specific table
  */
-router.get('/rls/policies/:tableName', authenticateToken, async (req, res) => {
+router.get('/rls/policies/:tableName', authenticateToken, validateAll({
+    params: z.object({
+        tableName: z.string().min(1, 'Table name is required')
+    }),
+    query: z.object({
+        schema: z.string().optional().default('public')
+    })
+}), async (req, res) => {
     try {
         const context = getProjectContext(db, 'builder', req);
         const { tableName } = req.params;
@@ -114,7 +141,7 @@ router.get('/rls/policies/:tableName', authenticateToken, async (req, res) => {
  * POST /api/database/rls/policies
  * Create a new RLS policy
  */
-router.post('/rls/policies', authenticateToken, async (req, res) => {
+router.post('/rls/policies', authenticateToken, validateBody(CreateRLSPolicySchema), async (req, res) => {
     try {
         const context = getProjectContext(db, 'builder', req);
         const {
@@ -125,15 +152,8 @@ router.post('/rls/policies', authenticateToken, async (req, res) => {
             checkExpression,
             roles = ['authenticated'],
             permissive = true,
-            propagateTo = [] // Array of { tableName, fkColumn, fkReferencedColumn }
+            propagateTo = []
         } = req.body;
-
-        if (!tableName || !policyName || !operation) {
-            return res.status(400).json({
-                success: false,
-                message: 'tableName, policyName, and operation are required'
-            });
-        }
 
         // 1. Create Base Policy
         const result = await callRLSFunction('frontbase_create_rls_policy', {
@@ -161,18 +181,12 @@ router.post('/rls/policies', authenticateToken, async (req, res) => {
 
             for (const target of propagateTo) {
                 try {
-                    // Unique name for derived policy
                     const derivedPolicyName = `${policyName}_on_${target.tableName}`;
 
-                    // Generate derived SQL: FK IN (SELECT ID FROM BASE WHERE CONDITION)
-                    // Note: This logic assumes the base condition is valid for the base table
-                    // We wrap the base condition in a subquery
                     const derivedUsing = usingExpression
                         ? `${target.fkColumn} IN (SELECT ${target.fkReferencedColumn} FROM ${tableName} WHERE ${usingExpression})`
                         : null;
 
-                    // For check expression, we usually don't propagate blindly as it might be dangerous
-                    // But if the user wants it, we use the same logic
                     const derivedCheck = checkExpression
                         ? `${target.fkColumn} IN (SELECT ${target.fkReferencedColumn} FROM ${tableName} WHERE ${checkExpression})`
                         : null;
@@ -189,12 +203,8 @@ router.post('/rls/policies', authenticateToken, async (req, res) => {
 
                     propagatedPolicies.push(target.tableName);
 
-                    // Optional: Create metadata for derived policy to mark it as derived?
-                    // For now, we leave it without metadata so it shows as "Raw SQL" (which is true)
-
                 } catch (err) {
                     console.error(`[RLS] Failed to propagate to ${target.tableName}:`, err);
-                    // Continue with other targets, don't fail the whole request
                 }
             }
         }
@@ -217,7 +227,13 @@ router.post('/rls/policies', authenticateToken, async (req, res) => {
  * PUT /api/database/rls/policies/:tableName/:policyName
  * Update an existing RLS policy (drop + create)
  */
-router.put('/rls/policies/:tableName/:policyName', authenticateToken, async (req, res) => {
+router.put('/rls/policies/:tableName/:policyName', authenticateToken, validateAll({
+    params: z.object({
+        tableName: z.string().min(1, 'Table name is required'),
+        policyName: z.string().min(1, 'Policy name is required')
+    }),
+    body: UpdateRLSPolicySchema
+}), async (req, res) => {
     try {
         const context = getProjectContext(db, 'builder', req);
         const { tableName, policyName } = req.params;
@@ -229,13 +245,6 @@ router.put('/rls/policies/:tableName/:policyName', authenticateToken, async (req
             roles = ['authenticated'],
             permissive = true
         } = req.body;
-
-        if (!operation) {
-            return res.status(400).json({
-                success: false,
-                message: 'operation is required'
-            });
-        }
 
         const result = await callRLSFunction('frontbase_update_rls_policy', {
             p_table_name: tableName,
@@ -269,7 +278,10 @@ router.put('/rls/policies/:tableName/:policyName', authenticateToken, async (req
  * DELETE /api/database/rls/policies/:tableName/:policyName
  * Delete an RLS policy
  */
-router.delete('/rls/policies/:tableName/:policyName', authenticateToken, async (req, res) => {
+router.delete('/rls/policies/:tableName/:policyName', authenticateToken, validateParams(z.object({
+    tableName: z.string().min(1, 'Table name is required'),
+    policyName: z.string().min(1, 'Policy name is required')
+})), async (req, res) => {
     try {
         const context = getProjectContext(db, 'builder', req);
         const { tableName, policyName } = req.params;
@@ -299,18 +311,16 @@ router.delete('/rls/policies/:tableName/:policyName', authenticateToken, async (
  * POST /api/database/rls/tables/:tableName/toggle
  * Enable or disable RLS on a table
  */
-router.post('/rls/tables/:tableName/toggle', authenticateToken, async (req, res) => {
+router.post('/rls/tables/:tableName/toggle', authenticateToken, validateAll({
+    params: z.object({
+        tableName: z.string().min(1, 'Table name is required')
+    }),
+    body: ToggleRLSSchema
+}), async (req, res) => {
     try {
         const context = getProjectContext(db, 'builder', req);
         const { tableName } = req.params;
         const { enable } = req.body;
-
-        if (typeof enable !== 'boolean') {
-            return res.status(400).json({
-                success: false,
-                message: 'enable (boolean) is required'
-            });
-        }
 
         const result = await callRLSFunction('frontbase_toggle_table_rls', {
             p_table_name: tableName,
@@ -342,22 +352,24 @@ router.post('/rls/tables/:tableName/toggle', authenticateToken, async (req, res)
  */
 function generateSQLHash(sql) {
     if (!sql) return '';
-    // Normalize whitespace and create a simple hash
     const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase();
     let hash = 0;
     for (let i = 0; i < normalized.length; i++) {
         const char = normalized.charCodeAt(i);
         hash = ((hash << 5) - hash) + char;
-        hash = hash & hash; // Convert to 32bit integer
+        hash = hash & hash;
     }
     return hash.toString(16);
 }
 
 /**
  * GET /api/database/rls/metadata/:tableName/:policyName
- * Get stored metadata for a policy (if it was created via Frontbase)
+ * Get stored metadata for a policy 
  */
-router.get('/rls/metadata/:tableName/:policyName', authenticateToken, (req, res) => {
+router.get('/rls/metadata/:tableName/:policyName', authenticateToken, validateParams(z.object({
+    tableName: z.string().min(1, 'Table name is required'),
+    policyName: z.string().min(1, 'Policy name is required')
+})), (req, res) => {
     try {
         const { tableName, policyName } = req.params;
         const metadata = db.getRLSMetadata(tableName, policyName);
@@ -375,16 +387,9 @@ router.get('/rls/metadata/:tableName/:policyName', authenticateToken, (req, res)
  * POST /api/database/rls/metadata
  * Save metadata when creating a policy via Frontbase
  */
-router.post('/rls/metadata', authenticateToken, (req, res) => {
+router.post('/rls/metadata', authenticateToken, validateBody(RLSMetadataSchema), (req, res) => {
     try {
         const { tableName, policyName, formData, generatedUsing, generatedCheck } = req.body;
-
-        if (!tableName || !policyName || !formData) {
-            return res.status(400).json({
-                success: false,
-                message: 'tableName, policyName, and formData are required'
-            });
-        }
 
         const sqlHash = generateSQLHash(generatedUsing);
         const metadata = db.createRLSMetadata(
@@ -407,19 +412,21 @@ router.post('/rls/metadata', authenticateToken, (req, res) => {
 
 /**
  * PUT /api/database/rls/metadata/:tableName/:policyName
- * Update metadata when updating a policy via Frontbase
+ * Update metadata 
  */
-router.put('/rls/metadata/:tableName/:policyName', authenticateToken, (req, res) => {
+router.put('/rls/metadata/:tableName/:policyName', authenticateToken, validateAll({
+    params: z.object({
+        tableName: z.string().min(1, 'Table name is required'),
+        policyName: z.string().min(1, 'Policy name is required')
+    }),
+    body: RLSMetadataSchema.partial().extend({
+        newPolicyName: z.string().optional(),
+        formData: z.record(z.any(), 'Form data is required')
+    })
+}), (req, res) => {
     try {
         const { tableName, policyName } = req.params;
         const { newPolicyName, formData, generatedUsing, generatedCheck } = req.body;
-
-        if (!formData) {
-            return res.status(400).json({
-                success: false,
-                message: 'formData is required'
-            });
-        }
 
         const sqlHash = generateSQLHash(generatedUsing);
         const metadata = db.updateRLSMetadata(
@@ -443,9 +450,12 @@ router.put('/rls/metadata/:tableName/:policyName', authenticateToken, (req, res)
 
 /**
  * DELETE /api/database/rls/metadata/:tableName/:policyName
- * Delete metadata when deleting a policy
+ * Delete metadata 
  */
-router.delete('/rls/metadata/:tableName/:policyName', authenticateToken, (req, res) => {
+router.delete('/rls/metadata/:tableName/:policyName', authenticateToken, validateParams(z.object({
+    tableName: z.string().min(1, 'Table name is required'),
+    policyName: z.string().min(1, 'Policy name is required')
+})), (req, res) => {
     try {
         const { tableName, policyName } = req.params;
         db.deleteRLSMetadata(tableName, policyName);
@@ -463,21 +473,13 @@ router.delete('/rls/metadata/:tableName/:policyName', authenticateToken, (req, r
  * POST /api/database/rls/metadata/verify
  * Verify if a policy's current USING expression matches the stored hash
  */
-router.post('/rls/metadata/verify', authenticateToken, (req, res) => {
+router.post('/rls/metadata/verify', authenticateToken, validateBody(VerifyRLSSchema), (req, res) => {
     try {
         const { tableName, policyName, currentUsing } = req.body;
-
-        if (!tableName || !policyName) {
-            return res.status(400).json({
-                success: false,
-                message: 'tableName and policyName are required'
-            });
-        }
 
         const metadata = db.getRLSMetadata(tableName, policyName);
 
         if (!metadata) {
-            // No metadata = policy created externally
             return res.json({
                 success: true,
                 data: {
@@ -488,7 +490,6 @@ router.post('/rls/metadata/verify', authenticateToken, (req, res) => {
             });
         }
 
-        // Compare current expression hash with stored hash
         const currentHash = generateSQLHash(currentUsing);
         const isVerified = currentHash === metadata.sql_hash;
 
@@ -507,4 +508,3 @@ router.post('/rls/metadata/verify', authenticateToken, (req, res) => {
 });
 
 module.exports = router;
-

@@ -8,6 +8,7 @@ import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { SupabaseConnectionModal } from './SupabaseConnectionModal';
 import { SimpleDataTableView } from '@/components/admin/SimpleDataTableView';
 import { useToast } from '@/hooks/use-toast';
+import api from '@/services/api-service';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,50 +24,50 @@ import {
 export const DatabasePanel: React.FC = () => {
   const { connections, setSupabaseModalOpen, fetchConnections } = useDashboardStore();
   const { toast } = useToast();
-  
+
   // Initialize data-binding when dashboard is connected
   const { connected: bindingConnected, initialize } = useDataBindingStore();
-  
+
+  // Check if we have a Supabase connection from the connections array
+  const supabaseConnection = connections?.supabase || { connected: false, url: '' };
+
   useEffect(() => {
-    if (connections.supabase.connected && !bindingConnected) {
+    if (supabaseConnection.connected && !bindingConnected) {
       initialize();
     }
-  }, [connections.supabase.connected, bindingConnected, initialize]);
+  }, [supabaseConnection.connected, bindingConnected, initialize]);
 
   const handleDisconnectSupabase = async () => {
     try {
-      const response = await fetch('/api/database/disconnect-supabase', {
-        method: 'DELETE',
-        credentials: 'include'
-      });
+      const response = await api.delete('/api/database/disconnect-supabase');
 
-      if (response.ok) {
+      if (response.data?.success) {
         toast({
           title: "Disconnected",
           description: "Supabase connection has been removed",
         });
-        // Connection will be updated by the main app flow
+        // Refresh connections after disconnect
+        await fetchConnections();
       } else {
-        const errorData = await response.json().catch(() => ({}));
         toast({
           title: "Error",
-          description: errorData.error || "Failed to disconnect",
+          description: response.data?.message || response.data?.error || "Failed to disconnect",
           variant: "destructive"
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Disconnect error:', error);
       toast({
-        title: "Connection Error", 
-        description: "Check if encryption key is set properly. See API.md for troubleshooting.",
+        title: "Connection Error",
+        description: error?.response?.data?.detail || error?.message || "Failed to disconnect",
         variant: "destructive"
       });
     }
   };
 
   const openSupabaseProject = () => {
-    if (connections.supabase.url) {
-      window.open(connections.supabase.url, '_blank');
+    if (supabaseConnection.url) {
+      window.open(supabaseConnection.url, '_blank');
     }
   };
 
@@ -99,8 +100,8 @@ export const DatabasePanel: React.FC = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-2">
-              <Badge variant={connections.supabase.connected ? "default" : "secondary"}>
-                {connections.supabase.connected ? (
+              <Badge variant={supabaseConnection.connected ? "default" : "secondary"}>
+                {supabaseConnection.connected ? (
                   <>
                     <CheckCircle className="mr-1 h-3 w-3" />
                     Connected
@@ -112,14 +113,14 @@ export const DatabasePanel: React.FC = () => {
                   </>
                 )}
               </Badge>
-              {connections.supabase.connected && connections.supabase.url && (
+              {supabaseConnection.connected && supabaseConnection.url && (
                 <Badge variant="outline">
-                  {new URL(connections.supabase.url).hostname}
+                  {new URL(supabaseConnection.url).hostname}
                 </Badge>
               )}
             </div>
 
-            {connections.supabase.connected ? (
+            {supabaseConnection.connected ? (
               <div className="space-y-3">
                 <div className="text-sm text-muted-foreground">
                   Your Supabase database is connected and ready to use.
@@ -231,7 +232,7 @@ export const DatabasePanel: React.FC = () => {
       </div>
 
       {/* Data Tables Section - Only show when connected */}
-      {connections.supabase.connected && bindingConnected && (
+      {supabaseConnection.connected && bindingConnected && (
         <div className="mt-8">
           <div className="mb-6">
             <h2 className="text-2xl font-bold tracking-tight">Database Tables</h2>

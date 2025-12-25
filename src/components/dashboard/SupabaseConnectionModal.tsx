@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { AlertTriangle, CheckCircle, ExternalLink } from 'lucide-react';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useToast } from '@/hooks/use-toast';
+import api from '@/services/api-service';
 
 export const SupabaseConnectionModal: React.FC = () => {
   const { supabaseModalOpen, setSupabaseModalOpen, fetchConnections } = useDashboardStore();
@@ -37,26 +38,22 @@ export const SupabaseConnectionModal: React.FC = () => {
 
     setTesting(true);
     try {
-      const response = await fetch('/api/database/test-supabase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          url: formData.url,
-          anonKey: formData.anonKey
-        })
+      const response = await api.post('/api/database/test-supabase', {
+        url: formData.url,
+        anonKey: formData.anonKey,
+        serviceKey: formData.includeServiceKey ? formData.serviceKey : undefined
       });
 
-      const data = await response.json();
-      if (response.ok) {
+      const data = response.data;
+      if (data.success) {
         toast({
           title: "Connection successful",
-          description: "Your Supabase credentials are valid",
+          description: data.message || "Your Supabase credentials are valid",
         });
       } else {
         toast({
           title: "Connection failed",
-          description: data.error,
+          description: data.message || data.error || "Invalid credentials",
           variant: "destructive"
         });
       }
@@ -83,19 +80,14 @@ export const SupabaseConnectionModal: React.FC = () => {
 
     setLoading(true);
     try {
-      const response = await fetch('/api/database/connect-supabase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          url: formData.url,
-          anonKey: formData.anonKey,
-          serviceKey: formData.includeServiceKey ? formData.serviceKey : undefined
-        })
+      const response = await api.post('/api/database/connect-supabase', {
+        url: formData.url,
+        anonKey: formData.anonKey,
+        serviceKey: formData.includeServiceKey ? formData.serviceKey : undefined
       });
 
-      const data = await response.json();
-      if (response.ok) {
+      const data = response.data;
+      if (data.success) {
         toast({
           title: "Connection saved",
           description: "Supabase connection configured successfully",
@@ -163,7 +155,7 @@ export const SupabaseConnectionModal: React.FC = () => {
             <Checkbox
               id="include-service-key"
               checked={formData.includeServiceKey}
-              onCheckedChange={(checked) => 
+              onCheckedChange={(checked) =>
                 setFormData(prev => ({ ...prev, includeServiceKey: !!checked }))
               }
             />
@@ -184,7 +176,7 @@ export const SupabaseConnectionModal: React.FC = () => {
                   onChange={(e) => handleInputChange('serviceKey', e.target.value)}
                 />
               </div>
-              
+
               <Alert>
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>

@@ -22,13 +22,14 @@ interface DataBindingState {
   schemas: Map<string, TableSchema>;
   globalSchema: {
     tables: any[];
-    foreign_keys: Array<{
+    foreign_keys: {
       table_name: string;
       column_name: string;
       foreign_table_name: string;
       foreign_column_name: string;
-    }>;
-  };
+    }[];
+    definitions?: any;
+  } | null;
 
   // Component bindings
   componentBindings: Map<string, ComponentDataBinding>;
@@ -111,15 +112,20 @@ export const useDataBindingStore = create<DataBindingState>()(
       fetchGlobalSchema: async () => {
         try {
           const result = await databaseApi.advancedQuery('frontbase_get_schema_info', {});
-          const schemaResult = result as any;
-          if (result.success && schemaResult.tables && schemaResult.foreign_keys) {
+          const schemaData = result.data || result; // Handle {data: {...}} wrapper or direct
+
+          if (result.success && schemaData.tables) {
             set({
               globalSchema: {
-                tables: schemaResult.tables,
-                foreign_keys: schemaResult.foreign_keys
+                tables: schemaData.tables,
+                foreign_keys: schemaData.foreign_keys || [], // Fallback for manual schema
+                definitions: schemaData.definitions || {}
               }
             });
-            debug.log('DATA_BINDING', 'Global schema fetched:', schemaResult.foreign_keys.length, 'FKs');
+            console.log('[DATA_BINDING] Global Schema Loaded:', {
+              tables: schemaData.tables.length,
+              fks: (schemaData.foreign_keys || []).length
+            });
           }
         } catch (error) {
           console.error('Failed to fetch global schema:', error);
@@ -133,34 +139,24 @@ export const useDataBindingStore = create<DataBindingState>()(
           return;
         }
 
-        // Fetch global schema first for better intellipense
-        get().fetchGlobalSchema();
+        // Fetch global schema first and WAIT for it
+        await get().fetchGlobalSchema();
 
         const requestKey = generateRequestKey('/api/database/supabase-tables');
 
         return requestDeduplicator.dedupe(requestKey, async () => {
           set({ tablesLoading: true, tablesError: null });
-
           try {
-            const result = await databaseApi.fetchTables();
-
-            if (result.success) {
-              set({
-                tables: result.data.tables,
-                tablesLoading: false,
-                tablesError: null
-              });
-              debug.critical('DATA_BINDING', 'Tables fetched:', result.data.tables.length);
-            } else {
-              set({
-                tablesError: result.message || 'Failed to fetch tables',
-                tablesLoading: false
-              });
-            }
-          } catch (error) {
-            console.error('Failed to fetch Supabase tables:', error);
+            const res = await databaseApi.fetchTables();
+            // Data is already unwrapped and validated
             set({
-              tablesError: 'Failed to fetch tables',
+              tables: res.tables || [],
+              tablesLoading: false
+            });
+          } catch (error: any) {
+            console.error('Failed to fetch tables:', error);
+            set({
+              tablesError: error.message || 'Failed to fetch tables',
               tablesLoading: false
             });
           }
@@ -175,11 +171,12 @@ export const useDataBindingStore = create<DataBindingState>()(
         }
 
         try {
-          const result = await databaseApi.fetchTableSchema(tableName);
+          const schemaResult = await databaseApi.fetchTableSchema(tableName);
+          // Result is already validated and unwrapped { table_name, columns }
 
-          if (result.success && result.data) {
+          if (schemaResult && schemaResult.columns) {
             // Transform database column structure to frontend format
-            const transformedColumns = result.data.columns.map((col: any) => ({
+            const transformedColumns = schemaResult.columns.map((col: any) => ({
               name: col.column_name || col.name, // Handle both formats
               type: col.data_type || col.type,
               nullable: col.is_nullable === 'YES' || col.nullable,
@@ -234,17 +231,30 @@ export const useDataBindingStore = create<DataBindingState>()(
           // Check column overrides
           if (binding.columnOverrides) {
             Object.keys(binding.columnOverrides).forEach(key => {
-              const [t] = key.split('.');
-              if (t && t !== binding.tableName) relatedTables.add(t);
+              if (key.includes('.')) {
+                const [t] = key.split('.');
+                if (t && t !== binding.tableName) relatedTables.add(t);
+              }
             });
           }
           // Check column order
           if (binding.columnOrder) {
             binding.columnOrder.forEach(key => {
-              const [t] = key.split('.');
-              if (t && t !== binding.tableName) relatedTables.add(t);
+              if (key.includes('.')) {
+                const [t] = key.split('.');
+                if (t && t !== binding.tableName) relatedTables.add(t);
+              }
             });
           }
+
+          // DEBUG: Log related tables detection
+          console.log('[DATA_BINDING] FK Debug:', {
+            tableName: binding.tableName,
+            columnOverrides: binding.columnOverrides ? Object.keys(binding.columnOverrides) : [],
+            columnOrder: binding.columnOrder,
+            relatedTables: Array.from(relatedTables),
+            globalSchemaFKs: get().globalSchema?.foreign_keys?.length
+          });
 
           // Build Joins based on Schema Graph
           const globalSchema = get().globalSchema;
@@ -252,6 +262,13 @@ export const useDataBindingStore = create<DataBindingState>()(
           relatedTables.forEach(relatedTable => {
             // 1. Try Find Forward FK (binding.tableName -> relatedTable)
             let fk = globalSchema?.foreign_keys?.find(k => k.table_name === binding.tableName && k.foreign_table_name === relatedTable);
+
+            console.log('[DATA_BINDING] FK lookup:', {
+              relatedTable,
+              lookingFor: `${binding.tableName} -> ${relatedTable}`,
+              found: !!fk,
+              fk
+            });
 
             if (fk) {
               // Belongs To
@@ -275,6 +292,8 @@ export const useDataBindingStore = create<DataBindingState>()(
               }
             }
           });
+
+          console.log('[DATA_BINDING] Final query params:', { columns, joins });
 
           // Sorting
           let sort_col = '';

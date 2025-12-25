@@ -1,14 +1,33 @@
 const express = require('express');
+const { z } = require('zod');
 const crypto = require('crypto');
-const { authenticateToken } = require('../auth');
 const DatabaseManager = require('../../../utils/db');
 const { getProjectContext, handleRouteError } = require('./utils');
+const {
+    validateParams,
+    validateBody,
+    validateQuery,
+    validateAll
+} = require('../../../validation/middleware');
+const {
+    TableDataQuerySchema,
+    DistinctValuesRequestSchema,
+    AdvancedQuerySchema
+} = require('../../../validation/schemas');
 
 const router = express.Router();
 const db = new DatabaseManager();
 
+// No-op middleware for authenticateToken since auth is removed
+const authenticateToken = (req, res, next) => next();
+
 // Get table data preview
-router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
+router.get('/table-data/:tableName', authenticateToken, validateAll({
+    params: z.object({
+        tableName: z.string().min(1, 'Table name is required')
+    }),
+    query: TableDataQuerySchema.omit({ tableName: true })
+}), async (req, res) => {
     // Add stronger cache-busting headers
     res.set({
         'Cache-Control': 'no-cache, no-store, must-revalidate, private',
@@ -149,13 +168,9 @@ router.get('/table-data/:tableName', authenticateToken, async (req, res) => {
 });
 
 // Get distinct values for a column
-router.post('/distinct-values', authenticateToken, async (req, res) => {
+router.post('/distinct-values', authenticateToken, validateBody(DistinctValuesRequestSchema), async (req, res) => {
     try {
         const { tableName, column, mode = 'builder' } = req.body;
-
-        if (!tableName || !column) {
-            return res.status(400).json({ error: 'Table name and column required' });
-        }
 
         const { supabaseUrl, anonKey, authKey } = getProjectContext(db, mode, req);
 
@@ -174,11 +189,17 @@ router.post('/distinct-values', authenticateToken, async (req, res) => {
         if (response.ok) {
             const data = await response.json();
             const values = [...new Set(data.map(item => item[column]))].filter(val => val !== null && val !== undefined).sort();
-            res.json({ success: true, data: values });
+            res.json({
+                success: true,
+                data: values
+            });
         } else {
             const errorText = await response.text();
             console.error('Failed to fetch distinct values:', errorText);
-            res.status(400).json({ error: 'Failed to fetch values' });
+            res.status(400).json({
+                success: false,
+                error: 'Failed to fetch values'
+            });
         }
     } catch (error) {
         handleRouteError(res, error, 'Distinct values');
@@ -186,12 +207,18 @@ router.post('/distinct-values', authenticateToken, async (req, res) => {
 });
 
 // Create record
-router.post('/table-data/:tableName', authenticateToken, async (req, res) => {
+router.post('/table-data/:tableName', authenticateToken, validateAll({
+    params: z.object({
+        tableName: z.string().min(1, 'Table name is required')
+    }),
+    body: z.object({
+        data: z.record(z.any(), 'Record data is required')
+    })
+}), async (req, res) => {
     try {
         const { tableName } = req.params;
-        const data = req.body;
-        const mode = 'builder'; // Operations default to builder (service role) usually, but let's check assumptions. 
-        // Logic before always used service key. So mode='builder'.
+        const data = req.body.data;
+        const mode = 'builder';
 
         const { supabaseUrl, authKey } = getProjectContext(db, mode, req);
 
@@ -208,10 +235,16 @@ router.post('/table-data/:tableName', authenticateToken, async (req, res) => {
 
         if (response.ok) {
             const result = await response.json();
-            res.json({ success: true, data: result });
+            res.json({
+                success: true,
+                data: result
+            });
         } else {
             const error = await response.text();
-            res.status(400).json({ success: false, message: error });
+            res.status(400).json({
+                success: false,
+                message: error
+            });
         }
     } catch (error) {
         handleRouteError(res, error, 'Create record');
@@ -219,11 +252,19 @@ router.post('/table-data/:tableName', authenticateToken, async (req, res) => {
 });
 
 // Update record
-router.put('/table-data/:tableName/:id', authenticateToken, async (req, res) => {
+router.put('/table-data/:tableName/:id', authenticateToken, validateAll({
+    params: z.object({
+        tableName: z.string().min(1, 'Table name is required'),
+        id: z.string().min(1, 'Record ID is required')
+    }),
+    body: z.object({
+        data: z.record(z.any(), 'Update data is required')
+    })
+}), async (req, res) => {
     try {
         const { tableName, id } = req.params;
-        const data = req.body;
-        const mode = 'builder'; // Default to service key for writes in builder
+        const data = req.body.data;
+        const mode = 'builder';
 
         const { supabaseUrl, authKey } = getProjectContext(db, mode, req);
 
@@ -240,10 +281,16 @@ router.put('/table-data/:tableName/:id', authenticateToken, async (req, res) => 
 
         if (response.ok) {
             const result = await response.json();
-            res.json({ success: true, data: result });
+            res.json({
+                success: true,
+                data: result
+            });
         } else {
             const error = await response.text();
-            res.status(400).json({ success: false, message: error });
+            res.status(400).json({
+                success: false,
+                message: error
+            });
         }
     } catch (error) {
         handleRouteError(res, error, 'Update record');
@@ -251,10 +298,13 @@ router.put('/table-data/:tableName/:id', authenticateToken, async (req, res) => 
 });
 
 // Delete record
-router.delete('/table-data/:tableName/:id', authenticateToken, async (req, res) => {
+router.delete('/table-data/:tableName/:id', authenticateToken, validateParams(z.object({
+    tableName: z.string().min(1, 'Table name is required'),
+    id: z.string().min(1, 'Record ID is required')
+})), async (req, res) => {
     try {
         const { tableName, id } = req.params;
-        const mode = 'builder'; // Default to service key
+        const mode = 'builder';
 
         const { supabaseUrl, authKey } = getProjectContext(db, mode, req);
 
@@ -270,10 +320,16 @@ router.delete('/table-data/:tableName/:id', authenticateToken, async (req, res) 
 
         if (response.ok) {
             const result = await response.json();
-            res.json({ success: true, data: result });
+            res.json({
+                success: true,
+                data: result
+            });
         } else {
             const error = await response.text();
-            res.status(400).json({ success: false, message: error });
+            res.status(400).json({
+                success: false,
+                message: error
+            });
         }
     } catch (error) {
         handleRouteError(res, error, 'Delete record');
@@ -282,13 +338,9 @@ router.delete('/table-data/:tableName/:id', authenticateToken, async (req, res) 
 
 
 // Advanced Query (RPC Proxy)
-router.post('/advanced-query', authenticateToken, async (req, res) => {
+router.post('/advanced-query', authenticateToken, validateBody(AdvancedQuerySchema), async (req, res) => {
     try {
         const { rpcName, params, mode = 'builder' } = req.body;
-
-        if (!rpcName) {
-            return res.status(400).json({ error: 'RPC Function name required' });
-        }
 
         const { supabaseUrl, anonKey, authKey } = getProjectContext(db, mode, req);
 
@@ -297,7 +349,7 @@ router.post('/advanced-query', authenticateToken, async (req, res) => {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${authKey}`,
-                'apikey': anonKey, // apikey header is always required by Supabase/Kong
+                'apikey': anonKey,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(params || {})
@@ -306,14 +358,24 @@ router.post('/advanced-query', authenticateToken, async (req, res) => {
         if (response.ok) {
             const data = await response.json();
             if (Array.isArray(data)) {
-                res.json({ success: true, data: data, rows: data });
+                res.json({
+                    success: true,
+                    data: data,
+                    rows: data
+                });
             } else {
-                res.json({ success: true, ...data });
+                res.json({
+                    success: true,
+                    ...data
+                });
             }
         } else {
             const errorText = await response.text();
             console.error(`RPC ${rpcName} failed:`, errorText);
-            res.status(response.status).json({ success: false, message: errorText });
+            res.status(response.status).json({
+                success: false,
+                message: errorText
+            });
         }
     } catch (error) {
         handleRouteError(res, error, 'Advanced query');

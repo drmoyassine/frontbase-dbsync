@@ -45,7 +45,7 @@ const getBadgeColor = (value: string) => {
 };
 
 export const DataTableCell: React.FC<DataTableCellProps> = ({ value, columnName, row, columnConfig }) => {
-    // Handle related columns (e.g., "institutions.name")
+    // Handle related columns (e.g., "providers.provider_name")
     let actualValue = value;
     if (row && columnName.includes('.')) {
         const [tableName, colName] = columnName.split('.');
@@ -60,7 +60,6 @@ export const DataTableCell: React.FC<DataTableCellProps> = ({ value, columnName,
             }
         }
 
-        // Handle array response (common in PostgREST for relations) or single object
         if (Array.isArray(relationData)) {
             actualValue = relationData[0]?.[colName];
         } else {

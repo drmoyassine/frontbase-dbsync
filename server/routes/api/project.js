@@ -1,4 +1,6 @@
 const express = require('express');
+const { validateBody } = require('../../validation/middleware');
+const { UpdateProjectRequestSchema } = require('../../validation/schemas');
 const router = express.Router();
 
 module.exports = (db) => {
@@ -20,7 +22,7 @@ module.exports = (db) => {
   });
 
   // PUT /api/project - Update project
-  router.put('/', (req, res) => {
+  router.put('/', validateBody(UpdateProjectRequestSchema), (req, res) => {
     try {
       const updates = req.body;
 

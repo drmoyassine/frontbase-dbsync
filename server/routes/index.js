@@ -29,15 +29,7 @@ function setupRoutes(app, dbManager) {
         });
     });
 
-    // Auth routes
-    try {
-        const { router: authRouter } = require('./api/auth');
-        router.use('/auth', authRouter);
-        console.log('✅ Auth API routes loaded with universal session recovery');
-    } catch (error) {
-        console.error('❌ Failed to load auth routes:', error);
-        process.exit(1);
-    }
+    // Auth routes removed (no auth)
 
     // Project routes
     try {
@@ -50,9 +42,8 @@ function setupRoutes(app, dbManager) {
 
     // Pages routes
     try {
-        const { authenticateToken } = require('./api/auth');
-        router.use('/pages', authenticateToken, require('./api/pages')(dbManager));
-        console.log('✅ Pages API routes loaded with authentication');
+        router.use('/pages', require('./api/pages')(dbManager));
+        console.log('✅ Pages API routes loaded');
     } catch (error) {
         console.error('❌ Failed to load pages routes:', error);
         process.exit(1);
@@ -77,14 +68,7 @@ function setupRoutes(app, dbManager) {
         process.exit(1);
     }
 
-    // Auth Forms routes
-    try {
-        router.use('/auth-forms', require('./api/auth-forms')(dbManager));
-        console.log('✅ Auth Forms API routes loaded');
-    } catch (error) {
-        console.error('❌ Failed to load auth-forms routes:', error);
-        process.exit(1);
-    }
+    // Auth Forms routes removed (no auth)
 
     // Mount the router
     app.use('/api', router);

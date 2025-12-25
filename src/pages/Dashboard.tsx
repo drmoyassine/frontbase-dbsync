@@ -13,14 +13,18 @@ const Dashboard: React.FC = () => {
     <SidebarProvider>
       <div className="min-h-screen flex w-full max-w-full overflow-hidden">
         <DashboardLayout>
-          <Routes>
-            <Route path="/" element={<Navigate to="/dashboard/pages" replace />} />
-            <Route path="/pages" element={<PagesPanel />} />
-            <Route path="/database" element={<DatabasePanel />} />
-            <Route path="/users" element={<UsersPanel />} />
-            <Route path="/storage" element={<StoragePanel />} />
-            <Route path="/settings" element={<SettingsPanel />} />
-          </Routes>
+          <div className="container mx-auto p-6">
+            <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
+
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard/pages" replace />} />
+              <Route path="/pages" element={<PagesPanel />} />
+              <Route path="/database" element={<DatabasePanel />} />
+              <Route path="/users" element={<UsersPanel />} />
+              <Route path="/storage" element={<StoragePanel />} />
+              <Route path="/settings" element={<SettingsPanel />} />
+            </Routes>
+          </div>
         </DashboardLayout>
       </div>
     </SidebarProvider>

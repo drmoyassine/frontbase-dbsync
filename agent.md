@@ -1,17 +1,17 @@
 # Frontbase Builder - Agent Documentation
 
 ## Overview
-Frontbase is a visual page builder application that allows users to create web pages through a drag-and-drop interface. It features database connectivity (Supabase), component-based design, and real-time preview capabilities.
+Frontbase is a visual database builder and admin panel for Supabase. It enables users to create web pages through a drag-and-drop interface with automatic data binding.
 
 ## Architecture
 
 ### Tech Stack
 - **Frontend**: React 18 + TypeScript + Vite
 - **UI Framework**: Shadcn UI + Tailwind CSS
-- **State Management**: Zustand (persistent stores)
+- **State Management**: Zustand + TanStack Query (React Query)
 - **Drag & Drop**: React DND
-- **Backend**: Node.js + Express + SQLite
-- **Database Integration**: Supabase (via REST API)
+- **Backend**: FastAPI (Python) + SQLite
+- **Database Integration**: Supabase (via PostgREST)
 
 ### Directory Structure
 
@@ -25,35 +25,47 @@ src/
 │   │   └── style-controls/ # Styling controls
 │   ├── dashboard/        # Dashboard UI components
 │   ├── data-binding/     # Data-bound components (DataTable, KPICard, etc.)
-│   └── ui/              # Shadcn UI components
+│   └── ui/               # Shadcn UI components
 ├── hooks/
-│   └── data/            # Data fetching hooks (useSimpleData, useTableSchema, etc.)
-├── stores/              # Zustand stores
-├── services/            # API services
-├── lib/                 # Utilities
-├── pages/               # Route pages
-└── types/               # TypeScript types
+│   ├── data/             # Data fetching hooks (useSimpleData, etc.)
+│   └── useDatabase.ts    # React Query database hooks
+├── stores/               # Zustand stores
+├── services/             # API services
+├── lib/                  # Utilities
+├── pages/                # Route pages
+└── types/                # TypeScript types
 
-server/
-├── routes/api/
-│   ├── database/        # Database API routes (connection, schema, data)
-│   ├── auth.js          # Authentication
-│   ├── pages.js         # Page management
-│   ├── project.js       # Project settings
-│   └── variables.js     # App variables
-└── utils/               # Server utilities
+fastapi-backend/
+├── app/
+│   ├── routers/          # API routes (database, pages, auth, project)
+│   ├── models/           # Pydantic schemas
+│   └── database/         # SQLAlchemy config
+├── main.py               # FastAPI entry point
+└── requirements.txt      # Python dependencies
 ```
 
 ## Key Concepts
 
-### 1. Component System
-The builder uses a component-based architecture where each UI element is a draggable, configurable component.
+### 1. Data Layer (React Query)
+
+**Primary Hooks** (`src/hooks/useDatabase.ts`):
+- `useGlobalSchema()` - Fetches FK relationships (1hr cache)
+- `useTables()` - Fetches table list (5min cache)
+- `useTableSchema(tableName)` - Fetches columns (10min cache)
+- `useTableData(tableName, params)` - Fetches data with auto FK joins
+
+**Consumer Hook** (`src/hooks/data/useSimpleData.ts`):
+- Wraps React Query hooks for component use
+- Manages local state (filters, pagination, sorting)
+- Returns: `{ data, count, loading, error, schema, refetch, ... }`
+
+### 2. Component System
 
 **Component Types**:
 - **Basic**: Button, Text, Heading, Card, Badge, Image, Alert, etc.
 - **Form**: Input, Textarea, Select, Checkbox, Switch
 - **Layout**: Container, Tabs, Accordion, Breadcrumb
-- **Data**: DataTable, KPICard, Chart, Grid (data-bound components)
+- **Data**: DataTable, KPICard, Chart, Grid (data-bound)
 
 **Component Structure**:
 ```typescript
@@ -68,214 +80,130 @@ The builder uses a component-based architecture where each UI element is a dragg
 }
 ```
 
-### 2. State Management
+### 3. State Management
 
-#### Builder Store (`stores/builder.ts`)
-Manages the page builder state using a sliced architecture:
-- **Project Slice**: Project settings
-- **Page Slice**: Page CRUD and database sync
-- **Builder Slice**: Component manipulation (move, update, delete)
-- **UI Slice**: Tooling state (preview, viewport, zoom)
-- **Variables Slice**: App variables
+#### Zustand Stores
+- **Builder Store** (`stores/builder.ts`): Page builder state (sliced architecture)
+- **Dashboard Store** (`stores/dashboard.ts`): Dashboard and settings
+- **Data Binding Store** (`stores/data-binding-simple.ts`): Legacy data management
 
-#### Dashboard Store (`stores/dashboard.ts`)
-Manages dashboard state:
-- Database connections
-- Project settings
-- User data
+#### React Query (TanStack Query)
+- Server state management for database operations
+- Automatic caching and background updates
+- `keepPreviousData` for smooth pagination
 
-#### Data Binding Store (`stores/data-binding-simple.ts`)
-Manages data fetching and caching:
-- Database connection status
-- Table schemas
-- Component data bindings
-- Query cache
+### 4. Data Flow
 
-### 3. Data Binding System
+```
+Component → useSimpleData() → useTableData() → databaseApi → FastAPI → Supabase
+                                    ↓
+                            React Query Cache
+```
 
-**Flow**:
-1. User connects to Supabase via Dashboard
-2. Tables are fetched and cached in `data-binding-simple` store
-3. User binds a data component (DataTable, KPICard, etc.) to a table
-4. `useSimpleData` hook fetches and manages data for the component
-5. Data is cached and refreshed based on pagination/sorting/filtering
+### 5. Foreign Key Handling
 
-**Key Files**:
-- `src/services/database-api.ts` - API service layer
-- `src/stores/data-binding-simple.ts` - Data state management
-- `src/hooks/data/useSimpleData.ts` - Main data fetching hook
-- `src/components/builder/data-binding/DataBindingModal.tsx` - Binding UI
-
-### 4. Rendering System
-
-**ComponentRenderer** (`src/components/builder/ComponentRenderer.tsx`):
-- Main component that renders all builder components
-- Delegates to specialized renderers:
-  - `BasicRenderers.tsx`
-  - `FormRenderers.tsx`
-  - `LayoutRenderers.tsx`
-  - `DataRenderers.tsx`
-- Handles data binding resolution
-- Manages inline text editing
-
-**DraggableComponent** (`src/components/builder/DraggableComponent.tsx`):
-- Wraps components with drag-and-drop functionality
-- Handles drop zones for nesting
-- Manages component selection
+FKs are automatically detected and joined:
+1. `useGlobalSchema()` fetches FK relationships from `frontbase_get_schema_info` RPC
+2. `useTableData()` constructs PostgREST select: `*,providers(*),categories(*)`
+3. Related data is embedded in response as nested objects
 
 ## API Structure
 
-### Server Routes
+### FastAPI Routes (`fastapi-backend/app/routers/`)
+
+#### `/api/database`
+- `GET /connections` - Get database connections
+- `POST /connect-supabase` - Connect to Supabase
+- `GET /tables` - List tables
+- `GET /table-schema/:tableName` - Get table schema
+- `GET /table-data/:tableName` - Get table data
+- `POST /advanced-query` - RPC calls
+
+#### `/api/pages`
+- `GET /` - List pages
+- `POST /` - Create page
+- `PUT /:id` - Update page
+- `DELETE /:id` - Delete page
 
 #### `/api/auth`
 - `POST /login` - User login
 - `POST /logout` - User logout
 - `GET /me` - Get current user
-- `GET /demo-info` - Get demo mode info
-
-#### `/api/database`
-- `GET /connections` - Get database connections
-- `POST /connect-supabase` - Connect to Supabase
-- `DELETE /disconnect-supabase` - Disconnect
-- `GET /supabase-tables` - List tables
-- `GET /table-schema/:tableName` - Get table schema
-- `GET /table-data/:tableName` - Get table data (with pagination, sorting, filtering)
-- `POST /distinct-values` - Get distinct column values
-
-#### `/api/pages`
-- `GET /` - List all pages
-- `GET /:id` - Get page by ID
-- `POST /` - Create page
-- `PUT /:id` - Update page
-- `DELETE /:id` - Delete page
-
-#### `/api/variables`
-- `GET /` - List app variables
-- `POST /` - Create variable
-- `PUT /:id` - Update variable
-- `DELETE /:id` - Delete variable
 
 ## Common Patterns
 
-### 1. Adding a New Component Type
+### 1. Adding a New Data Hook
 
-1. **Define default props** in `src/lib/componentDefaults.ts`
-2. **Create renderer** in appropriate renderer file (`BasicRenderers.tsx`, etc.)
-3. **Add to ComponentPalette** in `src/components/builder/ComponentPalette.tsx`
-4. **Add properties panel** in `src/components/builder/PropertiesPanel.tsx`
-5. **Add styling support** if needed
+Create in `src/hooks/useDatabase.ts`:
+```typescript
+export function useMyData(options) {
+  return useQuery({
+    queryKey: ['myData', options],
+    queryFn: async () => {
+      const response = await databaseApi.myEndpoint(options);
+      return response.data;
+    },
+    staleTime: 5000,
+  });
+}
+```
 
-### 2. Adding a New Data Hook
+### 2. Adding a New API Endpoint
 
-1. Create hook in `src/hooks/data/`
-2. Use `databaseApi` service for API calls
-3. Integrate with `data-binding-simple` store if caching is needed
-4. Export from `src/hooks/useSimpleData.ts` for backward compatibility
-
-### 3. Adding a New API Endpoint
-
-1. Add route in appropriate file in `server/routes/api/`
-2. Use `authenticateToken` middleware for protected routes
-3. Access database via `DatabaseManager` instance
-4. Return consistent response format: `{ success: boolean, data?: any, message?: string }`
-
-## Important Notes
-
-### Data Persistence
-- Builder state is persisted to SQLite via `/api/pages`
-- User settings stored in `user_settings` table
-- Project settings in `project` table
-- Data bindings stored in browser localStorage (Zustand persist)
-
-### Authentication
-- JWT-based authentication
-- Tokens stored in httpOnly cookies
-- Demo mode available (no auth required)
-
-### Responsive Design
-- Components support responsive styles per breakpoint
-- Viewports: mobile (375px), tablet (768px), desktop (1024px)
-- Zoom levels: 50%, 75%, 100%, 125%, 150%
-
-### Inline Editing
-- Double-click text components to edit inline
-- Uses `InlineTextEditor` component
-- Managed by `useComponentTextEditor` hook
+Add route in `fastapi-backend/app/routers/`:
+```python
+@router.get("/my-endpoint")
+async def my_endpoint(request: Request, db: Session = Depends(get_db)):
+    try:
+        # Implementation
+        return {"success": True, "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
 
 ## Development Workflow
 
 ### Running Locally
-```bash
-# Frontend (port 5173)
-npm run dev
 
-# Backend (port 3001)
-cd server && npm run dev
+**Terminal 1 - Backend (FastAPI)**:
+```bash
+cd fastapi-backend
+.\venv\Scripts\activate  # Windows
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
+
+**Terminal 2 - Frontend (Vite)**:
+```bash
+npm run dev
+```
+
+### Port Configuration
+| Service | Port |
+|---------|------|
+| Frontend (Vite) | 5173 |
+| Backend (FastAPI) | 8000 |
 
 ### Building
 ```bash
 npm run build
 ```
 
-### Code Organization Principles
-1. **Modularity**: Keep files focused and under 400 lines
-2. **Separation of Concerns**: Separate UI, logic, and data layers
-3. **Reusability**: Extract common patterns into hooks/utilities
-4. **Type Safety**: Use TypeScript interfaces for all data structures
-
-## Recent Refactorings
-
-### Builder Store Refactoring (Dec 2025)
-- Split monolithic `builder.ts` into modular slices (`createPageSlice`, `createBuilderSlice`, etc.)
-- Enforced stricter TypeScript configuration (`noImplicitAny: true`)
-- Centralized shared types in `src/types/builder.ts`
-
-### ComponentRenderer Refactoring
-- Split large switch statement into categorized renderer files
-- Extracted text editing logic into `useComponentTextEditor` hook
-- Created shared `RendererProps` interface
-
-### Database API Refactoring
-- Split monolithic `database.js` into modular files (connection, schema, data)
-- Created `database-api.ts` service layer on frontend
-- Organized data hooks into `src/hooks/data/` directory
-
-### Users Dashboard Refactoring (Dec 2025)
-- **Modularized UI Components**:
-  - `FilterBar`: Extracted individual filters into `src/components/data-binding/filters/`
-  - `UniversalDataTable`: Extracted `DataTableCell` and `ColumnSettingsPopover`
-  - `CompactColumnConfigurator`: Extracted `DraggableColumnItem`
-- **Logic Extraction**:
-  - `UserManagementTable`: Created `useFilterOptions` and `useUserTableBinding` hooks
-  - **Backend**: centralized authentication logic in `server/routes/api/database/utils.js`
-
-### Code Quality & Optimization (Dec 2025)
-- **Client Components**:
-  - Extracted `ConditionItem` from `ConditionGroupBuilder`
-  - Extracted `AuthFormCard` from `AuthFormsList`
-  - Deduplicated logic in `VariableSelector`
-- **Logic Extraction**:
-  - `UniversalDataTable`: Extracted `useTableColumns` custom hook
-  - `RLSPolicyBuilder`: Extracted `useRLSSQLGeneration` custom hook
-- **Server Organization**:
-  - Extracted API route registration to `server/routes/index.js`
-  - Consolidated schema definitions into `server/database/schema.sql`
-  - Cleaned up `server/utils/db.js` and `server/index.js`
-
 ## Troubleshooting
 
-### Build Warnings
-- **Dynamic import warnings**: Expected for lazy-loaded modules
-- **Large chunk warnings**: Consider code splitting if bundle > 500KB
-
 ### Common Issues
-- **Data not loading**: Check Supabase connection and service key
-- **Components not rendering**: Verify component type in `ComponentRenderer`
-- **Drag-and-drop not working**: Check React DND provider wrapping
+- **FK columns show dashes**: Run `supabase_setup.sql` in Supabase
+- **Data not loading**: Check Supabase connection in Settings
+- **Build errors**: Clear `node_modules/.vite` cache
 
-## Future Considerations
-- Implement undo/redo for builder actions
-- Add component templates/presets
-- Support for custom component plugins
-- Multi-user collaboration features
+### Debugging
+- React Query DevTools: Shows cache state
+- Browser Network tab: Verify API calls
+- FastAPI `/docs`: Interactive API documentation
+
+## Future Enhancements
+
+Documented in `memory-bank/progress.md`:
+- User-configurable FK display columns
+- Optimized column fetching
+- Multi-level relation support
+- Undo/redo for builder actions

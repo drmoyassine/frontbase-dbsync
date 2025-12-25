@@ -1,193 +1,159 @@
-# Welcome to your Lovable project
+# Frontbase
 
-## Project info
+A visual database builder and admin panel for Supabase, built with React, TypeScript, and FastAPI.
 
-**URL**: https://lovable.dev/projects/4651ed78-2b9d-433c-88ca-fdbe2875e6cf
+## Tech Stack
 
-## How can I edit this code?
+- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui
+- **Backend**: FastAPI (Python), SQLAlchemy
+- **Database**: SQLite (local config), Supabase (user data)
+- **State Management**: Zustand, TanStack Query
 
-There are several ways of editing your application.
+## Quick Start
 
-**Use Lovable**
+### Prerequisites
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/4651ed78-2b9d-433c-88ca-fdbe2875e6cf) and start prompting.
+- Node.js 18+ and npm
+- Python 3.11+
+- A Supabase project (for database features)
 
-Changes made via Lovable will be committed automatically to this repo.
+### Development Setup
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
+```bash
+# 1. Clone the repository
 git clone <YOUR_GIT_URL>
+cd frontbase
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# 2. Install frontend dependencies
+npm install
 
-# Step 3: Install the necessary dependencies.
-npm i
+# 3. Setup FastAPI backend
+cd fastapi-backend
+python -m venv venv
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Windows
+.\venv\Scripts\activate
+# macOS/Linux
+source venv/bin/activate
+
+pip install -r requirements.txt
+cd ..
+
+# 4. Copy environment template
+cp .env.example .env
+# Edit .env with your settings
+
+# 5. Start both servers (2 terminals)
+```
+
+### Running the Application
+
+**Terminal 1 - Backend (FastAPI):**
+```bash
+cd fastapi-backend
+.\venv\Scripts\activate  # Windows
+# source venv/bin/activate  # macOS/Linux
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Terminal 2 - Frontend (Vite):**
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Open http://localhost:5173 in your browser.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Port Configuration
 
-**Use GitHub Codespaces**
+| Service | Port | Description |
+|---------|------|-------------|
+| Frontend (Vite) | 5173 | Development server with HMR |
+| Backend (FastAPI) | 8000 | API server |
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Production Deployment
 
-## What technologies are used for this project?
+### Docker (Recommended)
 
-This project is built with:
+```bash
+# Build and run
+docker-compose up -d
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+# Or build manually
+docker build -t frontbase .
+docker run -p 8000:8000 -v ./data:/app/data frontbase
+```
 
-## How can I deploy this project?
+### Manual Deployment
 
-Simply open [Lovable](https://lovable.dev/projects/4651ed78-2b9d-433c-88ca-fdbe2875e6cf) and click on Share -> Publish.
+**Backend:**
+```bash
+cd fastapi-backend
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+**Frontend:**
+```bash
+npm run build
+# Serve the dist/ folder with nginx or similar
+```
 
 ## Environment Variables
 
-This project supports various environment variables for configuration. See `.env.example` for a complete list.
+Copy `.env.example` to `.env` and configure:
 
-### Critical Configuration
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PORT` | No | Backend port (default: 8000) |
+| `NODE_ENV` | No | development/production |
+| `ADMIN_USERNAME` | No | Admin username (default: admin) |
+| `ADMIN_PASSWORD` | No | Admin password (default: admin) |
 
-**Encryption (REQUIRED for Production):**
-- `ENCRYPTION_KEY` - **Required for persistent Supabase connections**
-  - Must be a 64-character hexadecimal string (32 bytes)
-  - Generate with: `node -p "require('crypto').randomBytes(32).toString('hex')"`
-  - **Without this, Supabase connections will be lost on container restart**
+### Supabase Configuration
 
-**Supabase Auto-Configuration (Optional):**
-- `SUPABASE_PROJECT_URL` - Your Supabase project URL (e.g., `https://your-project.supabase.co`)
-- `SUPABASE_ANON_KEY` - Your Supabase anonymous key
-- `SUPABASE_SERVICE_KEY` - Your Supabase service key
-- **If all three are provided, Supabase will be automatically configured on container startup**
+Supabase credentials are configured through the UI after login. For auto-configuration, you can set:
 
-### Optional Configuration
+- `SUPABASE_PROJECT_URL` - Your Supabase project URL
+- `SUPABASE_ANON_KEY` - Anonymous key
+- `SUPABASE_SERVICE_KEY` - Service role key (for admin features)
 
-**Server Settings:**
-- `PORT` - Server port (default: 3000)
-- `NODE_ENV` - Environment mode (development/production)
-- `DB_PATH` - Database file path (default: ./database.sqlite)
+## Supabase Setup
 
-**Admin User Settings:**
-- `ADMIN_USERNAME` - Custom admin username (default: admin)
-- `ADMIN_PASSWORD` - Custom admin password (default: admin123)
-- `ADMIN_EMAIL` - Custom admin email (default: admin@frontbase.dev)
+For full foreign key detection and advanced features, run the SQL in `supabase_setup.sql` in your Supabase SQL Editor. This creates the `frontbase_get_schema_info` RPC function.
 
-### Docker Deployment with Environment Variables
+## Project Structure
 
-```yaml
-# docker-compose.yml example
-version: '3.8'
-services:
-  frontbase:
-    build: .
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - ADMIN_USERNAME=your_admin
-      - ADMIN_PASSWORD=your_secure_password
-      - ADMIN_EMAIL=admin@yourdomain.com
-      # Optional: Auto-configure Supabase
-      - SUPABASE_PROJECT_URL=https://your-project.supabase.co
-      - SUPABASE_ANON_KEY=your_anon_key
-      - SUPABASE_SERVICE_KEY=your_service_key
+```
+frontbase/
+├── src/                    # React frontend
+│   ├── components/         # UI components
+│   ├── hooks/              # Custom hooks (React Query)
+│   ├── stores/             # Zustand stores
+│   └── services/           # API clients
+├── fastapi-backend/        # Python backend
+│   ├── app/
+│   │   ├── routers/        # API routes
+│   │   ├── models/         # Pydantic schemas
+│   │   └── database/       # SQLAlchemy config
+│   └── main.py             # FastAPI app
+├── public/                 # Static assets
+└── docs/                   # Documentation
 ```
 
-### Docker Deployment with Persistent Connections
+## Troubleshooting
 
-**Critical for Supabase connections:**
-
+### "Backend service unavailable"
+Ensure FastAPI is running on port 8000:
 ```bash
-# 1. Generate a secure encryption key
-node -p "require('crypto').randomBytes(32).toString('hex')"
-
-# 2. Set the encryption key in your environment
-export ENCRYPTION_KEY=your_generated_key_here
-
-# 3. Start the container
-docker-compose up -d
+cd fastapi-backend && python -m uvicorn main:app --port 8000 --reload
 ```
 
-**Example docker-compose.yml with persistent Supabase:**
+### "Foreign key columns show dashes"
+Run `supabase_setup.sql` in your Supabase project to enable FK detection.
 
-```yaml
-version: '3.8'
-services:
-  frontbase:
-    build: .
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./data:/app/data
-    environment:
-      - NODE_ENV=production
-      - ENCRYPTION_KEY=a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456
-      - ADMIN_USERNAME=your_admin
-      - ADMIN_PASSWORD=your_secure_password
-      - ADMIN_EMAIL=admin@yourdomain.com
-```
+### "Supabase connection lost"
+Re-enter your Supabase credentials in the Settings modal.
 
-### Security Notes
+## License
 
-- **Demo Mode**: When no custom admin credentials are set, demo credentials are shown on the login page
-- **Production**: Always set custom admin credentials for production deployments
-- **Password Security**: Use strong passwords (minimum 6 characters, recommended 12+)
-- **Encryption Key**: Required for persistent Supabase connections - generate with crypto.randomBytes(32)
-
-### Troubleshooting
-
-**Supabase Connection Lost After Restart:**
-If your Supabase connection is lost after container restart:
-1. **Set the `ENCRYPTION_KEY` environment variable** (most common cause)
-   - Generate: `node -p "require('crypto').randomBytes(32).toString('hex')"`
-   - Add to your `.env` file or docker environment
-2. Ensure the data directory is properly mounted (`./data:/app/data`)
-3. Check container logs for encryption key warnings
-
-**Database Access Issues:**
-If you can't access the database or see tables:
-1. Check if you have the service key configured
-2. Verify your Supabase credentials are correct
-3. Ensure your Supabase project is running
-4. If you see "Failed to decrypt service key", regenerate `ENCRYPTION_KEY`
-
-**Table Display Issues:**
-If table scrolling is problematic:
-- Tables now have contained horizontal scrolling within the viewport
-- Columns have minimum widths to prevent cramped display
-- Use the search function to filter large datasets
-
-**Additional Resources:**
-- Check RLS policies in Supabase dashboard
-- Verify service key permissions
-- See API.md for detailed endpoint documentation
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+MIT

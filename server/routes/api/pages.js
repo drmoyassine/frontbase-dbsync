@@ -1,10 +1,25 @@
 const express = require('express');
+const { z } = require('zod');
 const { v4: uuidv4 } = require('uuid');
+const {
+  validateBody,
+  validateQuery,
+  validateParams,
+  validateAll
+} = require('../../validation/middleware');
+const {
+  CreatePageRequestSchema,
+  UpdatePageRequestSchema,
+  UpdatePageLayoutRequestSchema,
+  PaginationParamsSchema
+} = require('../../validation/schemas');
 const router = express.Router();
 
 module.exports = (db) => {
   // GET /api/pages - Get all pages
-  router.get('/', (req, res) => {
+  router.get('/', validateQuery(PaginationParamsSchema.extend({
+    includeDeleted: z.coerce.boolean().optional()
+  })), (req, res) => {
     try {
       const includeDeleted = req.query.includeDeleted === 'true';
       const pages = db.getAllPages(includeDeleted);
@@ -22,7 +37,9 @@ module.exports = (db) => {
   });
 
   // GET /api/pages/:id - Get specific page
-  router.get('/:id', (req, res) => {
+  router.get('/:id', validateParams(z.object({
+    id: z.string().min(1, 'Page ID is required')
+  })), (req, res) => {
     try {
       const { id } = req.params;
       const page = db.getPage(id);
@@ -48,7 +65,7 @@ module.exports = (db) => {
   });
 
   // POST /api/pages - Create new page
-  router.post('/', (req, res) => {
+  router.post('/', validateBody(CreatePageRequestSchema), (req, res) => {
     try {
       console.log('📝 Create page request body:', JSON.stringify(req.body, null, 2));
 
@@ -59,15 +76,6 @@ module.exports = (db) => {
       };
 
       console.log('📝 Processed pageData:', JSON.stringify(pageData, null, 2));
-
-      // Validate required fields
-      if (!pageData.name || !pageData.slug) {
-        console.error('❌ Validation failed - name:', pageData.name, 'slug:', pageData.slug);
-        return res.status(400).json({
-          success: false,
-          error: 'Name and slug are required'
-        });
-      }
 
       const page = db.createPage(pageData);
 
@@ -94,7 +102,12 @@ module.exports = (db) => {
   });
 
   // PUT /api/pages/:id - Update page
-  router.put('/:id', (req, res) => {
+  router.put('/:id', validateAll({
+    params: z.object({
+      id: z.string().min(1, 'Page ID is required')
+    }),
+    body: UpdatePageRequestSchema
+  }), (req, res) => {
     try {
       const { id } = req.params;
       const updates = req.body;
@@ -143,7 +156,9 @@ module.exports = (db) => {
   });
 
   // DELETE /api/pages/:id - Soft delete page
-  router.delete('/:id', (req, res) => {
+  router.delete('/:id', validateParams(z.object({
+    id: z.string().min(1, 'Page ID is required')
+  })), (req, res) => {
     try {
       const { id } = req.params;
       const page = db.getPage(id);
@@ -176,17 +191,15 @@ module.exports = (db) => {
   });
 
   // PUT /api/pages/:id/layout - Update page layout data
-  router.put('/:id/layout', (req, res) => {
+  router.put('/:id/layout', validateAll({
+    params: z.object({
+      id: z.string().min(1, 'Page ID is required')
+    }),
+    body: UpdatePageLayoutRequestSchema
+  }), (req, res) => {
     try {
       const { id } = req.params;
       const { layoutData } = req.body;
-
-      if (!layoutData) {
-        return res.status(400).json({
-          success: false,
-          error: 'layoutData is required'
-        });
-      }
 
       const page = db.updatePage(id, { layoutData });
 
@@ -211,7 +224,9 @@ module.exports = (db) => {
   });
 
   // POST /api/pages/:id/restore - Restore deleted page
-  router.post('/:id/restore', (req, res) => {
+  router.post('/:id/restore', validateParams(z.object({
+    id: z.string().min(1, 'Page ID is required')
+  })), (req, res) => {
     try {
       const { id } = req.params;
       const page = db.getPage(id);
@@ -257,7 +272,9 @@ module.exports = (db) => {
   });
 
   // DELETE /api/pages/:id/permanent - Permanently delete page
-  router.delete('/:id/permanent', (req, res) => {
+  router.delete('/:id/permanent', validateParams(z.object({
+    id: z.string().min(1, 'Page ID is required')
+  })), (req, res) => {
     try {
       const { id } = req.params;
       const success = db.deletePage(id);

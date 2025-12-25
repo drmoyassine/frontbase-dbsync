@@ -3,53 +3,14 @@ const path = require('path');
 
 class DatabaseManager {
   constructor() {
-    const dbPath = process.env.DB_PATH || path.join(__dirname, '../data/frontbase.db');
+    // Route everything to the FastAPI unified database
+    const dbPath = process.env.DB_PATH || path.join(__dirname, '../../fastapi-backend/unified.db');
     this.db = new Database(dbPath);
     this.db.pragma('foreign_keys = ON');
 
     // Create RLS policy metadata table if it doesn't exist
     // Moved to schema.sql, but we can keep this check for existing deployments just in case init.js didn't run it
     // (Actually, init.js runs before this, so we can verify or just trust it. Let's trust init.js for the CREATE TABLE)
-
-    // Check if we need to migrate auth_forms (add allowed_contact_types or fix check constraint)
-    const tableInfo = this.db.pragma('table_info(auth_forms)');
-    const hasAllowedContactTypes = tableInfo.some(col => col.name === 'allowed_contact_types');
-
-    // If table exists but missing column, we need to migrate to fix schema and constraints
-    if (tableInfo.length > 0 && !hasAllowedContactTypes) {
-      console.log('🔄 Migrating auth_forms table schema...');
-      this.db.transaction(() => {
-        // 1. Rename existing table
-        this.db.exec('ALTER TABLE auth_forms RENAME TO auth_forms_old');
-
-        // 2. Create new table with updated schema
-        this.db.exec(`
-          CREATE TABLE auth_forms (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            type TEXT NOT NULL CHECK (type IN ('login', 'signup', 'both')),
-            config TEXT DEFAULT '{}',
-            target_contact_type TEXT,
-            allowed_contact_types TEXT DEFAULT '[]',
-            redirect_url TEXT,
-            is_active INTEGER DEFAULT 1,
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now'))
-          )
-        `);
-
-        // 3. Copy data
-        this.db.exec(`
-          INSERT INTO auth_forms (id, name, type, config, target_contact_type, redirect_url, is_active, created_at, updated_at)
-          SELECT id, name, type, config, target_contact_type, redirect_url, is_active, created_at, updated_at
-          FROM auth_forms_old
-        `);
-
-        // 4. Drop old table
-        this.db.exec('DROP TABLE auth_forms_old');
-      })();
-      console.log('✅ auth_forms table migration complete.');
-    }
 
     // Prepare statements for better performance
     this.prepareStatements();
@@ -115,18 +76,6 @@ class DatabaseManager {
     `);
     this.deleteAssetStmt = this.db.prepare('DELETE FROM assets WHERE id = ?');
 
-    // User settings statements
-    this.getUserSettingsStmt = this.db.prepare('SELECT * FROM user_settings WHERE user_id = ?');
-    this.createUserSettingsStmt = this.db.prepare(`
-      INSERT INTO user_settings (id, user_id, supabase_url, supabase_anon_key, settings_data, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-    `);
-    this.updateUserSettingsStmt = this.db.prepare(`
-      UPDATE user_settings 
-      SET supabase_url = ?, supabase_anon_key = ?, settings_data = ?, updated_at = datetime('now')
-      WHERE user_id = ?
-    `);
-
     // RLS policy metadata statements
     this.getRLSMetadataStmt = this.db.prepare(
       'SELECT * FROM rls_policy_metadata WHERE table_name = ? AND policy_name = ?'
@@ -146,20 +95,6 @@ class DatabaseManager {
     this.deleteRLSMetadataStmt = this.db.prepare(
       'DELETE FROM rls_policy_metadata WHERE table_name = ? AND policy_name = ?'
     );
-
-    // Auth Forms statements
-    this.getAllAuthFormsStmt = this.db.prepare('SELECT * FROM auth_forms ORDER BY created_at DESC');
-    this.getAuthFormStmt = this.db.prepare('SELECT * FROM auth_forms WHERE id = ?');
-    this.createAuthFormStmt = this.db.prepare(`
-      INSERT INTO auth_forms (id, name, type, config, target_contact_type, allowed_contact_types, redirect_url, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-    `);
-    this.updateAuthFormStmt = this.db.prepare(`
-      UPDATE auth_forms 
-      SET name = ?, type = ?, config = ?, target_contact_type = ?, allowed_contact_types = ?, redirect_url = ?, is_active = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `);
-    this.deleteAuthFormStmt = this.db.prepare('DELETE FROM auth_forms WHERE id = ?');
   }
 
   // Project methods
@@ -362,47 +297,7 @@ class DatabaseManager {
     return result.changes > 0;
   }
 
-  // User settings methods
-  getUserSettings(userId) {
-    const userSettings = this.getUserSettingsStmt.get(userId);
-    if (!userSettings) return {};
 
-    const result = {
-      supabase_url: userSettings.supabase_url,
-      supabase_anon_key: userSettings.supabase_anon_key,
-    };
-
-    // Parse additional settings from JSON
-    if (userSettings.settings_data) {
-      try {
-        const additionalSettings = JSON.parse(userSettings.settings_data);
-        Object.assign(result, additionalSettings);
-      } catch (error) {
-        console.error('Error parsing settings_data:', error);
-      }
-    }
-
-    return result;
-  }
-
-  updateUserSettings(userId, settings) {
-    const { supabase_url, supabase_anon_key, ...otherSettings } = settings;
-    const settingsData = Object.keys(otherSettings).length > 0 ? JSON.stringify(otherSettings) : null;
-
-    const current = this.getUserSettingsStmt.get(userId);
-    if (current) {
-      this.updateUserSettingsStmt.run(supabase_url, supabase_anon_key, settingsData, userId);
-    } else {
-      const { v4: uuidv4 } = require('uuid');
-      this.createUserSettingsStmt.run(uuidv4(), userId, supabase_url, supabase_anon_key, settingsData);
-    }
-  }
-
-  updateUserSetting(userId, key, value) {
-    const current = this.getUserSettings(userId);
-    const updated = { ...current, [key]: value };
-    this.updateUserSettings(userId, updated);
-  }
 
   // RLS Policy Metadata methods
   getRLSMetadata(tableName, policyName) {
@@ -454,83 +349,7 @@ class DatabaseManager {
     return result.changes > 0;
   }
 
-  // Auth Forms methods
-  getAllAuthForms() {
-    return this.getAllAuthFormsStmt.all().map(f => ({
-      ...f,
-      config: JSON.parse(f.config),
-      allowedContactTypes: f.allowed_contact_types ? JSON.parse(f.allowed_contact_types) : [],
-      isActive: Boolean(f.is_active)
-    }));
-  }
 
-  getAuthForm(id) {
-    const form = this.getAuthFormStmt.get(id);
-    if (!form) return null;
-    return {
-      ...form,
-      config: JSON.parse(form.config),
-      allowedContactTypes: form.allowed_contact_types ? JSON.parse(form.allowed_contact_types) : [],
-      isActive: Boolean(form.is_active)
-    };
-  }
-
-  createAuthForm(formData) {
-    const { v4: uuidv4 } = require('uuid');
-    const id = uuidv4();
-    const { name, type, config = {}, targetContactType, allowedContactTypes = [], redirectUrl, isActive = true } = formData;
-
-    this.createAuthFormStmt.run(
-      id,
-      name,
-      type,
-      JSON.stringify(config),
-      targetContactType,
-      JSON.stringify(allowedContactTypes),
-      redirectUrl,
-      isActive ? 1 : 0
-    );
-
-    return this.getAuthForm(id);
-  }
-
-  updateAuthForm(id, updates) {
-    const current = this.getAuthForm(id);
-    if (!current) return null;
-
-    // Merge updates
-    const {
-      name, type, config, target_contact_type, allowed_contact_types, redirect_url, is_active
-    } = {
-      ...current, ...updates,
-      // Handle mixed camelCase/snake_case inputs by preferring updates
-      target_contact_type: updates.targetContactType !== undefined ? updates.targetContactType : current.target_contact_type,
-      allowed_contact_types: updates.allowedContactTypes !== undefined ? JSON.stringify(updates.allowedContactTypes) : (current.allowedContactTypes ? JSON.stringify(current.allowedContactTypes) : '[]'),
-      redirect_url: updates.redirectUrl !== undefined ? updates.redirectUrl : current.redirect_url,
-      is_active: updates.isActive !== undefined ? updates.isActive : current.is_active
-    };
-
-    // If config is object, stringify it
-    const configStr = typeof config === 'object' ? JSON.stringify(config) : config;
-
-    this.updateAuthFormStmt.run(
-      name,
-      type,
-      configStr,
-      target_contact_type,
-      allowed_contact_types,
-      redirect_url,
-      is_active ? 1 : 0,
-      id
-    );
-
-    return this.getAuthForm(id);
-  }
-
-  deleteAuthForm(id) {
-    const result = this.deleteAuthFormStmt.run(id);
-    return result.changes > 0;
-  }
 
   close() {
     this.db.close();

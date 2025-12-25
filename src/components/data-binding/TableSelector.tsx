@@ -6,6 +6,8 @@ import { RefreshCw } from 'lucide-react';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useDashboardStore } from '@/stores/dashboard';
 
+import { useTables } from '@/hooks/useDatabase';
+
 interface TableSelectorProps {
   value?: string;
   onValueChange: (value: string) => void;
@@ -27,27 +29,23 @@ export function TableSelector({
   showRefresh = true,
   variant = 'default'
 }: TableSelectorProps) {
-  const { tables, tablesError, connected, tablesLoading, fetchTables, initialize } = useDataBindingStore();
+  const { connected, initialize } = useDataBindingStore();
+  const { data: tables = [], isLoading: tablesLoading, error, refetch } = useTables();
 
-  const loadTables = React.useCallback(async () => {
-    if (!connected) {
-      // Try to initialize the connection first
-      initialize();
-      return;
-    }
-    await fetchTables();
-  }, [connected, fetchTables, initialize]);
-
+  // Initialize connection if needed
   React.useEffect(() => {
-    loadTables();
-  }, [loadTables]);
+    if (!connected) {
+      initialize();
+    }
+  }, [connected, initialize]);
 
   const handleRefresh = () => {
-    loadTables();
+    refetch();
   };
 
   const isLoading = tablesLoading;
   const tableList = tables.map(table => table.name);
+  const errorMessage = error instanceof Error ? error.message : 'Failed to load tables';
 
   if (variant === 'compact') {
     return (
@@ -119,7 +117,7 @@ export function TableSelector({
         <p className="text-sm text-muted-foreground">
           {!connected
             ? 'Database not connected. Please configure your Supabase connection.'
-            : (tablesError || 'No tables found. Make sure your database is properly connected.')
+            : (error ? errorMessage : 'No tables found. Make sure your database is properly connected.')
           }
         </p>
       )}

@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -11,19 +12,19 @@ const { renderPageSSR } = require('./ssr/renderer');
 
 // Initialize Express app
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // Enhanced startup logging with error handling
 console.log('🚀 Starting Frontbase server...');
 console.log('Environment:', process.env.NODE_ENV || 'production');
 console.log('Database Path:', process.env.DB_PATH || '/app/data/frontbase.db');
-console.log('Port:', process.env.PORT || 3000);
+console.log('Port:', process.env.PORT || 3001);
 console.log('Working Directory:', process.cwd());
 
 // Set default environment variables if not provided
 process.env.NODE_ENV = process.env.NODE_ENV || 'production';
-process.env.DB_PATH = process.env.DB_PATH || '/app/data/frontbase.db';
-process.env.PORT = process.env.PORT || '3000';
+process.env.DB_PATH = process.env.DB_PATH || path.join(__dirname, '../fastapi-backend/unified.db');
+process.env.PORT = process.env.PORT || '3001';
 
 // Ensure data directory exists with comprehensive error handling
 console.log('📁 Ensuring data directory exists...');
@@ -85,7 +86,7 @@ try {
   console.log('📋 Database tables found:', tables.map(t => t.name).join(', '));
 
   // Check critical tables exist
-  const requiredTables = ['users', 'user_sessions', 'project', 'pages'];
+  const requiredTables = ['project', 'pages'];
   const missingTables = requiredTables.filter(table =>
     !tables.some(t => t.name === table)
   );
@@ -114,12 +115,7 @@ try {
   dbManager = new DatabaseManager();
   console.log('✅ Database manager connected');
 
-  // Add session monitoring for debugging
-  if (process.env.NODE_ENV !== 'production' || process.env.DEBUG_SESSIONS) {
-    const { monitorSessions } = require('./debug/session-monitor');
-    monitorSessions(dbManager);
-    console.log('🔍 Session monitoring enabled');
-  }
+  // Session monitoring removed (no auth)
 
   // Run comprehensive startup health check
   const { checkStartupHealth } = require('./debug/startup-check');
@@ -139,15 +135,7 @@ try {
   process.exit(1);
 }
 
-// Ensure admin user exists with correct password hash
-(async () => {
-  try {
-    const createAdminUser = require('./scripts/create-admin');
-    await createAdminUser();
-  } catch (error) {
-    console.error('Failed to create admin user:', error);
-  }
-})();
+// Admin user creation removed (no auth)
 
 // Auto-configure Supabase if environment variables are present
 (async () => {
@@ -226,28 +214,55 @@ app.use(helmet({
   },
 }));
 app.use(compression());
-app.use(cors());
+// Configure CORS for frontend development
+// Dynamic CORS origin echo for cookie support
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:4173',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Cookie parser for session handling
-const cookieParser = require('cookie-parser');
-app.use(cookieParser());
+// Cookie parser removed (no sessions)
+
+// Enhanced debugging middleware for JSON preservation and FastAPI integration
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    // Capture request info for debugging (without consuming stream)
+    const requestInfo = {
+      method: req.method,
+      url: req.originalUrl,
+      contentType: req.headers['content-type'],
+      contentLength: req.headers['content-length'],
+      userAgent: req.headers['user-agent'],
+      timestamp: new Date().toISOString()
+    };
+
+    req._requestInfo = requestInfo;
+  }
+  next();
+});
 
 // Enhanced health check endpoint for debugging
 app.get('/health', (req, res) => {
   try {
     // Test basic database connectivity
     const dbTest = dbManager.getProject();
-
-    // Test session functionality
-    const sessionTest = dbManager.db.prepare('SELECT COUNT(*) as count FROM user_sessions').get();
-
-    // Test critical tables
-    const tableTest = dbManager.db.prepare(`
-      SELECT name FROM sqlite_master 
-      WHERE type='table' AND name IN ('users', 'user_sessions', 'project_config', 'pages')
-    `).all();
 
     res.json({
       status: 'healthy',
@@ -256,8 +271,6 @@ app.get('/health', (req, res) => {
       environment: process.env.NODE_ENV || 'development',
       port: PORT,
       uptime: process.uptime(),
-      session_count: sessionTest.count,
-      tables: tableTest.map(t => t.name),
       database_path: process.env.DB_PATH,
       startup_time: new Date().toISOString()
     });
@@ -535,11 +548,7 @@ const serveIndexWithEnv = (res, indexPath) => {
 
 // SPA fallback for frontend app routes (auth, dashboard, etc.)
 // IMPORTANT: These must come AFTER API routes to prevent conflicts
-app.get('/auth/*', (req, res) => {
-  console.log(`🔍 Auth SPA route: ${req.originalUrl}`);
-  const indexPath = path.join(__dirname, 'public', 'index.html');
-  serveIndexWithEnv(res, indexPath);
-});
+
 
 app.get('/dashboard/*', (req, res) => {
   console.log(`🔍 Dashboard SPA route: ${req.originalUrl}`);

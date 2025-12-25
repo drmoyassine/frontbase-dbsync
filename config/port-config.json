@@ -1,0 +1,1 @@
+{"express": {"port": 3001, "description": "Express.js backend for Frontbase"}, "fastapi": {"port": 8000, "description": "FastAPI backend for DB-Synchronizer"}, "frontend": {"port": 5173, "description": "Vite development server for Frontbase frontend"}}

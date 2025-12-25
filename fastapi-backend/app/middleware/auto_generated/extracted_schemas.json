@@ -1,0 +1,578 @@
+{
+  "ApiResponseSchema": {
+    "type": "object",
+    "fields": {
+      "success": {
+        "type": "boolean",
+        "constraints": {
+          "required": true
+        }
+      },
+      "data": {
+        "type": "unknown",
+        "constraints": {
+          "required": false
+        }
+      },
+      "error": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      },
+      "message": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      }
+    }
+  },
+  "PaginationParamsSchema": {
+    "type": "object",
+    "fields": {
+      "limit": {
+        "type": "unknown",
+        "constraints": {
+          "required": false
+        }
+      },
+      "offset": {
+        "type": "unknown",
+        "constraints": {
+          "required": false
+        }
+      },
+      "orderBy": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      },
+      "orderDirection": {
+        "type": "unknown",
+        "constraints": {
+          "required": true
+        }
+      }
+    }
+  },
+  "FilterParamsSchema": {
+    "type": "object",
+    "fields": {
+      "search": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      },
+      "searchColumns": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      }
+    }
+  },
+  "LoginRequestSchema": {
+    "type": "object",
+    "fields": {
+      "username": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "password": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      }
+    }
+  },
+  "RegisterRequestSchema": {
+    "type": "object",
+    "fields": {
+      "username": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "email": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "password": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      }
+    }
+  },
+  "UserResponseSchema": {
+    "type": "object",
+    "fields": {
+      "id": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "username": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "email": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      }
+    }
+  },
+  "TestConnectionRequestSchema": {
+    "type": "object",
+    "fields": {
+      "url": {
+        "type": "string",
+        "constraints": {
+          "format": "url",
+          "required": true
+        }
+      },
+      "anonKey": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      }
+    }
+  },
+  "ConnectSupabaseRequestSchema": {
+    "type": "object",
+    "fields": {
+      "url": {
+        "type": "string",
+        "constraints": {
+          "format": "url",
+          "required": true
+        }
+      },
+      "anonKey": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "serviceKey": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      }
+    }
+  },
+  "PageDataSchema": {
+    "type": "object",
+    "fields": {
+      "name": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "slug": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "title": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      },
+      "description": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      },
+      "layoutData": {
+        "type": "object",
+        "constraints": {
+          "required": true
+        }
+      },
+      "content": {
+        "type": "array",
+        "constraints": {
+          "required": false
+        }
+      },
+      "root": {
+        "type": "unknown",
+        "constraints": {
+          "required": false
+        }
+      }
+    }
+  },
+  "ProjectSettingsSchema": {
+    "type": "object",
+    "fields": {
+      "name": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      },
+      "description": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      },
+      "supabase_url": {
+        "type": "string",
+        "constraints": {
+          "format": "url",
+          "required": false
+        }
+      },
+      "supabase_anon_key": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      },
+      "supabase_service_key_encrypted": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      },
+      "users_config": {
+        "type": "unknown",
+        "constraints": {
+          "required": false
+        }
+      }
+    }
+  },
+  "VariableSchema": {
+    "type": "object",
+    "fields": {
+      "name": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "value": {
+        "type": "unknown",
+        "constraints": {
+          "required": false
+        }
+      },
+      "expression": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      },
+      "description": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      }
+    }
+  },
+  "TableDataQuerySchema": {
+    "type": "object",
+    "fields": {
+      "tableName": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "limit": {
+        "type": "unknown",
+        "constraints": {
+          "required": false
+        }
+      },
+      "offset": {
+        "type": "unknown",
+        "constraints": {
+          "required": false
+        }
+      },
+      "orderBy": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      },
+      "orderDirection": {
+        "type": "unknown",
+        "constraints": {
+          "required": true
+        }
+      },
+      "mode": {
+        "type": "unknown",
+        "constraints": {
+          "required": true
+        }
+      },
+      "select": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      }
+    }
+  },
+  "DistinctValuesRequestSchema": {
+    "type": "object",
+    "fields": {
+      "tableName": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "column": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "mode": {
+        "type": "unknown",
+        "constraints": {
+          "required": true
+        }
+      }
+    }
+  },
+  "CreateRecordSchema": {
+    "type": "object",
+    "fields": {
+      "tableName": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "data": {
+        "type": "unknown",
+        "constraints": {
+          "required": true
+        }
+      }
+    }
+  },
+  "UpdateRecordSchema": {
+    "type": "object",
+    "fields": {
+      "tableName": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "id": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "data": {
+        "type": "unknown",
+        "constraints": {
+          "required": true
+        }
+      }
+    }
+  },
+  "DeleteRecordSchema": {
+    "type": "object",
+    "fields": {
+      "tableName": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "id": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      }
+    }
+  },
+  "AdvancedQuerySchema": {
+    "type": "object",
+    "fields": {
+      "rpcName": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "params": {
+        "type": "unknown",
+        "constraints": {
+          "required": false
+        }
+      },
+      "mode": {
+        "type": "unknown",
+        "constraints": {
+          "required": true
+        }
+      }
+    }
+  },
+  "RLSPolicySchema": {
+    "type": "object",
+    "fields": {
+      "tableName": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "policyName": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "usingExpression": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      },
+      "checkExpression": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      },
+      "roles": {
+        "type": "array",
+        "constraints": {
+          "required": false
+        }
+      },
+      "permissive": {
+        "type": "boolean",
+        "constraints": {
+          "required": false
+        }
+      },
+      "propagateTo": {
+        "type": "array",
+        "constraints": {
+          "required": true
+        }
+      },
+      "fkColumn": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "fkReferencedColumn": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      }
+    }
+  },
+  "ToggleRLSSchema": {
+    "type": "object",
+    "fields": {
+      "enable": {
+        "type": "boolean",
+        "constraints": {
+          "required": true
+        }
+      }
+    }
+  },
+  "RLSMetadataSchema": {
+    "type": "object",
+    "fields": {
+      "tableName": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "policyName": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "formData": {
+        "type": "unknown",
+        "constraints": {
+          "required": true
+        }
+      },
+      "generatedUsing": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      },
+      "generatedCheck": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      }
+    }
+  },
+  "VerifyRLSSchema": {
+    "type": "object",
+    "fields": {
+      "tableName": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "policyName": {
+        "type": "string",
+        "constraints": {
+          "required": true
+        }
+      },
+      "currentUsing": {
+        "type": "string",
+        "constraints": {
+          "required": false
+        }
+      }
+    }
+  }
+}

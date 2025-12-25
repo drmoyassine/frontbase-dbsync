@@ -13,11 +13,38 @@ export default defineConfig(({ mode }) => {
     base: '/',
     server: {
       host: "::",
-      port: 8080,
+      port: 5173,
       proxy: {
         '/api': {
-          target: 'http://localhost:3000',
+          target: 'http://localhost:8000', // Redirect all API calls to FastAPI
           changeOrigin: true,
+          secure: false,
+          timeout: 10000, // 10 second timeout
+          onProxyReq: (proxyReq: any, req: any, res: any) => {
+            // Add CORS headers for development
+            proxyReq.setHeader('Access-Control-Allow-Origin', '*');
+            proxyReq.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+            proxyReq.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+          },
+          onError: (err: any, req: any, res: any) => {
+            // Handle proxy errors gracefully
+            if (req.url?.includes('/api/')) {
+              console.warn(`[Vite-Proxy] Backend unavailable at ${err.host}:${err.port}`);
+              if (!res.headersSent) {
+                res.writeHead(503, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                  success: false,
+                  message: 'Backend service unavailable',
+                  error: 'Backend service is not running'
+                }));
+              }
+            }
+          },
+          onProxyRes: (proxyRes: any, req: any, res: any) => {
+            // Clean up response headers to avoid CORS issues
+            delete proxyRes.headers['x-frame-options'];
+            delete proxyRes.headers['x-content-type-options'];
+          }
         },
       },
     },

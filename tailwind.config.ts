@@ -22,6 +22,17 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          // Numeric scale for DB-Sync components
+          50: "hsl(var(--primary) / 0.05)",
+          100: "hsl(var(--primary) / 0.1)",
+          200: "hsl(var(--primary) / 0.2)",
+          300: "hsl(var(--primary) / 0.3)",
+          400: "hsl(var(--primary) / 0.4)",
+          500: "hsl(var(--primary))",
+          600: "hsl(var(--primary))",
+          700: "hsl(var(--primary) / 0.9)",
+          800: "hsl(var(--primary) / 0.8)",
+          900: "hsl(var(--primary) / 0.7)",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",

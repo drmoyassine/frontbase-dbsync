@@ -1,10 +1,10 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { 
-  FileText, 
-  Database, 
-  Users, 
-  HardDrive, 
+import {
+  FileText,
+  Database,
+  Users,
+  HardDrive,
   Settings,
   Palette
 } from 'lucide-react';
@@ -22,11 +22,11 @@ import {
 } from '@/components/ui/sidebar';
 
 const menuItems = [
-  { title: 'Pages', url: '/dashboard/pages', icon: FileText },
-  { title: 'Database', url: '/dashboard/database', icon: Database },
-  { title: 'Users', url: '/dashboard/users', icon: Users },
-  { title: 'Storage', url: '/dashboard/storage', icon: HardDrive },
-  { title: 'Settings', url: '/dashboard/settings', icon: Settings },
+  { title: 'Pages', url: '/pages', icon: FileText },
+  { title: 'Database', url: '/data-studio', icon: Database },
+  { title: 'Users', url: '/users', icon: Users },
+  { title: 'Storage', url: '/storage', icon: HardDrive },
+  { title: 'Settings', url: '/settings', icon: Settings },
 ];
 
 export const DashboardSidebar: React.FC = () => {
@@ -47,7 +47,7 @@ export const DashboardSidebar: React.FC = () => {
             <Palette className="h-4 w-4" />
             {!collapsed && <span>Frontbase</span>}
           </SidebarGroupLabel>
-          
+
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (

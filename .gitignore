@@ -8,6 +8,7 @@ node_modules/
 # Python
 venv/
 .venv/
+venv_sync/
 __pycache__/
 *.py[cod]
 *$py.class

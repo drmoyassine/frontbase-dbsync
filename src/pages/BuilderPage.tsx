@@ -64,7 +64,7 @@ const BuilderPage: React.FC = () => {
 
   // If no pageId or page doesn't exist, redirect to dashboard
   if (!pageId || !pages.find(page => page.id === pageId)) {
-    return <Navigate to="/dashboard/pages" replace />;
+    return <Navigate to="/pages" replace />;
   }
 
   return <FrontbaseBuilder />;

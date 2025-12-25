@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Play, 
-  Eye, 
-  EyeOff, 
-  Save, 
+import {
+  Play,
+  Eye,
+  EyeOff,
+  Save,
   Globe,
   Layers,
   Database,
@@ -35,11 +35,11 @@ import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
 
 export const BuilderHeader: React.FC = () => {
   const navigate = useNavigate();
-  const { 
-    project, 
-    currentPageId, 
-    pages, 
-    isPreviewMode, 
+  const {
+    project,
+    currentPageId,
+    pages,
+    isPreviewMode,
     setPreviewMode,
     isSupabaseConnected,
     selectedComponentId,
@@ -54,9 +54,9 @@ export const BuilderHeader: React.FC = () => {
     togglePageVisibility,
     deleteSelectedComponent
   } = useBuilderStore();
-  
+
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
-  
+
   const currentPage = pages.find(page => page.id === currentPageId);
 
   const handleSave = async () => {
@@ -82,14 +82,14 @@ export const BuilderHeader: React.FC = () => {
   };
 
   const handleNavigateToDatabase = () => {
-    navigate('/dashboard/database');
+    navigate('/data-studio');
   };
 
   const handleBackToDashboard = () => {
     if (hasUnsavedChanges) {
       setShowUnsavedDialog(true);
     } else {
-      navigate('/dashboard/pages');
+      navigate('/pages');
     }
   };
 
@@ -97,12 +97,12 @@ export const BuilderHeader: React.FC = () => {
     if (currentPageId) {
       await handleSave();
     }
-    navigate('/dashboard/pages');
+    navigate('/pages');
     setShowUnsavedDialog(false);
   };
 
   const handleDiscardAndNavigate = () => {
-    navigate('/dashboard/pages');
+    navigate('/pages');
     setShowUnsavedDialog(false);
   };
 
@@ -113,18 +113,18 @@ export const BuilderHeader: React.FC = () => {
         <Button variant="ghost" size="sm" onClick={handleBackToDashboard}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        
+
         <div className="h-6 w-px bg-border" />
-        
+
         <div className="flex items-center gap-2">
           <Layers className="h-5 w-5 text-primary" />
           <span className="font-semibold text-foreground">Frontbase</span>
         </div>
-        
+
         <div className="h-6 w-px bg-border" />
-        
+
         <PageSelector />
-        
+
         {currentPage && (
           <Button
             variant="ghost"
@@ -132,7 +132,7 @@ export const BuilderHeader: React.FC = () => {
             onClick={handleToggleVisibility}
             className="h-auto p-1"
           >
-            <Badge 
+            <Badge
               variant={currentPage.isPublic ? "default" : "secondary"}
               className="cursor-pointer"
             >
@@ -193,11 +193,11 @@ export const BuilderHeader: React.FC = () => {
           >
             <ZoomOut className="h-4 w-4" />
           </Button>
-          
+
           <Badge variant="outline" className="min-w-16 justify-center">
             {zoomLevel}%
           </Badge>
-          
+
           <Button
             variant="ghost"
             size="sm"
@@ -218,7 +218,7 @@ export const BuilderHeader: React.FC = () => {
           onClick={handleNavigateToDatabase}
           className="h-auto p-1"
         >
-          <Badge 
+          <Badge
             variant={isSupabaseConnected ? "default" : "outline"}
             className="gap-1 cursor-pointer"
           >
@@ -226,18 +226,18 @@ export const BuilderHeader: React.FC = () => {
             {isSupabaseConnected ? "Connected" : "No Database"}
           </Badge>
         </Button>
-        
-        
+
+
         <div className="flex items-center gap-2">
           {!isSaving && !hasUnsavedChanges && (
             <Badge variant="outline" className="text-xs text-green-600 border-green-500">
               Synced
             </Badge>
           )}
-          
-          <Button 
-            variant="outline" 
-            size="sm" 
+
+          <Button
+            variant="outline"
+            size="sm"
             onClick={handleSave}
             disabled={isSaving}
             className={hasUnsavedChanges ? "border-orange-500 text-orange-600" : ""}
@@ -246,7 +246,7 @@ export const BuilderHeader: React.FC = () => {
             {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save*' : 'Save'}
           </Button>
         </div>
-        
+
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button size="sm" disabled={isSaving}>
@@ -269,7 +269,7 @@ export const BuilderHeader: React.FC = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        
+
         <PageSettings />
       </div>
 

@@ -29,6 +29,10 @@ app.include_router(variables.router)
 app.include_router(database.router)
 app.include_router(rls.router)
 
+# Mount DB-Synchronizer Service
+from app.services.sync.main import sync_app
+app.mount("/api/sync", sync_app)
+
 @app.get("/")
 async def root():
     return {"message": "Frontbase-DBSync API is running", "test_mode": True}

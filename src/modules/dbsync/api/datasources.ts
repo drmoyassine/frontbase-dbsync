@@ -10,6 +10,15 @@ export interface SearchMatch {
     row_id: any;
 }
 
+export interface TableDataResponse {
+    records: any[];
+    total: number;
+    offset: number;
+    limit: number;
+    has_more: boolean;
+    timestamp_utc?: string;
+}
+
 export const datasourcesApi = {
     list: () => api.get<Datasource[]>('/datasources'),
     get: (id: string) => api.get<Datasource>(`/datasources/${id}`),
@@ -21,10 +30,11 @@ export const datasourcesApi = {
     testUpdate: (id: string, data: any) => api.post<{ success: boolean; message: string; tables?: string[]; error?: string; suggestion?: string }>(`/datasources/${id}/test-update`, data),
     getTables: (id: string | number) => api.get<string[]>(`/datasources/${id}/tables`),
     getTableSchema: (id: string | number, table: string) => api.get<TableSchema>(`/datasources/${id}/tables/${table}/schema`),
-    getTablesData: (id: string | number, table: string, limit: number = 10, filters?: any[]) =>
-        api.get<{ records: any[]; total: number; timestamp_utc?: string }>(`/datasources/${id}/tables/${table}/data`, {
-            params: { limit, filters: filters ? JSON.stringify(filters) : undefined }
+    getTablesData: (id: string | number, table: string, limit: number = 50, offset: number = 0, filters?: any[]) =>
+        api.get<TableDataResponse>(`/datasources/${id}/tables/${table}/data`, {
+            params: { limit, offset, filters: filters ? JSON.stringify(filters) : undefined }
         }),
+
     refreshTableSchema: (id: string | number, table: string) =>
         api.get<TableSchema>(`/datasources/${id}/tables/${table}/schema`, { params: { refresh: true } }),
     searchDatasource: (id: string | number, q: string, detailed?: boolean, limit?: number) =>

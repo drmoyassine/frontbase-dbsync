@@ -440,11 +440,12 @@ async def get_table_schema(
 async def get_datasource_table_data(
     datasource_id: str,
     table: str,
-    limit: int = 10,
+    limit: int = 50,
+    offset: int = 0,  # For pagination / infinite scroll
     filters: Optional[str] = None,  # JSON string of filters
     db: AsyncSession = Depends(get_db)
 ):
-    """Get sample data for a specific table in a datasource."""
+    """Get data for a specific table in a datasource with pagination."""
     result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
     datasource = result.scalar_one_or_none()
     
@@ -465,18 +466,23 @@ async def get_datasource_table_data(
     try:
         adapter = get_adapter(datasource)
         async with adapter:
-            records = await adapter.read_records(table, limit=limit, where=where)
+            records = await adapter.read_records(table, limit=limit, offset=offset, where=where)
             total = await adapter.count_records(table, where=where)
             # Ensure total is never less than actual records returned
-            total = max(total, len(records))
+            total = max(total, len(records) + offset)
+            has_more = (offset + len(records)) < total
             return {
                 "records": records,
                 "total": total,
+                "offset": offset,
+                "limit": limit,
+                "has_more": has_more,
                 "timestamp_utc": datetime.utcnow().isoformat() + "Z"
             }
     except Exception as e:
         logger.error(f"Error fetching data for {datasource_id} table {table}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch sample data: {str(e)}")
+
 
 
 @router.get("/{datasource_id}/search")

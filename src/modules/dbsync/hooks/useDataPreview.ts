@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { datasourcesApi, viewsApi } from '../api';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
+import { datasourcesApi, viewsApi, TableDataResponse } from '../api';
 import { useLayoutStore } from '../store/useLayoutStore';
 import { DataPreviewModalProps, SearchResult } from '../types/data-preview';
 
@@ -99,12 +99,46 @@ export const useDataPreview = ({
         staleTime: 1000 * 60 * 60, // 1 hour for schema
     });
 
-    const { data, isLoading, error, refetch: refetchData, isFetching: isFetchingData } = useQuery({
+    // Infinite query for paginated table data
+    const PAGE_SIZE = 50;
+    const {
+        data: infiniteData,
+        isLoading,
+        error,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+        isFetching: isFetchingData,
+        refetch: refetchData
+    } = useInfiniteQuery({
         queryKey: ['tableData', datasourceId, selectedTable, appliedFilters],
-        queryFn: () => datasourcesApi.getTablesData(datasourceId, selectedTable, 100, appliedFilters).then(r => r.data),
+        queryFn: async ({ pageParam = 0 }) => {
+            const response = await datasourcesApi.getTablesData(datasourceId, selectedTable, PAGE_SIZE, pageParam, appliedFilters);
+            return response.data;
+        },
+        getNextPageParam: (lastPage) => {
+            if (lastPage.has_more) {
+                return lastPage.offset + lastPage.limit;
+            }
+            return undefined;
+        },
+        initialPageParam: 0,
         enabled: isOpen && !!datasourceId && !!selectedTable,
         staleTime: 1000 * 60 * 10, // 10 minutes cache for data by default
     });
+
+    // Flatten paginated data for use in the component
+    const data = useMemo(() => {
+        if (!infiniteData?.pages) return undefined;
+        const allRecords = infiniteData.pages.flatMap(page => page.records);
+        const lastPage = infiniteData.pages[infiniteData.pages.length - 1];
+        return {
+            records: allRecords,
+            total: lastPage?.total || 0,
+            timestamp_utc: lastPage?.timestamp_utc
+        };
+    }, [infiniteData]);
+
 
     const { data: searchResults, isFetching: isSearchingByQuery } = useQuery({
         queryKey: ['datasourceSearch', datasourceId, dataSearchQuery],
@@ -603,7 +637,9 @@ export const useDataPreview = ({
         },
         data: {
             tables, schemaData, tableData: data, isLoading, error, isFetchingData, availableFields, tableColumns,
-            groupedMatches, filteredTables, filteredRecords, isDataSearching: isSearchingByQuery, searchResults
+            groupedMatches, filteredTables, filteredRecords, isDataSearching: isSearchingByQuery, searchResults,
+            // Infinite scroll support
+            hasNextPage, isFetchingNextPage
         },
         actions: {
             setFilters, setAppliedFilters, setViewName, setCurrentViewId, setIsSaving, setIsColumnsDropdownOpen,
@@ -615,7 +651,9 @@ export const useDataPreview = ({
             setAllMatches, setColumnOrder, setVisibleColumns, togglePin, toggleVisibility,
             handleNextMatch, handlePrevMatch, copyToClipboard, addFilter, removeFilter, updateFilter,
             runRemoteSearch, searchOtherCollections, searchAllDatasources, handleSaveView, handleManualUpdate,
-            handleDataSearch, refreshSchemaMutation, triggerWebhookTest
+            handleDataSearch, refreshSchemaMutation, triggerWebhookTest,
+            // Infinite scroll support
+            fetchNextPage
         }
     };
 };

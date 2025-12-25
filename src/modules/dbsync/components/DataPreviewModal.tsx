@@ -143,7 +143,9 @@ const DataPreviewModal: React.FC<DataPreviewModalProps> = (props) => {
 
     const {
         tables, schemaData, tableData, isLoading, error, isFetchingData, availableFields, tableColumns,
-        groupedMatches, filteredTables, filteredRecords, isDataSearching
+        groupedMatches, filteredTables, filteredRecords, isDataSearching,
+        // Infinite scroll support
+        hasNextPage, isFetchingNextPage
     } = data;
 
     const {
@@ -156,8 +158,28 @@ const DataPreviewModal: React.FC<DataPreviewModalProps> = (props) => {
         setAllMatches, setColumnOrder, setVisibleColumns, togglePin, toggleVisibility, setCurrentMatchIndex: _setCurrentMatchIndex,
         handleNextMatch, handlePrevMatch, copyToClipboard, addFilter, removeFilter, updateFilter,
         runRemoteSearch, searchOtherCollections, searchAllDatasources, handleSaveView, handleManualUpdate,
-        handleDataSearch, refreshSchemaMutation, triggerWebhookTest
+        handleDataSearch, refreshSchemaMutation, triggerWebhookTest,
+        // Infinite scroll support
+        fetchNextPage
     } = actions;
+
+    // Intersection Observer for infinite scroll
+    const loadMoreRef = React.useRef<HTMLDivElement>(null);
+    React.useEffect(() => {
+        if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+                    fetchNextPage();
+                }
+            },
+            { threshold: 0.1, rootMargin: '100px' }
+        );
+
+        observer.observe(loadMoreRef.current);
+        return () => observer.disconnect();
+    }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
     // Actions Wrapper for UI events that need arguments
     const onNextMatch = () => handleNextMatch(scrollToColumn);
@@ -724,6 +746,23 @@ const DataPreviewModal: React.FC<DataPreviewModalProps> = (props) => {
                                                                     ))}
                                                                 </tbody>
                                                             </table>
+                                                            {/* Infinite scroll sentinel */}
+                                                            <div
+                                                                ref={loadMoreRef}
+                                                                className="w-full py-4 flex items-center justify-center"
+                                                            >
+                                                                {isFetchingNextPage && (
+                                                                    <div className="flex items-center gap-2 text-gray-400">
+                                                                        <Loader2 className="animate-spin" size={16} />
+                                                                        <span className="text-xs font-medium">Loading more records...</span>
+                                                                    </div>
+                                                                )}
+                                                                {!hasNextPage && tableData?.records?.length > 0 && (
+                                                                    <span className="text-xs text-gray-400">
+                                                                        All {tableData?.total?.toLocaleString()} records loaded
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>

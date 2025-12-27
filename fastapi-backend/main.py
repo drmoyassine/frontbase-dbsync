@@ -66,6 +66,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Trust Proxy Headers (X-Forwarded-Proto) so redirects use HTTPS
+# This fixes the Mixed Content issue when FastAPI redirects /url to /url/
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
 # Add test mode middleware
 app.add_middleware(TestModeMiddleware, test_mode=True)
 

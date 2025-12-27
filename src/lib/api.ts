@@ -10,7 +10,7 @@ export const projectAPI = {
   // Get project settings
   getProject: async (): Promise<APIResponse> => {
     try {
-      const response = await fetch('/api/project', {
+      const response = await fetch('/api/project/', {
         credentials: 'include'
       });
       if (!response.ok) throw new Error('Failed to fetch project');
@@ -24,7 +24,7 @@ export const projectAPI = {
   // Update project settings (including users config)
   updateProject: async (projectData: any): Promise<APIResponse> => {
     try {
-      const response = await fetch('/api/project', {
+      const response = await fetch('/api/project/', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -43,7 +43,7 @@ export const pageAPI = {
   // Get all pages
   getAllPages: async (includeDeleted = false): Promise<APIResponse> => {
     try {
-      const url = includeDeleted ? '/api/pages?includeDeleted=true' : '/api/pages';
+      const url = includeDeleted ? '/api/pages/?includeDeleted=true' : '/api/pages/';
       const response = await fetch(url, {
         credentials: 'include' // Include session cookies
       });
@@ -72,7 +72,7 @@ export const pageAPI = {
   // Create new page
   createPage: async (pageData: any): Promise<APIResponse> => {
     try {
-      const response = await fetch('/api/pages', {
+      const response = await fetch('/api/pages/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -168,7 +168,7 @@ export const variableAPI = {
   // Get all variables
   getAllVariables: async (): Promise<APIResponse> => {
     try {
-      const response = await fetch('/api/variables', {
+      const response = await fetch('/api/variables/', {
         credentials: 'include'
       });
       if (!response.ok) throw new Error('Failed to fetch variables');
@@ -196,7 +196,7 @@ export const variableAPI = {
   // Create new variable
   createVariable: async (variableData: any): Promise<APIResponse> => {
     try {
-      const response = await fetch('/api/variables', {
+      const response = await fetch('/api/variables/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

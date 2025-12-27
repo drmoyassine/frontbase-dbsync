@@ -28,7 +28,6 @@ import BuilderPage from "./pages/BuilderPage";
 import VariablesPage from "./pages/VariablesPage";
 import EmbedAuthPage from "./pages/EmbedAuthPage";
 import NotFound from "./pages/NotFound";
-import DebugControlPanel from "./components/debug/DebugControlPanel";
 
 const queryClient = new QueryClient();
 
@@ -86,7 +85,6 @@ const App = () => {
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
-          <DebugControlPanel />
         </TooltipProvider>
       </QueryClientProvider>
     </ErrorBoundary>

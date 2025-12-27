@@ -12,12 +12,25 @@ const getBackendConfig = () => {
     };
   }
 
-  // In production, use the configured backend URL
+  // In production, check for saved config but IGNORE localhost configs
+  // This prevents Mixed Content errors when deploying to HTTPS
   const savedConfig = localStorage.getItem('backendConfig');
   if (savedConfig) {
-    return JSON.parse(savedConfig);
+    try {
+      const config = JSON.parse(savedConfig);
+      // If the saved config points to localhost, ignore it in production
+      if (config.baseUrl && config.baseUrl.includes('localhost')) {
+        console.warn('[API Service] Ignoring localhost config in production.');
+        localStorage.removeItem('backendConfig'); // Clean up invalid config
+      } else {
+        return config;
+      }
+    } catch (e) {
+      console.error('[API Service] Failed to parse backendConfig:', e);
+      localStorage.removeItem('backendConfig');
+    }
   }
-  // Default to FastAPI backend
+  // Default to relative URL for Nginx proxy
   return {
     type: 'fastapi',
     baseUrl: '', // In production, use relative URL by default to leverage Nginx proxy

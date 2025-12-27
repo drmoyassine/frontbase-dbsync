@@ -6,9 +6,13 @@ from sqlalchemy.orm import sessionmaker
 # Database configuration - Use FastAPI's own unified database
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./unified.db")
 
+# Ensure we use the synchronous driver for the Main App
+# The Sync sub-app uses async ("sqlite+aiosqlite"), but Main App uses sync ("sqlite")
+SYNC_DATABASE_URL = DATABASE_URL.replace("sqlite+aiosqlite", "sqlite")
+
 # Create SQLAlchemy engine
 engine = create_engine(
-    DATABASE_URL,
+    SYNC_DATABASE_URL,
     connect_args={"check_same_thread": False}  # Needed for SQLite
 )
 

@@ -13,13 +13,18 @@ app = FastAPI(
 import os
 
 # Configure CORS for frontend integration
-cors_origins_str = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:8080")
+# Default to allowing everything if not specified (relative domain support)
+cors_origins_str = os.getenv("CORS_ORIGINS", "*")
 cors_origins = [origin.strip() for origin in cors_origins_str.split(",")]
+
+# Note: allow_credentials=True cannot be used with allow_origins=["*"]
+# We detect if wildcard is used and adjust accordingly
+allow_all = "*" in cors_origins
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_credentials=not allow_all, # Disable credentials if wildcard is used
     allow_methods=["*"],
     allow_headers=["*"],
 )

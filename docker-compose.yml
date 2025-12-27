@@ -10,7 +10,7 @@ services:
     environment:
       - DATABASE_URL=sqlite+aiosqlite:///./data/unified.db
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-      - CORS_ORIGINS=http://localhost:8080
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - REDIS_URL=redis://redis:6379/0
     volumes:
       - backend_data:/app/data

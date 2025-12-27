@@ -60,10 +60,20 @@ Component → useSimpleData() → useTableData() → databaseApi → FastAPI →
 - **Location**: `fastapi-backend/app/routers/`
 - **Files**: database.py, pages.py, auth.py, project.py
 
-### API Response Format
-- **Pattern**: Consistent `{success, data, message}` envelope
-- **Implementation**: All endpoints return this format
-- **Validation**: Frontend validates with Zod schemas
+## Deployment Patterns
+
+### Production Docker Setup (VPS)
+- **Pattern**: Multi-container orchestration (FastAPI + Frontend + Redis)
+- **Components**:
+    - **Backend**: Python 3.11-slim, FastAPI, Gunicorn/Uvicorn
+    - **Frontend**: Node 20-alpine build, served via Nginx
+    - **Routing**: Nginx reverse proxy for SPA and API
+- **Benefits**: Scalability, isolation, identical environment between VPS and local test
+
+### Legacy Parity Pattern
+- **Pattern**: Archived legacy components for reference
+- **Implementation**: `docker-compose.legacy.yml` + `Dockerfile.legacy`
+- **Purpose**: Behavioral verification and historical reference during migration
 
 ## Performance Patterns
 

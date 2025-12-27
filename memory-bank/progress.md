@@ -29,10 +29,12 @@
 - **Solution**: `useTableData` now constructs `select=*,providers(*)` correctly
 - **Result**: FK relationships display properly in data tables
 
-### 4. Workspace Optimization ✅
-- **Gitignore**: Comprehensive exclusions for secrets, venv, node_modules
-- **README**: Rewritten with FastAPI setup instructions
-- **Debug Components**: Excluded from push (keep locally)
+### 4. Workspace & Deployment Optimization ✅
+- **Docker**: Separated Production (FastAPI) from Legacy (Express).
+- **Production Config**: `docker-compose.yml` (Unified) + `Dockerfile.frontend` + `nginx.conf`.
+- **Legacy Config**: `docker-compose.legacy.yml` + `Dockerfile.legacy`.
+- **Gitignore**: Updated for clean repository.
+- **Documentation**: Updated `agent.md` and Memory Bank.
 
 ## 🏗️ System Architecture
 

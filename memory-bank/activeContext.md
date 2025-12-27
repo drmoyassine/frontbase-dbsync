@@ -13,12 +13,19 @@ This file tracks the project's current status, including recent changes, current
 - **ENVIRONMENT**: FastAPI-only architecture operational
 
 ### Current Environment Status
-- **FastAPI Backend (Port 8000)**: ✅ Primary - All API endpoints
-- **Express.js Backend (Port 3001)**: ⚠️ Archived - Kept locally, not pushed
-- **Frontend (Port 5173)**: ✅ Active - Vite dev server with HMR
-- **Database**: ✅ Supabase integration via PostgREST
+- **FastAPI Backend (Port 8000)**: ✅ Primary - Unified API & DB-Sync
+- **Express.js Backend (Port 3001)**: ⚠️ Legacy - Archived in `Dockerfile.legacy`
+- **Frontend (Port 5173)**: ✅ Active - Vite dev server or Nginx (Prod)
+- **Deployment**: ✅ Production-ready `docker-compose.yml` (FastAPI-only)
 
 ## Recent Changes
+
+**2025-12-27 - 🐳 Docker Organization & VPS Readiness**
+- **REFACTORED**: Docker configuration to separate Production (FastAPI) from Legacy (Express).
+- **RENAMED**: `docker-compose.prod.yml` → `docker-compose.yml` (Main).
+- **RENAMED**: Legacy files to `Dockerfile.legacy` and `docker-compose.legacy.yml`.
+- **CREATED**: `Dockerfile.frontend` and `nginx.conf` for VPS deployment.
+- **UPDATED**: `agent.md` and Memory Bank with new architecture details.
 
 **2025-12-25 05:20:00 - 🚀 INITIAL COMMIT PREPARATION**
 - **MIGRATED**: Data layer to React Query (`useDatabase.ts` hooks)

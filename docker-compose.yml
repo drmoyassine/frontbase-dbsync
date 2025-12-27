@@ -1,48 +1,54 @@
 version: '3.8'
 
 services:
-  frontbase:
-    build: .
-    ports:
-      - "3000:3000"
-    volumes:
-      # Use host directory mount for true portability
-      - ./data:/app/data
+  backend:
+    build:
+      context: ./fastapi-backend
+      dockerfile: Dockerfile
+    expose:
+      - "8000"
     environment:
-      - NODE_ENV=production
-      - DB_PATH=/app/data/frontbase.db
-      - PORT=3000
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
-      # Optional: Supabase auto-configuration
-      - SUPABASE_PROJECT_URL=${SUPABASE_PROJECT_URL:-}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
-      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
+      - DATABASE_URL=sqlite+aiosqlite:///./data/unified.db
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - CORS_ORIGINS=http://localhost:80
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - backend_data:/app/data
+    depends_on:
+      - redis
     restart: unless-stopped
-    # Enhanced healthcheck with debugging
     healthcheck:
-      test: ["CMD", "sh", "-c", "curl -f http://localhost:3000/health || (echo 'Health check failed' && exit 1)"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/" ]
       interval: 15s
       timeout: 5s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
       retries: 5
-      start_period: 60s
-    # Add logging configuration
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
-  # Optional: Add nginx for production
-  # nginx:
-  #   image: nginx:alpine
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - ./nginx.conf:/etc/nginx/nginx.conf
-  #     - ./ssl:/etc/ssl
-  #   depends_on:
-  #     - frontbase
-  #   restart: unless-stopped
-
-# No named volumes needed - using host directory mount for portability
+volumes:
+  backend_data:
+  redis_data:

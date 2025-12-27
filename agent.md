@@ -16,32 +16,21 @@ Frontbase is a visual database builder and admin panel for Supabase. It enables 
 ### Directory Structure
 
 ```
-src/
-├── components/
-│   ├── builder/          # Page builder components
-│   │   ├── renderers/    # Component renderers (Basic, Form, Layout, Data)
-│   │   ├── hooks/        # Builder-specific hooks
-│   │   ├── data-binding/ # Data binding UI
-│   │   └── style-controls/ # Styling controls
-│   ├── dashboard/        # Dashboard UI components
-│   ├── data-binding/     # Data-bound components (DataTable, KPICard, etc.)
-│   └── ui/               # Shadcn UI components
-├── hooks/
-│   ├── data/             # Data fetching hooks (useSimpleData, etc.)
-│   └── useDatabase.ts    # React Query database hooks
-├── stores/               # Zustand stores
-├── services/             # API services
-├── lib/                  # Utilities
-├── pages/                # Route pages
-└── types/                # TypeScript types
+src/                  # React Frontend
+├── components/       # UI components
+├── hooks/            # Data fetching & logic
+└── ...
 
-fastapi-backend/
-├── app/
-│   ├── routers/          # API routes (database, pages, auth, project)
-│   ├── models/           # Pydantic schemas
-│   └── database/         # SQLAlchemy config
-├── main.py               # FastAPI entry point
-└── requirements.txt      # Python dependencies
+fastapi-backend/      # Unified Backend
+├── app/              # API and Services
+├── Dockerfile        # Production API image
+└── ...
+
+Dockerfile.frontend   # Production Frontend image
+nginx.conf            # Production routing
+docker-compose.yml    # Main production orchestration
+docker-compose.legacy.yml # Legacy (Express) setup
+Dockerfile.legacy     # Legacy image definition
 ```
 
 ## Key Concepts
@@ -177,15 +166,18 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 npm run dev
 ```
 
-### Port Configuration
-| Service | Port |
-|---------|------|
-| Frontend (Vite) | 5173 |
-| Backend (FastAPI) | 8000 |
+### Running with Docker (Production)
 
-### Building
+**Direct Deployment (VPS)**:
 ```bash
-npm run build
+# Start unified environment (FastAPI + Frontend + Redis)
+docker-compose up -d --build
+```
+
+**Legacy/Reference Environment**:
+```bash
+# Start legacy setup (Express)
+docker-compose -f docker-compose.legacy.yml up -d --build
 ```
 
 ## Troubleshooting

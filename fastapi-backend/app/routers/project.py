@@ -10,11 +10,10 @@ async def get_project_endpoint(db: Session = Depends(get_db)):
     """Get project settings"""
     project = get_project(db)
     if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
+        # Auto-create default project if it doesn't exist
+        # This handles fresh deployments where the DB is initialized but empty
+        project = update_project(db, {"name": "My Project"})
+        
     return project
 
 @router.put("/", response_model=ProjectResponse)

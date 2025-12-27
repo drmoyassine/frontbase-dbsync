@@ -10,7 +10,7 @@ services:
     environment:
       - DATABASE_URL=sqlite+aiosqlite:///./data/unified.db
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-      - CORS_ORIGINS=http://localhost:80
+      - CORS_ORIGINS=http://localhost:8080
       - REDIS_URL=redis://redis:6379/0
     volumes:
       - backend_data:/app/data
@@ -28,7 +28,7 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
     ports:
-      - "80:80"
+      - "8080:80"
     depends_on:
       - backend
     restart: unless-stopped

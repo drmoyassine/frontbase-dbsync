@@ -1,10 +1,9 @@
 import axios from 'axios';
 import { PORT_CONFIG } from '../lib/portConfig';
 
-// Get the current backend configuration from localStorage
+// Get the current backend configuration
 const getBackendConfig = () => {
   // In development, always use empty baseURL so Vite proxy handles routing
-  // The proxy in vite.config.ts routes /api to the correct backend
   if (import.meta.env.DEV) {
     return {
       type: 'vite-proxy',
@@ -12,28 +11,12 @@ const getBackendConfig = () => {
     };
   }
 
-  // In production, check for saved config but IGNORE localhost configs
-  // This prevents Mixed Content errors when deploying to HTTPS
-  const savedConfig = localStorage.getItem('backendConfig');
-  if (savedConfig) {
-    try {
-      const config = JSON.parse(savedConfig);
-      // If the saved config points to localhost, ignore it in production
-      if (config.baseUrl && config.baseUrl.includes('localhost')) {
-        console.warn('[API Service] Ignoring localhost config in production.');
-        localStorage.removeItem('backendConfig'); // Clean up invalid config
-      } else {
-        return config;
-      }
-    } catch (e) {
-      console.error('[API Service] Failed to parse backendConfig:', e);
-      localStorage.removeItem('backendConfig');
-    }
-  }
-  // Default to relative URL for Nginx proxy
+  // In PRODUCTION: ALWAYS use relative URLs
+  // This ensures Nginx can proxy correctly regardless of domain/protocol
+  // We do NOT read from localStorage to avoid Mixed Content issues
   return {
-    type: 'fastapi',
-    baseUrl: '', // In production, use relative URL by default to leverage Nginx proxy
+    type: 'nginx-proxy',
+    baseUrl: '', // Relative URL for Nginx reverse proxy
   };
 };
 

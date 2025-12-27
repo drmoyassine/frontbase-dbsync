@@ -5,13 +5,11 @@ const getBaseUrl = () => {
     if (envUrl) return envUrl;
 
     // In local development, default to localhost:8000 if not specified.
-    // This allows both direct hits and (optionally) proxying.
     if (import.meta.env.DEV) {
         return 'http://localhost:8000';
     }
 
-    // In production/docker, use relative paths so Nginx can proxy correctly 
-    // based on the host header.
+    // In production, ALWAYS use relative paths for Nginx proxy
     return '';
 };
 

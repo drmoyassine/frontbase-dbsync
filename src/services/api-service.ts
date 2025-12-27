@@ -20,7 +20,7 @@ const getBackendConfig = () => {
   // Default to FastAPI backend
   return {
     type: 'fastapi',
-    baseUrl: PORT_CONFIG.fastapi.baseUrl,
+    baseUrl: '', // In production, use relative URL by default to leverage Nginx proxy
   };
 };
 

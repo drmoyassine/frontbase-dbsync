@@ -32,29 +32,36 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler - runs on startup and shutdown."""
     import asyncio
     
-    # Startup - wrap everything in try/except to prevent blocking the main app
+    # Startup - Database initialization is CRITICAL, so we don't timeout too quickly
+    logger.info("[Sync-App Startup] Initializing database tables...")
     try:
-        # Ensure sync tables exist in the shared DB (with timeout)
-        async with asyncio.timeout(5.0):
+        # Increase timeout to 30 seconds for first-time table creation
+        async with asyncio.timeout(30.0):
             await init_db()
-            logger.info("Sync DB initialized successfully")
+            logger.info("[Sync-App Startup] ✅ Database tables initialized successfully")
     except asyncio.TimeoutError:
-        logger.warning("Sync DB init timed out - tables may need manual creation")
+        logger.error("[Sync-App Startup] ❌ Database init timed out after 30s. Tables may not exist!")
     except Exception as e:
-        logger.warning(f"Sync DB init failed (non-fatal): {e}")
+        logger.error(f"[Sync-App Startup] ❌ Database init FAILED: {e}")
+        # Re-raise to prevent app from starting without a working DB
+        # This is more honest than silently failing
+        raise
     
-    # Load Redis settings into memory safely (skip if Redis not needed immediately)
+    # Load Redis settings into memory safely (optional, can fail)
     try:
         from app.services.sync.redis_client import load_settings_from_db
-        async with asyncio.timeout(2.0):
+        async with asyncio.timeout(5.0):
             await load_settings_from_db()
+            logger.info("[Sync-App Startup] ✅ Redis settings loaded")
     except asyncio.TimeoutError:
-        logger.warning("Redis settings load timed out - will use defaults")
+        logger.warning("[Sync-App Startup] Redis settings load timed out - will use defaults")
     except Exception as e:
-        logger.warning(f"Redis settings load failed (non-fatal): {e}")
+        logger.warning(f"[Sync-App Startup] Redis settings load failed (non-fatal): {e}")
     
+    logger.info("[Sync-App Startup] 🚀 Sub-app ready")
     yield
     # Shutdown
+    logger.info("[Sync-App Shutdown] Shutting down...")
     pass
 
 

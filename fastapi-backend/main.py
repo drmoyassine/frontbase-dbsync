@@ -27,6 +27,20 @@ async def lifespan(app: FastAPI):
         logger.error("[Main App Startup] ❌ Sync DB init timed out after 30s")
     except Exception as e:
         logger.error(f"[Main App Startup] ❌ Sync DB init failed: {e}")
+
+    # Initialize Main App database tables (Project, User, Page, etc.)
+    # This is critical for fresh deployments
+    try:
+        from app.database.config import Base, engine
+        # Verify models are imported to register them
+        import app.models.models  # noqa
+        
+        logger.info("[Main App Startup] Initializing Core tables...")
+        # Create tables synchronously (SQLite is fast/local)
+        Base.metadata.create_all(bind=engine)
+        logger.info("[Main App Startup] ✅ Core tables initialized successfully")
+    except Exception as e:
+        logger.error(f"[Main App Startup] ❌ Core DB init failed: {e}")
     
     # Load Redis settings for sync service
     try:

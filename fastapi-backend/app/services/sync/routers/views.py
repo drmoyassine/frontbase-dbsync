@@ -25,7 +25,7 @@ router = APIRouter()
 
 
 
-@router.get("/views/{view_id}", response_model=DatasourceViewResponse)
+@router.get("/{view_id}", response_model=DatasourceViewResponse)
 async def get_datasource_view(
     view_id: str,
     db: AsyncSession = Depends(get_db)
@@ -40,7 +40,7 @@ async def get_datasource_view(
     return db_view
 
 
-@router.patch("/views/{view_id}", response_model=DatasourceViewResponse)
+@router.patch("/{view_id}", response_model=DatasourceViewResponse)
 async def update_datasource_view(
     view_id: str,
     view_update: DatasourceViewUpdate,
@@ -73,7 +73,7 @@ async def update_datasource_view(
     return db_view
 
 
-@router.get("/views/{view_id}/records")
+@router.get("/{view_id}/records")
 async def get_view_records(
     view_id: str,
     page: int = 1,
@@ -196,7 +196,7 @@ async def get_view_records(
     }
 
 
-@router.get("/views/{view_id}/count")
+@router.get("/{view_id}/count")
 async def get_view_count(
     view_id: str,
     db: AsyncSession = Depends(get_db)
@@ -240,7 +240,7 @@ async def get_view_count(
     }
 
 
-@router.post("/views/{view_id}/records", status_code=status.HTTP_201_CREATED)
+@router.post("/{view_id}/records", status_code=status.HTTP_201_CREATED)
 async def create_view_record(
     view_id: str,
     record: Dict[str, Any],
@@ -272,7 +272,7 @@ async def create_view_record(
     return {"success": True, "message": "Record created successfully"}
 
 
-@router.patch("/views/{view_id}/records")
+@router.patch("/{view_id}/records")
 async def patch_view_record(
     view_id: str,
     record: Dict[str, Any],
@@ -316,7 +316,7 @@ async def forward_webhook(url: str, payload: Dict[str, Any]):
         logger.error(f"Failed to forward webhook to {url}: {e}")
 
 
-@router.post("/views/{view_id}/trigger")
+@router.post("/{view_id}/trigger")
 async def trigger_view_webhook(
     view_id: str,
     payload: Dict[str, Any],
@@ -366,7 +366,7 @@ async def trigger_view_webhook(
     }
 
 
-@router.delete("/views/{view_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{view_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_datasource_view(
     view_id: str,
     db: AsyncSession = Depends(get_db)

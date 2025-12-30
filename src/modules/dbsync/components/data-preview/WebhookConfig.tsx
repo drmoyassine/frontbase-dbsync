@@ -174,8 +174,8 @@ export const WebhookConfig: React.FC<WebhookConfigProps> = ({
                                         <div className="p-2 bg-gray-50 dark:bg-gray-900/60 border border-gray-100 dark:border-gray-800 rounded-lg font-mono text-[9px] text-gray-500 overflow-x-auto">
                                             <pre>{JSON.stringify({
                                                 "event": "insert",
-                                                "timestamp": new Date().toISOString(),
-                                                "data": { "key": "value" } // Simplified for preview
+                                                "timestamp": "2025-01-01T12:00:00.000Z",
+                                                "data": { "key": "value" }
                                             }, null, 2)}</pre>
                                         </div>
                                     </div>

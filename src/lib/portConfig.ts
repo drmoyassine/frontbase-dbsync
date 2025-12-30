@@ -1,20 +1,23 @@
 // Single Source of Truth for Port Configuration
 // This file ensures all components use the same port numbers
 
+const isProd = import.meta.env.PROD;
+const apiBaseUrl = import.meta.env.VITE_API_URL || '';
+
 export const PORT_CONFIG = {
   express: {
     port: 3001,
-    baseUrl: `http://localhost:3001`,
+    baseUrl: isProd ? apiBaseUrl : `http://localhost:3001`,
     description: "Express.js backend for Frontbase"
   },
   fastapi: {
     port: 8000,
-    baseUrl: `http://localhost:8000`,
+    baseUrl: isProd ? apiBaseUrl : `http://localhost:8000`,
     description: "FastAPI backend for DB-Synchronizer"
   },
   frontend: {
     port: 5173,
-    baseUrl: `http://localhost:5173`,
+    baseUrl: isProd ? window.location.origin : `http://localhost:5173`,
     description: "Vite development server for Frontbase frontend"
   }
 };

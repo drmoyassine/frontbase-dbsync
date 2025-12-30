@@ -1,16 +1,12 @@
 import axios from 'axios'
+import { getFastApiBaseUrl } from '../../../lib/portConfig';
 
 const getBaseUrl = () => {
     const envUrl = import.meta.env.VITE_API_URL;
     if (envUrl) return envUrl;
 
-    // In local development, default to localhost:8000 if not specified.
-    if (import.meta.env.DEV) {
-        return 'http://localhost:8000';
-    }
-
-    // In production, ALWAYS use relative paths for Nginx proxy
-    return '';
+    // Use centralized configuration which handles Prod/Dev logic
+    return getFastApiBaseUrl();
 };
 
 const API_URL = getBaseUrl();

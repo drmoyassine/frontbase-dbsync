@@ -9,7 +9,7 @@ export const ApiDocs = ({ currentViewId }: ApiDocsProps) => {
     // Use the current origin (works for both VPS and localhost)
     const baseUrl = window.location.origin.includes('localhost')
         ? 'http://localhost:8000'
-        : window.location.origin.replace(/:\d+$/, '').replace('https://', 'https://api.');
+        : window.location.origin; // Assume same-origin for production unless VITE_API_URL is set
 
     // @ts-ignore - Vite env
     const API_URL = import.meta.env.VITE_API_URL || baseUrl;

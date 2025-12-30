@@ -234,7 +234,15 @@ const DataPreviewModal: React.FC<DataPreviewModalProps> = (props) => {
 
     // API Base URL for Swagger Docs
     // @ts-ignore
-    const API_DOCS_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace('/api', '') + '/docs/views';
+    // API Base URL for Swagger Docs
+    // In production, VITE_API_URL is '/api'. We need to construct the full URL to the sync service docs.
+    // Sync service is mounted at /api/sync, so docs are at /api/sync/docs/views
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+    const baseUrl = apiBase.startsWith('http')
+        ? apiBase
+        : `${window.location.origin}${apiBase}`;
+    // Remove trailing slash if present then append sync docs path
+    const API_DOCS_URL = baseUrl.replace(/\/$/, '') + '/sync/docs/views';
     const SWAGGER_ANCHOR = currentViewId
         ? `#/Views/create_view_record_api_views__view_id__records_post`
         : `#/Views`;

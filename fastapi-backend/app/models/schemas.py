@@ -121,6 +121,17 @@ class ProjectResponse(BaseModel):
     class Config:
         from_attributes = True
 
+    @field_validator('users_config', mode='before')
+    @classmethod
+    def parse_users_config(cls, v):
+        """Parse users_config from JSON string if needed"""
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        return v or {}
+
 # Variable Models
 class VariableCreateRequest(BaseModel):
     name: constr(min_length=1, max_length=50)

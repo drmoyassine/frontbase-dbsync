@@ -221,31 +221,44 @@ def update_project_settings(db: Session, project_id: str = "default", settings: 
         db.rollback()
         return False
 
-def encrypt_data(data: str):
-    """Encrypt data using Fernet"""
-    # Generate or load encryption key
+def _get_encryption_key():
+    """Get encryption key from env or file"""
+    # Priority 1: Environment Variable (Best for Production)
+    env_key = os.getenv("ENCRYPTION_KEY")
+    if env_key:
+        return env_key.encode() if isinstance(env_key, str) else env_key
+        
+    # Priority 2: File (Best for Local Development)
     key_file = "encryption_key.txt"
     if os.path.exists(key_file):
         with open(key_file, "rb") as f:
-            key = f.read()
-    else:
-        key = Fernet.generate_key()
+            return f.read()
+            
+    # Priority 3: Generate and Save (Only for Local/First Run)
+    key = Fernet.generate_key()
+    try:
         with open(key_file, "wb") as f:
             f.write(key)
-    
+    except Exception:
+        # If we can't write to file (e.g. read-only container), just log warning
+        print("Warning: Could not save generated encryption key to file.")
+    return key
+
+def encrypt_data(data: str):
+    """Encrypt data using Fernet"""
+    key = _get_encryption_key()
     fernet = Fernet(key)
     encrypted_data = fernet.encrypt(data.encode())
     return encrypted_data.decode()
 
 def decrypt_data(encrypted_data: str):
     """Decrypt data using Fernet"""
-    key_file = "encryption_key.txt"
-    if not os.path.exists(key_file):
-        raise Exception("Encryption key not found")
-    
-    with open(key_file, "rb") as f:
-        key = f.read()
-    
-    fernet = Fernet(key)
-    decrypted_data = fernet.decrypt(encrypted_data.encode())
-    return decrypted_data.decode()
+    try:
+        key = _get_encryption_key()
+        fernet = Fernet(key)
+        decrypted_data = fernet.decrypt(encrypted_data.encode())
+        return decrypted_data.decode()
+    except Exception as e:
+        print(f"Decryption error: {e}")
+        # Return original data if decryption fails (fallback behavior)
+        return encrypted_data

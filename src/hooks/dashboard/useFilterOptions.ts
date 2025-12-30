@@ -6,7 +6,7 @@ export const useFilterOptions = (config: UserContactConfig | null, isConfigured:
     const [filterOptions, setFilterOptions] = useState<Record<string, string[]>>({});
 
     useEffect(() => {
-        if (!config?.frontendFilters || !isConfigured) return;
+        if (!config?.frontendFilters || !isConfigured || !config?.columnMapping) return;
 
         const fetchOptions = async () => {
             const newOptions: Record<string, string[]> = {};

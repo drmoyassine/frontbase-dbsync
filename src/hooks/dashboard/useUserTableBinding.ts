@@ -8,7 +8,7 @@ export const useUserTableBinding = (
     filterOptions: Record<string, string[]>
 ): ComponentDataBinding | null => {
     return useMemo(() => {
-        if (!isConfigured || !config) return null;
+        if (!isConfigured || !config || !config.columnMapping) return null;
 
         const createdAtCol = config.columnMapping.createdAtColumn || 'created_at';
 

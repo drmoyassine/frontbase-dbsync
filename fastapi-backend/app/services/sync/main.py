@@ -79,31 +79,13 @@ sync_app.add_exception_handler(RequestValidationError, validation_exception_hand
 sync_app.add_exception_handler(SQLAlchemyError, database_exception_handler)
 sync_app.add_exception_handler(Exception, global_exception_handler)
 
-# Include routers
-# Prefixes are modified to be relative to the mount point (/api/sync)
-logger.info("Including routers...")
-sync_app.include_router(datasources_router.router, prefix="/datasources", tags=["Datasources"]) # Was /api/datasources
-sync_app.include_router(sync_configs_router.router, prefix="/sync-configs", tags=["Sync Configs"]) # Was /api/sync-configs
-sync_app.include_router(sync_router.router, prefix="/operations", tags=["Sync Operations"]) # Was /api/sync -> /operations
-sync_app.include_router(views_router.router, prefix="/views", tags=["Views"]) # Was /api -> /views (to separate from data APIs)
-# Wait, /api/views prefix was just /api in original file line 82.
-# "app.include_router(views_router.router, prefix="/api", tags=["Views"])"
-# If I change it to /views, it becomes /api/sync/views.
-# Original was /api/data? No, viewed file said prefix="/api".
-# Let's check views router content later. For now /views is safe.
-
-sync_app.include_router(webhooks_router.router, prefix="/webhooks", tags=["Webhooks"]) # Keep /webhooks
-sync_app.include_router(settings_api_router.router, prefix="/settings", tags=["Settings"]) # Was /api/settings
-logger.info("Routers included successfully")
-
-
+# Register specific routes BEFORE parametrized routers to avoid conflicts
 @sync_app.get("/health")
 async def health():
     """Health check endpoint."""
     return {"status": "healthy"}
 
-# Custom Swagger UI for Views
-# Adjusted path to expect mounting at /api/sync
+# Custom Swagger UI for Views - MUST come before views_router to avoid /{view_id} conflict
 @sync_app.get("/views/openapi.json", include_in_schema=False)
 async def get_views_openapi():
     """Returns a filtered OpenAPI schema for Views only."""
@@ -131,6 +113,26 @@ async def get_views_openapi():
     }
     
     return views_openapi
+
+# Include routers
+# Prefixes are modified to be relative to the mount point (/api/sync)
+logger.info("Including routers...")
+sync_app.include_router(datasources_router.router, prefix="/datasources", tags=["Datasources"]) # Was /api/datasources
+sync_app.include_router(sync_configs_router.router, prefix="/sync-configs", tags=["Sync Configs"]) # Was /api/sync-configs
+sync_app.include_router(sync_router.router, prefix="/operations", tags=["Sync Operations"]) # Was /api/sync -> /operations
+sync_app.include_router(views_router.router, prefix="/views", tags=["Views"]) # Was /api -> /views (to separate from data APIs)
+# Wait, /api/views prefix was just /api in original file line 82.
+# "app.include_router(views_router.router, prefix="/api", tags=["Views"])"
+# If I change it to /views, it becomes /api/sync/views.
+# Original was /api/data? No, viewed file said prefix="/api".
+# Let's check views router content later. For now /views is safe.
+
+sync_app.include_router(webhooks_router.router, prefix="/webhooks", tags=["Webhooks"]) # Keep /webhooks
+sync_app.include_router(settings_api_router.router, prefix="/settings", tags=["Settings"]) # Was /api/settings
+logger.info("Routers included successfully")
+
+
+
 
 
 @sync_app.get("/docs/views", include_in_schema=False)

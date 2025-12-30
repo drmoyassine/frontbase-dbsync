@@ -1,5 +1,5 @@
-import React from 'react';
-import { Zap, Plus, Globe, Settings, Activity, ChevronRight, X, Info, RefreshCw, Trash2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Zap, Plus, Globe, Settings, Activity, ChevronRight, X, Info, RefreshCw, Trash2, AlertCircle, Save } from 'lucide-react';
 
 interface WebhookConfigProps {
     webhooks: any[];
@@ -12,7 +12,19 @@ interface WebhookConfigProps {
     setIsWebhookModalOpen: (isOpen: boolean) => void;
     triggerWebhookTest: (viewId: string) => Promise<any>;
     currentViewId?: string;
+    onSaveView?: () => Promise<void>;
+    hasUnsavedChanges?: boolean;
 }
+
+// URL validation helper
+const isValidUrl = (url: string): boolean => {
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+        return false;
+    }
+};
 
 export const WebhookConfig: React.FC<WebhookConfigProps> = ({
     webhooks,
@@ -24,8 +36,55 @@ export const WebhookConfig: React.FC<WebhookConfigProps> = ({
     isWebhookModalOpen,
     setIsWebhookModalOpen,
     triggerWebhookTest,
-    currentViewId
+    currentViewId,
+    onSaveView,
+    hasUnsavedChanges
 }) => {
+    const [isSaving, setIsSaving] = useState(false);
+    const [urlError, setUrlError] = useState<string | null>(null);
+
+    // Validate URL when form changes
+    const validateUrl = (url: string) => {
+        if (!url) {
+            setUrlError(null);
+            return;
+        }
+        if (!isValidUrl(url)) {
+            setUrlError('Please enter a valid URL (e.g., https://example.com/webhook)');
+        } else {
+            setUrlError(null);
+        }
+    };
+
+    const isFormValid = useMemo(() => {
+        return webhookForm.name && webhookForm.url && isValidUrl(webhookForm.url) && webhookForm.events.length > 0;
+    }, [webhookForm]);
+
+    const handleSaveWebhookAndView = async () => {
+        if (!isFormValid) return;
+
+        // Update webhooks state
+        if (editingWebhookIndex !== null) {
+            const newWebhooks = [...webhooks];
+            newWebhooks[editingWebhookIndex] = { ...webhookForm };
+            setWebhooks(newWebhooks);
+        } else {
+            setWebhooks(curr => [...curr, { ...webhookForm }]);
+        }
+        setIsWebhookModalOpen(false);
+
+        // Auto-save view if callback provided
+        if (onSaveView) {
+            setIsSaving(true);
+            try {
+                await onSaveView();
+            } catch (err) {
+                console.error('Failed to save view with webhooks:', err);
+            } finally {
+                setIsSaving(false);
+            }
+        }
+    };
     return (
         <>
             <div className="p-6 h-full flex flex-col bg-gray-50/10">
@@ -204,15 +263,25 @@ export const WebhookConfig: React.FC<WebhookConfigProps> = ({
                             <div className="space-y-2">
                                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">Callback URL</label>
                                 <div className="relative">
-                                    <Globe className="absolute left-4 top-3.5 size-4 text-gray-400" />
+                                    <Globe className={`absolute left-4 top-3.5 size-4 ${urlError ? 'text-red-400' : 'text-gray-400'}`} />
                                     <input
                                         type="text"
                                         value={webhookForm.url}
-                                        onChange={(e) => setWebhookForm((curr: any) => ({ ...curr, url: e.target.value }))}
+                                        onChange={(e) => {
+                                            setWebhookForm((curr: any) => ({ ...curr, url: e.target.value }));
+                                            validateUrl(e.target.value);
+                                        }}
+                                        onBlur={(e) => validateUrl(e.target.value)}
                                         placeholder="https://your-app.com/api/webhook"
-                                        className="w-full pl-11 pr-4 py-3.5 bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 rounded-2xl outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all text-sm font-medium"
+                                        className={`w-full pl-11 pr-4 py-3.5 bg-gray-50 dark:bg-gray-900/50 border rounded-2xl outline-none focus:ring-4 transition-all text-sm font-medium ${urlError ? 'border-red-300 focus:ring-red-500/10 focus:border-red-500' : 'border-gray-100 dark:border-gray-700 focus:ring-primary-500/10 focus:border-primary-500'}`}
                                     />
                                 </div>
+                                {urlError && (
+                                    <div className="flex items-center gap-1.5 text-[10px] text-red-500 px-1">
+                                        <AlertCircle size={12} />
+                                        {urlError}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="space-y-3">
@@ -245,29 +314,35 @@ export const WebhookConfig: React.FC<WebhookConfigProps> = ({
                             </div>
                         </div>
 
-                        <div className="p-8 bg-gray-50/50 dark:bg-gray-900/20 border-t border-gray-100 dark:border-gray-700 flex gap-4">
-                            <button
-                                onClick={() => setIsWebhookModalOpen(false)}
-                                className="flex-1 py-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400 rounded-2xl text-xs font-bold hover:bg-gray-50 transition-all"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={() => {
-                                    if (editingWebhookIndex !== null) {
-                                        const newWebhooks = [...webhooks];
-                                        newWebhooks[editingWebhookIndex] = { ...webhookForm };
-                                        setWebhooks(newWebhooks);
-                                    } else {
-                                        setWebhooks(curr => [...curr, { ...webhookForm }]);
-                                    }
-                                    setIsWebhookModalOpen(false);
-                                }}
-                                disabled={!webhookForm.url || !webhookForm.name}
-                                className="flex-1 py-4 bg-primary-600 text-white rounded-2xl text-xs font-bold hover:bg-primary-700 transition-all shadow-lg shadow-primary-500/20 disabled:opacity-50 disabled:shadow-none active:scale-95"
-                            >
-                                {editingWebhookIndex !== null ? 'Update Settings' : 'Create Webhook'}
-                            </button>
+                        <div className="p-8 bg-gray-50/50 dark:bg-gray-900/20 border-t border-gray-100 dark:border-gray-700 flex flex-col gap-4">
+                            {!onSaveView && (
+                                <div className="flex items-center gap-2 text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-xl">
+                                    <AlertCircle size={12} />
+                                    <span>Remember to click <strong>Save View</strong> to persist this webhook configuration.</span>
+                                </div>
+                            )}
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => {
+                                        setUrlError(null);
+                                        setIsWebhookModalOpen(false);
+                                    }}
+                                    className="flex-1 py-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400 rounded-2xl text-xs font-bold hover:bg-gray-50 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSaveWebhookAndView}
+                                    disabled={!isFormValid || isSaving}
+                                    className="flex-1 py-4 bg-primary-600 text-white rounded-2xl text-xs font-bold hover:bg-primary-700 transition-all shadow-lg shadow-primary-500/20 disabled:opacity-50 disabled:shadow-none active:scale-95 flex items-center justify-center gap-2"
+                                >
+                                    {isSaving ? (
+                                        <><RefreshCw size={14} className="animate-spin" /> Saving...</>
+                                    ) : (
+                                        <>{onSaveView && <Save size={14} />}{editingWebhookIndex !== null ? 'Update & Save' : 'Create & Save'}</>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

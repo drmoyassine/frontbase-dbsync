@@ -69,6 +69,7 @@ interface DataPreviewContentProps {
     setWebhookForm: (form: any) => void;
     triggerWebhookTest: (viewId: string) => Promise<any>;
     currentViewId?: string;
+    onSaveView?: () => Promise<void>;
 }
 
 export const DataPreviewContent = ({
@@ -125,6 +126,7 @@ export const DataPreviewContent = ({
     setWebhookForm,
     triggerWebhookTest,
     currentViewId,
+    onSaveView,
 }: DataPreviewContentProps) => {
 
     const tabs = [
@@ -241,6 +243,7 @@ export const DataPreviewContent = ({
                         setWebhookForm={setWebhookForm}
                         triggerWebhookTest={triggerWebhookTest}
                         currentViewId={currentViewId}
+                        onSaveView={onSaveView}
                     />
                 )}
             </div>

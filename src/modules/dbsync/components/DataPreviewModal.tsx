@@ -187,6 +187,7 @@ const DataPreviewModal = (props: DataPreviewModalProps) => {
                                     datasourceName={props.datasourceName}
                                     showDataSearchResults={showDataSearchResults}
                                     setShowDataSearchResults={actions.setShowDataSearchResults}
+                                    onSaveView={actions.handleSaveView}
                                 />
                             </div>
                         </div>

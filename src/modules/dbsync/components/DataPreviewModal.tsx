@@ -289,10 +289,10 @@ const DataPreviewModal: React.FC<DataPreviewModalProps> = (props) => {
                                         <div className="w-px h-3 bg-white/20 mx-1" />
                                         <button
                                             onClick={() => copyToClipboard(currentViewId)}
-                                            className="flex items-center gap-1.5 text-[10px] font-bold text-primary-100 hover:text-white transition-all active:scale-95"
+                                            className="flex items-center gap-1.5 text-[10px] font-bold text-white/50 hover:text-white transition-all active:scale-95 group/copy"
                                             title="Click to copy View ID"
                                         >
-                                            <Copy size={10} />
+                                            <Copy size={10} className="group-hover/copy:scale-110 transition-transform" />
                                             <span>{currentViewId.split('-')[0]}...</span>
                                             {copySuccess && (
                                                 <CheckCircle size={10} className="text-green-300 animate-in fade-in" />

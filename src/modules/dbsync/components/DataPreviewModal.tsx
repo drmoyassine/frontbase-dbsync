@@ -509,138 +509,142 @@ const DataPreviewModal: React.FC<DataPreviewModalProps> = (props) => {
                                     {(activeTab === 'table' || activeTab === 'record') ? (
                                         <div className="flex flex-col h-full overflow-hidden">
                                             <div className="p-4 bg-gray-50/50 dark:bg-gray-900/20 border-b border-gray-100 dark:border-gray-700/50">
-                                                <div className="flex flex-wrap items-center gap-3">
-                                                    <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400 uppercase tracking-tight"><Filter className="w-3.5 h-3.5" /> Filters</div>
-                                                    <button onClick={addFilter} className="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-primary-600 hover:bg-primary-50 rounded-lg whitespace-nowrap"><Plus size={14} /> Add Filter</button>
+                                                <div className="flex flex-wrap items-center justify-between gap-3 min-h-[42px]">
+                                                    <div className="flex flex-wrap items-center gap-3">
+                                                        <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400 uppercase tracking-tight"><Filter className="w-3.5 h-3.5" /> Filters</div>
+                                                        <button onClick={addFilter} className="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-primary-600 hover:bg-primary-50 rounded-lg whitespace-nowrap"><Plus size={14} /> Add Filter</button>
 
-                                                    {filters.map((filter, index) => (
-                                                        <div key={index} className="flex items-center gap-1 p-1 bg-white dark:bg-gray-800 border border-gray-200 rounded-lg shadow-sm">
-                                                            <div className="relative group/search">
+                                                        {filters.map((filter, index) => (
+                                                            <div key={index} className="flex items-center gap-1 p-1 bg-white dark:bg-gray-800 border border-gray-200 rounded-lg shadow-sm">
+                                                                <div className="relative group/search">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={filter.field}
+                                                                        onChange={(e) => updateFilter(index, 'field', e.target.value)}
+                                                                        placeholder="Field..."
+                                                                        className="w-32 px-2 py-1 text-xs bg-transparent outline-none font-medium"
+                                                                    />
+                                                                    <div className="absolute left-0 top-full mt-1 w-48 max-h-48 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg shadow-xl z-50 hidden group-focus-within/search:block">
+                                                                        {availableFields
+                                                                            .filter(f => f.toLowerCase().includes(filter.field.toLowerCase()))
+                                                                            .map(f => (
+                                                                                <button
+                                                                                    key={f}
+                                                                                    onClick={(e) => {
+                                                                                        updateFilter(index, 'field', f);
+                                                                                        // Blur the input to close the CSS group-focus-within dropdown
+                                                                                        (e.currentTarget.closest('.group\\/search')?.querySelector('input') as HTMLInputElement)?.blur();
+                                                                                    }}
+                                                                                    className="w-full text-left px-3 py-2 text-xs hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors"
+                                                                                >
+                                                                                    {f}
+                                                                                </button>
+                                                                            ))}
+                                                                    </div>
+                                                                </div>
+                                                                <select value={filter.operator} onChange={(e) => updateFilter(index, 'operator', e.target.value)} className="px-1 py-1 text-[10px] font-mono text-primary-600">
+                                                                    <option value="==">==</option>
+                                                                    <option value="!=">!=</option>
+                                                                    <option value=">">{'>'}</option>
+                                                                    <option value="<">{'<'}</option>
+                                                                    <option value="contains">contains</option>
+                                                                    <option value="not_contains">does not contain</option>
+                                                                    <option value="in">in list</option>
+                                                                    <option value="not_in">not in list</option>
+                                                                    <option value="is_empty">is empty</option>
+                                                                    <option value="is_not_empty">is not empty</option>
+                                                                </select>
+                                                                {!['is_empty', 'is_not_empty'].includes(filter.operator) && (
+                                                                    <input type="text" placeholder="value" value={filter.value} onChange={(e) => updateFilter(index, 'value', e.target.value)} className="w-32 px-2 py-1 text-xs bg-transparent outline-none border-l border-gray-100 ml-1" />
+                                                                )}
+                                                                <button onClick={() => removeFilter(index)} className="ml-1 p-1 hover:text-red-500 transition-colors"><Trash2 size={12} /></button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+
+                                                    <div className="flex items-center gap-3 ml-auto">
+                                                        <div className="flex items-center gap-2">
+                                                            {tableData && (
+                                                                <div className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-[10px] font-bold text-gray-500 flex items-center gap-1.5 shadow-sm">
+                                                                    <Table size={12} className="text-gray-400" />
+                                                                    <span>{tableData.total?.toLocaleString() || filteredRecords.length.toLocaleString()} total</span>
+                                                                    <span className="text-gray-300">/</span>
+                                                                    <span className="text-gray-400">{tableData.total?.toLocaleString() || '0'}</span>
+                                                                    <span className="ml-1 text-[8px] uppercase tracking-wider opacity-50">Records</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Global Search and Navigation */}
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="relative flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-2.5 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-primary-500/20 focus-within:border-primary-500 transition-all w-64 md:w-80">
+                                                                <Search size={14} className="text-gray-400" />
                                                                 <input
                                                                     type="text"
-                                                                    value={filter.field}
-                                                                    onChange={(e) => updateFilter(index, 'field', e.target.value)}
-                                                                    placeholder="Field..."
-                                                                    className="w-32 px-2 py-1 text-xs bg-transparent outline-none font-medium"
-                                                                />
-                                                                <div className="absolute left-0 top-full mt-1 w-48 max-h-48 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg shadow-xl z-50 hidden group-focus-within/search:block">
-                                                                    {availableFields
-                                                                        .filter(f => f.toLowerCase().includes(filter.field.toLowerCase()))
-                                                                        .map(f => (
-                                                                            <button
-                                                                                key={f}
-                                                                                onClick={(e) => {
-                                                                                    updateFilter(index, 'field', f);
-                                                                                    // Blur the input to close the CSS group-focus-within dropdown
-                                                                                    (e.currentTarget.closest('.group\\/search')?.querySelector('input') as HTMLInputElement)?.blur();
-                                                                                }}
-                                                                                className="w-full text-left px-3 py-2 text-xs hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors"
-                                                                            >
-                                                                                {f}
-                                                                            </button>
-                                                                        ))}
-                                                                </div>
-                                                            </div>
-                                                            <select value={filter.operator} onChange={(e) => updateFilter(index, 'operator', e.target.value)} className="px-1 py-1 text-[10px] font-mono text-primary-600">
-                                                                <option value="==">==</option>
-                                                                <option value="!=">!=</option>
-                                                                <option value=">">{'>'}</option>
-                                                                <option value="<">{'<'}</option>
-                                                                <option value="contains">contains</option>
-                                                                <option value="not_contains">does not contain</option>
-                                                                <option value="in">in list</option>
-                                                                <option value="not_in">not in list</option>
-                                                                <option value="is_empty">is empty</option>
-                                                                <option value="is_not_empty">is not empty</option>
-                                                            </select>
-                                                            {!['is_empty', 'is_not_empty'].includes(filter.operator) && (
-                                                                <input type="text" placeholder="value" value={filter.value} onChange={(e) => updateFilter(index, 'value', e.target.value)} className="w-32 px-2 py-1 text-xs bg-transparent outline-none border-l border-gray-100 ml-1" />
-                                                            )}
-                                                            <button onClick={() => removeFilter(index)} className="ml-1 p-1 hover:text-red-500 transition-colors"><Trash2 size={12} /></button>
-                                                        </div>
-                                                    ))}
-
-                                                    <div className="flex-1 flex items-center gap-2">
-                                                        {tableData && (
-                                                            <div className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-[10px] font-bold text-gray-500 flex items-center gap-1.5 shadow-sm">
-                                                                <Table size={12} className="text-gray-400" />
-                                                                <span>{tableData.total?.toLocaleString() || filteredRecords.length.toLocaleString()} total</span>
-                                                                <span className="text-gray-300">/</span>
-                                                                <span className="text-gray-400">{tableData.total?.toLocaleString() || '0'}</span>
-                                                                <span className="ml-1 text-[8px] uppercase tracking-wider opacity-50">Records</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Global Search and Navigation */}
-                                                    <div className="flex-1 flex items-center gap-2">
-                                                        <div className="relative flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-2.5 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-primary-500/20 focus-within:border-primary-500 transition-all w-64 md:w-80">
-                                                            <Search size={14} className="text-gray-400" />
-                                                            <input
-                                                                type="text"
-                                                                placeholder="Global search..."
-                                                                className="bg-transparent border-none outline-none text-xs w-full font-medium placeholder:text-gray-400"
-                                                                value={globalSearch}
-                                                                onChange={(e) => setGlobalSearch(e.target.value)}
-                                                                onKeyDown={(e) => {
-                                                                    if (e.key === 'Enter') {
-                                                                        if (e.shiftKey) {
-                                                                            onPrevMatch();
-                                                                        } else {
-                                                                            onNextMatch();
+                                                                    placeholder="Global search..."
+                                                                    className="bg-transparent border-none outline-none text-xs w-full font-medium placeholder:text-gray-400"
+                                                                    value={globalSearch}
+                                                                    onChange={(e) => setGlobalSearch(e.target.value)}
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter') {
+                                                                            if (e.shiftKey) {
+                                                                                onPrevMatch();
+                                                                            } else {
+                                                                                onNextMatch();
+                                                                            }
                                                                         }
-                                                                    }
-                                                                }}
-                                                            />
-                                                            {globalSearch && (
-                                                                <div className="flex items-center gap-1">
-                                                                    <button
-                                                                        onClick={onPrevMatch}
-                                                                        disabled={allMatches.length === 0}
-                                                                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-30"
-                                                                    >
-                                                                        <ChevronDown className="w-4 h-4 rotate-180" />
-                                                                    </button>
-                                                                    <span className="text-[10px] font-medium text-gray-500 min-w-[3rem] text-center">
-                                                                        {allMatches.length > 0 ? `${currentMatchIndex + 1} / ${allMatches.length}` : '0 / 0'}
-                                                                    </span>
-                                                                    <button
-                                                                        onClick={onNextMatch}
-                                                                        disabled={allMatches.length === 0}
-                                                                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-30"
-                                                                    >
-                                                                        <ChevronDown className="w-4 h-4" />
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setGlobalSearch('');
-                                                                            setAllMatches([]);
-                                                                        }}
-                                                                        className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-400 transition-colors"
-                                                                    >
-                                                                        <X size={12} />
-                                                                    </button>
-                                                                </div>
-                                                            )}
+                                                                    }}
+                                                                />
+                                                                {globalSearch && (
+                                                                    <div className="flex items-center gap-1">
+                                                                        <button
+                                                                            onClick={onPrevMatch}
+                                                                            disabled={allMatches.length === 0}
+                                                                            className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-30"
+                                                                        >
+                                                                            <ChevronDown className="w-4 h-4 rotate-180" />
+                                                                        </button>
+                                                                        <span className="text-[10px] font-medium text-gray-500 min-w-[3rem] text-center">
+                                                                            {allMatches.length > 0 ? `${currentMatchIndex + 1} / ${allMatches.length}` : '0 / 0'}
+                                                                        </span>
+                                                                        <button
+                                                                            onClick={onNextMatch}
+                                                                            disabled={allMatches.length === 0}
+                                                                            className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-30"
+                                                                        >
+                                                                            <ChevronDown className="w-4 h-4" />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setGlobalSearch('');
+                                                                                setAllMatches([]);
+                                                                            }}
+                                                                            className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-400 transition-colors"
+                                                                        >
+                                                                            <X size={12} />
+                                                                        </button>
+                                                                    </div>
+                                                                )}
 
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                    <ColumnsDropdown
-                                                        isColumnsDropdownOpen={isColumnsDropdownOpen}
-                                                        setIsColumnsDropdownOpen={setIsColumnsDropdownOpen}
-                                                        visibleColumns={visibleColumns}
-                                                        availableFields={availableFields}
-                                                        columnSearch={columnSearch}
-                                                        setColumnSearch={setColumnSearch}
-                                                        setVisibleColumns={setVisibleColumns}
-                                                        tableData={tableData}
-                                                        toggleVisibility={toggleVisibility}
-                                                        pinnedColumns={pinnedColumns}
-                                                        togglePin={togglePin}
-                                                        columnOrder={state.columnOrder}
-                                                        setColumnOrder={setColumnOrder}
-                                                    />
+                                                        <ColumnsDropdown
+                                                            isColumnsDropdownOpen={isColumnsDropdownOpen}
+                                                            setIsColumnsDropdownOpen={setIsColumnsDropdownOpen}
+                                                            visibleColumns={visibleColumns}
+                                                            availableFields={availableFields}
+                                                            columnSearch={columnSearch}
+                                                            setColumnSearch={setColumnSearch}
+                                                            setVisibleColumns={setVisibleColumns}
+                                                            tableData={tableData}
+                                                            toggleVisibility={toggleVisibility}
+                                                            pinnedColumns={pinnedColumns}
+                                                            togglePin={togglePin}
+                                                            columnOrder={state.columnOrder}
+                                                            setColumnOrder={setColumnOrder}
+                                                        />
 
+                                                    </div>
                                                 </div>
                                             </div>
                                             {/* Content area: Table or Record Editor */}

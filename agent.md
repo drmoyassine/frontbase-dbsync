@@ -19,6 +19,7 @@ Frontbase is a visual database builder and admin panel for Supabase. It enables 
 src/                  # React Frontend
 ├── components/       # UI components
 ├── hooks/            # Data fetching & logic
+├── modules/          # Feature-based modules (e.g., dbsync)
 └── ...
 
 fastapi-backend/      # Unified Backend

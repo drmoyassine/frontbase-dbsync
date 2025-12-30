@@ -229,21 +229,37 @@ export const useDataPreview = ({
         if (filters.length > 0) {
             results = results.filter((record: any) => {
                 return filters.every(f => {
-                    if (!f.field || f.value === '') return true;
+                    if (!f.field) return true;
+                    // Allow empty value only for is_empty/is_not_empty
+                    if (f.value === '' && !['is_empty', 'is_not_empty'].includes(f.operator)) return true;
+
                     const val = record[f.field];
                     const recordVal = String(val ?? '').toLowerCase();
                     const filterVal = f.value.toLowerCase();
+
                     switch (f.operator) {
                         case '==': return recordVal === filterVal;
                         case '!=': return recordVal !== filterVal;
                         case '>': return Number(val) > Number(f.value);
                         case '<': return Number(val) < Number(f.value);
                         case 'contains': return recordVal.includes(filterVal);
+                        case 'not_contains': return !recordVal.includes(filterVal);
+                        case 'is_empty': return val === null || val === undefined || String(val).trim() === '';
+                        case 'is_not_empty': return val !== null && val !== undefined && String(val).trim() !== '';
+                        case 'in': {
+                            const list = f.value.split(',').map(v => v.trim().toLowerCase());
+                            return list.includes(recordVal);
+                        }
+                        case 'not_in': {
+                            const list = f.value.split(',').map(v => v.trim().toLowerCase());
+                            return !list.includes(recordVal);
+                        }
                         default: return true;
                     }
                 });
             });
         }
+
 
         // 2. Apply global full-text search
         if (globalSearch.trim()) {

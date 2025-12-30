@@ -200,6 +200,10 @@ class SQLAdapter(DatabaseAdapter, ABC):
                 conditions.append(f'({col_expr} IS NULL OR {col_expr} = \'\')')
             elif op == "is_not_empty":
                 conditions.append(f'({col_expr} IS NOT NULL AND {col_expr} != \'\')')
+            elif op == "not_contains":
+                conditions.append(f'{col_expr} NOT LIKE {curr_placeholder}')
+                params.append(f"%{v}%")
+
             elif op == "in":
                 # Handle comma-separated list
                 vals = [x.strip() for x in str(v).split(",") if x.strip()]

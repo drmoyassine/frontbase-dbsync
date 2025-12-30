@@ -544,11 +544,18 @@ const DataPreviewModal: React.FC<DataPreviewModalProps> = (props) => {
                                                             <select value={filter.operator} onChange={(e) => updateFilter(index, 'operator', e.target.value)} className="px-1 py-1 text-[10px] font-mono text-primary-600">
                                                                 <option value="==">==</option>
                                                                 <option value="!=">!=</option>
-                                                                <option value=">">&gt;</option>
-                                                                <option value="<">&lt;</option>
+                                                                <option value=">">{'>'}</option>
+                                                                <option value="<">{'<'}</option>
                                                                 <option value="contains">contains</option>
+                                                                <option value="not_contains">does not contain</option>
+                                                                <option value="in">in list</option>
+                                                                <option value="not_in">not in list</option>
+                                                                <option value="is_empty">is empty</option>
+                                                                <option value="is_not_empty">is not empty</option>
                                                             </select>
-                                                            <input type="text" placeholder="value" value={filter.value} onChange={(e) => updateFilter(index, 'value', e.target.value)} className="w-32 px-2 py-1 text-xs bg-transparent outline-none border-l border-gray-100 ml-1" />
+                                                            {!['is_empty', 'is_not_empty'].includes(filter.operator) && (
+                                                                <input type="text" placeholder="value" value={filter.value} onChange={(e) => updateFilter(index, 'value', e.target.value)} className="w-32 px-2 py-1 text-xs bg-transparent outline-none border-l border-gray-100 ml-1" />
+                                                            )}
                                                             <button onClick={() => removeFilter(index)} className="ml-1 p-1 hover:text-red-500 transition-colors"><Trash2 size={12} /></button>
                                                         </div>
                                                     ))}
@@ -585,35 +592,37 @@ const DataPreviewModal: React.FC<DataPreviewModalProps> = (props) => {
                                                                     }
                                                                 }}
                                                             />
-                                                            <div className="flex items-center gap-1">
-                                                                <button
-                                                                    onClick={onPrevMatch}
-                                                                    disabled={!globalSearch || allMatches.length === 0}
-                                                                    className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-30"
-                                                                >
-                                                                    <ChevronDown className="w-4 h-4 rotate-180" />
-                                                                </button>
-                                                                <span className="text-[10px] font-medium text-gray-500 min-w-[3rem] text-center">
-                                                                    {allMatches.length > 0 ? `${currentMatchIndex + 1} / ${allMatches.length}` : '0 / 0'}
-                                                                </span>
-                                                                <button
-                                                                    onClick={onNextMatch}
-                                                                    disabled={!globalSearch || allMatches.length === 0}
-                                                                    className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-30"
-                                                                >
-                                                                    <ChevronDown className="w-4 h-4" />
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setGlobalSearch('');
-                                                                        setAllMatches([]);
-                                                                    }}
-                                                                    disabled={!globalSearch}
-                                                                    className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-400 transition-colors disabled:opacity-30"
-                                                                >
-                                                                    <X size={12} />
-                                                                </button>
-                                                            </div>
+                                                            {globalSearch && (
+                                                                <div className="flex items-center gap-1">
+                                                                    <button
+                                                                        onClick={onPrevMatch}
+                                                                        disabled={allMatches.length === 0}
+                                                                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-30"
+                                                                    >
+                                                                        <ChevronDown className="w-4 h-4 rotate-180" />
+                                                                    </button>
+                                                                    <span className="text-[10px] font-medium text-gray-500 min-w-[3rem] text-center">
+                                                                        {allMatches.length > 0 ? `${currentMatchIndex + 1} / ${allMatches.length}` : '0 / 0'}
+                                                                    </span>
+                                                                    <button
+                                                                        onClick={onNextMatch}
+                                                                        disabled={allMatches.length === 0}
+                                                                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-30"
+                                                                    >
+                                                                        <ChevronDown className="w-4 h-4" />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setGlobalSearch('');
+                                                                            setAllMatches([]);
+                                                                        }}
+                                                                        className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-400 transition-colors"
+                                                                    >
+                                                                        <X size={12} />
+                                                                    </button>
+                                                                </div>
+                                                            )}
+
                                                         </div>
                                                     </div>
                                                     <ColumnsDropdown
@@ -626,7 +635,12 @@ const DataPreviewModal: React.FC<DataPreviewModalProps> = (props) => {
                                                         setVisibleColumns={setVisibleColumns}
                                                         tableData={tableData}
                                                         toggleVisibility={toggleVisibility}
+                                                        pinnedColumns={pinnedColumns}
+                                                        togglePin={togglePin}
+                                                        columnOrder={state.columnOrder}
+                                                        setColumnOrder={setColumnOrder}
                                                     />
+
                                                 </div>
                                             </div>
                                             {/* Content area: Table or Record Editor */}

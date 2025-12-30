@@ -160,47 +160,7 @@ async def test_supabase(request: DatabaseConnectionRequest):
             message=f"Unable to reach Supabase server: {str(e)}"
         )
 
-@router.get("/supabase-tables")
-async def get_supabase_tables(db: Session = Depends(get_db)):
-    """Get Supabase tables"""
-    try:
-        ctx = await get_project_context(db, "builder")
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{ctx['url']}/rest/v1/",
-                headers={
-                    'apikey': ctx['auth_key'],
-                    'Authorization': f"Bearer {ctx['auth_key']}"
-                }
-            )
-            
-        if not response.is_success:
-            raise HTTPException(status_code=response.status_code, detail="Failed to fetch tables from Supabase")
-            
-        data = response.json()
-        tables = []
-        if "paths" in data:
-            for path in data["paths"]:
-                if path.startswith("/") and "{" not in path:
-                    table_name = path[1:]
-                    if table_name and "/" not in table_name:
-                        tables.append({
-                            "name": table_name,
-                            "schema": "public",
-                            "path": path
-                        })
-        
-        return {
-            "success": True,
-            "message": "Tables retrieved successfully",
-            "data": { "tables": tables }
-        }
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        print(f"Get tables error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+# Duplicate function removed
 
 @router.get("/table-data/{table_name}")
 async def get_table_data(
@@ -494,6 +454,15 @@ async def get_supabase_tables(db: Session = Depends(get_db)):
                 "tables": tables
             }
         }
+    except HTTPException as e:
+        if e.status_code == 404:
+             return {
+                "success": True,
+                "data": {
+                    "tables": []
+                }
+            }
+        raise e
     except Exception as e:
         print(f"Get tables error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

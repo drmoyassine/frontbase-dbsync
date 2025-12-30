@@ -69,9 +69,13 @@ cors_origins_str = os.getenv("CORS_ORIGINS", "*")
 cors_origins = [origin.strip() for origin in cors_origins_str.split(",")]
 
 # Note: allow_credentials=True cannot be used with allow_origins=["*"]
-# For local development, we expand "*" to include explicit localhost origins
+# For local development (Windows), we expand "*" to include explicit localhost origins
+# We assume VPS/Production (Linux) manages origins explicitly or uses a proxy
+import sys
+is_windows = os.name == 'nt' or sys.platform == 'win32'
+
 allow_all = "*" in cors_origins
-if allow_all:
+if allow_all and is_windows:
     # Replace wildcard with specific origins to support credentials
     cors_origins = [
         "http://localhost:5173",  # Vite dev server

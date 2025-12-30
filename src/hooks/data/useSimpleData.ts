@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
-import { useTableData, useTableSchema, useGlobalSchema } from '@/hooks/useDatabase';
+import { useTableData, useTableSchema, useGlobalSchema, useRpcData } from '@/hooks/useDatabase';
 import { debug } from '@/lib/debug';
 
 export interface FilterConfig {
@@ -122,12 +122,36 @@ export function useSimpleData({
 
     const { data: schema } = useTableSchema(binding?.tableName || null);
 
+    // Decide which data hook to use
+    const isRpcMode = !!binding?.rpcName;
+
+    // Call both hooks but only enable the relevant one
     const {
-        data: queryResult,
+        data: tableResult,
         isLoading: isTableLoading,
-        error: queryError,
-        refetch: refetchQuery
-    } = useTableData(binding?.tableName || null, queryParams || {});
+        error: tableError,
+        refetch: refetchTable
+    } = useTableData(
+        !isRpcMode && binding?.tableName ? binding.tableName : null,
+        queryParams || {}
+    );
+
+    const {
+        data: rpcResult,
+        isLoading: isRpcLoading,
+        error: rpcError,
+        refetch: refetchRpc
+    } = useRpcData(
+        isRpcMode ? binding!.rpcName : undefined,
+        // For RPC, we merge binding.params with queryParams (pagination/sort/filters)
+        isRpcMode ? { ...binding?.params, ...queryParams } : {}
+    );
+
+    // Unify results
+    const queryResult = isRpcMode ? rpcResult : tableResult;
+    const queryError = isRpcMode ? rpcError : tableError;
+    const isDataLoading = isRpcMode ? isRpcLoading : isTableLoading;
+    const refetchQuery = isRpcMode ? refetchRpc : refetchTable;
 
     // Ensure array data
     const data = useMemo(() => Array.isArray(queryResult?.rows) ? queryResult.rows : [], [queryResult]);
@@ -137,7 +161,7 @@ export function useSimpleData({
     const error = (globalSchemaError instanceof Error ? globalSchemaError.message : null) ||
         (queryError instanceof Error ? queryError.message : null);
 
-    const isLoading = isGlobalSchemaLoading || isTableLoading;
+    const isLoading = isGlobalSchemaLoading || isDataLoading;
 
     // Actions
     const setFilters = useCallback((newFilters: Record<string, any>) => {

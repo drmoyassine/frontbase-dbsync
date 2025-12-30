@@ -123,8 +123,33 @@ export function useTableData(tableName: string | null, params: TableDataParams =
                 total: tableData.total || 0
             };
         },
-        enabled: !!tableName && !!globalSchema, // Wait for global schema to ensure joins are correct
-        placeholderData: keepPreviousData, // Keep previous data while fetching new page/sort
-        staleTime: 5000, // 5 seconds
+        enabled: !!tableName && !!globalSchema,
+        placeholderData: keepPreviousData,
+        staleTime: 5000,
+    });
+}
+
+export function useRpcData(rpcName: string | undefined, params: any = {}) {
+    return useQuery({
+        queryKey: ['rpcData', rpcName, params],
+        queryFn: async () => {
+            if (!rpcName) return { rows: [], total: 0 };
+
+            // Params are passed directly to the RPC via advancedQuery
+            // The database-api handles 'advanced-query' endpoint which expects { rpcName, params }
+            // So we pass the entire params object as the 'params' property
+            const result = await databaseApi.advancedQuery(rpcName, params);
+
+            // Result format: { success: true, rows: [], total: ... }
+            const rpcResult = result.data || result;
+
+            return {
+                rows: rpcResult.rows || [],
+                total: rpcResult.total || 0
+            };
+        },
+        enabled: !!rpcName,
+        placeholderData: keepPreviousData,
+        staleTime: 5000,
     });
 }

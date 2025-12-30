@@ -69,16 +69,26 @@ cors_origins_str = os.getenv("CORS_ORIGINS", "*")
 cors_origins = [origin.strip() for origin in cors_origins_str.split(",")]
 
 # Note: allow_credentials=True cannot be used with allow_origins=["*"]
-# We detect if wildcard is used and adjust accordingly
+# For local development, we expand "*" to include explicit localhost origins
 allow_all = "*" in cors_origins
+if allow_all:
+    # Replace wildcard with specific origins to support credentials
+    cors_origins = [
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:3000",  # Alternative port
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+    ]
+    allow_all = False  # Now we have explicit origins, can enable credentials
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=not allow_all, # Disable credentials if wildcard is used
+    allow_credentials=not allow_all,  # Enable credentials with explicit origins
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Trust Proxy Headers (X-Forwarded-Proto) so redirects use HTTPS
 # This fixes the Mixed Content issue when FastAPI redirects /url to /url/

@@ -143,22 +143,17 @@ export function useSimpleData({
         refetch: refetchRpc
     } = useRpcData(
         isRpcMode ? binding!.rpcName : undefined,
-        // For RPC, we merge binding.params with queryParams (pagination/sort/filters)
-        // AND transform standard params to match RPC naming conventions (snake_case)
+        // For RPC, construct clean params with snake_case keys only
         isRpcMode ? {
+            // Start with binding-specific params (table_name, auth_id_col)
             ...binding?.params,
-            ...queryParams,
-            // Map standard params to RPC snake_case
+            // Map standard queryParams to RPC snake_case (don't spread queryParams to avoid duplicates)
+            page: queryParams?.page,
             page_size: queryParams?.pageSize,
             sort_col: queryParams?.sort?.column,
             sort_dir: queryParams?.sort?.direction,
-            search_query: queryParams?.filters?.search, // Extract search from filters if present
-            // Remove camelCase versions if they cause issues (Supabase might complain about extra params)
-            // But usually extra params are ignored unless function is strict. 
-            // The error said "Searched for ... with parameters ... pageSize", so it seems Strict.
-            // So we might need to remove pageSize, sort, etc. 
-            // Let's pass ONLY what we know + binding defaults.
-            // Actually, destructuring overrides.
+            search_query: queryParams?.filters?.search || '',
+            filters: JSON.stringify(queryParams?.filters || {}),
         } : {}
     );
 

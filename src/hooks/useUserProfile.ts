@@ -22,7 +22,7 @@ export function useUserProfile() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated || !user || !currentUser || !config) {
+    if (!isAuthenticated || !user || !currentUser || !config || !config.columnMapping) {
       setProfile(null);
       return;
     }
@@ -67,7 +67,7 @@ export function useUserProfile() {
 
       const updatedData = await response.json();
       setProfile(prev => prev ? { ...prev, ...updates } : null);
-      
+
       return updatedData;
     } catch (err) {
       console.error('Profile update error:', err);
@@ -83,10 +83,10 @@ export function useUserProfile() {
     isAuthenticated,
     hasProfile: !!profile,
     updateProfile,
-    
+
     // Convenience getters
     displayName: profile?.name || profile?.email || 'Anonymous',
-    initials: profile?.name 
+    initials: profile?.name
       ? profile.name.split(' ').map(n => n[0]).join('').toUpperCase()
       : profile?.email?.[0]?.toUpperCase() || 'A'
   };

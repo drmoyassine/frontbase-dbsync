@@ -127,7 +127,6 @@ def update_project(db: Session, project_data: dict):
         if 'name' in project_data:
             project.name = project_data['name']
         if 'description' in project_data:
-        if 'description' in project_data:
             project.description = project_data['description']
         if 'users_config' in project_data:
             config = project_data['users_config']

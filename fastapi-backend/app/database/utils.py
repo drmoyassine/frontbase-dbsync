@@ -223,25 +223,28 @@ def update_project_settings(db: Session, project_id: str = "default", settings: 
 
 def _get_encryption_key():
     """Get encryption key from env or file"""
-    # Priority 1: Environment Variable (Best for Production)
+    # Priority 1: Environment Variable (Best for Production if set)
     env_key = os.getenv("ENCRYPTION_KEY")
     if env_key:
         return env_key.encode() if isinstance(env_key, str) else env_key
         
-    # Priority 2: File (Best for Local Development)
-    key_file = "encryption_key.txt"
+    # Priority 2: Persistent File in /app/data volume (Out-of-the-box fix)
+    # We use path.join to be OS-agnostic, though in Docker it's /app/data
+    key_file = os.path.join("data", "encryption_key.txt")
+    
     if os.path.exists(key_file):
         with open(key_file, "rb") as f:
             return f.read()
             
-    # Priority 3: Generate and Save (Only for Local/First Run)
+    # Priority 3: Generate and Save to Persistent Volume
     key = Fernet.generate_key()
     try:
+        # Ensure data directory exists (it should, but safety first)
+        os.makedirs("data", exist_ok=True)
         with open(key_file, "wb") as f:
             f.write(key)
-    except Exception:
-        # If we can't write to file (e.g. read-only container), just log warning
-        print("Warning: Could not save generated encryption key to file.")
+    except Exception as e:
+        print(f"Warning: Could not save generated encryption key to {key_file}: {e}")
     return key
 
 def encrypt_data(data: str):

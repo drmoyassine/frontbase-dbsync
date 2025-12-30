@@ -233,14 +233,14 @@ const DataPreviewModal: React.FC<DataPreviewModalProps> = (props) => {
     }, [isColumnsDropdownOpen]);
 
     // API Base URL for Swagger Docs
-    // @ts-ignore
     // API Base URL for Swagger Docs
-    // In production, VITE_API_URL is '/api'. We need to construct the full URL to the sync service docs.
-    // Sync service is mounted at /api/sync, so docs are at /api/sync/docs/views
-    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
-    const baseUrl = apiBase.startsWith('http')
-        ? apiBase
-        : `${window.location.origin}${apiBase}`;
+    // In production, we use relative paths. In dev, Vite proxies /api to localhost:8000.
+    // So we can always resolve relative to window.location.origin if VITE_API_URL is missing/relative.
+    const envApiUrl = import.meta.env.VITE_API_URL || '/api';
+    const baseUrl = envApiUrl.startsWith('http')
+        ? envApiUrl
+        : `${window.location.origin}${envApiUrl.startsWith('/') ? envApiUrl : '/' + envApiUrl}`;
+
     // Remove trailing slash if present then append sync docs path
     const API_DOCS_URL = baseUrl.replace(/\/$/, '') + '/sync/docs/views';
     const SWAGGER_ANCHOR = currentViewId

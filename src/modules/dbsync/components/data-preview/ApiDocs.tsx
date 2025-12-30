@@ -13,7 +13,11 @@ export const ApiDocs = ({ currentViewId }: ApiDocsProps) => {
 
     // @ts-ignore - Vite env
     const API_URL = import.meta.env.VITE_API_URL || baseUrl;
-    const DOCS_URL = API_URL.replace('/api', '') + '/docs';
+    // Construct the docs URL pointing to the sync service swagger
+    // Sync service is mounted at /api/sync, so docs are at /api/sync/docs/views
+    const DOCS_URL = API_URL.endsWith('/api')
+        ? API_URL + '/sync/docs/views'
+        : API_URL + '/api/sync/docs/views';
     const SWAGGER_ANCHOR = currentViewId
         ? `#/Views/create_view_record_api_views__view_id__records_post`
         : `#/Views`;

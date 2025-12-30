@@ -106,7 +106,10 @@ class ProjectUpdateRequest(BaseModel):
     supabase_url: Optional[constr(min_length=1)] = None
     supabase_anon_key: Optional[constr(min_length=1)] = None
     supabase_service_key: Optional[constr(min_length=1)] = None
-    users_config: Optional[Dict[str, Any]] = None
+    users_config: Optional[Dict[str, Any]] = Field(default=None, alias="usersConfig")
+
+    class Config:
+        populate_by_name = True  # Accept both field name and alias
 
 class ProjectResponse(BaseModel):
     id: str
@@ -114,12 +117,13 @@ class ProjectResponse(BaseModel):
     description: Optional[str] = None
     supabase_url: Optional[str] = None
     supabase_anon_key: Optional[str] = None
-    users_config: Optional[Dict[str, Any]] = None
+    users_config: Optional[Dict[str, Any]] = Field(default=None, alias="usersConfig")
     created_at: datetime
     updated_at: datetime
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
     @field_validator('users_config', mode='before')
     @classmethod

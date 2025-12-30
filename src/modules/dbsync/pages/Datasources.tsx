@@ -81,7 +81,7 @@ export function Datasources() {
                     className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                 >
                     <Plus className="w-4 h-4" />
-                    Add Datasource
+                    Add Data Source
                 </button>
             </div>
 
@@ -99,7 +99,7 @@ export function Datasources() {
                         className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                     >
                         <Plus className="w-4 h-4" />
-                        Add Datasource
+                        Add Data Source
                     </button>
                 </div>
             ) : (
@@ -355,7 +355,7 @@ function DatasourceModal({
                 <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
                     <div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                            {isEditing ? `Edit ${datasource.name}` : 'Add Datasource'}
+                            {isEditing ? `Edit ${datasource.name}` : 'Add Data Source'}
                         </h2>
                         <p className="text-xs text-gray-500 mt-1">Configure your database connection credentials</p>
                     </div>
@@ -382,13 +382,20 @@ function DatasourceModal({
                             <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">Database Type</label>
                             <select
                                 value={formData.type}
-                                onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                                onChange={(e) => {
+                                    const newType = e.target.value as any;
+                                    setFormData({ 
+                                        ...formData, 
+                                        type: newType,
+                                        port: newType === 'mysql' ? 3306 : 5432
+                                    });
+                                }}
                                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
                                 disabled={isEditing}
                             >
                                 <option value="supabase">Supabase</option>
                                 <option value="postgres">PostgreSQL</option>
-                                <option value="wordpress">WordPress (Direct DB)</option>
+
                                 <option value="wordpress_rest">WordPress (REST API)</option>
                                 <option value="wordpress_graphql">WordPress (GraphQL)</option>
                                 <option value="neon">Neon</option>
@@ -398,7 +405,7 @@ function DatasourceModal({
                     </div>
 
                     <div className="space-y-4">
-                        {formData.type !== 'wordpress_rest' && formData.type !== 'wordpress_graphql' && (
+                        {formData.type !== 'wordpress_rest' && formData.type !== 'wordpress_graphql' && formData.type !== 'supabase' && formData.type !== 'neon' && (
                             <div className="flex p-1 bg-gray-100 dark:bg-gray-900 rounded-xl">
                                 <button
                                     type="button"
@@ -419,7 +426,7 @@ function DatasourceModal({
                             </div>
                         )}
 
-                        {formData.type !== 'wordpress_rest' && formData.type !== 'wordpress_graphql' && (
+                        {formData.type !== 'wordpress_rest' && formData.type !== 'wordpress_graphql' && formData.type !== 'supabase' && formData.type !== 'neon' && (
                             <>
                                 {configMode === 'uri' ? (
                                     <div className="animate-in fade-in slide-in-from-top-2 duration-300">
@@ -593,7 +600,7 @@ function DatasourceModal({
                                     className="w-full px-3 py-2 border border-primary-200 dark:border-primary-800 rounded-xl bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none font-mono text-xs"
                                     placeholder="postgresql://postgres:[PASSWORD]@db.xxx.supabase.co:5432/postgres"
                                 />
-                                <p className="mt-1 text-[10px] text-gray-500">For direct PostgreSQL access. Find in Project Settings → Database → Connection string</p>
+                                <p className="mt-1 text-[10px] text-gray-500">For direct PostgreSQL access. Find in Project Settings → Database → Connection string. Use port 6543 for Connection Pooling.</p>
                             </div>
                         </div>
                     )}
@@ -654,7 +661,7 @@ function DatasourceModal({
                                 <XCircle className="w-4 h-4" />
                             </div>
                             <div>
-                                <p className="font-bold">Failed to save datasource</p>
+                                <p className="font-bold">Failed to save data source</p>
                                 <p className="opacity-90 mt-1">
                                     {(mutation.error as any)?.response?.data?.detail || mutation.error.message}
                                 </p>
@@ -690,7 +697,7 @@ function DatasourceModal({
                             disabled={mutation.isPending || testRawMutation.isPending}
                             className="flex-1 px-4 py-3 text-sm font-bold bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-all disabled:opacity-50 shadow-lg shadow-primary-500/20"
                         >
-                            {mutation.isPending ? (isEditing ? 'Saving...' : 'Adding...') : (isEditing ? 'Save Changes' : 'Add Datasource')}
+                            {mutation.isPending ? (isEditing ? 'Saving...' : 'Adding...') : (isEditing ? 'Save Changes' : 'Add Data Source')}
                         </button>
                     </div>
                 </div>

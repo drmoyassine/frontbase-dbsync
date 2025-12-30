@@ -9,7 +9,7 @@ export function useCurrentUserData() {
   const { queryData } = useDataBindingStore();
 
   const binding = useMemo(() => {
-    if (!isConfigured || !config || !user) return null;
+    if (!isConfigured || !config || !config.columnMapping || !user) return null;
 
     return {
       componentId: 'current-user-data',

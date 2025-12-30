@@ -290,11 +290,11 @@ export function UserContactConfigPanel() {
     if (config) {
       setSelectedTable(config.contactsTable);
       setColumns({
-        authUserIdColumn: config.columnMapping.authUserIdColumn || '',
-        contactIdColumn: config.columnMapping.contactIdColumn || '',
-        contactTypeColumn: config.columnMapping.contactTypeColumn || '',
-        permissionLevelColumn: config.columnMapping.permissionLevelColumn || '',
-        createdAtColumn: config.columnMapping.createdAtColumn || '',
+        authUserIdColumn: config.columnMapping?.authUserIdColumn || '',
+        contactIdColumn: config.columnMapping?.contactIdColumn || '',
+        contactTypeColumn: config.columnMapping?.contactTypeColumn || '',
+        permissionLevelColumn: config.columnMapping?.permissionLevelColumn || '',
+        createdAtColumn: config.columnMapping?.createdAtColumn || '',
       });
       setContactTypes(config.contactTypes || {});
       setContactTypeHomePages(config.contactTypeHomePages || {});

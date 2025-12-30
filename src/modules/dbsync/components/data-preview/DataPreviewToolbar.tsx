@@ -1,6 +1,6 @@
 import React from 'react';
 import { Search, Plus, Trash2, Filter, ChevronDown, RefreshCw, X } from 'lucide-react';
-import ColumnsDropdown from './ColumnsDropdown';
+import { ColumnsDropdown } from './ColumnsDropdown';
 
 interface DataPreviewToolbarProps {
     filters: { field: string; operator: string; value: string }[];
@@ -127,9 +127,6 @@ export const DataPreviewToolbar = ({
 
             {/* Right: Controls */}
             <div className="flex items-center gap-3 ml-auto">
-                <span className="text-[10px] font-medium text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-md">
-                    {recordCount} / {totalRecords} records
-                </span>
 
                 <div className="relative group/search">
                     <Search className="absolute left-2.5 top-1.5 w-3.5 h-3.5 text-gray-400 group-focus-within/search:text-primary-500 transition-colors" />
@@ -170,14 +167,15 @@ export const DataPreviewToolbar = ({
                 </div>
 
                 <ColumnsDropdown
-                    isOpen={isColumnsDropdownOpen}
-                    setIsOpen={setIsColumnsDropdownOpen}
-                    searchTerm={columnSearch}
-                    setSearchTerm={setColumnSearch}
-                    availableColumns={availableTableFields}
+                    isColumnsDropdownOpen={isColumnsDropdownOpen}
+                    setIsColumnsDropdownOpen={setIsColumnsDropdownOpen}
+                    columnSearch={columnSearch}
+                    setColumnSearch={setColumnSearch}
+                    availableFields={availableTableFields}
                     visibleColumns={visibleColumns}
-                    toggleVisibility={toggleVisibility}
+                    toggleVisibility={(col) => toggleVisibility(col)}
                     setVisibleColumns={setVisibleColumns}
+                    tableData={null}
                     pinnedColumns={pinnedColumns}
                     columnOrder={columnOrder}
                     togglePin={togglePin}

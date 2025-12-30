@@ -22,6 +22,8 @@ interface DataPreviewContentProps {
     globalSearch: string;
     allMatches: { colKey: string; rowIndex: number }[];
     currentMatchIndex: number;
+    recordCount: number;
+    totalRecords: number;
 
     // Table Props
     setColumnOrder: (order: string[]) => void;
@@ -85,6 +87,8 @@ export const DataPreviewContent = ({
     globalSearch,
     allMatches,
     currentMatchIndex,
+    recordCount,
+    totalRecords,
     setColumnOrder,
     pinnedColumns,
     togglePin,
@@ -152,38 +156,48 @@ export const DataPreviewContent = ({
 
             {/* Content Swapper */}
             <div className="flex-1 overflow-hidden relative">
-                {activeTab === 'table' && (
-                    <DataPreviewTable
-                        data={tableData}
-                        isLoading={isLoading || isFetchingData}
-                        isSessionLoading={isSessionLoading}
-                        error={error}
-                        tableColumns={tableColumns}
-                        setColumnOrder={setColumnOrder}
-                        pinnedColumns={pinnedColumns}
-                        togglePin={togglePin}
-                        toggleVisibility={toggleVisibility}
-                        availableFields={availableFields}
-                        filteredRecords={filteredRecords}
-                        globalSearch={globalSearch}
-                        allMatches={allMatches}
-                        currentMatchIndex={currentMatchIndex}
-                        setEditingRecord={setEditingRecord}
-                        setActiveTab={setActiveTab}
-                        globalSearchStatus={globalSearchStatus}
-                        globalResults={globalResults}
-                        setGlobalResults={setGlobalResults}
-                        setFilters={setFilters}
-                        setAppliedFilters={setAppliedFilters}
-                        setSelectedTable={setSelectedTable}
-                        searchOtherCollections={searchOtherCollections}
-                        searchAllDatasources={searchAllDatasources}
-                        datasourceName={datasourceName}
-                        selectedTable={selectedTable}
-                        showDataSearchResults={showDataSearchResults}
-                        setShowDataSearchResults={setShowDataSearchResults}
-                    />
-                )}
+                activeTab === 'table' && (
+                <div className="flex flex-col h-full">
+                    <div className="flex-1 overflow-auto">
+                        <DataPreviewTable
+                            data={tableData}
+                            isLoading={isLoading || isFetchingData}
+                            isSessionLoading={isSessionLoading}
+                            error={error}
+                            tableColumns={tableColumns}
+                            setColumnOrder={setColumnOrder}
+                            pinnedColumns={pinnedColumns}
+                            togglePin={togglePin}
+                            toggleVisibility={toggleVisibility}
+                            availableFields={availableFields}
+                            filteredRecords={filteredRecords}
+                            globalSearch={globalSearch}
+                            allMatches={allMatches}
+                            currentMatchIndex={currentMatchIndex}
+                            setEditingRecord={setEditingRecord}
+                            setActiveTab={setActiveTab}
+                            globalSearchStatus={globalSearchStatus}
+                            globalResults={globalResults}
+                            setGlobalResults={setGlobalResults}
+                            setFilters={setFilters}
+                            setAppliedFilters={setAppliedFilters}
+                            setSelectedTable={setSelectedTable}
+                            searchOtherCollections={searchOtherCollections}
+                            searchAllDatasources={searchAllDatasources}
+                            datasourceName={datasourceName}
+                            selectedTable={selectedTable}
+                            showDataSearchResults={showDataSearchResults}
+                            setShowDataSearchResults={setShowDataSearchResults}
+                        />
+                    </div>
+                    {/* Footer with record count */}
+                    <div className="flex items-center justify-between px-4 py-2 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/10">
+                        <span className="text-[11px] font-medium text-gray-500">
+                            <span className="font-bold text-primary-600">{recordCount}</span> total / <span className="font-bold">{totalRecords}</span> <span className="text-gray-400 uppercase text-[9px]">records</span>
+                        </span>
+                    </div>
+                </div>
+                )
 
                 {activeTab === 'record' && (
                     <RecordEditor

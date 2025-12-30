@@ -166,6 +166,8 @@ const DataPreviewModal = (props: DataPreviewModalProps) => {
                                     currentViewId={currentViewId}
                                     allMatches={allMatches}
                                     currentMatchIndex={currentMatchIndex}
+                                    recordCount={tableData?.total || 0}
+                                    totalRecords={tableData?.total || 0}
                                     handleManualUpdate={actions.handleManualUpdate}
                                     // New props for table features
                                     setColumnOrder={actions.setColumnOrder}

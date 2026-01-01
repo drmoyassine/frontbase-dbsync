@@ -38,8 +38,9 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
     open,
     onOpenChange,
 }) => {
-    const { currentPageId, pages, updatePage } = useBuilderStore();
+    const { currentPageId, pages, updatePage, savePageToDatabase } = useBuilderStore();
     const [activeTab, setActiveTab] = useState<string>('basic');
+    const [isSaving, setIsSaving] = useState(false);
 
     const currentPage = pages.find((p) => p.id === currentPageId);
 
@@ -57,7 +58,7 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
             return currentPage.containerStyles as StylesData;
         }
 
-        // Convert old format to  new format
+        // Convert old format to new format
         const oldStyles = currentPage.containerStyles as any;
         const activeProperties: string[] = [];
         const values: Record<string, any> = {};
@@ -112,6 +113,20 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
 
     const handleStylesUpdate = (newStyles: StylesData) => {
         handleUpdatePage({ containerStyles: newStyles });
+    };
+
+    const handleSave = async () => {
+        if (!currentPageId) return;
+
+        setIsSaving(true);
+        try {
+            await savePageToDatabase(currentPageId);
+            onOpenChange(false);
+        } catch (error) {
+            console.error('Failed to save page:', error);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -313,17 +328,16 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
                         onClick={() => onOpenChange(false)}
                         variant="outline"
                         className="flex-1"
+                        disabled={isSaving}
                     >
                         Close
                     </Button>
                     <Button
-                        onClick={() => {
-                            toast.success('Page settings saved');
-                            onOpenChange(false);
-                        }}
+                        onClick={handleSave}
                         className="flex-1"
+                        disabled={isSaving}
                     >
-                        Save Changes
+                        {isSaving ? 'Saving...' : 'Save Changes'}
                     </Button>
                 </div>
             </SheetContent>

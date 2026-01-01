@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import type { Page, StylesData } from '@/types/builder';
 import { StylesPanel } from '@/components/styles/StylesPanel';
+import { getDefaultPageStyles } from '@/lib/styles/defaults';
 import { toast } from 'sonner';
 
 interface PageSettingsDrawerProps {

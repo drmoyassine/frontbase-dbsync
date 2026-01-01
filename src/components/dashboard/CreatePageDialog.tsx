@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useBuilderStore } from '@/stores/builder';
+import { getDefaultPageStyles } from '@/lib/styles/defaults';
 import {
     Dialog,
     DialogContent,
@@ -87,6 +88,7 @@ export const CreatePageDialog: React.FC<CreatePageDialogProps> = ({
                 keywords: '',
                 isPublic: false,
                 isHomepage: false,
+                containerStyles: getDefaultPageStyles(),
                 layoutData: {
                     content: [
                         {

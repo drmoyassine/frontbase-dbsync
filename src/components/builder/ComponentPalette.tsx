@@ -20,70 +20,71 @@ import {
 
 const componentCategories = {
   basic: {
-    icon: MousePointer,
+    icon: Layout,
     label: 'Basic',
     components: [
-      { name: 'Button', icon: MousePointer, description: 'Interactive button' },
-      { name: 'Text', icon: Type, description: 'Text content' },
-      { name: 'Heading', icon: Type, description: 'Headings (H1-H6)' },
-      { name: 'Link', icon: Globe, description: 'Navigation link' },
-      { name: 'Image', icon: Image, description: 'Image display' },
-      { name: 'Container', icon: Layout, description: 'Layout container' },
-    ]
-  },
-  layout: {
-    icon: Layout,
-    label: 'Layout',
-    components: [
-      { name: 'Card', icon: Layout, description: 'Content card' },
-      { name: 'Grid', icon: Layout, description: 'Grid layout' },
-      { name: 'Flex', icon: Layout, description: 'Flex container' },
-      { name: 'Separator', icon: Layout, description: 'Visual separator' },
-      { name: 'Tabs', icon: Layout, description: 'Tabbed content' },
-      { name: 'Accordion', icon: Layout, description: 'Collapsible content' },
-    ]
-  },
-  forms: {
-    icon: CheckSquare,
-    label: 'Forms',
-    components: [
-      { name: 'Form', icon: CheckSquare, description: 'Form container' },
-      { name: 'Input', icon: Type, description: 'Text input' },
-      { name: 'Textarea', icon: Type, description: 'Multi-line text' },
-      { name: 'Select', icon: CheckSquare, description: 'Dropdown select' },
-      { name: 'Checkbox', icon: CheckSquare, description: 'Checkbox input' },
-      { name: 'Switch', icon: CheckSquare, description: 'Toggle switch' },
-      { name: 'DatePicker', icon: Calendar, description: 'Date selection' },
+      // Basic Components
+      { name: 'Button', icon: MousePointer, description: 'Interactive button', section: 'basic' },
+      { name: 'Text', icon: Type, description: 'Text content', section: 'basic' },
+      { name: 'Heading', icon: Type, description: 'Headings (H1-H6)', section: 'basic' },
+      { name: 'Link', icon: Globe, description: 'Navigation link', section: 'basic' },
+      { name: 'Image', icon: Image, description: 'Image display', section: 'basic' },
+      { name: 'Container', icon: Layout, description: 'Layout container', section: 'basic' },
+
+      // Layout separator
+      { name: '_separator_layout', icon: Layout, description: 'Layout Components', section: 'separator' },
+
+      // Layout Components
+      { name: 'Card', icon: Layout, description: 'Content card', section: 'layout' },
+      { name: 'Grid', icon: Layout, description: 'Grid layout', section: 'layout' },
+      { name: 'Flex', icon: Layout, description: 'Flex container', section: 'layout' },
+      { name: 'Separator', icon: Layout, description: 'Visual separator', section: 'layout' },
+      { name: 'Tabs', icon: Layout, description: 'Tabbed content', section: 'layout' },
+      { name: 'Accordion', icon: Layout, description: 'Collapsible content', section: 'layout' },
     ]
   },
   data: {
     icon: Table,
     label: 'Data',
     components: [
-      { name: 'DataTable', icon: Table, description: 'Advanced data table' },
-      { name: 'KPICard', icon: BarChart, description: 'KPI display card' },
-      { name: 'Chart', icon: BarChart, description: 'Data visualization' },
-      { name: 'Badge', icon: MousePointer, description: 'Status badge' },
-      { name: 'Progress', icon: BarChart, description: 'Progress indicator' },
-      { name: 'Avatar', icon: MousePointer, description: 'User avatar' },
-    ]
-  },
-  advanced: {
-    icon: BarChart,
-    label: 'Advanced',
-    components: [
-      { name: 'Dashboard', icon: BarChart, description: 'Dashboard layout' },
-      { name: 'Navigation', icon: Globe, description: 'Navigation menu' },
-      { name: 'Breadcrumb', icon: Globe, description: 'Breadcrumb trail' },
-      { name: 'Pagination', icon: Globe, description: 'Page navigation' },
-      { name: 'Dialog', icon: Layout, description: 'Modal dialog' },
-      { name: 'Tooltip', icon: MousePointer, description: 'Hover tooltip' },
+      // Form Components
+      { name: 'Form', icon: CheckSquare, description: 'Form container', section: 'forms' },
+      { name: 'Input', icon: Type, description: 'Text input', section: 'forms' },
+      { name: 'Textarea', icon: Type, description: 'Multi-line text', section: 'forms' },
+      { name: 'Select', icon: CheckSquare, description: 'Dropdown select', section: 'forms' },
+      { name: 'Checkbox', icon: CheckSquare, description: 'Checkbox input', section: 'forms' },
+      { name: 'Switch', icon: CheckSquare, description: 'Toggle switch', section: 'forms' },
+      { name: 'DatePicker', icon: Calendar, description: 'Date selection', section: 'forms' },
+
+      // Single Record separator
+      { name: '_separator_record', icon: Table, description: 'Single Record', section: 'separator' },
+
+      // Data Components
+      { name: 'DataTable', icon: Table, description: 'Advanced data table', section: 'data' },
+      { name: 'KPICard', icon: BarChart, description: 'KPI display card', section: 'data' },
+      { name: 'Chart', icon: BarChart, description: 'Data visualization', section: 'data' },
+      { name: 'Badge', icon: MousePointer, description: 'Status badge', section: 'data' },
+      { name: 'Progress', icon: BarChart, description: 'Progress indicator', section: 'data' },
+      { name: 'Avatar', icon: MousePointer, description: 'User avatar', section: 'data' },
     ]
   }
 };
 
 // Draggable component item using @dnd-kit
 const DraggableComponentItem: React.FC<{ component: any }> = ({ component }) => {
+  // Render separator
+  if (component.section === 'separator') {
+    return (
+      <div className="col-span-3 flex items-center gap-2 my-2">
+        <div className="flex-1 border-t border-border"></div>
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          {component.description}
+        </span>
+        <div className="flex-1 border-t border-border"></div>
+      </div>
+    );
+  }
+
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `palette-${component.name}`,
     data: {
@@ -146,14 +147,16 @@ export const ComponentPalette: React.FC = () => {
         {/* Category Filters */}
         <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full">
           <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
-            <TabsTrigger value="all" className="text-xs">
-              All
-            </TabsTrigger>
+            {/* Basic and Data first */}
             {Object.entries(componentCategories).map(([key, data]) => (
               <TabsTrigger key={key} value={key} className="text-xs">
                 {data.label}
               </TabsTrigger>
             ))}
+            {/* All at the end */}
+            <TabsTrigger value="all" className="text-xs">
+              All
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>

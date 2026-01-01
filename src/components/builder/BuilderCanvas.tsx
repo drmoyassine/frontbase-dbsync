@@ -44,13 +44,13 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
     }
   };
 
-  // Viewport dimensions
+  // Viewport dimensions - Industry standard sizes
   const getViewportDimensions = () => {
     switch (currentViewport) {
-      case 'mobile': return { width: 375, height: 667 };
-      case 'tablet': return { width: 768, height: 1024 };
-      case 'desktop': return { width: 1200, height: 800 };
-      default: return { width: 1200, height: 800 };
+      case 'mobile': return { width: 375, height: 812 }; // iPhone 13 size
+      case 'tablet': return { width: 768, height: 1024 }; // iPad size
+      case 'desktop': return { width: 1200, height: 1400 }; // Better working height
+      default: return { width: 1200, height: 1400 };
     }
   };
 
@@ -204,11 +204,12 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       {/* Device Frame / Viewport Container */}
       <div
         className={cn(
-          "mx-auto transition-all duration-300 relative h-full",
+          "mx-auto transition-all duration-300 relative",
           showDeviceFrame && "shadow-2xl rounded-lg overflow-hidden"
         )}
         style={{
           width: `${viewportWidth}px`,
+          minHeight: `${viewportHeight}px`, // Minimum height, can grow
           transform: `scale(${scaleFactor})`,
           transformOrigin: 'top center'
         }}

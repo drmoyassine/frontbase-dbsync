@@ -204,12 +204,11 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       {/* Device Frame / Viewport Container */}
       <div
         className={cn(
-          "mx-auto transition-all duration-300 relative",
+          "mx-auto transition-all duration-300 relative min-h-full",
           showDeviceFrame && "shadow-2xl rounded-lg overflow-hidden"
         )}
         style={{
           width: `${viewportWidth}px`,
-          minHeight: `${viewportHeight}px`, // Minimum height, can grow
           transform: `scale(${scaleFactor})`,
           transformOrigin: 'top center'
         }}
@@ -218,7 +217,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
         <div
           ref={hasComponents ? undefined : setDropRef}
           className={cn(
-            "h-full w-full",
+            "min-h-full w-full",
             !hasComponents && isOverEmpty && "bg-blue-50/50 border-2 border-dashed border-blue-400"
           )}
           style={getContainerCSS()}

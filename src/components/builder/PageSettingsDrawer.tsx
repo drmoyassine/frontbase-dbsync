@@ -35,6 +35,7 @@ import {
     Filter,
     Play
 } from 'lucide-react';
+import type { Page } from '@/types/builder';
 
 interface PageSettingsDrawerProps {
     open: boolean;
@@ -45,16 +46,16 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
     open,
     onOpenChange,
 }) => {
-    const { currentPageId, pages, updatePageMeta } = useBuilderStore();
+    const { currentPageId, pages, updatePage } = useBuilderStore();
     const [activeTab, setActiveTab] = useState<string>('basic');
 
     const currentPage = pages.find((p) => p.id === currentPageId);
 
     if (!currentPage) return null;
 
-    const handleUpdateMeta = (key: string, value: any) => {
+    const handleUpdatePage = (updates: Partial<Page>) => {
         if (currentPageId) {
-            updatePageMeta(currentPageId, { [key]: value });
+            updatePage(currentPageId, updates);
         }
     };
 
@@ -92,21 +93,21 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
                             <Input
                                 id="pageName"
                                 value={currentPage.name}
-                                onChange={(e) => handleUpdateMeta('name', e.target.value)}
+                                onChange={(e) => handleUpdatePage({ name: e.target.value })}
                                 placeholder="Enter page name"
                             />
                         </div>
 
-                        {/* Page Path */}
+                        {/* Page Slug */}
                         <div className="space-y-2">
-                            <Label htmlFor="pagePath">Page Path</Label>
+                            <Label htmlFor="pageSlug">URL Slug</Label>
                             <div className="flex items-center gap-2">
                                 <span className="text-sm text-muted-foreground">/</span>
                                 <Input
-                                    id="pagePath"
-                                    value={currentPage.path || ''}
-                                    onChange={(e) => handleUpdateMeta('path', e.target.value)}
-                                    placeholder="page-path"
+                                    id="pageSlug"
+                                    value={currentPage.slug || ''}
+                                    onChange={(e) => handleUpdatePage({ slug: e.target.value })}
+                                    placeholder="page-slug"
                                     className="flex-1"
                                 />
                             </div>
@@ -120,10 +121,14 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
                             <Label htmlFor="pageTitle">Page Title (SEO)</Label>
                             <Input
                                 id="pageTitle"
-                                value={currentPage.meta?.title || ''}
-                                onChange={(e) => handleUpdateMeta('title', e.target.value)}
+                                value={currentPage.title || ''}
+                                onChange={(e) => handleUpdatePage({ title: e.target.value })}
                                 placeholder="Page title for search engines"
+                                maxLength={60}
                             />
+                            <p className="text-xs text-muted-foreground">
+                                {(currentPage.title || '').length}/60 characters
+                            </p>
                         </div>
 
                         {/* Page Description (SEO) */}
@@ -131,10 +136,25 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
                             <Label htmlFor="pageDescription">Page Description (SEO)</Label>
                             <Textarea
                                 id="pageDescription"
-                                value={currentPage.meta?.description || ''}
-                                onChange={(e) => handleUpdateMeta('description', e.target.value)}
+                                value={currentPage.description || ''}
+                                onChange={(e) => handleUpdatePage({ description: e.target.value })}
                                 placeholder="Brief description for search engines"
                                 rows={3}
+                                maxLength={160}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                {(currentPage.description || '').length}/160 characters
+                            </p>
+                        </div>
+
+                        {/* Keywords */}
+                        <div className="space-y-2">
+                            <Label htmlFor="pageKeywords">Keywords</Label>
+                            <Input
+                                id="pageKeywords"
+                                value={currentPage.keywords || ''}
+                                onChange={(e) => handleUpdatePage({ keywords: e.target.value })}
+                                placeholder="keyword1, keyword2, keyword3"
                             />
                         </div>
 
@@ -142,22 +162,25 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
                         <div className="space-y-2">
                             <Label>Status</Label>
                             <div className="flex items-center gap-2">
-                                <Badge variant={currentPage.published ? 'default' : 'secondary'}>
-                                    {currentPage.published ? 'Published' : 'Draft'}
+                                <Badge variant={currentPage.deletedAt ? 'destructive' : 'default'}>
+                                    {currentPage.deletedAt ? 'Deleted' : 'Active'}
                                 </Badge>
-                                <Badge variant={currentPage.visible ? 'default' : 'outline'}>
-                                    {currentPage.visible ? (
+                                <Badge variant={currentPage.isPublic ? 'default' : 'outline'}>
+                                    {currentPage.isPublic ? (
                                         <>
                                             <Eye className="h-3 w-3 mr-1" />
-                                            Visible
+                                            Public
                                         </>
                                     ) : (
                                         <>
                                             <EyeOff className="h-3 w-3 mr-1" />
-                                            Hidden
+                                            Private
                                         </>
                                     )}
                                 </Badge>
+                                {currentPage.isHomepage && (
+                                    <Badge variant="secondary">Homepage</Badge>
+                                )}
                             </div>
                         </div>
                     </TabsContent>

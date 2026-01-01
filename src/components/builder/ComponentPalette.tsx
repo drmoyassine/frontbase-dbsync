@@ -79,6 +79,8 @@ const componentCategories = {
 
 // Draggable component item using @dnd-kit
 const DraggableComponentItem: React.FC<{ component: any }> = ({ component }) => {
+  const { currentPageId, moveComponent, setSelectedComponentId } = useBuilderStore();
+
   // Render separator
   if (component.section === 'separator') {
     return (
@@ -95,7 +97,7 @@ const DraggableComponentItem: React.FC<{ component: any }> = ({ component }) => 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `palette-${component.name}`,
     data: {
-      type: component.name, // This is what CustomBuilder expects
+      type: component.name,
       name: component.name
     }
   });
@@ -108,10 +110,7 @@ const DraggableComponentItem: React.FC<{ component: any }> = ({ component }) => 
   const Icon = component.icon;
 
   const handleDoubleClick = () => {
-    // Import useBuilderStore to add component directly
-    const { currentPageId, moveComponent, setSelectedComponentId } = (window as any).__builderStore || {};
-
-    if (currentPageId && moveComponent) {
+    if (currentPageId) {
       const newComponent = {
         id: `${Date.now()}-${Math.random()}`,
         type: component.name,
@@ -120,11 +119,8 @@ const DraggableComponentItem: React.FC<{ component: any }> = ({ component }) => 
         children: []
       };
 
-      // Add to end of canvas
       moveComponent(currentPageId, null, newComponent, 999);
-      if (setSelectedComponentId) {
-        setSelectedComponentId(newComponent.id);
-      }
+      setSelectedComponentId(newComponent.id);
     }
   };
 
@@ -154,63 +150,86 @@ export const ComponentPalette: React.FC = () => {
     data.components.map(comp => ({ ...comp, category }))
   );
 
-  const filteredComponents = allComponents.filter(comp =>
-    comp.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-    (activeCategory === 'all' || comp.category === activeCategory)
-  );
+  const filteredComponents = allComponents.filter(comp => {
+    const matchesSearch = comp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      comp.description.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = activeCategory === 'all' || comp.category === activeCategory;
+    return matchesSearch && matchesCategory && comp.section !== 'separator';
+  });
+
+  const getCategoryComponents = (category: string) => {
+    if (category === 'all') {
+      return allComponents;
+    }
+    return componentCategories[category as keyof typeof componentCategories]?.components || [];
+  };
 
   return (
     <div className="flex flex-col h-full">
-      {/* Search */}
-      <div className="p-4 border-b space-y-3">
+      {/* Search Bar */}
+      <div className="p-4 border-b border-border">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search components..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
+            className="pl-8 h-9"
           />
         </div>
-
-        {/* Category Filters */}
-        <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            {/* Basic and Data first */}
-            {Object.entries(componentCategories).map(([key, data]) => (
-              <TabsTrigger key={key} value={key} className="text-xs">
-                {data.label}
-              </TabsTrigger>
-            ))}
-            {/* All at the end */}
-            <TabsTrigger value="all" className="text-xs">
-              All
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
       </div>
 
-      {/* Components Grid */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {/* Grid */}
-        <div className="grid grid-cols-3 gap-2">
-          {filteredComponents.map((component) => (
-            <DraggableComponentItem
-              key={component.name}
-              component={component}
-            />
+      {/* Category Tabs */}
+      <Tabs value={activeCategory} onValueChange={setActiveCategory} className="flex-1 flex flex-col">
+        <TabsList className="w-full rounded-none border-b border-border justify-start px-4">
+          <TabsTrigger value="all" className="relative">
+            All
+            <Badge variant="secondary" className="ml-2 h-5 px-1.5">
+              {allComponents.filter(c => c.section !== 'separator').length}
+            </Badge>
+          </TabsTrigger>
+          {Object.entries(componentCategories).map(([key, cat]) => {
+            const Icon = cat.icon;
+            return (
+              <TabsTrigger key={key} value={key} className="relative">
+                <Icon className="h-3.5 w-3.5 mr-1.5" />
+                {cat.label}
+                <Badge variant="secondary" className="ml-2 h-5 px-1.5">
+                  {cat.components.filter(c => c.section !== 'separator').length}
+                </Badge>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+
+        <div className="flex-1 overflow-auto">
+          <TabsContent value="all" className="mt-0 p-4">
+            {searchTerm ? (
+              <div className="grid grid-cols-3 gap-2">
+                {filteredComponents.map((component) => (
+                  <DraggableComponentItem key={component.name} component={component} />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-2">
+                {allComponents.map((component) => (
+                  <DraggableComponentItem key={component.name} component={component} />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {Object.entries(componentCategories).map(([key, cat]) => (
+            <TabsContent key={key} value={key} className="mt-0 p-4">
+              <div className="grid grid-cols-3 gap-2">
+                {getCategoryComponents(key).map((component) => (
+                  <DraggableComponentItem key={component.name} component={component} />
+                ))}
+              </div>
+            </TabsContent>
           ))}
         </div>
-
-        {/* Empty state */}
-        {filteredComponents.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-32 text-center text-muted-foreground">
-            <Search className="h-8 w-8 mb-2 opacity-50" />
-            <p className="text-sm">No components found</p>
-            <p className="text-xs mt-1">Try a different search term</p>
-          </div>
-        )}
-      </div>
+      </Tabs>
     </div>
   );
 };

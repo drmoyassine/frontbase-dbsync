@@ -65,7 +65,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
         }
       }}
     >
-      <div className="flex justify-center items-start">
+      <div className="flex justify-start items-start">
         <div
           className={cn(
             "bg-background transition-all duration-300 relative",
@@ -77,7 +77,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
             width: `${viewportWidth}px`,
             minHeight: `${viewportHeight}px`,
             transform: `scale(${scaleFactor})`,
-            transformOrigin: 'top center',
+            transformOrigin: 'top left',
             marginBottom: `${(viewportHeight * scaleFactor - viewportHeight) + 32}px`
           }}
         >

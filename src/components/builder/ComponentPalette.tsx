@@ -23,18 +23,21 @@ const componentCategories = {
     icon: Layout,
     label: 'Basic',
     components: [
-      // Basic Components
+      // Basic Components separator (NEW)
+      { name: '_separator_basic', icon: MousePointer, description: 'Basic Components', section: 'separator' },
+
+      // Basic Components (Container REMOVED)
       { name: 'Button', icon: MousePointer, description: 'Interactive button', section: 'basic' },
       { name: 'Text', icon: Type, description: 'Text content', section: 'basic' },
       { name: 'Heading', icon: Type, description: 'Headings (H1-H6)', section: 'basic' },
       { name: 'Link', icon: Globe, description: 'Navigation link', section: 'basic' },
       { name: 'Image', icon: Image, description: 'Image display', section: 'basic' },
-      { name: 'Container', icon: Layout, description: 'Layout container', section: 'basic' },
 
       // Layout separator
       { name: '_separator_layout', icon: Layout, description: 'Layout Components', section: 'separator' },
 
-      // Layout Components
+      // Layout Components (Container MOVED HERE)
+      { name: 'Container', icon: Layout, description: 'Layout container', section: 'layout' },
       { name: 'Card', icon: Layout, description: 'Content card', section: 'layout' },
       { name: 'Grid', icon: Layout, description: 'Grid layout', section: 'layout' },
       { name: 'Flex', icon: Layout, description: 'Flex container', section: 'layout' },
@@ -47,7 +50,10 @@ const componentCategories = {
     icon: Table,
     label: 'Data',
     components: [
-      // Form Components
+      // Record Components separator (RENAMED from Form Components)
+      { name: '_separator_record', icon: CheckSquare, description: 'Record Components', section: 'separator' },
+
+      // Form/Record Components
       { name: 'Form', icon: CheckSquare, description: 'Form container', section: 'forms' },
       { name: 'Input', icon: Type, description: 'Text input', section: 'forms' },
       { name: 'Textarea', icon: Type, description: 'Multi-line text', section: 'forms' },
@@ -56,10 +62,10 @@ const componentCategories = {
       { name: 'Switch', icon: CheckSquare, description: 'Toggle switch', section: 'forms' },
       { name: 'DatePicker', icon: Calendar, description: 'Date selection', section: 'forms' },
 
-      // Single Record separator
-      { name: '_separator_record', icon: Table, description: 'Single Record', section: 'separator' },
+      // Lists Components separator (RENAMED from Single Record)
+      { name: '_separator_lists', icon: Table, description: 'Lists Components', section: 'separator' },
 
-      // Data Components
+      // Data/Lists Components
       { name: 'DataTable', icon: Table, description: 'Advanced data table', section: 'data' },
       { name: 'KPICard', icon: BarChart, description: 'KPI display card', section: 'data' },
       { name: 'Chart', icon: BarChart, description: 'Data visualization', section: 'data' },

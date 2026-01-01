@@ -141,13 +141,33 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
 
         setSaving(true);
         try {
-            // Create a sanitized copy of the page
+            // Serialize containerStyles into layoutData.root for database storage
             const sanitizedPage = { ...page };
 
-            console.log('💾 Saving page:', {
+            if (sanitizedPage.containerStyles) {
+                // Ensure layoutData exists
+                if (!sanitizedPage.layoutData) {
+                    sanitizedPage.layoutData = { content: [], root: {} };
+                }
+
+                // Move containerStyles into layoutData.root
+                sanitizedPage.layoutData = {
+                    ...sanitizedPage.layoutData,
+                    root: {
+                        ...sanitizedPage.layoutData.root,
+                        containerStyles: sanitizedPage.containerStyles
+                    }
+                };
+
+                // Remove top-level containerStyles (not in DB schema)
+                delete sanitizedPage.containerStyles;
+            }
+
+            console.log('💾 [Store] Saving page:', {
                 id: pageId,
                 componentCount: page.layoutData?.content?.length || 0,
-                hasLayoutData: !!sanitizedPage.layoutData
+                hasContainerStyles: !!page.containerStyles,
+                serializedToRoot: !!sanitizedPage.layoutData?.root?.containerStyles
             });
 
             await updatePageApi(pageId, sanitizedPage);
@@ -159,6 +179,7 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
                 description: "Page has been saved successfully"
             });
         } catch (error: any) {
+            console.error('❌ [Store] Save failed:', error);
             toast({
                 title: "Error saving page",
                 description: error.response?.data?.message || error.message || "Failed to save page",

@@ -40,10 +40,17 @@ export interface Page {
     keywords?: string;
     isPublic: boolean;
     isHomepage: boolean;
-    containerStyles?: ContainerStyles | StylesData; // Support both old and new
+
+    // containerStyles NOW lives in layoutData.root.containerStyles
+    // but we keep this for in-memory representation
+    containerStyles?: ContainerStyles | StylesData;
+
     layoutData?: {
         content: ComponentData[];
-        root: Record<string, any>;
+        root: {
+            containerStyles?: ContainerStyles | StylesData; // Actually stored here in DB
+            [key: string]: any;
+        };
     };
     createdAt: string;
     updatedAt: string;

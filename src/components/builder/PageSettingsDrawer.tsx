@@ -57,7 +57,7 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
             return currentPage.containerStyles as StylesData;
         }
 
-        // Convert old format to new format
+        // Convert old format to  new format
         const oldStyles = currentPage.containerStyles as any;
         const activeProperties: string[] = [];
         const values: Record<string, any> = {};
@@ -306,7 +306,27 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
                         </div>
                     </TabsContent>
                 </Tabs>
+
+                {/* Sticky Save/Close Buttons */}
+                <div className="sticky bottom-0 left-0 right-0 mt-6 pt-4 pb-4 px-6 bg-background border-t border-border flex gap-2">
+                    <Button
+                        onClick={() => onOpenChange(false)}
+                        variant="outline"
+                        className="flex-1"
+                    >
+                        Close
+                    </Button>
+                    <Button
+                        onClick={() => {
+                            toast.success('Page settings saved');
+                            onOpenChange(false);
+                        }}
+                        className="flex-1"
+                    >
+                        Save Changes
+                    </Button>
+                </div>
             </SheetContent>
-        </Sheet >
+        </Sheet>
     );
 };

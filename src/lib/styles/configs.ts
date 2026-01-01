@@ -33,7 +33,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         category: 'Layout',
         controlType: 'select',
         defaultValue: 'row',
-        options: ['row', 'column', 'row-reverse', 'column-reverse'],
+        options: ['row', 'column'],
+        useToggleGroup: true,
         toCSSValue: (value) => value,
         fromCSSValue: (css) => css.trim()
     },
@@ -44,7 +45,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         category: 'Layout',
         controlType: 'select',
         defaultValue: 'flex-start',
-        options: ['flex-start', 'center', 'flex-end', 'space-between', 'space-around', 'space-evenly'],
+        options: ['flex-start', 'center', 'flex-end', 'space-between', 'space-around'],
+        useToggleGroup: true,
         toCSSValue: (value) => value,
         fromCSSValue: (css) => css.trim()
     },
@@ -54,8 +56,9 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         name: 'Align Items',
         category: 'Layout',
         controlType: 'select',
-        defaultValue: 'stretch',
-        options: ['flex-start', 'center', 'flex-end', 'stretch', 'baseline'],
+        defaultValue: 'flex-start',
+        options: ['flex-start', 'center', 'flex-end', 'stretch'],
+        useToggleGroup: true,
         toCSSValue: (value) => value,
         fromCSSValue: (css) => css.trim()
     },

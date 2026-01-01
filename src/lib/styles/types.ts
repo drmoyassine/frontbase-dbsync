@@ -27,6 +27,7 @@ export interface CSSPropertyConfig {
 
     // For select controls
     options?: string[];
+    useToggleGroup?: boolean; // Use toggle buttons instead of dropdown
 
     // For number controls
     unit?: string;

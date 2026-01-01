@@ -7,6 +7,7 @@ import { NumberControl } from './controls/NumberControl';
 import { ColorControl } from './controls/ColorControl';
 import { SpacingControl } from './controls/SpacingControl';
 import { CompositeControl } from './controls/CompositeControl';
+import { ToggleGroupControl } from './controls/ToggleGroupControl';
 import type { CSSPropertyConfig } from '@/lib/styles/types';
 
 interface PropertyControlProps {
@@ -37,7 +38,11 @@ export const PropertyControl: React.FC<PropertyControlProps> = ({
             </div>
 
             <div className="property-control-input">
-                {config.controlType === 'select' && (
+                {config.controlType === 'select' && config.useToggleGroup && (
+                    <ToggleGroupControl config={config} value={value} onChange={onChange} />
+                )}
+
+                {config.controlType === 'select' && !config.useToggleGroup && (
                     <SelectControl config={config} value={value} onChange={onChange} />
                 )}
 

@@ -251,15 +251,30 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
         try {
             const pagesRaw = await getPages();
 
-            // Ensure we handle naming mismatches if any persist
-            const pages = (pagesRaw || []).map((page: any) => ({
-                ...page,
-                isPublic: page.isPublic ?? page.is_public ?? false,
-                isHomepage: page.isHomepage ?? page.is_homepage ?? false,
-                layoutData: page.layoutData ?? page.layout_data ?? { content: [], root: {} },
-                createdAt: page.createdAt ?? page.created_at ?? new Date().toISOString(),
-                updatedAt: page.updatedAt ?? page.updated_at ?? new Date().toISOString()
-            })) as Page[];
+            // Deserialize containerStyles from layoutData.root to top-level
+            const pages = (pagesRaw || []).map((page: any) => {
+                const layoutData = page.layoutData ?? page.layout_data ?? { content: [], root: {} };
+
+                // Extract containerStyles from layoutData.root
+                const containerStyles = layoutData?.root?.containerStyles;
+
+                console.log('📥 [Store] Loading page:', {
+                    id: page.id,
+                    name: page.name,
+                    hasContainerStylesInRoot: !!containerStyles
+                });
+
+                return {
+                    ...page,
+                    isPublic: page.isPublic ?? page.is_public ?? false,
+                    isHomepage: page.isHomepage ?? page.is_homepage ?? false,
+                    layoutData,
+                    containerStyles, // Expose at top level for easy access
+                    createdAt: page.createdAt ?? page.created_at ?? new Date().toISOString(),
+                    updatedAt: page.updatedAt ?? page.updated_at ?? new Date().toISOString(),
+                    deletedAt: page.deletedAt ?? page.deleted_at ?? null
+                };
+            }) as Page[];
 
             set({
                 pages: pages || [],

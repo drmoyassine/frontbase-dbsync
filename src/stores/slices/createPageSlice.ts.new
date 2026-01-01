@@ -1,0 +1,48 @@
+    loadPagesFromDatabase: async (includeDeleted = false) => {
+        const { setLoading } = get();
+        setLoading(true);
+        try {
+            const pagesRaw = await getPages();
+
+            // Deserialize containerStyles from layoutData.root to top-level
+            const pages = (pagesRaw || []).map((page: any) => {
+                const layoutData = page.layoutData ?? page.layout_data ?? { content: [], root: {} };
+                
+                // Extract containerStyles from layoutData.root
+                const containerStyles = layoutData?.root?.containerStyles;
+                
+                console.log('📥 [Store] Loading page:', {
+                    id: page.id,
+                    name: page.name,
+                    hasContainerStylesInRoot: !!containerStyles
+                });
+                
+                return {
+                    ...page,
+                    isPublic: page.isPublic ?? page.is_public ?? false,
+                    isHomepage: page.isHomepage ?? page.is_homepage ?? false,
+                    layoutData,
+                    containerStyles, // Expose at top level for easy access
+                    createdAt: page.createdAt ?? page.created_at ?? new Date().toISOString(),
+                    updatedAt: page.updatedAt ?? page.updated_at ?? new Date().toISOString(),
+                    deletedAt: page.deletedAt ?? page.deleted_at ?? null
+                };
+            }) as Page[];
+
+            set({
+                pages: pages || [],
+                hasUnsavedChanges: false,
+                isInitialized: true
+            });
+        } catch (error: any) {
+            console.error('Failed to load pages:', error);
+            toast({
+                title: "Error loading pages",
+                description: error.response?.data?.message || error.message || "Failed to load pages from database",
+                variant: "destructive"
+            });
+            set({ isInitialized: true });
+        } finally {
+            setLoading(false);
+        }
+    },

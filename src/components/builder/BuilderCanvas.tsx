@@ -5,6 +5,8 @@ import { DraggableComponent } from './DraggableComponent';
 import { CanvasGrid } from './CanvasGrid';
 import { cn } from '@/lib/utils';
 import { getDefaultProps } from '@/lib/componentDefaults';
+import { stylesToCSS } from '@/lib/styles/converters';
+import type { StylesData } from '@/types/builder';
 
 interface BuilderCanvasProps {
   page: Page;
@@ -55,56 +57,133 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
   const { width: viewportWidth, height: viewportHeight } = getViewportDimensions();
   const scaleFactor = zoomLevel / 100;
 
-  // Get container styles from page
-  const containerStyles = page.containerStyles || {};
-
-  // Convert containerStyles to CSS
+  // Convert NEW containerStyles format to inline CSS
   const getContainerCSS = (): React.CSSProperties => {
+    const containerStyles = page.containerStyles;
+
+    if (!containerStyles) {
+      return { display: 'flex', flexDirection: 'column' };
+    }
+
     const styles: React.CSSProperties = {};
 
-    if (containerStyles.orientation) {
-      styles.display = 'flex';
-      styles.flexDirection = containerStyles.orientation;
+    // Handle NEW StylesData format
+    if ('activeProperties' in containerStyles && 'values' in containerStyles) {
+      const stylesData = containerStyles as StylesData;
+      const values = stylesData.values;
+
+      // Flex direction
+      if (values.flexDirection) {
+        styles.display = 'flex';
+        styles.flexDirection = values.flexDirection as any;
+      }
+
+      // Gap
+      if (values.gap !== undefined) {
+        styles.gap = typeof values.gap === 'number' ? `${values.gap}px` : values.gap;
+      }
+
+      // Flex wrap
+      if (values.flexWrap) {
+        styles.flexWrap = values.flexWrap as any;
+      }
+
+      // Align items
+      if (values.alignItems) {
+        styles.alignItems = values.alignItems as any;
+      }
+
+      // Justify content
+      if (values.justifyContent) {
+        styles.justifyContent = values.justifyContent as any;
+      }
+
+      // Background color
+      if (values.backgroundColor) {
+        styles.backgroundColor = values.backgroundColor;
+      }
+
+      // Padding
+      if (values.padding) {
+        const p = values.padding;
+        if (typeof p === 'object' && 'top' in p) {
+          styles.padding = `${p.top}px ${p.right}px ${p.bottom}px ${p.left}px`;
+        }
+      }
+
+      // Width, height, etc.
+      ['width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight'].forEach(prop => {
+        if (values[prop] !== undefined && values[prop] !== 'auto') {
+          (styles as any)[prop] = typeof values[prop] === 'number' ? `${values[prop]}px` : values[prop];
+        }
+      });
+
+      // Typography
+      if (values.fontSize) styles.fontSize = `${values.fontSize}px`;
+      if (values.fontWeight) styles.fontWeight = values.fontWeight;
+      if (values.lineHeight) styles.lineHeight = values.lineHeight;
+      if (values.textAlign) styles.textAlign = values.textAlign as any;
+      if (values.color) styles.color = values.color;
+
+      // Effects
+      if (values.opacity) styles.opacity = values.opacity;
+      if (values.borderRadius) styles.borderRadius = `${values.borderRadius}px`;
+      if (values.borderWidth) styles.borderWidth = `${values.borderWidth}px`;
+      if (values.borderStyle) styles.borderStyle = values.borderStyle as any;
+      if (values.borderColor) styles.borderColor = values.borderColor;
+      if (values.boxShadow && typeof values.boxShadow === 'object') {
+        const { x, y, blur, spread, color } = values.boxShadow;
+        styles.boxShadow = `${x}px ${y}px ${blur}px ${spread}px ${color}`;
+      }
+    } else {
+      // Handle OLD ContainerStyles format for backward compatibility
+      const oldStyles = containerStyles as any;
+
+      if (oldStyles.orientation) {
+        styles.display = 'flex';
+        styles.flexDirection = oldStyles.orientation;
+      }
+
+      if (oldStyles.gap !== undefined) {
+        styles.gap = `${oldStyles.gap}px`;
+      }
+
+      if (oldStyles.flexWrap) {
+        styles.flexWrap = oldStyles.flexWrap;
+      }
+
+      if (oldStyles.alignItems) {
+        const alignMap: Record<string, string> = {
+          'start': 'flex-start',
+          'center': 'center',
+          'end': 'flex-end',
+          'stretch': 'stretch'
+        };
+        styles.alignItems = alignMap[oldStyles.alignItems] || oldStyles.alignItems;
+      }
+
+      if (oldStyles.justifyContent) {
+        const justifyMap: Record<string, string> = {
+          'start': 'flex-start',
+          'center': 'center',
+          'end': 'flex-end',
+          'between': 'space-between',
+          'around': 'space-around'
+        };
+        styles.justifyContent = justifyMap[oldStyles.justifyContent] || oldStyles.justifyContent;
+      }
+
+      if (oldStyles.backgroundColor) {
+        styles.backgroundColor = oldStyles.backgroundColor;
+      }
+
+      if (oldStyles.padding) {
+        const { top, right, bottom, left } = oldStyles.padding;
+        styles.padding = `${top}px ${right}px ${bottom}px ${left}px`;
+      }
     }
 
-    if (containerStyles.gap !== undefined) {
-      styles.gap = `${containerStyles.gap}px`;
-    }
-
-    if (containerStyles.flexWrap) {
-      styles.flexWrap = containerStyles.flexWrap;
-    }
-
-    if (containerStyles.alignItems) {
-      const alignMap: Record<string, string> = {
-        'start': 'flex-start',
-        'center': 'center',
-        'end': 'flex-end',
-        'stretch': 'stretch'
-      };
-      styles.alignItems = alignMap[containerStyles.alignItems] || containerStyles.alignItems;
-    }
-
-    if (containerStyles.justifyContent) {
-      const justifyMap: Record<string, string> = {
-        'start': 'flex-start',
-        'center': 'center',
-        'end': 'flex-end',
-        'between': 'space-between',
-        'around': 'space-around'
-      };
-      styles.justifyContent = justifyMap[containerStyles.justifyContent] || containerStyles.justifyContent;
-    }
-
-    if (containerStyles.backgroundColor) {
-      styles.backgroundColor = containerStyles.backgroundColor;
-    }
-
-    if (containerStyles.padding) {
-      const { top, right, bottom, left } = containerStyles.padding;
-      styles.padding = `${top}px ${right}px ${bottom}px ${left}px`;
-    }
-
+    console.log('🎨 [Canvas] Applied container styles:', styles);
     return styles;
   };
 
@@ -118,52 +197,49 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
         }
       }}
     >
-      <div className="flex justify-start items-start">
+      {/* Grid Overlay */}
+      {showGrid && <CanvasGrid />}
+
+      {/* Device Frame / Viewport Container */}
+      <div
+        className={cn(
+          "mx-auto transition-all duration-300 relative",
+          showDeviceFrame && "shadow-2xl rounded-lg overflow-hidden border-8 border-gray-800"
+        )}
+        style={{
+          width: `${viewportWidth}px`,
+          minHeight: `${viewportHeight}px`,
+          transform: `scale(${scaleFactor})`,
+          transformOrigin: 'top center'
+        }}
+      >
+        {/* Canvas Content with Container Styles */}
         <div
+          ref={hasComponents ? undefined : setDropRef}
           className={cn(
-            "bg-background transition-all duration-300 relative",
-            showDeviceFrame && currentViewport !== 'desktop' && "shadow-2xl rounded-lg border border-border",
-            currentViewport === 'mobile' && showDeviceFrame && "rounded-[2.5rem] border-8 border-slate-300",
-            currentViewport === 'tablet' && showDeviceFrame && "rounded-xl border-4 border-slate-300"
+            "min-h-full",
+            !hasComponents && isOverEmpty && "bg-blue-50/50 border-2 border-dashed border-blue-400"
           )}
-          style={{
-            width: `${viewportWidth}px`,
-            minHeight: `${viewportHeight}px`,
-            transform: `scale(${scaleFactor})`,
-            transformOrigin: 'top left',
-            marginBottom: `${(viewportHeight * scaleFactor - viewportHeight) + 32}px`
-          }}
+          style={getContainerCSS()}
         >
-          {/* Canvas Grid Overlay */}
-          <CanvasGrid visible={showGrid && !isPreviewMode} gridSize={20} />
+          {!hasComponents && (
+            <div className="flex flex-col items-center justify-center min-h-[400px] text-center p-12">
+              <div className="text-5xl mb-4">📄</div>
+              <h3 className="text-xl font-semibold mb-2">Empty Canvas</h3>
+              <p className="text-muted-foreground">
+                Drag components from the left panel to start building your page
+              </p>
+            </div>
+          )}
 
-          <div className="relative z-10" style={getContainerCSS()}>
-            {/* Render components with integrated drop zones */}
-            {page.layoutData?.content?.map((component, index) => (
-              <DraggableComponent
-                key={component.id}
-                component={component}
-                index={index}
-                pageId={page.id}
-                isSelected={selectedComponentId === component.id}
-                onSelect={handleComponentClick}
-              />
-            ))}
-
-            {/* Empty canvas drop zone */}
-            {!isPreviewMode && !hasComponents && (
-              <div
-                ref={setDropRef}
-                className={cn(
-                  "text-center py-16 text-muted-foreground transition-all duration-200 rounded-lg border-2 border-dashed",
-                  isOverEmpty ? 'border-primary bg-primary/10' : 'border-muted hover:border-primary/50'
-                )}
-              >
-                <p className="text-lg">Drop components here to start building</p>
-                <p className="text-sm mt-2">Drag components from the left panel or reorder existing ones</p>
-              </div>
-            )}
-          </div>
+          {components.map((component, index) => (
+            <DraggableComponent
+              key={component.id}
+              component={component}
+              index={index}
+              onComponentClick={handleComponentClick}
+            />
+          ))}
         </div>
       </div>
     </div>

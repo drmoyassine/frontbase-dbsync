@@ -30,12 +30,15 @@ import {
     AlignCenter,
     AlignRight,
     AlignJustify,
+    AlignVerticalJustifyStart,
+    AlignVerticalJustifyCenter,
+    AlignVerticalJustifyEnd,
     Package,
     Plus,
     Filter,
     Play
 } from 'lucide-react';
-import type { Page } from '@/types/builder';
+import type { Page, ContainerStyles } from '@/types/builder';
 
 interface PageSettingsDrawerProps {
     open: boolean;
@@ -53,11 +56,32 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
 
     if (!currentPage) return null;
 
+    const containerStyles = currentPage.containerStyles || {};
+
     const handleUpdatePage = (updates: Partial<Page>) => {
         if (currentPageId) {
             updatePage(currentPageId, updates);
         }
     };
+
+    const handleStyleChange = (key: keyof ContainerStyles, value: any) => {
+        const newStyles: ContainerStyles = {
+            ...containerStyles,
+            [key]: value
+        };
+        handleUpdatePage({ containerStyles: newStyles });
+    };
+
+    const handlePaddingChange = (value: number) => {
+        handleStyleChange('padding', {
+            top: value,
+            right: value,
+            bottom: value,
+            left: value
+        });
+    };
+
+    const currentPadding = containerStyles.padding?.top || 50;
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
@@ -192,14 +216,20 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
 
                             {/* Orientation */}
                             <div className="space-y-2 mb-4">
-                                <Label className="flex items-center gap-2">
-                                    Orientation
-                                </Label>
+                                <Label>Orientation</Label>
                                 <div className="grid grid-cols-2 gap-2">
-                                    <Button variant="outline" className="justify-start">
+                                    <Button
+                                        variant={containerStyles.orientation === 'row' ? 'default' : 'outline'}
+                                        className="justify-start"
+                                        onClick={() => handleStyleChange('orientation', 'row')}
+                                    >
                                         Row
                                     </Button>
-                                    <Button variant="ghost" className="justify-start">
+                                    <Button
+                                        variant={containerStyles.orientation === 'column' ? 'default' : 'outline'}
+                                        className="justify-start"
+                                        onClick={() => handleStyleChange('orientation', 'column')}
+                                    >
                                         Column
                                     </Button>
                                 </div>
@@ -207,21 +237,25 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
 
                             {/* Gap */}
                             <div className="space-y-2 mb-4">
-                                <Label className="flex items-center gap-2">
-                                    Gap
-                                </Label>
+                                <Label>Gap</Label>
                                 <div className="flex items-center gap-2">
-                                    <Input type="number" defaultValue="30" className="flex-1" />
+                                    <Input
+                                        type="number"
+                                        value={containerStyles.gap || 30}
+                                        onChange={(e) => handleStyleChange('gap', parseInt(e.target.value) || 0)}
+                                        className="flex-1"
+                                    />
                                     <span className="text-sm text-muted-foreground">px</span>
                                 </div>
                             </div>
 
                             {/* Flex Wrap */}
                             <div className="space-y-2 mb-4">
-                                <Label className="flex items-center gap-2">
-                                    Flex Wrap
-                                </Label>
-                                <Select defaultValue="nowrap">
+                                <Label>Flex Wrap</Label>
+                                <Select
+                                    value={containerStyles.flexWrap || 'nowrap'}
+                                    onValueChange={(value: any) => handleStyleChange('flexWrap', value)}
+                                >
                                     <SelectTrigger>
                                         <SelectValue />
                                     </SelectTrigger>
@@ -235,69 +269,113 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
 
                             {/* Align Items */}
                             <div className="space-y-2 mb-4">
-                                <Label className="flex items-center gap-2">
-                                    Align Items
-                                </Label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <Button variant="outline" size="sm">
-                                        <AlignLeft className="h-4 w-4" />
+                                <Label>Align Items</Label>
+                                <div className="grid grid-cols-4 gap-2">
+                                    <Button
+                                        variant={containerStyles.alignItems === 'start' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => handleStyleChange('alignItems', 'start')}
+                                    >
+                                        <AlignVerticalJustifyStart className="h-4 w-4" />
                                     </Button>
-                                    <Button variant="ghost" size="sm">
-                                        <Plus className="h-4 w-4" />
+                                    <Button
+                                        variant={containerStyles.alignItems === 'center' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => handleStyleChange('alignItems', 'center')}
+                                    >
+                                        <AlignVerticalJustifyCenter className="h-4 w-4" />
                                     </Button>
-                                    <Button variant="ghost" size="sm">
-                                        <AlignRight className="h-4 w-4" />
+                                    <Button
+                                        variant={containerStyles.alignItems === 'end' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => handleStyleChange('alignItems', 'end')}
+                                    >
+                                        <AlignVerticalJustifyEnd className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        variant={containerStyles.alignItems === 'stretch' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => handleStyleChange('alignItems', 'stretch')}
+                                    >
+                                        Stretch
                                     </Button>
                                 </div>
                             </div>
 
                             {/* Justify Content */}
                             <div className="space-y-2 mb-4">
-                                <Label className="flex items-center gap-2">
-                                    Justify Content
-                                </Label>
+                                <Label>Justify Content</Label>
                                 <div className="grid grid-cols-5 gap-2">
-                                    <Button variant="outline" size="sm">
+                                    <Button
+                                        variant={containerStyles.justifyContent === 'start' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => handleStyleChange('justifyContent', 'start')}
+                                    >
                                         <AlignLeft className="h-4 w-4" />
                                     </Button>
-                                    <Button variant="ghost" size="sm">
-                                        <Plus className="h-4 w-4" />
-                                    </Button>
-                                    <Button variant="ghost" size="sm">
+                                    <Button
+                                        variant={containerStyles.justifyContent === 'center' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => handleStyleChange('justifyContent', 'center')}
+                                    >
                                         <AlignCenter className="h-4 w-4" />
                                     </Button>
-                                    <Button variant="ghost" size="sm">
+                                    <Button
+                                        variant={containerStyles.justifyContent === 'end' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => handleStyleChange('justifyContent', 'end')}
+                                    >
+                                        <AlignRight className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        variant={containerStyles.justifyContent === 'between' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => handleStyleChange('justifyContent', 'between')}
+                                    >
                                         <AlignJustify className="h-4 w-4" />
                                     </Button>
-                                    <Button variant="ghost" size="sm">
-                                        <AlignRight className="h-4 w-4" />
+                                    <Button
+                                        variant={containerStyles.justifyContent === 'around' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => handleStyleChange('justifyContent', 'around')}
+                                    >
+                                        Around
                                     </Button>
                                 </div>
                             </div>
 
                             {/* Background Color */}
                             <div className="space-y-2 mb-4">
-                                <Label className="flex items-center gap-2">
-                                    Background Color
-                                </Label>
+                                <Label>Background Color</Label>
                                 <div className="flex items-center gap-2">
-                                    <div className="w-10 h-10 rounded border border-border bg-white cursor-pointer"></div>
-                                    <Input type="text" placeholder="#FFFFFF" className="flex-1" />
+                                    <input
+                                        type="color"
+                                        value={containerStyles.backgroundColor || '#FFFFFF'}
+                                        onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
+                                        className="w-10 h-10 rounded border border-border cursor-pointer"
+                                    />
+                                    <Input
+                                        type="text"
+                                        value={containerStyles.backgroundColor || '#FFFFFF'}
+                                        onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
+                                        placeholder="#FFFFFF"
+                                        className="flex-1"
+                                    />
                                 </div>
                             </div>
 
                             {/* Padding */}
                             <div className="space-y-2 mb-4">
                                 <div className="flex items-center justify-between">
-                                    <Label className="flex items-center gap-2">
-                                        Padding
-                                    </Label>
-                                    <Button variant="ghost" size="sm">
-                                        <Plus className="h-4 w-4" />
-                                    </Button>
+                                    <Label>Padding</Label>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <Input type="number" defaultValue="50" className="flex-1" />
+                                    <Input
+                                        type="number"
+                                        value={currentPadding}
+                                        onChange={(e) => handlePaddingChange(parseInt(e.target.value) || 0)}
+                                        className="flex-1"
+                                    />
                                     <span className="text-sm text-muted-foreground">All Sides</span>
                                 </div>
                             </div>
@@ -306,8 +384,18 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
                             <div className="space-y-2">
                                 <Label>Styling Mode</Label>
                                 <div className="grid grid-cols-2 gap-2">
-                                    <Button variant="outline">Visual</Button>
-                                    <Button variant="ghost">CSS (Advanced)</Button>
+                                    <Button
+                                        variant={containerStyles.stylingMode !== 'css' ? 'outline' : 'ghost'}
+                                        onClick={() => handleStyleChange('stylingMode', 'visual')}
+                                    >
+                                        Visual
+                                    </Button>
+                                    <Button
+                                        variant={containerStyles.stylingMode === 'css' ? 'outline' : 'ghost'}
+                                        onClick={() => handleStyleChange('stylingMode', 'css')}
+                                    >
+                                        CSS (Advanced)
+                                    </Button>
                                 </div>
                             </div>
                         </div>

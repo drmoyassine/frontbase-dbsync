@@ -55,6 +55,59 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
   const { width: viewportWidth, height: viewportHeight } = getViewportDimensions();
   const scaleFactor = zoomLevel / 100;
 
+  // Get container styles from page
+  const containerStyles = page.containerStyles || {};
+
+  // Convert containerStyles to CSS
+  const getContainerCSS = (): React.CSSProperties => {
+    const styles: React.CSSProperties = {};
+
+    if (containerStyles.orientation) {
+      styles.display = 'flex';
+      styles.flexDirection = containerStyles.orientation;
+    }
+
+    if (containerStyles.gap !== undefined) {
+      styles.gap = `${containerStyles.gap}px`;
+    }
+
+    if (containerStyles.flexWrap) {
+      styles.flexWrap = containerStyles.flexWrap;
+    }
+
+    if (containerStyles.alignItems) {
+      const alignMap: Record<string, string> = {
+        'start': 'flex-start',
+        'center': 'center',
+        'end': 'flex-end',
+        'stretch': 'stretch'
+      };
+      styles.alignItems = alignMap[containerStyles.alignItems] || containerStyles.alignItems;
+    }
+
+    if (containerStyles.justifyContent) {
+      const justifyMap: Record<string, string> = {
+        'start': 'flex-start',
+        'center': 'center',
+        'end': 'flex-end',
+        'between': 'space-between',
+        'around': 'space-around'
+      };
+      styles.justifyContent = justifyMap[containerStyles.justifyContent] || containerStyles.justifyContent;
+    }
+
+    if (containerStyles.backgroundColor) {
+      styles.backgroundColor = containerStyles.backgroundColor;
+    }
+
+    if (containerStyles.padding) {
+      const { top, right, bottom, left } = containerStyles.padding;
+      styles.padding = `${top}px ${right}px ${bottom}px ${left}px`;
+    }
+
+    return styles;
+  };
+
   return (
     <div
       className="min-h-full p-8 bg-muted/30 transition-colors relative overflow-auto"
@@ -84,7 +137,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
           {/* Canvas Grid Overlay */}
           <CanvasGrid visible={showGrid && !isPreviewMode} gridSize={20} />
 
-          <div className="p-4 relative z-10">
+          <div className="relative z-10" style={getContainerCSS()}>
             {/* Render components with integrated drop zones */}
             {page.layoutData?.content?.map((component, index) => (
               <DraggableComponent

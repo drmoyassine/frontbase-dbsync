@@ -6,6 +6,22 @@ export interface ComponentData {
     children?: ComponentData[];
 }
 
+export interface ContainerStyles {
+    orientation?: 'row' | 'column';
+    gap?: number;
+    flexWrap?: 'nowrap' | 'wrap' | 'wrap-reverse';
+    alignItems?: 'start' | 'center' | 'end' | 'stretch';
+    justifyContent?: 'start' | 'center' | 'end' | 'between' | 'around';
+    backgroundColor?: string;
+    padding?: {
+        top: number;
+        right: number;
+        bottom: number;
+        left: number;
+    };
+    stylingMode?: 'visual' | 'css';
+}
+
 export interface Page {
     id: string;
     name: string;
@@ -15,6 +31,7 @@ export interface Page {
     keywords?: string;
     isPublic: boolean;
     isHomepage: boolean;
+    containerStyles?: ContainerStyles;
     layoutData?: {
         content: ComponentData[];
         root: Record<string, any>;

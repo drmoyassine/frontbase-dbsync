@@ -82,141 +82,97 @@ const componentCategories = {
 
 export const ComponentPalette: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeCategory, setActiveCategory] = useState('basic');
+  const [activeCategory, setActiveCategory] = useState<string>('all');
 
-  const filteredComponents = searchTerm
-    ? Object.values(componentCategories)
-      .flatMap(category => category.components)
-      .filter(component =>
-        component.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        component.description.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    : componentCategories[activeCategory as keyof typeof componentCategories]?.components || [];
+  const allComponents = Object.entries(componentCategories).flatMap(([category, data]) =>
+    data.components.map(comp => ({ ...comp, category }))
+  );
+
+  const filteredComponents = allComponents.filter(comp =>
+    comp.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+    (activeCategory === 'all' || comp.category === activeCategory)
+  );
+
+  const handleDragStart = (component: any) => (event: React.DragEvent) => {
+    event.dataTransfer.setData('component', JSON.stringify({
+      type: component.name,
+      name: component.name
+    }));
+    event.dataTransfer.effectAllowed = 'copy';
+  };
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="p-4 border-b border-border">
-        <h2 className="font-semibold text-foreground mb-3">Components</h2>
+    <div className="h-full flex flex-col bg-background">
+      {/* Search */}
+      <div className="p-3 border-b">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search components..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
+            className="pl-8 h-9"
           />
         </div>
       </div>
 
-      {/* Category Tabs */}
-      {!searchTerm && (
-        <Tabs value={activeCategory} onValueChange={setActiveCategory} className="flex-1 flex flex-col">
-          <TabsList className="grid grid-cols-2 gap-1 p-2 h-auto">
-            {Object.entries(componentCategories).map(([key, category]) => {
-              const Icon = category.icon;
-              return (
-                <TabsTrigger
-                  key={key}
-                  value={key}
-                  className="flex flex-col gap-1 h-auto py-2"
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="text-xs">{category.label}</span>
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
-
-          {Object.entries(componentCategories).map(([key]) => (
-            <TabsContent key={key} value={key} className="flex-1 overflow-y-auto">
-              <div className="p-2 space-y-2">
-                {componentCategories[key as keyof typeof componentCategories].components.map((component) => (
-                  <ComponentItem
-                    key={component.name}
-                    name={component.name}
-                    icon={component.icon}
-                    description={component.description}
-                  />
-                ))}
-              </div>
-            </TabsContent>
+      {/* Category Tabs - Compact horizontal scroll */}
+      <div className="border-b">
+        <div className="flex gap-1 p-2 overflow-x-auto scrollbar-hide">
+          <Button
+            variant={activeCategory === 'all' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setActiveCategory('all')}
+            className="h-7 px-3 text-xs"
+          >
+            All
+          </Button>
+          {Object.entries(componentCategories).map(([key, data]) => (
+            <Button
+              key={key}
+              variant={activeCategory === key ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setActiveCategory(key)}
+              className="h-7 px-3 text-xs whitespace-nowrap"
+            >
+              {data.label}
+            </Button>
           ))}
-        </Tabs>
-      )}
+        </div>
+      </div>
 
-      {/* Search Results */}
-      {searchTerm && (
-        <div className="flex-1 overflow-y-auto p-2 space-y-2">
-          {filteredComponents.length > 0 ? (
-            filteredComponents.map((component) => (
-              <ComponentItem
+      {/* Components Grid - 3 columns, compact */}
+      <div className="flex-1 overflow-auto p-3">
+        <div className="grid grid-cols-3 gap-2">
+          {filteredComponents.map((component) => {
+            const Icon = component.icon;
+            return (
+              <div
                 key={component.name}
-                name={component.name}
-                icon={component.icon}
-                description={component.description}
-              />
-            ))
-          ) : (
-            <div className="text-center text-muted-foreground py-8">
-              No components found for "{searchTerm}"
-            </div>
-          )}
+                draggable
+                onDragStart={handleDragStart(component)}
+                className="flex flex-col items-center justify-center p-3 rounded-lg border border-border bg-card hover:bg-accent hover:border-primary/50 cursor-move transition-all group"
+                title={component.description}
+              >
+                <Icon className="h-5 w-5 mb-1.5 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span className="text-xs text-center font-medium leading-tight">
+                  {component.name}
+                </span>
+              </div>
+            );
+          })}
         </div>
-      )}
-    </div>
-  );
-};
 
-interface ComponentItemProps {
-  name: string;
-  icon: React.ComponentType<{ className?: string }>;
-  description: string;
-}
-
-import { useDraggable } from '@dnd-kit/core';
-
-const ComponentItem: React.FC<ComponentItemProps> = ({ name, icon: Icon, description }) => {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `component-${name}`,
-    data: {
-      type: name,
-      category: 'component',
-      description
-    }
-  });
-
-  // Don't apply transform or ref to visual element - prevents snap-back
-  const style = {
-    opacity: isDragging ? 0.5 : 1,
-  };
-
-  return (
-    <div
-      // DON'T apply setNodeRef here - this prevents animation!
-      style={style}
-      className={`
-        p-3 border border-border rounded-lg bg-card hover:bg-accent/50 cursor-grab active:cursor-grabbing relative
-      `}
-    >
-      {/* Hidden drag handle that gets the ref */}
-      <div
-        ref={setNodeRef}
-        {...attributes}
-        {...listeners}
-        className="absolute inset-0 z-10"
-        aria-label={`Drag ${name}`}
-      />
-
-      <div className="flex items-start gap-3 relative z-0">
-        <div className="p-2 bg-primary/10 rounded-md">
-          <Icon className="h-4 w-4 text-primary" />
-        </div>
-        <div className="flex-1">
-          <div className="font-medium text-foreground">{name}</div>
-          <div className="text-xs text-muted-foreground mt-1">{description}</div>
-        </div>
+        {/* Empty state */}
+        {filteredComponents.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-32 text-center text-muted-foreground">
+            <Search className="h-8 w-8 mb-2 opacity-50" />
+            <p className="text-sm">No components found</p>
+            <p className="text-xs mt-1">Try a different search term</p>
+          </div>
+        )}
       </div>
     </div>
   );
 };
+

@@ -709,13 +709,15 @@ def _get_error_suggestion(e: Exception) -> Optional[str]:
 
 @router.post("/{datasource_id}/tables/{table_name}/session")
 async def save_table_session(datasource_id: str, table_name: str, session_data: Dict[str, Any]):
-    """Save draft layout/config to Redis session."""
+    """Save draft layout/config to Redis session (optional - gracefully degrades if Redis unavailable)."""
     key = f"session:{datasource_id}:{table_name}"
     ttl = settings.sync_state_ttl
     success = await cache_set(settings.redis_url, key, session_data, ttl=ttl)
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to save session to Redis")
-    return {"status": "ok"}
+        logger.warning(f"Redis unavailable - session data not persisted for {table_name}")
+        # Return success anyway - session persistence is optional for local dev
+        return {"status": "ok", "persisted": False, "message": "Redis unavailable - changes not saved"}
+    return {"status": "ok", "persisted": True}
 
 
 @router.get("/{datasource_id}/tables/{table_name}/session")

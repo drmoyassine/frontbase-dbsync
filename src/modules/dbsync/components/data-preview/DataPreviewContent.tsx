@@ -215,6 +215,7 @@ export const DataPreviewContent = ({
                         tableName={selectedTable || ''}
                         columnSearch={columnSearch}
                         globalSearch={globalSearch}
+                        availableFields={availableFields}
                     />
                 )}
 

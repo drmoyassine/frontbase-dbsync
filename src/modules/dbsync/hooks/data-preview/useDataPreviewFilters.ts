@@ -89,7 +89,7 @@ export const useDataPreviewFilters = ({
 
     // Calculate all matches for navigation
     useEffect(() => {
-        if (!globalSearch || !data?.records) {
+        if (!globalSearch || filteredRecords.length === 0) {
             setAllMatches([]);
             setCurrentMatchIndex(0);
             return;
@@ -98,8 +98,11 @@ export const useDataPreviewFilters = ({
         const matches: { colKey: string; rowIndex: number }[] = [];
         const searchLower = globalSearch.toLowerCase();
 
+        // Get fields from the first record to avoid circular dependency with availableFields
+        const recordFields = filteredRecords[0] ? Object.keys(filteredRecords[0]) : [];
+
         filteredRecords.forEach((record: any, rowIndex: number) => {
-            availableFields.forEach(colKey => {
+            recordFields.forEach(colKey => {
                 const val = record[colKey];
                 const strVal = typeof val === 'object' && val !== null ? JSON.stringify(val) : String(val ?? '');
                 if (strVal.toLowerCase().includes(searchLower)) {
@@ -109,7 +112,7 @@ export const useDataPreviewFilters = ({
         });
         setAllMatches(matches);
         setCurrentMatchIndex(0);
-    }, [globalSearch, filteredRecords, availableFields, data]);
+    }, [globalSearch, filteredRecords]); // Only depend on globalSearch and filteredRecords
 
     // Actions
     const addFilter = () => setFilters([...filters, { field: '', operator: '==', value: '' }]);

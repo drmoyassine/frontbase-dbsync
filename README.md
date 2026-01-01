@@ -184,6 +184,17 @@ Run `supabase_setup.sql` in your Supabase project to enable FK detection.
 ### "Supabase connection lost"
 Re-enter your Supabase credentials in the Settings modal.
 
+### "Redis connection errors in logs"
+Redis is used for session persistence and caching but is **optional for local development**. If you see Redis connection errors:
+- **For local dev**: These warnings can be safely ignored. The app will work without Redis, but session data (filters, column settings) won't persist between page refreshes.
+- **For production**: Install and run Redis to enable session persistence:
+  ```bash
+  # Install Redis (varies by OS)
+  # Windows: Download from https://github.com/tporadowski/redis/releases
+  # macOS: brew install redis && brew services start redis
+  # Linux: sudo apt-get install redis-server && sudo systemctl start redis
+  ```
+
 ## License
 
 MIT

@@ -31,6 +31,7 @@ interface RecordEditorProps {
     tableName: string;
     columnSearch?: string;
     globalSearch?: string;
+    availableFields: string[];  // NEW: Unified source of available fields
 }
 
 interface SortableFieldProps {
@@ -154,7 +155,8 @@ export const RecordEditor: React.FC<RecordEditorProps> = ({
     datasourceName,
     tableName,
     columnSearch = '',
-    globalSearch = ''
+    globalSearch = '',
+    availableFields  // NEW: Use unified field source
 }) => {
     const {
         pinnedColumns,
@@ -173,8 +175,9 @@ export const RecordEditor: React.FC<RecordEditorProps> = ({
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
+    // Use availableFields directly instead of computing from schema/record
     const allFields = React.useMemo(() => {
-        let fields = schema?.columns ? schema.columns.map(col => col.name) : Object.keys(record);
+        let fields = [...availableFields];
 
         if (columnOrder.length > 0) {
             const orderMap = new Map(columnOrder.map((name, index) => [name, index]));
@@ -185,7 +188,7 @@ export const RecordEditor: React.FC<RecordEditorProps> = ({
             });
         }
         return fields;
-    }, [schema, record, columnOrder]);
+    }, [availableFields, columnOrder]);
 
     const isFieldVisible = (fieldName: string) => visibleColumns.length === 0 || visibleColumns.includes(fieldName);
 

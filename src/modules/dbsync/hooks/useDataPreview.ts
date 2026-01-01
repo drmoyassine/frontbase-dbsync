@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { shallow } from 'zustand/shallow';
 import { datasourcesApi, viewsApi } from '../api';
 import { useLayoutStore } from '../store/useLayoutStore';
 import { DataPreviewModalProps } from '../types/data-preview';
@@ -23,7 +24,18 @@ export const useDataPreview = ({
     initialWebhooks
 }: DataPreviewModalProps) => {
     const queryClient = useQueryClient();
-    const layoutStore = useLayoutStore();
+
+    // Use selectors with shallow equality for arrays to prevent infinite re-renders
+    const pinnedColumns = useLayoutStore(state => state.pinnedColumns, shallow);
+    const columnOrder = useLayoutStore(state => state.columnOrder, shallow);
+    const visibleColumns = useLayoutStore(state => state.visibleColumns, shallow);
+    const setColumnOrder = useLayoutStore(state => state.setColumnOrder);
+    const setVisibleColumns = useLayoutStore(state => state.setVisibleColumns);
+    const togglePin = useLayoutStore(state => state.togglePin);
+    const toggleVisibility = useLayoutStore(state => state.toggleVisibility);
+    const initializeLayout = useLayoutStore(state => state.initialize);
+    const setActiveContext = useLayoutStore(state => state.setActiveContext);
+    const clearTableCache = useLayoutStore(state => state.clearTableCache);
 
     // High Level State
     const [viewName, setViewName] = useState(initialViewName || '');
@@ -56,19 +68,6 @@ export const useDataPreview = ({
         enabled: true,
         method: 'POST' as 'POST' | 'PUT' | 'PATCH'
     });
-
-    const {
-        pinnedColumns,
-        columnOrder,
-        visibleColumns,
-        setColumnOrder,
-        setVisibleColumns,
-        togglePin,
-        toggleVisibility,
-        initialize: initializeLayout,
-        setActiveContext,
-        clearTableCache
-    } = layoutStore;
 
     // --- Data Hook (Must be called first to provide data to filters) ---
     // But filters hook manages the filter state that data hook needs!

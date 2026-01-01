@@ -80,7 +80,7 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         name: 'Padding',
         category: 'Spacing',
         controlType: 'spacing',
-        defaultValue: { top: 0, right: 0, bottom: 0, left: 0 },
+        defaultValue: { top: 50, right: 50, bottom: 50, left: 50 },
         toCSSValue: ({ top, right, bottom, left }) =>
             `${top}px ${right}px ${bottom}px ${left}px`,
         fromCSSValue: (css) => {
@@ -118,7 +118,7 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         name: 'Gap',
         category: 'Spacing',
         controlType: 'number',
-        defaultValue: 0,
+        defaultValue: 30,
         unit: 'px',
         min: 0,
         step: 1,

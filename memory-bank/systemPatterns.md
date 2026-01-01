@@ -60,7 +60,15 @@ Component → useSimpleData() → useTableData() → databaseApi → FastAPI →
 - **Location**: `fastapi-backend/app/routers/`
 - **Files**: database.py, pages.py, auth.py, project.py
 
-## Deployment Patterns
+## Environment Patterns
+
+### Python Virtual Environment Strategy
+- **Pattern**: Strict isolation per machine
+- **Implementation**: 
+  - `requirements.txt` locked to specific versions
+  - `venv` directory excluded from git
+  - Explicit activation required (`source venv/bin/activate` or `.\venv\Scripts\activate`)
+- **Reasoning**: Avoids system-level package conflicts (especially with modern Python versions like 3.13) and ensures reproducible builds.
 
 ### Production Docker Setup (VPS)
 - **Pattern**: Multi-container orchestration (FastAPI + Frontend + Redis)

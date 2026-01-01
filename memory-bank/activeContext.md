@@ -1,6 +1,7 @@
 # Active Context
 
 This file tracks the project's current status, including recent changes, current goals, and open questions.
+2026-01-01 - 🔒 DEPENDENCY HARDENING: Updated requirements and setup for cross-platform robustness
 2025-12-25 05:20:00 - INITIAL COMMIT READY: FastAPI + React Query Migration Complete
 
 ## Current Focus

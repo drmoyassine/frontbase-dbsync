@@ -6,8 +6,8 @@ node_modules/
 .pnp.js
 
 # Python
-venv/
-.venv/
+venv*/
+.venv*/
 venv_sync/
 __pycache__/
 *.py[cod]

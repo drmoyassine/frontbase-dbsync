@@ -19,32 +19,62 @@ A visual database builder and admin panel for Supabase, built with React, TypeSc
 
 ### Development Setup
 
-```bash
-# 1. Clone the repository
-git clone <YOUR_GIT_URL>
-cd frontbase
+> [!IMPORTANT]
+> **Python Environment**: Ensure you are using a clean virtual environment to avoid conflicts. The instructions below will guide you through creating one.
 
-# 2. Install frontend dependencies
-npm install
+1. **Clone the repository**:
+   ```bash
+   git clone <YOUR_GIT_URL>
+   cd frontbase
+   ```
 
-# 3. Setup FastAPI backend
-cd fastapi-backend
-python -m venv venv
+2. **Frontend Setup**:
+   ```bash
+   npm install
+   ```
 
-# Windows
-.\venv\Scripts\activate
-# macOS/Linux
-source venv/bin/activate
+3. **Backend Setup (FastAPI)**:
+   ```bash
+   cd fastapi-backend
+   
+   # Remove any existing broken environment
+   # Windows (PowerShell)
+   if (Test-Path venv) { Remove-Item -Recurse -Force venv }
+   # macOS/Linux
+   rm -rf venv
 
-pip install -r requirements.txt
-cd ..
+   # Create a fresh virtual environment
+   python -m venv venv
 
-# 4. Copy environment template
-cp .env.example .env
-# Edit .env with your settings
+   # Activate the environment
+   # Windows (PowerShell)
+   .\venv\Scripts\activate
+   # macOS/Linux
+   source venv/bin/activate
 
-# 5. Start both servers (2 terminals)
-```
+   # Install dependencies
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   
+   cd ..
+   ```
+
+4. **Environment Configuration**:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your settings
+   ```
+
+5. **Start Servers**:
+   ```bash
+   # Terminal 1: Backend
+   cd fastapi-backend
+   .\venv\Scripts\activate
+   python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+   # Terminal 2: Frontend
+   npm run dev
+   ```
 
 ### Running the Application
 

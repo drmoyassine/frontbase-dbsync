@@ -158,7 +158,9 @@ async def my_endpoint(request: Request, db: Session = Depends(get_db)):
 **Terminal 1 - Backend (FastAPI)**:
 ```bash
 cd fastapi-backend
-.\venv\Scripts\activate  # Windows
+# Ensure you have activated your venv!
+# Windows: .\venv\Scripts\activate
+# Mac/Linux: source venv/bin/activate
 python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 

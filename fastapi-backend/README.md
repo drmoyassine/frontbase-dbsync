@@ -10,21 +10,24 @@ This is the primary backend for Frontbase - a visual database builder and admin 
 
 ### Installation
 
-#### Windows
-1. Double-click and run `setup.bat` OR
-2. Open Command Prompt and run:
-   ```
-   setup.bat
-   ```
+#### Universal Setup (Recommended)
 
-#### macOS/Linux
-1. Make the setup script executable:
+1. **Clean Start**: If you have an existing `venv` folder that is not working, delete it.
+2. **Create Virtual Environment**:
+   ```bash
+   python -m venv venv
    ```
-   chmod +x setup.sh
+3. **Activate Environment**:
+   - **Windows**: `.\venv\Scripts\activate`
+   - **macOS/Linux**: `source venv/bin/activate`
+4. **Install Dependencies**:
+   ```bash
+   pip install --upgrade pip
+   pip install -r requirements.txt
    ```
-2. Run the setup script:
-   ```
-   ./setup.sh
+5. **Initialize Database**:
+   ```bash
+   python init_db.py
    ```
 
 #### Manual Installation

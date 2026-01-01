@@ -204,12 +204,11 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       {/* Device Frame / Viewport Container */}
       <div
         className={cn(
-          "mx-auto transition-all duration-300 relative",
+          "mx-auto transition-all duration-300 relative h-full",
           showDeviceFrame && "shadow-2xl rounded-lg overflow-hidden"
         )}
         style={{
           width: `${viewportWidth}px`,
-          minHeight: `${viewportHeight}px`,
           transform: `scale(${scaleFactor})`,
           transformOrigin: 'top center'
         }}
@@ -218,13 +217,13 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
         <div
           ref={hasComponents ? undefined : setDropRef}
           className={cn(
-            "min-h-full",
+            "h-full w-full",
             !hasComponents && isOverEmpty && "bg-blue-50/50 border-2 border-dashed border-blue-400"
           )}
           style={getContainerCSS()}
         >
           {!hasComponents && (
-            <div className="flex flex-col items-center justify-center min-h-[400px] text-center p-12">
+            <div className="flex flex-col items-center justify-center h-full w-full text-center p-12">
               <div className="text-5xl mb-4">📄</div>
               <h3 className="text-xl font-semibold mb-2">Empty Canvas</h3>
               <p className="text-muted-foreground">

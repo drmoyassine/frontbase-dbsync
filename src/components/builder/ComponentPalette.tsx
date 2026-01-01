@@ -3,12 +3,12 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Search, 
-  MousePointer, 
-  Type, 
-  Layout, 
-  BarChart, 
+import {
+  Search,
+  MousePointer,
+  Type,
+  Layout,
+  BarChart,
   Table,
   CheckSquare,
   Image,
@@ -86,11 +86,11 @@ export const ComponentPalette: React.FC = () => {
 
   const filteredComponents = searchTerm
     ? Object.values(componentCategories)
-        .flatMap(category => category.components)
-        .filter(component => 
-          component.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          component.description.toLowerCase().includes(searchTerm.toLowerCase())
-        )
+      .flatMap(category => category.components)
+      .filter(component =>
+        component.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        component.description.toLowerCase().includes(searchTerm.toLowerCase())
+      )
     : componentCategories[activeCategory as keyof typeof componentCategories]?.components || [];
 
   return (
@@ -127,7 +127,7 @@ export const ComponentPalette: React.FC = () => {
               );
             })}
           </TabsList>
-          
+
           {Object.entries(componentCategories).map(([key]) => (
             <TabsContent key={key} value={key} className="flex-1 overflow-y-auto">
               <div className="p-2 space-y-2">
@@ -174,30 +174,41 @@ interface ComponentItemProps {
   description: string;
 }
 
-import { useDrag } from 'react-dnd';
+import { useDraggable } from '@dnd-kit/core';
 
 const ComponentItem: React.FC<ComponentItemProps> = ({ name, icon: Icon, description }) => {
-  const [{ isDragging }, drag] = useDrag({
-    type: 'component',
-    item: { type: name },
-    collect: (monitor) => ({
-      isDragging: monitor.isDragging(),
-    }),
-    canDrag: () => true,
-    end: (item, monitor) => {
-      console.log('Drag ended:', item, 'Drop result:', monitor.getDropResult());
-    },
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `component-${name}`,
+    data: {
+      type: name,
+      category: 'component',
+      description
+    }
   });
+
+  // Don't apply transform or ref to visual element - prevents snap-back
+  const style = {
+    opacity: isDragging ? 0.5 : 1,
+  };
 
   return (
     <div
-      ref={drag}
+      // DON'T apply setNodeRef here - this prevents animation!
+      style={style}
       className={`
-        p-3 border border-border rounded-lg bg-card hover:bg-accent/50 cursor-grab active:cursor-grabbing transition-colors
-        ${isDragging ? 'opacity-50' : 'opacity-100'}
+        p-3 border border-border rounded-lg bg-card hover:bg-accent/50 cursor-grab active:cursor-grabbing relative
       `}
     >
-      <div className="flex items-start gap-3">
+      {/* Hidden drag handle that gets the ref */}
+      <div
+        ref={setNodeRef}
+        {...attributes}
+        {...listeners}
+        className="absolute inset-0 z-10"
+        aria-label={`Drag ${name}`}
+      />
+
+      <div className="flex items-start gap-3 relative z-0">
         <div className="p-2 bg-primary/10 rounded-md">
           <Icon className="h-4 w-4 text-primary" />
         </div>

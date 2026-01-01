@@ -1,5 +1,6 @@
 import React from 'react';
-import { useDrag, useDrop } from 'react-dnd';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,29 +41,32 @@ export const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
     isExpanded = false,
     onToggleExpand
 }) => {
-    const [{ isDragging }, drag, preview] = useDrag({
-        type: 'COLUMN',
-        item: { index },
-        collect: (monitor) => ({
-            isDragging: monitor.isDragging()
-        })
-    });
-
-    const [, drop] = useDrop({
-        accept: 'COLUMN',
-        hover: (item: { index: number }) => {
-            if (item.index !== index) {
-                moveColumn(item.index, index);
-                item.index = index;
-            }
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({
+        id: column.name,
+        data: {
+            column,
+            index
         }
     });
 
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+    };
+
     return (
         <div
-            ref={(node) => preview(drop(node))}
-            className={`flex items-center gap-2 p-1.5 border-b last:border-0 bg-background hover:bg-muted/30 transition-colors ${isDragging ? 'opacity-50' : ''
-                }`}
+            ref={setNodeRef}
+            style={style}
+            className={`flex items-center gap-2 p-1.5 border-b last:border-0 bg-background hover:bg-muted/30 transition-colors`}
         >
             {/* Expand/Collapse Button for FK columns */}
             {column.foreignKey && !column.relatedTable ? (
@@ -82,7 +86,11 @@ export const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
             )}
 
             {/* Drag Handle */}
-            <div ref={drag} className="cursor-move text-muted-foreground hover:text-foreground p-1">
+            <div
+                {...attributes}
+                {...listeners}
+                className="cursor-move text-muted-foreground hover:text-foreground p-1"
+            >
                 <GripVertical className="w-3.5 h-3.5" />
             </div>
 

@@ -1,29 +1,23 @@
-/* Clean builder layout */
+/* Responsive builder layout - Flexbox system */
 .builder-layout {
-  display: grid;
+  display: flex;
   flex: 1;
   overflow: hidden;
+  height: calc(100vh - 4rem); /* Updated for h-16 header */
 }
 
-.builder-layout.design-mode {
-  grid-template-columns: 300px 1fr 300px;
-}
-
-.builder-layout.preview-mode {
-  grid-template-columns: 1fr;
-}
-
-.builder-canvas {
-  overflow: auto;
-  background: hsl(var(--muted));
-}
-
+/* Sidebar base styles */
 .builder-sidebar {
-  background: hsl(var(--background));
+  flex-shrink: 0;
+  width: 320px; /* Updated from 300px */
+  min-width: 280px;
+  max-width: 480px;
+  background: hsl(var(--card));
   border-right: 1px solid hsl(var(--border));
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  transition: transform 0.3s ease, width 0.2s ease;
 }
 
 .builder-sidebar.right-sidebar {
@@ -31,7 +25,111 @@
   border-left: 1px solid hsl(var(--border));
 }
 
-/* Style Puck's native components */
+/* Canvas */
+.builder-canvas {
+  flex: 1;
+  overflow: auto;
+  background: hsl(var(--muted) / 0.3);
+  order: 2;
+}
+
+/* Preview mode - hide sidebars */
+.builder-layout.preview-mode .builder-sidebar {
+  display: none;
+}
+
+.builder-layout.preview-mode {
+  grid-template-columns: 1fr;
+}
+
+/* Mobile/Tablet: Overlay drawers (< 1024px) */
+@media (max-width: 1023px) {
+  .builder-layout {
+    flex-direction: row; /* Keep horizontal */
+  }
+
+  .builder-sidebar {
+    position: fixed;
+    top: 4rem; /* Below header */
+    bottom: 0;
+    width: 320px;
+    max-width: 85vw;
+    z-index: 40;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+    transform: translateX(-100%); /* Hidden by default */
+  }
+
+  .builder-sidebar.left-sidebar {
+    left: 0;
+  }
+
+  .builder-sidebar.right-sidebar {
+    right: 0;
+    left: auto;
+    transform: translateX(100%); /* Hidden to the right */
+  }
+
+  /* Open state */
+  .builder-sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* Canvas takes full width on mobile */
+  .builder-canvas {
+    width: 100%;
+  }
+}
+
+/* Tablet landscape: Slightly narrower drawers */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .builder-sidebar {
+    width: 360px;
+    max-width: 50vw;
+  }
+}
+
+/* Desktop: Fixed sidebars (≥ 1024px) */
+@media (min-width: 1024px) {
+  .builder-sidebar {
+    position: static;
+    transform: none;
+  }
+
+  .builder-sidebar.left-sidebar {
+    order: 1;
+  }
+
+  .builder-sidebar.right-sidebar {
+    order: 3;
+  }
+}
+
+/* Backdrop overlay for mobile */
+.builder-backdrop {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .builder-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 30;
+    animation: fadeIn 0.2s ease;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Legacy Puck styles - Keep for compatibility */
 .puck-components-wrapper {
   flex: 1;
   overflow-y: auto;
@@ -43,12 +141,10 @@
   padding: 1rem;
 }
 
-/* Custom styling for Puck components list */
 .puck-components-wrapper [data-rbd-droppable-id="components"] {
   padding: 1rem;
 }
 
-/* Override Puck's default styles for our layout */
 .puck-components-wrapper .Puck-components {
   height: 100%;
   display: flex;

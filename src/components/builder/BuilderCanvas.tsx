@@ -1,5 +1,5 @@
 import React from 'react';
-import { useDrop } from 'react-dnd';
+import { useDroppable } from '@dnd-kit/core';
 import { useBuilderStore, type Page } from '@/stores/builder';
 import { DraggableComponent } from './DraggableComponent';
 import { cn } from '@/lib/utils';
@@ -10,45 +10,27 @@ interface BuilderCanvasProps {
 }
 
 export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
-  const { 
-    moveComponent, 
-    selectedComponentId, 
-    setSelectedComponentId, 
+  const {
+    moveComponent,
+    selectedComponentId,
+    setSelectedComponentId,
     isPreviewMode,
     currentViewport,
     zoomLevel,
     showDeviceFrame
   } = useBuilderStore();
-  
+
   const components = page.layoutData?.content || [];
   const hasComponents = components.length > 0;
 
   // Empty canvas drop zone for initial component
-  const [{ isOverEmpty }, dropEmpty] = useDrop({
-    accept: ['component', 'existing-component', 'layer-component'],
-    drop: (item: any, monitor) => {
-      if (!monitor.didDrop() && !hasComponents) {
-        if (item.type) {
-          // New component from palette
-          const newComponent = {
-            id: `${Date.now()}-${Math.random()}`,
-            type: item.type,
-            props: getDefaultProps(item.type),
-            styles: {},
-            children: []
-          };
-          moveComponent(page.id, null, newComponent, 0);
-          setSelectedComponentId(newComponent.id);
-        } else if (item.id) {
-          // Existing component being moved to empty canvas
-          moveComponent(page.id, item.id, item.component, 0, undefined, item.parentId);
-        }
-      }
+  const { setNodeRef: setDropRef, isOver: isOverEmpty } = useDroppable({
+    id: 'canvas-drop-zone',
+    data: {
+      accepts: ['component', 'existing-component', 'layer-component'],
+      pageId: page.id
     },
-    collect: (monitor) => ({
-      isOverEmpty: monitor.isOver({ shallow: true }),
-    }),
-    canDrop: () => !hasComponents,
+    disabled: hasComponents
   });
 
   const handleComponentClick = (componentId: string, event: React.MouseEvent) => {
@@ -72,7 +54,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
   const scaleFactor = zoomLevel / 100;
 
   return (
-    <div 
+    <div
       className="min-h-full p-8 bg-muted/30 transition-colors relative overflow-auto"
       style={{ minHeight: '400px' }}
       onClick={(e) => {
@@ -82,7 +64,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       }}
     >
       <div className="flex justify-center items-start">
-        <div 
+        <div
           className={cn(
             "bg-background transition-all duration-300 relative",
             showDeviceFrame && currentViewport !== 'desktop' && "shadow-2xl rounded-lg border border-border",
@@ -109,11 +91,11 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
                 onSelect={handleComponentClick}
               />
             ))}
-            
+
             {/* Empty canvas drop zone */}
             {!isPreviewMode && !hasComponents && (
-              <div 
-                ref={dropEmpty}
+              <div
+                ref={setDropRef}
                 className={cn(
                   "text-center py-16 text-muted-foreground transition-all duration-200 rounded-lg border-2 border-dashed",
                   isOverEmpty ? 'border-primary bg-primary/10' : 'border-muted hover:border-primary/50'

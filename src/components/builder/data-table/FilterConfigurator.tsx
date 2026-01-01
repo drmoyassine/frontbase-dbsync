@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { DndProvider, useDrag, useDrop } from 'react-dnd';
-import { HTML5Backend } from 'react-dnd-html5-backend';
+import { DndContext, DragEndEvent, closestCenter } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -45,23 +47,26 @@ const DraggableFilterItem: React.FC<DraggableFilterItemProps> = ({
     updateFilter,
     removeFilter
 }) => {
-    const [{ isDragging }, drag, preview] = useDrag({
-        type: 'FILTER',
-        item: { index },
-        collect: (monitor) => ({
-            isDragging: monitor.isDragging()
-        })
-    });
-
-    const [, drop] = useDrop({
-        accept: 'FILTER',
-        hover: (item: { index: number }) => {
-            if (item.index !== index) {
-                moveFilter(item.index, index);
-                item.index = index;
-            }
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({
+        id: filter.id,
+        data: {
+            filter,
+            index
         }
     });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+    };
 
     const displayName = filter.label || filter.column || 'Unconfigured';
     const filterTypeLabel = FILTER_TYPE_LABELS[filter.filterType] || 'Text';
@@ -69,12 +74,12 @@ const DraggableFilterItem: React.FC<DraggableFilterItemProps> = ({
 
     return (
         <div
-            ref={(node) => preview(drop(node))}
-            className={`flex items-center gap-2 p-1.5 border-b last:border-0 bg-background hover:bg-muted/30 transition-colors ${isDragging ? 'opacity-50' : ''
-                }`}
+            ref={setNodeRef}
+            style={style}
+            className={`flex items-center gap-2 p-1.5 border-b last:border-0 bg-background hover:bg-muted/30 transition-colors`}
         >
             {/* Drag Handle */}
-            <div ref={drag} className="cursor-move text-muted-foreground hover:text-foreground p-1">
+            <div {...attributes} {...listeners} className="cursor-move text-muted-foreground hover:text-foreground p-1">
                 <GripVertical className="w-3.5 h-3.5" />
             </div>
 
@@ -288,8 +293,20 @@ export const FilterConfigurator: React.FC<FilterConfiguratorProps> = ({
         );
     }
 
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+
+        const activeIndex = filters.findIndex(f => f.id === active.id);
+        const overIndex = filters.findIndex(f => f.id === over.id);
+
+        if (activeIndex !== -1 && overIndex !== -1) {
+            moveFilter(activeIndex, overIndex);
+        }
+    };
+
     return (
-        <DndProvider backend={HTML5Backend}>
+        <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <div className="space-y-2">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -312,21 +329,23 @@ export const FilterConfigurator: React.FC<FilterConfiguratorProps> = ({
                         No filters. Click "Add" to create one.
                     </div>
                 ) : (
-                    <div className="border rounded-lg overflow-hidden">
-                        {filters.map((filter, index) => (
-                            <DraggableFilterItem
-                                key={filter.id}
-                                filter={filter}
-                                index={index}
-                                columns={columns}
-                                moveFilter={moveFilter}
-                                updateFilter={(updated) => updateFilter(index, updated)}
-                                removeFilter={() => removeFilter(index)}
-                            />
-                        ))}
-                    </div>
+                    <SortableContext items={filters.map(f => f.id)} strategy={verticalListSortingStrategy}>
+                        <div className="border rounded-lg overflow-hidden">
+                            {filters.map((filter, index) => (
+                                <DraggableFilterItem
+                                    key={filter.id}
+                                    filter={filter}
+                                    index={index}
+                                    columns={columns}
+                                    moveFilter={moveFilter}
+                                    updateFilter={(updated) => updateFilter(index, updated)}
+                                    removeFilter={() => removeFilter(index)}
+                                />
+                            ))}
+                        </div>
+                    </SortableContext>
                 )}
             </div>
-        </DndProvider>
+        </DndContext>
     );
 };

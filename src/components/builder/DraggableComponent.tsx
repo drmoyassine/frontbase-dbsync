@@ -1,10 +1,10 @@
 import React from 'react';
-import { useDrag, useDrop } from 'react-dnd';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { useDroppable } from '@dnd-kit/core';
 import { ComponentRenderer } from './ComponentRenderer';
 import { useBuilderStore } from '@/stores/builder';
 import { cn } from '@/lib/utils';
-import { shouldRenderDropZone, getDropZoneStyle } from '@/lib/dropZoneUtils';
-import { getDefaultProps } from '@/lib/componentDefaults';
 
 interface DraggableComponentProps {
   component: {
@@ -22,174 +22,96 @@ interface DraggableComponentProps {
   onSelect: (componentId: string, event: React.MouseEvent) => void;
 }
 
-export const DraggableComponent: React.FC<DraggableComponentProps> = ({ 
-  component, 
-  index, 
-  pageId, 
+export const DraggableComponent: React.FC<DraggableComponentProps> = ({
+  component,
+  index,
+  pageId,
   parentId,
-  isSelected, 
-  onSelect 
+  isSelected,
+  onSelect
 }) => {
-  const { moveComponent, isPreviewMode, draggedComponentId, setDraggedComponentId } = useBuilderStore();
+  const { isPreviewMode, moveComponent, pages } = useBuilderStore();
 
-  // Make the component draggable
-  const [{ isDragging }, drag] = useDrag(() => ({
-    type: 'existing-component',
-    item: () => {
-      // Set drag state immediately when drag begins (replaces deprecated begin)
-      setDraggedComponentId(component.id);
-      return { 
-        id: component.id, 
-        index, 
-        pageId,
-        parentId,
-        component 
-      };
-    },
-    end: () => {
-      // Clear drag state immediately when drag ends
-      setDraggedComponentId(null);
-    },
-    collect: (monitor) => ({
-      isDragging: monitor.isDragging(),
-    }),
-    canDrag: () => !isPreviewMode,
-  }), [component.id, index, pageId, parentId, component, isPreviewMode, setDraggedComponentId]);
-
-  // Get sibling components for drop zone validation
-  const { pages } = useBuilderStore();
+  // Get sibling components to determine if this is the last one
   const currentPage = pages.find(p => p.id === pageId);
-  const siblingComponents = parentId 
+  const siblingComponents = parentId
     ? currentPage?.layoutData?.content?.find(c => c.id === parentId)?.children || []
     : currentPage?.layoutData?.content || [];
-  
-  // Create drop zone for reordering (drop above this component)
-  const [{ isOver }, drop] = useDrop({
-    accept: ['component', 'existing-component', 'layer-component'],
-    drop: (item: any, monitor) => {
-      if (!monitor.didDrop()) {
-        if (item.type) {
-          // New component from palette
-          const newComponent = {
-            id: `${Date.now()}-${Math.random()}`,
-            type: item.type,
-            props: getDefaultProps(item.type),
-            styles: {},
-            children: []
-          };
-          moveComponent(pageId, null, newComponent, index, parentId);
-        } else if (item.id !== component.id) {
-          // Existing component being moved
-          moveComponent(pageId, item.id, item.component, index, parentId, item.parentId);
-        }
-      }
-    },
-    collect: (monitor) => ({
-      isOver: monitor.isOver({ shallow: true }),
-    }),
-    canDrop: () => !isPreviewMode,
-  });
-
-  // Check if this drop zone should be rendered (first or between)
-  const shouldShowAboveZone = shouldRenderDropZone(
-    component.id,
-    index,
-    draggedComponentId,
-    siblingComponents,
-    'above'
-  );
-
-  // No need to combine refs - separate them for cleaner logic
-
-  // Container drop zone (for dropping inside containers)
-  const [{ isOverContainer }, dropContainer] = useDrop({
-    accept: ['component', 'existing-component', 'layer-component'],
-    drop: (item: any, monitor) => {
-      if (component.type === 'Container' && !monitor.didDrop()) {
-        if (item.type) {
-          // New component from palette
-          const newComponent = {
-            id: `${Date.now()}-${Math.random()}`,
-            type: item.type,
-            props: getDefaultProps(item.type),
-            styles: {},
-            children: []
-          };
-          moveComponent(pageId, null, newComponent, 0, component.id);
-        } else if (item.id !== component.id) {
-          // Existing component being moved
-          moveComponent(pageId, item.id, item.component, 0, component.id, item.parentId);
-        }
-      }
-    },
-    collect: (monitor) => ({
-      isOverContainer: monitor.isOver({ shallow: true }),
-    }),
-    canDrop: () => !isPreviewMode && component.type === 'Container',
-  });
-
-  // Check if this is the last component in its container
   const isLastComponent = index === siblingComponents.length - 1;
 
-
-  // Drop zone after last component
-  const [{ isOverAfter }, dropAfter] = useDrop({
-    accept: ['component', 'existing-component', 'layer-component'],
-    drop: (item: any, monitor) => {
-      if (!monitor.didDrop() && isLastComponent) {
-        const targetIndex = index + 1;
-        if (item.type) {
-          // New component from palette
-          const newComponent = {
-            id: `${Date.now()}-${Math.random()}`,
-            type: item.type,
-            props: getDefaultProps(item.type),
-            styles: {},
-            children: []
-          };
-          moveComponent(pageId, null, newComponent, targetIndex, parentId);
-        } else if (item.id !== component.id) {
-          // Existing component being moved (prevent self-drop)
-          moveComponent(pageId, item.id, item.component, targetIndex, parentId, item.parentId);
-        }
-      }
+  // Use sortable for drag and drop
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({
+    id: component.id,
+    data: {
+      type: 'existing-component',
+      component,
+      index,
+      pageId,
+      parentId
     },
-    collect: (monitor) => ({
-      isOverAfter: monitor.isOver({ shallow: true }),
-    }),
-    canDrop: () => !isPreviewMode && isLastComponent && component.id !== draggedComponentId,
+    disabled: isPreviewMode
   });
 
-  // Check if the "after last" drop zone should be rendered
-  const shouldShowAfterZone = shouldRenderDropZone(
-    component.id,
-    index,
-    draggedComponentId,
-    siblingComponents,
-    'after'
-  );
+  // Drop zone BEFORE this component
+  const { setNodeRef: setDropBefore, isOver: isOverBefore } = useDroppable({
+    id: `drop-before-${component.id}`,
+    data: {
+      type: 'drop-zone',
+      index,
+      pageId,
+      parentId
+    },
+    disabled: isPreviewMode
+  });
+
+  // Drop zone AFTER this component (only for last component)
+  const { setNodeRef: setDropAfter, isOver: isOverAfter } = useDroppable({
+    id: `drop-after-${component.id}`,
+    data: {
+      type: 'drop-zone',
+      index: index + 1,
+      pageId,
+      parentId
+    },
+    disabled: isPreviewMode || !isLastComponent
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
 
   return (
     <>
-      {/* Drop zone above component (first or between) */}
-      {!isPreviewMode && shouldShowAboveZone && (
+      {/* Drop zone before component */}
+      {!isPreviewMode && (
         <div
-          ref={drop}
+          ref={setDropBefore}
           className={cn(
-            'mb-1',
-            getDropZoneStyle(index === 0 ? 'first' : 'between', isOver)
+            'h-2 -my-1 transition-all',
+            isOverBefore && 'h-8 bg-primary/10 border-2 border-dashed border-primary rounded-md'
           )}
         />
       )}
-      
+
       {/* The actual component */}
       <div
-        ref={drag}
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+        {...listeners}
         onClick={(e) => onSelect(component.id, e)}
         className={cn(
           'transition-all duration-200',
           {
-            'opacity-50': isDragging,
             'ring-2 ring-primary ring-offset-2 rounded-md': isSelected && !isPreviewMode,
             'cursor-pointer': !isPreviewMode,
             'cursor-move': !isPreviewMode && isDragging,
@@ -197,14 +119,12 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
         )}
       >
         {component.type === 'Container' ? (
-          <ContainerComponent 
+          <ContainerComponent
             component={component}
             pageId={pageId}
-            isOverContainer={isOverContainer}
-            dropContainer={dropContainer}
           />
         ) : (
-          <ComponentRenderer 
+          <ComponentRenderer
             component={component}
             isSelected={isSelected}
             onComponentClick={(componentId, event) => onSelect(componentId, event)}
@@ -221,13 +141,13 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
         )}
       </div>
 
-      {/* Drop zone after last component only */}
-      {!isPreviewMode && shouldShowAfterZone && (
+      {/* Drop zone after last component */}
+      {!isPreviewMode && isLastComponent && (
         <div
-          ref={dropAfter}
+          ref={setDropAfter}
           className={cn(
-            'mt-1',
-            getDropZoneStyle('last', isOverAfter)
+            'h-2 -my-1 transition-all',
+            isOverAfter && 'h-8 bg-primary/10 border-2 border-dashed border-primary rounded-md'
           )}
         />
       )}
@@ -239,10 +159,19 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
 const ContainerComponent: React.FC<{
   component: any;
   pageId: string;
-  isOverContainer: boolean;
-  dropContainer: (node: HTMLElement | null) => void;
-}> = ({ component, pageId, isOverContainer, dropContainer }) => {
+}> = ({ component, pageId }) => {
   const { selectedComponentId, setSelectedComponentId, isPreviewMode } = useBuilderStore();
+
+  // Make container a dropzone
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `container-${component.id}`,
+    data: {
+      type: 'container',
+      componentId: component.id,
+      pageId
+    },
+    disabled: isPreviewMode
+  });
 
   // Use ComponentRenderer for Container to apply styles properly
   const containerChildren = component.children?.length > 0 ? (
@@ -273,10 +202,10 @@ const ContainerComponent: React.FC<{
   );
 
   return (
-    <div ref={dropContainer} className={cn({
-      'ring-2 ring-primary/50 ring-offset-2': isOverContainer && !isPreviewMode,
+    <div ref={setDropRef} className={cn({
+      'ring-2 ring-primary/50 ring-offset-2': isOver && !isPreviewMode,
     })}>
-      <ComponentRenderer 
+      <ComponentRenderer
         component={component}
         isSelected={false}
         children={containerChildren}

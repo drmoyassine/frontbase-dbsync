@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { DndProvider } from 'react-dnd';
-import { HTML5Backend } from 'react-dnd-html5-backend';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { DndContext, DragEndEvent, closestCenter } from '@dnd-kit/core';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -277,8 +277,20 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
         );
     }
 
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+
+        const activeIndex = orderedColumns.findIndex(col => col.name === active.id);
+        const overIndex = orderedColumns.findIndex(col => col.name === over.id);
+
+        if (activeIndex !== -1 && overIndex !== -1) {
+            moveColumn(activeIndex, overIndex);
+        }
+    };
+
     return (
-        <DndProvider backend={HTML5Backend}>
+        <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <div className="space-y-2">
                 {/* Quick Actions */}
                 <div className="flex justify-between items-center px-1">
@@ -308,76 +320,78 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
                 </div>
 
                 {/* Column List */}
-                <div className="border rounded-md divide-y max-h-[400px] overflow-y-auto bg-card">
-                    {orderedColumns.map((column, index) => {
-                        const override = columnOverrides[column.name] || {};
-                        const isExpanded = expandedFKs.has(column.name);
-                        // Prevent expanding self-referencing foreign keys (matches backend limitation)
-                        const isSelfReference = column.foreignKey?.table === tableName;
-                        const relatedSchema = column.foreignKey && !isSelfReference ? relatedSchemas.get(column.foreignKey.table) : null;
+                <SortableContext items={orderedColumns.map(c => c.name)} strategy={verticalListSortingStrategy}>
+                    <div className="border rounded-md divide-y max-h-[400px] overflow-y-auto bg-card">
+                        {orderedColumns.map((column, index) => {
+                            const override = columnOverrides[column.name] || {};
+                            const isExpanded = expandedFKs.has(column.name);
+                            // Prevent expanding self-referencing foreign keys (matches backend limitation)
+                            const isSelfReference = column.foreignKey?.table === tableName;
+                            const relatedSchema = column.foreignKey && !isSelfReference ? relatedSchemas.get(column.foreignKey.table) : null;
 
-                        return (
-                            <React.Fragment key={column.name}>
-                                <DraggableColumnItem
-                                    column={column}
-                                    index={index}
-                                    override={override}
-                                    moveColumn={moveColumn}
-                                    updateColumnOverride={(name, up) => {
-                                        // Intercept visibility toggle for related columns to handle remove logic
-                                        if (column.relatedTable && up.visible === false) {
-                                            handleRemoveRelatedColumn(name);
-                                        } else {
-                                            updateColumnOverride(name, up);
-                                        }
-                                    }}
-                                    isExpanded={isExpanded}
-                                    onToggleExpand={!isSelfReference ? toggleFKExpansion : undefined}
-                                />
+                            return (
+                                <React.Fragment key={column.name}>
+                                    <DraggableColumnItem
+                                        column={column}
+                                        index={index}
+                                        override={override}
+                                        moveColumn={moveColumn}
+                                        updateColumnOverride={(name, up) => {
+                                            // Intercept visibility toggle for related columns to handle remove logic
+                                            if (column.relatedTable && up.visible === false) {
+                                                handleRemoveRelatedColumn(name);
+                                            } else {
+                                                updateColumnOverride(name, up);
+                                            }
+                                        }}
+                                        isExpanded={isExpanded}
+                                        onToggleExpand={!isSelfReference ? toggleFKExpansion : undefined}
+                                    />
 
-                                {/* Render related columns when expanded - CATALOG MODE */}
-                                {isExpanded && relatedSchema && column.foreignKey && !isSelfReference && (
-                                    <div className="bg-muted/30 pl-12 border-b">
-                                        <div className="px-1.5 py-1 text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">
-                                            Available Columns from {column.foreignKey.table}
+                                    {/* Render related columns when expanded - CATALOG MODE */}
+                                    {isExpanded && relatedSchema && column.foreignKey && !isSelfReference && (
+                                        <div className="bg-muted/30 pl-12 border-b">
+                                            <div className="px-1.5 py-1 text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">
+                                                Available Columns from {column.foreignKey.table}
+                                            </div>
+                                            {relatedSchema.columns.map((relatedCol: any) => {
+                                                const relatedKey = `${column.foreignKey!.table}.${relatedCol.name}`;
+                                                const isActive = orderedColumns.some(c => c.name === relatedKey);
+                                                // Calculate check state: It is checked if it is In the Order AND Visible.
+                                                // If it is in the order but hidden, it's checked? No, let's say checked = active.
+
+                                                // Wait, if I remove it from order when hidden, then isActive is strictly about presence in order.
+
+                                                return (
+                                                    <div
+                                                        key={relatedKey}
+                                                        className="flex items-center gap-2 p-1.5 border-b last:border-0 hover:bg-muted/50 transition-colors"
+                                                    >
+                                                        <div className="w-5" /> {/* Spacer */}
+                                                        <span className="flex-1 text-sm text-muted-foreground">
+                                                            {relatedCol.name}
+                                                        </span>
+                                                        <Switch
+                                                            checked={isActive}
+                                                            onCheckedChange={(checked) => {
+                                                                if (checked) {
+                                                                    handleAddRelatedColumn(relatedKey, column.foreignKey!.table, relatedCol.name);
+                                                                } else {
+                                                                    handleRemoveRelatedColumn(relatedKey);
+                                                                }
+                                                            }}
+                                                            className="scale-75 origin-right"
+                                                        />
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
-                                        {relatedSchema.columns.map((relatedCol: any) => {
-                                            const relatedKey = `${column.foreignKey!.table}.${relatedCol.name}`;
-                                            const isActive = orderedColumns.some(c => c.name === relatedKey);
-                                            // Calculate check state: It is checked if it is In the Order AND Visible.
-                                            // If it is in the order but hidden, it's checked? No, let's say checked = active.
-
-                                            // Wait, if I remove it from order when hidden, then isActive is strictly about presence in order.
-
-                                            return (
-                                                <div
-                                                    key={relatedKey}
-                                                    className="flex items-center gap-2 p-1.5 border-b last:border-0 hover:bg-muted/50 transition-colors"
-                                                >
-                                                    <div className="w-5" /> {/* Spacer */}
-                                                    <span className="flex-1 text-sm text-muted-foreground">
-                                                        {relatedCol.name}
-                                                    </span>
-                                                    <Switch
-                                                        checked={isActive}
-                                                        onCheckedChange={(checked) => {
-                                                            if (checked) {
-                                                                handleAddRelatedColumn(relatedKey, column.foreignKey!.table, relatedCol.name);
-                                                            } else {
-                                                                handleRemoveRelatedColumn(relatedKey);
-                                                            }
-                                                        }}
-                                                        className="scale-75 origin-right"
-                                                    />
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </React.Fragment>
-                        );
-                    })}
-                </div>
+                                    )}
+                                </React.Fragment>
+                            );
+                        })}
+                    </div>
+                </SortableContext>
 
                 {orderedColumns.length === 0 && (
                     <div className="text-center py-8 text-muted-foreground text-sm">
@@ -385,6 +399,6 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
                     </div>
                 )}
             </div>
-        </DndProvider>
+        </DndContext>
     );
 };

@@ -146,7 +146,7 @@ export const ComponentPalette: React.FC = () => {
 
         {/* Category Filters */}
         <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full">
-          <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
+          <TabsList className="grid w-full grid-cols-3">
             {/* Basic and Data first */}
             {Object.entries(componentCategories).map(([key, data]) => (
               <TabsTrigger key={key} value={key} className="text-xs">

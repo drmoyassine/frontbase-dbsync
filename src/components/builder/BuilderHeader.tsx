@@ -19,7 +19,9 @@ import {
   Menu,
   Wrench,
   FileEdit,
-  Trash2
+  Trash2,
+  Grid3x3,
+  Magnet
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -62,6 +64,10 @@ export const BuilderHeader: React.FC<{
       zoomLevel,
       setCurrentViewport,
       setZoomLevel,
+      showGrid,
+      setShowGrid,
+      snapToGrid,
+      setSnapToGrid,
       savePageToDatabase,
       publishPage,
       togglePageVisibility,
@@ -223,6 +229,30 @@ export const BuilderHeader: React.FC<{
               className="h-8 w-8 p-0"
             >
               <ZoomIn className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Grid & Snap Controls */}
+          <div className="flex items-center gap-1 border-l pl-4">
+            <Button
+              variant={showGrid ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setShowGrid(!showGrid)}
+              className="h-8 w-8 p-0"
+              title="Toggle Grid (G)"
+            >
+              <Grid3x3 className="h-4 w-4" />
+            </Button>
+
+            <Button
+              variant={snapToGrid ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setSnapToGrid(!snapToGrid)}
+              disabled={!showGrid}
+              className="h-8 w-8 p-0"
+              title="Snap to Grid (Shift+G)"
+            >
+              <Magnet className="h-4 w-4" />
             </Button>
           </div>
         </div>

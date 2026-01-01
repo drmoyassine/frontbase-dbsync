@@ -21,7 +21,8 @@ import {
   FileEdit,
   Trash2,
   Grid3x3,
-  Magnet
+  Magnet,
+  Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -37,7 +38,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useBuilderStore } from '@/stores/builder';
 import { PageSelector } from './PageSelector';
-import { PageSettings } from './PageSettings';
+import { PageSettingsDrawer } from './PageSettingsDrawer';
 import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
 
 export const BuilderHeader: React.FC<{
@@ -75,6 +76,7 @@ export const BuilderHeader: React.FC<{
     } = useBuilderStore();
 
     const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+    const [showPageSettings, setShowPageSettings] = useState(false);
 
     const currentPage = pages.find(page => page.id === currentPageId);
 
@@ -312,7 +314,13 @@ export const BuilderHeader: React.FC<{
           </AlertDialog>
 
           {/* Page Settings - visible on all screens */}
-          <PageSettings />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowPageSettings(true)}
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
         </div>
 
         <UnsavedChangesDialog
@@ -320,6 +328,11 @@ export const BuilderHeader: React.FC<{
           onOpenChange={setShowUnsavedDialog}
           onSaveAndContinue={handleSaveAndNavigate}
           onDiscardAndContinue={handleDiscardAndNavigate}
+        />
+
+        <PageSettingsDrawer
+          open={showPageSettings}
+          onOpenChange={setShowPageSettings}
         />
       </header>
     );

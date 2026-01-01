@@ -204,11 +204,12 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       {/* Device Frame / Viewport Container */}
       <div
         className={cn(
-          "mx-auto transition-all duration-300 relative min-h-full",
+          "mx-auto transition-all duration-300 relative",
           showDeviceFrame && "shadow-2xl rounded-lg overflow-hidden"
         )}
         style={{
           width: `${viewportWidth}px`,
+          minHeight: '800px', // Good working height that fits most screens
           transform: `scale(${scaleFactor})`,
           transformOrigin: 'top center'
         }}

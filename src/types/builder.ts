@@ -6,6 +6,7 @@ export interface ComponentData {
     children?: ComponentData[];
 }
 
+// Legacy type for backward compatibility
 export interface ContainerStyles {
     orientation?: 'row' | 'column';
     gap?: number;
@@ -22,6 +23,14 @@ export interface ContainerStyles {
     stylingMode?: 'visual' | 'css';
 }
 
+// New styles system
+export interface StylesData {
+    activeProperties: string[];
+    values: Record<string, any>;
+    stylingMode: 'visual' | 'css';
+    rawCSS?: string;
+}
+
 export interface Page {
     id: string;
     name: string;
@@ -31,7 +40,7 @@ export interface Page {
     keywords?: string;
     isPublic: boolean;
     isHomepage: boolean;
-    containerStyles?: ContainerStyles;
+    containerStyles?: ContainerStyles | StylesData; // Support both old and new
     layoutData?: {
         content: ComponentData[];
         root: Record<string, any>;

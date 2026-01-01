@@ -15,7 +15,7 @@ export const getDefaultPageStyles = (): StylesData => {
             'padding'
         ],
         values: {
-            flexDirection: 'row',
+            flexDirection: 'column',
             gap: 30,
             flexWrap: 'nowrap',
             alignItems: 'flex-start',

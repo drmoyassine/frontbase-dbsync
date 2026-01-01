@@ -90,17 +90,7 @@ export const CreatePageDialog: React.FC<CreatePageDialogProps> = ({
                 isHomepage: false,
                 containerStyles: getDefaultPageStyles(),
                 layoutData: {
-                    content: [
-                        {
-                            id: 'heading-1',
-                            type: 'Heading',
-                            props: {
-                                text: name,
-                                level: '1'
-                            },
-                            children: []
-                        }
-                    ],
+                    content: [], // Start with empty canvas
                     root: {}
                 }
             };

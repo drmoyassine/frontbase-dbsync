@@ -192,13 +192,14 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       className="min-h-full p-8 bg-muted/30 transition-colors relative overflow-auto"
       style={{ minHeight: '400px' }}
       onClick={(e) => {
+        // Only deselect if clicking on outer wrapper, not canvas content
         if (e.target === e.currentTarget && !isPreviewMode) {
           setSelectedComponentId(null);
         }
       }}
     >
       {/* Grid Overlay */}
-      {showGrid && <CanvasGrid />}
+      {showGrid && <CanvasGrid visible={showGrid} />}
 
       {/* Device Frame / Viewport Container */}
       <div
@@ -213,7 +214,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
           transformOrigin: 'top center'
         }}
       >
-        {/* Canvas Content with Container Styles */}
+        {/* Canvas Content with Container Styles - No onClick here */}
         <div
           ref={hasComponents ? undefined : setDropRef}
           className={cn(
@@ -237,7 +238,9 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
               key={component.id}
               component={component}
               index={index}
-              onComponentClick={handleComponentClick}
+              pageId={page.id}
+              isSelected={selectedComponentId === component.id}
+              onSelect={handleComponentClick}
             />
           ))}
         </div>

@@ -106,26 +106,44 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
     const containerStyles = getContainerStyles();
 
     const handleUpdatePage = (updates: Partial<Page>) => {
+        console.log('🔄 [PageSettings] handleUpdatePage called:', updates);
         if (currentPageId) {
             updatePage(currentPageId, updates);
+            console.log('✅ [PageSettings] updatePage executed for ID:', currentPageId);
+        } else {
+            console.error('❌ [PageSettings] No currentPageId!');
         }
     };
 
     const handleStylesUpdate = (newStyles: StylesData) => {
+        console.log('🎨 [PageSettings] handleStylesUpdate called:', newStyles);
         handleUpdatePage({ containerStyles: newStyles });
     };
 
     const handleSave = async () => {
-        if (!currentPageId) return;
+        console.log('💾 [PageSettings] Save button clicked!');
+        console.log('💾 [PageSettings] currentPageId:', currentPageId);
+        console.log('💾 [PageSettings] savePageToDatabase:', savePageToDatabase);
+
+        if (!currentPageId) {
+            console.error('❌ [PageSettings] Cannot save: No currentPageId');
+            toast.error('Error: No page selected');
+            return;
+        }
 
         setIsSaving(true);
+        console.log('💾 [PageSettings] Calling savePageToDatabase...');
+
         try {
             await savePageToDatabase(currentPageId);
+            console.log('✅ [PageSettings] Save successful!');
             onOpenChange(false);
         } catch (error) {
-            console.error('Failed to save page:', error);
+            console.error('❌ [PageSettings] Save failed:', error);
+            toast.error('Failed to save page settings');
         } finally {
             setIsSaving(false);
+            console.log('💾 [PageSettings] Save complete, isSaving reset');
         }
     };
 

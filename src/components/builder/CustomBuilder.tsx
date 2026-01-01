@@ -17,7 +17,9 @@ import { LeftSidebar } from './LeftSidebar';
 import { RightSidebar } from './RightSidebar';
 import { BuilderCanvas } from './BuilderCanvas';
 import { useBuilderStore } from '@/stores/builder';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
+import { toast } from 'sonner';
 import './builder.css';
 
 export const CustomBuilder: React.FC = () => {
@@ -31,6 +33,20 @@ export const CustomBuilder: React.FC = () => {
     savePageToDatabase,
     moveComponent
   } = useBuilderStore();
+
+  // Keyboard shortcuts integration
+  useKeyboardShortcuts({
+    onSave: async () => {
+      if (currentPageId) {
+        try {
+          await savePageToDatabase(currentPageId);
+          toast.success('Page saved successfully!');
+        } catch (error) {
+          toast.error('Failed to save page');
+        }
+      }
+    }
+  });
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [activeItem, setActiveItem] = useState<any>(null);

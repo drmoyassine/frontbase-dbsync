@@ -12,6 +12,7 @@ export interface BuilderSlice {
     selectedComponentId: string | null;
     draggedComponentId: string | null;
     editingComponentId: string | null;
+    copiedComponent: ComponentData | null;
 
     setSelectedComponentId: (id: string | null) => void;
     setDraggedComponentId: (componentId: string | null) => void;
@@ -22,12 +23,16 @@ export interface BuilderSlice {
     updateComponent: (componentId: string, propsUpdates: Record<string, any>) => void;
     removeComponent: (componentId: string) => void;
     deleteSelectedComponent: () => void;
+    copyComponent: (componentId: string) => void;
+    pasteComponent: () => void;
+    duplicateComponent: (componentId: string) => void;
 }
 
 export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice> = (set, get) => ({
     selectedComponentId: null,
     draggedComponentId: null,
     editingComponentId: null,
+    copiedComponent: null,
 
     setSelectedComponentId: (id) => set({ selectedComponentId: id }),
     setDraggedComponentId: (id) => set({ draggedComponentId: id }),
@@ -184,6 +189,161 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
         toast({
             title: "Component deleted",
             description: "Component has been removed successfully"
+        });
+    },
+
+    copyComponent: (componentId: string) => {
+        const { currentPageId, pages } = get();
+        if (!currentPageId) return;
+
+        const page = pages.find(p => p.id === currentPageId);
+        if (!page?.layoutData?.content) return;
+
+        // Find component recursively
+        const findComponent = (components: ComponentData[], id: string): ComponentData | null => {
+            for (const comp of components) {
+                if (comp.id === id) return comp;
+                if (comp.children) {
+                    const found = findComponent(comp.children, id);
+                    if (found) return found;
+                }
+            }
+            return null;
+        };
+
+        const component = findComponent(page.layoutData.content, componentId);
+        if (component) {
+            set({ copiedComponent: JSON.parse(JSON.stringify(component)) });
+            toast({
+                title: "Component copied",
+                description: "Press Ctrl/Cmd+V to paste"
+            });
+        }
+    },
+
+    pasteComponent: () => {
+        const { copiedComponent, currentPageId, pages, selectedComponentId } = get();
+        if (!copiedComponent || !currentPageId) return;
+
+        const pageIndex = pages.findIndex(p => p.id === currentPageId);
+        if (pageIndex === -1) return;
+
+        // Generate new ID for pasted component
+        const generateNewId = () => `comp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        const cloneWithNewIds = (comp: ComponentData): ComponentData => {
+            const newComp = { ...comp, id: generateNewId() };
+            if (newComp.children) {
+                newComp.children = newComp.children.map(cloneWithNewIds);
+            }
+            return newComp;
+        };
+
+        const newComponent = cloneWithNewIds(copiedComponent);
+
+        set((state) => {
+            const newPages = [...state.pages];
+            const page = { ...newPages[pageIndex] };
+            const content = [...(page.layoutData?.content || [])];
+
+            // Paste after selected component or at end
+            content.push(newComponent);
+
+            page.layoutData = { ...page.layoutData, content };
+            newPages[pageIndex] = page;
+
+            return {
+                ...state,
+                pages: newPages,
+                selectedComponentId: newComponent.id,
+                hasUnsavedChanges: true
+            };
+        });
+
+        toast({
+            title: "Component pasted",
+            description: "Component pasted successfully"
+        });
+    },
+
+    duplicateComponent: (componentId: string) => {
+        const { currentPageId, pages } = get();
+        if (!currentPageId) return;
+
+        const pageIndex = pages.findIndex(p => p.id === currentPageId);
+        if (pageIndex === -1) return;
+
+        const page = pages[pageIndex];
+        const content = page.layoutData?.content || [];
+
+        // Find component and its parent
+        const findComponentWithParent = (components: ComponentData[], id: string, parent: ComponentData | null = null): { component: ComponentData; parent: ComponentData | null; index: number } | null => {
+            for (let i = 0; i < components.length; i++) {
+                const comp = components[i];
+                if (comp.id === id) return { component: comp, parent, index: i };
+                if (comp.children) {
+                    const found = findComponentWithParent(comp.children, id, comp);
+                    if (found) return found;
+                }
+            }
+            return null;
+        };
+
+        const result = findComponentWithParent(content, componentId);
+        if (!result) return;
+
+        // Generate new ID
+        const generateNewId = () => `comp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        const cloneWithNewIds = (comp: ComponentData): ComponentData => {
+            const newComp = { ...comp, id: generateNewId() };
+            if (newComp.children) {
+                newComp.children = newComp.children.map(cloneWithNewIds);
+            }
+            return newComp;
+        };
+
+        const duplicate = cloneWithNewIds(result.component);
+
+        set((state) => {
+            const newPages = [...state.pages];
+            const newPage = { ...newPages[pageIndex] };
+            const newContent = [...(newPage.layoutData?.content || [])];
+
+            // Insert duplicate after original
+            if (result.parent) {
+                // Find parent in new structure and add to its children
+                const findAndInsert = (components: ComponentData[]): boolean => {
+                    for (const comp of components) {
+                        if (comp.id === result.parent!.id && comp.children) {
+                            comp.children.splice(result.index + 1, 0, duplicate);
+                            return true;
+                        }
+                        if (comp.children && findAndInsert(comp.children)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+                findAndInsert(newContent);
+            } else {
+                newContent.splice(result.index + 1, 0, duplicate);
+            }
+
+            newPage.layoutData = { ...newPage.layoutData, content: newContent };
+            newPages[pageIndex] = newPage;
+
+            return {
+                ...state,
+                pages: newPages,
+                selectedComponentId: duplicate.id,
+                hasUnsavedChanges: true
+            };
+        });
+
+        toast({
+            title: "Component duplicated",
+            description: "Component duplicated successfully"
         });
     },
 });

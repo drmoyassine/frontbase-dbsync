@@ -205,7 +205,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       <div
         className={cn(
           "mx-auto transition-all duration-300 relative",
-          showDeviceFrame && "shadow-2xl rounded-lg overflow-hidden border-8 border-gray-800"
+          showDeviceFrame && "shadow-2xl rounded-lg overflow-hidden"
         )}
         style={{
           width: `${viewportWidth}px`,

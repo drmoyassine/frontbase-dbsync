@@ -36,7 +36,11 @@ import {
     Package,
     Plus,
     Filter,
-    Play
+    Play,
+    ArrowUp,
+    ArrowDown,
+    ArrowLeft,
+    ArrowRight
 } from 'lucide-react';
 import type { Page, ContainerStyles } from '@/types/builder';
 
@@ -51,6 +55,7 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
 }) => {
     const { currentPageId, pages, updatePage } = useBuilderStore();
     const [activeTab, setActiveTab] = useState<string>('basic');
+    const [paddingMode, setPaddingMode] = useState<'all' | 'custom'>('all');
 
     const currentPage = pages.find((p) => p.id === currentPageId);
 
@@ -81,7 +86,61 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
         });
     };
 
+    const handleCustomPaddingChange = (side: 'top' | 'right' | 'bottom' | 'left', value: number) => {
+        const currentPadding = containerStyles.padding || { top: 50, right: 50, bottom: 50, left: 50 };
+        handleStyleChange('padding', {
+            ...currentPadding,
+            [side]: value
+        });
+    };
+
     const currentPadding = containerStyles.padding?.top || 50;
+
+    // Convert containerStyles to CSS string
+    const containerStylesToCSS = (): string => {
+        const cssLines: string[] = [];
+
+        if (containerStyles.padding) {
+            const { top, right, bottom, left } = containerStyles.padding;
+            cssLines.push(`padding: ${top}px ${right}px ${bottom}px ${left}px;`);
+        }
+
+        if (containerStyles.orientation) {
+            cssLines.push(`display: flex;`);
+            cssLines.push(`flex-direction: ${containerStyles.orientation};`);
+        }
+
+        if (containerStyles.alignItems) {
+            const alignMap: Record<string, string> = {
+                'start': 'flex-start',
+                'center': 'center',
+                'end': 'flex-end',
+                'stretch': 'stretch'
+            };
+            cssLines.push(`align-items: ${alignMap[containerStyles.alignItems] || containerStyles.alignItems};`);
+        }
+
+        if (containerStyles.justifyContent) {
+            const justifyMap: Record<string, string> = {
+                'start': 'flex-start',
+                'center': 'center',
+                'end': 'flex-end',
+                'between': 'space-between',
+                'around': 'space-around'
+            };
+            cssLines.push(`justify-content: ${justifyMap[containerStyles.justifyContent] || containerStyles.justifyContent};`);
+        }
+
+        if (containerStyles.gap !== undefined) {
+            cssLines.push(`gap: ${containerStyles.gap}px;`);
+        }
+
+        if (containerStyles.backgroundColor) {
+            cssLines.push(`background-color: ${containerStyles.backgroundColor};`);
+        }
+
+        return cssLines.join('\n');
+    };
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
@@ -211,194 +270,271 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
 
                     {/* STYLES TAB */}
                     <TabsContent value="styles" className="space-y-6">
-                        <div className="rounded-lg border border-border p-4 bg-muted/30">
-                            <h3 className="font-semibold mb-4">Container Layout</h3>
-
-                            {/* Orientation */}
-                            <div className="space-y-2 mb-4">
-                                <Label>Orientation</Label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <Button
-                                        variant={containerStyles.orientation === 'row' ? 'default' : 'outline'}
-                                        className="justify-start"
-                                        onClick={() => handleStyleChange('orientation', 'row')}
-                                    >
-                                        Row
-                                    </Button>
-                                    <Button
-                                        variant={containerStyles.orientation === 'column' ? 'default' : 'outline'}
-                                        className="justify-start"
-                                        onClick={() => handleStyleChange('orientation', 'column')}
-                                    >
-                                        Column
-                                    </Button>
-                                </div>
-                            </div>
-
-                            {/* Gap */}
-                            <div className="space-y-2 mb-4">
-                                <Label>Gap</Label>
-                                <div className="flex items-center gap-2">
-                                    <Input
-                                        type="number"
-                                        value={containerStyles.gap || 30}
-                                        onChange={(e) => handleStyleChange('gap', parseInt(e.target.value) || 0)}
-                                        className="flex-1"
-                                    />
-                                    <span className="text-sm text-muted-foreground">px</span>
-                                </div>
-                            </div>
-
-                            {/* Flex Wrap */}
-                            <div className="space-y-2 mb-4">
-                                <Label>Flex Wrap</Label>
-                                <Select
-                                    value={containerStyles.flexWrap || 'nowrap'}
-                                    onValueChange={(value: any) => handleStyleChange('flexWrap', value)}
+                        {/* Styling Mode Toggle */}
+                        <div className="space-y-2">
+                            <Label>Styling Mode</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                    variant={containerStyles.stylingMode !== 'css' ? 'default' : 'outline'}
+                                    onClick={() => handleStyleChange('stylingMode', 'visual')}
                                 >
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="nowrap">No Wrap</SelectItem>
-                                        <SelectItem value="wrap">Wrap</SelectItem>
-                                        <SelectItem value="wrap-reverse">Wrap Reverse</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {/* Align Items */}
-                            <div className="space-y-2 mb-4">
-                                <Label>Align Items</Label>
-                                <div className="grid grid-cols-4 gap-2">
-                                    <Button
-                                        variant={containerStyles.alignItems === 'start' ? 'default' : 'outline'}
-                                        size="sm"
-                                        onClick={() => handleStyleChange('alignItems', 'start')}
-                                    >
-                                        <AlignVerticalJustifyStart className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                        variant={containerStyles.alignItems === 'center' ? 'default' : 'outline'}
-                                        size="sm"
-                                        onClick={() => handleStyleChange('alignItems', 'center')}
-                                    >
-                                        <AlignVerticalJustifyCenter className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                        variant={containerStyles.alignItems === 'end' ? 'default' : 'outline'}
-                                        size="sm"
-                                        onClick={() => handleStyleChange('alignItems', 'end')}
-                                    >
-                                        <AlignVerticalJustifyEnd className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                        variant={containerStyles.alignItems === 'stretch' ? 'default' : 'outline'}
-                                        size="sm"
-                                        onClick={() => handleStyleChange('alignItems', 'stretch')}
-                                    >
-                                        Stretch
-                                    </Button>
-                                </div>
-                            </div>
-
-                            {/* Justify Content */}
-                            <div className="space-y-2 mb-4">
-                                <Label>Justify Content</Label>
-                                <div className="grid grid-cols-5 gap-2">
-                                    <Button
-                                        variant={containerStyles.justifyContent === 'start' ? 'default' : 'outline'}
-                                        size="sm"
-                                        onClick={() => handleStyleChange('justifyContent', 'start')}
-                                    >
-                                        <AlignLeft className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                        variant={containerStyles.justifyContent === 'center' ? 'default' : 'outline'}
-                                        size="sm"
-                                        onClick={() => handleStyleChange('justifyContent', 'center')}
-                                    >
-                                        <AlignCenter className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                        variant={containerStyles.justifyContent === 'end' ? 'default' : 'outline'}
-                                        size="sm"
-                                        onClick={() => handleStyleChange('justifyContent', 'end')}
-                                    >
-                                        <AlignRight className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                        variant={containerStyles.justifyContent === 'between' ? 'default' : 'outline'}
-                                        size="sm"
-                                        onClick={() => handleStyleChange('justifyContent', 'between')}
-                                    >
-                                        <AlignJustify className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                        variant={containerStyles.justifyContent === 'around' ? 'default' : 'outline'}
-                                        size="sm"
-                                        onClick={() => handleStyleChange('justifyContent', 'around')}
-                                    >
-                                        Around
-                                    </Button>
-                                </div>
-                            </div>
-
-                            {/* Background Color */}
-                            <div className="space-y-2 mb-4">
-                                <Label>Background Color</Label>
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="color"
-                                        value={containerStyles.backgroundColor || '#FFFFFF'}
-                                        onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
-                                        className="w-10 h-10 rounded border border-border cursor-pointer"
-                                    />
-                                    <Input
-                                        type="text"
-                                        value={containerStyles.backgroundColor || '#FFFFFF'}
-                                        onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
-                                        placeholder="#FFFFFF"
-                                        className="flex-1"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Padding */}
-                            <div className="space-y-2 mb-4">
-                                <div className="flex items-center justify-between">
-                                    <Label>Padding</Label>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Input
-                                        type="number"
-                                        value={currentPadding}
-                                        onChange={(e) => handlePaddingChange(parseInt(e.target.value) || 0)}
-                                        className="flex-1"
-                                    />
-                                    <span className="text-sm text-muted-foreground">All Sides</span>
-                                </div>
-                            </div>
-
-                            {/* Styling Mode */}
-                            <div className="space-y-2">
-                                <Label>Styling Mode</Label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <Button
-                                        variant={containerStyles.stylingMode !== 'css' ? 'outline' : 'ghost'}
-                                        onClick={() => handleStyleChange('stylingMode', 'visual')}
-                                    >
-                                        Visual
-                                    </Button>
-                                    <Button
-                                        variant={containerStyles.stylingMode === 'css' ? 'outline' : 'ghost'}
-                                        onClick={() => handleStyleChange('stylingMode', 'css')}
-                                    >
-                                        CSS (Advanced)
-                                    </Button>
-                                </div>
+                                    Visual
+                                </Button>
+                                <Button
+                                    variant={containerStyles.stylingMode === 'css' ? 'default' : 'outline'}
+                                    onClick={() => handleStyleChange('stylingMode', 'css')}
+                                >
+                                    CSS (Advanced)
+                                </Button>
                             </div>
                         </div>
+
+                        <Separator />
+
+                        {containerStyles.stylingMode === 'css' ? (
+                            /* CSS ADVANCED MODE */
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-sm font-semibold">CSS Styling</Label>
+                                    <Button variant="ghost" size="sm">
+                                        <Plus className="h-3 w-3 mr-1" />
+                                        Expand
+                                    </Button>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-xs text-muted-foreground">Page Root</Label>
+                                    <Textarea
+                                        value={containerStylesToCSS()}
+                                        readOnly
+                                        className="font-mono text-sm min-h-[200px]"
+                                        placeholder="No styles defined yet"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Switch to Visual mode to edit styles with UI controls
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
+                            /* VISUAL MODE */
+                            <div className="rounded-lg border border-border p-4 bg-muted/30">
+                                <h3 className="font-semibold mb-4">Container Layout</h3>
+
+                                {/* Orientation */}
+                                <div className="space-y-2 mb-4">
+                                    <Label>Orientation</Label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button
+                                            variant={containerStyles.orientation === 'row' ? 'default' : 'outline'}
+                                            className="justify-start"
+                                            onClick={() => handleStyleChange('orientation', 'row')}
+                                        >
+                                            Row
+                                        </Button>
+                                        <Button
+                                            variant={containerStyles.orientation === 'column' ? 'default' : 'outline'}
+                                            className="justify-start"
+                                            onClick={() => handleStyleChange('orientation', 'column')}
+                                        >
+                                            Column
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {/* Gap */}
+                                <div className="space-y-2 mb-4">
+                                    <Label>Gap</Label>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            type="number"
+                                            value={containerStyles.gap || 30}
+                                            onChange={(e) => handleStyleChange('gap', parseInt(e.target.value) || 0)}
+                                            className="flex-1"
+                                        />
+                                        <span className="text-sm text-muted-foreground">px</span>
+                                    </div>
+                                </div>
+
+                                {/* Flex Wrap */}
+                                <div className="space-y-2 mb-4">
+                                    <Label>Flex Wrap</Label>
+                                    <Select
+                                        value={containerStyles.flexWrap || 'nowrap'}
+                                        onValueChange={(value: any) => handleStyleChange('flexWrap', value)}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="nowrap">No Wrap</SelectItem>
+                                            <SelectItem value="wrap">Wrap</SelectItem>
+                                            <SelectItem value="wrap-reverse">Wrap Reverse</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {/* Align Items */}
+                                <div className="space-y-2 mb-4">
+                                    <Label>Align Items</Label>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        <Button
+                                            variant={containerStyles.alignItems === 'start' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => handleStyleChange('alignItems', 'start')}
+                                        >
+                                            <AlignVerticalJustifyStart className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant={containerStyles.alignItems === 'center' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => handleStyleChange('alignItems', 'center')}
+                                        >
+                                            <AlignVerticalJustifyCenter className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant={containerStyles.alignItems === 'end' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => handleStyleChange('alignItems', 'end')}
+                                        >
+                                            <AlignVerticalJustifyEnd className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant={containerStyles.alignItems === 'stretch' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => handleStyleChange('alignItems', 'stretch')}
+                                        >
+                                            Stretch
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {/* Justify Content */}
+                                <div className="space-y-2 mb-4">
+                                    <Label>Justify Content</Label>
+                                    <div className="grid grid-cols-5 gap-2">
+                                        <Button
+                                            variant={containerStyles.justifyContent === 'start' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => handleStyleChange('justifyContent', 'start')}
+                                        >
+                                            <AlignLeft className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant={containerStyles.justifyContent === 'center' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => handleStyleChange('justifyContent', 'center')}
+                                        >
+                                            <AlignCenter className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant={containerStyles.justifyContent === 'end' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => handleStyleChange('justifyContent', 'end')}
+                                        >
+                                            <AlignRight className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant={containerStyles.justifyContent === 'between' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => handleStyleChange('justifyContent', 'between')}
+                                        >
+                                            <AlignJustify className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant={containerStyles.justifyContent === 'around' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => handleStyleChange('justifyContent', 'around')}
+                                        >
+                                            Around
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {/* Background Color */}
+                                <div className="space-y-2 mb-4">
+                                    <Label>Background Color</Label>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="color"
+                                            value={containerStyles.backgroundColor || '#FFFFFF'}
+                                            onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
+                                            className="w-10 h-10 rounded border border-border cursor-pointer"
+                                        />
+                                        <Input
+                                            type="text"
+                                            value={containerStyles.backgroundColor || '#FFFFFF'}
+                                            onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
+                                            placeholder="#FFFFFF"
+                                            className="flex-1"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Padding */}
+                                <div className="space-y-2 mb-4">
+                                    <div className="flex items-center justify-between">
+                                        <Label>Padding</Label>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setPaddingMode(paddingMode === 'all' ? 'custom' : 'all')}
+                                        >
+                                            {paddingMode === 'all' ? 'All Sides' : 'Custom'}
+                                        </Button>
+                                    </div>
+
+                                    {paddingMode === 'all' ? (
+                                        <div className="flex items-center gap-2">
+                                            <Input
+                                                type="number"
+                                                value={currentPadding}
+                                                onChange={(e) => handlePaddingChange(parseInt(e.target.value) || 0)}
+                                                className="flex-1"
+                                            />
+                                            <span className="text-sm text-muted-foreground">All Sides</span>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-4 gap-2">
+                                            <div className="flex flex-col items-center gap-1">
+                                                <ArrowUp className="h-3 w-3 text-muted-foreground" />
+                                                <Input
+                                                    type="number"
+                                                    value={containerStyles.padding?.top || 50}
+                                                    onChange={(e) => handleCustomPaddingChange('top', parseInt(e.target.value) || 0)}
+                                                    className="text-center"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                                                <Input
+                                                    type="number"
+                                                    value={containerStyles.padding?.right || 50}
+                                                    onChange={(e) => handleCustomPaddingChange('right', parseInt(e.target.value) || 0)}
+                                                    className="text-center"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <ArrowDown className="h-3 w-3 text-muted-foreground" />
+                                                <Input
+                                                    type="number"
+                                                    value={containerStyles.padding?.bottom || 50}
+                                                    onChange={(e) => handleCustomPaddingChange('bottom', parseInt(e.target.value) || 0)}
+                                                    className="text-center"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <ArrowLeft className="h-3 w-3 text-muted-foreground" />
+                                                <Input
+                                                    type="number"
+                                                    value={containerStyles.padding?.left || 50}
+                                                    onChange={(e) => handleCustomPaddingChange('left', parseInt(e.target.value) || 0)}
+                                                    className="text-center"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </TabsContent>
 
                     {/* ADVANCED TAB */}

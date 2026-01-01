@@ -10,39 +10,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import {
     Settings,
     Palette,
     Zap,
     Eye,
     EyeOff,
-    AlignLeft,
-    AlignCenter,
-    AlignRight,
-    AlignJustify,
-    AlignVerticalJustifyStart,
-    AlignVerticalJustifyCenter,
-    AlignVerticalJustifyEnd,
     Package,
     Plus,
     Filter,
-    Play,
-    ArrowUp,
-    ArrowDown,
-    ArrowLeft,
-    ArrowRight
+    Play
 } from 'lucide-react';
-import type { Page, ContainerStyles } from '@/types/builder';
+import type { Page, StylesData } from '@/types/builder';
+import { StylesPanel } from '@/components/styles/StylesPanel';
 
 interface PageSettingsDrawerProps {
     open: boolean;
@@ -55,13 +38,72 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
 }) => {
     const { currentPageId, pages, updatePage } = useBuilderStore();
     const [activeTab, setActiveTab] = useState<string>('basic');
-    const [paddingMode, setPaddingMode] = useState<'all' | 'custom'>('all');
 
     const currentPage = pages.find((p) => p.id === currentPageId);
 
     if (!currentPage) return null;
 
-    const containerStyles = currentPage.containerStyles || {};
+    // Convert old ContainerStyles to new StylesData if needed
+    const getContainerStyles = (): StylesData => {
+        if (!currentPage.containerStyles) {
+            return {
+                activeProperties: [],
+                values: {},
+                stylingMode: 'visual'
+            };
+        }
+
+        // Check if it's already new format
+        if ('activeProperties' in currentPage.containerStyles) {
+            return currentPage.containerStyles as StylesData;
+        }
+
+        // Convert old format to new format
+        const oldStyles = currentPage.containerStyles as any;
+        const activeProperties: string[] = [];
+        const values: Record<string, any> = {};
+
+        if (oldStyles.orientation) {
+            activeProperties.push('flexDirection');
+            values.flexDirection = oldStyles.orientation;
+        }
+        if (oldStyles.gap !== undefined) {
+            activeProperties.push('gap');
+            values.gap = oldStyles.gap;
+        }
+        if (oldStyles.padding) {
+            activeProperties.push('padding');
+            values.padding = oldStyles.padding;
+        }
+        if (oldStyles.alignItems) {
+            activeProperties.push('alignItems');
+            values.alignItems = oldStyles.alignItems === 'start' ? 'flex-start' :
+                oldStyles.alignItems === 'end' ? 'flex-end' : oldStyles.alignItems;
+        }
+        if (oldStyles.justifyContent) {
+            activeProperties.push('justifyContent');
+            values.justifyContent = oldStyles.justifyContent === 'start' ? 'flex-start' :
+                oldStyles.justifyContent === 'end' ? 'flex-end' :
+                    oldStyles.justifyContent === 'between' ? 'space-between' :
+                        oldStyles.justifyContent === 'around' ? 'space-around' : oldStyles.justifyContent;
+        }
+        if (oldStyles.backgroundColor) {
+            activeProperties.push('backgroundColor');
+            values.backgroundColor = oldStyles.backgroundColor;
+        }
+        if (oldStyles.flexWrap) {
+            activeProperties.push('flexWrap');
+            values.flexWrap = oldStyles.flexWrap;
+        }
+
+        return {
+            activeProperties,
+            values,
+            stylingMode: oldStyles.stylingMode || 'visual'
+        };
+    };
+
+    const containerStyles = getContainerStyles();
 
     const handleUpdatePage = (updates: Partial<Page>) => {
         if (currentPageId) {
@@ -69,77 +111,8 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
         }
     };
 
-    const handleStyleChange = (key: keyof ContainerStyles, value: any) => {
-        const newStyles: ContainerStyles = {
-            ...containerStyles,
-            [key]: value
-        };
+    const handleStylesUpdate = (newStyles: StylesData) => {
         handleUpdatePage({ containerStyles: newStyles });
-    };
-
-    const handlePaddingChange = (value: number) => {
-        handleStyleChange('padding', {
-            top: value,
-            right: value,
-            bottom: value,
-            left: value
-        });
-    };
-
-    const handleCustomPaddingChange = (side: 'top' | 'right' | 'bottom' | 'left', value: number) => {
-        const currentPadding = containerStyles.padding || { top: 50, right: 50, bottom: 50, left: 50 };
-        handleStyleChange('padding', {
-            ...currentPadding,
-            [side]: value
-        });
-    };
-
-    const currentPadding = containerStyles.padding?.top || 50;
-
-    // Convert containerStyles to CSS string
-    const containerStylesToCSS = (): string => {
-        const cssLines: string[] = [];
-
-        if (containerStyles.padding) {
-            const { top, right, bottom, left } = containerStyles.padding;
-            cssLines.push(`padding: ${top}px ${right}px ${bottom}px ${left}px;`);
-        }
-
-        if (containerStyles.orientation) {
-            cssLines.push(`display: flex;`);
-            cssLines.push(`flex-direction: ${containerStyles.orientation};`);
-        }
-
-        if (containerStyles.alignItems) {
-            const alignMap: Record<string, string> = {
-                'start': 'flex-start',
-                'center': 'center',
-                'end': 'flex-end',
-                'stretch': 'stretch'
-            };
-            cssLines.push(`align-items: ${alignMap[containerStyles.alignItems] || containerStyles.alignItems};`);
-        }
-
-        if (containerStyles.justifyContent) {
-            const justifyMap: Record<string, string> = {
-                'start': 'flex-start',
-                'center': 'center',
-                'end': 'flex-end',
-                'between': 'space-between',
-                'around': 'space-around'
-            };
-            cssLines.push(`justify-content: ${justifyMap[containerStyles.justifyContent] || containerStyles.justifyContent};`);
-        }
-
-        if (containerStyles.gap !== undefined) {
-            cssLines.push(`gap: ${containerStyles.gap}px;`);
-        }
-
-        if (containerStyles.backgroundColor) {
-            cssLines.push(`background-color: ${containerStyles.backgroundColor};`);
-        }
-
-        return cssLines.join('\n');
     };
 
     return (
@@ -152,449 +125,189 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
                     </SheetTitle>
                 </SheetHeader>
 
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    <TabsList className="grid w-full grid-cols-3 mb-6">
-                        <TabsTrigger value="basic" className="gap-2">
-                            <Package className="h-4 w-4" />
-                            Basic
-                        </TabsTrigger>
-                        <TabsTrigger value="styles" className="gap-2">
-                            <Palette className="h-4 w-4" />
-                            Styles
-                        </TabsTrigger>
-                        <TabsTrigger value="advanced" className="gap-2">
-                            <Zap className="h-4 w-4" />
-                            Advanced
-                        </TabsTrigger>
-                    </TabsList>
+                <Tabs value={active Tab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-3 mb-6">
+                    <TabsTrigger value="basic" className="gap-2">
+                        <Package className="h-4 w-4" />
+                        Basic
+                    </TabsTrigger>
+                    <TabsTrigger value="styles" className="gap-2">
+                        <Palette className="h-4 w-4" />
+                        Styles
+                    </TabsTrigger>
+                    <TabsTrigger value="advanced" className="gap-2">
+                        <Zap className="h-4 w-4" />
+                        Advanced
+                    </TabsTrigger>
+                </TabsList>
 
-                    {/* BASIC TAB */}
-                    <TabsContent value="basic" className="space-y-6">
-                        {/* Page Name */}
-                        <div className="space-y-2">
-                            <Label htmlFor="pageName">Page Name</Label>
+                {/* BASIC TAB */}
+                <TabsContent value="basic" className="space-y-6">
+                    {/* Page Name */}
+                    <div className="space-y-2">
+                        <Label htmlFor="pageName">Page Name</Label>
+                        <Input
+                            id="pageName"
+                            value={currentPage.name}
+                            onChange={(e) => handleUpdatePage({ name: e.target.value })}
+                            placeholder="Enter page name"
+                        />
+                    </div>
+
+                    {/* Page Slug */}
+                    <div className="space-y-2">
+                        <Label htmlFor="pageSlug">URL Slug</Label>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">/</span>
                             <Input
-                                id="pageName"
-                                value={currentPage.name}
-                                onChange={(e) => handleUpdatePage({ name: e.target.value })}
-                                placeholder="Enter page name"
+                                id="pageSlug"
+                                value={currentPage.slug || ''}
+                                onChange={(e) => handleUpdatePage({ slug: e.target.value })}
+                                placeholder="page-slug"
+                                className="flex-1"
                             />
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                            URL-friendly path (e.g., about-us, contact)
+                        </p>
+                    </div>
 
-                        {/* Page Slug */}
-                        <div className="space-y-2">
-                            <Label htmlFor="pageSlug">URL Slug</Label>
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm text-muted-foreground">/</span>
-                                <Input
-                                    id="pageSlug"
-                                    value={currentPage.slug || ''}
-                                    onChange={(e) => handleUpdatePage({ slug: e.target.value })}
-                                    placeholder="page-slug"
-                                    className="flex-1"
-                                />
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                URL-friendly path (e.g., about-us, contact)
-                            </p>
-                        </div>
+                    {/* Page Title (SEO) */}
+                    <div className="space-y-2">
+                        <Label htmlFor="pageTitle">Page Title (SEO)</Label>
+                        <Input
+                            id="pageTitle"
+                            value={currentPage.title || ''}
+                            onChange={(e) => handleUpdatePage({ title: e.target.value })}
+                            placeholder="Page title for search engines"
+                            maxLength={60}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            {(currentPage.title || '').length}/60 characters
+                        </p>
+                    </div>
 
-                        {/* Page Title (SEO) */}
-                        <div className="space-y-2">
-                            <Label htmlFor="pageTitle">Page Title (SEO)</Label>
-                            <Input
-                                id="pageTitle"
-                                value={currentPage.title || ''}
-                                onChange={(e) => handleUpdatePage({ title: e.target.value })}
-                                placeholder="Page title for search engines"
-                                maxLength={60}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                {(currentPage.title || '').length}/60 characters
-                            </p>
-                        </div>
+                    {/* Page Description (SEO) */}
+                    <div className="space-y-2">
+                        <Label htmlFor="pageDescription">Page Description (SEO)</Label>
+                        <Textarea
+                            id="pageDescription"
+                            value={currentPage.description || ''}
+                            onChange={(e) => handleUpdatePage({ description: e.target.value })}
+                            placeholder="Brief description for search engines"
+                            rows={3}
+                            maxLength={160}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            {(currentPage.description || '').length}/160 characters
+                        </p>
+                    </div>
 
-                        {/* Page Description (SEO) */}
-                        <div className="space-y-2">
-                            <Label htmlFor="pageDescription">Page Description (SEO)</Label>
-                            <Textarea
-                                id="pageDescription"
-                                value={currentPage.description || ''}
-                                onChange={(e) => handleUpdatePage({ description: e.target.value })}
-                                placeholder="Brief description for search engines"
-                                rows={3}
-                                maxLength={160}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                {(currentPage.description || '').length}/160 characters
-                            </p>
-                        </div>
+                    {/* Keywords */}
+                    <div className="space-y-2">
+                        <Label htmlFor="pageKeywords">Keywords</Label>
+                        <Input
+                            id="pageKeywords"
+                            value={currentPage.keywords || ''}
+                            onChange={(e) => handleUpdatePage({ keywords: e.target.value })}
+                            placeholder="keyword1, keyword2, keyword3"
+                        />
+                    </div>
 
-                        {/* Keywords */}
-                        <div className="space-y-2">
-                            <Label htmlFor="pageKeywords">Keywords</Label>
-                            <Input
-                                id="pageKeywords"
-                                value={currentPage.keywords || ''}
-                                onChange={(e) => handleUpdatePage({ keywords: e.target.value })}
-                                placeholder="keyword1, keyword2, keyword3"
-                            />
-                        </div>
-
-                        {/* Status */}
-                        <div className="space-y-2">
-                            <Label>Status</Label>
-                            <div className="flex items-center gap-2">
-                                <Badge variant={currentPage.deletedAt ? 'destructive' : 'default'}>
-                                    {currentPage.deletedAt ? 'Deleted' : 'Active'}
-                                </Badge>
-                                <Badge variant={currentPage.isPublic ? 'default' : 'outline'}>
-                                    {currentPage.isPublic ? (
-                                        <>
-                                            <Eye className="h-3 w-3 mr-1" />
-                                            Public
-                                        </>
-                                    ) : (
-                                        <>
-                                            <EyeOff className="h-3 w-3 mr-1" />
-                                            Private
-                                        </>
-                                    )}
-                                </Badge>
-                                {currentPage.isHomepage && (
-                                    <Badge variant="secondary">Homepage</Badge>
+                    {/* Status */}
+                    <div className="space-y-2">
+                        <Label>Status</Label>
+                        <div className="flex items-center gap-2">
+                            <Badge variant={currentPage.deletedAt ? 'destructive' : 'default'}>
+                                {currentPage.deletedAt ? 'Deleted' : 'Active'}
+                            </Badge>
+                            <Badge variant={currentPage.isPublic ? 'default' : 'outline'}>
+                                {currentPage.isPublic ? (
+                                    <>
+                                        <Eye className="h-3 w-3 mr-1" />
+                                        Public
+                                    </>
+                                ) : (
+                                    <>
+                                        <EyeOff className="h-3 w-3 mr-1" />
+                                        Private
+                                    </>
                                 )}
-                            </div>
+                            </Badge>
+                            {currentPage.isHomepage && (
+                                <Badge variant="secondary">Homepage</Badge>
+                            )}
                         </div>
-                    </TabsContent>
+                    </div>
+                </TabsContent>
 
-                    {/* STYLES TAB */}
-                    <TabsContent value="styles" className="space-y-6">
-                        {/* Styling Mode Toggle */}
-                        <div className="space-y-2">
-                            <Label>Styling Mode</Label>
-                            <div className="grid grid-cols-2 gap-2">
-                                <Button
-                                    variant={containerStyles.stylingMode !== 'css' ? 'default' : 'outline'}
-                                    onClick={() => handleStyleChange('stylingMode', 'visual')}
-                                >
-                                    Visual
-                                </Button>
-                                <Button
-                                    variant={containerStyles.stylingMode === 'css' ? 'default' : 'outline'}
-                                    onClick={() => handleStyleChange('stylingMode', 'css')}
-                                >
-                                    CSS (Advanced)
-                                </Button>
-                            </div>
-                        </div>
+                {/* STYLES TAB */}
+                <TabsContent value="styles" className="space-y-6">
+                    <StylesPanel
+                        styles={containerStyles}
+                        onUpdate={handleStylesUpdate}
+                        title="Container Layout"
+                    />
+                </TabsContent>
 
-                        <Separator />
-
-                        {containerStyles.stylingMode === 'css' ? (
-                            /* CSS ADVANCED MODE */
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <Label className="text-sm font-semibold">CSS Styling</Label>
-                                    <Button variant="ghost" size="sm">
-                                        <Plus className="h-3 w-3 mr-1" />
-                                        Expand
-                                    </Button>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-xs text-muted-foreground">Page Root</Label>
-                                    <Textarea
-                                        value={containerStylesToCSS()}
-                                        readOnly
-                                        className="font-mono text-sm min-h-[200px]"
-                                        placeholder="No styles defined yet"
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                        Switch to Visual mode to edit styles with UI controls
-                                    </p>
-                                </div>
-                            </div>
-                        ) : (
-                            /* VISUAL MODE */
-                            <div className="rounded-lg border border-border p-4 bg-muted/30">
-                                <h3 className="font-semibold mb-4">Container Layout</h3>
-
-                                {/* Orientation */}
-                                <div className="space-y-2 mb-4">
-                                    <Label>Orientation</Label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Button
-                                            variant={containerStyles.orientation === 'row' ? 'default' : 'outline'}
-                                            className="justify-start"
-                                            onClick={() => handleStyleChange('orientation', 'row')}
-                                        >
-                                            Row
-                                        </Button>
-                                        <Button
-                                            variant={containerStyles.orientation === 'column' ? 'default' : 'outline'}
-                                            className="justify-start"
-                                            onClick={() => handleStyleChange('orientation', 'column')}
-                                        >
-                                            Column
-                                        </Button>
-                                    </div>
-                                </div>
-
-                                {/* Gap */}
-                                <div className="space-y-2 mb-4">
-                                    <Label>Gap</Label>
-                                    <div className="flex items-center gap-2">
-                                        <Input
-                                            type="number"
-                                            value={containerStyles.gap || 30}
-                                            onChange={(e) => handleStyleChange('gap', parseInt(e.target.value) || 0)}
-                                            className="flex-1"
-                                        />
-                                        <span className="text-sm text-muted-foreground">px</span>
-                                    </div>
-                                </div>
-
-                                {/* Flex Wrap */}
-                                <div className="space-y-2 mb-4">
-                                    <Label>Flex Wrap</Label>
-                                    <Select
-                                        value={containerStyles.flexWrap || 'nowrap'}
-                                        onValueChange={(value: any) => handleStyleChange('flexWrap', value)}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="nowrap">No Wrap</SelectItem>
-                                            <SelectItem value="wrap">Wrap</SelectItem>
-                                            <SelectItem value="wrap-reverse">Wrap Reverse</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                {/* Align Items */}
-                                <div className="space-y-2 mb-4">
-                                    <Label>Align Items</Label>
-                                    <div className="grid grid-cols-4 gap-2">
-                                        <Button
-                                            variant={containerStyles.alignItems === 'start' ? 'default' : 'outline'}
-                                            size="sm"
-                                            onClick={() => handleStyleChange('alignItems', 'start')}
-                                        >
-                                            <AlignVerticalJustifyStart className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            variant={containerStyles.alignItems === 'center' ? 'default' : 'outline'}
-                                            size="sm"
-                                            onClick={() => handleStyleChange('alignItems', 'center')}
-                                        >
-                                            <AlignVerticalJustifyCenter className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            variant={containerStyles.alignItems === 'end' ? 'default' : 'outline'}
-                                            size="sm"
-                                            onClick={() => handleStyleChange('alignItems', 'end')}
-                                        >
-                                            <AlignVerticalJustifyEnd className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            variant={containerStyles.alignItems === 'stretch' ? 'default' : 'outline'}
-                                            size="sm"
-                                            onClick={() => handleStyleChange('alignItems', 'stretch')}
-                                        >
-                                            Stretch
-                                        </Button>
-                                    </div>
-                                </div>
-
-                                {/* Justify Content */}
-                                <div className="space-y-2 mb-4">
-                                    <Label>Justify Content</Label>
-                                    <div className="grid grid-cols-5 gap-2">
-                                        <Button
-                                            variant={containerStyles.justifyContent === 'start' ? 'default' : 'outline'}
-                                            size="sm"
-                                            onClick={() => handleStyleChange('justifyContent', 'start')}
-                                        >
-                                            <AlignLeft className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            variant={containerStyles.justifyContent === 'center' ? 'default' : 'outline'}
-                                            size="sm"
-                                            onClick={() => handleStyleChange('justifyContent', 'center')}
-                                        >
-                                            <AlignCenter className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            variant={containerStyles.justifyContent === 'end' ? 'default' : 'outline'}
-                                            size="sm"
-                                            onClick={() => handleStyleChange('justifyContent', 'end')}
-                                        >
-                                            <AlignRight className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            variant={containerStyles.justifyContent === 'between' ? 'default' : 'outline'}
-                                            size="sm"
-                                            onClick={() => handleStyleChange('justifyContent', 'between')}
-                                        >
-                                            <AlignJustify className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            variant={containerStyles.justifyContent === 'around' ? 'default' : 'outline'}
-                                            size="sm"
-                                            onClick={() => handleStyleChange('justifyContent', 'around')}
-                                        >
-                                            Around
-                                        </Button>
-                                    </div>
-                                </div>
-
-                                {/* Background Color */}
-                                <div className="space-y-2 mb-4">
-                                    <Label>Background Color</Label>
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="color"
-                                            value={containerStyles.backgroundColor || '#FFFFFF'}
-                                            onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
-                                            className="w-10 h-10 rounded border border-border cursor-pointer"
-                                        />
-                                        <Input
-                                            type="text"
-                                            value={containerStyles.backgroundColor || '#FFFFFF'}
-                                            onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
-                                            placeholder="#FFFFFF"
-                                            className="flex-1"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Padding */}
-                                <div className="space-y-2 mb-4">
-                                    <div className="flex items-center justify-between">
-                                        <Label>Padding</Label>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => setPaddingMode(paddingMode === 'all' ? 'custom' : 'all')}
-                                        >
-                                            {paddingMode === 'all' ? 'All Sides' : 'Custom'}
-                                        </Button>
-                                    </div>
-
-                                    {paddingMode === 'all' ? (
-                                        <div className="flex items-center gap-2">
-                                            <Input
-                                                type="number"
-                                                value={currentPadding}
-                                                onChange={(e) => handlePaddingChange(parseInt(e.target.value) || 0)}
-                                                className="flex-1"
-                                            />
-                                            <span className="text-sm text-muted-foreground">All Sides</span>
-                                        </div>
-                                    ) : (
-                                        <div className="grid grid-cols-4 gap-2">
-                                            <div className="flex flex-col items-center gap-1">
-                                                <ArrowUp className="h-3 w-3 text-muted-foreground" />
-                                                <Input
-                                                    type="number"
-                                                    value={containerStyles.padding?.top || 50}
-                                                    onChange={(e) => handleCustomPaddingChange('top', parseInt(e.target.value) || 0)}
-                                                    className="text-center"
-                                                />
-                                            </div>
-                                            <div className="flex flex-col items-center gap-1">
-                                                <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                                                <Input
-                                                    type="number"
-                                                    value={containerStyles.padding?.right || 50}
-                                                    onChange={(e) => handleCustomPaddingChange('right', parseInt(e.target.value) || 0)}
-                                                    className="text-center"
-                                                />
-                                            </div>
-                                            <div className="flex flex-col items-center gap-1">
-                                                <ArrowDown className="h-3 w-3 text-muted-foreground" />
-                                                <Input
-                                                    type="number"
-                                                    value={containerStyles.padding?.bottom || 50}
-                                                    onChange={(e) => handleCustomPaddingChange('bottom', parseInt(e.target.value) || 0)}
-                                                    className="text-center"
-                                                />
-                                            </div>
-                                            <div className="flex flex-col items-center gap-1">
-                                                <ArrowLeft className="h-3 w-3 text-muted-foreground" />
-                                                <Input
-                                                    type="number"
-                                                    value={containerStyles.padding?.left || 50}
-                                                    onChange={(e) => handleCustomPaddingChange('left', parseInt(e.target.value) || 0)}
-                                                    className="text-center"
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </TabsContent>
-
-                    {/* ADVANCED TAB */}
-                    <TabsContent value="advanced" className="space-y-6">
-                        {/* Display Conditions - Placeholder */}
-                        <div className="rounded-lg border border-border p-4 bg-muted/30">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                    <Filter className="h-4 w-4 text-muted-foreground" />
-                                    <h3 className="font-semibold">Display Conditions</h3>
-                                </div>
-                                <Button variant="ghost" size="sm">
-                                    <Plus className="h-3 w-3" />
-                                </Button>
-                            </div>
-                            <div className="flex items-center gap-2 p-3 rounded-md bg-background border border-dashed">
+                {/* ADVANCED TAB */}
+                <TabsContent value="advanced" className="space-y-6">
+                    {/* Display Conditions - Placeholder */}
+                    <div className="rounded-lg border border-border p-4 bg-muted/30">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
                                 <Filter className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm text-muted-foreground">Not configured</span>
+                                <h3 className="font-semibold">Display Conditions</h3>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-2">
-                                Control when this page is visible based on user conditions
-                            </p>
+                            <Button variant="ghost" size="sm">
+                                <Plus className="h-3 w-3" />
+                            </Button>
                         </div>
+                        <div className="flex items-center gap-2 p-3 rounded-md bg-background border border-dashed">
+                            <Filter className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">Not configured</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                            Control when this page is visible based on user conditions
+                        </p>
+                    </div>
 
-                        <Separator />
+                    <Separator />
 
-                        {/* Page Load Actions - Placeholder */}
-                        <div className="rounded-lg border border-border p-4 bg-muted/30">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                    <Play className="h-4 w-4 text-muted-foreground" />
-                                    <h3 className="font-semibold">Page Load Actions</h3>
-                                </div>
-                                <Button variant="ghost" size="sm">
-                                    Configure Action
-                                </Button>
-                            </div>
-                            <div className="flex items-center gap-2 p-3 rounded-md bg-background border border-dashed">
+                    {/* Page Load Actions - Placeholder */}
+                    <div className="rounded-lg border border-border p-4 bg-muted/30">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
                                 <Play className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm text-muted-foreground">Not configured</span>
+                                <h3 className="font-semibold">Page Load Actions</h3>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-2">
-                                Run actions automatically when this page loads
-                            </p>
+                            <Button variant="ghost" size="sm">
+                                Configure Action
+                            </Button>
                         </div>
-
-                        <Separator />
-
-                        {/* Page History - Placeholder */}
-                        <div className="rounded-lg border border-border p-4 bg-muted/30">
-                            <div className="flex items-center gap-2 mb-3">
-                                <h3 className="font-semibold">Page History</h3>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                                Save current changes to activate
-                            </p>
+                        <div className="flex items-center gap-2 p-3 rounded-md bg-background border border-dashed">
+                            <Play className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">Not configured</span>
                         </div>
-                    </TabsContent>
-                </Tabs>
-            </SheetContent>
-        </Sheet>
-    );
+                        <p className="text-xs text-muted-foreground mt-2">
+                            Run actions automatically when this page loads
+                        </p>
+                    </div>
+
+                    <Separator />
+
+                    {/* Page History - Placeholder */}
+                    <div className="rounded-lg border border-border p-4 bg-muted/30">
+                        <div className="flex items-center gap-2 mb-3">
+                            <h3 className="font-semibold">Page History</h3>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                            Save current changes to activate
+                        </p>
+                    </div>
+                </TabsContent>
+            </Tabs>
+        </SheetContent>
+    </Sheet >
+  );
 };

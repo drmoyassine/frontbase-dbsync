@@ -184,9 +184,6 @@ export const ComponentPalette: React.FC = () => {
         <TabsList className="w-full rounded-none border-b border-border justify-start px-4">
           <TabsTrigger value="all" className="relative">
             All
-            <Badge variant="secondary" className="ml-2 h-5 px-1.5">
-              {allComponents.filter(c => c.section !== 'separator').length}
-            </Badge>
           </TabsTrigger>
           {Object.entries(componentCategories).map(([key, cat]) => {
             const Icon = cat.icon;
@@ -194,9 +191,6 @@ export const ComponentPalette: React.FC = () => {
               <TabsTrigger key={key} value={key} className="relative">
                 <Icon className="h-3.5 w-3.5 mr-1.5" />
                 {cat.label}
-                <Badge variant="secondary" className="ml-2 h-5 px-1.5">
-                  {cat.components.filter(c => c.section !== 'separator').length}
-                </Badge>
               </TabsTrigger>
             );
           })}

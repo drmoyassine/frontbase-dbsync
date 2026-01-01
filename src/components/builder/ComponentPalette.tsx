@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useBuilderStore } from '@/stores/builder';
 import {
   Search,
   MousePointer,
@@ -106,14 +107,36 @@ const DraggableComponentItem: React.FC<{ component: any }> = ({ component }) => 
 
   const Icon = component.icon;
 
+  const handleDoubleClick = () => {
+    // Import useBuilderStore to add component directly
+    const { currentPageId, moveComponent, setSelectedComponentId } = (window as any).__builderStore || {};
+
+    if (currentPageId && moveComponent) {
+      const newComponent = {
+        id: `${Date.now()}-${Math.random()}`,
+        type: component.name,
+        props: {},
+        styles: {},
+        children: []
+      };
+
+      // Add to end of canvas
+      moveComponent(currentPageId, null, newComponent, 999);
+      if (setSelectedComponentId) {
+        setSelectedComponentId(newComponent.id);
+      }
+    }
+  };
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
+      onDoubleClick={handleDoubleClick}
       className="flex flex-col items-center justify-center p-3 rounded-lg border border-border bg-card hover:bg-accent hover:border-primary/50 cursor-move transition-all group"
-      title={component.description}
+      title={`${component.description} (Double-click to add)`}
     >
       <Icon className="h-5 w-5 mb-1.5 text-muted-foreground group-hover:text-primary transition-colors" />
       <span className="text-xs text-center font-medium leading-tight">

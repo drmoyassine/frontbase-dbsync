@@ -198,9 +198,6 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
         }
       }}
     >
-      {/* Grid Overlay */}
-      {showGrid && <CanvasGrid visible={showGrid} />}
-
       {/* Device Frame / Viewport Container */}
       <div
         className={cn(
@@ -214,6 +211,8 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
           transformOrigin: 'top center'
         }}
       >
+        {/* Grid Overlay - Now inside viewport container */}
+        {showGrid && <CanvasGrid visible={showGrid} />}
         {/* Canvas Content with Container Styles - No onClick here */}
         <div
           ref={hasComponents ? undefined : setDropRef}

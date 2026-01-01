@@ -234,7 +234,7 @@ export const BuilderHeader: React.FC<{
             </Button>
           </div>
 
-          {/* Grid & Snap Controls */}
+          {/* Grid Controls */}
           <div className="flex items-center gap-1 border-l pl-4">
             <Button
               variant={showGrid ? "default" : "ghost"}
@@ -244,17 +244,6 @@ export const BuilderHeader: React.FC<{
               title="Toggle Grid (G)"
             >
               <Grid3x3 className="h-4 w-4" />
-            </Button>
-
-            <Button
-              variant={snapToGrid ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setSnapToGrid(!snapToGrid)}
-              disabled={!showGrid}
-              className="h-8 w-8 p-0"
-              title="Snap to Grid (Shift+G)"
-            >
-              <Magnet className="h-4 w-4" />
             </Button>
           </div>
         </div>

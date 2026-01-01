@@ -110,14 +110,26 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
         {...listeners}
         onClick={(e) => onSelect(component.id, e)}
         className={cn(
-          'transition-all duration-200',
+          'transition-all duration-200 relative group',
           {
             'ring-2 ring-primary ring-offset-2 rounded-md': isSelected && !isPreviewMode,
             'cursor-pointer': !isPreviewMode,
             'cursor-move': !isPreviewMode && isDragging,
+            'hover:ring-2 hover:ring-dashed hover:ring-primary/30': !isSelected && !isPreviewMode,
           }
         )}
       >
+        {/* Corner Handles - only visible when selected */}
+        {isSelected && !isPreviewMode && (
+          <>
+            <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-primary rounded-full z-10 pointer-events-none" />
+            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-primary rounded-full z-10 pointer-events-none" />
+            <div className="absolute -bottom-1 -left-1 w-2.5 h-2.5 bg-primary rounded-full z-10 pointer-events-none" />
+            <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-primary rounded-full z-10 pointer-events-none" />
+          </>
+        )}
+
+        {/* Component Content */}
         {component.type === 'Container' ? (
           <ContainerComponent
             component={component}
@@ -139,7 +151,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
             }}
           />
         )}
-      </div>
+      </div>  {/* End Component Content */}
 
       {/* Drop zone after last component */}
       {!isPreviewMode && isLastComponent && (

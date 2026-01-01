@@ -2,6 +2,7 @@ import React from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { useBuilderStore, type Page } from '@/stores/builder';
 import { DraggableComponent } from './DraggableComponent';
+import { CanvasGrid } from './CanvasGrid';
 import { cn } from '@/lib/utils';
 import { getDefaultProps } from '@/lib/componentDefaults';
 
@@ -17,7 +18,8 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
     isPreviewMode,
     currentViewport,
     zoomLevel,
-    showDeviceFrame
+    showDeviceFrame,
+    showGrid
   } = useBuilderStore();
 
   const components = page.layoutData?.content || [];
@@ -79,7 +81,10 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
             marginBottom: `${(viewportHeight * scaleFactor - viewportHeight) + 32}px`
           }}
         >
-          <div className="p-4">
+          {/* Canvas Grid Overlay */}
+          <CanvasGrid visible={showGrid && !isPreviewMode} gridSize={20} />
+
+          <div className="p-4 relative z-10">
             {/* Render components with integrated drop zones */}
             {page.layoutData?.content?.map((component, index) => (
               <DraggableComponent

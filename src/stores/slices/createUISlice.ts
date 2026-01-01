@@ -12,6 +12,7 @@ export interface UISlice {
     currentViewport: 'mobile' | 'tablet' | 'desktop';
     zoomLevel: number;
     showDeviceFrame: boolean;
+    showGrid: boolean;
 
     // Supabase connection
     isSupabaseConnected: boolean;
@@ -26,6 +27,7 @@ export interface UISlice {
     setCurrentViewport: (viewport: 'mobile' | 'tablet' | 'desktop') => void;
     setZoomLevel: (zoom: number) => void;
     setShowDeviceFrame: (show: boolean) => void;
+    setShowGrid: (show: boolean) => void;
     setSupabaseConnection: (connected: boolean, tables?: any[]) => void;
 }
 
@@ -38,6 +40,7 @@ export const createUISlice: StateCreator<BuilderState, [], [], UISlice> = (set) 
     currentViewport: 'desktop',
     zoomLevel: 100,
     showDeviceFrame: true,
+    showGrid: false,
 
     isSupabaseConnected: false,
     supabaseTables: [],
@@ -50,5 +53,7 @@ export const createUISlice: StateCreator<BuilderState, [], [], UISlice> = (set) 
     setCurrentViewport: (viewport) => set({ currentViewport: viewport }),
     setZoomLevel: (zoom) => set({ zoomLevel: zoom }),
     setShowDeviceFrame: (show) => set({ showDeviceFrame: show }),
+    setShowGrid: (show) => set({ showGrid: show }),
     setSupabaseConnection: (connected, tables) => set({ isSupabaseConnected: connected, supabaseTables: tables || [] }),
 });
+

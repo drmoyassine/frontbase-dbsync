@@ -48,11 +48,8 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
     // Convert old ContainerStyles to new StylesData if needed
     const getContainerStyles = (): StylesData => {
         if (!currentPage.containerStyles) {
-            return {
-                activeProperties: [],
-                values: {},
-                stylingMode: 'visual'
-            };
+            // No styles yet - use defaults  
+            return getDefaultPageStyles();
         }
 
         // Check if it's already new format

@@ -52,19 +52,19 @@ export const SizingControl: React.FC<SizingControlProps> = ({
     };
 
     return (
-        <div className="flex items-center gap-2 w-full">
+        <div className="flex items-center gap-3 w-full">
             {/* Width */}
-            <div className="flex items-center gap-0.5 flex-1">
-                <span className="text-[10px] text-muted-foreground">W</span>
+            <div className="flex items-center gap-1 flex-1">
+                <span className="text-[10px] text-muted-foreground flex-shrink-0">W</span>
                 <Input
                     type="text"
                     value={safeValue.width === 'auto' ? '' : safeValue.width}
                     placeholder="auto"
                     onChange={(e) => handleWidthChange(e.target.value)}
-                    className="w-12 h-7 text-xs text-center px-1"
+                    className="flex-1 min-w-0 h-7 text-xs text-center px-1"
                 />
                 <Select value={safeValue.widthUnit} onValueChange={handleWidthUnitChange}>
-                    <SelectTrigger className="w-10 h-7 text-xs px-1">
+                    <SelectTrigger className="w-12 h-7 text-xs px-1 flex-shrink-0">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -75,17 +75,17 @@ export const SizingControl: React.FC<SizingControlProps> = ({
             </div>
 
             {/* Height */}
-            <div className="flex items-center gap-0.5 flex-1">
-                <span className="text-[10px] text-muted-foreground">H</span>
+            <div className="flex items-center gap-1 flex-1">
+                <span className="text-[10px] text-muted-foreground flex-shrink-0">H</span>
                 <Input
                     type="text"
                     value={safeValue.height === 'auto' ? '' : safeValue.height}
                     placeholder="auto"
                     onChange={(e) => handleHeightChange(e.target.value)}
-                    className="w-12 h-7 text-xs text-center px-1"
+                    className="flex-1 min-w-0 h-7 text-xs text-center px-1"
                 />
                 <Select value={safeValue.heightUnit} onValueChange={handleHeightUnitChange}>
-                    <SelectTrigger className="w-10 h-7 text-xs px-1">
+                    <SelectTrigger className="w-12 h-7 text-xs px-1 flex-shrink-0">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

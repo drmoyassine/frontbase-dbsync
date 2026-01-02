@@ -181,14 +181,14 @@ export const ComponentPalette: React.FC = () => {
 
       {/* Category Tabs */}
       <Tabs value={activeCategory} onValueChange={setActiveCategory} className="flex-1 flex flex-col">
-        <TabsList className="w-full rounded-none border-b border-border justify-start px-4">
-          <TabsTrigger value="all" className="relative">
+        <TabsList className="w-full rounded-none border-b border-border justify-between px-4 gap-2">
+          <TabsTrigger value="all" className="relative px-4">
             All
           </TabsTrigger>
           {Object.entries(componentCategories).map(([key, cat]) => {
             const Icon = cat.icon;
             return (
-              <TabsTrigger key={key} value={key} className="relative">
+              <TabsTrigger key={key} value={key} className="relative px-4">
                 <Icon className="h-3.5 w-3.5 mr-1.5" />
                 {cat.label}
               </TabsTrigger>

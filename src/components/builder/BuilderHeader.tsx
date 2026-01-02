@@ -21,7 +21,6 @@ import {
   FileEdit,
   Trash2,
   Grid3x3,
-  Magnet,
   Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -67,8 +66,6 @@ export const BuilderHeader: React.FC<{
       setZoomLevel,
       showGrid,
       setShowGrid,
-      snapToGrid,
-      setSnapToGrid,
       savePageToDatabase,
       publishPage,
       togglePageVisibility,

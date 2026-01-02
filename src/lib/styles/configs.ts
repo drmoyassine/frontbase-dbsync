@@ -121,9 +121,10 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         defaultValue: 30,
         unit: 'px',
         min: 0,
-        step: 1,
+        max: 200,
+        step: 5,
         toCSSValue: (value) => `${value}px`,
-        fromCSSValue: (css) => parseInt(css) || 0
+        fromCSSValue: (css) => parseInt(css) || 30
     },
 
     // ===== SIZING =====

@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react';
 import type { SpacingValue } from '@/lib/styles/types';
 
 interface SpacingControlProps {
@@ -35,72 +33,76 @@ export const SpacingControl: React.FC<SpacingControlProps> = ({
         });
     };
 
-    return (
-        <div className="space-y-3">
-            <div className="flex items-center justify-end">
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setMode(mode === 'all' ? 'custom' : 'all')}
-                    className="text-xs"
-                >
-                    {mode === 'all' ? 'Custom' : 'All Sides'}
-                </Button>
-            </div>
+    const toggleMode = () => {
+        setMode(mode === 'all' ? 'custom' : 'all');
+    };
 
+    return (
+        <div className="flex items-center gap-2 w-full">
             {mode === 'all' ? (
-                <div className="flex items-center gap-2">
+                <>
                     <Input
                         type="number"
                         value={value.top}
                         onChange={(e) => handleAllChange(parseInt(e.target.value) || 0)}
                         min={0}
-                        className="flex-1"
+                        className="w-16 h-7 text-xs text-center"
                     />
-                    <span className="text-sm text-muted-foreground">All Sides</span>
-                </div>
+                    <button
+                        onClick={toggleMode}
+                        className="text-xs text-muted-foreground hover:text-primary whitespace-nowrap"
+                    >
+                        All Sides
+                    </button>
+                </>
             ) : (
-                <div className="grid grid-cols-4 gap-2">
-                    <div className="flex flex-col items-center gap-1">
-                        <ArrowUp className="h-3 w-3 text-muted-foreground" />
+                <div className="flex items-center gap-1 flex-1">
+                    <div className="flex items-center gap-0.5">
+                        <span className="text-[10px] text-muted-foreground">T</span>
                         <Input
                             type="number"
                             value={value.top}
                             onChange={(e) => handleSideChange('top', parseInt(e.target.value) || 0)}
                             min={0}
-                            className="text-center"
+                            className="w-10 h-7 text-xs text-center px-1"
                         />
                     </div>
-                    <div className="flex flex-col items-center gap-1">
-                        <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                    <div className="flex items-center gap-0.5">
+                        <span className="text-[10px] text-muted-foreground">R</span>
                         <Input
                             type="number"
                             value={value.right}
                             onChange={(e) => handleSideChange('right', parseInt(e.target.value) || 0)}
                             min={0}
-                            className="text-center"
+                            className="w-10 h-7 text-xs text-center px-1"
                         />
                     </div>
-                    <div className="flex flex-col items-center gap-1">
-                        <ArrowDown className="h-3 w-3 text-muted-foreground" />
+                    <div className="flex items-center gap-0.5">
+                        <span className="text-[10px] text-muted-foreground">B</span>
                         <Input
                             type="number"
                             value={value.bottom}
                             onChange={(e) => handleSideChange('bottom', parseInt(e.target.value) || 0)}
                             min={0}
-                            className="text-center"
+                            className="w-10 h-7 text-xs text-center px-1"
                         />
                     </div>
-                    <div className="flex flex-col items-center gap-1">
-                        <ArrowLeft className="h-3 w-3 text-muted-foreground" />
+                    <div className="flex items-center gap-0.5">
+                        <span className="text-[10px] text-muted-foreground">L</span>
                         <Input
                             type="number"
                             value={value.left}
                             onChange={(e) => handleSideChange('left', parseInt(e.target.value) || 0)}
                             min={0}
-                            className="text-center"
+                            className="w-10 h-7 text-xs text-center px-1"
                         />
                     </div>
+                    <button
+                        onClick={toggleMode}
+                        className="text-[10px] text-muted-foreground hover:text-primary whitespace-nowrap ml-1"
+                    >
+                        ←
+                    </button>
                 </div>
             )}
         </div>

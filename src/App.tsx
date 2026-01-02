@@ -1,7 +1,9 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useDashboardStore } from "@/stores/dashboard";
@@ -29,7 +31,20 @@ import VariablesPage from "./pages/VariablesPage";
 import EmbedAuthPage from "./pages/EmbedAuthPage";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+// Create QueryClient with cacheTime for persistence
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours - data kept in localStorage
+    },
+  },
+});
+
+// Create localStorage persister
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+  key: 'frontbase-query-cache',
+});
 
 const App = () => {
   const { fetchConnections } = useDashboardStore();
@@ -51,7 +66,10 @@ const App = () => {
 
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{ persister }}
+      >
         <TooltipProvider>
           <Toaster />
           <Sonner />
@@ -86,10 +104,9 @@ const App = () => {
             </Routes>
           </BrowserRouter>
         </TooltipProvider>
-      </QueryClientProvider>
+      </PersistQueryClientProvider>
     </ErrorBoundary>
   );
 };
 
 export default App;
-

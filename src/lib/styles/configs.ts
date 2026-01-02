@@ -128,6 +128,20 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
     },
 
     // ===== SIZING =====
+    size: {
+        id: 'size',
+        name: 'Size',
+        category: 'Sizing',
+        controlType: 'sizing',
+        defaultValue: { width: 'auto', height: 'auto', widthUnit: 'px', heightUnit: 'px' },
+        toCSSValue: (value) => {
+            const w = value.width === 'auto' ? 'auto' : `${value.width}${value.widthUnit}`;
+            const h = value.height === 'auto' ? 'auto' : `${value.height}${value.heightUnit}`;
+            return { width: w, height: h };
+        },
+        fromCSSValue: () => ({ width: 'auto', height: 'auto', widthUnit: 'px', heightUnit: 'px' })
+    },
+
     width: {
         id: 'width',
         name: 'Width',
@@ -338,7 +352,7 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
 export const CSS_CATEGORIES = {
     'Layout': ['display', 'position', 'flexDirection', 'justifyContent', 'alignItems', 'flexWrap'],
     'Spacing': ['padding', 'margin', 'gap'],
-    'Sizing': ['width', 'height', 'minWidth', 'maxWidth'],
+    'Sizing': ['size', 'width', 'height', 'minWidth', 'maxWidth'],
     'Typography': ['fontSize', 'fontWeight', 'lineHeight', 'textAlign'],
     'Colors': ['color', 'backgroundColor', 'borderColor'],
     'Effects': ['opacity', 'borderRadius', 'boxShadow', 'borderWidth', 'borderStyle']

@@ -6,6 +6,7 @@ import { SelectControl } from './controls/SelectControl';
 import { NumberControl } from './controls/NumberControl';
 import { ColorControl } from './controls/ColorControl';
 import { SpacingControl } from './controls/SpacingControl';
+import { SizingControl } from './controls/SizingControl';
 import { CompositeControl } from './controls/CompositeControl';
 import { ToggleGroupControl } from './controls/ToggleGroupControl';
 import type { CSSPropertyConfig } from '@/lib/styles/types';
@@ -53,6 +54,10 @@ export const PropertyControl: React.FC<PropertyControlProps> = ({
 
                     {config.controlType === 'composite' && (
                         <CompositeControl config={config} value={value} onChange={onChange} />
+                    )}
+
+                    {config.controlType === 'sizing' && (
+                        <SizingControl value={value} onChange={onChange} />
                     )}
                 </div>
 

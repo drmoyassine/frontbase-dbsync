@@ -12,7 +12,8 @@ export const getDefaultPageStyles = (): StylesData => {
             'alignItems',
             'justifyContent',
             'backgroundColor',
-            'padding'
+            'padding',
+            'size'
         ],
         values: {
             flexDirection: 'column',
@@ -26,6 +27,12 @@ export const getDefaultPageStyles = (): StylesData => {
                 right: 50,
                 bottom: 50,
                 left: 50
+            },
+            size: {
+                width: 'auto',
+                height: 'auto',
+                widthUnit: 'px',
+                heightUnit: 'px'
             }
         },
         stylingMode: 'visual'

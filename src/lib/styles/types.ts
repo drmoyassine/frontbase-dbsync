@@ -5,6 +5,7 @@ export type ControlType =
     | 'number'
     | 'color'
     | 'spacing'
+    | 'sizing'
     | 'composite'
     | 'toggle';
 
@@ -39,7 +40,7 @@ export interface CSSPropertyConfig {
     fields?: PropertyField[];
 
     // Conversion functions
-    toCSSValue: (value: any) => string;
+    toCSSValue: (value: any) => string | Record<string, string>;
     fromCSSValue: (css: string) => any;
 
     // Optional documentation

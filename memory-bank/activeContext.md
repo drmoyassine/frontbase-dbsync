@@ -1,25 +1,36 @@
 # Active Context
 
 This file tracks the project's current status, including recent changes, current goals, and open questions.
+2026-01-02 - 🎨 BUILDER UI/UX REVAMP: Visual CSS Styling, Responsive Viewport, Container Styles
 2026-01-01 - 🔒 DEPENDENCY HARDENING: Updated requirements and setup for cross-platform robustness
 2025-12-25 05:20:00 - INITIAL COMMIT READY: FastAPI + React Query Migration Complete
 
 ## Current Focus
 
-**🚀 INITIAL COMMIT PREPARATION**
-- **COMPLETED**: Full migration from Express.js to FastAPI backend
-- **COMPLETED**: React Query data layer implementation
-- **COMPLETED**: Foreign key data display fix
-- **STATUS**: Ready for initial push to remote repository
-- **ENVIRONMENT**: FastAPI-only architecture operational
+**🎨 BUILDER UI/UX REVAMP COMPLETE (17 Phases)**
+- **COMPLETED**: Visual CSS Styling System (metadata-driven preset properties)
+- **COMPLETED**: Container Styles with zero-migration persistence
+- **COMPLETED**: Responsive viewport auto-switching (mobile/tablet/desktop)
+- **COMPLETED**: Canvas UX improvements (grid bounds, double-click to add)
+- **COMPLETED**: @dnd-kit migration from legacy react-dnd
+- **STATUS**: All builder improvements pushed to remote
 
 ### Current Environment Status
 - **FastAPI Backend (Port 8000)**: ✅ Primary - Unified API & DB-Sync
 - **Express.js Backend (Port 3001)**: ⚠️ Legacy - Archived in `Dockerfile.legacy`
 - **Frontend (Port 5173)**: ✅ Active - Vite dev server or Nginx (Prod)
-- **Deployment**: ✅ Production-ready `docker-compose.yml` (FastAPI-only)
+- **Builder**: ✅ **REVAMPED** - 17-phase UI/UX improvements complete
 
 ## Recent Changes
+
+**2026-01-02 - 🎨 BUILDER UI/UX REVAMP COMPLETE**
+- **VISUAL STYLING**: Implemented metadata-driven preset CSS properties engine
+- **CONTAINER STYLES**: Zero-migration nested JSON persistence (`layoutData.root.containerStyles`)
+- **RESPONSIVE BUILDER**: Auto-switching viewport (mobile <768px, tablet 768-1024px, desktop >1024px)
+- **CANVAS UX**: Grid bounds fixed to viewport, double-click to add components
+- **DND MIGRATION**: Completed @dnd-kit migration from legacy react-dnd
+- **CODE CLEANUP**: Removed unused imports (Magnet, snapToGrid, Button, Badge)
+- **DOCS UPDATED**: agent.md with new sections 3-5 for styling, container styles, responsive builder
 
 **2025-12-27 - 🐳 Docker Organization & VPS Readiness**
 - **REFACTORED**: Docker configuration to separate Production (FastAPI) from Legacy (Express).

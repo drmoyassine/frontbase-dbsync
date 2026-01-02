@@ -1,5 +1,46 @@
 # Decision Log
 
+## [2026-01-02] Builder UI/UX Revamp - Visual CSS Styling & Responsive Builder
+
+**Context**: Major builder overhaul to improve UX, implement visual styling, and add responsive features.
+
+**Decisions Made**:
+
+1. **Metadata-driven CSS Properties Engine**
+   - Created `src/lib/styles/` with configs, defaults, converters, types
+   - Visual toggle groups for flex properties instead of dropdowns
+   - Single source of truth via `getDefaultPageStyles()`
+
+2. **Zero-migration Container Styles Persistence**
+   - Store styles in `page.layoutData.root.containerStyles` (nested JSON)
+   - Extract to `page.containerStyles` on load for convenience
+   - No database schema changes required
+
+3. **Responsive Viewport Auto-Switching**
+   - < 768px → Mobile canvas
+   - 768-1024px → Tablet canvas
+   - > 1024px → Desktop canvas
+   - Combined with mobile drawer pattern for sidebars
+
+4. **Canvas UX Improvements**
+   - Grid overlay now constrained to canvas viewport only
+   - Double-click to add components from palette
+   - 800px minimum canvas height for comfortable editing
+   - Removed snap-to-grid (not needed for Flexbox layout)
+
+5. **Flexbox-first Layout Strategy**
+   - Decided against absolute positioning after analysis
+   - Flexbox provides better responsiveness and cleaner code generation
+   - Future: Optional absolute mode for specific creative needs
+
+**Impact**:
+- 17-phase revamp completed
+- Production-ready responsive builder
+- Clean, extensible styling architecture
+- Improved DX with @dnd-kit migration
+
+---
+
 ## [2025-12-25] React Query Migration & Initial Commit Preparation
 
 **Context**: Preparing Frontbase for initial commit with FastAPI as sole backend and improved data layer.

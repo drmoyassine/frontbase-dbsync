@@ -70,6 +70,76 @@ Dockerfile.legacy     # Legacy image definition
 }
 ```
 
+### 3. Visual CSS Styling System
+
+**Architecture**: Metadata-driven preset CSS properties engine
+
+**Key Files**:
+- `src/lib/styles/defaults.ts` - Default page styles (`getDefaultPageStyles()`)
+- `src/lib/styles/configs.ts` - CSS property configurations
+- `src/lib/styles/types.ts` - StylesData and related types
+- `src/lib/styles/converters.ts` - CSS value converters
+- `src/components/styles/PropertyControl.tsx` - Dynamic property controls
+
+**StylesData Format**:
+```typescript
+{
+  activeProperties: string[];   // Which properties are enabled
+  values: Record<string, any>;  // Property values
+  stylingMode: 'visual' | 'css' // Current styling mode
+}
+```
+
+**CSS Property Categories**:
+- **Layout**: flexDirection, justifyContent, alignItems, flexWrap
+- **Spacing**: padding, margin, gap
+- **Sizing**: width, height, minWidth, maxWidth
+- **Typography**: fontSize, fontWeight, color, textAlign
+- **Background**: backgroundColor, gradient
+- **Visual Effects**: borderRadius, opacity, boxShadow
+
+**Visual Toggle Groups**: Properties like flexDirection and alignItems use visual toggle groups instead of dropdowns for better UX.
+
+### 4. Container Styles (Page-Level Styling)
+
+**Storage Strategy**: Zero-migration nested JSON approach
+
+**Data Flow**:
+1. In-memory: `page.containerStyles` (top-level for convenience)
+2. Database: `page.layoutData.root.containerStyles` (nested in JSON)
+3. On save: Serialize to `layoutData.root`
+4. On load: Extract to top-level `containerStyles`
+
+**Key Implementation**:
+- `createPageSlice.ts`: Handles serialization/deserialization
+- `BuilderCanvas.tsx`: Applies styles via `getContainerCSS()`
+- `StylingPanel.tsx`: UI for editing page styles
+
+### 5. Responsive Builder
+
+**Viewport Auto-Switching**:
+| Screen Width | Canvas Viewport | Use Case |
+|--------------|-----------------|----------|
+| < 768px | Mobile (375x812) | Phone users |
+| 768-1024px | Tablet (768x1024) | iPad users |
+| > 1024px | Desktop (1200x1400) | Desktop users |
+
+**Implementation** (`CustomBuilder.tsx`):
+```typescript
+useEffect(() => {
+  const checkMobile = () => {
+    const width = window.innerWidth;
+    setIsMobile(width < 1024);
+    if (width < 768) setCurrentViewport('mobile');
+    else if (width < 1024) setCurrentViewport('tablet');
+    else setCurrentViewport('desktop');
+  };
+  // ...
+}, [setCurrentViewport]);
+```
+
+**Mobile UI**: Collapsible sidebars with drawer pattern for touch-friendly editing.
+
 ### 3. State Management
 
 #### Zustand Stores

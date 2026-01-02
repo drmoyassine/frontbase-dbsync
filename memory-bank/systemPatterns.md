@@ -1,7 +1,43 @@
 # System Patterns
 
 This file documents recurring patterns and standards used in the project.
+2026-01-02 - 🎨 Added Builder Styling and Responsive patterns
 2025-12-25 05:20:00 - Updated with React Query patterns
+
+## Builder UI/UX Patterns (NEW)
+
+### Visual CSS Styling Engine
+- **Pattern**: Metadata-driven preset CSS properties
+- **Implementation**: 
+  - `src/lib/styles/configs.ts` - CSS property configurations
+  - `src/lib/styles/defaults.ts` - `getDefaultPageStyles()` single source of truth
+  - `src/components/styles/PropertyControl.tsx` - Dynamic control rendering
+- **Benefits**: Extensible, type-safe, visual toggle groups for better UX
+- **Usage**: StylingPanel for page-level styles, future component-level styling
+
+### Container Styles Persistence
+- **Pattern**: Zero-migration nested JSON storage
+- **Implementation**:
+  - In-memory: `page.containerStyles` (top-level convenience)
+  - Database: `page.layoutData.root.containerStyles` (nested JSON)
+  - On save: Serialize to `layoutData.root`
+  - On load: Extract to top-level
+- **Benefits**: No database migration needed, backward compatible
+- **Files**: `createPageSlice.ts` (serialize/deserialize), `BuilderCanvas.tsx` (apply styles)
+
+### Responsive Viewport Pattern
+- **Pattern**: Auto-switch viewport based on screen size
+- **Implementation** (`CustomBuilder.tsx`):
+  - < 768px → Mobile viewport (375×812)
+  - 768-1024px → Tablet viewport (768×1024)
+  - > 1024px → Desktop viewport (1200×1400)
+- **Benefits**: WYSIWYG editing on any device
+- **Usage**: Combined with mobile drawer pattern for sidebars
+
+### @dnd-kit Drag and Drop
+- **Pattern**: Unified DnD engine for all drag interactions
+- **Components**: ComponentPalette, BuilderCanvas, LayersPanel
+- **Benefits**: Hardware-accelerated CSS transforms, accessibility, consistent behavior
 
 ## Architecture Patterns
 

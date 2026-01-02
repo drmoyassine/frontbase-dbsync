@@ -71,6 +71,54 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   const { currentViewport } = useBuilderStore();
   const { createEditableText } = useComponentTextEditor(id);
 
+  // Convert stylesData to CSS styles (new system)
+  const stylesDataStyles = React.useMemo(() => {
+    const stylesData = (component as any).stylesData;
+    if (!stylesData?.values) return {};
+
+    const cssStyles: Record<string, any> = {};
+    const values = stylesData.values;
+
+    // Map property values to CSS
+    Object.entries(values).forEach(([key, value]) => {
+      if (key === 'padding' && typeof value === 'object') {
+        cssStyles.paddingTop = `${(value as any).top}px`;
+        cssStyles.paddingRight = `${(value as any).right}px`;
+        cssStyles.paddingBottom = `${(value as any).bottom}px`;
+        cssStyles.paddingLeft = `${(value as any).left}px`;
+      } else if (key === 'margin' && typeof value === 'object') {
+        cssStyles.marginTop = `${(value as any).top}px`;
+        cssStyles.marginRight = `${(value as any).right}px`;
+        cssStyles.marginBottom = `${(value as any).bottom}px`;
+        cssStyles.marginLeft = `${(value as any).left}px`;
+      } else if (key === 'size' && typeof value === 'object') {
+        const sizeVal = value as any;
+        if (sizeVal.width !== 'auto') {
+          cssStyles.width = `${sizeVal.width}${sizeVal.widthUnit}`;
+        }
+        if (sizeVal.height !== 'auto') {
+          cssStyles.height = `${sizeVal.height}${sizeVal.heightUnit}`;
+        }
+      } else if (key === 'gap' && typeof value === 'number') {
+        cssStyles.gap = `${value}px`;
+      } else if (key === 'fontSize' && typeof value === 'number') {
+        cssStyles.fontSize = `${value}px`;
+      } else if (key === 'borderRadius' && typeof value === 'number') {
+        cssStyles.borderRadius = `${value}px`;
+      } else if (key === 'opacity' && typeof value === 'number') {
+        cssStyles.opacity = value / 100;
+      } else if (typeof value === 'string') {
+        // Direct CSS property (flexDirection, backgroundColor, etc.)
+        cssStyles[key] = value;
+      }
+    });
+
+    return cssStyles;
+  }, [(component as any).stylesData]);
+
+  // Merge legacy styles with new stylesData styles  
+  const mergedStyles = { ...styles, ...stylesDataStyles };
+
   // Data Binding Logic
   const binding = props.binding as ComponentDataBinding | undefined;
 
@@ -137,9 +185,9 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     return newProps;
   }, [props, binding, boundData]);
 
-  // Generate styles from the styles object
+  // Generate styles from the merged styles object
   const { classes: generatedClasses, inlineStyles } = generateStyles(
-    styles,
+    mergedStyles,
     component.responsiveStyles,
     currentViewport
   );

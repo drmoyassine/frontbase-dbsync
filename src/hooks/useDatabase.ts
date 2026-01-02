@@ -61,7 +61,7 @@ export function useTableSchema(tableName: string | null) {
             return await databaseApi.fetchTableSchema(tableName);
         },
         enabled: !!tableName,
-        staleTime: 1000 * 60 * 10, // 10 minutes
+        staleTime: 1000 * 60 * 60, // 1 hour for schema (rarely changes)
     });
 }
 

@@ -50,12 +50,21 @@ export const CustomBuilder: React.FC = () => {
     }
   });
 
-  // Auto-switch viewport based on screen size
-  useEffect(() => {
-    const handleResize = () => {
-      const width = window.innerWidth;
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [activeItem, setActiveItem] = useState<any>(null);
 
-      // Breakpoints: mobile (<768px), tablet (768-1024px), desktop (>1024px)
+  // Mobile drawer state
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile screen size and auto-switch viewport
+  useEffect(() => {
+    const checkMobile = () => {
+      const width = window.innerWidth;
+      setIsMobile(width < 1024);
+
+      // Auto-switch canvas viewport based on screen size
       if (width < 768) {
         setCurrentViewport('mobile');
       } else if (width >= 768 && width < 1024) {
@@ -65,32 +74,10 @@ export const CustomBuilder: React.FC = () => {
       }
     };
 
-    // Set initial viewport
-    handleResize();
-
-    // Listen for window resize
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [setCurrentViewport]);
-
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [activeItem, setActiveItem] = useState<any>(null);
-
-  // Mobile drawer state
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-
-  // Detect mobile screen size
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024);
-    };
-
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  }, [setCurrentViewport]);
 
   const currentPage = pages.find(page => page.id === currentPageId);
 
@@ -257,7 +244,7 @@ export const CustomBuilder: React.FC = () => {
           onToggleRightSidebar={() => setRightSidebarOpen(!rightSidebarOpen)}
         />
 
-        <div className={`builder - layout ${isPreviewMode ? 'preview-mode' : 'design-mode'} `}>
+        <div className={`builder-layout ${isPreviewMode ? 'preview-mode' : 'design-mode'}`}>
           {/* Mobile backdrop - only show when a drawer is open */}
           {isMobile && (leftSidebarOpen || rightSidebarOpen) && (
             <div

@@ -7,7 +7,7 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from '@/components/ui/accordion';
-import { PropertySelector } from './PropertySelector';
+import { CategoryPropertySelector } from './CategoryPropertySelector';
 import { PropertyControl } from './PropertyControl';
 import { CSSEditor } from './CSSEditor';
 import { CSS_PROPERTY_CONFIGS, CSS_CATEGORIES, getAllCategories } from '@/lib/styles/configs';
@@ -107,7 +107,6 @@ export const StylesPanel: React.FC<StylesPanelProps> = ({
     };
 
     const categorizedProperties = getPropertiesByCategory();
-    const hasProperties = styles.activeProperties.length > 0;
 
     return (
         <div className="styles-panel space-y-4">
@@ -139,52 +138,50 @@ export const StylesPanel: React.FC<StylesPanelProps> = ({
 
             {styles.stylingMode === 'visual' ? (
                 /* VISUAL MODE */
-                <>
-                    <PropertySelector
-                        excludeProperties={styles.activeProperties}
-                        onSelect={addProperty}
-                    />
+                <Accordion type="multiple" defaultValue={[]} className="w-full">
+                    {Object.entries(categorizedProperties).map(([category, propertyIds]) => {
+                        const CategoryIcon = CATEGORY_ICONS[category];
+                        return (
+                            <AccordionItem key={category} value={category}>
+                                <AccordionTrigger className="text-sm font-semibold">
+                                    <span className="flex items-center gap-2 flex-1">
+                                        {CategoryIcon && <CategoryIcon className="h-4 w-4 text-muted-foreground" />}
+                                        {category} ({propertyIds.length})
+                                    </span>
+                                    <CategoryPropertySelector
+                                        category={category}
+                                        excludeProperties={styles.activeProperties}
+                                        onSelect={addProperty}
+                                    />
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <div className="space-y-2 pt-2">
+                                        {propertyIds.length === 0 ? (
+                                            <div className="text-xs text-muted-foreground text-center py-2">
+                                                No properties. Click + to add.
+                                            </div>
+                                        ) : (
+                                            propertyIds.map((propertyId) => {
+                                                const config = CSS_PROPERTY_CONFIGS[propertyId];
+                                                if (!config) return null;
 
-                    <Accordion type="multiple" defaultValue={[]} className="w-full">
-                        {Object.entries(categorizedProperties).map(([category, propertyIds]) => {
-                            const CategoryIcon = CATEGORY_ICONS[category];
-                            return (
-                                <AccordionItem key={category} value={category}>
-                                    <AccordionTrigger className="text-sm font-semibold">
-                                        <span className="flex items-center gap-2">
-                                            {CategoryIcon && <CategoryIcon className="h-4 w-4 text-muted-foreground" />}
-                                            {category} ({propertyIds.length})
-                                        </span>
-                                    </AccordionTrigger>
-                                    <AccordionContent>
-                                        <div className="space-y-2 pt-2">
-                                            {propertyIds.length === 0 ? (
-                                                <div className="text-xs text-muted-foreground text-center py-2">
-                                                    No properties. Add via + button above.
-                                                </div>
-                                            ) : (
-                                                propertyIds.map((propertyId) => {
-                                                    const config = CSS_PROPERTY_CONFIGS[propertyId];
-                                                    if (!config) return null;
-
-                                                    return (
-                                                        <PropertyControl
-                                                            key={propertyId}
-                                                            config={config}
-                                                            value={styles.values[propertyId]}
-                                                            onChange={(value) => updateValues({ ...styles.values, [propertyId]: value })}
-                                                            onRemove={() => removeProperty(propertyId)}
-                                                        />
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-                                    </AccordionContent>
-                                </AccordionItem>
-                            );
-                        })}
-                    </Accordion>
-                </>
+                                                return (
+                                                    <PropertyControl
+                                                        key={propertyId}
+                                                        config={config}
+                                                        value={styles.values[propertyId]}
+                                                        onChange={(value) => updateValues({ ...styles.values, [propertyId]: value })}
+                                                        onRemove={() => removeProperty(propertyId)}
+                                                    />
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                        );
+                    })}
+                </Accordion>
             ) : (
                 /* CSS MODE */
                 <CSSEditor

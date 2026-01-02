@@ -47,6 +47,7 @@ interface UniversalDataTableProps {
   componentId: string;
   binding?: ComponentDataBinding | null;
   className?: string;
+  style?: React.CSSProperties;
   onConfigureBinding?: () => void;
   onColumnOverrideChange?: (columnName: string, updates: any) => void; // For builder mode column editing
   title?: string;
@@ -56,6 +57,7 @@ export function UniversalDataTable({
   componentId,
   binding: bindingProp,
   className,
+  style,
   onConfigureBinding,
   onColumnOverrideChange,
   title
@@ -212,7 +214,7 @@ export function UniversalDataTable({
   }
 
   return (
-    <Card className={cn('w-full', className)}>
+    <Card className={cn('w-full', className)} style={style}>
       <CardHeader>
         {title !== '' && (
           <CardTitle className="flex items-center justify-between">

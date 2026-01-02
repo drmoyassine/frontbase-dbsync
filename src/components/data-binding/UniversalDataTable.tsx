@@ -298,19 +298,12 @@ export function UniversalDataTable({
                       <TableRow key={index} className="h-12">
                         {visibleColumns.map((column: any) => (
                           <TableCell key={column.name} className="max-w-[200px] truncate whitespace-nowrap py-2">
-                            <ColumnSettingsPopover
+                            <DataTableCell
+                              value={row[column.name]}
                               columnName={column.name}
+                              row={row}
                               columnConfig={binding?.columnOverrides?.[column.name]}
-                              onColumnOverrideChange={onColumnOverrideChange!}
-                              isBuilderMode={isBuilderMode}
-                            >
-                              <DataTableCell
-                                value={row[column.name]}
-                                columnName={column.name}
-                                row={row}
-                                columnConfig={binding?.columnOverrides?.[column.name]}
-                              />
-                            </ColumnSettingsPopover>
+                            />
                           </TableCell>
                         ))}
                       </TableRow>

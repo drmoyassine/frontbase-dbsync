@@ -31,7 +31,9 @@ export const CustomBuilder: React.FC = () => {
     selectedComponentId,
     setSelectedComponentId,
     savePageToDatabase,
-    moveComponent
+    moveComponent,
+    currentViewport,
+    setCurrentViewport,
   } = useBuilderStore();
 
   // Keyboard shortcuts integration
@@ -47,6 +49,29 @@ export const CustomBuilder: React.FC = () => {
       }
     }
   });
+
+  // Auto-switch viewport based on screen size
+  useEffect(() => {
+    const handleResize = () => {
+      const width = window.innerWidth;
+
+      // Breakpoints: mobile (<768px), tablet (768-1024px), desktop (>1024px)
+      if (width < 768) {
+        setCurrentViewport('mobile');
+      } else if (width >= 768 && width < 1024) {
+        setCurrentViewport('tablet');
+      } else {
+        setCurrentViewport('desktop');
+      }
+    };
+
+    // Set initial viewport
+    handleResize();
+
+    // Listen for window resize
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [setCurrentViewport]);
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [activeItem, setActiveItem] = useState<any>(null);
@@ -123,7 +148,7 @@ export const CustomBuilder: React.FC = () => {
       console.log('Dropped new component on drop zone:', overData.index);
 
       const newComponent = {
-        id: `${Date.now()}-${Math.random()}`,
+        id: `${Date.now()} -${Math.random()} `,
         type: activeData.type,
         props: {},
         styles: {},
@@ -148,7 +173,7 @@ export const CustomBuilder: React.FC = () => {
       console.log('Dropped component on empty canvas:', activeData.type);
 
       const newComponent = {
-        id: `${Date.now()}-${Math.random()}`,
+        id: `${Date.now()} -${Math.random()} `,
         type: activeData.type,
         props: {},
         styles: {},
@@ -232,7 +257,7 @@ export const CustomBuilder: React.FC = () => {
           onToggleRightSidebar={() => setRightSidebarOpen(!rightSidebarOpen)}
         />
 
-        <div className={`builder-layout ${isPreviewMode ? 'preview-mode' : 'design-mode'}`}>
+        <div className={`builder - layout ${isPreviewMode ? 'preview-mode' : 'design-mode'} `}>
           {/* Mobile backdrop - only show when a drawer is open */}
           {isMobile && (leftSidebarOpen || rightSidebarOpen) && (
             <div

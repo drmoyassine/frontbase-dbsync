@@ -256,7 +256,7 @@ export function UniversalDataTable({
         ) : (
           <>
             <div className="rounded-md border overflow-x-auto">
-              <Table className="min-w-max">
+              <Table className="min-w-max" style={style}>
                 <TableHeader>
                   <TableRow>
                     {visibleColumns.map((column: any) => (

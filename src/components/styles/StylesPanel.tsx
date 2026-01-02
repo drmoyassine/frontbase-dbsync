@@ -44,9 +44,17 @@ export const StylesPanel: React.FC<StylesPanelProps> = ({
     onUpdate,
     title = 'Styles'
 }) => {
-    const addProperty = (propertyId: string) => {
+    // Track which accordion categories are open
+    const [openCategories, setOpenCategories] = useState<string[]>([]);
+
+    const addProperty = (propertyId: string, category: string) => {
         const config = CSS_PROPERTY_CONFIGS[propertyId];
         if (!config) return;
+
+        // Ensure the category stays open after adding
+        if (!openCategories.includes(category)) {
+            setOpenCategories([...openCategories, category]);
+        }
 
         onUpdate({
             ...styles,
@@ -138,7 +146,12 @@ export const StylesPanel: React.FC<StylesPanelProps> = ({
 
             {styles.stylingMode === 'visual' ? (
                 /* VISUAL MODE */
-                <Accordion type="multiple" defaultValue={[]} className="w-full">
+                <Accordion
+                    type="multiple"
+                    value={openCategories}
+                    onValueChange={setOpenCategories}
+                    className="w-full"
+                >
                     {Object.entries(categorizedProperties).map(([category, propertyIds]) => {
                         const CategoryIcon = CATEGORY_ICONS[category];
                         return (
@@ -151,7 +164,7 @@ export const StylesPanel: React.FC<StylesPanelProps> = ({
                                     <CategoryPropertySelector
                                         category={category}
                                         excludeProperties={styles.activeProperties}
-                                        onSelect={addProperty}
+                                        onSelect={(propId) => addProperty(propId, category)}
                                     />
                                 </AccordionTrigger>
                                 <AccordionContent>

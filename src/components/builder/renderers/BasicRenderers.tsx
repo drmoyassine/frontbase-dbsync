@@ -77,11 +77,16 @@ export const BadgeRenderer: React.FC<RendererProps> = ({ effectiveProps, combine
     </Badge>
 );
 
-export const ImageRenderer: React.FC<RendererProps> = ({ effectiveProps }) => (
+export const ImageRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, inlineStyles }) => (
     <img
         src={effectiveProps.src || '/placeholder.svg'}
         alt={effectiveProps.alt || 'Image'}
-        className="max-w-full h-auto rounded-lg"
+        className={cn('rounded-lg object-cover', combinedClassName)}
+        style={{
+            width: effectiveProps.width || '200px',
+            height: effectiveProps.height || '200px',
+            ...inlineStyles
+        }}
     />
 );
 

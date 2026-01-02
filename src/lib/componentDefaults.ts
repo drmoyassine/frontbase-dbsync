@@ -13,7 +13,7 @@ export function getDefaultProps(componentType: string): Record<string, any> {
     Badge: { text: 'Badge', variant: 'default' },
     Alert: { message: 'This is an alert message.' },
     Separator: {},
-    Tabs: { 
+    Tabs: {
       tabs: [
         { label: 'Tab 1', content: 'Content for tab 1' },
         { label: 'Tab 2', content: 'Content for tab 2' }
@@ -34,7 +34,7 @@ export function getDefaultProps(componentType: string): Record<string, any> {
     },
     Progress: { value: 50 },
     Container: { className: 'p-6' },
-    Image: { src: '/placeholder.svg', alt: 'Placeholder image' },
+    Image: { src: '/placeholder.svg', alt: 'Placeholder image', width: '200px', height: '200px' },
     Link: { text: 'Link', href: '#', target: '_self' },
     DataTable: { binding: null },
     KPICard: { binding: null },

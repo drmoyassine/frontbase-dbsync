@@ -13,6 +13,25 @@ import { CSSEditor } from './CSSEditor';
 import { CSS_PROPERTY_CONFIGS, CSS_CATEGORIES, getAllCategories } from '@/lib/styles/configs';
 import { stylesToCSS } from '@/lib/styles/converters';
 import type { StylesData } from '@/lib/styles/types';
+import {
+    LayoutGrid,
+    Space,
+    Maximize2,
+    Type,
+    Palette,
+    Sparkles,
+    LucideIcon
+} from 'lucide-react';
+
+// Category icons mapping
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+    'Layout': LayoutGrid,
+    'Spacing': Space,
+    'Sizing': Maximize2,
+    'Typography': Type,
+    'Colors': Palette,
+    'Effects': Sparkles,
+};
 
 interface StylesPanelProps {
     styles: StylesData;
@@ -65,19 +84,23 @@ export const StylesPanel: React.FC<StylesPanelProps> = ({
         });
     };
 
-    // Group properties by category
+    // Group properties by category - ALWAYS include all categories
     const getPropertiesByCategory = () => {
         const grouped: Record<string, string[]> = {};
 
+        // Initialize ALL categories (even empty ones)
+        getAllCategories().forEach(category => {
+            grouped[category] = [];
+        });
+
+        // Then populate with active properties
         getAllCategories().forEach(category => {
             const categoryProps = styles.activeProperties.filter(propId => {
                 const categoryPropertyIds = CSS_CATEGORIES[category as keyof typeof CSS_CATEGORIES] || [];
                 return categoryPropertyIds.includes(propId);
             });
 
-            if (categoryProps.length > 0) {
-                grouped[category] = categoryProps;
-            }
+            grouped[category] = categoryProps;
         });
 
         return grouped;
@@ -122,39 +145,45 @@ export const StylesPanel: React.FC<StylesPanelProps> = ({
                         onSelect={addProperty}
                     />
 
-                    {!hasProperties ? (
-                        <div className="text-center py-8 text-sm text-muted-foreground">
-                            No properties added yet. Click "Add Property" to get started.
-                        </div>
-                    ) : (
-                        <Accordion type="multiple" defaultValue={Object.keys(categorizedProperties)} className="w-full">
-                            {Object.entries(categorizedProperties).map(([category, propertyIds]) => (
+                    <Accordion type="multiple" defaultValue={[]} className="w-full">
+                        {Object.entries(categorizedProperties).map(([category, propertyIds]) => {
+                            const CategoryIcon = CATEGORY_ICONS[category];
+                            return (
                                 <AccordionItem key={category} value={category}>
                                     <AccordionTrigger className="text-sm font-semibold">
-                                        {category} ({propertyIds.length})
+                                        <span className="flex items-center gap-2">
+                                            {CategoryIcon && <CategoryIcon className="h-4 w-4 text-muted-foreground" />}
+                                            {category} ({propertyIds.length})
+                                        </span>
                                     </AccordionTrigger>
                                     <AccordionContent>
                                         <div className="space-y-2 pt-2">
-                                            {propertyIds.map((propertyId) => {
-                                                const config = CSS_PROPERTY_CONFIGS[propertyId];
-                                                if (!config) return null;
+                                            {propertyIds.length === 0 ? (
+                                                <div className="text-xs text-muted-foreground text-center py-2">
+                                                    No properties. Add via + button above.
+                                                </div>
+                                            ) : (
+                                                propertyIds.map((propertyId) => {
+                                                    const config = CSS_PROPERTY_CONFIGS[propertyId];
+                                                    if (!config) return null;
 
-                                                return (
-                                                    <PropertyControl
-                                                        key={propertyId}
-                                                        config={config}
-                                                        value={styles.values[propertyId]}
-                                                        onChange={(value) => updateValues({ ...styles.values, [propertyId]: value })}
-                                                        onRemove={() => removeProperty(propertyId)}
-                                                    />
-                                                );
-                                            })}
+                                                    return (
+                                                        <PropertyControl
+                                                            key={propertyId}
+                                                            config={config}
+                                                            value={styles.values[propertyId]}
+                                                            onChange={(value) => updateValues({ ...styles.values, [propertyId]: value })}
+                                                            onRemove={() => removeProperty(propertyId)}
+                                                        />
+                                                    );
+                                                })
+                                            )}
                                         </div>
                                     </AccordionContent>
                                 </AccordionItem>
-                            ))}
-                        </Accordion>
-                    )}
+                            );
+                        })}
+                    </Accordion>
                 </>
             ) : (
                 /* CSS MODE */

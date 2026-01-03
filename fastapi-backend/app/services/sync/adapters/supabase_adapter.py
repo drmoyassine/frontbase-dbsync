@@ -1,5 +1,8 @@
 """
-Supabase adapter - extends PostgresAdapter with Supabase-specific features.
+Supabase adapter - API-first with optional direct DB connection.
+
+Primary: REST API (required) - for CRUD, RLS-aware queries, schema via RPC
+Secondary: Direct PostgreSQL (optional) - for bulk ops, bypassing RLS
 """
 
 from typing import Any, Dict, List, Optional, Union
@@ -7,69 +10,207 @@ import logging
 import httpx
 
 from app.services.sync.adapters.postgres_adapter import PostgresAdapter
+from app.services.sync.adapters.base import SQLAdapter
 from app.services.sync.models.datasource import Datasource
 
 
-class SupabaseAdapter(PostgresAdapter):
+class SupabaseAdapter(SQLAdapter):
     """
     Supabase database adapter.
     
-    Can use either direct PostgreSQL connection (via asyncpg) or Supabase REST API.
-    Direct connection is preferred for bulk operations.
+    API URL + Secret Key = Required (for REST API, RPC functions)
+    DB URI = Optional (for direct PostgreSQL when performance matters)
+    
+    Supports both legacy (anon/service_role) and new (publishable/secret) API keys.
     """
     
     def __init__(self, datasource: "Datasource"):
         super().__init__(datasource)
         self._client: Optional[httpx.AsyncClient] = None
-        self._use_rest_api = False  # Prefer direct connection
+        self._postgres_adapter: Optional[PostgresAdapter] = None
+        self._has_db_connection = False
+        self._schema_cache: Optional[Dict] = None
         self.logger = logging.getLogger(f"app.adapters.supabase.{self.datasource.name}")
     
+    @property
+    def has_db_connection(self) -> bool:
+        """Check if direct DB connection is available."""
+        return self._has_db_connection
+    
+    def _get_api_key(self) -> Optional[str]:
+        """Get API key - supports both legacy and new key naming."""
+        # Try service_role/secret key first (bypasses RLS)
+        return self.datasource.api_key_encrypted  # TODO: decrypt
+    
     async def connect(self) -> None:
-        """Connect to Supabase - uses direct Postgres connection."""
+        """Connect to Supabase - REST API required, DB optional."""
         self.logger.info(f"Initializing Supabase adapter for {self.datasource.name}")
-        # If we have API credentials, also set up REST client for certain operations
-        if self.datasource.api_url and self.datasource.api_key_encrypted:
-            self.logger.info(f"Setting up Supabase REST client with URL: {self.datasource.api_url}")
+        
+        api_key = self._get_api_key()
+        
+        # REST API client (required)
+        if self.datasource.api_url and api_key:
+            self.logger.info(f"Setting up Supabase REST client: {self.datasource.api_url}")
             self._client = httpx.AsyncClient(
-                base_url=f"{self.datasource.api_url}/rest/v1",
+                base_url=self.datasource.api_url,
                 headers={
-                    "apikey": self.datasource.api_key_encrypted,  # TODO: decrypt
-                    "Authorization": f"Bearer {self.datasource.api_key_encrypted}",
+                    "apikey": api_key,
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                     "Prefer": "return=representation",
-                }
+                },
+                timeout=30.0
             )
+        else:
+            raise ValueError("Supabase requires API URL and API Key")
         
-        # Use parent's PostgreSQL connection
-        self.logger.info("Falling back to Postgres direct connection for core operations")
-        await super().connect()
+        # Direct PostgreSQL connection (optional)
+        if self._has_connection_uri():
+            try:
+                self.logger.info("Setting up direct PostgreSQL connection...")
+                self._postgres_adapter = PostgresAdapter(self.datasource)
+                await self._postgres_adapter.connect()
+                self._has_db_connection = True
+                self.logger.info("Direct DB connection established")
+            except Exception as e:
+                self.logger.warning(f"Direct DB connection failed (using API only): {e}")
+                self._has_db_connection = False
+    
+    def _has_connection_uri(self) -> bool:
+        """Check if we have DB connection details."""
+        ds = self.datasource
+        # Check for connection URI or individual connection params
+        # Use getattr since connection_uri may not exist on all models
+        if getattr(ds, 'connection_uri', None):
+            return True
+        if ds.host and ds.database and ds.username:
+            return True
+        return False
     
     async def disconnect(self) -> None:
-        """Close connections."""
+        """Close all connections."""
         if self._client:
             await self._client.aclose()
             self._client = None
-        await super().disconnect()
+        if self._postgres_adapter:
+            await self._postgres_adapter.disconnect()
+            self._postgres_adapter = None
+        self._has_db_connection = False
     
-    async def get_tables_via_api(self) -> List[str]:
-        """Get tables using Supabase REST API (alternative method)."""
-        if not self._client:
-            return await self.get_tables()
+    # =========================================================================
+    # Schema & Table Discovery
+    # =========================================================================
+    
+    async def get_tables(self) -> List[str]:
+        """Get list of tables - uses DB if available, else RPC."""
+        if self._has_db_connection and self._postgres_adapter:
+            return await self._postgres_adapter.get_tables()
         
-        # Use introspection endpoint if available
+        # Use RPC function
+        return await self._get_tables_via_rpc()
+    
+    async def _get_tables_via_rpc(self) -> List[str]:
+        """Get tables via frontbase_get_schema_info RPC."""
+        schema_info = await self._get_schema_info()
+        if schema_info and "tables" in schema_info:
+            return [t["table_name"] for t in schema_info["tables"] if t.get("table_name")]
+        return []
+    
+    async def get_schema(self, table: str) -> Dict[str, Any]:
+        """Get table schema - uses DB if available, else RPC."""
+        if self._has_db_connection and self._postgres_adapter:
+            return await self._postgres_adapter.get_schema(table)
+        
+        # Use RPC function
+        return await self._get_schema_via_rpc(table)
+    
+    async def _get_schema_via_rpc(self, table: str) -> Dict[str, Any]:
+        """Get schema for a specific table via RPC."""
+        schema_info = await self._get_schema_info()
+        if not schema_info or "tables" not in schema_info:
+            return {"columns": []}
+        
+        # Find the table
+        for t in schema_info["tables"]:
+            if t.get("table_name") == table:
+                columns = t.get("columns") or []
+                # Also get FK info
+                fk_map = {}
+                for fk in schema_info.get("foreign_keys") or []:
+                    if fk.get("table_name") == table:
+                        fk_map[fk["column_name"]] = {
+                            "foreign_table": fk.get("foreign_table_name"),
+                            "foreign_column": fk.get("foreign_column_name")
+                        }
+                
+                # Enrich columns with FK info
+                for col in columns:
+                    col_name = col.get("column_name")
+                    if col_name in fk_map:
+                        col["is_foreign"] = True
+                        col["foreign_table"] = fk_map[col_name]["foreign_table"]
+                        col["foreign_column"] = fk_map[col_name]["foreign_column"]
+                    else:
+                        col["is_foreign"] = False
+                    
+                    # Normalize field names
+                    col["name"] = col.get("column_name")
+                    col["type"] = col.get("data_type")
+                    col["nullable"] = col.get("is_nullable") == "YES"
+                
+                return {"columns": columns}
+        
+        return {"columns": []}
+    
+    async def get_all_relationships(self) -> List[Dict[str, Any]]:
+        """Get all FK relationships - uses DB if available, else RPC."""
+        if self._has_db_connection and self._postgres_adapter:
+            return await self._postgres_adapter.get_all_relationships()
+        
+        # Use RPC function
+        return await self._get_relationships_via_rpc()
+    
+    async def _get_relationships_via_rpc(self) -> List[Dict[str, Any]]:
+        """Get all relationships via RPC."""
+        schema_info = await self._get_schema_info()
+        if not schema_info or "foreign_keys" not in schema_info:
+            return []
+        
+        return [
+            {
+                "source_table": fk.get("table_name"),
+                "source_column": fk.get("column_name"),
+                "target_table": fk.get("foreign_table_name"),
+                "target_column": fk.get("foreign_column_name"),
+            }
+            for fk in schema_info.get("foreign_keys") or []
+        ]
+    
+    async def _get_schema_info(self) -> Optional[Dict]:
+        """Call frontbase_get_schema_info RPC (cached)."""
+        if self._schema_cache:
+            return self._schema_cache
+        
         try:
-            response = await self._client.get("/")
+            response = await self._client.post(
+                "/rest/v1/rpc/frontbase_get_schema_info",
+                json={}
+            )
             if response.status_code == 200:
-                data = response.json()
-                if isinstance(data, dict) and "paths" in data:
-                    return list(data["paths"].keys())
-        except Exception:
-            pass
+                self._schema_cache = response.json()
+                return self._schema_cache
+            else:
+                self.logger.warning(f"RPC frontbase_get_schema_info failed: {response.status_code}")
+        except Exception as e:
+            self.logger.error(f"Failed to call frontbase_get_schema_info: {e}")
         
-        # Fall back to SQL query
-        return await self.get_tables()
+        return None
     
-    async def read_records_via_api(
+    # =========================================================================
+    # CRUD Operations
+    # =========================================================================
+    
+    async def read_records(
         self,
         table: str,
         columns: Optional[List[str]] = None,
@@ -77,11 +218,21 @@ class SupabaseAdapter(PostgresAdapter):
         limit: int = 100,
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
-        """Read records using Supabase REST API (alternative method)."""
-        if not self._client:
-            return await self.read_records(table, columns, where, limit, offset)
+        """Read records - uses DB if available, else REST API."""
+        if self._has_db_connection and self._postgres_adapter:
+            return await self._postgres_adapter.read_records(table, columns, where, limit, offset)
         
-        # Build query params
+        return await self._read_records_via_api(table, columns, where, limit, offset)
+    
+    async def _read_records_via_api(
+        self,
+        table: str,
+        columns: Optional[List[str]] = None,
+        where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Read records using REST API."""
         params = {}
         
         if columns:
@@ -111,27 +262,174 @@ class SupabaseAdapter(PostgresAdapter):
         params["limit"] = str(limit)
         params["offset"] = str(offset)
         
-        response = await self._client.get(f"/{table}", params=params)
+        response = await self._client.get(f"/rest/v1/{table}", params=params)
         response.raise_for_status()
         return response.json()
     
-    async def upsert_record_via_api(
+    async def count_records(
+        self,
+        table: str,
+        where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
+    ) -> int:
+        """Count records - uses DB if available, else REST API."""
+        if self._has_db_connection and self._postgres_adapter:
+            return await self._postgres_adapter.count_records(table, where)
+        
+        # Use REST API with count header
+        params = {"select": "*", "head": "true"}
+        
+        if where:
+            filter_list = where if isinstance(where, list) else [{"field": k, "operator": "==", "value": v} for k, v in where.items()]
+            for f in filter_list:
+                k, v, op = f.get("field"), f.get("value"), f.get("operator", "==")
+                if k and v is not None:
+                    if op == "==":
+                        params[k] = f"eq.{v}"
+        
+        response = await self._client.get(
+            f"/rest/v1/{table}",
+            params=params,
+            headers={"Prefer": "count=exact"}
+        )
+        
+        # Count is in Content-Range header
+        content_range = response.headers.get("content-range", "")
+        if "/" in content_range:
+            return int(content_range.split("/")[-1])
+        return 0
+    
+    async def read_record_by_key(
+        self,
+        table: str,
+        key_column: str,
+        key_value: Any,
+    ) -> Optional[Dict[str, Any]]:
+        """Read single record by key."""
+        if self._has_db_connection and self._postgres_adapter:
+            return await self._postgres_adapter.read_record_by_key(table, key_column, key_value)
+        
+        response = await self._client.get(
+            f"/rest/v1/{table}",
+            params={key_column: f"eq.{key_value}", "limit": "1"}
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data[0] if data else None
+    
+    async def upsert_record(
         self,
         table: str,
         record: Dict[str, Any],
         key_column: str,
     ) -> Dict[str, Any]:
-        """Upsert using Supabase REST API (alternative method)."""
-        if not self._client:
-            return await self.upsert_record(table, record, key_column)
+        """Upsert record - uses DB if available, else REST API."""
+        if self._has_db_connection and self._postgres_adapter:
+            return await self._postgres_adapter.upsert_record(table, record, key_column)
         
         response = await self._client.post(
-            f"/{table}",
+            f"/rest/v1/{table}",
             json=record,
-            headers={
-                "Prefer": f"resolution=merge-duplicates,return=representation",
-            }
+            headers={"Prefer": "resolution=merge-duplicates,return=representation"}
         )
         response.raise_for_status()
         data = response.json()
         return data[0] if data else record
+    
+    async def delete_record(
+        self,
+        table: str,
+        key_column: str,
+        key_value: Any,
+    ) -> bool:
+        """Delete record by key."""
+        if self._has_db_connection and self._postgres_adapter:
+            return await self._postgres_adapter.delete_record(table, key_column, key_value)
+        
+        response = await self._client.delete(
+            f"/rest/v1/{table}",
+            params={key_column: f"eq.{key_value}"}
+        )
+        return response.status_code == 204
+    
+    async def search_records(self, table: str, query: str) -> List[Dict[str, Any]]:
+        """Search for records by text content."""
+        if self._has_db_connection and self._postgres_adapter:
+            return await self._postgres_adapter.search_records(table, query)
+        
+        # Use REST API - search across all text columns
+        # This is a simple ilike search, not as comprehensive as direct DB
+        try:
+            # Get schema to find text columns
+            schema = await self.get_schema(table)
+            text_cols = [
+                c.get("name") for c in schema.get("columns", [])
+                if c.get("type") in ["text", "character varying", "varchar", "citext"]
+            ]
+            
+            if not text_cols:
+                return []
+            
+            # Build OR filter for text columns (limited to first 3 to avoid long queries)
+            params = {"limit": "50"}
+            or_filters = []
+            for col in text_cols[:3]:
+                or_filters.append(f"{col}.ilike.*{query}*")
+            
+            params["or"] = f"({','.join(or_filters)})"
+            
+            response = await self._client.get(f"/rest/v1/{table}", params=params)
+            response.raise_for_status()
+            return response.json()
+        except Exception:
+            return []
+    
+    async def count_search_matches(self, table: str, query: str) -> int:
+        """Count records matching search query."""
+        if self._has_db_connection and self._postgres_adapter:
+            return await self._postgres_adapter.count_search_matches(table, query)
+        
+        # Use REST API count
+        results = await self.search_records(table, query)
+        return len(results)
+    
+    # =========================================================================
+    # Migration & Setup
+    # =========================================================================
+    
+    async def check_migration_status(self) -> Dict[str, Any]:
+        """Check if Frontbase migration has been applied."""
+        try:
+            response = await self._client.post(
+                "/rest/v1/rpc/frontbase_get_schema_info",
+                json={}
+            )
+            if response.status_code == 200:
+                return {"applied": True, "functions": ["frontbase_get_schema_info"]}
+            else:
+                return {"applied": False, "error": f"HTTP {response.status_code}"}
+        except Exception as e:
+            return {"applied": False, "error": str(e)}
+    
+    async def apply_migration(self, sql: str) -> Dict[str, Any]:
+        """Apply SQL migration via exec_sql RPC or direct DB."""
+        if self._has_db_connection and self._postgres_adapter:
+            # Direct execution via DB
+            try:
+                async with self._postgres_adapter._pool.acquire() as conn:
+                    await conn.execute(sql)
+                return {"success": True, "method": "direct_db"}
+            except Exception as e:
+                return {"success": False, "error": str(e), "method": "direct_db"}
+        
+        # Try via exec_sql RPC (if it exists)
+        try:
+            response = await self._client.post(
+                "/rest/v1/rpc/exec_sql",
+                json={"query": sql}
+            )
+            if response.status_code == 200:
+                return {"success": True, "method": "rpc"}
+            else:
+                return {"success": False, "error": f"HTTP {response.status_code}", "method": "rpc"}
+        except Exception as e:
+            return {"success": False, "error": str(e), "method": "rpc"}

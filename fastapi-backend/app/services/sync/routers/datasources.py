@@ -488,6 +488,149 @@ async def get_table_schema(
         logger.error(f"Error fetching schema for {datasource_id} table {table}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch schema: {str(e)}")
 
+
+# =========================================================================
+# Migration Endpoints (Supabase)
+# =========================================================================
+
+@router.get("/{datasource_id}/check-migration")
+async def check_datasource_migration(
+    datasource_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Check if Frontbase migration has been applied to a Supabase datasource.
+    Returns status of required RPC functions.
+    """
+    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
+    datasource = result.scalar_one_or_none()
+    
+    if not datasource:
+        raise HTTPException(status_code=404, detail="Datasource not found")
+    
+    # Only applicable for Supabase
+    if datasource.type.value != "supabase":
+        return {"applicable": False, "reason": "Migration only applies to Supabase datasources"}
+    
+    try:
+        adapter = get_adapter(datasource)
+        async with adapter:
+            if hasattr(adapter, 'check_migration_status'):
+                status = await adapter.check_migration_status()
+                return {"applicable": True, **status}
+            else:
+                return {"applicable": False, "reason": "Adapter does not support migration check"}
+    except Exception as e:
+        logger.error(f"Error checking migration for {datasource_id}: {str(e)}")
+        return {"applicable": True, "applied": False, "error": str(e)}
+
+
+@router.post("/{datasource_id}/apply-migration")
+async def apply_datasource_migration(
+    datasource_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Apply Frontbase migration SQL to a Supabase datasource.
+    Creates required RPC functions for schema introspection, user management, etc.
+    """
+    import os
+    
+    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
+    datasource = result.scalar_one_or_none()
+    
+    if not datasource:
+        raise HTTPException(status_code=404, detail="Datasource not found")
+    
+    # Only applicable for Supabase
+    if datasource.type.value != "supabase":
+        raise HTTPException(status_code=400, detail="Migration only applies to Supabase datasources")
+    
+    # Read migration SQL file
+    migration_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "supabase_setup.sql")
+    migration_path = os.path.abspath(migration_path)
+    
+    if not os.path.exists(migration_path):
+        # Try alternative path
+        migration_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..", "supabase_setup.sql")
+        migration_path = os.path.abspath(migration_path)
+    
+    if not os.path.exists(migration_path):
+        raise HTTPException(status_code=500, detail="Migration SQL file not found")
+    
+    with open(migration_path, "r", encoding="utf-8") as f:
+        migration_sql = f.read()
+    
+    try:
+        adapter = get_adapter(datasource)
+        async with adapter:
+            if hasattr(adapter, 'apply_migration'):
+                result = await adapter.apply_migration(migration_sql)
+                if result.get("success"):
+                    return {"success": True, "message": "Migration applied successfully", **result}
+                else:
+                    raise HTTPException(status_code=500, detail=f"Migration failed: {result.get('error')}")
+            else:
+                raise HTTPException(status_code=400, detail="Adapter does not support migration apply")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error applying migration for {datasource_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to apply migration: {str(e)}")
+
+
+# =========================================================================
+# Relationships Discovery
+# =========================================================================
+
+@router.get("/{datasource_id}/relationships")
+async def get_datasource_relationships(
+    datasource_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get all foreign key relationships for all tables in a datasource.
+    Returns a list of relationships with source/target table/column info.
+    Uses a single optimized query instead of looping through tables.
+    """
+    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
+    datasource = result.scalar_one_or_none()
+    
+    if not datasource:
+        raise HTTPException(status_code=404, detail="Datasource not found")
+    
+    try:
+        adapter = get_adapter(datasource)
+        async with adapter:
+            # Get tables and all relationships in parallel (fast)
+            tables = await adapter.get_tables()
+            
+            # Use optimized single-query method if available
+            if hasattr(adapter, 'get_all_relationships'):
+                relationships = await adapter.get_all_relationships()
+            else:
+                # Fallback for adapters without the optimized method
+                relationships = []
+                for table in tables:
+                    schema = await adapter.get_schema(table)
+                    for col in schema.get("columns", []):
+                        if col.get("is_foreign"):
+                            relationships.append({
+                                "source_table": table,
+                                "source_column": col["name"],
+                                "target_table": col.get("foreign_table"),
+                                "target_column": col.get("foreign_column"),
+                            })
+            
+            return {
+                "tables": tables,
+                "relationships": relationships
+            }
+    except Exception as e:
+        logger.error(f"Error fetching relationships for {datasource_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch relationships: {str(e)}")
+
+
 @router.get("/{datasource_id}/tables/{table}/data")
 async def get_datasource_table_data(
     datasource_id: str,

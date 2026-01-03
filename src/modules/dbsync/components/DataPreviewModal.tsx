@@ -6,6 +6,8 @@ import { DataPreviewToolbar } from './data-preview/DataPreviewToolbar';
 import { DataPreviewSidebar } from './data-preview/DataPreviewSidebar';
 import { DataPreviewContent } from './data-preview/DataPreviewContent';
 import { TableSelectionView } from './data-preview/TableSelectionView';
+import { RelationshipsView } from './data-preview/RelationshipsView';
+import { Table, GitBranch } from 'lucide-react';
 
 const DataPreviewModal = (props: DataPreviewModalProps) => {
     const { isOpen, onClose, viewId } = props;
@@ -65,23 +67,54 @@ const DataPreviewModal = (props: DataPreviewModalProps) => {
 
                 <div className="flex-1 overflow-hidden flex flex-col">
                     {currentStep === 'tables' ? (
-                        <TableSelectionView
-                            tableSearch={tableSearch}
-                            setTableSearch={actions.setTableSearch}
-                            dataSearchQuery={dataSearchQuery}
-                            setDataSearchQuery={actions.setDataSearchQuery}
-                            handleDataSearch={actions.handleDataSearch}
-                            isDataSearching={isDataSearching}
-                            showDataSearchResults={showDataSearchResults}
-                            setShowDataSearchResults={actions.setShowDataSearchResults}
-                            filteredTables={filteredTables}
-                            groupedMatches={groupedMatches}
-                            setSelectedTable={actions.setSelectedTable}
-                            setCurrentStep={actions.setCurrentStep}
-                            setGlobalSearch={actions.setGlobalSearch}
-                            setAppliedFilters={actions.setAppliedFilters}
-                            setFilters={actions.setFilters}
-                        />
+                        <>
+                            {/* Tab Navigation */}
+                            <div className="flex items-center gap-1 px-6 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/30">
+                                <button
+                                    onClick={() => actions.setActiveTab('table')}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'table'
+                                            ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-sm border border-gray-200 dark:border-gray-600'
+                                            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-white/60 dark:hover:bg-gray-800/60'
+                                        }`}
+                                >
+                                    <Table className="w-4 h-4" />
+                                    Tables
+                                </button>
+                                <button
+                                    onClick={() => actions.setActiveTab('relationships')}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'relationships'
+                                            ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-sm border border-gray-200 dark:border-gray-600'
+                                            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-white/60 dark:hover:bg-gray-800/60'
+                                        }`}
+                                >
+                                    <GitBranch className="w-4 h-4" />
+                                    Relationships
+                                </button>
+                            </div>
+
+                            {/* Tab Content */}
+                            {activeTab === 'relationships' ? (
+                                <RelationshipsView datasourceId={props.datasourceId} />
+                            ) : (
+                                <TableSelectionView
+                                    tableSearch={tableSearch}
+                                    setTableSearch={actions.setTableSearch}
+                                    dataSearchQuery={dataSearchQuery}
+                                    setDataSearchQuery={actions.setDataSearchQuery}
+                                    handleDataSearch={actions.handleDataSearch}
+                                    isDataSearching={isDataSearching}
+                                    showDataSearchResults={showDataSearchResults}
+                                    setShowDataSearchResults={actions.setShowDataSearchResults}
+                                    filteredTables={filteredTables}
+                                    groupedMatches={groupedMatches}
+                                    setSelectedTable={actions.setSelectedTable}
+                                    setCurrentStep={actions.setCurrentStep}
+                                    setGlobalSearch={actions.setGlobalSearch}
+                                    setAppliedFilters={actions.setAppliedFilters}
+                                    setFilters={actions.setFilters}
+                                />
+                            )}
+                        </>
                     ) : (
                         <div className="flex-1 flex min-w-0 overflow-hidden">
                             <DataPreviewSidebar

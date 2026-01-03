@@ -3,7 +3,7 @@
 from app.services.sync.adapters.base import DatabaseAdapter
 from app.services.sync.adapters.supabase_adapter import SupabaseAdapter
 from app.services.sync.adapters.postgres_adapter import PostgresAdapter
-from app.services.sync.adapters.wordpress_adapter import WordPressAdapter
+from app.services.sync.adapters.mysql_adapter import MySQLAdapter
 from app.services.sync.adapters.wordpress_api_adapter import WordPressRestAdapter, WordPressGraphQLAdapter
 from app.services.sync.adapters.neon_adapter import NeonAdapter
 from app.services.sync.models.datasource import Datasource, DatasourceType
@@ -14,11 +14,11 @@ def get_adapter(datasource: Datasource) -> DatabaseAdapter:
     adapter_map = {
         DatasourceType.SUPABASE: SupabaseAdapter,
         DatasourceType.POSTGRES: PostgresAdapter,
-        DatasourceType.WORDPRESS: WordPressAdapter,
+        DatasourceType.WORDPRESS: MySQLAdapter,  # WordPress DB uses MySQL
         DatasourceType.WORDPRESS_REST: WordPressRestAdapter,
         DatasourceType.WORDPRESS_GRAPHQL: WordPressGraphQLAdapter,
         DatasourceType.NEON: NeonAdapter,
-        DatasourceType.MYSQL: WordPressAdapter,  # Reuse WordPress adapter for MySQL
+        DatasourceType.MYSQL: MySQLAdapter,
     }
     
     adapter_class = adapter_map.get(datasource.type)
@@ -32,9 +32,11 @@ __all__ = [
     "DatabaseAdapter",
     "SupabaseAdapter",
     "PostgresAdapter",
-    "WordPressAdapter",
+    "MySQLAdapter",
     "WordPressRestAdapter",
     "WordPressGraphQLAdapter",
     "NeonAdapter",
     "get_adapter",
 ]
+
+

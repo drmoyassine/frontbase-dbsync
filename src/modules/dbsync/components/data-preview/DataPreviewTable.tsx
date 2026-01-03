@@ -34,7 +34,7 @@ interface DataPreviewTableProps {
     allMatches: { colKey: string; rowIndex: number }[];
     currentMatchIndex: number;
     setEditingRecord: (record: any) => void;
-    setActiveTab: (tab: 'table' | 'record' | 'linked' | 'api' | 'webhooks') => void;
+    setActiveTab: (tab: 'table' | 'record' | 'linked' | 'api' | 'webhooks' | 'relationships') => void;
     globalSearchStatus: 'idle' | 'searching_datasource' | 'searching_all';
     globalResults: { datasource_name: string; table: string; count: number }[];
     setGlobalResults: (results: any[]) => void;

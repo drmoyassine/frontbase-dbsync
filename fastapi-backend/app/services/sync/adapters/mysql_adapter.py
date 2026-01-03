@@ -1,5 +1,5 @@
 """
-WordPress adapter - MySQL adapter for WordPress databases.
+MySQL adapter - Generic MySQL database adapter.
 """
 
 from typing import Any, Dict, List, Optional, Union
@@ -12,17 +12,17 @@ from app.services.sync.models.datasource import Datasource
 
 from app.services.sync.adapters.base import SQLAdapter
 
-class WordPressAdapter(SQLAdapter):
+class MySQLAdapter(SQLAdapter):
     """
-    WordPress/MySQL database adapter using aiomysql.
+    MySQL database adapter using aiomysql.
     
-    Handles WordPress-specific table structures like wp_posts and wp_postmeta.
+    Supports generic MySQL databases and WordPress-specific structures.
     """
     
     def __init__(self, datasource: "Datasource"):
         super().__init__(datasource)
         import logging
-        self.logger = logging.getLogger(f"app.adapters.wordpress.{self.datasource.name}")
+        self.logger = logging.getLogger(f"app.adapters.mysql.{self.datasource.name}")
         
         self._pool: Optional[aiomysql.Pool] = None
         self._prefix = datasource.table_prefix or "wp_"
@@ -59,25 +59,81 @@ class WordPressAdapter(SQLAdapter):
                 return [row[0] for row in rows]
     
     async def get_schema(self, table: str) -> Dict[str, Any]:
-        """Get column information for a table."""
+        """Get column information for a table, including foreign key relationships."""
         async with self._pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(f"DESCRIBE `{table}`")
                 rows = await cur.fetchall()
                 
+                # Get FK info for this table
+                await cur.execute("""
+                    SELECT 
+                        COLUMN_NAME,
+                        REFERENCED_TABLE_NAME,
+                        REFERENCED_COLUMN_NAME
+                    FROM information_schema.KEY_COLUMN_USAGE
+                    WHERE TABLE_SCHEMA = %s
+                    AND TABLE_NAME = %s
+                    AND REFERENCED_TABLE_NAME IS NOT NULL
+                """, (self.datasource.database, table))
+                fk_rows = await cur.fetchall()
+                
+                # Build FK lookup map
+                fk_map = {
+                    fk["COLUMN_NAME"]: {
+                        "foreign_table": fk["REFERENCED_TABLE_NAME"],
+                        "foreign_column": fk["REFERENCED_COLUMN_NAME"]
+                    }
+                    for fk in fk_rows
+                }
+                
                 columns = []
                 for row in rows:
                     # Robust key access (some MySQL versions return lowercase)
                     r = {k.lower(): v for k, v in row.items()}
+                    col_name = r.get("field")
                     columns.append({
-                        "name": r.get("field"),
+                        "name": col_name,
                         "type": r.get("type"),
                         "nullable": r.get("null") == "YES",
                         "default": r.get("default"),
                         "primary_key": r.get("key") == "PRI",
+                        "is_foreign": col_name in fk_map,
+                        "foreign_table": fk_map.get(col_name, {}).get("foreign_table"),
+                        "foreign_column": fk_map.get(col_name, {}).get("foreign_column"),
                     })
                 
                 return {"columns": columns}
+    
+    async def get_all_relationships(self) -> List[Dict[str, Any]]:
+        """Get ALL foreign key relationships across all tables in one query (fast)."""
+        async with self._pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cur:
+                # Single query to get all FK relationships in this database
+                await cur.execute("""
+                    SELECT 
+                        TABLE_NAME AS source_table,
+                        COLUMN_NAME AS source_column,
+                        REFERENCED_TABLE_NAME AS target_table,
+                        REFERENCED_COLUMN_NAME AS target_column
+                    FROM information_schema.KEY_COLUMN_USAGE
+                    WHERE TABLE_SCHEMA = %s
+                    AND REFERENCED_TABLE_NAME IS NOT NULL
+                    ORDER BY TABLE_NAME, COLUMN_NAME
+                """, (self.datasource.database,))
+                fk_rows = await cur.fetchall()
+                
+                self.logger.info(f"Found {len(fk_rows)} total FK relationships")
+                
+                return [
+                    {
+                        "source_table": row["source_table"],
+                        "source_column": row["source_column"],
+                        "target_table": row["target_table"],
+                        "target_column": row["target_column"],
+                    }
+                    for row in fk_rows
+                ]
     
     async def _build_filtered_query(
         self,

@@ -19,6 +19,18 @@ export interface TableDataResponse {
     timestamp_utc?: string;
 }
 
+export interface Relationship {
+    source_table: string;
+    source_column: string;
+    target_table: string;
+    target_column: string;
+}
+
+export interface RelationshipsResponse {
+    tables: string[];
+    relationships: Relationship[];
+}
+
 export const datasourcesApi = {
     list: () => api.get<Datasource[]>('/datasources'),
     get: (id: string) => api.get<Datasource>(`/datasources/${id}`),
@@ -37,6 +49,8 @@ export const datasourcesApi = {
 
     refreshTableSchema: (id: string | number, table: string) =>
         api.get<TableSchema>(`/datasources/${id}/tables/${table}/schema`, { params: { refresh: true } }),
+    getRelationships: (id: string | number) =>
+        api.get<RelationshipsResponse>(`/datasources/${id}/relationships`),
     searchDatasource: (id: string | number, q: string, detailed?: boolean, limit?: number) =>
         api.get<SearchMatch[]>(`/datasources/${id}/search`, { params: { q, detailed, limit } }),
     searchAll: (q: string, detailed?: boolean, limit?: number) =>

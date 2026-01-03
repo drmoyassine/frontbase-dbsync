@@ -17,7 +17,7 @@ interface DataPreviewHeaderProps {
     copyToClipboard: (text: string) => void;
     handleSaveView: () => void;
     setCurrentStep: (step: 'tables' | 'records') => void;
-    setActiveTab: (tab: 'table' | 'record' | 'linked' | 'api' | 'webhooks') => void;
+    setActiveTab: (tab: 'table' | 'record' | 'linked' | 'api' | 'webhooks' | 'relationships') => void;
     onClose: () => void;
 }
 

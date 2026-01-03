@@ -42,6 +42,7 @@ class PostgresAdapter(SQLAdapter):
                 min_size=1,
                 max_size=10,
                 command_timeout=60,
+                statement_cache_size=0,  # Required for pgbouncer (Supabase pooler)
             )
             self.logger.info(f"Successfully established {self.datasource.type} connection pool to {host} (Secure)")
         except Exception as e:
@@ -67,6 +68,7 @@ class PostgresAdapter(SQLAdapter):
                         min_size=1,
                         max_size=10,
                         command_timeout=60,
+                        statement_cache_size=0,  # Required for pgbouncer
                     )
                     self.logger.info(f"Successfully established {self.datasource.type} connection pool to {host} (SSL Fallback/Insecure)")
                     return
@@ -96,8 +98,9 @@ class PostgresAdapter(SQLAdapter):
             return [row["table_name"] for row in rows]
     
     async def get_schema(self, table: str) -> Dict[str, Any]:
-        """Get column information for a table."""
+        """Get column information for a table, including foreign key relationships."""
         async with self._pool.acquire() as conn:
+            # Get columns with primary key info
             rows = await conn.fetch("""
                 SELECT 
                     c.column_name,
@@ -118,6 +121,27 @@ class PostgresAdapter(SQLAdapter):
                 ORDER BY c.ordinal_position
             """, table)
             
+            # Get foreign key relationships
+            fk_rows = await conn.fetch("""
+                SELECT kcu.column_name, ccu.table_name AS foreign_table, ccu.column_name AS foreign_column
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+                JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name
+                WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_name = $1
+            """, table)
+            
+            self.logger.info(f"FK discovery for '{table}': found {len(fk_rows)} foreign keys")
+            
+            
+            # Build FK lookup map
+            fk_map = {
+                fk["column_name"]: {
+                    "foreign_table": fk["foreign_table"],
+                    "foreign_column": fk["foreign_column"]
+                }
+                for fk in fk_rows
+            }
+            
             return {
                 "columns": [
                     {
@@ -126,11 +150,45 @@ class PostgresAdapter(SQLAdapter):
                         "nullable": row["is_nullable"] == "YES",
                         "default": row["column_default"],
                         "primary_key": row["is_primary_key"],
+                        "is_foreign": row["column_name"] in fk_map,
+                        "foreign_table": fk_map.get(row["column_name"], {}).get("foreign_table"),
+                        "foreign_column": fk_map.get(row["column_name"], {}).get("foreign_column"),
                     }
                     for row in rows
                 ]
             }
     
+    async def get_all_relationships(self) -> Dict[str, Any]:
+        """Get ALL foreign key relationships across all tables in one query (fast)."""
+        async with self._pool.acquire() as conn:
+            # Single query to get all FK relationships in the database
+            fk_rows = await conn.fetch("""
+                SELECT 
+                    tc.table_name AS source_table,
+                    kcu.column_name AS source_column,
+                    ccu.table_name AS target_table,
+                    ccu.column_name AS target_column
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu 
+                    ON tc.constraint_name = kcu.constraint_name
+                JOIN information_schema.constraint_column_usage ccu 
+                    ON ccu.constraint_name = tc.constraint_name
+                WHERE tc.constraint_type = 'FOREIGN KEY'
+                ORDER BY tc.table_name, kcu.column_name
+            """)
+            
+            self.logger.info(f"Found {len(fk_rows)} total FK relationships")
+            
+            return [
+                {
+                    "source_table": row["source_table"],
+                    "source_column": row["source_column"],
+                    "target_table": row["target_table"],
+                    "target_column": row["target_column"],
+                }
+                for row in fk_rows
+            ]
+
 
     async def read_records(
         self,

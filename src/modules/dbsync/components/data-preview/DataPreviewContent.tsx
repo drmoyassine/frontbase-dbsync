@@ -7,8 +7,8 @@ import { WebhookConfig } from './WebhookConfig';
 import { DataPreviewTable } from './DataPreviewTable';
 
 interface DataPreviewContentProps {
-    activeTab: 'table' | 'record' | 'linked' | 'api' | 'webhooks';
-    setActiveTab: (tab: 'table' | 'record' | 'linked' | 'api' | 'webhooks') => void;
+    activeTab: 'table' | 'record' | 'linked' | 'api' | 'webhooks' | 'relationships';
+    setActiveTab: (tab: 'table' | 'record' | 'linked' | 'api' | 'webhooks' | 'relationships') => void;
     tableData: any;
     isLoading: boolean;
     isFetchingData: boolean;

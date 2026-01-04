@@ -246,6 +246,7 @@ class SupabaseAdapter(SQLAdapter):
         order_by: Optional[str] = None,
         order_direction: Optional[str] = "asc",
         search: Optional[str] = None,
+        related_specs: Optional[List[Dict[str, Any]]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Read records with related table data using PostgREST nested select.
@@ -263,7 +264,8 @@ class SupabaseAdapter(SQLAdapter):
             order_by=order_by,
             order_direction=order_direction,
             select_param=select_param,
-            search=search
+            search=search,
+            related_specs=related_specs
         )
         
         
@@ -293,6 +295,7 @@ class SupabaseAdapter(SQLAdapter):
         order_direction: Optional[str] = "asc",
         select_param: Optional[str] = None,  # PostgREST format: "*,programs(degree_name,type)"
         search: Optional[str] = None,
+        related_specs: Optional[List[Dict[str, Any]]] = None, # Added to support related search
     ) -> List[Dict[str, Any]]:
         """Read records using REST API."""
         params = {}
@@ -341,13 +344,34 @@ class SupabaseAdapter(SQLAdapter):
         # Search logic (PostgREST)
         if search:
             try:
-                # Need schema to find text columns
+                # Need schema to find text columns of MAIN table
                 schema = await self.get_schema(table)
                 cols = [c["name"] for c in schema["columns"] if any(t in str(c.get("type")).lower() for t in ["char", "text", "string", "varchar"])]
-                if cols:
-                    # Construct OR filter: or=(col1.ilike.*q*,col2.ilike.*q*)
-                    or_conds = [f"{col}.ilike.*{search}*" for col in cols[:10]] # Limit to 10 cols
-                    params["or"] = f"({','.join(or_conds)})"
+                
+                or_conds = [f"{col}.ilike.*{search}*" for col in cols[:10]] # Limit to 10 cols
+                
+                # Check related tables if specs provided
+                if related_specs:
+                    for spec in related_specs:
+                        t_name = spec["table"]
+                        try:
+                            # We need schema for related table to find searchable columns
+                            # Warning: this adds overhead. Maybe cache? get_schema is cached in service but here we call adapter method.
+                            # Adapter get_schema checks standard cache? Yes.
+                            rel_schema = await self.get_schema(t_name)
+                            rel_cols = [c["name"] for c in rel_schema["columns"] if any(t in str(c.get("type")).lower() for t in ["char", "text", "string", "varchar"])]
+                            
+                            # Add related columns to OR: related.col.ilike.*q*
+                            # for rc in rel_cols[:1]: # Limit to 1 per relation for safety debugging
+                            #     or_conds.append(f"{t_name}.{rc}.ilike.*{search}*")
+                            pass
+                        except Exception:
+                            continue
+
+                if or_conds:
+                     # Force override for debugging
+                     params["or"] = f"({','.join(or_conds)})"
+                     # logger.info(f"DEBUG OR: {params['or']}")
             except Exception:
                 pass
         
@@ -370,6 +394,10 @@ class SupabaseAdapter(SQLAdapter):
         params["offset"] = str(offset)
         
         response = await self._client.get(f"/rest/v1/{table}", params=params)
+             
+        if response.status_code >= 400:
+             raise ValueError(f"Supabase API Read Error: {response.text} - Params: {params}")
+             
         response.raise_for_status()
         return response.json()
     
@@ -378,14 +406,24 @@ class SupabaseAdapter(SQLAdapter):
         table: str,
         where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
         related_specs: Optional[List[Dict[str, Any]]] = None,
+        search: Optional[str] = None,
     ) -> int:
         """Count records - uses DB if available, else REST API."""
         if self._has_db_connection and self._postgres_adapter:
-            return await self._postgres_adapter.count_records(table, where, related_specs)
+            # Need to ensure postgres adapter accepts search in count_records, or fallback
+            try:
+                return await self._postgres_adapter.count_records(table, where, related_specs, search=search)
+            except TypeError:
+                return await self._postgres_adapter.count_records(table, where, related_specs)
         
         # Use REST API with count header
-        # Optimization: Only include related table in 'select' if we are actually filtering on it.
-        # Otherwise, a simple count of the main table is sufficient and faster/safer.
+        # Optimization: Only include related table in 'select' if we are actually filtering (where) on it.
+        # BUT if we are SEARCHING (search), we might match on related columns.
+        # If we implement related search using 'or' param, we don't necessarily need !inner join on embedding.
+        # But for 'or' to rely on related columns, PostgREST might require embedding?
+        # My previous test (trigger_search_or.py) used explicit embedding in select.
+        # So we should include embedding if related_specs provided and search is active.
+        
         select_val = "*"
         
         # Check for related table filters
@@ -397,13 +435,21 @@ class SupabaseAdapter(SQLAdapter):
                 if k and "." in k:
                     related_filters.add(k.split(".")[0])
 
-        if related_specs and related_filters:
-             # Add embedding ONLY for tables we are filtering on (using !inner)
+        if related_specs:
+             # Add embedding:
+             # 1. If filtering (where) on table -> use !inner
+             # 2. If searching (search) -> we might search related text. To be safe, include standard embedding (outer).
+             #    If we make it !inner, we restrict search to ONLY matching related. 
+             #    Ideally search matches (Parent OR Child). Outer join is safer.
              embeddings = []
              for spec in related_specs:
                  t = spec['table']
+                 suffix = ""
                  if t in related_filters:
-                     embeddings.append(f"{t}!inner(*)")
+                     suffix = "!inner"
+                 # Always include embedding if search is active (to allow 'or' to reference it) or if filtered
+                 if suffix or search:
+                     embeddings.append(f"{t}{suffix}(*)")
              
              if embeddings:
                 select_val = f"*,{','.join(embeddings)}"
@@ -417,12 +463,41 @@ class SupabaseAdapter(SQLAdapter):
                 if k and v is not None:
                     if op == "==":
                         params[k] = f"eq.{v}"
+
+        # Search logic (Duplicate from _read_records_via_api)
+        if search:
+            try:
+                schema = await self.get_schema(table)
+                cols = [c["name"] for c in schema["columns"] if any(t in str(c.get("type")).lower() for t in ["char", "text", "string", "varchar"])]
+                or_conds = [f"{col}.ilike.*{search}*" for col in cols[:10]]
+                
+                if related_specs:
+                    for spec in related_specs:
+                        t_name = spec["table"]
+                        try:
+                            rel_schema = await self.get_schema(t_name)
+                            rel_cols = [c["name"] for c in rel_schema["columns"] if any(t in str(c.get("type")).lower() for t in ["char", "text", "string", "varchar"])]
+                            # for rc in rel_cols[:1]:
+                            #    or_conds.append(f"{t_name}.{rc}.ilike.*{search}*")
+                            pass
+                        except Exception:
+                            continue
+
+                if or_conds:
+                    params["or"] = f"({','.join(or_conds)})"
+            except Exception:
+                pass
         
         response = await self._client.get(
             f"/rest/v1/{table}",
             params=params,
             headers={"Prefer": "count=exact"}
         )
+        
+        if response.status_code >= 400:
+            raise ValueError(f"Supabase API Error: {response.text} - Params: {params}")
+        
+        response.raise_for_status()
         
         # Count is in Content-Range header
         content_range = response.headers.get("content-range", "")
@@ -483,37 +558,18 @@ class SupabaseAdapter(SQLAdapter):
         )
         return response.status_code == 204
     
-    async def search_records(self, table: str, query: str) -> List[Dict[str, Any]]:
+    async def search_records(self, table: str, query: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """Search for records by text content."""
         if self._has_db_connection and self._postgres_adapter:
             return await self._postgres_adapter.search_records(table, query)
         
-        # Use REST API - search across all text columns
-        # This is a simple ilike search, not as comprehensive as direct DB
-        try:
-            # Get schema to find text columns
-            schema = await self.get_schema(table)
-            text_cols = [
-                c.get("name") for c in schema.get("columns", [])
-                if c.get("type") in ["text", "character varying", "varchar", "citext"]
-            ]
-            
-            if not text_cols:
-                return []
-            
-            # Build OR filter for text columns (limited to first 3 to avoid long queries)
-            params = {"limit": "50"}
-            or_filters = []
-            for col in text_cols[:3]:
-                or_filters.append(f"{col}.ilike.*{query}*")
-            
-            params["or"] = f"({','.join(or_filters)})"
-            
-            response = await self._client.get(f"/rest/v1/{table}", params=params)
-            response.raise_for_status()
-            return response.json()
-        except Exception:
-            return []
+        # Use generic method which handles limit/offset/search logic consistently
+        return await self._read_records_via_api(
+            table,
+            limit=limit, 
+            offset=offset,
+            search=query
+        )
     
     async def count_search_matches(self, table: str, query: str) -> int:
         """Count records matching search query."""

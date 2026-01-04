@@ -161,7 +161,8 @@ async def get_datasource_table_data(
                                     offset=offset,
                                     order_by=sort,
                                     order_direction=order,
-                                    search=search
+                                    search=search,
+                                    related_specs=enriched_specs
                                 )
                             else:
                                 # Postgres/MySQL use related_specs
@@ -214,7 +215,8 @@ async def get_datasource_table_data(
                     total = await adapter.count_records(
                         table, 
                         where=where, 
-                        related_specs=enriched_specs if enriched_specs else None
+                        related_specs=enriched_specs if enriched_specs else None,
+                        search=search
                     )
                 except TypeError:
                     # Adapter doesn't support related_specs argument

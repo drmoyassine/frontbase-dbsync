@@ -258,8 +258,12 @@ class SupabaseAdapter(SQLAdapter):
             table, 
             columns=None, 
             where=where, 
+            limit=limit,
+            offset=offset,
+            order_by=order_by,
             order_direction=order_direction,
-            select_param=select_param
+            select_param=select_param,
+            search=search
         )
         
         
@@ -288,15 +292,30 @@ class SupabaseAdapter(SQLAdapter):
         order_by: Optional[str] = None,
         order_direction: Optional[str] = "asc",
         select_param: Optional[str] = None,  # PostgREST format: "*,programs(degree_name,type)"
+        search: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Read records using REST API."""
         params = {}
         
-        # Use select_param if provided (for related tables), else use columns
-        if select_param:
-            params["select"] = select_param
-        elif columns:
-            params["select"] = ",".join(columns)
+        # Use select_param if provided, else columns
+        final_select = select_param if select_param else (",".join(columns) if columns else "*")
+        
+        # Detect filters on related tables to enforce !inner join
+        related_filters = set()
+        if where:
+            filter_list = where if isinstance(where, list) else [{"field": k, "operator": "==", "value": v} for k, v in where.items()]
+            for f in filter_list:
+                k = f.get("field")
+                if k and "." in k:
+                    related_filters.add(k.split(".")[0])
+        
+        if related_filters and final_select:
+             for t in related_filters:
+                  # Inject !inner if not present
+                  if f"{t}(" in final_select and f"{t}!inner(" not in final_select:
+                       final_select = final_select.replace(f"{t}(", f"{t}!inner(")
+        
+        params["select"] = final_select
         
         if where:
             filter_list = where if isinstance(where, list) else [{"field": k, "operator": "==", "value": v} for k, v in where.items()]
@@ -319,10 +338,33 @@ class SupabaseAdapter(SQLAdapter):
                 elif op == "contains":
                     params[k] = f"ilike.*{v}*"
         
-        # Add sorting
+        # Search logic (PostgREST)
+        if search:
+            try:
+                # Need schema to find text columns
+                schema = await self.get_schema(table)
+                cols = [c["name"] for c in schema["columns"] if any(t in str(c.get("type")).lower() for t in ["char", "text", "string", "varchar"])]
+                if cols:
+                    # Construct OR filter: or=(col1.ilike.*q*,col2.ilike.*q*)
+                    or_conds = [f"{col}.ilike.*{search}*" for col in cols[:10]] # Limit to 10 cols
+                    params["or"] = f"({','.join(or_conds)})"
+            except Exception:
+                pass
+        
         if order_by:
-            direction = ".desc" if order_direction and order_direction.lower() == "desc" else ".asc"
-            params["order"] = f"{order_by}{direction}"
+            # PostgREST support for related table sorting: table(col).asc
+            if "." in order_by:
+                parts = order_by.split(".")
+                if len(parts) >= 2:
+                    # Handle "countries.country" -> "countries(country)"
+                    # Note: this only works if relation is unambiguous and PostgREST supports it (v9+)
+                    table_part = parts[0]
+                    col_part = ".".join(parts[1:]) 
+                    direction = "desc" if order_direction and order_direction.lower() == "desc" else "asc"
+                    params["order"] = f"{table_part}({col_part}).{direction}"
+            else:
+                direction = ".desc" if order_direction and order_direction.lower() == "desc" else ".asc"
+                params["order"] = f"{order_by}{direction}"
         
         params["limit"] = str(limit)
         params["offset"] = str(offset)
@@ -342,7 +384,31 @@ class SupabaseAdapter(SQLAdapter):
             return await self._postgres_adapter.count_records(table, where, related_specs)
         
         # Use REST API with count header
-        params = {"select": "*", "head": "true"}
+        # Optimization: Only include related table in 'select' if we are actually filtering on it.
+        # Otherwise, a simple count of the main table is sufficient and faster/safer.
+        select_val = "*"
+        
+        # Check for related table filters
+        related_filters = set()
+        if where:
+            filter_list = where if isinstance(where, list) else [{"field": k, "operator": "==", "value": v} for k, v in where.items()]
+            for f in filter_list:
+                k = f.get("field")
+                if k and "." in k:
+                    related_filters.add(k.split(".")[0])
+
+        if related_specs and related_filters:
+             # Add embedding ONLY for tables we are filtering on (using !inner)
+             embeddings = []
+             for spec in related_specs:
+                 t = spec['table']
+                 if t in related_filters:
+                     embeddings.append(f"{t}!inner(*)")
+             
+             if embeddings:
+                select_val = f"*,{','.join(embeddings)}"
+        
+        params = {"select": select_val, "limit": "1", "offset": "0"}
         
         if where:
             filter_list = where if isinstance(where, list) else [{"field": k, "operator": "==", "value": v} for k, v in where.items()]

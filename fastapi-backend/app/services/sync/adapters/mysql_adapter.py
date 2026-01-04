@@ -337,32 +337,35 @@ class MySQLAdapter(SQLAdapter):
     async def read_records_with_relations(
         self,
         table: str,
-        related_specs: List[Dict[str, Any]],  # [{"table": "programs", "columns": ["degree_name"], "fk_col": "program_id", "ref_col": "id"}]
+        related_specs: List[Dict[str, Any]],
         where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
         limit: int = 100,
         offset: int = 0,
         order_by: Optional[str] = None,
         order_direction: Optional[str] = "asc",
+        search: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Read records with LEFT JOINs for related tables.
         Returns flattened records with keys like "programs.degree_name".
         """
-        # Build SELECT columns: main.*, related.col AS "related.col"
         select_parts = [f"`{table}`.*"]
         join_parts = []
+        alias_map = {}
         
         for i, spec in enumerate(related_specs):
             rel_table = spec["table"]
             rel_alias = f"rel_{i}"
-            fk_col = spec.get("fk_col", f"{rel_table}_id")  # FK column in main table
-            ref_col = spec.get("ref_col", "id")  # Reference column in related table
+            alias_map[rel_table] = rel_alias
             
-            # Add SELECT for each related column with alias
+            fk_col = spec.get("fk_col", f"{rel_table}_id")
+            ref_col = spec.get("ref_col", "id")
+            
+            # Select related columns
             for col in spec["columns"]:
                 select_parts.append(f"`{rel_alias}`.`{col}` AS `{rel_table}.{col}`")
             
-            # Add LEFT JOIN
+            # Left Join
             join_parts.append(
                 f"LEFT JOIN `{rel_table}` `{rel_alias}` ON `{table}`.`{fk_col}` = `{rel_alias}`.`{ref_col}`"
             )
@@ -373,23 +376,73 @@ class MySQLAdapter(SQLAdapter):
         query = f"SELECT {select_clause} FROM `{table}` {join_clause}"
         params = []
         
-        # Add WHERE clause (simplified - MySQL uses %s placeholders)
+        # Process WHERE with alias mapping
+        processed_where = []
         if where:
             filter_list = where if isinstance(where, list) else [{"field": k, "operator": "==", "value": v} for k, v in where.items()]
-            conditions = []
             for f in filter_list:
-                k, v, op = f.get("field"), f.get("value"), f.get("operator", "==")
-                if k and v is not None:
-                    if op == "==":
-                        conditions.append(f"`{table}`.`{k}` = %s")
-                        params.append(v)
-            if conditions:
-                query += " WHERE " + " AND ".join(conditions)
+                new_f = f.copy()
+                field = new_f.get("field")
+                if not field: continue
+                
+                if "." in field:
+                    parts = field.split(".")
+                    rel_t = parts[0]
+                    col = parts[1]
+                    if rel_t in alias_map:
+                        # Use backticks for MySQL identifiers
+                        new_f["field"] = f'`{alias_map[rel_t]}`.`{col}`'
+                    else:
+                         new_f["field"] = field
+                else:
+                    new_f["field"] = f'`{table}`.`{field}`'
+                
+                processed_where.append(new_f)
+            
+            # Use base class builder with MySQL placeholder
+            where_clause, p = self._build_where_clause(processed_where, placeholder="%s", use_index=False, column_prefix="")
+            if where_clause:
+                query += where_clause
+                params.extend(p)
         
-        # Add ORDER BY
+        # Search logic
+        if search:
+            # For MySQL, get_schema might be needed to find searchable columns
+            # Or use explicit list if available? We'll fetch schema.
+            # search_records logic uses basic text search.
+            try:
+                schema = await self.get_schema(table)
+                # Filter useful columns
+                search_cols = [c["name"] for c in schema["columns"]]
+                if search_cols:
+                    search_conds = []
+                    for col in search_cols:
+                        search_conds.append(f"CAST(`{table}`.`{col}` AS CHAR) LIKE %s")
+                        params.append(f"%{search}%")
+                    
+                    search_chunk = "(" + " OR ".join(search_conds) + ")"
+                    if "WHERE" in query:
+                         query += f" AND {search_chunk}"
+                    else:
+                         query += f" WHERE {search_chunk}"
+            except Exception:
+                pass # Ignore search errors if schema fails
+        
+        # Order By with alias mapping
         if order_by:
             direction = "DESC" if order_direction and order_direction.lower() == "desc" else "ASC"
-            query += f" ORDER BY `{table}`.`{order_by}` {direction}"
+            if "." in order_by:
+                parts = order_by.split(".")
+                rel_t = parts[0]
+                col = parts[1]
+                if rel_t in alias_map:
+                    order_expr = f'`{alias_map[rel_t]}`.`{col}`'
+                else:
+                    order_expr = f'`{order_by}`' # Fallback
+            else:
+                order_expr = f'`{table}`.`{order_by}`'
+                
+            query += f" ORDER BY {order_expr} {direction}"
         
         query += f" LIMIT %s OFFSET %s"
         params.extend([limit, offset])
@@ -404,8 +457,65 @@ class MySQLAdapter(SQLAdapter):
         self,
         table: str,
         where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
+        related_specs: Optional[List[Dict[str, Any]]] = None,
     ) -> int:
-        """Count records with meta-aware filtering."""
+        """Count records with meta-aware filtering and FK joins."""
+        
+        # If relations are involved, use standard join logic (bypassing WP meta optimization)
+        if related_specs:
+            join_clause = ""
+            alias_map = {}
+            join_parts = []
+            
+            for i, spec in enumerate(related_specs):
+                rel_table = spec["table"]
+                rel_alias = f"rel_{i}"
+                alias_map[rel_table] = rel_alias
+                
+                fk_col = spec.get("fk_col", f"{rel_table}_id")
+                ref_col = spec.get("ref_col", "id")
+                
+                join_parts.append(
+                    f"LEFT JOIN `{rel_table}` `{rel_alias}` ON `{table}`.`{fk_col}` = `{rel_alias}`.`{ref_col}`"
+                )
+            join_clause = " ".join(join_parts)
+            
+            query = f"SELECT COUNT(*) FROM `{table}` {join_clause}"
+            params = []
+            
+            # Process WHERE
+            if where:
+                processed_where = []
+                filter_list = where if isinstance(where, list) else [{"field": k, "operator": "==", "value": v} for k, v in where.items()]
+                
+                for f in filter_list:
+                    new_f = f.copy()
+                    field = new_f.get("field")
+                    if not field: continue
+                    
+                    if "." in field:
+                        parts = field.split(".")
+                        rel_t = parts[0]
+                        col = parts[1]
+                        if rel_t in alias_map:
+                            new_f["field"] = f'`{alias_map[rel_t]}`.`{col}`'
+                        else:
+                            new_f["field"] = field
+                    else:
+                        new_f["field"] = f'`{table}`.`{field}`'
+                    processed_where.append(new_f)
+                
+                where_clause, p = self._build_where_clause(processed_where, placeholder="%s", use_index=False, column_prefix="")
+                query += where_clause
+                params.extend(p)
+                
+            async with self._pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(query, params)
+                    row = await cur.fetchone()
+                    return row[0] if row else 0
+
+        # Legacy logic (WP support)
         query, params = await self._build_filtered_query(table, "SELECT COUNT(*)", where)
         
         async with self._pool.acquire() as conn:

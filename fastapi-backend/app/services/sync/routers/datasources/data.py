@@ -89,6 +89,7 @@ async def get_datasource_table_data(
         async with adapter:
             # If search is provided, use search_records method
             # If search is provided, use search_records method unless we have relations logic
+            enriched_specs = None
             use_generic_search = bool(search)
             if search and related_specs and hasattr(adapter, 'read_records_with_relations'):
                 # We want to use read_records_with_relations to get enriched data AND filter by search

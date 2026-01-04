@@ -1,0 +1,26 @@
+
+--- 1. Fetching Main Table Schema (activities) ---
+GET http://127.0.0.1:8000/api/sync/datasources/75bdfec7-71f6-4613-8854-a318cb3f0016/tables/activities/schema
+Found 1 Foreign Keys columns (or checking foreign_keys list):
+  - FK to table: 'contacts' via '['related_contact_id']'
+Targeting Related Table: 'contacts' (as defined in FK)
+
+--- 2. Fetching Related Table Schema (contacts) to get Column Names ---
+GET http://127.0.0.1:8000/api/sync/datasources/75bdfec7-71f6-4613-8854-a318cb3f0016/tables/contacts/schema
+Found related columns with EXACT casing: ['email', 'case_summary', 'auth_user_id']
+
+--- 3. Simulating Data Request ---
+GET http://127.0.0.1:8000/api/sync/datasources/75bdfec7-71f6-4613-8854-a318cb3f0016/tables/activities/data
+Select Param: *,contacts(email,case_summary,auth_user_id)
+Retrieved 1 records.
+
+--- 4. content of First Record (Keys Verification) ---
+Record Keys: ['id', 'name', 'type', 'description', 'assignee_id', 'assignee_name', 'related_contact_id', 'related_app_id', 'task_url', 'completion_note', 'created_by_id', 'created_by_name', 'completed_by_id', 'completed_by_name', 'assignee_type', 'assignee_org_id', 'created_at_timestamp', 'due_date_timestamp', 'due_days', 'completed_date_timestamp', 'status', 'document_count', 'action_plan', 'action_plan_status', 'last_updated_timestamp', 'last_updated_by', 'related_contact_name', 'contacts.email', 'contacts.auth_user_id', 'contacts.case_summary']
+
+--- 5. Casing Mismatch Analysis ---
+✅ MATCH: 'contacts.email' found with value: 93770756501@studygram.me
+✅ MATCH: 'contacts.case_summary' found with value: ### Last Updated: 2025-12-15 13:15:53 (UTC)
+- ### ...
+✅ MATCH: 'contacts.auth_user_id' found with value: None
+
+SUCCESS: API returns keys exactly as expected from Schema.

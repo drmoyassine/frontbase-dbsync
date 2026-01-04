@@ -20,6 +20,7 @@ import { useBuilderStore } from '@/stores/builder';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 import { toast } from 'sonner';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import './builder.css';
 
 export const CustomBuilder: React.FC = () => {
@@ -53,9 +54,11 @@ export const CustomBuilder: React.FC = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [activeItem, setActiveItem] = useState<any>(null);
 
-  // Mobile drawer state
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
+  // Sidebar state (mobile uses open/close, desktop uses collapsed/expanded)
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(false); // Mobile
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(false); // Mobile
+  const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false); // Desktop
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false); // Desktop
   const [isMobile, setIsMobile] = useState(false);
 
   // Detect mobile screen size and auto-switch viewport
@@ -258,12 +261,29 @@ export const CustomBuilder: React.FC = () => {
 
           {/* Left Sidebar - Components & Layers */}
           {!isPreviewMode && (
-            <div className={cn(
-              "builder-sidebar left-sidebar",
-              isMobile && leftSidebarOpen && "open"
-            )}>
-              <LeftSidebar />
-            </div>
+            <>
+              <div className={cn(
+                "builder-sidebar left-sidebar",
+                isMobile && leftSidebarOpen && "open",
+                !isMobile && leftSidebarCollapsed && "collapsed"
+              )}>
+                <LeftSidebar />
+              </div>
+              {/* Desktop collapse toggle for left sidebar */}
+              {!isMobile && (
+                <button
+                  onClick={() => setLeftSidebarCollapsed(!leftSidebarCollapsed)}
+                  className="flex-shrink-0 w-5 h-full flex items-center justify-center bg-card border-r border-border hover:bg-accent transition-colors order-1"
+                  aria-label={leftSidebarCollapsed ? "Expand left sidebar" : "Collapse left sidebar"}
+                >
+                  {leftSidebarCollapsed ? (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </button>
+              )}
+            </>
           )}
 
           {/* Center - Canvas */}
@@ -273,12 +293,29 @@ export const CustomBuilder: React.FC = () => {
 
           {/* Right Sidebar - Properties & Styling */}
           {!isPreviewMode && (
-            <div className={cn(
-              "builder-sidebar right-sidebar",
-              isMobile && rightSidebarOpen && "open"
-            )}>
-              <RightSidebar />
-            </div>
+            <>
+              {/* Desktop collapse toggle for right sidebar */}
+              {!isMobile && (
+                <button
+                  onClick={() => setRightSidebarCollapsed(!rightSidebarCollapsed)}
+                  className="flex-shrink-0 w-5 h-full flex items-center justify-center bg-card border-l border-border hover:bg-accent transition-colors order-3"
+                  aria-label={rightSidebarCollapsed ? "Expand right sidebar" : "Collapse right sidebar"}
+                >
+                  {rightSidebarCollapsed ? (
+                    <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </button>
+              )}
+              <div className={cn(
+                "builder-sidebar right-sidebar",
+                isMobile && rightSidebarOpen && "open",
+                !isMobile && rightSidebarCollapsed && "collapsed"
+              )}>
+                <RightSidebar />
+              </div>
+            </>
           )}
         </div>
 

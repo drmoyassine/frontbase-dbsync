@@ -114,7 +114,13 @@ export const useDataPreview = ({
         const fieldsSet = new Set<string>();
         filterState.filters.forEach(f => { if (f.field) fieldsSet.add(f.field); });
         if (schemaData?.columns) schemaData.columns.forEach((col: any) => fieldsSet.add(col.name));
-        if (data?.records?.[0]) Object.keys(data.records[0]).forEach(key => fieldsSet.add(key));
+
+        // Scan all records (or up to limit relative to performance) to find all possible keys including sparse/related ones
+        if (data?.records) {
+            data.records.forEach((record: any) => {
+                Object.keys(record).forEach(key => fieldsSet.add(key));
+            });
+        }
         return Array.from(fieldsSet).sort();
     }, [schemaData, data, filterState.filters]);
 

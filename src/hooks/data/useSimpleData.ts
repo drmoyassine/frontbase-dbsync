@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useTableData, useTableSchema, useGlobalSchema, useRpcData } from '@/hooks/useDatabase';
 import { debug } from '@/lib/debug';
@@ -120,10 +121,129 @@ export function useSimpleData({
         error: globalSchemaError
     } = useGlobalSchema();
 
-    const { data: schema } = useTableSchema(binding?.tableName || null);
+    // Use datasource-specific API when dataSourceId is available
+    const useDatasourceData = !!binding?.dataSourceId && binding.dataSourceId !== 'backend';
 
-    // Decide which data hook to use
+    // Decide which data hook to use (RPC mode for special functions)
     const isRpcMode = !!binding?.rpcName;
+
+    // Fetch schema via datasource-specific API when needed
+    const { data: datasourceSchema } = useQuery({
+        queryKey: ['datasource-schema', binding?.dataSourceId, binding?.tableName],
+        queryFn: async () => {
+            if (!binding?.dataSourceId || !binding?.tableName) return null;
+            const response = await fetch(
+                `/api/sync/datasources/${binding.dataSourceId}/tables/${binding.tableName}/schema`
+            );
+            if (!response.ok) return null;
+            return response.json();
+        },
+        enabled: useDatasourceData && !!binding?.tableName,
+        staleTime: 1000 * 60 * 60, // 1 hour for schema
+    });
+
+    // Use datasource-specific schema if available, otherwise fallback to legacy
+    const { data: legacySchema } = useTableSchema(!useDatasourceData ? binding?.tableName || null : null);
+    const schema = useDatasourceData ? datasourceSchema : legacySchema;
+
+    // React Query for datasource-specific data
+    const {
+        data: datasourceResult,
+        isLoading: isDatasourceLoading,
+        error: datasourceError,
+        refetch: refetchDatasource
+    } = useQuery({
+        queryKey: ['datasource-data', binding?.dataSourceId, binding?.tableName, queryParams, binding?.columnOrder],
+        queryFn: async () => {
+            if (!binding?.dataSourceId || !binding?.tableName) {
+                return { records: [], total: 0 };
+            }
+
+            const params = new URLSearchParams();
+            params.append('limit', String(queryParams?.pageSize || 50));
+            if (queryParams?.page && queryParams?.pageSize) {
+                params.append('offset', String((queryParams.page - 1) * queryParams.pageSize));
+            }
+
+            // Add sorting
+            if (queryParams?.sort?.column) {
+                params.append('sort', queryParams.sort.column);
+                params.append('order', queryParams.sort.direction || 'asc');
+            }
+
+            // Add search
+            if (queryParams?.filters?.search) {
+                params.append('search', queryParams.filters.search);
+            }
+
+            // Add filters (excluding search which is handled separately)
+            if (queryParams?.filters) {
+                const filterList = Object.entries(queryParams.filters)
+                    .filter(([k, v]) => k !== 'search' && v != null && v !== '')
+                    .map(([field, value]) => {
+                        // Handle filter object format { filterType, value }
+                        // value is guaranteed non-null after filter above
+                        const v = value as NonNullable<typeof value>;
+                        if (v && typeof v === 'object' && 'value' in v) {
+                            return { field, operator: '==', value: (v as { value: unknown }).value };
+                        }
+                        return { field, operator: '==', value: v };
+                    });
+                if (filterList.length > 0) {
+                    params.append('filters', JSON.stringify(filterList));
+                }
+            }
+
+            // Build select param for related columns (format: "programs(degree_name,type)")
+            // columnOrder may contain columns like "programs.degree_name" which need to be grouped
+            if (binding.columnOrder && binding.columnOrder.length > 0) {
+                const relatedColumnsMap = new Map<string, string[]>();
+                binding.columnOrder.forEach((col: string) => {
+                    if (col.includes('.')) {
+                        const [table, column] = col.split('.');
+                        if (!relatedColumnsMap.has(table)) {
+                            relatedColumnsMap.set(table, []);
+                        }
+                        relatedColumnsMap.get(table)!.push(column);
+                    }
+                });
+
+                if (relatedColumnsMap.size > 0) {
+                    const selectParts: string[] = ['*'];
+                    relatedColumnsMap.forEach((columns, table) => {
+                        selectParts.push(`${table}(${columns.join(',')})`);
+                    });
+                    params.append('select', selectParts.join(','));
+                }
+            }
+
+            // Debug logging for request construction
+            console.log('[useSimpleData] Request Debug:', {
+                bindingTableName: binding.tableName,
+                columnOrder: binding.columnOrder,
+                selectParam: params.get('select'),
+                fullParams: params.toString()
+            });
+
+            const response = await fetch(
+                `/api/sync/datasources/${binding.dataSourceId}/tables/${binding.tableName}/data?${params}`
+            );
+            if (!response.ok) throw new Error('Failed to fetch data');
+            const result = await response.json();
+
+            // Debug log to check if keys are present (e.g. contacts.case_summary)
+            if (result.records && result.records.length > 0) {
+                console.log('[useSimpleData] First record keys:', Object.keys(result.records[0]));
+                // Check specifically for any dotted keys
+                const dottedKeys = Object.keys(result.records[0]).filter(k => k.includes('.'));
+                console.log('[useSimpleData] Dotted keys present:', dottedKeys);
+            }
+
+            return result;
+        },
+        enabled: useDatasourceData && !!binding?.tableName,
+        staleTime: 5000,
+    });
 
     // Call both hooks but only enable the relevant one
     const {
@@ -132,7 +252,7 @@ export function useSimpleData({
         error: tableError,
         refetch: refetchTable
     } = useTableData(
-        !isRpcMode && binding?.tableName ? binding.tableName : null,
+        !isRpcMode && !useDatasourceData && binding?.tableName ? binding.tableName : null,
         queryParams || {}
     );
 
@@ -157,11 +277,15 @@ export function useSimpleData({
         } : {}
     );
 
-    // Unify results
-    const queryResult = isRpcMode ? rpcResult : tableResult;
-    const queryError = isRpcMode ? rpcError : tableError;
-    const isDataLoading = isRpcMode ? isRpcLoading : isTableLoading;
-    const refetchQuery = isRpcMode ? refetchRpc : refetchTable;
+    // Unify results - prioritize datasource-specific API
+    const queryResult = useDatasourceData
+        ? { rows: datasourceResult?.records || [], total: datasourceResult?.total || 0 }
+        : isRpcMode
+            ? rpcResult
+            : tableResult;
+    const queryError = useDatasourceData ? datasourceError : (isRpcMode ? rpcError : tableError);
+    const isDataLoading = useDatasourceData ? isDatasourceLoading : (isRpcMode ? isRpcLoading : isTableLoading);
+    const refetchQuery = useDatasourceData ? refetchDatasource : (isRpcMode ? refetchRpc : refetchTable);
 
     // Ensure array data
     const data = useMemo(() => Array.isArray(queryResult?.rows) ? queryResult.rows : [], [queryResult]);

@@ -155,6 +155,8 @@ export interface ComponentDataBinding {
     };
   };
 
+  columnOrder?: string[];
+
   // Component configuration
   pagination?: {
     enabled: boolean;

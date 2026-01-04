@@ -159,6 +159,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       filters: binding.filtering?.filters ?? {},
     },
     columnOverrides: binding.columnOverrides ?? {},
+    columnOrder: binding.columnOrder,
   } : null;
 
   const { data: boundData } = useSimpleData({

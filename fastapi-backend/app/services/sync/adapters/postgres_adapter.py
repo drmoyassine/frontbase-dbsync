@@ -142,6 +142,15 @@ class PostgresAdapter(SQLAdapter):
                 for fk in fk_rows
             }
             
+            # Build FK list for return
+            foreign_keys_list = []
+            for fk in fk_rows:
+                foreign_keys_list.append({
+                    "constrained_columns": [fk["column_name"]],
+                    "referred_table": fk["foreign_table"],
+                    "referred_columns": [fk["foreign_column"]]
+                })
+            
             return {
                 "columns": [
                     {
@@ -155,7 +164,8 @@ class PostgresAdapter(SQLAdapter):
                         "foreign_column": fk_map.get(row["column_name"], {}).get("foreign_column"),
                     }
                     for row in rows
-                ]
+                ],
+                "foreign_keys": foreign_keys_list
             }
     
     async def get_all_relationships(self) -> Dict[str, Any]:
@@ -197,15 +207,78 @@ class PostgresAdapter(SQLAdapter):
         where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
         limit: int = 100,
         offset: int = 0,
+        order_by: Optional[str] = None,
+        order_direction: Optional[str] = "asc",
     ) -> List[Dict[str, Any]]:
-        """Read records from table."""
+        """Read records from table with sorting support."""
         cols = ", ".join(f'"{c}"' for c in columns) if columns else "*"
         query = f'SELECT {cols} FROM "{table}"'
         
         where_clause, params = self._build_where_clause(where, use_index=True)
         query += where_clause
         
+        # Add ORDER BY clause if sorting requested
+        if order_by:
+            direction = "DESC" if order_direction and order_direction.lower() == "desc" else "ASC"
+            query += f' ORDER BY "{order_by}" {direction}'
+        
         query += f" LIMIT {limit} OFFSET {offset}"
+        
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+    
+    async def read_records_with_relations(
+        self,
+        table: str,
+        related_specs: List[Dict[str, Any]],  # [{"table": "programs", "columns": ["degree_name"], "fk_col": "program_id", "ref_col": "id"}]
+        where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
+        limit: int = 100,
+        offset: int = 0,
+        order_by: Optional[str] = None,
+        order_direction: Optional[str] = "asc",
+    ) -> List[Dict[str, Any]]:
+        """
+        Read records with LEFT JOINs for related tables.
+        Returns flattened records with keys like "programs.degree_name".
+        """
+        # Build SELECT columns: main.*, related.col AS "related.col"
+        select_parts = [f'"{table}".*']
+        join_parts = []
+        
+        for i, spec in enumerate(related_specs):
+            rel_table = spec["table"]
+            rel_alias = f"rel_{i}"
+            fk_col = spec.get("fk_col", f"{rel_table}_id")  # FK column in main table
+            ref_col = spec.get("ref_col", "id")  # Reference column in related table (usually id)
+            
+            # Add SELECT for each related column with alias
+            for col in spec["columns"]:
+                select_parts.append(f'{rel_alias}."{col}" AS "{rel_table}.{col}"')
+            
+            # Add LEFT JOIN
+            join_parts.append(
+                f'LEFT JOIN "{rel_table}" {rel_alias} ON "{table}"."{fk_col}" = {rel_alias}."{ref_col}"'
+            )
+        
+        select_clause = ", ".join(select_parts)
+        join_clause = " ".join(join_parts)
+        
+        query = f'SELECT {select_clause} FROM "{table}" {join_clause}'
+        
+        # Add WHERE clause
+        where_clause, params = self._build_where_clause(where, use_index=True, column_prefix=f'"{table}".')
+        if where_clause:
+            query += where_clause
+        
+        # Add ORDER BY
+        if order_by:
+            direction = "DESC" if order_direction and order_direction.lower() == "desc" else "ASC"
+            query += f' ORDER BY "{table}"."{order_by}" {direction}'
+        
+        query += f" LIMIT {limit} OFFSET {offset}"
+        
+        self.logger.debug(f"FK JOIN query: {query}")
         
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(query, *params)

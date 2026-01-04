@@ -69,11 +69,19 @@ export function useTableColumns(
         }
 
         // 2. Determine visible columns based on overrides
+        // Check if columnOverrides match current schema (detect stale overrides from previous table)
+        const overrideKeys = Object.keys(binding?.columnOverrides || {});
+        const schemaColumnNames = new Set(schema.columns.map((c: any) => c.name));
+        const hasValidOverrides = overrideKeys.length > 0 && overrideKeys.some(key => schemaColumnNames.has(key.split('.')[0]));
+
         const isVisible = (key: string) => {
+            // If no valid overrides for current schema, show all columns by default
+            if (!hasValidOverrides) return true;
+
             const override = binding?.columnOverrides?.[key];
             if (override?.hidden !== undefined) return !override.hidden; // Respect 'hidden' prop if present
             if (override?.visible !== undefined) return override.visible;
-            return false; // Default hidden if neither set
+            return true; // Default VISIBLE if no overrides set
         };
 
         const visibleKeys = new Set<string>();

@@ -10,14 +10,20 @@ export const RightSidebar: React.FC = () => {
   return (
     <div className="h-full flex flex-col bg-background">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-        <TabsList className="grid w-full grid-cols-2 m-2 mb-0">
-          <TabsTrigger value="properties" className="flex items-center gap-2">
+        <TabsList className="grid w-full grid-cols-2 m-3 mb-2 p-1">
+          <TabsTrigger
+            value="properties"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 h-10"
+          >
             <Settings className="h-4 w-4" />
-            Properties
+            <span className="font-medium">Properties</span>
           </TabsTrigger>
-          <TabsTrigger value="styling" className="flex items-center gap-2">
+          <TabsTrigger
+            value="styling"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 h-10"
+          >
             <Palette className="h-4 w-4" />
-            Styling
+            <span className="font-medium">Styling</span>
           </TabsTrigger>
         </TabsList>
         

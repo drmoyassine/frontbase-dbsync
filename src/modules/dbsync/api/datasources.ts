@@ -49,8 +49,8 @@ export const datasourcesApi = {
 
     refreshTableSchema: (id: string | number, table: string) =>
         api.get<TableSchema>(`/datasources/${id}/tables/${table}/schema`, { params: { refresh: true } }),
-    getRelationships: (id: string | number) =>
-        api.get<RelationshipsResponse>(`/datasources/${id}/relationships`),
+    getRelationships: (id: string | number, refresh?: boolean) =>
+        api.get<RelationshipsResponse>(`/datasources/${id}/relationships`, { params: refresh ? { refresh: true } : undefined }),
     searchDatasource: (id: string | number, q: string, detailed?: boolean, limit?: number) =>
         api.get<SearchMatch[]>(`/datasources/${id}/search`, { params: { q, detailed, limit } }),
     searchAll: (q: string, detailed?: boolean, limit?: number) =>

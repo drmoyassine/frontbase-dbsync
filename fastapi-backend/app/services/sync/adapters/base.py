@@ -43,8 +43,10 @@ class DatabaseAdapter(ABC):
         where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
         limit: int = 100,
         offset: int = 0,
+        order_by: Optional[str] = None,
+        order_direction: Optional[str] = "asc",
     ) -> List[Dict[str, Any]]:
-        """Read records from a table."""
+        """Read records from a table with optional sorting."""
         pass
     
     @abstractmethod
@@ -136,7 +138,8 @@ class SQLAdapter(DatabaseAdapter, ABC):
         self, 
         where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]],
         placeholder: str = "%s",
-        use_index: bool = False
+        use_index: bool = False,
+        column_prefix: str = ""  # For JOINs: prefix columns with table name
     ) -> tuple[str, List[Any]]:
         """
         Generic SQL WHERE clause builder.
@@ -145,6 +148,7 @@ class SQLAdapter(DatabaseAdapter, ABC):
             where: Filter conditions
             placeholder: The placeholder style (%s for MySQL/SQLite, $1 for Postgres)
             use_index: If True, uses $1, $2 instead of $ placeholder.
+            column_prefix: Prefix for column names (e.g., '"table".' for JOINs)
         """
         if not where:
             return "", []
@@ -166,14 +170,15 @@ class SQLAdapter(DatabaseAdapter, ABC):
                 continue
             
             p_idx = len(params) + 1
+            # Apply column prefix for JOINs
+            col_expr = f'{column_prefix}"{k}"' if column_prefix else f'"{k}"'
             curr_placeholder = f"${p_idx}" if use_index else placeholder
             
             # Use CAST for string-based operators if the database might have typed columns (like Postgres)
             # This prevents 500 errors when comparing integer columns to ''
-            col_expr = f'"{k}"'
             # Apply CAST to all operators that receive string values from the UI
             if op in ["==", "!=", "contains", "starts_with", "ends_with", "is_empty", "is_not_empty", "in", "not_in"]:
-                col_expr = f'CAST("{k}" AS TEXT)'
+                col_expr = f'CAST({col_expr} AS TEXT)'
 
             if op == "==":
                 conditions.append(f'{col_expr} = {curr_placeholder}')
@@ -212,8 +217,9 @@ class SQLAdapter(DatabaseAdapter, ABC):
                 placeholders = []
                 for val in vals:
                     placeholders.append(f"${len(params) + 1}" if use_index else placeholder)
-                    params.append(val)
-                conditions.append(f'{col_expr} IN ({", ".join(placeholders)})')
+                    params.append(val)  # Keep as string for asyncpg
+                # Use column cast to handle integer vs string comparison
+                conditions.append(f'{col_expr}::text IN ({", ".join(placeholders)})')
             elif op == "not_in":
                 vals = [x.strip() for x in str(v).split(",") if x.strip()]
                 if not vals:

@@ -71,7 +71,7 @@ async def get_table_schema(
         cached = cache_result.scalar_one_or_none()
         if cached:
             logger.debug(f"Schema cache hit for {datasource_id}/{table}")
-            return TableSchema(columns=cached.columns)
+            return TableSchema(columns=cached.columns, foreign_keys=cached.foreign_keys or [])
     
     # No cache or refresh requested - fetch from source
     try:
@@ -91,7 +91,8 @@ async def get_table_schema(
         new_cache = TableSchemaCache(
             datasource_id=datasource_id,
             table_name=table,
-            columns=schema["columns"]
+            columns=schema["columns"],
+            foreign_keys=schema.get("foreign_keys", [])
         )
         db.add(new_cache)
         await db.commit()

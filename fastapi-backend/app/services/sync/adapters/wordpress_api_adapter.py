@@ -319,10 +319,12 @@ class WordPressRestAdapter(WordPressBaseApiAdapter):
         where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
         limit: int = 100,
         offset: int = 0,
+        order_by: Optional[str] = None,
+        order_direction: Optional[str] = "asc",
         use_cache: bool = True,
     ) -> List[Dict[str, Any]]:
         """
-        Read records via REST API.
+        Read records via REST API with sorting support.
         
         For no-filter or simple-filter cases, uses a single fast request.
         For complex meta-field filters, scans pages sequentially until limit is met.
@@ -338,7 +340,8 @@ class WordPressRestAdapter(WordPressBaseApiAdapter):
             # Create deterministic string for complex args
             where_str = json.dumps(where, sort_keys=True, default=str) if where else ""
             cols_str = json.dumps(columns, sort_keys=True) if columns else ""
-            key_base = f"{self._api_url}:{table}:{limit}:{offset}:{where_str}:{cols_str}"
+            order_str = f"{order_by}:{order_direction}" if order_by else ""
+            key_base = f"{self._api_url}:{table}:{limit}:{offset}:{where_str}:{cols_str}:{order_str}"
             key_hash = hashlib.md5(key_base.encode()).hexdigest()
             cache_key = f"wp:data:{key_hash}"
             
@@ -354,6 +357,11 @@ class WordPressRestAdapter(WordPressBaseApiAdapter):
             "page": (offset // 100) + 1,
             "context": "view",  # Use view context for faster responses
         }
+        
+        # Add sorting if requested (WordPress REST API sorting)
+        if order_by:
+            params["orderby"] = order_by
+            params["order"] = "desc" if order_direction and order_direction.lower() == "desc" else "asc"
         
         # Parse filter list
         filter_list = []
@@ -715,15 +723,24 @@ class WordPressGraphQLAdapter(WordPressBaseApiAdapter):
         where: Optional[Dict[str, Any]] = None,
         limit: int = 100,
         offset: int = 0,
+        order_by: Optional[str] = None,
+        order_direction: Optional[str] = "asc",
     ) -> List[Dict[str, Any]]:
-        """Read records via GraphQL."""
+        """Read records via GraphQL with sorting support."""
         if not self._client:
             await self.connect()
             
         cols = " ".join(columns) if columns else "id title content date"
+        
+        # Build order clause for GraphQL
+        order_clause = ""
+        if order_by:
+            direction = "DESC" if order_direction and order_direction.lower() == "desc" else "ASC"
+            order_clause = f', where: {{orderby: {{field: "{order_by.upper()}", order: {direction}}}}}'
+        
         query = f"""
         query GetRecords {{
-          {table}(first: {limit}) {{
+          {table}(first: {limit}{order_clause}) {{
             nodes {{
               {cols}
             }}

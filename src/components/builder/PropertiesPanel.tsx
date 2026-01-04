@@ -553,7 +553,9 @@ export const PropertiesPanel = () => {
         );
 
       case 'DataTable':
-        const dataTableBinding = getComponentBinding(selectedComponentId!);
+        // Fix: Source binding directly from BuilderStore (authoritative) instead of auxiliary store
+        // This prevents stale/empty binding from overwriting the correct configuration
+        const dataTableBinding = selectedComponent?.props?.binding;
         return (
           <DataTablePropertiesPanel
             componentId={selectedComponentId!}

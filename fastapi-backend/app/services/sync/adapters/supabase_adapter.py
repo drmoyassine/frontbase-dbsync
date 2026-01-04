@@ -143,6 +143,16 @@ class SupabaseAdapter(SQLAdapter):
                             "foreign_column": fk.get("foreign_column_name")
                         }
                 
+                # Prepare FK list for return
+                table_fks = []
+                for fk in schema_info.get("foreign_keys") or []:
+                    if fk.get("table_name") == table:
+                        table_fks.append({
+                            "constrained_columns": [fk.get("column_name")],
+                            "referred_table": fk.get("foreign_table_name"),
+                            "referred_columns": [fk.get("foreign_column_name")]
+                        })
+
                 # Enrich columns with FK info
                 for col in columns:
                     col_name = col.get("column_name")
@@ -158,7 +168,7 @@ class SupabaseAdapter(SQLAdapter):
                     col["type"] = col.get("data_type")
                     col["nullable"] = col.get("is_nullable") == "YES"
                 
-                return {"columns": columns}
+                return {"columns": columns, "foreign_keys": table_fks}
         
         return {"columns": []}
     
@@ -217,12 +227,55 @@ class SupabaseAdapter(SQLAdapter):
         where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
         limit: int = 100,
         offset: int = 0,
+        order_by: Optional[str] = None,
+        order_direction: Optional[str] = "asc",
     ) -> List[Dict[str, Any]]:
         """Read records - uses DB if available, else REST API."""
         if self._has_db_connection and self._postgres_adapter:
-            return await self._postgres_adapter.read_records(table, columns, where, limit, offset)
+            return await self._postgres_adapter.read_records(table, columns, where, limit, offset, order_by, order_direction)
         
-        return await self._read_records_via_api(table, columns, where, limit, offset)
+        return await self._read_records_via_api(table, columns, where, limit, offset, order_by, order_direction)
+    
+    async def read_records_with_relations(
+        self,
+        table: str,
+        select_param: str,  # PostgREST format: "*,programs(degree_name,type,level)"
+        where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
+        limit: int = 100,
+        offset: int = 0,
+        order_by: Optional[str] = None,
+        order_direction: Optional[str] = "asc",
+    ) -> List[Dict[str, Any]]:
+        """
+        Read records with related table data using PostgREST nested select.
+        
+        This uses Supabase's native embedding feature where foreign key relationships
+        are resolved in a single request. Returns flattened records with keys like "programs.degree_name".
+        """
+        # Use REST API with nested select - Supabase handles JOINs automatically
+        records = await self._read_records_via_api(
+            table, 
+            columns=None, 
+            where=where, 
+            order_direction=order_direction,
+            select_param=select_param
+        )
+        
+        
+        # Flatten nested objects to "table.column" format
+        flattened = []
+        for record in records:
+            flat_record = {}
+            for key, value in record.items():
+                if isinstance(value, dict):
+                    # Nested object from related table
+                    for sub_key, sub_value in value.items():
+                        flat_record[f"{key}.{sub_key}"] = sub_value
+                else:
+                    flat_record[key] = value
+            flattened.append(flat_record)
+        
+        return flattened
     
     async def _read_records_via_api(
         self,
@@ -231,11 +284,17 @@ class SupabaseAdapter(SQLAdapter):
         where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
         limit: int = 100,
         offset: int = 0,
+        order_by: Optional[str] = None,
+        order_direction: Optional[str] = "asc",
+        select_param: Optional[str] = None,  # PostgREST format: "*,programs(degree_name,type)"
     ) -> List[Dict[str, Any]]:
         """Read records using REST API."""
         params = {}
         
-        if columns:
+        # Use select_param if provided (for related tables), else use columns
+        if select_param:
+            params["select"] = select_param
+        elif columns:
             params["select"] = ",".join(columns)
         
         if where:
@@ -258,6 +317,11 @@ class SupabaseAdapter(SQLAdapter):
                     params[k] = f"lt.{v}"
                 elif op == "contains":
                     params[k] = f"ilike.*{v}*"
+        
+        # Add sorting
+        if order_by:
+            direction = ".desc" if order_direction and order_direction.lower() == "desc" else ".asc"
+            params["order"] = f"{order_by}{direction}"
         
         params["limit"] = str(limit)
         params["offset"] = str(offset)

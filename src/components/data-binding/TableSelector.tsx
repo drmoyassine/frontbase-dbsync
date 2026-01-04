@@ -1,12 +1,9 @@
 import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
-import { useDataBindingStore } from '@/stores/data-binding-simple';
-import { useDashboardStore } from '@/stores/dashboard';
-
-import { useTables } from '@/hooks/useDatabase';
 
 interface TableSelectorProps {
   value?: string;
@@ -29,22 +26,30 @@ export function TableSelector({
   showRefresh = true,
   variant = 'default'
 }: TableSelectorProps) {
-  const { connected, initialize } = useDataBindingStore();
-  const { data: tables = [], isLoading: tablesLoading, error, refetch } = useTables();
+  // Fetch tables from the selected datasource
+  const { data: tables = [], isLoading, error, refetch } = useQuery<string[]>({
+    queryKey: ['datasource-tables', dataSourceId],
+    queryFn: async () => {
+      if (!dataSourceId) return [];
+      const response = await fetch(`/api/sync/datasources/${dataSourceId}/tables`);
+      if (!response.ok) throw new Error('Failed to fetch tables');
+      return response.json();
+    },
+    enabled: !!dataSourceId,
+    staleTime: 30000, // Cache for 30 seconds
+  });
 
-  // Initialize connection if needed
+  // Reset table selection when datasource changes
   React.useEffect(() => {
-    if (!connected) {
-      initialize();
+    if (value && tables.length > 0 && !tables.includes(value)) {
+      onValueChange('');
     }
-  }, [connected, initialize]);
+  }, [dataSourceId, tables, value, onValueChange]);
 
   const handleRefresh = () => {
     refetch();
   };
 
-  const isLoading = tablesLoading;
-  const tableList = tables.map(table => table.name);
   const errorMessage = error instanceof Error ? error.message : 'Failed to load tables';
 
   if (variant === 'compact') {
@@ -53,20 +58,24 @@ export function TableSelector({
         <Select
           value={value || ''}
           onValueChange={onValueChange}
-          disabled={disabled || isLoading || tableList.length === 0}
+          disabled={disabled || isLoading || tables.length === 0 || !dataSourceId}
         >
           <SelectTrigger className="flex-1">
-            <SelectValue placeholder={isLoading ? "Loading..." : placeholder} />
+            <SelectValue placeholder={
+              !dataSourceId ? "Select datasource first" :
+                isLoading ? "Loading..." :
+                  placeholder
+            } />
           </SelectTrigger>
           <SelectContent>
-            {tableList.map((table) => (
+            {tables.map((table) => (
               <SelectItem key={table} value={table}>
                 {table}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {showRefresh && (
+        {showRefresh && dataSourceId && (
           <Button
             variant="ghost"
             size="icon"
@@ -86,7 +95,7 @@ export function TableSelector({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <Label>{label}</Label>
-        {showRefresh && (
+        {showRefresh && dataSourceId && (
           <Button
             variant="ghost"
             size="sm"
@@ -100,26 +109,35 @@ export function TableSelector({
       <Select
         value={value || ''}
         onValueChange={onValueChange}
-        disabled={disabled || isLoading || tableList.length === 0}
+        disabled={disabled || isLoading || tables.length === 0 || !dataSourceId}
       >
         <SelectTrigger>
-          <SelectValue placeholder={isLoading ? "Loading tables..." : placeholder} />
+          <SelectValue placeholder={
+            !dataSourceId ? "Select a datasource first" :
+              isLoading ? "Loading tables..." :
+                placeholder
+          } />
         </SelectTrigger>
         <SelectContent>
-          {tableList.map((table) => (
+          {tables.map((table) => (
             <SelectItem key={table} value={table}>
               {table}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
-      {!isLoading && tableList.length === 0 && (
+      {!isLoading && !dataSourceId && (
         <p className="text-sm text-muted-foreground">
-          {!connected
-            ? 'Database not connected. Please configure your Supabase connection.'
-            : (error ? errorMessage : 'No tables found. Make sure your database is properly connected.')
-          }
+          Please select a datasource to view available tables.
         </p>
+      )}
+      {!isLoading && dataSourceId && tables.length === 0 && !error && (
+        <p className="text-sm text-muted-foreground">
+          No tables found in this datasource.
+        </p>
+      )}
+      {error && (
+        <p className="text-sm text-destructive">{errorMessage}</p>
       )}
     </div>
   );

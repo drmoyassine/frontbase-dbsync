@@ -78,14 +78,25 @@ class MySQLAdapter(SQLAdapter):
                 """, (self.datasource.database, table))
                 fk_rows = await cur.fetchall()
                 
-                # Build FK lookup map
-                fk_map = {
-                    fk["COLUMN_NAME"]: {
-                        "foreign_table": fk["REFERENCED_TABLE_NAME"],
-                        "foreign_column": fk["REFERENCED_COLUMN_NAME"]
+                # Build FK lookup map and FK list for return
+                fk_map = {}
+                foreign_keys_list = []
+                
+                for fk in fk_rows:
+                    col_name = fk["COLUMN_NAME"]
+                    ref_table = fk["REFERENCED_TABLE_NAME"]
+                    ref_col = fk["REFERENCED_COLUMN_NAME"]
+                    
+                    fk_map[col_name] = {
+                        "foreign_table": ref_table,
+                        "foreign_column": ref_col
                     }
-                    for fk in fk_rows
-                }
+                    
+                    foreign_keys_list.append({
+                        "constrained_columns": [col_name],
+                        "referred_table": ref_table,
+                        "referred_columns": [ref_col]
+                    })
                 
                 columns = []
                 for row in rows:
@@ -103,7 +114,7 @@ class MySQLAdapter(SQLAdapter):
                         "foreign_column": fk_map.get(col_name, {}).get("foreign_column"),
                     })
                 
-                return {"columns": columns}
+                return {"columns": columns, "foreign_keys": foreign_keys_list}
     
     async def get_all_relationships(self) -> List[Dict[str, Any]]:
         """Get ALL foreign key relationships across all tables in one query (fast)."""
@@ -190,6 +201,16 @@ class MySQLAdapter(SQLAdapter):
                 elif op == "<":
                     conditions.append(f"`{k}` < %s")
                     params.append(v)
+                elif op == "in":
+                    # Handle IN clause for FK lookups
+                    if isinstance(v, list) and len(v) > 0:
+                        placeholders = ", ".join(["%s"] * len(v))
+                        conditions.append(f"`{k}` IN ({placeholders})")
+                        params.extend(v)
+                    else:
+                        # Single value fallback
+                        conditions.append(f"`{k}` = %s")
+                        params.append(v)
         
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
@@ -292,11 +313,18 @@ class MySQLAdapter(SQLAdapter):
         where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
         limit: int = 100,
         offset: int = 0,
+        order_by: Optional[str] = None,
+        order_direction: Optional[str] = "asc",
     ) -> List[Dict[str, Any]]:
-        """Read records from table with meta-aware filtering."""
+        """Read records from table with meta-aware filtering and sorting."""
         cols = ", ".join(f"`{table}`.`{c}`" for c in columns) if columns else f"`{table}`.*"
         
         query, params = await self._build_filtered_query(table, f"SELECT {cols}", where)
+        
+        # Add ORDER BY clause if sorting requested
+        if order_by:
+            direction = "DESC" if order_direction and order_direction.lower() == "desc" else "ASC"
+            query += f" ORDER BY `{order_by}` {direction}"
         
         query += f" LIMIT %s OFFSET %s"
         params.extend([limit, offset])
@@ -305,6 +333,72 @@ class MySQLAdapter(SQLAdapter):
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(query, params)
                 return list(await cur.fetchall())
+    
+    async def read_records_with_relations(
+        self,
+        table: str,
+        related_specs: List[Dict[str, Any]],  # [{"table": "programs", "columns": ["degree_name"], "fk_col": "program_id", "ref_col": "id"}]
+        where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
+        limit: int = 100,
+        offset: int = 0,
+        order_by: Optional[str] = None,
+        order_direction: Optional[str] = "asc",
+    ) -> List[Dict[str, Any]]:
+        """
+        Read records with LEFT JOINs for related tables.
+        Returns flattened records with keys like "programs.degree_name".
+        """
+        # Build SELECT columns: main.*, related.col AS "related.col"
+        select_parts = [f"`{table}`.*"]
+        join_parts = []
+        
+        for i, spec in enumerate(related_specs):
+            rel_table = spec["table"]
+            rel_alias = f"rel_{i}"
+            fk_col = spec.get("fk_col", f"{rel_table}_id")  # FK column in main table
+            ref_col = spec.get("ref_col", "id")  # Reference column in related table
+            
+            # Add SELECT for each related column with alias
+            for col in spec["columns"]:
+                select_parts.append(f"`{rel_alias}`.`{col}` AS `{rel_table}.{col}`")
+            
+            # Add LEFT JOIN
+            join_parts.append(
+                f"LEFT JOIN `{rel_table}` `{rel_alias}` ON `{table}`.`{fk_col}` = `{rel_alias}`.`{ref_col}`"
+            )
+        
+        select_clause = ", ".join(select_parts)
+        join_clause = " ".join(join_parts)
+        
+        query = f"SELECT {select_clause} FROM `{table}` {join_clause}"
+        params = []
+        
+        # Add WHERE clause (simplified - MySQL uses %s placeholders)
+        if where:
+            filter_list = where if isinstance(where, list) else [{"field": k, "operator": "==", "value": v} for k, v in where.items()]
+            conditions = []
+            for f in filter_list:
+                k, v, op = f.get("field"), f.get("value"), f.get("operator", "==")
+                if k and v is not None:
+                    if op == "==":
+                        conditions.append(f"`{table}`.`{k}` = %s")
+                        params.append(v)
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+        
+        # Add ORDER BY
+        if order_by:
+            direction = "DESC" if order_direction and order_direction.lower() == "desc" else "ASC"
+            query += f" ORDER BY `{table}`.`{order_by}` {direction}"
+        
+        query += f" LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+        
+        async with self._pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cur:
+                await cur.execute(query, params)
+                return list(await cur.fetchall())
+
 
     async def count_records(
         self,

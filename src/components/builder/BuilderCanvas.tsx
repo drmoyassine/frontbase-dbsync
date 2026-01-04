@@ -189,8 +189,8 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
 
   return (
     <div
-      className="min-h-full p-8 bg-muted/30 transition-colors relative overflow-auto"
-      style={{ minHeight: '400px' }}
+      className="h-full p-8 bg-muted/30 transition-colors relative overflow-y-auto overflow-x-hidden"
+      style={{ minHeight: '100%' }}
       onClick={(e) => {
         // Only deselect if clicking on outer wrapper, not canvas content
         if (e.target === e.currentTarget && !isPreviewMode) {

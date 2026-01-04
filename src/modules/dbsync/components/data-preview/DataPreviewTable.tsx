@@ -353,8 +353,28 @@ export const DataPreviewTable = ({
                     {filteredRecords.map((record, i) => (
                         <tr key={i} className="group hover:bg-primary-50/30 dark:hover:bg-primary-900/10 transition-colors relative">
                             {tableColumns.map((key, j) => {
-                                const value = record[key];
-                                const strVal = typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value ?? '');
+                                const displayValue = (() => {
+                                    // 1. Try direct flattened key lookup
+                                    let val = record[key];
+
+                                    // 2. Fallback to nested lookup (e.g. programs.degree_name -> record.programs.degree_name)
+                                    if (val === undefined && key.includes('.')) {
+                                        const [table, col] = key.split('.');
+                                        val = record[table]?.[col];
+
+                                        // Debug log for missing data
+                                        if (key.includes('degree_name') || key.includes('type')) {
+                                            console.log(`[DataPreviewTable] Nested lookup for ${key}:`, {
+                                                direct: record[key],
+                                                nested: val,
+                                                recordKeys: Object.keys(record)
+                                            });
+                                        }
+                                    }
+                                    return val;
+                                })();
+
+                                const strVal = typeof displayValue === 'object' && displayValue !== null ? JSON.stringify(displayValue) : String(displayValue ?? '');
                                 const cellMatches = globalSearch && strVal.toLowerCase().includes(globalSearch.toLowerCase());
                                 const isPinned = pinnedColumns.includes(key);
                                 const leftOffset = isPinned ? (j * 150) : undefined;
@@ -365,11 +385,7 @@ export const DataPreviewTable = ({
                                         className={`px-4 py-3 text-xs border-b border-gray-50 truncate transition-all ${cellMatches ? 'bg-yellow-50/50 dark:bg-yellow-900/10 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'} ${isPinned ? 'sticky z-10 bg-white dark:bg-gray-800 border-r border-gray-100/50 group-hover:bg-primary-50/50 dark:group-hover:bg-primary-900/10' : 'max-w-xs'} `}
                                         style={isPinned ? { left: leftOffset, minWidth: '150px', maxWidth: '150px' } : {}}
                                     >
-                                        {typeof value === 'object' ? (
-                                            <HighlightMatches text={JSON.stringify(value)} query={globalSearch} />
-                                        ) : (
-                                            <HighlightMatches text={String(value ?? '')} query={globalSearch} />
-                                        )}
+                                        <HighlightMatches text={strVal} query={globalSearch} />
                                     </td>
                                 );
                             })}

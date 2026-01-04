@@ -1,0 +1,25 @@
+
+--- 1. Fetching Main Table Schema (institutions) ---
+GET http://127.0.0.1:8000/api/sync/datasources/75bdfec7-71f6-4613-8854-a318cb3f0016/tables/institutions/schema
+Found 2 Foreign Keys columns (or checking foreign_keys list):
+  - FK to table: 'providers' via '['provider_id']'
+  - FK to table: 'countries' via '['country_id']'
+Targeting Related Table: 'providers' (as defined in FK)
+
+--- 2. Fetching Related Table Schema (providers) to get Column Names ---
+GET http://127.0.0.1:8000/api/sync/datasources/75bdfec7-71f6-4613-8854-a318cb3f0016/tables/providers/schema
+Found related columns with EXACT casing: ['provider_name']
+
+--- 3. Simulating Data Request ---
+GET http://127.0.0.1:8000/api/sync/datasources/75bdfec7-71f6-4613-8854-a318cb3f0016/tables/institutions/data
+Select Param: *,providers(provider_name)
+Retrieved 20 records.
+
+--- 4. content Analysis (First 5 records) ---
+Record 0: has_flattened=True, has_nested=False, dotted_keys=['providers.provider_name']
+Record 1: has_flattened=True, has_nested=False, dotted_keys=['providers.provider_name']
+Record 2: has_flattened=True, has_nested=False, dotted_keys=['providers.provider_name']
+Record 3: has_flattened=True, has_nested=False, dotted_keys=['providers.provider_name']
+Record 4: has_flattened=True, has_nested=False, dotted_keys=['providers.provider_name']
+
+SUCCESS: All records appear enriched or valid.

@@ -18,6 +18,7 @@ from app.services.sync.schemas.datasource import (
     DatasourceResponse,
 )
 from app.services.sync.adapters import get_adapter
+from app.services.sync.services.schema_service import SchemaService
 
 router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.crud")
@@ -85,6 +86,15 @@ async def create_datasource(
         .where(Datasource.id == datasource.id)
     )
     datasource = result.scalar_one()
+    
+    # Trigger eager schema discovery (all tables + FKs)
+    try:
+        logger.info(f"Triggering schema discovery for new datasource {datasource.name}")
+        discovery_result = await SchemaService.discover_all_schemas(db, datasource)
+        logger.info(f"Discovered {discovery_result['tables_discovered']} tables, {discovery_result['foreign_keys_discovered']} FKs")
+    except Exception as e:
+        logger.warning(f"Schema discovery failed for {datasource.name}: {e}")
+        # Don't fail the create - schema can be discovered later via /relationships?refresh=true
     
     return datasource
 

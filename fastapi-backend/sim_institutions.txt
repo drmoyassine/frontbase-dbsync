@@ -1,0 +1,24 @@
+
+--- 1. Fetching Main Table Schema (institutions) ---
+GET http://127.0.0.1:8000/api/sync/datasources/75bdfec7-71f6-4613-8854-a318cb3f0016/tables/institutions/schema
+Found 2 Foreign Keys columns (or checking foreign_keys list):
+  - FK to table: 'providers' via '['provider_id']'
+  - FK to table: 'countries' via '['country_id']'
+Targeting Related Table: 'providers' (as defined in FK)
+
+--- 2. Fetching Related Table Schema (providers) to get Column Names ---
+GET http://127.0.0.1:8000/api/sync/datasources/75bdfec7-71f6-4613-8854-a318cb3f0016/tables/providers/schema
+Found related columns with EXACT casing: ['provider_name']
+
+--- 3. Simulating Data Request ---
+GET http://127.0.0.1:8000/api/sync/datasources/75bdfec7-71f6-4613-8854-a318cb3f0016/tables/institutions/data
+Select Param: *,providers(provider_name)
+Retrieved 1 records.
+
+--- 4. content of First Record (Keys Verification) ---
+Record Keys: ['id', 'institution_name', 'created_at', 'updated_at', 'created_by', 'updated_by', 'geo_lat', 'geo_long', 'institution_image', 'institution_description', 'domain_url', 'provider_id', 'Status', 'type', 'city_id', 'programs_page_url', 'social_followed', 'news_page_url', 'events_page_url', 'service_fee', 'street_address', 'year_founded', 'total_number_of_students', 'gallery_images', 'video_url', 'wp_id', 'connect_wp', 'tagline', 'city_name', 'country_name', 'super_type', 'provider_name', 'country_flag', 'logo', 'country_id', 'program_count', 'wp_id_main', 'browseai_robot_id', 'wp_url', 'applications_count', 'providers.provider_name']
+
+--- 5. Casing Mismatch Analysis ---
+✅ MATCH: 'providers.provider_name' found with value: Switz Education
+
+SUCCESS: API returns keys exactly as expected from Schema.

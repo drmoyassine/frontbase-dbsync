@@ -214,6 +214,10 @@ class ColumnSchema(BaseModel):
     nullable: bool = True
     primary_key: bool = False
     default: Optional[Any] = None
+    # Foreign key fields
+    is_foreign: bool = False
+    foreign_table: Optional[str] = None
+    foreign_column: Optional[str] = None
 
     class Config:
         extra = "ignore"
@@ -222,3 +226,5 @@ class ColumnSchema(BaseModel):
 class TableSchema(BaseModel):
     """Schema for a table/resource."""
     columns: list[ColumnSchema]
+    foreign_keys: List[Dict[str, Any]] = Field(default_factory=list)
+

@@ -8,12 +8,13 @@ import asyncio
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select as sqlalchemy_select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.sync.database import get_db
 from app.services.sync.models.datasource import Datasource
 from app.services.sync.adapters import get_adapter
+from app.services.sync.services.schema_service import SchemaService
 
 router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.data")
@@ -45,10 +46,14 @@ async def get_datasource_table_data(
     limit: int = 50,
     offset: int = 0,
     filters: Optional[str] = None,
+    sort: Optional[str] = None,
+    order: Optional[str] = "asc",
+    search: Optional[str] = None,
+    select: Optional[str] = None,  # Support for related columns: "*,programs(degree_name,type)"
     db: AsyncSession = Depends(get_db)
 ):
-    """Get data for a specific table in a datasource with pagination."""
-    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
+    """Get data for a specific table in a datasource with pagination, sorting, search, and related data."""
+    result = await db.execute(sqlalchemy_select(Datasource).where(Datasource.id == datasource_id))
     datasource = result.scalar_one_or_none()
     
     if not datasource:
@@ -64,11 +69,136 @@ async def get_datasource_table_data(
         except Exception:
             where = None
 
+    # Parse select for related columns (format: "*,table(col1,col2)" or "table.column,other_table.column")
+    related_specs = []  # List of {"table": str, "columns": [str], "local_fk": str}
+    if select:
+        import re
+        # Match patterns like "programs(degree_name,type,level)"
+        pattern = r'(\w+)\(([^)]+)\)'
+        for match in re.finditer(pattern, select):
+            related_table = match.group(1)
+            related_cols = [c.strip() for c in match.group(2).split(',')]
+            related_specs.append({
+                "table": related_table,
+                "columns": related_cols,
+                "local_fk": None  # Will be determined from schema
+            })
+
     try:
         adapter = get_adapter(datasource)
         async with adapter:
-            records = await adapter.read_records(table, limit=limit, offset=offset, where=where)
-            total = await adapter.count_records(table, where=where)
+            # If search is provided, use search_records method
+            if search:
+                records = await adapter.search_records(table, search, limit=limit, offset=offset)
+                # Estimate total for search (may not be exact)
+                total = len(records) + offset
+                if len(records) == limit:
+                    total += 1  # Indicate there may be more
+            else:
+                # Check if we need to use relations (FK enrichment)
+                if related_specs and hasattr(adapter, 'read_records_with_relations'):
+                    # Get schema from cache (single source of truth)
+                    try:
+                        schema = await SchemaService.get_cached_schema(db, datasource_id, table)
+                        logger.info(f"[FK DEBUG] Cached schema for {table}: {bool(schema)}")
+                        if not schema:
+                            logger.warning(f"No cached schema for {table}. Skipping FK enrichment.")
+                            schema = {"columns": [], "foreign_keys": []}
+                        
+                        # Build FK map from cached foreign_keys
+                        fk_map = {}
+                        fk_list = schema.get("foreign_keys", [])
+                        logger.info(f"[FK DEBUG] FKs in cache: {len(fk_list)}")
+                        for fk in fk_list:
+                            ref_table = fk.get("referred_table")
+                            if ref_table:
+                                constrained_cols = fk.get("constrained_columns", [])
+                                referred_cols = fk.get("referred_columns", [])
+                                fk_col = constrained_cols[0] if constrained_cols else None
+                                ref_col = referred_cols[0] if referred_cols else "id"
+                                if fk_col:
+                                    fk_map[ref_table] = {"fk_col": fk_col, "ref_col": ref_col}
+                                    logger.info(f"[FK DEBUG] Found FK: {table}.{fk_col} -> {ref_table}.{ref_col}")
+                        
+                        logger.info(f"[FK DEBUG] FK map keys: {list(fk_map.keys())}")
+                        logger.info(f"[FK DEBUG] Related specs requested: {[s['table'] for s in related_specs]}")
+                        
+                        # Build related_specs with FK column info
+                        enriched_specs = []
+                        for spec in related_specs:
+                            rel_table = spec["table"]
+                            if rel_table in fk_map:
+                                enriched_specs.append({
+                                    "table": rel_table,
+                                    "columns": spec["columns"],
+                                    "fk_col": fk_map[rel_table]["fk_col"],
+                                    "ref_col": fk_map[rel_table]["ref_col"]
+                                })
+                            else:
+                                logger.info(f"[FK DEBUG] No FK found for requested table: {rel_table}")
+                        
+                        logger.info(f"[FK DEBUG] Enriched specs: {enriched_specs}")
+                        
+                        if enriched_specs:
+                            # Check adapter type - Supabase uses select_param, others use related_specs
+                            adapter_name = adapter.__class__.__name__
+                            logger.info(f"[FK DEBUG] Adapter: {adapter_name}")
+                            
+                            if adapter_name == "SupabaseAdapter":
+                                # Supabase uses PostgREST select format directly
+                                records = await adapter.read_records_with_relations(
+                                    table,
+                                    select_param=select,  # Pass original select param
+                                    where=where,
+                                    limit=limit,
+                                    offset=offset,
+                                    order_by=sort,
+                                    order_direction=order
+                                )
+                            else:
+                                # Postgres/MySQL use related_specs
+                                records = await adapter.read_records_with_relations(
+                                    table,
+                                    related_specs=enriched_specs,
+                                    where=where,
+                                    limit=limit,
+                                    offset=offset,
+                                    order_by=sort,
+                                    order_direction=order
+                                )
+                            logger.info(f"[FK DEBUG] Got {len(records)} records with relations")
+                        else:
+                            # No valid FK relationships found - use regular read
+                            logger.info("[FK DEBUG] No enriched specs, using regular read")
+                            records = await adapter.read_records(
+                                table, limit=limit, offset=offset, where=where,
+                                order_by=sort, order_direction=order
+                            )
+                    except Exception as e:
+                        logger.warning(f"Failed to use relations, falling back to regular read: {e}")
+                        import traceback
+                        logger.warning(traceback.format_exc())
+                        records = await adapter.read_records(
+                            table, limit=limit, offset=offset, where=where,
+                            order_by=sort, order_direction=order
+                        )
+                else:
+                    # No related specs or adapter doesn't support relations
+                    try:
+                        records = await adapter.read_records(
+                            table, 
+                            limit=limit, 
+                            offset=offset, 
+                            where=where,
+                            order_by=sort,
+                            order_direction=order
+                        )
+                    except TypeError:
+                        # Adapter doesn't support sorting params - call without them
+                        records = await adapter.read_records(table, limit=limit, offset=offset, where=where)
+                
+                total = await adapter.count_records(table, where=where)
+            
             total = max(total, len(records) + offset)
             has_more = (offset + len(records)) < total
             return {

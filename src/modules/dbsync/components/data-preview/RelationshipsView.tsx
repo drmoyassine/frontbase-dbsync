@@ -1,7 +1,7 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { datasourcesApi, Relationship } from '../../api';
-import { Loader2, GitBranch, ArrowRight, Table, AlertCircle, Database, Link2 } from 'lucide-react';
+import { Loader2, GitBranch, ArrowRight, Table, AlertCircle, Database, Link2, RefreshCw } from 'lucide-react';
 
 interface RelationshipsViewProps {
     datasourceId: string | number;
@@ -37,10 +37,22 @@ function groupBySourceTable(relationships: Relationship[]) {
 }
 
 export const RelationshipsView: React.FC<RelationshipsViewProps> = ({ datasourceId }) => {
+    const queryClient = useQueryClient();
+
     const { data, isLoading, error } = useQuery({
         queryKey: ['relationships', datasourceId],
         queryFn: () => datasourcesApi.getRelationships(datasourceId).then(r => r.data),
         staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    });
+
+    // Mutation to refresh schema
+    const refreshMutation = useMutation({
+        mutationFn: () => datasourcesApi.getRelationships(datasourceId, true).then(r => r.data),
+        onSuccess: () => {
+            // Invalidate both relationships and schema queries
+            queryClient.invalidateQueries({ queryKey: ['relationships', datasourceId] });
+            queryClient.invalidateQueries({ queryKey: ['schema', datasourceId] });
+        },
     });
 
     if (isLoading) {
@@ -86,6 +98,17 @@ export const RelationshipsView: React.FC<RelationshipsViewProps> = ({ datasource
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => refreshMutation.mutate()}
+                        disabled={refreshMutation.isPending}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 dark:bg-violet-900/20 rounded-lg border border-violet-100 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors disabled:opacity-50"
+                        title="Re-discover schemas from database"
+                    >
+                        <RefreshCw className={`w-4 h-4 text-violet-600 dark:text-violet-400 ${refreshMutation.isPending ? 'animate-spin' : ''}`} />
+                        <span className="text-xs font-semibold text-violet-700 dark:text-violet-300">
+                            {refreshMutation.isPending ? 'Refreshing...' : 'Refresh Schema'}
+                        </span>
+                    </button>
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-100 dark:border-emerald-800">
                         <Link2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                         <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">

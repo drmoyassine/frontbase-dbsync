@@ -33,6 +33,9 @@ class TableSchemaCache(Base):
     # Schema stored as JSON list of column definitions
     columns: Mapped[List[Dict[str, Any]]] = mapped_column(JSON, nullable=False)
     
+    # Foreign keys stored as JSON list
+    foreign_keys: Mapped[List[Dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    
     # Timestamp when schema was fetched
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime, 

@@ -26,6 +26,7 @@ interface DataTablePropertiesPanelProps {
 // ============ SearchColumnSelector Component ============
 interface SearchColumnSelectorProps {
     tableName: string;
+    dataSourceId?: string;
     selectedColumns: string[];
     onColumnsChange: (columns: string[]) => void;
     columnOrder?: string[]; // To detect foreign columns
@@ -33,6 +34,7 @@ interface SearchColumnSelectorProps {
 
 const SearchColumnSelector: React.FC<SearchColumnSelectorProps> = ({
     tableName,
+    dataSourceId,
     selectedColumns,
     onColumnsChange,
     columnOrder = []
@@ -46,36 +48,59 @@ const SearchColumnSelector: React.FC<SearchColumnSelectorProps> = ({
     useEffect(() => {
         if (!tableName) return;
 
-        const allColumns: { name: string; type: string; isRelated?: boolean }[] = [];
+        const fetchColumns = async () => {
+            const allColumns: { name: string; type: string; isRelated?: boolean }[] = [];
 
-        // Get base columns from globalSchema
-        const gTable = globalSchema.tables.find((t: any) => t.table_name === tableName);
-        if (gTable && gTable.columns) {
-            gTable.columns.forEach((c: any) => {
-                allColumns.push({ name: c.column_name, type: c.data_type, isRelated: false });
-            });
-        }
-
-        // Add foreign columns from columnOrder (format: "table.column")
-        columnOrder.forEach(col => {
-            if (col.includes('.')) {
-                const [relTable, relCol] = col.split('.');
-                // Try to get type from globalSchema
-                const relTableSchema = globalSchema.tables.find((t: any) => t.table_name === relTable);
-                let colType = 'text'; // Default
-                if (relTableSchema?.columns) {
-                    const foundCol = relTableSchema.columns.find((c: any) => c.column_name === relCol);
-                    if (foundCol) colType = foundCol.data_type;
+            // Use sync API for external datasources
+            if (dataSourceId && dataSourceId !== 'backend') {
+                try {
+                    const response = await fetch(
+                        `/api/sync/datasources/${dataSourceId}/tables/${tableName}/schema`
+                    );
+                    if (response.ok) {
+                        const schemaData = await response.json();
+                        (schemaData.columns || []).forEach((col: any) => {
+                            allColumns.push({
+                                name: col.column_name || col.name,
+                                type: col.data_type || col.type || 'text',
+                                isRelated: false
+                            });
+                        });
+                    }
+                } catch (error) {
+                    console.error('[SearchColumnSelector] Failed to fetch schema:', error);
                 }
-                // Avoid duplicates
-                if (!allColumns.some(c => c.name === col)) {
-                    allColumns.push({ name: col, type: colType, isRelated: true });
+            } else {
+                // Use globalSchema for backend datasource
+                const gTable = globalSchema.tables.find((t: any) => t.table_name === tableName);
+                if (gTable && gTable.columns) {
+                    gTable.columns.forEach((c: any) => {
+                        allColumns.push({ name: c.column_name, type: c.data_type, isRelated: false });
+                    });
                 }
             }
-        });
 
-        setColumns(allColumns);
-    }, [tableName, globalSchema, columnOrder]);
+            // Add foreign columns from columnOrder (format: "table.column")
+            columnOrder.forEach(col => {
+                if (col.includes('.')) {
+                    const [relTable, relCol] = col.split('.');
+                    const relTableSchema = globalSchema.tables.find((t: any) => t.table_name === relTable);
+                    let colType = 'text';
+                    if (relTableSchema?.columns) {
+                        const foundCol = relTableSchema.columns.find((c: any) => c.column_name === relCol);
+                        if (foundCol) colType = foundCol.data_type;
+                    }
+                    if (!allColumns.some(c => c.name === col)) {
+                        allColumns.push({ name: col, type: colType, isRelated: true });
+                    }
+                }
+            });
+
+            setColumns(allColumns);
+        };
+
+        fetchColumns();
+    }, [tableName, dataSourceId, globalSchema, columnOrder]);
 
     const toggleColumn = (columnName: string) => {
         if (selectedColumns.includes(columnName)) {
@@ -243,6 +268,7 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
     binding,
     onBindingUpdate
 }) => {
+
     const defaultBinding: ComponentDataBinding = {
         componentId: componentId,
         dataSourceId: '',
@@ -331,6 +357,7 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                             {binding.filtering?.searchEnabled && (
                                 <SearchColumnSelector
                                     tableName={binding.tableName}
+                                    dataSourceId={binding.dataSourceId}
                                     selectedColumns={binding.searchColumns || []}
                                     onColumnsChange={(columns) => updateBinding({ searchColumns: columns.length > 0 ? columns : undefined })}
                                     columnOrder={binding.columnOrder}

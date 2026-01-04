@@ -48,22 +48,40 @@ export const DataTableCell: React.FC<DataTableCellProps> = ({ value, columnName,
     // Handle related columns (e.g., "providers.provider_name")
     let actualValue = value;
     if (row && columnName.includes('.')) {
-        const [tableName, colName] = columnName.split('.');
-        let relationData = row[tableName];
-
-        // Fallback: Case-insensitive lookup if direct access fails
-        if (!relationData) {
-            const lowerTableName = tableName.toLowerCase();
-            const matchingKey = Object.keys(row).find(k => k.toLowerCase() === lowerTableName);
-            if (matchingKey) {
-                relationData = row[matchingKey];
-            }
+        // Debug logging for related columns
+        // Debug logging for related columns - Log ALL dotted columns for debugging
+        if (columnName.includes('.')) {
+            console.log(`[DataTableCell] Accessing ${columnName}`, {
+                valueProp: value,
+                flattenedValue: row[columnName],
+                nestedValue: row[columnName.split('.')[0]]?.[columnName.split('.')[1]],
+                rowKeys: Object.keys(row).filter(k => k.includes('.')), // Only show relevant keys
+                row: row
+            });
         }
 
-        if (Array.isArray(relationData)) {
-            actualValue = relationData[0]?.[colName];
+        // First, try flattened key format (sync API returns this): row["programs.degree_name"]
+        if (row[columnName] !== undefined) {
+            actualValue = row[columnName];
         } else {
-            actualValue = relationData?.[colName];
+            // Fallback: try nested object format (legacy API): row.programs.degree_name
+            const [tableName, colName] = columnName.split('.');
+            let relationData = row[tableName];
+
+            // Case-insensitive lookup if direct access fails
+            if (!relationData) {
+                const lowerTableName = tableName.toLowerCase();
+                const matchingKey = Object.keys(row).find(k => k.toLowerCase() === lowerTableName);
+                if (matchingKey) {
+                    relationData = row[matchingKey];
+                }
+            }
+
+            if (Array.isArray(relationData)) {
+                actualValue = relationData[0]?.[colName];
+            } else {
+                actualValue = relationData?.[colName];
+            }
         }
     }
 

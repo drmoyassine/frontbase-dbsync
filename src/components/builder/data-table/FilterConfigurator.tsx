@@ -209,21 +209,53 @@ export const FilterConfigurator: React.FC<FilterConfiguratorProps> = ({
     const [schema, setSchema] = useState<any>(null);
     const [loading, setLoading] = useState(false);
 
-    // Load schema to get available columns
+    // Load schema - use datasource-specific API when dataSourceId is available
     useEffect(() => {
-        if (tableName) {
+        if (!tableName) return;
+
+        const fetchSchema = async () => {
             setLoading(true);
-            loadTableSchema(tableName)
-                .then((result) => {
+            try {
+                // Use sync API with dataSourceId if available
+                if (dataSourceId && dataSourceId !== 'backend') {
+                    const response = await fetch(
+                        `/api/sync/datasources/${dataSourceId}/tables/${tableName}/schema`
+                    );
+                    if (response.ok) {
+                        const schemaData = await response.json();
+                        // Transform to expected format
+                        const transformedSchema = {
+                            columns: (schemaData.columns || []).map((col: any) => ({
+                                name: col.column_name || col.name,
+                                type: col.data_type || col.type,
+                                nullable: col.is_nullable === 'YES' || col.nullable,
+                                isPrimaryKey: col.is_primary || col.isPrimaryKey,
+                                foreignKey: (col.is_foreign || col.isForeign) && (col.foreign_table || col.foreignTable) ? {
+                                    table: col.foreign_table || col.foreignTable,
+                                    column: col.foreign_column || col.foreignColumn
+                                } : undefined
+                            }))
+                        };
+                        setSchema(transformedSchema);
+                    } else {
+                        console.error('[FilterConfigurator] Failed to fetch schema from sync API');
+                        setSchema(null);
+                    }
+                } else {
+                    // Fallback to store method for legacy datasources
+                    const result = await loadTableSchema(tableName);
                     setSchema(result);
-                    setLoading(false);
-                })
-                .catch(() => {
-                    setSchema(null);
-                    setLoading(false);
-                });
-        }
-    }, [tableName, loadTableSchema]);
+                }
+            } catch (error) {
+                console.error('[FilterConfigurator] Schema load failed:', error);
+                setSchema(null);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchSchema();
+    }, [tableName, dataSourceId, loadTableSchema]);
 
     // Build columns list including related columns from columnOrder
     const columns: { name: string; type: string; isRelated?: boolean }[] = [];

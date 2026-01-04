@@ -361,32 +361,54 @@ class SupabaseAdapter(SQLAdapter):
                             rel_schema = await self.get_schema(t_name)
                             rel_cols = [c["name"] for c in rel_schema["columns"] if any(t in str(c.get("type")).lower() for t in ["char", "text", "string", "varchar"])]
                             
-                            # Add related columns to OR: related.col.ilike.*q*
-                            # for rc in rel_cols[:1]: # Limit to 1 per relation for safety debugging
-                            #     or_conds.append(f"{t_name}.{rc}.ilike.*{search}*")
-                            pass
+                            # 2-Step Search Strategy:
+                            # 1. Find IDs in related table matching search
+                            # 2. Add fk_col.in.(ids) to main OR
+                            
+                            # Find FK column in main table schema pointing to this related table
+                            fk_col = None
+                            if schema and "foreign_keys" in schema:
+                                for fk in schema["foreign_keys"]:
+                                    if fk["target_table"] == t_name:
+                                        fk_col = fk["column"]
+                                        break
+                            
+                            if fk_col and rel_cols:
+                                # Search related table for matching IDs
+                                # We need to limit this to avoid huge query params (e.g. max 100 ids)
+                                rel_or = [f"{rc}.ilike.*{search}*" for rc in rel_cols[:5]]
+                                rel_params = {
+                                    "select": "id", # Assuming related table has 'id'
+                                    "or": f"({','.join(rel_or)})",
+                                    "limit": "50"
+                                }
+                                try:
+                                    # Call raw client to avoid recursion/overhead
+                                    rel_res = await self._client.get(f"/rest/v1/{t_name}", params=rel_params)
+                                    if rel_res.status_code == 200:
+                                        rel_ids = [str(r["id"]) for r in rel_res.json() if "id" in r]
+                                        if rel_ids:
+                                            or_conds.append(f"{fk_col}.in.({','.join(rel_ids)})")
+                                except Exception:
+                                    pass
                         except Exception:
                             continue
 
                 if or_conds:
-                     # Force override for debugging
-                     params["or"] = f"({','.join(or_conds)})"
-                     # logger.info(f"DEBUG OR: {params['or']}")
+                    params["or"] = f"({','.join(or_conds)})"
             except Exception:
                 pass
         
+        # PostgREST support for related table sorting: table(col).asc
         if order_by:
-            # PostgREST support for related table sorting: table(col).asc
-            if "." in order_by:
+             if "." in order_by:
                 parts = order_by.split(".")
                 if len(parts) >= 2:
-                    # Handle "countries.country" -> "countries(country)"
-                    # Note: this only works if relation is unambiguous and PostgREST supports it (v9+)
                     table_part = parts[0]
                     col_part = ".".join(parts[1:]) 
                     direction = "desc" if order_direction and order_direction.lower() == "desc" else "asc"
                     params["order"] = f"{table_part}({col_part}).{direction}"
-            else:
+             else:
                 direction = ".desc" if order_direction and order_direction.lower() == "desc" else ".asc"
                 params["order"] = f"{order_by}{direction}"
         
@@ -396,6 +418,7 @@ class SupabaseAdapter(SQLAdapter):
         response = await self._client.get(f"/rest/v1/{table}", params=params)
              
         if response.status_code >= 400:
+             # Retain improved error logging for safety
              raise ValueError(f"Supabase API Read Error: {response.text} - Params: {params}")
              
         response.raise_for_status()
@@ -477,9 +500,29 @@ class SupabaseAdapter(SQLAdapter):
                         try:
                             rel_schema = await self.get_schema(t_name)
                             rel_cols = [c["name"] for c in rel_schema["columns"] if any(t in str(c.get("type")).lower() for t in ["char", "text", "string", "varchar"])]
-                            # for rc in rel_cols[:1]:
-                            #    or_conds.append(f"{t_name}.{rc}.ilike.*{search}*")
-                            pass
+                            # 2-Step Search Strategy (Duplicate)
+                            fk_col = None
+                            if schema and "foreign_keys" in schema:
+                                for fk in schema["foreign_keys"]:
+                                    if fk["target_table"] == t_name:
+                                        fk_col = fk["column"]
+                                        break
+                            
+                            if fk_col and rel_cols:
+                                rel_or = [f"{rc}.ilike.*{search}*" for rc in rel_cols[:5]]
+                                rel_params = {
+                                    "select": "id",
+                                    "or": f"({','.join(rel_or)})",
+                                    "limit": "50"
+                                }
+                                try:
+                                    rel_res = await self._client.get(f"/rest/v1/{t_name}", params=rel_params)
+                                    if rel_res.status_code == 200:
+                                        rel_ids = [str(r["id"]) for r in rel_res.json() if "id" in r]
+                                        if rel_ids:
+                                            or_conds.append(f"{fk_col}.in.({','.join(rel_ids)})")
+                                except Exception:
+                                    pass
                         except Exception:
                             continue
 

@@ -88,7 +88,13 @@ async def get_datasource_table_data(
         adapter = get_adapter(datasource)
         async with adapter:
             # If search is provided, use search_records method
-            if search:
+            # If search is provided, use search_records method unless we have relations logic
+            use_generic_search = bool(search)
+            if search and related_specs and hasattr(adapter, 'read_records_with_relations'):
+                # We want to use read_records_with_relations to get enriched data AND filter by search
+                use_generic_search = False
+
+            if use_generic_search:
                 records = await adapter.search_records(table, search, limit=limit, offset=offset)
                 # Estimate total for search (may not be exact)
                 total = len(records) + offset
@@ -153,7 +159,8 @@ async def get_datasource_table_data(
                                     limit=limit,
                                     offset=offset,
                                     order_by=sort,
-                                    order_direction=order
+                                    order_direction=order,
+                                    search=search
                                 )
                             else:
                                 # Postgres/MySQL use related_specs
@@ -164,7 +171,8 @@ async def get_datasource_table_data(
                                     limit=limit,
                                     offset=offset,
                                     order_by=sort,
-                                    order_direction=order
+                                    order_direction=order,
+                                    search=search
                                 )
                             logger.info(f"[FK DEBUG] Got {len(records)} records with relations")
                         else:
@@ -174,14 +182,17 @@ async def get_datasource_table_data(
                                 table, limit=limit, offset=offset, where=where,
                                 order_by=sort, order_direction=order
                             )
+
                     except Exception as e:
-                        logger.warning(f"Failed to use relations, falling back to regular read: {e}")
+                        logger.error(f"Failed to use relations: {e}")
                         import traceback
-                        logger.warning(traceback.format_exc())
-                        records = await adapter.read_records(
-                            table, limit=limit, offset=offset, where=where,
-                            order_by=sort, order_direction=order
-                        )
+                        logger.error(traceback.format_exc())
+                        raise e # Force crash to see trace
+                        # records = await adapter.read_records(
+                        #     table, limit=limit, offset=offset, where=where,
+                        #     order_by=sort, order_direction=order,
+                        #     search=search
+                        # )
                 else:
                     # No related specs or adapter doesn't support relations
                     try:
@@ -197,7 +208,16 @@ async def get_datasource_table_data(
                         # Adapter doesn't support sorting params - call without them
                         records = await adapter.read_records(table, limit=limit, offset=offset, where=where)
                 
-                total = await adapter.count_records(table, where=where)
+                try:
+                    # Try passing related_specs if available (supported by Postgres/Supabase adapters)
+                    total = await adapter.count_records(
+                        table, 
+                        where=where, 
+                        related_specs=enriched_specs if enriched_specs else None
+                    )
+                except TypeError:
+                    # Adapter doesn't support related_specs argument
+                    total = await adapter.count_records(table, where=where)
             
             total = max(total, len(records) + offset)
             has_more = (offset + len(records)) < total
@@ -210,7 +230,9 @@ async def get_datasource_table_data(
                 "timestamp_utc": datetime.utcnow().isoformat() + "Z"
             }
     except Exception as e:
+        import traceback
         logger.error(f"Error fetching data for {datasource_id} table {table}: {str(e)}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to fetch sample data: {str(e)}")
 
 

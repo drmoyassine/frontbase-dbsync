@@ -237,6 +237,7 @@ class PostgresAdapter(SQLAdapter):
         offset: int = 0,
         order_by: Optional[str] = None,
         order_direction: Optional[str] = "asc",
+        search: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Read records with LEFT JOINs for related tables.
@@ -245,10 +246,13 @@ class PostgresAdapter(SQLAdapter):
         # Build SELECT columns: main.*, related.col AS "related.col"
         select_parts = [f'"{table}".*']
         join_parts = []
+        alias_map = {}  # Map table name to alias (e.g., 'programs' -> 'rel_0')
         
         for i, spec in enumerate(related_specs):
             rel_table = spec["table"]
             rel_alias = f"rel_{i}"
+            alias_map[rel_table] = rel_alias
+            
             fk_col = spec.get("fk_col", f"{rel_table}_id")  # FK column in main table
             ref_col = spec.get("ref_col", "id")  # Reference column in related table (usually id)
             
@@ -266,15 +270,93 @@ class PostgresAdapter(SQLAdapter):
         
         query = f'SELECT {select_clause} FROM "{table}" {join_clause}'
         
+        # Pre-process WHERE clause to handle dotted keys (related tables)
+        # We manually map "table.column" to 'alias"."column' and pass column_prefix="" to _build_where_clause
+        processed_where = []
+        if where:
+            self.logger.info(f"DEBUG: related_specs: {[s['table'] for s in related_specs]}")
+            self.logger.info(f"DEBUG: alias_map: {alias_map}")
+            self.logger.info(f"DEBUG: Original where: {where}")
+
+            # Normalize to list
+            filter_list = where if isinstance(where, list) else [{"field": k, "operator": "==", "value": v} for k, v in where.items()]
+            
+            for f in filter_list:
+                # Create a copy to avoid mutating original
+                new_f = f.copy()
+                field = new_f.get("field")
+                if not field: continue
+                
+                if "." in field:
+                    parts = field.split(".")
+                    rel_t = parts[0]
+                    col = parts[1]
+                    
+                    if rel_t in alias_map:
+                        # Use quote hacking to make _build_where_clause generate "alias"."column"
+                        # It generates "{prefix}"{field}"". We set prefix="" and field='alias"."col'
+                        new_f["field"] = f'{alias_map[rel_t]}"."{col}'
+                        self.logger.info(f"DEBUG: Mapped {field} to {new_f['field']}")
+                    else:
+                        # Unknown relation or just a dot in column name? 
+                        # Fallback to quoting the whole thing or as is?
+                        # Assume it might be a json path or similar, but for now stick to simple quoting
+                        new_f["field"] = field
+                        self.logger.info(f"DEBUG: Failed to map {field}. rel_t '{rel_t}' not in alias_map")
+                else:
+                    # Main table column
+                    new_f["field"] = f'{table}"."{field}' 
+                
+                processed_where.append(new_f)
+            self.logger.info(f"DEBUG: Processed where: {processed_where}")
+
         # Add WHERE clause
-        where_clause, params = self._build_where_clause(where, use_index=True, column_prefix=f'"{table}".')
+        where_clause, params = self._build_where_clause(processed_where, use_index=True, column_prefix="")
+        
+        # Add Search Clause (OR across all columns)
+        if search:
+            # Fetch schema to get columns
+            schema = await self.get_schema(table) # Use cached or fresh
+            search_cols = [col["name"] for col in schema["columns"]]
+            
+            if search_cols:
+                search_conds = []
+                # params has len items. Next param is len+1.
+                current_param_idx = len(params) 
+                
+                for col in search_cols:
+                    current_param_idx += 1
+                    # Search main table columns
+                    search_conds.append(f'CAST("{table}"."{col}" AS TEXT) LIKE ${current_param_idx}')
+                    params.append(f"%{search}%")
+                
+                search_chunk = "(" + " OR ".join(search_conds) + ")"
+                
+                if where_clause:
+                    # Append to existing WHERE
+                    where_clause += f" AND {search_chunk}"
+                else:
+                    where_clause = f" WHERE {search_chunk}"
+
         if where_clause:
             query += where_clause
         
-        # Add ORDER BY
+        # Add ORDER BY with correct alias mapping
         if order_by:
             direction = "DESC" if order_direction and order_direction.lower() == "desc" else "ASC"
-            query += f' ORDER BY "{table}"."{order_by}" {direction}'
+            
+            if "." in order_by:
+                parts = order_by.split(".")
+                rel_t = parts[0]
+                col = parts[1]
+                if rel_t in alias_map:
+                    order_expr = f'"{alias_map[rel_t]}"."{col}"'
+                else:
+                    order_expr = f'"{order_by}"'
+            else:
+                order_expr = f'"{table}"."{order_by}"'
+                
+            query += f' ORDER BY {order_expr} {direction}'
         
         query += f" LIMIT {limit} OFFSET {offset}"
         
@@ -344,11 +426,54 @@ class PostgresAdapter(SQLAdapter):
         self,
         table: str,
         where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
+        related_specs: Optional[List[Dict[str, Any]]] = None,
     ) -> int:
-        """Count records in table."""
-        query = f'SELECT COUNT(*) FROM "{table}"'
+        """Count records in table, optionally with related table joins for filtering."""
+        join_clause = ""
+        alias_map = {}
         
-        where_clause, params = self._build_where_clause(where, use_index=True)
+        if related_specs:
+            join_parts = []
+            for i, spec in enumerate(related_specs):
+                rel_table = spec["table"]
+                rel_alias = f"rel_{i}"
+                alias_map[rel_table] = rel_alias
+                fk_col = spec.get("fk_col", f"{rel_table}_id")
+                ref_col = spec.get("ref_col", "id")
+                join_parts.append(
+                    f'LEFT JOIN "{rel_table}" {rel_alias} ON "{table}"."{fk_col}" = {rel_alias}."{ref_col}"'
+                )
+            join_clause = " ".join(join_parts)
+
+        query = f'SELECT COUNT(*) FROM "{table}" {join_clause}'
+        
+        # Process WHERE clause with alias mapping
+        processed_where = []
+        if where:
+            filter_list = where if isinstance(where, list) else [{"field": k, "operator": "==", "value": v} for k, v in where.items()]
+            
+            for f in filter_list:
+                new_f = f.copy()
+                field = new_f.get("field")
+                if not field: continue
+                
+                if "." in field:
+                    parts = field.split(".")
+                    rel_t = parts[0]
+                    col = parts[1]
+                    if rel_t in alias_map:
+                        new_f["field"] = f'{alias_map[rel_t]}"."{col}'
+                    else:
+                        new_f["field"] = field
+                else:
+                    new_f["field"] = f'{table}"."{field}'
+                processed_where.append(new_f)
+            
+            # Use column_prefix="" because fields are already fully qualified
+            where_clause, params = self._build_where_clause(processed_where, use_index=True, column_prefix="")
+        else:
+            where_clause, params = ("", [])
+            
         query += where_clause
         
         async with self._pool.acquire() as conn:
@@ -377,7 +502,8 @@ class PostgresAdapter(SQLAdapter):
         self,
         table: str,
         query: str,
-        limit: int = 100
+        limit: int = 100,
+        offset: int = 0
     ) -> List[Dict[str, Any]]:
         """Search across all columns for matching records."""
         # Get schema to know which columns to search
@@ -395,7 +521,7 @@ class PostgresAdapter(SQLAdapter):
             params.append(f"%{query}%")
         
         where_clause = " OR ".join(conditions)
-        query_sql = f'SELECT * FROM "{table}" WHERE {where_clause} LIMIT {limit}'
+        query_sql = f'SELECT * FROM "{table}" WHERE {where_clause} LIMIT {limit} OFFSET {offset}'
         
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(query_sql, *params)

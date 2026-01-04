@@ -245,6 +245,7 @@ class SupabaseAdapter(SQLAdapter):
         offset: int = 0,
         order_by: Optional[str] = None,
         order_direction: Optional[str] = "asc",
+        search: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Read records with related table data using PostgREST nested select.
@@ -334,10 +335,11 @@ class SupabaseAdapter(SQLAdapter):
         self,
         table: str,
         where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
+        related_specs: Optional[List[Dict[str, Any]]] = None,
     ) -> int:
         """Count records - uses DB if available, else REST API."""
         if self._has_db_connection and self._postgres_adapter:
-            return await self._postgres_adapter.count_records(table, where)
+            return await self._postgres_adapter.count_records(table, where, related_specs)
         
         # Use REST API with count header
         params = {"select": "*", "head": "true"}

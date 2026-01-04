@@ -1,0 +1,7 @@
+Connecting to 31.187.76.205:3306 / site_19315 to verify wp_posts access...
+Inspecting table wp_posts...
+
+--- Schema Verification for wp_posts ---
+Column count: 23
+Found target columns: ['ID', 'post_date', 'post_content', 'post_title']
+SUCCESS: Essential columns present.

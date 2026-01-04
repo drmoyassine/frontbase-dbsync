@@ -1,15 +1,31 @@
---- Starting Debug Simulation ---
-INFO:debug_simulation:DEBUG: related_specs: ['providers']
-Testing read_records_with_relations logic locally...
-Test Inputs:
-Table: institutions
-Specs: [{'table': 'providers', 'columns': ['provider_name'], 'fk_col': 'provider_id', 'ref_col': 'id'}]
-Where: [{'field': 'providers.provider_name', 'operator': '==', 'value': 'Applyboard'}]
-
-[QUERY EXECUTED]: SELECT "institutions".*, rel_0."provider_name" AS "providers.provider_name" FROM "institutions" LEFT JOIN "providers" rel_0 ON "institutions"."provider_id" = rel_0."id" WHERE rel_0"."provider_name == Applyboard LIMIT 100 OFFSET 0
-
-Success!
-INFO:debug_simulation:DEBUG: alias_map: {'providers': 'rel_0'}
-INFO:debug_simulation:DEBUG: Original where: [{'field': 'providers.provider_name', 'operator': '==', 'value': 'Applyboard'}]
-INFO:debug_simulation:DEBUG: Mapped providers.provider_name to rel_0"."provider_name
-INFO:debug_simulation:DEBUG: Processed where: [{'field': 'rel_0"."provider_name', 'operator': '==', 'value': 'Applyboard'}]
+Connecting to 31.187.76.205:3306 / site_19315...
+Inspecting table wp_mylisting_locations...
+Querying KEY_COLUMN_USAGE...
+Found 1 FKs:
+('listing_id', 'wp_posts', 'ID')
+Tables found: 267
+wp_posts FOUND.
+wp_posts Columns:
+ID
+post_author
+post_date
+post_date_gmt
+post_content
+post_title
+post_excerpt
+post_status
+comment_status
+ping_status
+post_password
+post_name
+to_ping
+pinged
+post_modified
+post_modified_gmt
+post_content_filtered
+post_parent
+guid
+menu_order
+post_type
+post_mime_type
+comment_count

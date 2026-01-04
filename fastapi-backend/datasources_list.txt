@@ -1,0 +1,8 @@
+Checking app.db...
+Error: no such table: datasources
+Checking unified.db...
+('75bdfec7-71f6-4613-8854-a318cb3f0016', 'SupaDB Local', 'SUPABASE')
+('ea1908bf-1aae-4acf-bbfe-aa99917eebfd', 'USA WP DB', 'MYSQL')
+('150828e2-3aac-4362-8471-c18faae305d9', 'SupaPostgres', 'POSTGRES')
+('4566ca0d-0ec3-4aa3-bb76-78bc9a4f4cf8', 'SupaAPI', 'SUPABASE')
+('8e2405d5-cc83-4675-94d4-dee13c574979', 'USA WP API', 'WORDPRESS_REST')

@@ -254,7 +254,32 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
             const column = orderedColumns.find(c => c.name === columnName);
             if (column?.foreignKey && !relatedSchemas.has(column.foreignKey.table)) {
                 try {
-                    const relatedSchema = await loadTableSchema(column.foreignKey.table);
+                    // Logic to fetch related schema - similar to initial schema fetch
+                    let relatedSchema = null;
+                    if (dataSourceId && dataSourceId !== 'backend') {
+                        const response = await fetch(
+                            `/api/sync/datasources/${dataSourceId}/tables/${column.foreignKey.table}/schema`
+                        );
+                        if (response.ok) {
+                            const schemaData = await response.json();
+                            // Transform
+                            relatedSchema = {
+                                columns: (schemaData.columns || []).map((col: any) => ({
+                                    name: col.column_name || col.name,
+                                    type: col.data_type || col.type,
+                                    nullable: col.is_nullable === 'YES' || col.nullable,
+                                    isPrimaryKey: col.is_primary || col.isPrimaryKey,
+                                    foreignKey: (col.is_foreign || col.isForeign) && (col.foreign_table || col.foreignTable) ? {
+                                        table: col.foreign_table || col.foreignTable,
+                                        column: col.foreign_column || col.foreignColumn
+                                    } : undefined
+                                }))
+                            };
+                        }
+                    } else {
+                        relatedSchema = await loadTableSchema(column.foreignKey.table);
+                    }
+
                     if (relatedSchema) {
                         setRelatedSchemas(prev => new Map(prev).set(column.foreignKey!.table, relatedSchema));
                     }

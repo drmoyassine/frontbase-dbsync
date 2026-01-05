@@ -13,10 +13,12 @@ export interface BuilderSlice {
     draggedComponentId: string | null;
     editingComponentId: string | null;
     copiedComponent: ComponentData | null;
+    focusedField: { componentId: string; fieldName: string } | null;
 
     setSelectedComponentId: (id: string | null) => void;
     setDraggedComponentId: (componentId: string | null) => void;
     setEditingComponentId: (id: string | null) => void;
+    setFocusedField: (field: { componentId: string; fieldName: string } | null) => void;
 
     moveComponent: (pageId: string, componentId: string | null, component: ComponentData, targetIndex: number, parentId?: string, sourceParentId?: string) => void;
     updateComponentText: (componentId: string, textProperty: string, text: string) => void;
@@ -33,10 +35,12 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
     draggedComponentId: null,
     editingComponentId: null,
     copiedComponent: null,
+    focusedField: null,
 
     setSelectedComponentId: (id) => set({ selectedComponentId: id }),
     setDraggedComponentId: (id) => set({ draggedComponentId: id }),
     setEditingComponentId: (id) => set({ editingComponentId: id }),
+    setFocusedField: (field) => set({ focusedField: field }),
 
     moveComponent: (pageId, componentId, component, targetIndex, parentId, sourceParentId) => {
         set((state) => {

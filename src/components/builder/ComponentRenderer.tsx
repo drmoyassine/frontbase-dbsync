@@ -44,6 +44,10 @@ import {
   GridRenderer
 } from './renderers/DataRenderers';
 
+// JSON Forms Smart Blocks
+import { Form } from '@/components/jsonforms/Form';
+import { InfoList } from '@/components/jsonforms/InfoList';
+
 interface ComponentRendererProps {
   component: {
     id?: string;
@@ -68,7 +72,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   onDoubleClick
 }) => {
   const { id, type, props, styles = {}, className = '' } = component;
-  const { currentViewport } = useBuilderStore();
+  const { currentViewport, setFocusedField } = useBuilderStore();
   const { createEditableText } = useComponentTextEditor(id);
 
   // Convert stylesData to CSS styles (new system)
@@ -266,6 +270,72 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     case 'KPICard': return <KPICardRenderer {...rendererProps} />;
     case 'Chart': return <ChartRenderer {...rendererProps} />;
     case 'Grid': return <GridRenderer {...rendererProps} />;
+
+    // JSON Forms Smart Blocks
+    case 'Form':
+      return (
+        <Form
+          dataSourceId={effectiveProps.dataSourceId}
+          tableName={effectiveProps.tableName}
+          recordId={effectiveProps.recordId}
+          title={effectiveProps.title}
+          excludeColumns={effectiveProps.excludeColumns}
+          readOnlyColumns={effectiveProps.readOnlyColumns}
+          showCard={effectiveProps.showCard ?? true}
+          className={combinedClassName}
+          style={inlineStyles}
+          fieldOverrides={effectiveProps.fieldOverrides}
+          fieldOrder={effectiveProps.fieldOrder}
+          isBuilderMode={true}
+          onFieldOverrideChange={(fieldName: string, updates: any) => {
+            if (id) {
+              const store = useBuilderStore.getState();
+              const currentOverrides = effectiveProps.fieldOverrides || {};
+              store.updateComponent(id, {
+                fieldOverrides: {
+                  ...currentOverrides,
+                  [fieldName]: {
+                    ...currentOverrides[fieldName],
+                    ...updates
+                  }
+                }
+              });
+            }
+          }}
+        />
+      );
+    case 'InfoList':
+      return (
+        <InfoList
+          dataSourceId={effectiveProps.dataSourceId}
+          tableName={effectiveProps.tableName}
+          recordId={effectiveProps.recordId}
+          title={effectiveProps.title}
+          excludeColumns={effectiveProps.excludeColumns}
+          showCard={effectiveProps.showCard ?? true}
+          className={combinedClassName}
+          style={inlineStyles}
+          fieldOverrides={effectiveProps.fieldOverrides}
+          layout={effectiveProps.layout || '2'}
+          fieldSpacing={effectiveProps.fieldSpacing || 'normal'}
+          isBuilderMode={true}
+          onFieldOverrideChange={(fieldName: string, updates: any) => {
+            if (id) {
+              const store = useBuilderStore.getState();
+              const currentOverrides = effectiveProps.fieldOverrides || {};
+              store.updateComponent(id, {
+                fieldOverrides: {
+                  ...currentOverrides,
+                  [fieldName]: {
+                    ...currentOverrides[fieldName],
+                    ...updates
+                  }
+                }
+              });
+            }
+          }}
+        />
+      );
 
     default:
       return (

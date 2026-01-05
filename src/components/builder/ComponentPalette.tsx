@@ -14,7 +14,8 @@ import {
   CheckSquare,
   Image,
   Calendar,
-  Globe
+  Globe,
+  FileText
 } from 'lucide-react';
 
 const componentCategories = {
@@ -49,19 +50,14 @@ const componentCategories = {
     icon: Table,
     label: 'Data',
     components: [
-      // Record Components separator (RENAMED from Form Components)
+      // Record Components separator
       { name: '_separator_record', icon: CheckSquare, description: 'Record Components', section: 'separator' },
 
-      // Form/Record Components
-      { name: 'Form', icon: CheckSquare, description: 'Form container', section: 'forms' },
-      { name: 'Input', icon: Type, description: 'Text input', section: 'forms' },
-      { name: 'Textarea', icon: Type, description: 'Multi-line text', section: 'forms' },
-      { name: 'Select', icon: CheckSquare, description: 'Dropdown select', section: 'forms' },
-      { name: 'Checkbox', icon: CheckSquare, description: 'Checkbox input', section: 'forms' },
-      { name: 'Switch', icon: CheckSquare, description: 'Toggle switch', section: 'forms' },
-      { name: 'DatePicker', icon: Calendar, description: 'Date selection', section: 'forms' },
+      // Form/Record Components (Smart Blocks)
+      { name: 'Form', icon: FileText, description: 'Schema-driven form', section: 'forms' },
+      { name: 'InfoList', icon: CheckSquare, description: 'Read-only record display', section: 'forms' },
 
-      // Lists Components separator (RENAMED from Single Record)
+      // Lists Components separator
       { name: '_separator_lists', icon: Table, description: 'Lists Components', section: 'separator' },
 
       // Data/Lists Components

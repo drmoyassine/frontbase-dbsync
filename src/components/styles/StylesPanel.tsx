@@ -156,16 +156,20 @@ export const StylesPanel: React.FC<StylesPanelProps> = ({
                         const CategoryIcon = CATEGORY_ICONS[category];
                         return (
                             <AccordionItem key={category} value={category}>
-                                <AccordionTrigger className="text-sm font-semibold">
+                                <AccordionTrigger
+                                    className="text-sm font-semibold"
+                                    actions={
+                                        <CategoryPropertySelector
+                                            category={category}
+                                            excludeProperties={styles.activeProperties}
+                                            onSelect={(propId) => addProperty(propId, category)}
+                                        />
+                                    }
+                                >
                                     <span className="flex items-center gap-2 flex-1">
                                         {CategoryIcon && <CategoryIcon className="h-4 w-4 text-muted-foreground" />}
                                         {category} ({propertyIds.length})
                                     </span>
-                                    <CategoryPropertySelector
-                                        category={category}
-                                        excludeProperties={styles.activeProperties}
-                                        onSelect={(propId) => addProperty(propId, category)}
-                                    />
                                 </AccordionTrigger>
                                 <AccordionContent>
                                     <div className="space-y-2 pt-2">

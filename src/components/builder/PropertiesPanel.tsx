@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DataBindingModal } from './data-binding/DataBindingModal';
 import { DataTablePropertiesPanel } from '@/components/builder/data-table/DataTablePropertiesPanel';
+import { FormPropertiesPanel } from './form/FormPropertiesPanel';
 
 // Helper to find component recursively
 const findComponent = (components: any[], id: string): any => {
@@ -32,6 +33,8 @@ const findComponent = (components: any[], id: string): any => {
   }
   return null;
 };
+
+
 
 export const PropertiesPanel = () => {
   const {
@@ -564,6 +567,26 @@ export const PropertiesPanel = () => {
               setComponentBinding(selectedComponentId!, binding);
               updateComponentProp('binding', binding);
             }}
+          />
+        );
+
+      case 'Form':
+        return (
+          <FormPropertiesPanel
+            componentId={selectedComponentId}
+            props={props}
+            updateComponentProp={updateComponentProp}
+            type="Form"
+          />
+        );
+
+      case 'InfoList':
+        return (
+          <FormPropertiesPanel
+            componentId={selectedComponentId}
+            props={props}
+            updateComponentProp={updateComponentProp}
+            type="InfoList"
           />
         );
 

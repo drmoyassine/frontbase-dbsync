@@ -55,6 +55,8 @@ encryption_key.txt
 # Database Files (User-Specific Data)
 # =============================================================================
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 server/data/

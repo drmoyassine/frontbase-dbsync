@@ -4,7 +4,8 @@ import { DndContext, DragEndEvent, closestCenter } from '@dnd-kit/core';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Eye, EyeOff } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Eye, EyeOff, Search } from 'lucide-react';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { DraggableColumnItem, Column } from './DraggableColumnItem';
 
@@ -30,11 +31,26 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
     const { loadTableSchema } = useDataBindingStore();
     const [schema, setSchema] = useState<any>(null);
     const [loading, setLoading] = useState(false);
+    const [search, setSearch] = useState('');
     const [orderedColumns, setOrderedColumns] = useState<Column[]>([]);
     const [expandedFKs, setExpandedFKs] = useState<Set<string>>(new Set());
     const [relatedSchemas, setRelatedSchemas] = useState<Map<string, any>>(new Map());
 
-    // Load schema - use datasource-specific API when dataSourceId is available
+    // Order columns based on columnOrder
+    useEffect(() => {
+        // This useEffect is now redundant as we have the main ordering logic below.
+        // Keeping it empty or removing it would be best, but to minimize diff noise we'll check logic below.
+    }, [schema, columnOrder, additionalColumns]);
+
+    // Filter columns based on search
+    const filteredColumns = orderedColumns.filter(col => {
+        if (!search) return true;
+        const override = columnOverrides[col.name];
+        const label = override?.label || col.name;
+        return label.toLowerCase().includes(search.toLowerCase()) ||
+            col.name.toLowerCase().includes(search.toLowerCase());
+    });
+    // Load schema
     useEffect(() => {
         if (!tableName) return;
 
@@ -348,6 +364,19 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
     return (
         <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <div className="space-y-2">
+                {/* Search */}
+                <div className="px-1">
+                    <div className="relative">
+                        <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                        <Input
+                            placeholder="Search columns..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="h-8 pl-8 text-xs"
+                        />
+                    </div>
+                </div>
+
                 {/* Quick Actions */}
                 <div className="flex justify-between items-center px-1">
                     <Label className="text-xs font-medium text-muted-foreground">
@@ -376,9 +405,9 @@ export const CompactColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({
                 </div>
 
                 {/* Column List */}
-                <SortableContext items={orderedColumns.map(c => c.name)} strategy={verticalListSortingStrategy}>
+                <SortableContext items={filteredColumns.map(c => c.name)} strategy={verticalListSortingStrategy}>
                     <div className="border rounded-md divide-y max-h-[400px] overflow-y-auto bg-card">
-                        {orderedColumns.map((column, index) => {
+                        {filteredColumns.map((column, index) => {
                             const override = columnOverrides[column.name] || {};
                             const isExpanded = expandedFKs.has(column.name);
                             // Prevent expanding self-referencing foreign keys (matches backend limitation)

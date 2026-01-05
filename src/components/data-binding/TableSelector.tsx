@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface TableSelectorProps {
   value?: string;
@@ -26,6 +28,8 @@ export function TableSelector({
   showRefresh = true,
   variant = 'default'
 }: TableSelectorProps) {
+  const [open, setOpen] = useState(false);
+
   // Fetch tables from the selected datasource
   const { data: tables = [], isLoading, error, refetch } = useQuery<string[]>({
     queryKey: ['datasource-tables', dataSourceId],
@@ -46,35 +50,79 @@ export function TableSelector({
     }
   }, [dataSourceId, tables, value, onValueChange]);
 
-  const handleRefresh = () => {
+  const handleRefresh = (e: React.MouseEvent) => {
+    e.stopPropagation();
     refetch();
   };
 
   const errorMessage = error instanceof Error ? error.message : 'Failed to load tables';
 
+  // Common trigger button content
+  const triggerContent = (
+    <Button
+      variant="outline"
+      role="combobox"
+      aria-expanded={open}
+      className={cn(
+        "justify-between font-normal",
+        variant === 'compact' ? "flex-1 h-9" : "w-full",
+        !value && "text-muted-foreground"
+      )}
+      disabled={disabled || isLoading || !dataSourceId}
+    >
+      <span className="truncate">
+        {!dataSourceId
+          ? "Select datasource first"
+          : isLoading
+            ? "Loading tables..."
+            : value || placeholder}
+      </span>
+      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+    </Button>
+  );
+
+  const selector = (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        {triggerContent}
+      </PopoverTrigger>
+      <PopoverContent className="w-[300px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search tables..." />
+          <CommandList>
+            <CommandEmpty>
+              {isLoading ? 'Loading...' : 'No tables found.'}
+            </CommandEmpty>
+            <CommandGroup>
+              {tables.map((table) => (
+                <CommandItem
+                  key={table}
+                  value={table}
+                  onSelect={(currentValue) => {
+                    onValueChange(currentValue === value ? "" : currentValue);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value === table ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  {table}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+
   if (variant === 'compact') {
     return (
       <div className="flex items-center gap-2 w-full">
-        <Select
-          value={value || ''}
-          onValueChange={onValueChange}
-          disabled={disabled || isLoading || tables.length === 0 || !dataSourceId}
-        >
-          <SelectTrigger className="flex-1">
-            <SelectValue placeholder={
-              !dataSourceId ? "Select datasource first" :
-                isLoading ? "Loading..." :
-                  placeholder
-            } />
-          </SelectTrigger>
-          <SelectContent>
-            {tables.map((table) => (
-              <SelectItem key={table} value={table}>
-                {table}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {selector}
         {showRefresh && dataSourceId && (
           <Button
             variant="ghost"
@@ -84,7 +132,7 @@ export function TableSelector({
             disabled={isLoading}
             title="Refresh tables"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
           </Button>
         )}
       </div>
@@ -101,31 +149,14 @@ export function TableSelector({
             size="sm"
             onClick={handleRefresh}
             disabled={isLoading}
+            className="h-6 w-6 p-0 hover:bg-transparent"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
+            <span className="sr-only">Refresh</span>
           </Button>
         )}
       </div>
-      <Select
-        value={value || ''}
-        onValueChange={onValueChange}
-        disabled={disabled || isLoading || tables.length === 0 || !dataSourceId}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder={
-            !dataSourceId ? "Select a datasource first" :
-              isLoading ? "Loading tables..." :
-                placeholder
-          } />
-        </SelectTrigger>
-        <SelectContent>
-          {tables.map((table) => (
-            <SelectItem key={table} value={table}>
-              {table}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {selector}
       {!isLoading && !dataSourceId && (
         <p className="text-sm text-muted-foreground">
           Please select a datasource to view available tables.

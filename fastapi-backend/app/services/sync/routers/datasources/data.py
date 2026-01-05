@@ -282,6 +282,73 @@ async def get_distinct_values(
         raise HTTPException(status_code=500, detail=f"Failed to fetch distinct values: {str(e)}")
 
 
+@router.post("/{datasource_id}/tables/{table}/records")
+async def create_record(
+    datasource_id: str,
+    table: str,
+    body: Dict[str, Any],
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new record in a table."""
+    result = await db.execute(sqlalchemy_select(Datasource).where(Datasource.id == datasource_id))
+    datasource = result.scalar_one_or_none()
+    
+    if not datasource:
+        raise HTTPException(status_code=404, detail="Datasource not found")
+    
+    data = body.get("data", {})
+    if not data:
+        raise HTTPException(status_code=400, detail="No data provided")
+    
+    try:
+        adapter = get_adapter(datasource)
+        async with adapter:
+            if hasattr(adapter, 'create_record'):
+                record = await adapter.create_record(table, data)
+                return {"success": True, "record": record}
+            else:
+                raise HTTPException(status_code=501, detail="Adapter does not support record creation")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating record: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create record: {str(e)}")
+
+
+@router.patch("/{datasource_id}/tables/{table}/records/{record_id}")
+async def update_record(
+    datasource_id: str,
+    table: str,
+    record_id: str,
+    body: Dict[str, Any],
+    db: AsyncSession = Depends(get_db)
+):
+    """Update an existing record in a table."""
+    result = await db.execute(sqlalchemy_select(Datasource).where(Datasource.id == datasource_id))
+    datasource = result.scalar_one_or_none()
+    
+    if not datasource:
+        raise HTTPException(status_code=404, detail="Datasource not found")
+    
+    data = body.get("data", {})
+    if not data:
+        raise HTTPException(status_code=400, detail="No data provided")
+    
+    try:
+        adapter = get_adapter(datasource)
+        async with adapter:
+            if hasattr(adapter, 'update_record'):
+                record = await adapter.update_record(table, record_id, data)
+                return {"success": True, "record": record}
+            else:
+                raise HTTPException(status_code=501, detail="Adapter does not support record updates")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating record: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update record: {str(e)}")
+
+
 @router.get("/{datasource_id}/search")
 async def search_datasource_tables(
     datasource_id: str,

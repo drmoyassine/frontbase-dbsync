@@ -176,6 +176,11 @@ export function useSimpleData({
                 params.append('search', queryParams.filters.search);
             }
 
+            // Add search columns restriction (so backend only searches these columns)
+            if (binding.searchColumns && binding.searchColumns.length > 0) {
+                params.append('search_cols', JSON.stringify(binding.searchColumns));
+            }
+
             // Add filters (excluding search which is handled separately)
             if (queryParams?.filters) {
                 const filterList = Object.entries(queryParams.filters)

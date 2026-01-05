@@ -8,7 +8,7 @@ import { Search, ChevronDown } from 'lucide-react';
 import { databaseApi } from '@/services/database-api';
 import { FilterInputProps } from './types';
 
-export const MultiselectFilterInput: React.FC<FilterInputProps> = ({ filter, tableName, onValueChange }) => {
+export const MultiselectFilterInput: React.FC<FilterInputProps> = ({ filter, tableName, dataSourceId, onValueChange }) => {
     const [fetchedOptions, setFetchedOptions] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const [open, setOpen] = useState(false);
@@ -33,16 +33,30 @@ export const MultiselectFilterInput: React.FC<FilterInputProps> = ({ filter, tab
                 queryColumn = relCol;
             }
 
-            databaseApi.fetchDistinctValues(queryTable, queryColumn)
-                .then((result) => {
-                    if (result.success) {
-                        setFetchedOptions(result.data || []);
-                    }
-                    setLoading(false);
-                })
-                .catch(() => setLoading(false));
+            // Use external datasource API if dataSourceId is provided and valid
+            if (dataSourceId && dataSourceId !== 'backend') {
+                fetch(`/api/sync/datasources/${dataSourceId}/tables/${queryTable}/distinct/${queryColumn}`)
+                    .then(res => res.json())
+                    .then(result => {
+                        if (result.success) {
+                            setFetchedOptions(result.data || []);
+                        }
+                        setLoading(false);
+                    })
+                    .catch(() => setLoading(false));
+            } else {
+                // Use internal database API
+                databaseApi.fetchDistinctValues(queryTable, queryColumn)
+                    .then((result) => {
+                        if (result.success) {
+                            setFetchedOptions(result.data || []);
+                        }
+                        setLoading(false);
+                    })
+                    .catch(() => setLoading(false));
+            }
         }
-    }, [filter.column, tableName, filter.options]);
+    }, [filter.column, tableName, filter.options, dataSourceId]);
 
     const toggleValue = (val: string) => {
         if (selectedValues.includes(val)) {

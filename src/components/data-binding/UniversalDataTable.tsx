@@ -241,6 +241,7 @@ export function UniversalDataTable({
           <FilterBar
             filters={runtimeFilters}
             tableName={binding.tableName}
+            dataSourceId={binding.dataSourceId}
             onFilterValuesChange={handleFilterValuesChange}
           />
         </div>

@@ -257,6 +257,18 @@ class MySQLAdapter(SQLAdapter):
                 row = await cur.fetchone()
                 return row[0] if row else 0
 
+    async def get_distinct_values(self, table: str, column: str, limit: int = 100) -> List[Any]:
+        """
+        Get distinct values for a column (for dropdown filter options).
+        """
+        sql = f"SELECT DISTINCT `{column}` FROM `{table}` WHERE `{column}` IS NOT NULL ORDER BY `{column}` LIMIT %s"
+        
+        async with self._pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(sql, [limit])
+                rows = await cur.fetchall()
+                return [str(row[0]) for row in rows if row[0] is not None]
+
     async def search_records(self, table: str, query: str) -> List[Dict[str, Any]]:
         """
         Search for records by text content. 
@@ -344,6 +356,7 @@ class MySQLAdapter(SQLAdapter):
         order_by: Optional[str] = None,
         order_direction: Optional[str] = "asc",
         search: Optional[str] = None,
+        search_cols: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Read records with LEFT JOINs for related tables.
@@ -405,22 +418,37 @@ class MySQLAdapter(SQLAdapter):
                 query += where_clause
                 params.extend(p)
         
-        # Search logic
+        # Search logic - use provided search_cols if available, else fallback to all columns
         if search:
-            # For MySQL, get_schema might be needed to find searchable columns
-            # Or use explicit list if available? We'll fetch schema.
-            # search_records logic uses basic text search.
             try:
-                schema = await self.get_schema(table)
-                # Filter useful columns
-                search_cols = [c["name"] for c in schema["columns"]]
-                if search_cols:
-                    search_conds = []
+                cols_to_search = []
+                
+                if search_cols and len(search_cols) > 0:
+                    # Use explicitly provided search columns
                     for col in search_cols:
-                        search_conds.append(f"CAST(`{table}`.`{col}` AS CHAR) LIKE %s")
+                        if "." in col:
+                            # Related table column (e.g., "wp_posts.post_title")
+                            parts = col.split(".")
+                            rel_table = parts[0]
+                            rel_col = parts[1]
+                            if rel_table in alias_map:
+                                cols_to_search.append(f"CAST(`{alias_map[rel_table]}`.`{rel_col}` AS CHAR) LIKE %s")
+                            else:
+                                cols_to_search.append(f"CAST(`{rel_table}`.`{rel_col}` AS CHAR) LIKE %s")
+                        else:
+                            # Main table column
+                            cols_to_search.append(f"CAST(`{table}`.`{col}` AS CHAR) LIKE %s")
+                else:
+                    # Fallback: fetch schema and use all columns
+                    schema = await self.get_schema(table)
+                    for c in schema["columns"]:
+                        cols_to_search.append(f"CAST(`{table}`.`{c['name']}` AS CHAR) LIKE %s")
+                
+                if cols_to_search:
+                    for _ in cols_to_search:
                         params.append(f"%{search}%")
                     
-                    search_chunk = "(" + " OR ".join(search_conds) + ")"
+                    search_chunk = "(" + " OR ".join(cols_to_search) + ")"
                     if "WHERE" in query:
                          query += f" AND {search_chunk}"
                     else:

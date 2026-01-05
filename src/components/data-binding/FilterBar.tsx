@@ -13,6 +13,7 @@ import { FilterInputProps } from './filters/types';
 interface FilterBarProps {
     filters: FilterConfig[];
     tableName: string;
+    dataSourceId?: string;  // For external datasources
     onFilterValuesChange: (updatedFilters: FilterConfig[]) => void;
 }
 
@@ -20,6 +21,7 @@ interface FilterBarProps {
 export const FilterBar: React.FC<FilterBarProps> = ({
     filters,
     tableName,
+    dataSourceId,
     onFilterValuesChange
 }) => {
     // Only show filters that have a column configured
@@ -47,6 +49,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         const props: FilterInputProps = {
             filter,
             tableName,
+            dataSourceId,
             onValueChange: (value) => handleValueChange(filter.id, value)
         };
 

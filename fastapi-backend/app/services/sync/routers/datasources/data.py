@@ -49,6 +49,7 @@ async def get_datasource_table_data(
     sort: Optional[str] = None,
     order: Optional[str] = "asc",
     search: Optional[str] = None,
+    search_cols: Optional[str] = None,  # JSON array of column names to restrict search to
     select: Optional[str] = None,  # Support for related columns: "*,programs(degree_name,type)"
     db: AsyncSession = Depends(get_db)
 ):
@@ -68,6 +69,16 @@ async def get_datasource_table_data(
                 where = None
         except Exception:
             where = None
+
+    # Parse search_cols if provided
+    parsed_search_cols = None
+    if search_cols:
+        try:
+            parsed_search_cols = json.loads(search_cols)
+            if not isinstance(parsed_search_cols, list):
+                parsed_search_cols = None
+        except Exception:
+            parsed_search_cols = None
 
     # Parse select for related columns (format: "*,table(col1,col2)" or "table.column,other_table.column")
     related_specs = []  # List of {"table": str, "columns": [str], "local_fk": str}
@@ -174,7 +185,8 @@ async def get_datasource_table_data(
                                     offset=offset,
                                     order_by=sort,
                                     order_direction=order,
-                                    search=search
+                                    search=search,
+                                    search_cols=parsed_search_cols
                                 )
                             logger.info(f"[FK DEBUG] Got {len(records)} records with relations")
                         else:
@@ -237,6 +249,37 @@ async def get_datasource_table_data(
         logger.error(f"Error fetching data for {datasource_id} table {table}: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to fetch sample data: {str(e)}")
+
+
+@router.get("/{datasource_id}/tables/{table}/distinct/{column}")
+async def get_distinct_values(
+    datasource_id: str,
+    table: str,
+    column: str,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get distinct values for a column (for dropdown filter options)."""
+    result = await db.execute(sqlalchemy_select(Datasource).where(Datasource.id == datasource_id))
+    datasource = result.scalar_one_or_none()
+    
+    if not datasource:
+        raise HTTPException(status_code=404, detail="Datasource not found")
+    
+    try:
+        adapter = get_adapter(datasource)
+        async with adapter:
+            if hasattr(adapter, 'get_distinct_values'):
+                values = await adapter.get_distinct_values(table, column, limit)
+                return {"success": True, "data": values}
+            else:
+                # Fallback: read records and extract distinct values
+                records = await adapter.read_records(table, columns=[column], limit=limit)
+                values = list(set(str(r.get(column)) for r in records if r.get(column) is not None))
+                return {"success": True, "data": sorted(values)[:limit]}
+    except Exception as e:
+        logger.error(f"Error fetching distinct values: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch distinct values: {str(e)}")
 
 
 @router.get("/{datasource_id}/search")

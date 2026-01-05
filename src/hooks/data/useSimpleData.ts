@@ -188,11 +188,11 @@ export function useSimpleData({
                     .map(([field, value]) => {
                         // Handle filter object format { filterType, value }
                         // value is guaranteed non-null after filter above
-                        const v = value as NonNullable<typeof value>;
-                        if (v && typeof v === 'object' && 'value' in v) {
-                            return { field, operator: '==', value: (v as { value: unknown }).value };
+                        if (value && typeof value === 'object' && 'value' in (value as Record<string, unknown>)) {
+                            const filterObj = value as { value: unknown };
+                            return { field, operator: '==', value: filterObj.value };
                         }
-                        return { field, operator: '==', value: v };
+                        return { field, operator: '==', value };
                     });
                 if (filterList.length > 0) {
                     params.append('filters', JSON.stringify(filterList));

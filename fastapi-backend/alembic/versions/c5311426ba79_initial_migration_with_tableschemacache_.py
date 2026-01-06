@@ -69,8 +69,8 @@ def upgrade() -> None:
                existing_type=sa.DATETIME(),
                type_=sa.String(),
                existing_nullable=False)
-        batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.drop_constraint(None, type_='foreignkey')
+        # batch_op.drop_constraint(None, type_='foreignkey')
+        # batch_op.drop_constraint(None, type_='foreignkey')
         batch_op.create_foreign_key(None, 'sync_jobs', ['sync_job_id'], ['id'])
         batch_op.drop_column('job_id')
         batch_op.drop_column('status')
@@ -100,7 +100,7 @@ def upgrade() -> None:
                existing_type=sa.DATETIME(),
                type_=sa.String(),
                existing_nullable=False)
-        batch_op.drop_constraint(None, type_='foreignkey')
+        # batch_op.drop_constraint(None, type_='foreignkey')
         batch_op.drop_column('linked_views')
         batch_op.drop_column('column_order')
         batch_op.drop_column('filters')
@@ -209,10 +209,10 @@ def upgrade() -> None:
                existing_type=sa.DATETIME(),
                type_=sa.String(),
                existing_nullable=False)
-        batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.drop_constraint(None, type_='foreignkey')
+        # batch_op.drop_constraint(None, type_='foreignkey')
+        # batch_op.drop_constraint(None, type_='foreignkey')
+        # batch_op.drop_constraint(None, type_='foreignkey')
+        # batch_op.drop_constraint(None, type_='foreignkey')
         batch_op.drop_column('last_sync_at')
         batch_op.drop_column('slave_table')
         batch_op.drop_column('master_datasource_id')
@@ -271,7 +271,7 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column('columns', sa.Text(), nullable=True))
         batch_op.add_column(sa.Column('foreign_keys', sa.Text(), nullable=True))
         batch_op.drop_constraint(batch_op.f('uq_datasource_table'), type_='unique')
-        batch_op.drop_constraint(None, type_='foreignkey')
+        # batch_op.drop_constraint(None, type_='foreignkey')
         batch_op.drop_column('fetched_at')
 
     with op.batch_alter_table('user_sessions', schema=None) as batch_op:
@@ -291,7 +291,7 @@ def upgrade() -> None:
                existing_type=sa.TEXT(),
                type_=sa.String(),
                existing_nullable=False)
-        batch_op.drop_constraint(None, type_='foreignkey')
+        # batch_op.drop_constraint(None, type_='foreignkey')
         batch_op.create_foreign_key(None, 'users', ['user_id'], ['id'])
         batch_op.drop_column('created_at')
 
@@ -312,7 +312,7 @@ def upgrade() -> None:
                existing_type=sa.TEXT(),
                type_=sa.String(),
                existing_nullable=True)
-        batch_op.drop_constraint(None, type_='foreignkey')
+        # batch_op.drop_constraint(None, type_='foreignkey')
         batch_op.create_foreign_key(None, 'users', ['user_id'], ['id'])
         batch_op.drop_column('created_at')
         batch_op.drop_column('updated_at')
@@ -379,7 +379,7 @@ def downgrade() -> None:
     with op.batch_alter_table('user_settings', schema=None) as batch_op:
         batch_op.add_column(sa.Column('updated_at', sa.TEXT(), nullable=False))
         batch_op.add_column(sa.Column('created_at', sa.TEXT(), nullable=False))
-        batch_op.drop_constraint(None, type_='foreignkey')
+        # batch_op.drop_constraint(None, type_='foreignkey')
         batch_op.create_foreign_key(None, 'users', ['user_id'], ['id'], ondelete='CASCADE')
         batch_op.alter_column('supabase_anon_key',
                existing_type=sa.String(),
@@ -400,7 +400,7 @@ def downgrade() -> None:
 
     with op.batch_alter_table('user_sessions', schema=None) as batch_op:
         batch_op.add_column(sa.Column('created_at', sa.TEXT(), nullable=False))
-        batch_op.drop_constraint(None, type_='foreignkey')
+        # batch_op.drop_constraint(None, type_='foreignkey')
         batch_op.create_foreign_key(None, 'users', ['user_id'], ['id'], ondelete='CASCADE')
         batch_op.alter_column('expires_at',
                existing_type=sa.String(),
@@ -623,7 +623,7 @@ def downgrade() -> None:
         batch_op.add_column(sa.Column('record_key', sa.VARCHAR(length=255), nullable=False))
         batch_op.add_column(sa.Column('status', sa.VARCHAR(length=16), nullable=False))
         batch_op.add_column(sa.Column('job_id', sa.VARCHAR(length=36), nullable=False))
-        batch_op.drop_constraint(None, type_='foreignkey')
+        # batch_op.drop_constraint(None, type_='foreignkey')
         batch_op.create_foreign_key(None, 'sync_jobs', ['job_id'], ['id'])
         batch_op.create_foreign_key(None, 'sync_configs', ['sync_config_id'], ['id'])
         batch_op.alter_column('created_at',

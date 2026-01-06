@@ -144,59 +144,89 @@ export function RLSBatchPolicyBuilder({
         setTableRules(newRules);
     }, [availableTables]);
 
-    // Build SQL for actor conditions (shared part)
+    /**
+     * Build SQL for actor conditions (WHO can access)
+     * This checks the CURRENT USER's permissions via auth.uid() → contacts lookup
+     * NOT the row data!
+     */
     const buildActorConditionSQL = useCallback((): string => {
         if (isUnauthenticated) {
-            return 'true'; // Public access
+            return 'true'; // Public access - no user check needed
         }
 
-        // For authenticated users with actor conditions
-        // This would need to integrate with useRLSSQLGeneration
-        // For now, return a placeholder that will be replaced by proper SQL generation
+        // Get the contacts table name and auth ID column from config
+        const contactsTable = config?.contactsTable || 'contacts';
+        const authIdColumn = config?.columnMapping?.authIdColumn || 'auth_id';
+
+        // Build conditions that check the CURRENT USER's attributes
         const conditions: string[] = [];
 
         actorConditionGroup.conditions.forEach(cond => {
             if ('column' in cond && cond.column) {
-                // Simple condition handling - real implementation uses useRLSSQLGeneration
                 let value = cond.literalValue || '';
                 if (cond.operator === 'equals') {
-                    conditions.push(`${cond.column} = '${value}'`);
+                    // Use qualified column name with 'c' alias
+                    conditions.push(`c.${cond.column} = '${value}'`);
                 } else if (cond.operator === 'in') {
                     const values = value.split(',').map(v => `'${v.trim()}'`).join(', ');
-                    conditions.push(`${cond.column} IN (${values})`);
+                    conditions.push(`c.${cond.column} IN (${values})`);
+                } else if (cond.operator === 'not_equals') {
+                    conditions.push(`c.${cond.column} != '${value}'`);
+                } else if (cond.operator === 'is_null') {
+                    conditions.push(`c.${cond.column} IS NULL`);
+                } else if (cond.operator === 'is_not_null') {
+                    conditions.push(`c.${cond.column} IS NOT NULL`);
                 }
             }
         });
 
         if (conditions.length === 0) {
-            return 'true';
+            // No specific actor conditions - just check if user is authenticated
+            return `EXISTS (SELECT 1 FROM ${contactsTable} c WHERE c.${authIdColumn} = auth.uid())`;
         }
 
+        // Wrap actor conditions in EXISTS subquery that checks the CURRENT USER
         const combinator = actorConditionGroup.combinator;
-        return conditions.join(` ${combinator} `);
-    }, [actorConditionGroup, isUnauthenticated]);
+        const conditionsSQL = conditions.join(` ${combinator} `);
 
-    // Build complete USING expression for a table
+        return `EXISTS (SELECT 1 FROM ${contactsTable} c WHERE c.${authIdColumn} = auth.uid() AND (${conditionsSQL}))`;
+    }, [actorConditionGroup, isUnauthenticated, config]);
+
+    /**
+     * Build complete USING expression for a table
+     * Combines: WHO (actor conditions via EXISTS) + WHERE (row-level conditions)
+     */
     const buildUsingExpressionForTable = useCallback((tableRule: RLSTableRule): string => {
         const actorSQL = buildActorConditionSQL();
 
-        // Row conditions for this specific table
+        // Row conditions for this specific table (these DO check row data)
         const rowConditions: string[] = [];
         tableRule.conditionGroup.conditions.forEach(cond => {
             if ('column' in cond && cond.column) {
                 let value = cond.literalValue || '';
                 if (cond.operator === 'equals') {
                     rowConditions.push(`${cond.column} = '${value}'`);
+                } else if (cond.operator === 'in') {
+                    const values = value.split(',').map(v => `'${v.trim()}'`).join(', ');
+                    rowConditions.push(`${cond.column} IN (${values})`);
+                } else if (cond.operator === 'not_equals') {
+                    rowConditions.push(`${cond.column} != '${value}'`);
+                } else if (cond.operator === 'is_null') {
+                    rowConditions.push(`${cond.column} IS NULL`);
+                } else if (cond.operator === 'is_not_null') {
+                    rowConditions.push(`${cond.column} IS NOT NULL`);
                 }
             }
         });
 
+        // If no row conditions, just use actor conditions
         if (rowConditions.length === 0) {
             return actorSQL;
         }
 
+        // Combine actor conditions AND row conditions
         const rowSQL = rowConditions.join(` ${tableRule.conditionGroup.combinator} `);
-        return actorSQL === 'true' ? rowSQL : `(${actorSQL}) AND (${rowSQL})`;
+        return `(${actorSQL}) AND (${rowSQL})`;
     }, [buildActorConditionSQL]);
 
     // Validation

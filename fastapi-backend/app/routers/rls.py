@@ -349,56 +349,62 @@ async def toggle_table_rls(
 # BATCH POLICY CREATION
 # ============================================================
 
+import asyncio
+
+async def create_single_policy_async(rule, request, ctx):
+    """Helper to create a single policy - used for parallel batch creation"""
+    policy_name = f"{request.policyBaseName}_{rule.tableName}"
+    
+    try:
+        result = await call_rls_function('frontbase_create_rls_policy', {
+            'p_table_name': rule.tableName,
+            'p_policy_name': policy_name,
+            'p_operation': rule.operation.upper(),
+            'p_using_expr': rule.usingExpression,
+            'p_check_expr': rule.checkExpression,
+            'p_roles': request.roles,
+            'p_permissive': request.permissive
+        }, ctx)
+        
+        if result.get('success', True):
+            return {
+                "tableName": rule.tableName,
+                "policyName": policy_name,
+                "success": True,
+                "sql": result.get('sql')
+            }
+        else:
+            return {
+                "tableName": rule.tableName,
+                "policyName": policy_name,
+                "success": False,
+                "error": result.get('error', 'Policy creation failed')
+            }
+    except Exception as e:
+        return {
+            "tableName": rule.tableName,
+            "policyName": policy_name,
+            "success": False,
+            "error": str(e)
+        }
+
+
 @router.post("/batch")
 async def create_batch_policies(request: CreateBatchPolicyRequest, db: Session = Depends(get_db)):
     """Create multiple RLS policies in a single request (for multi-table batch creation)"""
     try:
         ctx = await get_rls_context(db)
         
-        results = []
-        success_count = 0
-        error_count = 0
+        # Run all policy creations in parallel using asyncio.gather
+        tasks = [
+            create_single_policy_async(rule, request, ctx)
+            for rule in request.tableRules
+        ]
         
-        for rule in request.tableRules:
-            # Generate policy name: {baseName}_{tableName}
-            policy_name = f"{request.policyBaseName}_{rule.tableName}"
-            
-            try:
-                result = await call_rls_function('frontbase_create_rls_policy', {
-                    'p_table_name': rule.tableName,
-                    'p_policy_name': policy_name,
-                    'p_operation': rule.operation.upper(),
-                    'p_using_expr': rule.usingExpression,
-                    'p_check_expr': rule.checkExpression,
-                    'p_roles': request.roles,
-                    'p_permissive': request.permissive
-                }, ctx)
-                
-                if result.get('success', True):
-                    results.append({
-                        "tableName": rule.tableName,
-                        "policyName": policy_name,
-                        "success": True,
-                        "sql": result.get('sql')
-                    })
-                    success_count += 1
-                else:
-                    results.append({
-                        "tableName": rule.tableName,
-                        "policyName": policy_name,
-                        "success": False,
-                        "error": result.get('error', 'Policy creation failed')
-                    })
-                    error_count += 1
-                    
-            except Exception as e:
-                results.append({
-                    "tableName": rule.tableName,
-                    "policyName": policy_name,
-                    "success": False,
-                    "error": str(e)
-                })
-                error_count += 1
+        results = await asyncio.gather(*tasks)
+        
+        success_count = sum(1 for r in results if r.get('success'))
+        error_count = sum(1 for r in results if not r.get('success'))
         
         return {
             "success": error_count == 0,

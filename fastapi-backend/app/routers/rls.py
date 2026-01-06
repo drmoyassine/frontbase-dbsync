@@ -413,6 +413,7 @@ async def bulk_delete_policies(request: BulkDeleteRequest, db: Session = Depends
     """Delete multiple RLS policies from Supabase in bulk"""
     try:
         ctx = await get_rls_context(db)
+        ensure_rls_metadata_table(db)
         
         results = []
         success_count = 0
@@ -502,10 +503,30 @@ def generate_sql_hash(sql: Optional[str]) -> str:
     return format(hash_val, 'x')
 
 
+def ensure_rls_metadata_table(db: Session):
+    """Ensure the rls_metadata table exists"""
+    db.execute(text("""
+        CREATE TABLE IF NOT EXISTS rls_metadata (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            table_name TEXT NOT NULL,
+            policy_name TEXT NOT NULL,
+            form_data TEXT,
+            generated_using TEXT,
+            generated_check TEXT,
+            sql_hash TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(table_name, policy_name)
+        )
+    """))
+    db.commit()
+
+
 @router.get("/metadata")
 async def get_all_rls_metadata(db: Session = Depends(get_db)):
     """Get all stored RLS metadata for categorization by contact_type"""
     try:
+        ensure_rls_metadata_table(db)
         result = db.execute(
             text("SELECT table_name, policy_name, form_data, generated_using FROM rls_metadata")
         )
@@ -540,6 +561,7 @@ async def get_rls_metadata(
 ):
     """Get stored metadata for a policy"""
     try:
+        ensure_rls_metadata_table(db)
         result = db.execute(
             text("SELECT * FROM rls_metadata WHERE table_name = :table_name AND policy_name = :policy_name"),
             {"table_name": table_name, "policy_name": policy_name}
@@ -630,6 +652,7 @@ async def delete_rls_metadata(
 ):
     """Delete metadata"""
     try:
+        ensure_rls_metadata_table(db)
         db.execute(
             text("DELETE FROM rls_metadata WHERE table_name = :table_name AND policy_name = :policy_name"),
             {"table_name": table_name, "policy_name": policy_name}

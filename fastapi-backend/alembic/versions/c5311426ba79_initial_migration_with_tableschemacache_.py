@@ -24,6 +24,7 @@ def upgrade() -> None:
     
     # SAFETY: Cleanup leftover temp table from failed previous runs (crashes due to async driver)
     op.execute("DROP TABLE IF EXISTS _alembic_tmp_app_variables")
+    op.execute("DROP TABLE IF EXISTS _alembic_tmp_table_schema_cache")
 
     # SAFETY: Commented out drop_table commands for tables that exist in DB but not yet in Models
     # op.drop_table('page_views')
@@ -265,8 +266,8 @@ def upgrade() -> None:
     
     # 1. Update table_schema_cache (The critical fix)
     with op.batch_alter_table('table_schema_cache', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('schema_data', sa.Text(), nullable=False))
-        batch_op.add_column(sa.Column('last_updated', sa.String(), nullable=False))
+        batch_op.add_column(sa.Column('schema_data', sa.Text(), nullable=False, server_default='{}'))
+        batch_op.add_column(sa.Column('last_updated', sa.String(), nullable=False, server_default='1970-01-01'))
         batch_op.add_column(sa.Column('is_valid', sa.Boolean(), nullable=True))
         batch_op.add_column(sa.Column('columns', sa.Text(), nullable=True))
         batch_op.add_column(sa.Column('foreign_keys', sa.Text(), nullable=True))

@@ -876,3 +876,119 @@ BEGIN
   );
 END;
 $$;
+
+-- 15. Batch Create RLS Policies
+-- Creates multiple RLS policies in a single transaction (optimal for batch operations)
+-- Accepts a JSONB array of policy definitions
+CREATE OR REPLACE FUNCTION frontbase_create_rls_policies_batch(
+  p_policies jsonb  -- Array of {table_name, policy_name, operation, using_expr, check_expr, roles, permissive}
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  policy_item jsonb;
+  sql_stmt text;
+  cmd_type text;
+  policy_type text;
+  roles_str text;
+  v_table_name text;
+  v_policy_name text;
+  v_operation text;
+  v_using_expr text;
+  v_check_expr text;
+  v_roles text[];
+  v_permissive boolean;
+  results jsonb := '[]'::jsonb;
+  success_count int := 0;
+  error_count int := 0;
+  policy_result jsonb;
+BEGIN
+  -- Loop through each policy definition
+  FOR policy_item IN SELECT * FROM jsonb_array_elements(p_policies)
+  LOOP
+    -- Extract fields from policy item
+    v_table_name := policy_item->>'table_name';
+    v_policy_name := policy_item->>'policy_name';
+    v_operation := UPPER(COALESCE(policy_item->>'operation', 'ALL'));
+    v_using_expr := policy_item->>'using_expr';
+    v_check_expr := policy_item->>'check_expr';
+    v_roles := COALESCE(
+      (SELECT array_agg(elem::text) FROM jsonb_array_elements_text(policy_item->'roles') elem),
+      ARRAY['authenticated']
+    );
+    v_permissive := COALESCE((policy_item->>'permissive')::boolean, true);
+
+    -- Validate operation
+    IF v_operation NOT IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'ALL') THEN
+      policy_result := jsonb_build_object(
+        'table_name', v_table_name,
+        'policy_name', v_policy_name,
+        'success', false,
+        'error', 'Invalid operation: ' || v_operation
+      );
+      results := results || policy_result;
+      error_count := error_count + 1;
+      CONTINUE;
+    END IF;
+
+    -- Build policy type
+    policy_type := CASE WHEN v_permissive THEN 'PERMISSIVE' ELSE 'RESTRICTIVE' END;
+
+    -- Build roles string
+    roles_str := array_to_string(v_roles, ', ');
+
+    -- Build the CREATE POLICY statement
+    sql_stmt := format(
+      'CREATE POLICY %I ON %I AS %s FOR %s TO %s',
+      v_policy_name,
+      v_table_name,
+      policy_type,
+      v_operation,
+      roles_str
+    );
+
+    -- Add USING clause
+    IF v_using_expr IS NOT NULL AND v_using_expr != '' THEN
+      sql_stmt := sql_stmt || format(' USING (%s)', v_using_expr);
+    END IF;
+
+    -- Add WITH CHECK clause (only valid for INSERT, UPDATE, ALL)
+    IF v_check_expr IS NOT NULL AND v_check_expr != '' AND v_operation IN ('INSERT', 'UPDATE', 'ALL') THEN
+      sql_stmt := sql_stmt || format(' WITH CHECK (%s)', v_check_expr);
+    END IF;
+
+    -- Execute
+    BEGIN
+      EXECUTE sql_stmt;
+      policy_result := jsonb_build_object(
+        'table_name', v_table_name,
+        'policy_name', v_policy_name,
+        'success', true,
+        'sql', sql_stmt
+      );
+      success_count := success_count + 1;
+    EXCEPTION WHEN OTHERS THEN
+      policy_result := jsonb_build_object(
+        'table_name', v_table_name,
+        'policy_name', v_policy_name,
+        'success', false,
+        'error', SQLERRM,
+        'sql', sql_stmt
+      );
+      error_count := error_count + 1;
+    END;
+
+    results := results || policy_result;
+  END LOOP;
+
+  RETURN json_build_object(
+    'success', error_count = 0,
+    'message', format('Created %s policies, %s failed', success_count, error_count),
+    'policies', results,
+    'success_count', success_count,
+    'error_count', error_count
+  );
+END;
+$$;

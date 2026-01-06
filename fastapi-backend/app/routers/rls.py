@@ -349,69 +349,49 @@ async def toggle_table_rls(
 # BATCH POLICY CREATION
 # ============================================================
 
-import asyncio
-
-async def create_single_policy_async(rule, request, ctx):
-    """Helper to create a single policy - used for parallel batch creation"""
-    policy_name = f"{request.policyBaseName}_{rule.tableName}"
-    
-    try:
-        result = await call_rls_function('frontbase_create_rls_policy', {
-            'p_table_name': rule.tableName,
-            'p_policy_name': policy_name,
-            'p_operation': rule.operation.upper(),
-            'p_using_expr': rule.usingExpression,
-            'p_check_expr': rule.checkExpression,
-            'p_roles': request.roles,
-            'p_permissive': request.permissive
-        }, ctx)
-        
-        if result.get('success', True):
-            return {
-                "tableName": rule.tableName,
-                "policyName": policy_name,
-                "success": True,
-                "sql": result.get('sql')
-            }
-        else:
-            return {
-                "tableName": rule.tableName,
-                "policyName": policy_name,
-                "success": False,
-                "error": result.get('error', 'Policy creation failed')
-            }
-    except Exception as e:
-        return {
-            "tableName": rule.tableName,
-            "policyName": policy_name,
-            "success": False,
-            "error": str(e)
-        }
-
-
 @router.post("/batch")
 async def create_batch_policies(request: CreateBatchPolicyRequest, db: Session = Depends(get_db)):
-    """Create multiple RLS policies in a single request (for multi-table batch creation)"""
+    """Create multiple RLS policies in a single HTTP request using batch RPC function"""
     try:
         ctx = await get_rls_context(db)
         
-        # Run all policy creations in parallel using asyncio.gather
-        tasks = [
-            create_single_policy_async(rule, request, ctx)
-            for rule in request.tableRules
-        ]
+        # Build the policies array for the batch RPC call
+        policies_array = []
+        for rule in request.tableRules:
+            policy_name = f"{request.policyBaseName}_{rule.tableName}"
+            policies_array.append({
+                "table_name": rule.tableName,
+                "policy_name": policy_name,
+                "operation": rule.operation.upper(),
+                "using_expr": rule.usingExpression,
+                "check_expr": rule.checkExpression,
+                "roles": request.roles,
+                "permissive": request.permissive
+            })
         
-        results = await asyncio.gather(*tasks)
+        # Single RPC call to create all policies
+        result = await call_rls_function('frontbase_create_rls_policies_batch', {
+            'p_policies': policies_array
+        }, ctx)
         
-        success_count = sum(1 for r in results if r.get('success'))
-        error_count = sum(1 for r in results if not r.get('success'))
+        # Transform the response to match expected format
+        policies = result.get('policies', [])
+        transformed_policies = []
+        for p in policies:
+            transformed_policies.append({
+                "tableName": p.get('table_name'),
+                "policyName": p.get('policy_name'),
+                "success": p.get('success', False),
+                "sql": p.get('sql'),
+                "error": p.get('error')
+            })
         
         return {
-            "success": error_count == 0,
-            "message": f"Created {success_count} policies" + (f", {error_count} failed" if error_count > 0 else ""),
-            "policies": results,
-            "successCount": success_count,
-            "errorCount": error_count
+            "success": result.get('success', False),
+            "message": result.get('message', 'Batch creation completed'),
+            "policies": transformed_policies,
+            "successCount": result.get('success_count', 0),
+            "errorCount": result.get('error_count', 0)
         }
     except HTTPException as e:
         raise e

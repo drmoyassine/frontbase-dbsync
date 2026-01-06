@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 import {
     Collapsible,
     CollapsibleContent,
@@ -24,10 +24,10 @@ import {
     Users,
     Trash2,
     Search,
-    AlertCircle,
     Loader2,
     HelpCircle
 } from 'lucide-react';
+import { RLSPolicyCard } from './RLSPolicyCard';
 import { rlsApi } from '@/services/rls-api';
 import { useToast } from '@/hooks/use-toast';
 import { useUserContactConfig } from '@/hooks/useUserContactConfig';
@@ -36,6 +36,8 @@ import type { RLSPolicy } from '@/types/rls';
 interface RLSPoliciesByContactTypeProps {
     policies: RLSPolicy[];
     onRefresh: () => void;
+    onEdit: (policy: RLSPolicy) => void;
+    onDelete: (policy: RLSPolicy) => void;
     isLoading: boolean;
 }
 
@@ -89,6 +91,8 @@ function categorizePolicy(
 export function RLSPoliciesByContactType({
     policies,
     onRefresh,
+    onEdit,
+    onDelete,
     isLoading
 }: RLSPoliciesByContactTypeProps) {
     const { toast } = useToast();
@@ -260,8 +264,12 @@ export function RLSPoliciesByContactType({
                         className="pl-9"
                     />
                 </div>
-                <Badge variant="secondary">{totalPolicies} policies</Badge>
+                <div className="text-sm text-muted-foreground">
+                    {totalPolicies} {totalPolicies === 1 ? 'policy' : 'policies'}
+                </div>
             </div>
+
+            <Separator />
 
             {/* Loading */}
             {(isLoading || isLoadingMetadata) && (
@@ -275,15 +283,15 @@ export function RLSPoliciesByContactType({
 
             {/* Groups */}
             {!isLoading && !isLoadingMetadata && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                     {filteredGroups.map(group => (
                         <Collapsible
                             key={group.contactType}
                             open={expandedGroups.has(group.contactType)}
                             onOpenChange={() => toggleGroup(group.contactType)}
                         >
-                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
-                                <CollapsibleTrigger className="flex items-center gap-2 flex-1 text-left">
+                            <div className="flex items-center justify-between">
+                                <CollapsibleTrigger className="flex items-center gap-2 flex-1 text-left py-2 hover:bg-slate-50 rounded-lg px-2 -ml-2 transition-colors">
                                     {expandedGroups.has(group.contactType) ? (
                                         <ChevronDown className="h-4 w-4 text-muted-foreground" />
                                     ) : (
@@ -295,7 +303,7 @@ export function RLSPoliciesByContactType({
                                         <Users className="h-4 w-4 text-blue-500" />
                                     )}
                                     <span className="font-medium">{group.label}</span>
-                                    <Badge variant="outline" className="ml-2">
+                                    <Badge variant="secondary" className="ml-2">
                                         {group.policies.length} {group.policies.length === 1 ? 'policy' : 'policies'}
                                     </Badge>
                                 </CollapsibleTrigger>
@@ -321,24 +329,15 @@ export function RLSPoliciesByContactType({
                             </div>
 
                             <CollapsibleContent>
-                                <div className="ml-6 mt-2 space-y-1">
+                                {/* Use same 2-column grid layout as By Table view */}
+                                <div className="border-t mt-2 p-4 grid gap-3 md:grid-cols-2">
                                     {group.policies.map(policy => (
-                                        <div
+                                        <RLSPolicyCard
                                             key={`${policy.table_name}-${policy.policy_name}`}
-                                            className="flex items-center justify-between p-2 rounded border bg-white"
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <Badge variant="outline" className="text-xs">
-                                                    {policy.table_name}
-                                                </Badge>
-                                                <span className="text-sm font-medium">
-                                                    {policy.policy_name}
-                                                </span>
-                                            </div>
-                                            <Badge variant="secondary" className="text-xs">
-                                                {policy.operation || 'ALL'}
-                                            </Badge>
-                                        </div>
+                                            policy={policy}
+                                            onEdit={onEdit}
+                                            onDelete={onDelete}
+                                        />
                                     ))}
                                 </div>
                             </CollapsibleContent>

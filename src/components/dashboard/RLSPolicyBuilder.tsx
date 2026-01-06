@@ -9,8 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Trash2, Code, AlertCircle, Wand2, FileCode } from 'lucide-react';
-import { TableSelector } from '@/components/data-binding/TableSelector';
+import { Plus, Trash2, Code, AlertCircle, Wand2, FileCode, ChevronsUpDown, Check } from 'lucide-react';
+import { useTables } from '@/hooks/useDatabase';
 import { ConditionGroupBuilder, createEmptyCondition } from './ConditionGroupBuilder';
 import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
@@ -56,6 +56,12 @@ export function RLSPolicyBuilder({
 }: RLSPolicyBuilderProps) {
     const { config } = useUserContactConfig();
     const { schemas, loadTableSchema, globalSchema, fetchGlobalSchema } = useDataBindingStore();
+
+    // Fetch tables from Supabase connection (not datasource-based)
+    const { data: tablesData = [], isLoading: isLoadingTables } = useTables();
+    const availableTables = useMemo(() => {
+        return tablesData.map((t: any) => typeof t === 'string' ? t : t.name || t.table_name);
+    }, [tablesData]);
 
     // Form state
     const [policyName, setPolicyName] = useState(initialData?.policyName || '');
@@ -407,15 +413,19 @@ export function RLSPolicyBuilder({
                                         </SelectContent>
                                     </Select>
                                     <span className="text-muted-foreground">records in</span>
-                                    {/* Compact Table Selector */}
-                                    <div className="w-[200px]">
-                                        <TableSelector
-                                            value={tableName}
-                                            onValueChange={setTableName}
-                                            placeholder="Select table..."
-                                            variant="compact"
-                                        />
-                                    </div>
+                                    {/* Table Selector using Supabase connection */}
+                                    <Select value={tableName} onValueChange={setTableName}>
+                                        <SelectTrigger className="w-[200px] h-8 bg-white">
+                                            <SelectValue placeholder="Select table..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {availableTables.map((table) => (
+                                                <SelectItem key={table} value={table}>
+                                                    {table}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                             </CardContent>
                         </Card>

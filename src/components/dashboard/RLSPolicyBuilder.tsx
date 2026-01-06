@@ -315,8 +315,10 @@ export function RLSPolicyBuilder({
         editMode === 'raw'
             ? rawUsing.trim().length > 0  // Raw mode just needs a USING expression
             : (
+                isUnauthenticated ||
                 selectedContactTypes.length > 0 ||
                 selectedPermissionLevels.length > 0 ||
+                actorConditionGroup.conditions.some(c => 'column' in c && c.column) ||
                 conditionGroup.conditions.some(c => 'column' in c && c.column)
             )
     );

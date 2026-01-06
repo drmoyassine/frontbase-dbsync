@@ -417,7 +417,7 @@ export function RLSPoliciesPanel() {
                         policies={policies}
                         onRefresh={refresh}
                         onEdit={handleEditPolicy}
-                        onDelete={(policy) => handleDeletePolicy(policy.table_name, policy.policy_name)}
+                        onDelete={handleDeletePolicy}
                         isLoading={isLoading}
                     />
                 )}

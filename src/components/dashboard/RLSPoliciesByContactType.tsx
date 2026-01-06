@@ -37,7 +37,7 @@ interface RLSPoliciesByContactTypeProps {
     policies: RLSPolicy[];
     onRefresh: () => void;
     onEdit: (policy: RLSPolicy) => void;
-    onDelete: (policy: RLSPolicy) => void;
+    onDelete: (tableName: string, policyName: string) => Promise<void>;
     isLoading: boolean;
 }
 

@@ -45,6 +45,21 @@ class VerifyRLSRequest(BaseModel):
     currentUsing: Optional[str] = None
 
 
+# Batch policy creation models
+class TableRulePolicyData(BaseModel):
+    tableName: str
+    operation: str
+    usingExpression: str
+    checkExpression: Optional[str] = None
+
+
+class CreateBatchPolicyRequest(BaseModel):
+    policyBaseName: str
+    tableRules: List[TableRulePolicyData]
+    roles: List[str] = ["authenticated"]
+    permissive: bool = True
+
+
 async def get_rls_context(db: Session):
     """Get project context for RLS operations (requires service key)"""
     project = get_project_settings(db, "default")
@@ -327,6 +342,75 @@ async def toggle_table_rls(
         raise e
     except Exception as e:
         print(f"Toggle table RLS error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# BATCH POLICY CREATION
+# ============================================================
+
+@router.post("/batch")
+async def create_batch_policies(request: CreateBatchPolicyRequest, db: Session = Depends(get_db)):
+    """Create multiple RLS policies in a single request (for multi-table batch creation)"""
+    try:
+        ctx = await get_rls_context(db)
+        
+        results = []
+        success_count = 0
+        error_count = 0
+        
+        for rule in request.tableRules:
+            # Generate policy name: {baseName}_{tableName}
+            policy_name = f"{request.policyBaseName}_{rule.tableName}"
+            
+            try:
+                result = await call_rls_function('frontbase_create_rls_policy', {
+                    'p_table_name': rule.tableName,
+                    'p_policy_name': policy_name,
+                    'p_operation': rule.operation.upper(),
+                    'p_using_expr': rule.usingExpression,
+                    'p_check_expr': rule.checkExpression,
+                    'p_roles': request.roles,
+                    'p_permissive': request.permissive
+                }, ctx)
+                
+                if result.get('success', True):
+                    results.append({
+                        "tableName": rule.tableName,
+                        "policyName": policy_name,
+                        "success": True,
+                        "sql": result.get('sql')
+                    })
+                    success_count += 1
+                else:
+                    results.append({
+                        "tableName": rule.tableName,
+                        "policyName": policy_name,
+                        "success": False,
+                        "error": result.get('error', 'Policy creation failed')
+                    })
+                    error_count += 1
+                    
+            except Exception as e:
+                results.append({
+                    "tableName": rule.tableName,
+                    "policyName": policy_name,
+                    "success": False,
+                    "error": str(e)
+                })
+                error_count += 1
+        
+        return {
+            "success": error_count == 0,
+            "message": f"Created {success_count} policies" + (f", {error_count} failed" if error_count > 0 else ""),
+            "policies": results,
+            "successCount": success_count,
+            "errorCount": error_count
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print(f"Create batch RLS policies error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

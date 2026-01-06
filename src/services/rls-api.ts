@@ -8,7 +8,9 @@ import type {
     RLSPolicy,
     RLSTableStatus,
     CreatePolicyRequest,
-    UpdatePolicyRequest
+    UpdatePolicyRequest,
+    CreateBatchPolicyRequest,
+    BatchPolicyResult
 } from '@/types/rls';
 
 const API_BASE = '/api/database';
@@ -139,6 +141,20 @@ export const rlsApi = {
             policyName,
             currentUsing
         });
+        return response.data;
+    },
+
+    /**
+     * Create multiple RLS policies in batch (for multi-table creation)
+     */
+    createBatchPolicies: async (request: CreateBatchPolicyRequest): Promise<{
+        success: boolean;
+        message: string;
+        policies: BatchPolicyResult[];
+        successCount: number;
+        errorCount: number;
+    }> => {
+        const response = await api.post(`${API_BASE}/rls/batch`, request);
         return response.data;
     }
 };

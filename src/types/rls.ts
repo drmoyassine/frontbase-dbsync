@@ -107,6 +107,61 @@ export interface RLSPropagationTarget {
 }
 
 /**
+ * A single table rule for batch policy creation
+ * Contains operation + row conditions for one specific table
+ */
+export interface RLSTableRule {
+    id: string;                          // Unique ID for this rule
+    tableName: string;                   // Target table
+    operation: RLSOperation;             // SELECT, INSERT, UPDATE, DELETE, ALL
+    conditionGroup: RLSConditionGroup;   // Row-level conditions for this table
+}
+
+/**
+ * Batch policy form data (multiple tables, shared actor conditions)
+ */
+export interface RLSPolicyBatchFormData {
+    policyBaseName: string;              // Base name, e.g., "superadmin_access"
+
+    // Shared actor conditions (WHO)
+    actorConditionGroup: RLSConditionGroup;
+
+    // Per-table rules (WHAT + WHERE)
+    tableRules: RLSTableRule[];
+
+    // Options
+    applyToAllTables?: boolean;          // If true, apply to all tables
+    roles: string[];
+    permissive: boolean;
+    isUnauthenticated?: boolean;         // For public/anon access
+}
+
+/**
+ * Request to create batch policies
+ */
+export interface CreateBatchPolicyRequest {
+    policyBaseName: string;
+    tableRules: {
+        tableName: string;
+        operation: RLSOperation;
+        usingExpression: string;
+        checkExpression?: string;
+    }[];
+    roles?: string[];
+    permissive?: boolean;
+}
+
+/**
+ * Result of a batch policy creation
+ */
+export interface BatchPolicyResult {
+    tableName: string;
+    policyName: string;
+    success: boolean;
+    error?: string;
+}
+
+/**
  * Request body for creating a policy
  */
 export interface CreatePolicyRequest {

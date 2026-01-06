@@ -36,13 +36,16 @@ import {
     ShieldOff,
     Search,
     AlertCircle,
-    Loader2
+    Loader2,
+    Layers
 } from 'lucide-react';
 import { useRLSPolicies } from '@/hooks/data/useRLSPolicies';
 import { RLSPolicyCard } from './RLSPolicyCard';
 import { RLSPolicyBuilder } from './RLSPolicyBuilder';
+import { RLSBatchPolicyBuilder } from './RLSBatchPolicyBuilder';
+import { rlsApi } from '@/services/rls-api';
 import { useToast } from '@/hooks/use-toast';
-import type { RLSPolicy, RLSPolicyFormData, RLSTableStatus } from '@/types/rls';
+import type { RLSPolicy, RLSPolicyFormData, RLSTableStatus, RLSPolicyBatchFormData, RLSOperation } from '@/types/rls';
 
 // Type for metadata verification result
 interface VerifiedMetadata {
@@ -69,6 +72,7 @@ export function RLSPoliciesPanel() {
 
     // UI state
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+    const [isBatchDialogOpen, setIsBatchDialogOpen] = useState(false);
     const [editingPolicy, setEditingPolicy] = useState<RLSPolicy | null>(null);
     const [verifiedMetadata, setVerifiedMetadata] = useState<VerifiedMetadata | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -201,6 +205,50 @@ export function RLSPoliciesPanel() {
         }
     };
 
+    // Handle batch policy creation
+    const handleBatchCreatePolicies = async (
+        formData: RLSPolicyBatchFormData,
+        tableRulesWithSQL: Array<{
+            tableName: string;
+            operation: RLSOperation;
+            usingExpression: string;
+            checkExpression?: string;
+        }>
+    ) => {
+        try {
+            const result = await rlsApi.createBatchPolicies({
+                policyBaseName: formData.policyBaseName,
+                tableRules: tableRulesWithSQL,
+                roles: formData.roles,
+                permissive: formData.permissive
+            });
+
+            if (result.success) {
+                toast({
+                    title: 'Policies Created',
+                    description: result.message
+                });
+                setIsBatchDialogOpen(false);
+                refresh(); // Refresh the policies list
+            } else {
+                toast({
+                    title: 'Batch Creation Partial Failure',
+                    description: `${result.successCount} succeeded, ${result.errorCount} failed`,
+                    variant: 'destructive'
+                });
+                // Still close dialog and refresh to show what was created
+                setIsBatchDialogOpen(false);
+                refresh();
+            }
+        } catch (error: any) {
+            toast({
+                title: 'Failed to Create Policies',
+                description: error.message || 'An error occurred',
+                variant: 'destructive'
+            });
+        }
+    };
+
     // Handle policy update
     const handleUpdatePolicy = async (
         formData: RLSPolicyFormData,
@@ -310,6 +358,10 @@ export function RLSPoliciesPanel() {
                         >
                             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                             Refresh
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setIsBatchDialogOpen(true)}>
+                            <Layers className="h-4 w-4 mr-2" />
+                            Batch Create
                         </Button>
                         <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
                             <Plus className="h-4 w-4 mr-2" />
@@ -465,6 +517,25 @@ export function RLSPoliciesPanel() {
                     <RLSPolicyBuilder
                         onSubmit={handleCreatePolicy}
                         onCancel={() => setIsCreateDialogOpen(false)}
+                    />
+                </DialogContent>
+            </Dialog>
+
+            {/* Batch Create Policies Dialog */}
+            <Dialog open={isBatchDialogOpen} onOpenChange={setIsBatchDialogOpen}>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Layers className="h-5 w-5" />
+                            Batch Create RLS Policies
+                        </DialogTitle>
+                        <DialogDescription>
+                            Create policies for multiple tables at once with shared access rules
+                        </DialogDescription>
+                    </DialogHeader>
+                    <RLSBatchPolicyBuilder
+                        onSubmit={handleBatchCreatePolicies}
+                        onCancel={() => setIsBatchDialogOpen(false)}
                     />
                 </DialogContent>
             </Dialog>

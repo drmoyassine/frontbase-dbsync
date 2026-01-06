@@ -15,7 +15,7 @@ def run_migration():
     
     try:
         # Read the unified schema file
-        schema_path = Path(__file__).parent.parent.parent.parent / "server" / "database" / "unified_schema.sql"
+        schema_path = Path(__file__).parent / "unified_schema.sql"
         
         if not schema_path.exists():
             print(f"Error: Schema file not found at {schema_path}")

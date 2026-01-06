@@ -189,5 +189,7 @@ class TableSchemaCache(Base):
     datasource_id = Column(String, nullable=False)
     table_name = Column(String, nullable=False)
     schema_data = Column(Text, nullable=False)  # JSON
+    columns = Column(Text)  # JSON - added for caching efficiency
+    foreign_keys = Column(Text)  # JSON - added for caching efficiency
     last_updated = Column(String, nullable=False)
     is_valid = Column(Boolean, default=True)

@@ -11,7 +11,7 @@ import sys
 sys.path.append(os.getcwd())
 
 # Import the base and models
-from app.database.config import Base, DATABASE_URL
+from app.database.config import Base, SYNC_DATABASE_URL
 # Import models to ensure they are registered with Base
 from app.models import models
 
@@ -29,7 +29,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # Overwrite the sqlalchemy.url in the config with the one from the app
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+config.set_main_option("sqlalchemy.url", SYNC_DATABASE_URL)
 
 
 def run_migrations_offline() -> None:

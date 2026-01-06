@@ -156,7 +156,7 @@ export function RLSBatchPolicyBuilder({
 
         // Get the contacts table name and auth ID column from config
         const contactsTable = config?.contactsTable || 'contacts';
-        const authIdColumn = config?.columnMapping?.authIdColumn || 'auth_id';
+        const authIdColumn = config?.columnMapping?.authUserIdColumn || 'auth_id';
 
         // Build conditions that check the CURRENT USER's attributes
         const conditions: string[] = [];

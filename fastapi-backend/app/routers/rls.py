@@ -401,6 +401,91 @@ async def create_batch_policies(request: CreateBatchPolicyRequest, db: Session =
 
 
 # ============================================================
+# BULK DELETE POLICIES (from Supabase)
+# ============================================================
+
+class BulkDeleteRequest(BaseModel):
+    policies: List[dict]  # List of {tableName, policyName}
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_policies(request: BulkDeleteRequest, db: Session = Depends(get_db)):
+    """Delete multiple RLS policies from Supabase in bulk"""
+    try:
+        ctx = await get_rls_context(db)
+        
+        results = []
+        success_count = 0
+        error_count = 0
+        
+        for policy in request.policies:
+            table_name = policy.get('tableName')
+            policy_name = policy.get('policyName')
+            
+            if not table_name or not policy_name:
+                results.append({
+                    "tableName": table_name,
+                    "policyName": policy_name,
+                    "success": False,
+                    "error": "Missing tableName or policyName"
+                })
+                error_count += 1
+                continue
+            
+            try:
+                # Delete from Supabase via RPC
+                result = await call_rls_function('frontbase_drop_rls_policy', {
+                    'p_table_name': table_name,
+                    'p_policy_name': policy_name
+                }, ctx)
+                
+                if result.get('success', False):
+                    # Also delete metadata from local DB (using raw SQL)
+                    db.execute(
+                        text("DELETE FROM rls_metadata WHERE table_name = :table AND policy_name = :policy"),
+                        {"table": table_name, "policy": policy_name}
+                    )
+                    
+                    results.append({
+                        "tableName": table_name,
+                        "policyName": policy_name,
+                        "success": True
+                    })
+                    success_count += 1
+                else:
+                    results.append({
+                        "tableName": table_name,
+                        "policyName": policy_name,
+                        "success": False,
+                        "error": result.get('error', 'Delete failed')
+                    })
+                    error_count += 1
+            except Exception as e:
+                results.append({
+                    "tableName": table_name,
+                    "policyName": policy_name,
+                    "success": False,
+                    "error": str(e)
+                })
+                error_count += 1
+        
+        db.commit()
+        
+        return {
+            "success": error_count == 0,
+            "message": f"Deleted {success_count} policies" + (f", {error_count} failed" if error_count > 0 else ""),
+            "results": results,
+            "successCount": success_count,
+            "errorCount": error_count
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print(f"Bulk delete RLS policies error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
 # RLS METADATA ROUTES (Local SQLite storage)
 # ============================================================
 
@@ -415,6 +500,36 @@ def generate_sql_hash(sql: Optional[str]) -> str:
         hash_val = ((hash_val << 5) - hash_val) + ord(char)
         hash_val = hash_val & 0xFFFFFFFF  # Keep it 32-bit
     return format(hash_val, 'x')
+
+
+@router.get("/metadata")
+async def get_all_rls_metadata(db: Session = Depends(get_db)):
+    """Get all stored RLS metadata for categorization by contact_type"""
+    try:
+        result = db.execute(
+            text("SELECT table_name, policy_name, form_data, generated_using FROM rls_metadata")
+        )
+        rows = result.fetchall()
+        
+        data = []
+        for row in rows:
+            data.append({
+                "tableName": row.table_name,
+                "policyName": row.policy_name,
+                "formData": json.loads(row.form_data) if row.form_data else {},
+                "generatedUsing": row.generated_using
+            })
+        
+        return {
+            "success": True,
+            "data": data
+        }
+    except Exception as e:
+        print(f"Get all RLS metadata error: {e}")
+        return {
+            "success": True,
+            "data": []
+        }
 
 
 @router.get("/metadata/{table_name}/{policy_name}")

@@ -37,12 +37,15 @@ import {
     Search,
     AlertCircle,
     Loader2,
-    Layers
+    Layers,
+    Users,
+    Table as TableIcon
 } from 'lucide-react';
 import { useRLSPolicies } from '@/hooks/data/useRLSPolicies';
 import { RLSPolicyCard } from './RLSPolicyCard';
 import { RLSPolicyBuilder } from './RLSPolicyBuilder';
 import { RLSBatchPolicyBuilder } from './RLSBatchPolicyBuilder';
+import { RLSPoliciesByContactType } from './RLSPoliciesByContactType';
 import { rlsApi } from '@/services/rls-api';
 import { useToast } from '@/hooks/use-toast';
 import type { RLSPolicy, RLSPolicyFormData, RLSTableStatus, RLSPolicyBatchFormData, RLSOperation } from '@/types/rls';
@@ -78,6 +81,7 @@ export function RLSPoliciesPanel() {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterTable, setFilterTable] = useState<string>('_all_');
     const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
+    const [viewMode, setViewMode] = useState<'byTable' | 'byContactType'>('byTable');
 
     // Group policies by table
     const groupedPolicies = useMemo(() => {
@@ -383,126 +387,164 @@ export function RLSPoliciesPanel() {
                     </div>
                 )}
 
-                {/* Filters */}
-                <div className="flex items-center gap-4">
-                    <div className="relative flex-1 max-w-xs">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search policies..."
-                            className="pl-9"
-                        />
-                    </div>
-
-                    <Select value={filterTable} onValueChange={setFilterTable}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="All tables" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="_all_">All tables</SelectItem>
-                            {tableNames.map(name => (
-                                <SelectItem key={name} value={name}>{name}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-
-                    <div className="text-sm text-muted-foreground">
-                        {policies.length} {policies.length === 1 ? 'policy' : 'policies'}
-                    </div>
+                {/* View Mode Tabs */}
+                <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
+                    <button
+                        onClick={() => setViewMode('byTable')}
+                        className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'byTable'
+                            ? 'bg-white text-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                    >
+                        <TableIcon className="h-4 w-4" />
+                        By Table
+                    </button>
+                    <button
+                        onClick={() => setViewMode('byContactType')}
+                        className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'byContactType'
+                            ? 'bg-white text-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                    >
+                        <Users className="h-4 w-4" />
+                        By User Group
+                    </button>
                 </div>
 
-                <Separator />
-
-                {/* Loading state */}
-                {isLoading && policies.length === 0 && (
-                    <div className="flex items-center justify-center py-12">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                    </div>
+                {/* By Contact Type View */}
+                {viewMode === 'byContactType' && (
+                    <RLSPoliciesByContactType
+                        policies={policies}
+                        onRefresh={refresh}
+                        isLoading={isLoading}
+                    />
                 )}
 
-                {/* Empty state */}
-                {!isLoading && policies.length === 0 && (
-                    <div className="text-center py-12">
-                        <Shield className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                        <h3 className="font-medium text-lg mb-1">No RLS Policies</h3>
-                        <p className="text-muted-foreground text-sm mb-4">
-                            Create your first Row Level Security policy to control data access
-                        </p>
-                        <Button onClick={() => setIsCreateDialogOpen(true)}>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Create Policy
-                        </Button>
-                    </div>
-                )}
+                {/* By Table View (existing) */}
+                {viewMode === 'byTable' && (
+                    <>
+                        {/* Filters */}
+                        <div className="flex items-center gap-4">
+                            <div className="relative flex-1 max-w-xs">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Search policies..."
+                                    className="pl-9"
+                                />
+                            </div>
 
-                {/* Policies grouped by table */}
-                <div className="space-y-3">
-                    {Array.from(filteredGroupedPolicies.entries()).map(([tableName, tablePolicies]) => {
-                        const tableStatus = getTableRLSStatus(tableName);
-                        const isExpanded = expandedTables.has(tableName);
+                            <Select value={filterTable} onValueChange={setFilterTable}>
+                                <SelectTrigger className="w-[180px]">
+                                    <SelectValue placeholder="All tables" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="_all_">All tables</SelectItem>
+                                    {tableNames.map((name: string) => (
+                                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
 
-                        return (
-                            <Collapsible
-                                key={tableName}
-                                open={isExpanded}
-                                onOpenChange={() => toggleTableExpanded(tableName)}
-                            >
-                                <div className="rounded-lg border">
-                                    <CollapsibleTrigger className="w-full">
-                                        <div className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
-                                            <div className="flex items-center gap-3">
-                                                {isExpanded ? (
-                                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                                ) : (
-                                                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                                                )}
-                                                <Table className="h-4 w-4 text-muted-foreground" />
-                                                <span className="font-medium">{tableName}</span>
-                                                <Badge variant="secondary" className="text-xs">
-                                                    {tablePolicies.length} {tablePolicies.length === 1 ? 'policy' : 'policies'}
-                                                </Badge>
-                                            </div>
+                            <div className="text-sm text-muted-foreground">
+                                {policies.length} {policies.length === 1 ? 'policy' : 'policies'}
+                            </div>
+                        </div>
 
-                                            <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
-                                                {tableStatus && (
-                                                    <div className="flex items-center gap-2">
-                                                        {tableStatus.rls_enabled ? (
-                                                            <ShieldCheck className="h-4 w-4 text-green-600" />
+                        <Separator />
+
+                        {/* Loading state */}
+                        {isLoading && policies.length === 0 && (
+                            <div className="flex items-center justify-center py-12">
+                                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            </div>
+                        )}
+
+                        {/* Empty state */}
+                        {!isLoading && policies.length === 0 && (
+                            <div className="text-center py-12">
+                                <Shield className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                                <h3 className="font-medium text-lg mb-1">No RLS Policies</h3>
+                                <p className="text-muted-foreground text-sm mb-4">
+                                    Create your first Row Level Security policy to control data access
+                                </p>
+                                <Button onClick={() => setIsCreateDialogOpen(true)}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Create Policy
+                                </Button>
+                            </div>
+                        )}
+
+                        {/* Policies grouped by table */}
+                        <div className="space-y-3">
+                            {Array.from(filteredGroupedPolicies.entries()).map(([tableName, tablePolicies]) => {
+                                const tableStatus = getTableRLSStatus(tableName);
+                                const isExpanded = expandedTables.has(tableName);
+
+                                return (
+                                    <Collapsible
+                                        key={tableName}
+                                        open={isExpanded}
+                                        onOpenChange={() => toggleTableExpanded(tableName)}
+                                    >
+                                        <div className="rounded-lg border">
+                                            <CollapsibleTrigger className="w-full">
+                                                <div className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                                                    <div className="flex items-center gap-3">
+                                                        {isExpanded ? (
+                                                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
                                                         ) : (
-                                                            <ShieldOff className="h-4 w-4 text-amber-600" />
+                                                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                                         )}
-                                                        <span className="text-xs text-muted-foreground">
-                                                            RLS {tableStatus.rls_enabled ? 'enabled' : 'disabled'}
-                                                        </span>
-                                                        <Switch
-                                                            checked={tableStatus.rls_enabled}
-                                                            onCheckedChange={(checked) => handleToggleTableRLS(tableName, checked)}
-                                                            disabled={isLoadingTables}
-                                                        />
+                                                        <Table className="h-4 w-4 text-muted-foreground" />
+                                                        <span className="font-medium">{tableName}</span>
+                                                        <Badge variant="secondary" className="text-xs">
+                                                            {tablePolicies.length} {tablePolicies.length === 1 ? 'policy' : 'policies'}
+                                                        </Badge>
                                                     </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </CollapsibleTrigger>
 
-                                    <CollapsibleContent>
-                                        <div className="border-t p-4 grid gap-3 md:grid-cols-2">
-                                            {tablePolicies.map(policy => (
-                                                <RLSPolicyCard
-                                                    key={policy.policy_name}
-                                                    policy={policy}
-                                                    onEdit={handleEditPolicy}
-                                                    onDelete={handleDeletePolicy}
-                                                />
-                                            ))}
+                                                    <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
+                                                        {tableStatus && (
+                                                            <div className="flex items-center gap-2">
+                                                                {tableStatus.rls_enabled ? (
+                                                                    <ShieldCheck className="h-4 w-4 text-green-600" />
+                                                                ) : (
+                                                                    <ShieldOff className="h-4 w-4 text-amber-600" />
+                                                                )}
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    RLS {tableStatus.rls_enabled ? 'enabled' : 'disabled'}
+                                                                </span>
+                                                                <Switch
+                                                                    checked={tableStatus.rls_enabled}
+                                                                    onCheckedChange={(checked) => handleToggleTableRLS(tableName, checked)}
+                                                                    disabled={isLoadingTables}
+                                                                />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </CollapsibleTrigger>
+
+                                            <CollapsibleContent>
+                                                <div className="border-t p-4 grid gap-3 md:grid-cols-2">
+                                                    {tablePolicies.map(policy => (
+                                                        <RLSPolicyCard
+                                                            key={policy.policy_name}
+                                                            policy={policy}
+                                                            onEdit={handleEditPolicy}
+                                                            onDelete={handleDeletePolicy}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </CollapsibleContent>
                                         </div>
-                                    </CollapsibleContent>
-                                </div>
-                            </Collapsible>
-                        );
-                    })}
-                </div>
+                                    </Collapsible>
+                                );
+                            })}
+                        </div>
+                    </>
+                )}
             </CardContent>
 
             {/* Create Policy Dialog */}

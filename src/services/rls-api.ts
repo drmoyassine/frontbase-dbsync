@@ -156,6 +156,36 @@ export const rlsApi = {
     }> => {
         const response = await api.post(`${API_BASE}/rls/batch`, request);
         return response.data;
+    },
+
+    /**
+     * Bulk delete policies from Supabase (not just metadata)
+     */
+    bulkDeletePolicies: async (policies: Array<{ tableName: string; policyName: string }>): Promise<{
+        success: boolean;
+        message: string;
+        results: Array<{ tableName: string; policyName: string; success: boolean; error?: string }>;
+        successCount: number;
+        errorCount: number;
+    }> => {
+        const response = await api.post(`${API_BASE}/rls/bulk-delete`, { policies });
+        return response.data;
+    },
+
+    /**
+     * Get all metadata (for categorization by contact_type)
+     */
+    getAllMetadata: async (): Promise<{
+        success: boolean;
+        data: Array<{
+            tableName: string;
+            policyName: string;
+            formData: any;
+            generatedUsing?: string;
+        }>;
+    }> => {
+        const response = await api.get(`${API_BASE}/rls/metadata`);
+        return response.data;
     }
 };
 

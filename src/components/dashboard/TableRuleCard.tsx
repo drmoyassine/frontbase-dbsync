@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, GripVertical } from 'lucide-react';
+import { Trash2, GripVertical, ChevronDown, ChevronRight } from 'lucide-react';
 import { ConditionGroupBuilder, createEmptyCondition } from './ConditionGroupBuilder';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import type { RLSTableRule, RLSOperation, RLSConditionGroup } from '@/types/rls';
@@ -20,6 +20,7 @@ interface TableRuleCardProps {
 /**
  * A reusable card component for each table rule in batch policy creation.
  * Contains: table selector, operation selector, row conditions builder.
+ * Row conditions are collapsible to avoid loading schemas for all tables at once.
  */
 export function TableRuleCard({
     rule,
@@ -30,13 +31,17 @@ export function TableRuleCard({
     index
 }: TableRuleCardProps) {
     const { schemas, loadTableSchema } = useDataBindingStore();
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [schemaLoaded, setSchemaLoaded] = useState(false);
 
-    // Load schema when table changes
-    useEffect(() => {
-        if (rule.tableName) {
+    // Only load schema when user expands row conditions (on-demand)
+    const handleExpandToggle = useCallback(() => {
+        if (!isExpanded && rule.tableName && !schemaLoaded) {
             loadTableSchema(rule.tableName);
+            setSchemaLoaded(true);
         }
-    }, [rule.tableName, loadTableSchema]);
+        setIsExpanded(!isExpanded);
+    }, [isExpanded, rule.tableName, schemaLoaded, loadTableSchema]);
 
     // Get columns for selected table
     const tableColumns = useMemo(() => {
@@ -56,6 +61,7 @@ export function TableRuleCard({
     }, [rule.tableName, schemas]);
 
     const handleTableChange = (tableName: string) => {
+        setSchemaLoaded(false); // Reset schema loaded state for new table
         onChange({
             ...rule,
             tableName
@@ -133,19 +139,33 @@ export function TableRuleCard({
                     </Select>
                 </div>
 
-                {/* Row Conditions - only show if table is selected */}
+                {/* Row Conditions - collapsible, only load schema when expanded */}
                 {rule.tableName && (
-                    <div className="space-y-2 pt-2 border-t">
-                        <Label className="text-xs font-medium text-muted-foreground">
+                    <div className="pt-2 border-t">
+                        <button
+                            onClick={handleExpandToggle}
+                            className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                            {isExpanded ? (
+                                <ChevronDown className="h-3 w-3" />
+                            ) : (
+                                <ChevronRight className="h-3 w-3" />
+                            )}
                             Where (Row Conditions)
-                        </Label>
-                        <ConditionGroupBuilder
-                            group={rule.conditionGroup}
-                            onChange={handleConditionGroupChange}
-                            columns={tableColumns}
-                            allowedSources={['literal', 'auth', 'user_attribute', 'target_column']}
-                            showCombinator={true}
-                        />
+                            {!isExpanded && <span className="ml-1 text-xs opacity-60">click to expand</span>}
+                        </button>
+
+                        {isExpanded && (
+                            <div className="mt-2">
+                                <ConditionGroupBuilder
+                                    group={rule.conditionGroup}
+                                    onChange={handleConditionGroupChange}
+                                    columns={tableColumns}
+                                    allowedSources={['literal', 'auth', 'user_attribute', 'target_column']}
+                                    showCombinator={true}
+                                />
+                            </div>
+                        )}
                     </div>
                 )}
             </CardContent>

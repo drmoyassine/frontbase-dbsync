@@ -4,12 +4,13 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    gcc \
-    libpq-dev \
-    default-libmysqlclient-dev \
-    curl \
-    sqlite3 \
-    && rm -rf /var/lib/apt/lists/*
+  gcc \
+  libpq-dev \
+  default-libmysqlclient-dev \
+  curl \
+  sqlite3 \
+  dos2unix \
+  && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for caching
 COPY requirements.txt .
@@ -20,7 +21,7 @@ COPY . .
 
 # Copy entrypoint script and make executable
 COPY docker_entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker_entrypoint.sh
+RUN dos2unix /usr/local/bin/docker_entrypoint.sh && chmod +x /usr/local/bin/docker_entrypoint.sh
 
 # Create data directory
 RUN mkdir -p /app/data

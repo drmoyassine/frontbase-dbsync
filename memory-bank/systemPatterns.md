@@ -119,6 +119,23 @@ Component → useSimpleData() → useTableData() → databaseApi → FastAPI →
 - **Implementation**: `docker-compose.legacy.yml` + `Dockerfile.legacy`
 - **Purpose**: Behavioral verification and historical reference during migration
 
+### Database Migration Pattern (Alembic)
+- **Pattern**: Automated schema migrations on deployment
+- **Implementation**:
+  - `alembic/env.py` - Configured with `render_as_batch=True` for SQLite
+  - `docker_entrypoint.sh` - Runs `alembic upgrade head` before app start
+  - Uses `SYNC_DATABASE_URL` (not async) for Alembic operations
+- **Workflow**:
+  1. Change `models.py` locally
+  2. Generate migration: `alembic revision --autogenerate -m "description"`
+  3. Review generated script (auto-generate can be aggressive)
+  4. Commit and push
+  5. VPS applies automatically on deploy
+- **SQLite Gotchas**:
+  - Always use `server_default` when adding NOT NULL columns
+  - Name all constraints explicitly (avoid `None`)
+  - Use raw SQL for complex operations to avoid batch mode issues
+
 ## Performance Patterns
 
 ### Request Caching (React Query)

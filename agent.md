@@ -253,6 +253,36 @@ docker-compose up -d --build
 docker-compose -f docker-compose.legacy.yml up -d --build
 ```
 
+### Database Migrations (Alembic)
+
+**Automatic Deployment**: Migrations run automatically on container start via `docker_entrypoint.sh`. No manual intervention needed on VPS.
+
+**Local Development Workflow**:
+```bash
+cd fastapi-backend
+
+# 1. After changing models.py, generate a migration:
+alembic revision --autogenerate -m "Add xyz column"
+
+# 2. Review the generated script in alembic/versions/
+# WARNING: Auto-generate can be aggressive - always review!
+
+# 3. Test locally:
+alembic upgrade head
+
+# 4. Commit and push - VPS will apply automatically on deploy
+```
+
+**Key Files**:
+- `alembic/env.py` - Alembic configuration (uses SYNC_DATABASE_URL)
+- `alembic/versions/` - Migration scripts
+- `docker_entrypoint.sh` - Runs `alembic upgrade head` before app start
+
+**SQLite Gotchas**:
+- Use `render_as_batch=True` in env.py for ALTER TABLE support
+- Always provide `server_default` when adding NOT NULL columns to populated tables
+- Name all constraints explicitly (no `None` constraint names)
+
 ## Troubleshooting
 
 ### Common Issues

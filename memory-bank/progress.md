@@ -16,6 +16,13 @@
 - **@dnd-kit Migration**: Completed from legacy react-dnd
 - **Key Files**: `src/lib/styles/`, `BuilderCanvas.tsx`, `CustomBuilder.tsx`
 
+### 0.5. Database Migrations (Alembic) ✅ (2026-01-06)
+- **Setup**: Alembic configured with SQLite batch mode support
+- **Auto-Deploy**: `docker_entrypoint.sh` runs migrations on container start
+- **Fix**: Resolved VPS 500 error (missing `columns`/`foreign_keys` in `table_schema_cache`)
+- **Pattern**: Minimal surgical migrations using raw SQL for reliability
+- **Key Files**: `alembic/env.py`, `alembic/versions/`, `docker_entrypoint.sh`
+
 ### 1. FastAPI Primary Backend ✅
 - **Migration**: Completed full migration from Express.js to FastAPI
 - **API Proxy**: Vite proxies all `/api` requests to FastAPI (port 8000)

@@ -1,6 +1,7 @@
 # Active Context
 
 This file tracks the project's current status, including recent changes, current goals, and open questions.
+2026-01-06 - 🔄 ALEMBIC MIGRATIONS: Automated database migrations for VPS deployments
 2026-01-02 - 🎨 BUILDER UI/UX REVAMP: Visual CSS Styling, Responsive Viewport, Container Styles
 2026-01-01 - 🔒 DEPENDENCY HARDENING: Updated requirements and setup for cross-platform robustness
 2025-12-25 05:20:00 - INITIAL COMMIT READY: FastAPI + React Query Migration Complete
@@ -22,6 +23,13 @@ This file tracks the project's current status, including recent changes, current
 - **Builder**: ✅ **REVAMPED** - 17-phase UI/UX improvements complete
 
 ## Recent Changes
+
+**2026-01-06 - 🔄 ALEMBIC MIGRATIONS IMPLEMENTED**
+- **SETUP**: Installed Alembic with SQLite batch mode support (`render_as_batch=True`)
+- **AUTO-DEPLOY**: Migrations run automatically via `docker_entrypoint.sh` on container start
+- **FIX**: Resolved VPS 500 error by adding `columns` and `foreign_keys` to `table_schema_cache`
+- **PATTERN**: Minimal, surgical migrations using raw SQL for SQLite compatibility
+- **WORKFLOW**: Generate locally → Review → Commit → Deploy automatically
 
 **2026-01-02 - 🎨 BUILDER UI/UX REVAMP COMPLETE**
 - **VISUAL STYLING**: Implemented metadata-driven preset CSS properties engine

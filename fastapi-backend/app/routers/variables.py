@@ -9,13 +9,13 @@ from ..models.schemas import (
 
 router = APIRouter(prefix="/api/variables", tags=["variables"])
 
-@router.get("", response_model=List[VariableResponse])
+@router.get("/", response_model=List[VariableResponse])
 async def get_variables(db: Session = Depends(get_db)):
     """Get all variables"""
     variables = get_all_variables(db)
     return variables
 
-@router.post("", response_model=VariableResponse)
+@router.post("/", response_model=VariableResponse)
 async def create_variable_endpoint(request: VariableCreateRequest, db: Session = Depends(get_db)):
     """Create a new variable"""
     variable = create_variable(db, request.dict())

@@ -70,7 +70,6 @@ sync_app = FastAPI(
     description="Multi-source database synchronization microservice",
     version="1.0.0",
     lifespan=lifespan,
-    redirect_slashes=False,  # Disable 307 redirects for trailing slashes
     # Docs URL for sub-app will be /api/sync/docs relative to root if mounted at /api/sync
     # We can keep defaults or customize if needed.
 )
@@ -80,9 +79,19 @@ sync_app.add_exception_handler(RequestValidationError, validation_exception_hand
 sync_app.add_exception_handler(SQLAlchemyError, database_exception_handler)
 sync_app.add_exception_handler(Exception, global_exception_handler)
 
-# Trust proxy headers for HTTPS redirects (mounted sub-apps need their own middleware)
-from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
-sync_app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+# Custom middleware to force HTTPS scheme based on X-Forwarded-Proto
+# Mounted sub-apps need their own middleware as they don't inherit from parent
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+
+class ForceHTTPSSchemeMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        forwarded_proto = request.headers.get("x-forwarded-proto", "").lower()
+        if forwarded_proto == "https":
+            request.scope["scheme"] = "https"
+        return await call_next(request)
+
+sync_app.add_middleware(ForceHTTPSSchemeMiddleware)
 
 # Register specific routes BEFORE parametrized routers to avoid conflicts
 @sync_app.get("/health")

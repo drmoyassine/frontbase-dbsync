@@ -42,7 +42,7 @@ def serialize_page(page: Page) -> dict:
     }
 
 
-@router.get("")
+@router.get("/")
 async def get_pages(includeDeleted: bool = False, db: Session = Depends(get_db)):
     """Get all pages - matches Express: { success, data: pages[] }"""
     try:
@@ -86,7 +86,7 @@ async def get_page(page_id: str, db: Session = Depends(get_db)):
         }
 
 
-@router.post("", status_code=201)
+@router.post("/", status_code=201)
 async def create_page_endpoint(request: PageCreateRequest, db: Session = Depends(get_db)):
     """Create a new page - matches Express: { success, data: page }"""
     try:

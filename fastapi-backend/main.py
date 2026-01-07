@@ -60,8 +60,8 @@ app = FastAPI(
     title="Frontbase-DBSync API",
     description="Unified API for Frontbase and DB-Sync functionality",
     version="1.0.0",
-    lifespan=lifespan,
-    redirect_slashes=False  # Disable 307 redirects for trailing slashes
+    lifespan=lifespan
+    # Note: redirect_slashes=True (default) to support trailing slash normalization
 )
 
 # Configure CORS for frontend integration
@@ -95,10 +95,21 @@ app.add_middleware(
 )
 
 
-# Trust Proxy Headers (X-Forwarded-Proto) so redirects use HTTPS
-# This fixes the Mixed Content issue when FastAPI redirects /url to /url/
-from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+# Custom middleware to force HTTPS scheme based on X-Forwarded-Proto
+# This ensures redirects use HTTPS even when behind a proxy
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+class ForceHTTPSSchemeMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Check X-Forwarded-Proto header and force HTTPS scheme
+        forwarded_proto = request.headers.get("x-forwarded-proto", "").lower()
+        if forwarded_proto == "https":
+            # Mutate scope to use HTTPS scheme
+            request.scope["scheme"] = "https"
+        return await call_next(request)
+
+app.add_middleware(ForceHTTPSSchemeMiddleware)
 
 # Add test mode middleware
 app.add_middleware(TestModeMiddleware, test_mode=True)

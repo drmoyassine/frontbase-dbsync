@@ -70,6 +70,7 @@ sync_app = FastAPI(
     description="Multi-source database synchronization microservice",
     version="1.0.0",
     lifespan=lifespan,
+    redirect_slashes=False,  # Disable 307 redirects for trailing slashes
     # Docs URL for sub-app will be /api/sync/docs relative to root if mounted at /api/sync
     # We can keep defaults or customize if needed.
 )

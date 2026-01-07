@@ -34,7 +34,7 @@ ACTIONS_ENGINE_URL = "http://localhost:3002"
 
 # ============ Draft CRUD ============
 
-@router.get("/drafts", response_model=WorkflowDraftListResponse)
+@router.get("/drafts/", response_model=WorkflowDraftListResponse)
 async def list_drafts(
     skip: int = 0,
     limit: int = 50,
@@ -55,7 +55,7 @@ async def list_drafts(
     )
 
 
-@router.post("/drafts", response_model=WorkflowDraftResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/drafts/", response_model=WorkflowDraftResponse, status_code=status.HTTP_201_CREATED)
 async def create_draft(
     draft: WorkflowDraftCreate,
     db: Session = Depends(get_db)

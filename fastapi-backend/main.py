@@ -95,21 +95,27 @@ app.add_middleware(
 )
 
 
-# Custom middleware to force HTTPS scheme based on X-Forwarded-Proto
-# This ensures redirects use HTTPS even when behind a proxy
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
+# Custom middleware to internally add trailing slash to paths
+# This prevents 307 redirects by normalizing paths before routing
+from starlette.types import ASGIApp, Receive, Scope, Send
 
-class ForceHTTPSSchemeMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        # Check X-Forwarded-Proto header and force HTTPS scheme
-        forwarded_proto = request.headers.get("x-forwarded-proto", "").lower()
-        if forwarded_proto == "https":
-            # Mutate scope to use HTTPS scheme
-            request.scope["scheme"] = "https"
-        return await call_next(request)
+class TrailingSlashMiddleware:
+    """
+    Middleware that adds trailing slash to paths internally.
+    This prevents 307 redirects that can cause mixed-content issues.
+    """
+    def __init__(self, app: ASGIApp):
+        self.app = app
+    
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] == "http":
+            path = scope["path"]
+            # Add trailing slash if missing and not a file path (no extension)
+            if not path.endswith("/") and "." not in path.split("/")[-1]:
+                scope["path"] = path + "/"
+        await self.app(scope, receive, send)
 
-app.add_middleware(ForceHTTPSSchemeMiddleware)
+app.add_middleware(TrailingSlashMiddleware)
 
 # Add test mode middleware
 app.add_middleware(TestModeMiddleware, test_mode=True)

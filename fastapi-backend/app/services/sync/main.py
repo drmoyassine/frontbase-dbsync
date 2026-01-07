@@ -79,19 +79,23 @@ sync_app.add_exception_handler(RequestValidationError, validation_exception_hand
 sync_app.add_exception_handler(SQLAlchemyError, database_exception_handler)
 sync_app.add_exception_handler(Exception, global_exception_handler)
 
-# Custom middleware to force HTTPS scheme based on X-Forwarded-Proto
-# Mounted sub-apps need their own middleware as they don't inherit from parent
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request as StarletteRequest
+# Custom middleware to internally add trailing slash to paths
+# This prevents 307 redirects by normalizing paths before routing
+from starlette.types import ASGIApp, Receive, Scope, Send
 
-class ForceHTTPSSchemeMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: StarletteRequest, call_next):
-        forwarded_proto = request.headers.get("x-forwarded-proto", "").lower()
-        if forwarded_proto == "https":
-            request.scope["scheme"] = "https"
-        return await call_next(request)
+class TrailingSlashMiddleware:
+    """Middleware that adds trailing slash to paths internally."""
+    def __init__(self, app: ASGIApp):
+        self.app = app
+    
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] == "http":
+            path = scope["path"]
+            if not path.endswith("/") and "." not in path.split("/")[-1]:
+                scope["path"] = path + "/"
+        await self.app(scope, receive, send)
 
-sync_app.add_middleware(ForceHTTPSSchemeMiddleware)
+sync_app.add_middleware(TrailingSlashMiddleware)
 
 # Register specific routes BEFORE parametrized routers to avoid conflicts
 @sync_app.get("/health")

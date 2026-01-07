@@ -21,7 +21,7 @@ from app.services.sync.schemas.sync_config import (
 router = APIRouter()
 
 
-@router.post("", response_model=SyncConfigResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=SyncConfigResponse, status_code=status.HTTP_201_CREATED)
 async def create_sync_config(
     data: SyncConfigCreate,
     db: AsyncSession = Depends(get_db)
@@ -75,7 +75,7 @@ async def create_sync_config(
     return sync_config
 
 
-@router.get("", response_model=List[SyncConfigResponse])
+@router.get("/", response_model=List[SyncConfigResponse])
 async def list_sync_configs(
     db: AsyncSession = Depends(get_db)
 ):

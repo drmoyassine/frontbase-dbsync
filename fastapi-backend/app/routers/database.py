@@ -63,7 +63,7 @@ async def get_project_context(db: Session, mode: str = "builder"):
         "auth_method": auth_method
     }
 
-@router.get("/connections", response_model=DatabaseConnectionResponse)
+@router.get("/connections/", response_model=DatabaseConnectionResponse)
 async def get_connections(db: Session = Depends(get_db)):
     """Get database connections"""
     try:

@@ -200,7 +200,7 @@ async def resolve_conflict(
     )
 
 
-@router.get("/jobs", response_model=List[SyncJobResponse])
+@router.get("/jobs/", response_model=List[SyncJobResponse])
 async def list_jobs(
     config_id: str = None,
     limit: int = 20,

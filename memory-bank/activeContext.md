@@ -1,6 +1,8 @@
 # Active Context
 
 This file tracks the project's current status, including recent changes, current goals, and open questions.
+2026-01-06 - 🔒 RLS SINGLE POLICY BUILDER: Fixed user validation bug (button disabled)
+2026-01-06 - 🔒 RLS BATCH POLICY BUILDER: Fixed TypeScript property mismatch (`authIdColumn` → `authUserIdColumn`)
 2026-01-06 - 🔄 ALEMBIC MIGRATIONS: Automated database migrations for VPS deployments
 2026-01-02 - 🎨 BUILDER UI/UX REVAMP: Visual CSS Styling, Responsive Viewport, Container Styles
 2026-01-01 - 🔒 DEPENDENCY HARDENING: Updated requirements and setup for cross-platform robustness
@@ -23,6 +25,18 @@ This file tracks the project's current status, including recent changes, current
 - **Builder**: ✅ **REVAMPED** - 17-phase UI/UX improvements complete
 
 ## Recent Changes
+
+**2026-01-06 - 🔒 RLS SINGLE POLICY BUILDER FIX**
+- **FIX**: Resolved "Create Policy" button disabled bug in `RLSPolicyBuilder.tsx`
+- **ISSUE**: Validation logic ignored `actorConditionGroup` (Visual Builder "Who" conditions)
+- **SOLUTION**: Added `actorConditionGroup` and `isUnauthenticated` checks to `isValid` logic
+- **COMMIT**: Pushed fix to main branch (`886e2b8`)
+
+**2026-01-06 - 🔒 RLS BATCH POLICY BUILDER FIX**
+- **FIX**: Resolved TypeScript error in `RLSBatchPolicyBuilder.tsx` line 159
+- **ISSUE**: Property `authIdColumn` did not exist on `columnMapping` type
+- **SOLUTION**: Changed `config?.columnMapping?.authIdColumn` to `config?.columnMapping?.authUserIdColumn`
+- **COMMIT**: Pushed fix to main branch (`9e80d59`)
 
 **2026-01-06 - 🔄 ALEMBIC MIGRATIONS IMPLEMENTED**
 - **SETUP**: Installed Alembic with SQLite batch mode support (`render_as_batch=True`)

@@ -289,10 +289,9 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
 
     return (
         <Tabs defaultValue="binding" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="binding">Data</TabsTrigger>
                 <TabsTrigger value="options" disabled={!binding}>Options</TabsTrigger>
-                <TabsTrigger value="filters" disabled={!binding}>Filters</TabsTrigger>
                 <TabsTrigger value="actions" disabled={!binding}>Actions</TabsTrigger>
             </TabsList>
 
@@ -365,6 +364,18 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                             )}
                         </div>
 
+                        {/* Filters */}
+                        <div className="space-y-3 p-4 border rounded-lg">
+                            <Label className="font-medium">Filters</Label>
+                            <FilterConfigurator
+                                tableName={binding.tableName}
+                                dataSourceId={binding.dataSourceId}
+                                filters={binding.frontendFilters || []}
+                                onFiltersChange={(filters) => updateBinding({ frontendFilters: filters })}
+                                columnOrder={binding.columnOrder}
+                            />
+                        </div>
+
                         {/* Pagination */}
                         <div className="space-y-3 p-4 border rounded-lg">
                             <div className="flex items-center justify-between">
@@ -428,22 +439,6 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                 ) : (
                     <div className="text-center py-8 text-muted-foreground">
                         Configure data binding first to enable options.
-                    </div>
-                )}
-            </TabsContent>
-
-            <TabsContent value="filters" className="space-y-4 p-4">
-                {binding ? (
-                    <FilterConfigurator
-                        tableName={binding.tableName}
-                        dataSourceId={binding.dataSourceId}
-                        filters={binding.frontendFilters || []}
-                        onFiltersChange={(filters) => updateBinding({ frontendFilters: filters })}
-                        columnOrder={binding.columnOrder}
-                    />
-                ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                        Configure data binding first to enable filters.
                     </div>
                 )}
             </TabsContent>

@@ -234,10 +234,22 @@ cd fastapi-backend
 python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Terminal 2 - Frontend (Vite)**:
+**Terminal 2 - Actions Engine (Hono)**:
+```bash
+cd services/actions
+npm run dev
+# Runs on http://localhost:3002
+# Swagger UI: http://localhost:3002/docs
+```
+
+**Terminal 3 - Frontend (Vite)**:
 ```bash
 npm run dev
+# Runs on http://localhost:5173
 ```
+
+> **Note**: Actions Engine is optional for basic development but required for testing workflows.
+> See `memory-bank/actionsArchitecture.md` for full architecture details.
 
 ### Running with Docker (Production)
 
@@ -289,6 +301,7 @@ alembic upgrade head
 - **FK columns show dashes**: Run `supabase_setup.sql` in Supabase
 - **Data not loading**: Check Supabase connection in Settings
 - **Build errors**: Clear `node_modules/.vite` cache
+- **RLS config errors**: Ensure `columnMapping` uses `authUserIdColumn` (not `authIdColumn`)
 
 ### Debugging
 - React Query DevTools: Shows cache state

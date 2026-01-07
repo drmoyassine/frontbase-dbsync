@@ -2,9 +2,9 @@
 
 ## 🎯 Current Status: PRODUCTION READY
 
-**Date**: 2026-01-02  
-**Phase**: Builder UI/UX Revamp Complete  
-**Status**: ✅ **BUILDER REVAMP + FASTAPI + REACT QUERY COMPLETE**
+**Date**: 2026-01-06  
+**Phase**: RLS Policy Builder Maintenance  
+**Status**: ✅ **ALL SYSTEMS OPERATIONAL - RLS TypeScript Fix Applied**
 
 ## 🏆 Major Achievements
 
@@ -16,12 +16,25 @@
 - **@dnd-kit Migration**: Completed from legacy react-dnd
 - **Key Files**: `src/lib/styles/`, `BuilderCanvas.tsx`, `CustomBuilder.tsx`
 
+### 0.6. RLS Policy Builder Fixes ✅ (2026-01-06)
+- **Batch Builder**: Fixed TypeScript property mismatch (`authIdColumn` → `authUserIdColumn`)
+- **Single Builder**: Fixed "Create Policy" button disabled bug (validation logic ignored `actorConditionGroup`)
+- **Key Files**: `src/components/dashboard/RLSBatchPolicyBuilder.tsx`, `src/components/dashboard/RLSPolicyBuilder.tsx`
+
 ### 0.5. Database Migrations (Alembic) ✅ (2026-01-06)
 - **Setup**: Alembic configured with SQLite batch mode support
 - **Auto-Deploy**: `docker_entrypoint.sh` runs migrations on container start
 - **Fix**: Resolved VPS 500 error (missing `columns`/`foreign_keys` in `table_schema_cache`)
 - **Pattern**: Minimal surgical migrations using raw SQL for reliability
 - **Key Files**: `alembic/env.py`, `alembic/versions/`, `docker_entrypoint.sh`
+
+### Phase 4: Triggers & Integration (Completed)
+- **Frontend Hook**: `useActionTrigger` for executing workflows from components
+- **FastAPI**: Added `trigger_actions_engine` helper for webhooks
+- **UI Improvements**:
+  - **Table Properties**: Merged "Filters" into "Options" tab for cleaner layout
+  - **Button Properties**: Redesigned with Tabs (General/Actions) and added "Size" control
+- **Documentation**: Created `actionsArchitecture.md` and updated system patterns
 
 ### 1. FastAPI Primary Backend ✅
 - **Migration**: Completed full migration from Express.js to FastAPI

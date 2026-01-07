@@ -21,6 +21,7 @@ import {
 import { DataBindingModal } from './data-binding/DataBindingModal';
 import { DataTablePropertiesPanel } from '@/components/builder/data-table/DataTablePropertiesPanel';
 import { FormPropertiesPanel } from './form/FormPropertiesPanel';
+import { ActionProperties } from '@/components/builder/properties/ActionProperties';
 
 // Helper to find component recursively
 const findComponent = (components: any[], id: string): any => {
@@ -207,33 +208,13 @@ export const PropertiesPanel = () => {
 
       case 'Button':
         return (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="btn-text">Text</Label>
-              <Input
-                id="btn-text"
-                value={props.text || ''}
-                onChange={(e) => updateComponentProp('text', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="btn-variant">Variant</Label>
-              <Select value={props.variant || 'default'} onValueChange={(value) => updateComponentProp('variant', value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="default">Default</SelectItem>
-                  <SelectItem value="secondary">Secondary</SelectItem>
-                  <SelectItem value="destructive">Destructive</SelectItem>
-                  <SelectItem value="outline">Outline</SelectItem>
-                  <SelectItem value="ghost">Ghost</SelectItem>
-                  <SelectItem value="link">Link</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {renderDataBindingButton()}
-          </>
+          <ActionProperties
+            componentId={selectedComponentId}
+            props={props}
+            updateComponentProp={updateComponentProp}
+            onDataBindingClick={() => setShowDataBinding(true)}
+            hasBinding={!!props.binding}
+          />
         );
 
       case 'Input':

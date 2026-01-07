@@ -193,3 +193,7 @@ class TableSchemaCache(Base):
     foreign_keys = Column(Text)  # JSON - added for caching efficiency
     last_updated = Column(String, nullable=False)
     is_valid = Column(Boolean, default=True)
+
+
+# Import Actions models to register them with Base
+from app.models.actions import AutomationDraft, AutomationExecution  # noqa

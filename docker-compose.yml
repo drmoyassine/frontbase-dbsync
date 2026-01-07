@@ -8,19 +8,48 @@ services:
     expose:
       - "8000"
     environment:
+      # Database - SQLite for now (Postgres-ready: just change this URL)
       - DATABASE_URL=sqlite+aiosqlite:///./data/unified.db
+      # For Postgres migration, use: DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASS}@postgres:5432/${DB_NAME}
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - REDIS_URL=redis://redis:6379/0
+      # Actions Engine URL (internal network)
+      - ACTIONS_ENGINE_URL=http://actions:3002
     volumes:
       - backend_data:/app/data
     depends_on:
       - redis
+      - actions
+    networks:
+      - frontbase
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
       interval: 30s
       timeout: 10s
+      retries: 3
+
+  actions:
+    build:
+      context: ./services/actions
+      dockerfile: Dockerfile
+    expose:
+      - "3002"
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      # Database for workflow storage (SQLite)
+      - DATABASE_URL=file:/app/data/actions.db
+    volumes:
+      - actions_data:/app/data
+    networks:
+      - frontbase
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health" ]
+      interval: 15s
+      timeout: 5s
       retries: 3
 
   frontend:
@@ -31,6 +60,9 @@ services:
       - "8080:80"
     depends_on:
       - backend
+      - actions
+    networks:
+      - frontbase
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/" ]
@@ -42,6 +74,8 @@ services:
     image: redis:7-alpine
     volumes:
       - redis_data:/data
+    networks:
+      - frontbase
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
@@ -49,6 +83,11 @@ services:
       timeout: 5s
       retries: 5
 
+networks:
+  frontbase:
+    driver: bridge
+
 volumes:
   backend_data:
+  actions_data:
   redis_data:

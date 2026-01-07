@@ -316,6 +316,24 @@ async def forward_webhook(url: str, payload: Dict[str, Any]):
         logger.error(f"Failed to forward webhook to {url}: {e}")
 
 
+async def trigger_actions_engine(workflow_id: str, payload: Dict[str, Any]):
+    """Forward data change events to the Actions Engine."""
+    actions_engine_url = "http://localhost:3002"
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{actions_engine_url}/webhook/{workflow_id}",
+                json={"event": "data_change", "data": payload},
+                timeout=10.0
+            )
+            if response.status_code == 200:
+                logger.info(f"Actions Engine workflow {workflow_id} triggered successfully")
+            else:
+                logger.warning(f"Actions Engine returned {response.status_code}")
+    except Exception as e:
+        logger.error(f"Failed to trigger Actions Engine workflow {workflow_id}: {e}")
+
+
 @router.post("/{view_id}/trigger")
 async def trigger_view_webhook(
     view_id: str,

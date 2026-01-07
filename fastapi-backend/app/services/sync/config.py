@@ -2,7 +2,7 @@
 Application configuration using pydantic-settings
 """
 
-
+import os
 from typing import List, Any, Union
 from pydantic import field_validator, AnyHttpUrl
 from pydantic_settings import BaseSettings
@@ -11,8 +11,9 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
-    # Database
-    database_url: str = "sqlite+aiosqlite:///./unified.db"
+    # Database - Use DATABASE_URL env var with async driver
+    # Default matches main app's default but with async driver for the sync service
+    database_url: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./unified.db")
     
     # Security
     secret_key: str = "dev-secret-key-change-in-production"

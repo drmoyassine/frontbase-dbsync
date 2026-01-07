@@ -27,6 +27,7 @@ import { SettingsPanel } from "@/components/dashboard/SettingsPanel";
 // For now, adhering to the requested structure.
 
 import BuilderPage from "./pages/BuilderPage";
+import ActionsPage from "./pages/ActionsPage";
 import VariablesPage from "./pages/VariablesPage";
 import EmbedAuthPage from "./pages/EmbedAuthPage";
 import NotFound from "./pages/NotFound";
@@ -79,7 +80,9 @@ const App = () => {
               {/* Unified App Shell */}
               <Route element={<UnifiedShell />}>
                 <Route path="/" element={<Overview />} />
+
                 <Route path="/pages" element={<PagesPanel />} />
+                <Route path="/actions" element={<ActionsPage />} />
 
                 {/* Data Studio (Tabbed Interface) */}
                 <Route path="/data-studio" element={<DataStudio />}>

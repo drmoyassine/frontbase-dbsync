@@ -1,8 +1,16 @@
 # System Patterns
 
 This file documents recurring patterns and standards used in the project.
+2026-01-07 - 🎬 Added Actions Engine Architecture (see actionsArchitecture.md)
 2026-01-02 - 🎨 Added Builder Styling and Responsive patterns
 2025-12-25 05:20:00 - Updated with React Query patterns
+
+## Actions Engine Pattern (NEW)
+- **Pattern**: Split Builder/Runtime architecture
+- **Builder**: FastAPI (`/api/actions/`) - draft management, publishing
+- **Runtime**: Hono (`/actions/`) - workflow execution, webhooks
+- **Databases**: Separate `unified.db` (drafts) and `actions.db` (published)
+- **See**: `memory-bank/actionsArchitecture.md` for full documentation
 
 ## Builder UI/UX Patterns (NEW)
 
@@ -135,6 +143,16 @@ Component → useSimpleData() → useTableData() → databaseApi → FastAPI →
   - Always use `server_default` when adding NOT NULL columns
   - Name all constraints explicitly (avoid `None`)
   - Use raw SQL for complex operations to avoid batch mode issues
+
+### Unified Database Pattern
+- **Pattern**: Single SQLite file for all services
+- **Database File**: `unified.db` in `fastapi-backend/` root
+- **Services Using It**:
+  - Main App (`app/database/config.py`) - sync driver `sqlite:///`
+  - Sync Service (`app/services/sync/config.py`) - async driver `sqlite+aiosqlite:///`
+- **Configuration**: Both read `DATABASE_URL` from environment
+- **Docker**: Uses `./data/unified.db` with volume mount
+- **CRITICAL**: Never create separate database files - all data must go to unified.db
 
 ## Performance Patterns
 

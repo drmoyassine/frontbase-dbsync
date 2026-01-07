@@ -1,5 +1,44 @@
 # Decision Log
 
+## [2026-01-06] RLS Single Policy Builder - Validation Logic Fix
+
+**Context**: User reported that the "Create Policy" button was disabled in the single policy builder even when the form appeared valid.
+
+**Issue**: 
+- The validation logic (`isValid`) was only checking for legacy `contactTypes`/`permissionLevels` or `Row Conditions`.
+- It completely ignored the modern `actorConditionGroup` state (Visual Builder "Who" conditions).
+- It also didn't explicitly handle "Unauthenticated" (public) mode as a valid state without conditions.
+
+**Decision**: Updated `isValid` logic in `RLSPolicyBuilder.tsx` to include checks for:
+1. `actorConditionGroup.conditions` (presence of valid actor conditions)
+2. `isUnauthenticated` state (if true, policy is valid without explicit actor conditions)
+
+**Impact**:
+- "Create Policy" button now enables correctly when actor conditions are set.
+- Public policies can be created without forced dummy conditions.
+- Pushed fix to main branch (commit `886e2b8`).
+
+---
+
+## [2026-01-06] RLS Batch Policy Builder - TypeScript Property Fix
+
+**Context**: User encountered a TypeScript error while working on RLS policy functionality.
+
+**Issue**: 
+- Error: `Property 'authIdColumn' does not exist on type {...}. Did you mean 'authUserIdColumn'?`
+- Location: `RLSBatchPolicyBuilder.tsx:L159`
+
+**Root Cause**: The `columnMapping` interface was updated to use `authUserIdColumn` (more descriptive name for the Supabase auth user ID reference) but the RLS batch policy builder still referenced the old property name `authIdColumn`.
+
+**Decision**: Fixed the property reference from `authIdColumn` to `authUserIdColumn` to match the current type definition.
+
+**Impact**:
+- TypeScript compilation error resolved
+- RLS batch policy builder now correctly reads the auth user ID column from config
+- Pushed to main branch (commit `9e80d59`)
+
+---
+
 ## [2026-01-02] Builder UI/UX Revamp - Visual CSS Styling & Responsive Builder
 
 **Context**: Major builder overhaul to improve UX, implement visual styling, and add responsive features.

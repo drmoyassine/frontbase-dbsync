@@ -46,6 +46,13 @@ export default defineConfig(({ mode }) => {
             delete proxyRes.headers['x-content-type-options'];
           }
         },
+        // Actions Engine proxy
+        '/actions': {
+          target: 'http://localhost:3002',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path: string) => path.replace(/^\/actions/, ''),
+        },
       },
     },
     plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),

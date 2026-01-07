@@ -24,7 +24,7 @@ router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.crud")
 
 
-@router.post("/", response_model=DatasourceResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=DatasourceResponse, status_code=status.HTTP_201_CREATED)
 async def create_datasource(
     data: DatasourceCreate,
     db: AsyncSession = Depends(get_db)
@@ -99,7 +99,7 @@ async def create_datasource(
     return datasource
 
 
-@router.get("/", response_model=List[DatasourceResponse])
+@router.get("", response_model=List[DatasourceResponse])
 async def list_datasources(
     db: AsyncSession = Depends(get_db)
 ):

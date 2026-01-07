@@ -79,6 +79,10 @@ sync_app.add_exception_handler(RequestValidationError, validation_exception_hand
 sync_app.add_exception_handler(SQLAlchemyError, database_exception_handler)
 sync_app.add_exception_handler(Exception, global_exception_handler)
 
+# Trust proxy headers for HTTPS redirects (mounted sub-apps need their own middleware)
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+sync_app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
 # Register specific routes BEFORE parametrized routers to avoid conflicts
 @sync_app.get("/health")
 async def health():

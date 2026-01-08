@@ -262,6 +262,105 @@ const SearchColumnSelector: React.FC<SearchColumnSelectorProps> = ({
     );
 };
 
+// ============ DefaultSortColumnSelector Component ============
+interface DefaultSortColumnSelectorProps {
+    tableName: string;
+    dataSourceId?: string;
+    columnOrder?: string[];
+    value: string;
+    onValueChange: (column: string) => void;
+}
+
+const DefaultSortColumnSelector: React.FC<DefaultSortColumnSelectorProps> = ({
+    tableName,
+    dataSourceId,
+    columnOrder = [],
+    value,
+    onValueChange
+}) => {
+    const { globalSchema } = useDataBindingStore();
+    const [columns, setColumns] = useState<{ name: string; type: string; isRelated?: boolean }[]>([]);
+
+    // Load columns for the table + related columns from columnOrder
+    useEffect(() => {
+        if (!tableName) return;
+
+        const fetchColumns = async () => {
+            const allColumns: { name: string; type: string; isRelated?: boolean }[] = [];
+
+            // Use sync API for external datasources
+            if (dataSourceId && dataSourceId !== 'backend') {
+                try {
+                    const response = await fetch(
+                        `/api/sync/datasources/${dataSourceId}/tables/${tableName}/schema`
+                    );
+                    if (response.ok) {
+                        const schemaData = await response.json();
+                        (schemaData.columns || []).forEach((col: any) => {
+                            allColumns.push({
+                                name: col.column_name || col.name,
+                                type: col.data_type || col.type || 'text',
+                                isRelated: false
+                            });
+                        });
+                    }
+                } catch (error) {
+                    console.error('[DefaultSortColumnSelector] Failed to fetch schema:', error);
+                }
+            } else {
+                // Use globalSchema for backend datasource
+                const gTable = globalSchema.tables.find((t: any) => t.table_name === tableName);
+                if (gTable && gTable.columns) {
+                    gTable.columns.forEach((c: any) => {
+                        allColumns.push({ name: c.column_name, type: c.data_type, isRelated: false });
+                    });
+                }
+            }
+
+            // Add related columns from columnOrder (format: "table.column")
+            columnOrder.forEach(col => {
+                if (col.includes('.')) {
+                    const [relTable, relCol] = col.split('.');
+                    const relTableSchema = globalSchema.tables.find((t: any) => t.table_name === relTable);
+                    let colType = 'text';
+                    if (relTableSchema?.columns) {
+                        const foundCol = relTableSchema.columns.find((c: any) => c.column_name === relCol);
+                        if (foundCol) colType = foundCol.data_type;
+                    }
+                    if (!allColumns.some(c => c.name === col)) {
+                        allColumns.push({ name: col, type: colType, isRelated: true });
+                    }
+                }
+            });
+
+            setColumns(allColumns);
+        };
+
+        fetchColumns();
+    }, [tableName, dataSourceId, globalSchema, columnOrder]);
+
+    return (
+        <Select value={value} onValueChange={onValueChange}>
+            <SelectTrigger>
+                <SelectValue placeholder="Select a column..." />
+            </SelectTrigger>
+            <SelectContent>
+                {columns.map((col) => (
+                    <SelectItem key={col.name} value={col.name}>
+                        <div className="flex items-center gap-2">
+                            <span>{col.name}</span>
+                            {col.isRelated && (
+                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 bg-purple-50 text-purple-700 border-purple-200">
+                                    Related
+                                </Badge>
+                            )}
+                        </div>
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    );
+};
 
 export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> = ({
     componentId,
@@ -339,44 +438,7 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
             <TabsContent value="options" className="space-y-4 p-4">
                 {binding ? (
                     <div className="space-y-6">
-                        {/* Search */}
-                        <div className="space-y-3 p-4 border rounded-lg">
-                            <div className="flex items-center justify-between">
-                                <Label htmlFor="search-enabled" className="font-medium">Search</Label>
-                                <Switch
-                                    id="search-enabled"
-                                    checked={binding.filtering?.searchEnabled || false}
-                                    onCheckedChange={(checked) =>
-                                        updateBinding({
-                                            filtering: { ...binding.filtering!, searchEnabled: checked }
-                                        })
-                                    }
-                                />
-                            </div>
-                            {binding.filtering?.searchEnabled && (
-                                <SearchColumnSelector
-                                    tableName={binding.tableName}
-                                    dataSourceId={binding.dataSourceId}
-                                    selectedColumns={binding.searchColumns || []}
-                                    onColumnsChange={(columns) => updateBinding({ searchColumns: columns.length > 0 ? columns : undefined })}
-                                    columnOrder={binding.columnOrder}
-                                />
-                            )}
-                        </div>
-
-                        {/* Filters */}
-                        <div className="space-y-3 p-4 border rounded-lg">
-                            <Label className="font-medium">Filters</Label>
-                            <FilterConfigurator
-                                tableName={binding.tableName}
-                                dataSourceId={binding.dataSourceId}
-                                filters={binding.frontendFilters || []}
-                                onFiltersChange={(filters) => updateBinding({ frontendFilters: filters })}
-                                columnOrder={binding.columnOrder}
-                            />
-                        </div>
-
-                        {/* Pagination */}
+                        {/* Pagination - FIRST */}
                         <div className="space-y-3 p-4 border rounded-lg">
                             <div className="flex items-center justify-between">
                                 <Label htmlFor="pagination-enabled" className="font-medium">Pagination</Label>
@@ -409,6 +471,111 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                                         }
                                     />
                                 </div>
+                            )}
+                        </div>
+
+                        {/* Default Sort - SECOND */}
+                        <div className="space-y-3 p-4 border rounded-lg">
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="default-sort-enabled" className="font-medium">Default Sort</Label>
+                                <Switch
+                                    id="default-sort-enabled"
+                                    checked={binding.sorting?.enabled || false}
+                                    onCheckedChange={(checked) =>
+                                        updateBinding({
+                                            sorting: { ...binding.sorting!, enabled: checked }
+                                        })
+                                    }
+                                />
+                            </div>
+                            {binding.sorting?.enabled && (
+                                <div className="space-y-3 pt-2">
+                                    <div className="space-y-2">
+                                        <Label className="text-sm">Sort Column</Label>
+                                        <DefaultSortColumnSelector
+                                            tableName={binding.tableName}
+                                            dataSourceId={binding.dataSourceId}
+                                            columnOrder={binding.columnOrder}
+                                            value={binding.sorting?.column || ''}
+                                            onValueChange={(column) =>
+                                                updateBinding({
+                                                    sorting: { ...binding.sorting!, column }
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-sm">Sort Direction</Label>
+                                        <Select
+                                            value={binding.sorting?.direction || 'asc'}
+                                            onValueChange={(direction: 'asc' | 'desc') =>
+                                                updateBinding({
+                                                    sorting: { ...binding.sorting!, direction }
+                                                })
+                                            }
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="asc">Ascending (A → Z, 1 → 9)</SelectItem>
+                                                <SelectItem value="desc">Descending (Z → A, 9 → 1)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Search - THIRD */}
+                        <div className="space-y-3 p-4 border rounded-lg">
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="search-enabled" className="font-medium">Search</Label>
+                                <Switch
+                                    id="search-enabled"
+                                    checked={binding.filtering?.searchEnabled || false}
+                                    onCheckedChange={(checked) =>
+                                        updateBinding({
+                                            filtering: { ...binding.filtering!, searchEnabled: checked }
+                                        })
+                                    }
+                                />
+                            </div>
+                            {binding.filtering?.searchEnabled && (
+                                <SearchColumnSelector
+                                    tableName={binding.tableName}
+                                    dataSourceId={binding.dataSourceId}
+                                    selectedColumns={binding.searchColumns || []}
+                                    onColumnsChange={(columns) => updateBinding({ searchColumns: columns.length > 0 ? columns : undefined })}
+                                    columnOrder={binding.columnOrder}
+                                />
+                            )}
+                        </div>
+
+                        {/* Filters - FOURTH */}
+                        <div className="space-y-3 p-4 border rounded-lg">
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="filters-enabled" className="font-medium">Filters</Label>
+                                <Switch
+                                    id="filters-enabled"
+                                    checked={(binding.frontendFilters && binding.frontendFilters.length > 0) || (binding.filtering as any)?.filtersEnabled || false}
+                                    onCheckedChange={(checked) => {
+                                        updateBinding({
+                                            filtering: { ...binding.filtering!, filtersEnabled: checked } as any,
+                                            // Clear filters if disabled
+                                            frontendFilters: checked ? (binding.frontendFilters || []) : []
+                                        });
+                                    }}
+                                />
+                            </div>
+                            {((binding.frontendFilters && binding.frontendFilters.length > 0) || (binding.filtering as any)?.filtersEnabled) && (
+                                <FilterConfigurator
+                                    tableName={binding.tableName}
+                                    dataSourceId={binding.dataSourceId}
+                                    filters={binding.frontendFilters || []}
+                                    onFiltersChange={(filters) => updateBinding({ frontendFilters: filters })}
+                                    columnOrder={binding.columnOrder}
+                                />
                             )}
                         </div>
 

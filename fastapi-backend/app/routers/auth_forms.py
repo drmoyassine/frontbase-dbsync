@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 import uuid
+import json
 
 from app.database.utils import get_db
 
@@ -47,6 +48,20 @@ class AuthFormResponse(AuthFormBase):
         from_attributes = True
 
 
+def parse_json_field(value, default):
+    """Safely parse a JSON field."""
+    if not value:
+        return default
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        try:
+            # Try eval as fallback for Python dict strings
+            return eval(value)
+        except:
+            return default
+
+
 @router.get("/", response_model=List[AuthFormResponse])
 async def list_auth_forms(db: Session = Depends(get_db)):
     """List all auth forms"""
@@ -60,9 +75,9 @@ async def list_auth_forms(db: Session = Depends(get_db)):
                 "id": row.id,
                 "name": row.name,
                 "type": row.type,
-                "config": eval(row.config) if row.config else {},
+                "config": parse_json_field(row.config, {}),
                 "target_contact_type": row.target_contact_type,
-                "allowed_contact_types": eval(row.allowed_contact_types) if row.allowed_contact_types else [],
+                "allowed_contact_types": parse_json_field(row.allowed_contact_types, []),
                 "redirect_url": row.redirect_url,
                 "is_active": bool(row.is_active),
                 "created_at": row.created_at,
@@ -71,6 +86,9 @@ async def list_auth_forms(db: Session = Depends(get_db)):
         
         return forms
     except Exception as e:
+        import traceback
+        print(f"Error listing auth forms: {e}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -91,9 +109,9 @@ async def get_auth_form(form_id: str, db: Session = Depends(get_db)):
             "id": row.id,
             "name": row.name,
             "type": row.type,
-            "config": eval(row.config) if row.config else {},
+            "config": parse_json_field(row.config, {}),
             "target_contact_type": row.target_contact_type,
-            "allowed_contact_types": eval(row.allowed_contact_types) if row.allowed_contact_types else [],
+            "allowed_contact_types": parse_json_field(row.allowed_contact_types, []),
             "redirect_url": row.redirect_url,
             "is_active": bool(row.is_active),
             "created_at": row.created_at,
@@ -125,9 +143,9 @@ async def create_auth_form(form: AuthFormCreate, db: Session = Depends(get_db)):
                 "id": form_id,
                 "name": form.name,
                 "type": form.type,
-                "config": str(form.config) if form.config else "{}",
+                "config": json.dumps(form.config) if form.config else "{}",
                 "target_contact_type": form.target_contact_type,
-                "allowed_contact_types": str(form.allowed_contact_types) if form.allowed_contact_types else "[]",
+                "allowed_contact_types": json.dumps(form.allowed_contact_types) if form.allowed_contact_types else "[]",
                 "redirect_url": form.redirect_url,
                 "is_active": 1 if form.is_active else 0,
                 "created_at": now,
@@ -179,13 +197,13 @@ async def update_auth_form(form_id: str, form: AuthFormUpdate, db: Session = Dep
             params["type"] = form.type
         if form.config is not None:
             updates.append("config = :config")
-            params["config"] = str(form.config)
+            params["config"] = json.dumps(form.config)
         if form.target_contact_type is not None:
             updates.append("target_contact_type = :target_contact_type")
             params["target_contact_type"] = form.target_contact_type
         if form.allowed_contact_types is not None:
             updates.append("allowed_contact_types = :allowed_contact_types")
-            params["allowed_contact_types"] = str(form.allowed_contact_types)
+            params["allowed_contact_types"] = json.dumps(form.allowed_contact_types)
         if form.redirect_url is not None:
             updates.append("redirect_url = :redirect_url")
             params["redirect_url"] = form.redirect_url

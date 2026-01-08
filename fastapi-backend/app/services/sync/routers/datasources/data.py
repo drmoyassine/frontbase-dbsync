@@ -39,7 +39,7 @@ def _extract_row_id(record: Dict[str, Any]) -> Any:
     return list(record.values())[0] if record else None
 
 
-@router.get("/{datasource_id}/tables/{table}/data")
+@router.get("/{datasource_id}/tables/{table}/data/")
 async def get_datasource_table_data(
     datasource_id: str,
     table: str,
@@ -251,7 +251,7 @@ async def get_datasource_table_data(
         raise HTTPException(status_code=500, detail=f"Failed to fetch sample data: {str(e)}")
 
 
-@router.get("/{datasource_id}/tables/{table}/distinct/{column}")
+@router.get("/{datasource_id}/tables/{table}/distinct/{column}/")
 async def get_distinct_values(
     datasource_id: str,
     table: str,
@@ -282,7 +282,7 @@ async def get_distinct_values(
         raise HTTPException(status_code=500, detail=f"Failed to fetch distinct values: {str(e)}")
 
 
-@router.post("/{datasource_id}/tables/{table}/records")
+@router.post("/{datasource_id}/tables/{table}/records/")
 async def create_record(
     datasource_id: str,
     table: str,

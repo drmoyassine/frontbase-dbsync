@@ -41,7 +41,7 @@ async def get_datasource_tables(
         raise HTTPException(status_code=500, detail=f"Failed to fetch tables: {str(e)}")
 
 
-@router.get("/{datasource_id}/tables/{table}/schema", response_model=TableSchema)
+@router.get("/{datasource_id}/tables/{table}/schema/", response_model=TableSchema)
 async def get_table_schema(
     datasource_id: str,
     table: str,
@@ -105,7 +105,7 @@ async def get_table_schema(
 
 
 # Session endpoints for draft layout/config
-@router.post("/{datasource_id}/tables/{table_name}/session")
+@router.post("/{datasource_id}/tables/{table_name}/session/")
 async def save_table_session(datasource_id: str, table_name: str, session_data: Dict[str, Any]):
     """Save draft layout/config to Redis session (optional - gracefully degrades if Redis unavailable)."""
     key = f"session:{datasource_id}:{table_name}"
@@ -117,7 +117,7 @@ async def save_table_session(datasource_id: str, table_name: str, session_data: 
     return {"status": "ok", "persisted": True}
 
 
-@router.get("/{datasource_id}/tables/{table_name}/session")
+@router.get("/{datasource_id}/tables/{table_name}/session/")
 async def get_table_session(datasource_id: str, table_name: str):
     """Retrieve draft layout/config from Redis session."""
     key = f"session:{datasource_id}:{table_name}"

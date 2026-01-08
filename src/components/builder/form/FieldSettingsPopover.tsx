@@ -20,6 +20,10 @@ interface FieldSettingsPopoverProps {
     componentType?: 'Form' | 'InfoList';
     children: React.ReactNode;
     isBuilderMode?: boolean;
+    /** FK table name (for dropdown display column feature) */
+    fkTable?: string;
+    /** Datasource ID for fetching FK columns */
+    dataSourceId?: string;
 }
 
 export const FieldSettingsPopover: React.FC<FieldSettingsPopoverProps> = ({
@@ -28,18 +32,48 @@ export const FieldSettingsPopover: React.FC<FieldSettingsPopoverProps> = ({
     onSave,
     componentType = 'Form',
     children,
-    isBuilderMode = true
+    isBuilderMode = true,
+    fkTable,
+    dataSourceId
 }) => {
     const [open, setOpen] = useState(false);
     const [label, setLabel] = useState(settings?.label || fieldName);
     const [type, setType] = useState(settings?.type || 'text');
     const [required, setRequired] = useState(settings?.validation?.required || false);
+    const [fkDisplayColumn, setFkDisplayColumn] = useState(settings?.fkDisplayColumn || '');
+    const [fkColumns, setFkColumns] = useState<string[]>([]);
+
+    // Fetch FK table columns when fkTable is provided
+    useEffect(() => {
+        if (!fkTable || !open) return;
+
+        const fetchFkColumns = async () => {
+            try {
+                const endpoint = dataSourceId && dataSourceId !== 'backend'
+                    ? `/api/sync/datasources/${dataSourceId}/tables/${fkTable}/schema/`
+                    : `/api/database/table-schema/${fkTable}/`;
+
+                const response = await fetch(endpoint);
+                if (response.ok) {
+                    const result = await response.json();
+                    const schema = result.data || result;
+                    const cols = (schema.columns || []).map((c: any) => c.name || c.column_name).filter(Boolean);
+                    setFkColumns(cols);
+                }
+            } catch (e) {
+                console.warn('Failed to fetch FK columns:', e);
+            }
+        };
+
+        fetchFkColumns();
+    }, [fkTable, dataSourceId, open]);
 
     // Sync state when settings change
     useEffect(() => {
         setLabel(settings?.label || fieldName);
         setType(settings?.type || 'text');
         setRequired(settings?.validation?.required || false);
+        setFkDisplayColumn(settings?.fkDisplayColumn || '');
     }, [settings, fieldName]);
 
     // Don't wrap if not in builder mode
@@ -189,6 +223,30 @@ export const FieldSettingsPopover: React.FC<FieldSettingsPopoverProps> = ({
                                         </SelectContent>
                                     </Select>
                                 </div>
+
+                                {/* Display Column for FK dropdowns */}
+                                {fkTable && fkColumns.length > 0 && (
+                                    <div className="grid grid-cols-3 items-center gap-4">
+                                        <Label className="text-xs">Display</Label>
+                                        <Select
+                                            value={fkDisplayColumn}
+                                            onValueChange={(value) => {
+                                                setFkDisplayColumn(value);
+                                                handleSave({ fkDisplayColumn: value });
+                                            }}
+                                        >
+                                            <SelectTrigger className="col-span-2 h-8">
+                                                <SelectValue placeholder="Select column to show..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="id">ID</SelectItem>
+                                                {fkColumns.filter(c => c !== 'id').map(col => (
+                                                    <SelectItem key={col} value={col}>{col}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
                             </TabsContent>
 
                             <TabsContent value="validation" className="space-y-3 mt-3">

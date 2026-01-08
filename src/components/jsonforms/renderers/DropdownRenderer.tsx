@@ -29,7 +29,7 @@ const DropdownRendererComponent: React.FC<DropdownRendererProps> = ({
     errors,
 }) => {
     const [open, setOpen] = useState(false);
-    const [options, setOptions] = useState<string[]>([]);
+    const [options, setOptions] = useState<Array<{ value: string; label: string }>>([]);
     const [loading, setLoading] = useState(false);
     const { onFieldClick, isBuilderMode, fieldOverrides, onFieldOverrideChange } = useFormInteraction();
 
@@ -43,6 +43,7 @@ const DropdownRendererComponent: React.FC<DropdownRendererProps> = ({
     const fkTable = uischema?.options?.fkTable;
     const fkColumn = uischema?.options?.fkColumn || 'id';
     const dataSourceId = uischema?.options?.dataSourceId;
+    const fkDisplayColumn = uischema?.options?.fkDisplayColumn || fieldSettings?.fkDisplayColumn;
 
     // Fetch options from FK table
     useEffect(() => {
@@ -51,15 +52,35 @@ const DropdownRendererComponent: React.FC<DropdownRendererProps> = ({
         const fetchOptions = async () => {
             setLoading(true);
             try {
-                const endpoint = dataSourceId && dataSourceId !== 'backend'
-                    ? `/api/sync/datasources/${dataSourceId}/tables/${fkTable}/distinct/${fkColumn}`
-                    : `/api/database/tables/${fkTable}/distinct/${fkColumn}`;
+                // If we have a displayColumn, fetch records with id and displayColumn
+                if (fkDisplayColumn && fkDisplayColumn !== 'id') {
+                    const selectCols = `id,${fkDisplayColumn}`;
+                    const endpoint = dataSourceId && dataSourceId !== 'backend'
+                        ? `/api/sync/datasources/${dataSourceId}/tables/${fkTable}/data/?select=${selectCols}&limit=200`
+                        : `/api/database/table-data/${fkTable}/?limit=200`;
 
-                const response = await fetch(endpoint);
-                const result = await response.json();
+                    const response = await fetch(endpoint);
+                    const result = await response.json();
+                    const records = result.records || result.rows || [];
 
-                if (result.success || result.data) {
-                    setOptions(result.data || []);
+                    setOptions(records.map((r: any) => ({
+                        value: String(r.id || r[fkColumn]),
+                        label: String(r[fkDisplayColumn] || r.id || r[fkColumn])
+                    })));
+                } else {
+                    // Fallback: fetch distinct IDs (original behavior)
+                    const endpoint = dataSourceId && dataSourceId !== 'backend'
+                        ? `/api/sync/datasources/${dataSourceId}/tables/${fkTable}/distinct/${fkColumn}/`
+                        : `/api/database/tables/${fkTable}/distinct/${fkColumn}/`;
+
+                    const response = await fetch(endpoint);
+                    const result = await response.json();
+                    const values = result.data || [];
+
+                    setOptions(values.map((v: any) => ({
+                        value: String(v),
+                        label: String(v)
+                    })));
                 }
             } catch (error) {
                 console.error('Failed to fetch dropdown options:', error);
@@ -69,11 +90,17 @@ const DropdownRendererComponent: React.FC<DropdownRendererProps> = ({
         };
 
         fetchOptions();
-    }, [fkTable, fkColumn, dataSourceId]);
+    }, [fkTable, fkColumn, fkDisplayColumn, dataSourceId]);
 
     // Also support static enum options from schema
     const enumOptions = schema?.enum || [];
-    const allOptions = enumOptions.length > 0 ? enumOptions : options;
+    const allOptions = enumOptions.length > 0
+        ? enumOptions.map((v: any) => ({ value: String(v), label: String(v) }))
+        : options;
+
+    // Find current selection label for display
+    const currentOption = allOptions.find(opt => String(opt.value) === String(data));
+    const currentLabel = currentOption?.label || data;
 
     const content = (
         <div
@@ -103,7 +130,7 @@ const DropdownRendererComponent: React.FC<DropdownRendererProps> = ({
                             isBuilderMode && 'pointer-events-none' // Disable inner interaction in builder mode
                         )}
                     >
-                        {data || `Select ${(fieldSettings.label || displayLabel).toLowerCase()}...`}
+                        {currentLabel || `Select ${(fieldSettings.label || displayLabel).toLowerCase()}...`}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                 </PopoverTrigger>
@@ -127,20 +154,20 @@ const DropdownRendererComponent: React.FC<DropdownRendererProps> = ({
                                 </CommandItem>
                                 {allOptions.map((option) => (
                                     <CommandItem
-                                        key={String(option)}
-                                        value={String(option)}
+                                        key={option.value}
+                                        value={option.label}
                                         onSelect={() => {
-                                            handleChange(path, option);
+                                            handleChange(path, option.value);
                                             setOpen(false);
                                         }}
                                     >
                                         <Check
                                             className={cn(
                                                 'mr-2 h-4 w-4',
-                                                data === option ? 'opacity-100' : 'opacity-0'
+                                                String(data) === option.value ? 'opacity-100' : 'opacity-0'
                                             )}
                                         />
-                                        {String(option)}
+                                        {option.label}
                                     </CommandItem>
                                 ))}
                             </CommandGroup>
@@ -162,6 +189,8 @@ const DropdownRendererComponent: React.FC<DropdownRendererProps> = ({
                 onSave={(updates) => onFieldOverrideChange(fieldName, updates)}
                 componentType="Form"
                 isBuilderMode={true}
+                fkTable={fkTable}
+                dataSourceId={dataSourceId}
             >
                 {content}
             </FieldSettingsPopover>

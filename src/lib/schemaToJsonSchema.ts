@@ -214,6 +214,8 @@ export function schemaToJsonSchema(
                 ...(fieldOptions || {}),
                 ...(rendererHint ? { rendererHint } : {}),
                 ...(readOnlySet.has(column.name) ? { readonly: true } : {}),
+                // FK display column from override
+                ...(override.fkDisplayColumn ? { fkDisplayColumn: override.fkDisplayColumn } : {}),
             };
         }
 

@@ -14,24 +14,26 @@ import { FontControl } from './style-controls/FontControl';
 import { ComponentStyles, StyleMode } from '@/types/styles';
 import { generateStyles, getStylePresets } from '@/lib/styleUtils';
 import { cn } from '@/lib/utils';
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 
 export const AdvancedPropertiesPanel: React.FC = () => {
-  const { 
-    selectedComponentId, 
-    currentPageId, 
-    pages, 
-    updatePage, 
-    setSelectedComponentId 
+  const {
+    selectedComponentId,
+    currentPageId,
+    pages,
+    updatePage,
+    setSelectedComponentId
   } = useBuilderStore();
-  
+
   const [styleMode, setStyleMode] = useState<StyleMode>('visual');
   const [cssText, setCssText] = useState('');
-  
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
   const currentPage = pages.find(page => page.id === currentPageId);
   const selectedComponent = currentPage?.layoutData?.content?.find(
     (comp: any) => comp.id === selectedComponentId
   );
-  
+
   if (!selectedComponent) {
     return (
       <div className="h-full flex items-center justify-center p-4">
@@ -44,28 +46,28 @@ export const AdvancedPropertiesPanel: React.FC = () => {
       </div>
     );
   }
-  
+
   const styles: ComponentStyles = selectedComponent.styles || {};
-  
+
   const updateComponentStyle = (property: string, value: string) => {
     if (!currentPage) return;
-    
+
     // Handle default values - convert them to undefined to remove the style
     const defaultValues = ['default', 'auto', 'none'];
     const processedValue = defaultValues.includes(value) ? undefined : value;
-    
+
     const updatedContent = currentPage.layoutData.content.map((comp: any) =>
       comp.id === selectedComponentId
         ? {
-            ...comp,
-            styles: {
-              ...comp.styles,
-              [property]: processedValue
-            }
+          ...comp,
+          styles: {
+            ...comp.styles,
+            [property]: processedValue
           }
+        }
         : comp
     );
-    
+
     updatePage(currentPage.id, {
       layoutData: {
         ...currentPage.layoutData,
@@ -73,22 +75,22 @@ export const AdvancedPropertiesPanel: React.FC = () => {
       }
     });
   };
-  
+
   const updateComponentProp = (key: string, value: any) => {
     if (!currentPage) return;
-    
+
     const updatedContent = currentPage.layoutData.content.map((comp: any) =>
       comp.id === selectedComponentId
         ? {
-            ...comp,
-            props: {
-              ...comp.props,
-              [key]: value
-            }
+          ...comp,
+          props: {
+            ...comp.props,
+            [key]: value
           }
+        }
         : comp
     );
-    
+
     updatePage(currentPage.id, {
       layoutData: {
         ...currentPage.layoutData,
@@ -96,39 +98,40 @@ export const AdvancedPropertiesPanel: React.FC = () => {
       }
     });
   };
-  
+
   const deleteComponent = () => {
     if (!currentPage) return;
-    
+
     const updatedContent = currentPage.layoutData.content.filter(
       (comp: any) => comp.id !== selectedComponentId
     );
-    
+
     updatePage(currentPage.id, {
       layoutData: {
         ...currentPage.layoutData,
         content: updatedContent
       }
     });
-    
+
     setSelectedComponentId(null);
+    setShowDeleteDialog(false);
   };
-  
+
   const applyPreset = (presetStyles: ComponentStyles) => {
     if (!currentPage) return;
-    
+
     const updatedContent = currentPage.layoutData.content.map((comp: any) =>
       comp.id === selectedComponentId
         ? {
-            ...comp,
-            styles: {
-              ...comp.styles,
-              ...presetStyles
-            }
+          ...comp,
+          styles: {
+            ...comp.styles,
+            ...presetStyles
           }
+        }
         : comp
     );
-    
+
     updatePage(currentPage.id, {
       layoutData: {
         ...currentPage.layoutData,
@@ -136,11 +139,11 @@ export const AdvancedPropertiesPanel: React.FC = () => {
       }
     });
   };
-  
-  const presets = getStylePresets().filter(preset => 
+
+  const presets = getStylePresets().filter(preset =>
     !preset.applicableTypes || preset.applicableTypes.includes(selectedComponent.type)
   );
-  
+
   return (
     <div className="h-full flex flex-col bg-background">
       {/* Header */}
@@ -154,7 +157,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {/* TODO: Copy styles */}}
+              onClick={() => {/* TODO: Copy styles */ }}
               className="h-8 w-8 p-0"
             >
               <Copy className="h-4 w-4" />
@@ -162,7 +165,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={deleteComponent}
+              onClick={() => setShowDeleteDialog(true)}
               className="h-8 w-8 p-0 text-destructive hover:text-destructive"
             >
               <Trash2 className="h-4 w-4" />
@@ -170,7 +173,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
           </div>
         </div>
       </div>
-      
+
       {/* Content */}
       <div className="flex-1 overflow-auto">
         <Tabs value={styleMode} onValueChange={(v) => setStyleMode(v as StyleMode)} className="h-full">
@@ -178,7 +181,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
             <TabsTrigger value="visual" className="flex-1">Visual</TabsTrigger>
             <TabsTrigger value="css" className="flex-1">CSS</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="visual" className="space-y-4 p-4 pt-2">
             {/* Style Presets */}
             {presets.length > 0 && (
@@ -207,7 +210,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
                 </div>
               </Card>
             )}
-            
+
             {/* Typography */}
             <Card className="p-3">
               <Label className="text-sm font-medium mb-3 block">Typography</Label>
@@ -230,113 +233,113 @@ export const AdvancedPropertiesPanel: React.FC = () => {
                 />
               </div>
             </Card>
-            
+
             {/* Layout Controls */}
             <Card className="p-3">
               <Label className="text-sm font-medium mb-3 block">Layout Controls</Label>
               <div className="space-y-3">
-                 <div>
-                   <Label className="text-sm">Display</Label>
-                   <Select 
-                     value={styles.display || 'auto'} 
-                     onValueChange={(value) => updateComponentStyle('display', value)}
-                   >
-                     <SelectTrigger className="h-8">
-                       <SelectValue placeholder="Display" />
-                     </SelectTrigger>
-                     <SelectContent>
-                       <SelectItem value="auto">Default</SelectItem>
-                       <SelectItem value="block">Block</SelectItem>
-                       <SelectItem value="flex">Flex</SelectItem>
-                       <SelectItem value="grid">Grid</SelectItem>
-                       <SelectItem value="none">None</SelectItem>
-                     </SelectContent>
-                   </Select>
-                 </div>
+                <div>
+                  <Label className="text-sm">Display</Label>
+                  <Select
+                    value={styles.display || 'auto'}
+                    onValueChange={(value) => updateComponentStyle('display', value)}
+                  >
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="Display" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Default</SelectItem>
+                      <SelectItem value="block">Block</SelectItem>
+                      <SelectItem value="flex">Flex</SelectItem>
+                      <SelectItem value="grid">Grid</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
                 {styles.display === 'flex' && (
                   <>
                     <div className="grid grid-cols-2 gap-3">
-                       <div>
-                         <Label className="text-sm">Direction</Label>
-                         <Select 
-                           value={styles.flexDirection || 'default'} 
-                           onValueChange={(value) => updateComponentStyle('flexDirection', value)}
-                         >
-                           <SelectTrigger className="h-8">
-                             <SelectValue placeholder="Direction" />
-                           </SelectTrigger>
-                           <SelectContent>
-                             <SelectItem value="default">Default</SelectItem>
-                             <SelectItem value="row">Row</SelectItem>
-                             <SelectItem value="column">Column</SelectItem>
-                             <SelectItem value="row-reverse">Row Reverse</SelectItem>
-                             <SelectItem value="column-reverse">Column Reverse</SelectItem>
-                           </SelectContent>
-                         </Select>
-                       </div>
-                      
-                       <div>
-                         <Label className="text-sm">Gap</Label>
-                         <Select 
-                           value={styles.gap || 'none'} 
-                           onValueChange={(value) => updateComponentStyle('gap', value)}
-                         >
-                           <SelectTrigger className="h-8">
-                             <SelectValue placeholder="Gap" />
-                           </SelectTrigger>
-                           <SelectContent>
-                             <SelectItem value="none">None</SelectItem>
-                             <SelectItem value="1">1</SelectItem>
-                             <SelectItem value="2">2</SelectItem>
-                             <SelectItem value="3">3</SelectItem>
-                             <SelectItem value="4">4</SelectItem>
-                             <SelectItem value="6">6</SelectItem>
-                             <SelectItem value="8">8</SelectItem>
-                           </SelectContent>
-                         </Select>
-                       </div>
+                      <div>
+                        <Label className="text-sm">Direction</Label>
+                        <Select
+                          value={styles.flexDirection || 'default'}
+                          onValueChange={(value) => updateComponentStyle('flexDirection', value)}
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue placeholder="Direction" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="default">Default</SelectItem>
+                            <SelectItem value="row">Row</SelectItem>
+                            <SelectItem value="column">Column</SelectItem>
+                            <SelectItem value="row-reverse">Row Reverse</SelectItem>
+                            <SelectItem value="column-reverse">Column Reverse</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label className="text-sm">Gap</Label>
+                        <Select
+                          value={styles.gap || 'none'}
+                          onValueChange={(value) => updateComponentStyle('gap', value)}
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue placeholder="Gap" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            <SelectItem value="1">1</SelectItem>
+                            <SelectItem value="2">2</SelectItem>
+                            <SelectItem value="3">3</SelectItem>
+                            <SelectItem value="4">4</SelectItem>
+                            <SelectItem value="6">6</SelectItem>
+                            <SelectItem value="8">8</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
 
-                     <div>
-                       <Label className="text-sm">Justify Content (Horizontal)</Label>
-                       <Select 
-                         value={styles.justifyContent || 'default'} 
-                         onValueChange={(value) => updateComponentStyle('justifyContent', value)}
-                       >
-                         <SelectTrigger className="h-8">
-                           <SelectValue placeholder="Justify" />
-                         </SelectTrigger>
-                         <SelectContent>
-                           <SelectItem value="default">Default</SelectItem>
-                           <SelectItem value="flex-start">Start</SelectItem>
-                           <SelectItem value="center">Center</SelectItem>
-                           <SelectItem value="flex-end">End</SelectItem>
-                           <SelectItem value="space-between">Space Between</SelectItem>
-                           <SelectItem value="space-around">Space Around</SelectItem>
-                           <SelectItem value="space-evenly">Space Evenly</SelectItem>
-                         </SelectContent>
-                       </Select>
-                     </div>
+                    <div>
+                      <Label className="text-sm">Justify Content (Horizontal)</Label>
+                      <Select
+                        value={styles.justifyContent || 'default'}
+                        onValueChange={(value) => updateComponentStyle('justifyContent', value)}
+                      >
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="Justify" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default">Default</SelectItem>
+                          <SelectItem value="flex-start">Start</SelectItem>
+                          <SelectItem value="center">Center</SelectItem>
+                          <SelectItem value="flex-end">End</SelectItem>
+                          <SelectItem value="space-between">Space Between</SelectItem>
+                          <SelectItem value="space-around">Space Around</SelectItem>
+                          <SelectItem value="space-evenly">Space Evenly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                     <div>
-                       <Label className="text-sm">Align Items (Vertical)</Label>
-                       <Select 
-                         value={styles.alignItems || 'default'} 
-                         onValueChange={(value) => updateComponentStyle('alignItems', value)}
-                       >
-                         <SelectTrigger className="h-8">
-                           <SelectValue placeholder="Align" />
-                         </SelectTrigger>
-                         <SelectContent>
-                           <SelectItem value="default">Default</SelectItem>
-                           <SelectItem value="flex-start">Start</SelectItem>
-                           <SelectItem value="center">Center</SelectItem>
-                           <SelectItem value="flex-end">End</SelectItem>
-                           <SelectItem value="stretch">Stretch</SelectItem>
-                         </SelectContent>
-                       </Select>
-                     </div>
+                    <div>
+                      <Label className="text-sm">Align Items (Vertical)</Label>
+                      <Select
+                        value={styles.alignItems || 'default'}
+                        onValueChange={(value) => updateComponentStyle('alignItems', value)}
+                      >
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="Align" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default">Default</SelectItem>
+                          <SelectItem value="flex-start">Start</SelectItem>
+                          <SelectItem value="center">Center</SelectItem>
+                          <SelectItem value="flex-end">End</SelectItem>
+                          <SelectItem value="stretch">Stretch</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </>
                 )}
               </div>
@@ -366,7 +369,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
                     />
                   </div>
                 </div>
-                
+
                 <SpacingControl
                   label="Padding"
                   value={styles.padding}
@@ -378,11 +381,11 @@ export const AdvancedPropertiesPanel: React.FC = () => {
                     bottom: styles.paddingBottom,
                     left: styles.paddingLeft
                   }}
-                  onIndividualChange={(side, value) => 
+                  onIndividualChange={(side, value) =>
                     updateComponentStyle(`padding${side.charAt(0).toUpperCase() + side.slice(1)}`, value)
                   }
                 />
-                
+
                 <SpacingControl
                   label="Margin"
                   value={styles.margin}
@@ -394,13 +397,13 @@ export const AdvancedPropertiesPanel: React.FC = () => {
                     bottom: styles.marginBottom,
                     left: styles.marginLeft
                   }}
-                  onIndividualChange={(side, value) => 
+                  onIndividualChange={(side, value) =>
                     updateComponentStyle(`margin${side.charAt(0).toUpperCase() + side.slice(1)}`, value)
                   }
                 />
               </div>
             </Card>
-            
+
             {/* Background & Border */}
             <Card className="p-3">
               <Label className="text-sm font-medium mb-3 block">Background & Border</Label>
@@ -411,12 +414,12 @@ export const AdvancedPropertiesPanel: React.FC = () => {
                   onChange={(value) => updateComponentStyle('backgroundColor', value)}
                   property="backgroundColor"
                 />
-                
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-sm">Border Width</Label>
-                    <Select 
-                      value={styles.borderWidth || ''} 
+                    <Select
+                      value={styles.borderWidth || ''}
                       onValueChange={(value) => updateComponentStyle('borderWidth', value)}
                     >
                       <SelectTrigger className="h-8">
@@ -430,11 +433,11 @@ export const AdvancedPropertiesPanel: React.FC = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div>
                     <Label className="text-sm">Border Radius</Label>
-                    <Select 
-                      value={styles.borderRadius || ''} 
+                    <Select
+                      value={styles.borderRadius || ''}
                       onValueChange={(value) => updateComponentStyle('borderRadius', value)}
                     >
                       <SelectTrigger className="h-8">
@@ -450,7 +453,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
                     </Select>
                   </div>
                 </div>
-                
+
                 <ColorPicker
                   label="Border Color"
                   value={styles.borderColor}
@@ -459,7 +462,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
                 />
               </div>
             </Card>
-            
+
             {/* Component-specific properties */}
             <Card className="p-3">
               <Label className="text-sm font-medium mb-3 block">Component Properties</Label>
@@ -477,8 +480,8 @@ export const AdvancedPropertiesPanel: React.FC = () => {
                     </div>
                     <div>
                       <Label className="text-sm">Variant</Label>
-                      <Select 
-                        value={selectedComponent.props.variant || 'default'} 
+                      <Select
+                        value={selectedComponent.props.variant || 'default'}
                         onValueChange={(value) => updateComponentProp('variant', value)}
                       >
                         <SelectTrigger className="h-8">
@@ -496,7 +499,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
                     </div>
                   </>
                 )}
-                
+
                 {(selectedComponent.type === 'Text' || selectedComponent.type === 'Heading') && (
                   <div>
                     <Label className="text-sm">Text Content</Label>
@@ -507,7 +510,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
                     />
                   </div>
                 )}
-                
+
                 {selectedComponent.type === 'Input' && (
                   <>
                     <div>
@@ -520,8 +523,8 @@ export const AdvancedPropertiesPanel: React.FC = () => {
                     </div>
                     <div>
                       <Label className="text-sm">Type</Label>
-                      <Select 
-                        value={selectedComponent.props.type || 'text'} 
+                      <Select
+                        value={selectedComponent.props.type || 'text'}
                         onValueChange={(value) => updateComponentProp('type', value)}
                       >
                         <SelectTrigger className="h-8">
@@ -540,7 +543,7 @@ export const AdvancedPropertiesPanel: React.FC = () => {
               </div>
             </Card>
           </TabsContent>
-          
+
           <TabsContent value="css" className="p-4 pt-2">
             <Card className="p-3">
               <Label className="text-sm font-medium mb-3 block">Custom CSS</Label>
@@ -550,10 +553,10 @@ export const AdvancedPropertiesPanel: React.FC = () => {
                 onChange={(e) => setCssText(e.target.value)}
                 className="min-h-[200px] font-mono text-xs"
               />
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 className="mt-2"
-                onClick={() => {/* TODO: Parse and apply CSS */}}
+                onClick={() => {/* TODO: Parse and apply CSS */ }}
               >
                 Apply CSS
               </Button>
@@ -561,6 +564,12 @@ export const AdvancedPropertiesPanel: React.FC = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      <DeleteConfirmationDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        onConfirm={deleteComponent}
+      />
     </div>
   );
 };

@@ -5,6 +5,7 @@ interface KeyboardShortcutsOptions {
     onSave?: () => void;
     onUndo?: () => void;
     onRedo?: () => void;
+    onDeleteRequest?: () => void;
 }
 
 export const useKeyboardShortcuts = (options: KeyboardShortcutsOptions = {}) => {
@@ -33,7 +34,13 @@ export const useKeyboardShortcuts = (options: KeyboardShortcutsOptions = {}) => 
             // Delete - Del or Backspace (only when not typing)
             if ((event.key === 'Delete' || event.key === 'Backspace') && !isTyping && selectedComponentId) {
                 event.preventDefault();
-                removeComponent(selectedComponentId);
+                // Use callback to trigger confirmation dialog instead of direct deletion
+                if (options.onDeleteRequest) {
+                    options.onDeleteRequest();
+                } else {
+                    // Fallback to direct deletion if no callback provided
+                    removeComponent(selectedComponentId);
+                }
                 return;
             }
 

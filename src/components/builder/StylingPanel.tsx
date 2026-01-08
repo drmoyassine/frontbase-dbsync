@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
 import { useBuilderStore } from '@/stores/builder';
 import { StylesPanel } from '@/components/styles/StylesPanel';
 import type { StylesData } from '@/lib/styles/types';
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 
 export const StylingPanel: React.FC = () => {
   const {
@@ -13,6 +14,8 @@ export const StylingPanel: React.FC = () => {
     updatePage,
     setSelectedComponentId
   } = useBuilderStore();
+
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const currentPage = pages.find(page => page.id === currentPageId);
 
@@ -83,6 +86,7 @@ export const StylingPanel: React.FC = () => {
     });
 
     setSelectedComponentId(null);
+    setShowDeleteDialog(false);
   };
 
   // Get component styles in StylesData format (or create default)
@@ -130,7 +134,7 @@ export const StylingPanel: React.FC = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={deleteComponent}
+            onClick={() => setShowDeleteDialog(true)}
             className="h-8 w-8 p-0 text-destructive hover:text-destructive"
           >
             <Trash2 className="h-4 w-4" />
@@ -146,6 +150,12 @@ export const StylingPanel: React.FC = () => {
           title=""
         />
       </div>
+
+      <DeleteConfirmationDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        onConfirm={deleteComponent}
+      />
     </div>
   );
 };

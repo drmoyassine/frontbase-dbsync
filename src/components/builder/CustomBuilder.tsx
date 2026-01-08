@@ -48,7 +48,8 @@ export const CustomBuilder: React.FC = () => {
           toast.error('Failed to save page');
         }
       }
-    }
+    },
+    onDeleteRequest: () => setShowDeleteDialog(true),
   });
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);

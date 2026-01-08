@@ -334,7 +334,7 @@ async def trigger_actions_engine(workflow_id: str, payload: Dict[str, Any]):
         logger.error(f"Failed to trigger Actions Engine workflow {workflow_id}: {e}")
 
 
-@router.post("/{view_id}/trigger")
+@router.post("/{view_id}/trigger/")
 async def trigger_view_webhook(
     view_id: str,
     payload: Dict[str, Any],

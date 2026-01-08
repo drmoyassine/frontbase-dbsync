@@ -85,7 +85,7 @@ async def test_datasource(
         )
 
 
-@router.post("/test-raw", response_model=DatasourceTestResult)
+@router.post("/test-raw/", response_model=DatasourceTestResult)
 async def test_new_datasource(data: DatasourceTestRequest):
     """Test a new datasource connection with raw credentials without saving."""
     logger.info(f"Testing raw connection for new datasource: {data.name or 'Unnamed'} (Type: {data.type})")

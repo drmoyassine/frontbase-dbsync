@@ -40,7 +40,7 @@ class RedisTestResult(BaseModel):
     message: str
 
 
-@router.get("/redis", response_model=RedisSettingsResponse)
+@router.get("/redis/", response_model=RedisSettingsResponse)
 async def get_redis_settings(db: AsyncSession = Depends(get_db)):
     """Get current Redis settings."""
     result = await db.execute(select(ProjectSettings).limit(1))
@@ -58,7 +58,7 @@ async def get_redis_settings(db: AsyncSession = Depends(get_db)):
     )
 
 
-@router.put("/redis", response_model=RedisSettingsResponse)
+@router.put("/redis/", response_model=RedisSettingsResponse)
 async def update_redis_settings(
     data: RedisSettingsUpdate,
     db: AsyncSession = Depends(get_db)

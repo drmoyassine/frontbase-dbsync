@@ -99,7 +99,7 @@ async def get_connections(db: Session = Depends(get_db)):
             detail="Failed to get connections"
         )
 
-@router.post("/test-supabase", response_model=SuccessResponse)
+@router.post("/test-supabase/", response_model=SuccessResponse)
 async def test_supabase(request: DatabaseConnectionRequest):
     """Test Supabase connection credentials - tries service key first, falls back to anon key"""
     try:
@@ -269,7 +269,7 @@ async def get_table_data(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/distinct-values")
+@router.post("/distinct-values/")
 async def get_distinct_values(request: dict, db: Session = Depends(get_db)):
     """Get distinct values for a column"""
     try:
@@ -326,7 +326,7 @@ async def get_distinct_values(request: dict, db: Session = Depends(get_db)):
         print(f"Distinct values error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/advanced-query")
+@router.post("/advanced-query/")
 async def advanced_query(request: dict, db: Session = Depends(get_db)):
     """Execute advanced query"""
     try:
@@ -420,7 +420,7 @@ async def get_manual_schema_info(ctx):
         }
     }
 
-@router.get("/supabase-tables")
+@router.get("/supabase-tables/")
 async def get_supabase_tables(db: Session = Depends(get_db)):
     """Get database tables"""
     try:
@@ -467,7 +467,7 @@ async def get_supabase_tables(db: Session = Depends(get_db)):
         print(f"Get tables error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/tables")
+@router.get("/tables/")
 async def get_tables(db: Session = Depends(get_db)):
     """Get database tables (aliased to supabase-tables)"""
     return await get_supabase_tables(db)
@@ -564,7 +564,7 @@ async def get_table_schema(table_name: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/connect-supabase", response_model=SuccessResponse)
+@router.post("/connect-supabase/", response_model=SuccessResponse)
 async def connect_supabase(request: DatabaseConnectionRequest, db: Session = Depends(get_db)):
     """Connect to Supabase"""
     try:
@@ -593,7 +593,7 @@ async def connect_supabase(request: DatabaseConnectionRequest, db: Session = Dep
             detail="Failed to save connection"
         )
 
-@router.delete("/disconnect-supabase", response_model=SuccessResponse)
+@router.delete("/disconnect-supabase/", response_model=SuccessResponse)
 async def disconnect_supabase(db: Session = Depends(get_db)):
     """Disconnect from Supabase"""
     try:

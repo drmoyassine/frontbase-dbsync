@@ -117,7 +117,7 @@ async def call_rls_function(function_name: str, params: dict, ctx: dict):
 # RLS POLICY ROUTES
 # ============================================================
 
-@router.get("/policies")
+@router.get("/policies/")
 async def list_policies(schema: str = Query("public"), db: Session = Depends(get_db)):
     """List all RLS policies in the schema"""
     try:
@@ -138,7 +138,7 @@ async def list_policies(schema: str = Query("public"), db: Session = Depends(get
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/tables")
+@router.get("/tables/")
 async def get_tables_rls_status(schema: str = Query("public"), db: Session = Depends(get_db)):
     """Get RLS status for all tables"""
     try:
@@ -186,7 +186,7 @@ async def get_table_policies(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/policies")
+@router.post("/policies/")
 async def create_policy(request: CreatePolicyRequest, db: Session = Depends(get_db)):
     """Create a new RLS policy"""
     try:
@@ -349,7 +349,7 @@ async def toggle_table_rls(
 # BATCH POLICY CREATION
 # ============================================================
 
-@router.post("/batch")
+@router.post("/batch/")
 async def create_batch_policies(request: CreateBatchPolicyRequest, db: Session = Depends(get_db)):
     """Create multiple RLS policies in a single HTTP request using batch RPC function"""
     try:
@@ -408,7 +408,7 @@ class BulkDeleteRequest(BaseModel):
     policies: List[dict]  # List of {tableName, policyName}
 
 
-@router.post("/bulk-delete")
+@router.post("/bulk-delete/")
 async def bulk_delete_policies(request: BulkDeleteRequest, db: Session = Depends(get_db)):
     """Delete multiple RLS policies from Supabase in bulk"""
     try:
@@ -522,7 +522,7 @@ def ensure_rls_metadata_table(db: Session):
     db.commit()
 
 
-@router.get("/metadata")
+@router.get("/metadata/")
 async def get_all_rls_metadata(db: Session = Depends(get_db)):
     """Get all stored RLS metadata for categorization by contact_type"""
     try:
@@ -593,7 +593,7 @@ async def get_rls_metadata(
         }
 
 
-@router.post("/metadata")
+@router.post("/metadata/")
 async def save_rls_metadata(request: RLSMetadataRequest, db: Session = Depends(get_db)):
     """Save metadata when creating a policy"""
     try:

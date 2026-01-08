@@ -414,7 +414,7 @@ async def search_datasource_tables(
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 
-@router.get("/search-all")
+@router.get("/search-all/")
 async def search_all_datasources(
     q: str,
     detailed: bool = False,

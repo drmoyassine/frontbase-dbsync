@@ -9,7 +9,7 @@ from typing import List, Optional
 from datetime import datetime
 import uuid
 
-from app.database import get_db
+from app.database.utils import get_db
 
 router = APIRouter()
 

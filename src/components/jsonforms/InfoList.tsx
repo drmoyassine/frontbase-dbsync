@@ -1,5 +1,6 @@
 /**
  * InfoList Smart Block - Read-only display of a record as key-value pairs.
+ * Supports FK column expansion to show related table columns.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -10,6 +11,13 @@ import { columnToLabel } from '@/lib/schemaToJsonSchema';
 import type { ColumnSchema, TableSchema } from '@/types/schema';
 import { format, parseISO } from 'date-fns';
 import { FieldSettingsPopover } from '@/components/builder/form/FieldSettingsPopover';
+
+// Extended column type to support related/virtual columns
+interface ExpandedColumn extends ColumnSchema {
+    isRelated?: boolean;
+    relatedTable?: string;
+    relatedColumn?: string;
+}
 
 export interface InfoListProps {
     /** Datasource ID for external databases */
@@ -55,11 +63,20 @@ export const InfoList: React.FC<InfoListProps> = ({
     layout = '2',
     fieldSpacing = 'normal'
 }) => {
-    const [schema, setSchema] = useState<ColumnSchema[]>([]);
+    const [schema, setSchema] = useState<ExpandedColumn[]>([]);
     const [record, setRecord] = useState<Record<string, any> | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Fetch schema and record
+    // Helper: Get value from record, supporting dotted paths for related data
+    const getNestedValue = (rec: Record<string, any>, columnName: string): any => {
+        if (columnName.includes('.')) {
+            const [table, col] = columnName.split('.');
+            return rec[table]?.[col];
+        }
+        return rec[columnName];
+    };
+
+    // Fetch schema and record with FK expansion
     useEffect(() => {
         if (!tableName || !recordId) {
             setLoading(false);
@@ -69,20 +86,91 @@ export const InfoList: React.FC<InfoListProps> = ({
         const fetchData = async () => {
             setLoading(true);
             try {
-                // Fetch schema
+                // 1. Fetch main table schema
                 const schemaEndpoint = dataSourceId && dataSourceId !== 'backend'
-                    ? `/api/sync/datasources/${dataSourceId}/tables/${tableName}/schema`
-                    : `/api/database/tables/${tableName}/schema`;
+                    ? `/api/sync/datasources/${dataSourceId}/tables/${tableName}/schema/`
+                    : `/api/database/table-schema/${tableName}/`;
 
                 const schemaResponse = await fetch(schemaEndpoint);
                 if (!schemaResponse.ok) throw new Error('Failed to fetch schema');
-                const tableSchema: TableSchema = await schemaResponse.json();
-                setSchema(tableSchema.columns);
+                const schemaResult = await schemaResponse.json();
+                const tableSchema: TableSchema = schemaResult.data || schemaResult;
 
-                // Fetch record
+                // 2. Identify FK columns and fetch related schemas
+                const expandedSchema: ExpandedColumn[] = [];
+                const relatedTables = new Map<string, string[]>(); // table -> columns to fetch
+
+                for (const col of tableSchema.columns) {
+                    expandedSchema.push(col);
+
+                    // Check if this is an FK column (handle both snake_case and camelCase)
+                    const colAny = col as any;
+                    const isForeign = colAny.isForeign || col.is_foreign;
+                    const foreignTable = colAny.foreignTable || col.foreign_table;
+
+                    if (isForeign && foreignTable) {
+                        try {
+                            // Fetch related table schema
+                            const relSchemaEndpoint = dataSourceId && dataSourceId !== 'backend'
+                                ? `/api/sync/datasources/${dataSourceId}/tables/${foreignTable}/schema/`
+                                : `/api/database/table-schema/${foreignTable}/`;
+
+                            const relSchemaResponse = await fetch(relSchemaEndpoint);
+                            if (relSchemaResponse.ok) {
+                                const relSchemaResult = await relSchemaResponse.json();
+                                const relSchema: TableSchema = relSchemaResult.data || relSchemaResult;
+                                const relColumns: string[] = [];
+
+                                // Add virtual columns for related fields (skip id and FK columns)
+                                for (const relCol of relSchema.columns) {
+                                    const relColAny = relCol as any;
+                                    const relColName = relCol.name || relColAny.column_name;
+                                    // Skip id, created_at, updated_at etc
+                                    if (['id', 'created_at', 'updated_at', 'deleted_at'].includes(relColName)) continue;
+                                    // Skip if it's another FK
+                                    if (relColAny.isForeign || relCol.is_foreign) continue;
+
+                                    relColumns.push(relColName);
+                                    const relType = (typeof relCol.type === 'string' ? relCol.type : relColAny.data_type) || 'text';
+                                    expandedSchema.push({
+                                        name: `${foreignTable}.${relColName}`,
+                                        type: relType,
+                                        nullable: relCol.nullable ?? true,
+                                        primary_key: false,
+                                        is_foreign: false,
+                                        isRelated: true,
+                                        relatedTable: foreignTable,
+                                        relatedColumn: relColName,
+                                    } as ExpandedColumn);
+                                }
+
+                                if (relColumns.length > 0) {
+                                    relatedTables.set(foreignTable, relColumns);
+                                }
+                            }
+                        } catch (e) {
+                            console.warn(`Failed to fetch related schema for ${foreignTable}:`, e);
+                        }
+                    }
+                }
+
+                setSchema(expandedSchema);
+
+                // 3. Build select param for embedded relations
+                let selectParam = '*';
+                if (relatedTables.size > 0) {
+                    const embeddings: string[] = [];
+                    relatedTables.forEach((cols, table) => {
+                        embeddings.push(`${table}(${cols.join(',')})`);
+                    });
+                    selectParam = `*,${embeddings.join(',')}`;
+                }
+
+                // 4. Fetch record with embedded relations
+                const filtersParam = encodeURIComponent(JSON.stringify([{ field: 'id', operator: '==', value: recordId }]));
                 const dataEndpoint = dataSourceId && dataSourceId !== 'backend'
-                    ? `/api/sync/datasources/${dataSourceId}/tables/${tableName}/data?filters=${encodeURIComponent(JSON.stringify([{ field: 'id', operator: '==', value: recordId }]))}&limit=1`
-                    : `/api/database/tables/${tableName}/data?filters=${encodeURIComponent(JSON.stringify([{ field: 'id', operator: '==', value: recordId }]))}&limit=1`;
+                    ? `/api/sync/datasources/${dataSourceId}/tables/${tableName}/data/?filters=${filtersParam}&limit=1&select=${encodeURIComponent(selectParam)}`
+                    : `/api/database/table-data/${tableName}/?filters=${filtersParam}&limit=1`;
 
                 const dataResponse = await fetch(dataEndpoint);
                 if (!dataResponse.ok) throw new Error('Failed to fetch record');
@@ -98,6 +186,7 @@ export const InfoList: React.FC<InfoListProps> = ({
         };
 
         fetchData();
+
     }, [tableName, recordId, dataSourceId]);
 
     // Format value based on column type
@@ -319,7 +408,7 @@ export const InfoList: React.FC<InfoListProps> = ({
                                 {fieldOverrides[column.name]?.label || columnToLabel(column.name)}{isListLayout ? ':' : ''}
                             </dt>
                             <dd className="text-sm">
-                                {formatValue(column, record[column.name])}
+                                {formatValue(column, getNestedValue(record, column.name))}
                             </dd>
                         </div>
                     );

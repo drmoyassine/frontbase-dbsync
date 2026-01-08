@@ -315,7 +315,7 @@ export function UniversalDataTable({
             </div>
 
             {binding.pagination?.enabled && (
-              <div className="flex items-center justify-between px-2 py-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-2 py-4">
                 <div className="text-sm text-muted-foreground">
                   {(() => {
                     const page = currentPagination.page;
@@ -324,7 +324,14 @@ export function UniversalDataTable({
                     const end = Math.min((page + 1) * pageSize, count);
                     const totalPages = Math.ceil(count / pageSize);
 
-                    return `Showing ${start}-${end} of ${count} entries (Page ${page + 1} of ${totalPages || 1})`;
+                    return (
+                      <>
+                        {/* Mobile: Short format */}
+                        <span className="sm:hidden">{`${start}-${end} of ${count}`}</span>
+                        {/* Desktop: Full format */}
+                        <span className="hidden sm:inline">{`Showing ${start}-${end} of ${count} entries (Page ${page + 1} of ${totalPages || 1})`}</span>
+                      </>
+                    );
                   })()}
                 </div>
                 <div className="flex items-center space-x-2">
@@ -335,7 +342,7 @@ export function UniversalDataTable({
                     disabled={currentPagination.page === 0 || loading}
                   >
                     <ChevronLeft className="h-4 w-4" />
-                    Previous
+                    <span className="hidden sm:inline">Previous</span>
                   </Button>
                   <Button
                     variant="outline"
@@ -343,7 +350,7 @@ export function UniversalDataTable({
                     onClick={() => setPagination(currentPagination.page + 1)}
                     disabled={(currentPagination.page + 1) * currentPagination.pageSize >= count || loading}
                   >
-                    Next
+                    <span className="hidden sm:inline">Next</span>
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>

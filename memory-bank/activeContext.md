@@ -1,6 +1,9 @@
 # Active Context
 
 This file tracks the project's current status, including recent changes, current goals, and open questions.
+2026-01-09 - 🔄 MIGRATION CONSOLIDATION: Unified into single Alembic system
+2026-01-09 - 🛤️ TRAILING SLASH FIXES: Fixed 25+ routes to prevent 307 redirects
+2026-01-09 - 📝 AUTH FORMS: Fixed response format and trashed pages display
 2026-01-06 - 🔒 RLS SINGLE POLICY BUILDER: Fixed user validation bug (button disabled)
 2026-01-06 - 🔒 RLS BATCH POLICY BUILDER: Fixed TypeScript property mismatch (`authIdColumn` → `authUserIdColumn`)
 2026-01-06 - 🔄 ALEMBIC MIGRATIONS: Automated database migrations for VPS deployments
@@ -10,13 +13,12 @@ This file tracks the project's current status, including recent changes, current
 
 ## Current Focus
 
-**🎨 BUILDER UI/UX REVAMP COMPLETE (17 Phases)**
-- **COMPLETED**: Visual CSS Styling System (metadata-driven preset properties)
-- **COMPLETED**: Container Styles with zero-migration persistence
-- **COMPLETED**: Responsive viewport auto-switching (mobile/tablet/desktop)
-- **COMPLETED**: Canvas UX improvements (grid bounds, double-click to add)
-- **COMPLETED**: @dnd-kit migration from legacy react-dnd
-- **STATUS**: All builder improvements pushed to remote
+**🔄 MIGRATION & API CONSOLIDATION COMPLETE**
+- **COMPLETED**: Unified two migration systems into single Alembic system
+- **COMPLETED**: Fixed 25+ routes with missing trailing slashes
+- **COMPLETED**: Fixed auth_forms API response format
+- **COMPLETED**: Fixed trashed pages display (includeDeleted param)
+- **STATUS**: All changes pushed to main, MIGRATIONS.md documentation created
 
 ### Current Environment Status
 - **FastAPI Backend (Port 8000)**: ✅ Primary - Unified API & DB-Sync
@@ -25,6 +27,29 @@ This file tracks the project's current status, including recent changes, current
 - **Builder**: ✅ **REVAMPED** - 17-phase UI/UX improvements complete
 
 ## Recent Changes
+
+**2026-01-09 - 🔄 MIGRATION CONSOLIDATION**
+- **UNIFIED**: Consolidated `unified_schema.sql` + `migrate.py` into Alembic
+- **NEW MIGRATION**: `0001_frontbase_core_tables.py` (15 tables, idempotent)
+- **DOCS**: Created `MIGRATIONS.md` with comprehensive documentation
+- **CLEANUP**: Moved deprecated files to `app/database/_deprecated/`
+- **ENTRYPOINT**: Simplified to only run `alembic upgrade head`
+
+**2026-01-09 - 🛤️ TRAILING SLASH FIXES (25+ routes)**
+- **ISSUE**: FastAPI 307 redirects breaking frontend API calls
+- **FIX**: Added trailing slashes to all parameterized routes
+- **ROUTES FIXED**:
+  - `main.py`: `/health/`
+  - `sync/main.py`: `/health/`
+  - `pages.py`: `/{page_id}/`, `/layout/`, `/restore/`, `/permanent/`
+  - `database.py`: `/table-schema/{table_name}/`, `/table-data/{table_name}/`
+  - `testing.py`: `/{datasource_id}/test/`, `/test-update/`
+  - Plus all sync service routes (views, datasources, sync_configs, etc.)
+
+**2026-01-09 - 📝 AUTH FORMS API FIX**
+- **500 ERROR**: Fixed missing `auth_forms` table (now in Alembic)
+- **RESPONSE FORMAT**: Changed from raw data to `{success: true, data: ...}`
+- **FRONTEND**: Fixed `getPages()` to pass `includeDeleted` param for trashed pages
 
 **2026-01-06 - 🔒 RLS SINGLE POLICY BUILDER FIX**
 - **FIX**: Resolved "Create Policy" button disabled bug in `RLSPolicyBuilder.tsx`

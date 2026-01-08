@@ -127,22 +127,34 @@ Component → useSimpleData() → useTableData() → databaseApi → FastAPI →
 - **Implementation**: `docker-compose.legacy.yml` + `Dockerfile.legacy`
 - **Purpose**: Behavioral verification and historical reference during migration
 
-### Database Migration Pattern (Alembic)
-- **Pattern**: Automated schema migrations on deployment
+### Database Migration Pattern (Alembic - CONSOLIDATED)
+- **Pattern**: Single Alembic-based migration system (unified 2026-01-09)
+- **Documentation**: See `fastapi-backend/MIGRATIONS.md` for full guide
 - **Implementation**:
   - `alembic/env.py` - Configured with `render_as_batch=True` for SQLite
   - `docker_entrypoint.sh` - Runs `alembic upgrade head` before app start
   - Uses `SYNC_DATABASE_URL` (not async) for Alembic operations
+- **Migrations**:
+  - `c5311426ba79` - Initial (table_schema_cache columns)
+  - `0001_frontbase_core` - All Frontbase tables (15 tables, idempotent)
+- **Deprecated** (in `app/database/_deprecated/`):
+  - `migrate.py` - Old custom migration runner
+  - `unified_schema.sql` - Old SQL schema file
 - **Workflow**:
-  1. Change `models.py` locally
-  2. Generate migration: `alembic revision --autogenerate -m "description"`
-  3. Review generated script (auto-generate can be aggressive)
-  4. Commit and push
-  5. VPS applies automatically on deploy
+  1. Change models locally
+  2. Generate: `alembic revision --autogenerate -m "description"`
+  3. Review, commit, push
+  4. VPS applies automatically on deploy
 - **SQLite Gotchas**:
-  - Always use `server_default` when adding NOT NULL columns
-  - Name all constraints explicitly (avoid `None`)
-  - Use raw SQL for complex operations to avoid batch mode issues
+  - Always use `server_default` for NOT NULL columns
+  - Use `table_exists()` checks for idempotent migrations
+  - Use raw SQL for complex operations
+
+### API Route Trailing Slash Pattern (2026-01-09)
+- **Pattern**: All FastAPI routes with path parameters MUST end with `/`
+- **Reason**: Prevents 307 Temporary Redirect which breaks frontend API calls
+- **Implementation**: `@router.get("/{id}/")` not `@router.get("/{id}")`
+- **Middleware**: `TrailingSlashMiddleware` normalizes paths (adds slash if missing)
 
 ### Unified Database Pattern
 - **Pattern**: Single SQLite file for all services

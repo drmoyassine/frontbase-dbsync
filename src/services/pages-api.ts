@@ -4,9 +4,10 @@ import { ApiContracts, PageSchema, PageListSchema } from './api-contracts';
 
 // Pages API - Using Strict Contracts
 
-export const getPages = async (): Promise<Page[]> => {
+export const getPages = async (includeDeleted: boolean = false): Promise<Page[]> => {
   try {
-    const response = await api.get('/api/pages');
+    const params = includeDeleted ? '?includeDeleted=true' : '';
+    const response = await api.get(`/api/pages${params}`);
     // Validate response structure
     return ApiContracts.validate(PageListSchema, response.data, 'getPages') as unknown as Page[];
   } catch (error) {

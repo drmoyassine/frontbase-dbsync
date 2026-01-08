@@ -280,6 +280,8 @@ const DefaultSortColumnSelector: React.FC<DefaultSortColumnSelectorProps> = ({
 }) => {
     const { globalSchema } = useDataBindingStore();
     const [columns, setColumns] = useState<{ name: string; type: string; isRelated?: boolean }[]>([]);
+    const [searchFilter, setSearchFilter] = useState('');
+    const [open, setOpen] = useState(false);
 
     // Load columns for the table + related columns from columnOrder
     useEffect(() => {
@@ -339,26 +341,81 @@ const DefaultSortColumnSelector: React.FC<DefaultSortColumnSelectorProps> = ({
         fetchColumns();
     }, [tableName, dataSourceId, globalSchema, columnOrder]);
 
+    const filteredColumns = columns.filter(c =>
+        c.name.toLowerCase().includes(searchFilter.toLowerCase())
+    );
+
+    const selectedColumn = columns.find(c => c.name === value);
+
     return (
-        <Select value={value} onValueChange={onValueChange}>
-            <SelectTrigger>
-                <SelectValue placeholder="Select a column..." />
-            </SelectTrigger>
-            <SelectContent>
-                {columns.map((col) => (
-                    <SelectItem key={col.name} value={col.name}>
-                        <div className="flex items-center gap-2">
-                            <span>{col.name}</span>
-                            {col.isRelated && (
-                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 bg-purple-50 text-purple-700 border-purple-200">
-                                    Related
-                                </Badge>
-                            )}
-                        </div>
-                    </SelectItem>
-                ))}
-            </SelectContent>
-        </Select>
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    variant="outline"
+                    className="w-full justify-between h-auto min-h-9 px-3 py-2"
+                >
+                    <div className="flex items-center gap-2 truncate">
+                        {value ? (
+                            <>
+                                <span className="truncate">{value}</span>
+                                {selectedColumn?.isRelated && (
+                                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 bg-purple-50 text-purple-700 border-purple-200">
+                                        Related
+                                    </Badge>
+                                )}
+                            </>
+                        ) : (
+                            <span className="text-muted-foreground">Select a column...</span>
+                        )}
+                    </div>
+                    <ChevronDown className="w-4 h-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[280px] p-0" align="start">
+                <div className="p-2 border-b">
+                    <div className="relative">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search columns..."
+                            value={searchFilter}
+                            onChange={(e) => setSearchFilter(e.target.value)}
+                            className="pl-8 h-8"
+                        />
+                    </div>
+                </div>
+                <ScrollArea className="h-[200px]">
+                    <div className="p-1">
+                        {filteredColumns.length === 0 ? (
+                            <div className="text-center py-4 text-muted-foreground text-sm">
+                                No columns found
+                            </div>
+                        ) : (
+                            filteredColumns.map((col) => (
+                                <div
+                                    key={col.name}
+                                    className={`flex items-center gap-2 px-2 py-1.5 hover:bg-muted rounded cursor-pointer ${value === col.name ? 'bg-muted' : ''}`}
+                                    onClick={() => {
+                                        onValueChange(col.name);
+                                        setOpen(false);
+                                        setSearchFilter('');
+                                    }}
+                                >
+                                    <span className="text-sm truncate flex-1">{col.name}</span>
+                                    {col.isRelated && (
+                                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 bg-purple-50 text-purple-700 border-purple-200">
+                                            Related
+                                        </Badge>
+                                    )}
+                                    <Badge variant="outline" className="text-[10px] ml-auto shrink-0">
+                                        {col.type}
+                                    </Badge>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </ScrollArea>
+            </PopoverContent>
+        </Popover>
     );
 };
 

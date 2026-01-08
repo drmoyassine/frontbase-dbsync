@@ -125,7 +125,7 @@ async def get_table_session(datasource_id: str, table_name: str):
     return data or {}
 
 
-@router.delete("/{datasource_id}/tables/{table_name}/session")
+@router.delete("/{datasource_id}/tables/{table_name}/session/")
 async def clear_table_session(datasource_id: str, table_name: str):
     """Clear draft layout/config from Redis session."""
     key = f"session:{datasource_id}:{table_name}"

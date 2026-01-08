@@ -20,7 +20,7 @@ router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.views")
 
 
-@router.get("/{datasource_id}/views", response_model=List[DatasourceViewResponse])
+@router.get("/{datasource_id}/views/", response_model=List[DatasourceViewResponse])
 async def list_datasource_views(
     datasource_id: str,
     db: AsyncSession = Depends(get_db)
@@ -30,7 +30,7 @@ async def list_datasource_views(
     return result.scalars().all()
 
 
-@router.post("/{datasource_id}/views", response_model=DatasourceViewResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{datasource_id}/views/", response_model=DatasourceViewResponse, status_code=status.HTTP_201_CREATED)
 async def create_datasource_view(
     datasource_id: str,
     view: DatasourceViewCreate,

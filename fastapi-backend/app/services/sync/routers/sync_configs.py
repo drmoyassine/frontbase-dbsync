@@ -88,7 +88,7 @@ async def list_sync_configs(
     return result.scalars().all()
 
 
-@router.get("/{config_id}", response_model=SyncConfigResponse)
+@router.get("/{config_id}/", response_model=SyncConfigResponse)
 async def get_sync_config(
     config_id: str,
     db: AsyncSession = Depends(get_db)
@@ -110,7 +110,7 @@ async def get_sync_config(
     return config
 
 
-@router.put("/{config_id}", response_model=SyncConfigResponse)
+@router.put("/{config_id}/", response_model=SyncConfigResponse)
 async def update_sync_config(
     config_id: str,
     data: SyncConfigUpdate,
@@ -159,7 +159,7 @@ async def update_sync_config(
     return config
 
 
-@router.delete("/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{config_id}/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_sync_config(
     config_id: str,
     db: AsyncSession = Depends(get_db)

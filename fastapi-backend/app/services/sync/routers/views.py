@@ -25,7 +25,7 @@ router = APIRouter()
 
 
 
-@router.get("/{view_id}", response_model=DatasourceViewResponse)
+@router.get("/{view_id}/", response_model=DatasourceViewResponse)
 async def get_datasource_view(
     view_id: str,
     db: AsyncSession = Depends(get_db)
@@ -40,7 +40,7 @@ async def get_datasource_view(
     return db_view
 
 
-@router.patch("/{view_id}", response_model=DatasourceViewResponse)
+@router.patch("/{view_id}/", response_model=DatasourceViewResponse)
 async def update_datasource_view(
     view_id: str,
     view_update: DatasourceViewUpdate,
@@ -73,7 +73,7 @@ async def update_datasource_view(
     return db_view
 
 
-@router.get("/{view_id}/records")
+@router.get("/{view_id}/records/")
 async def get_view_records(
     view_id: str,
     page: int = 1,
@@ -384,7 +384,7 @@ async def trigger_view_webhook(
     }
 
 
-@router.delete("/{view_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{view_id}/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_datasource_view(
     view_id: str,
     db: AsyncSession = Depends(get_db)

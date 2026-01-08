@@ -62,7 +62,7 @@ async def get_pages(includeDeleted: bool = False, db: Session = Depends(get_db))
         }
 
 
-@router.get("/{page_id}")
+@router.get("/{page_id}/")
 async def get_page(page_id: str, db: Session = Depends(get_db)):
     """Get a page by ID - matches Express: { success, data: page }"""
     try:
@@ -115,7 +115,7 @@ async def create_page_endpoint(request: PageCreateRequest, db: Session = Depends
         }
 
 
-@router.put("/{page_id}")
+@router.put("/{page_id}/")
 async def update_page_endpoint(page_id: str, request: PageUpdateRequest, db: Session = Depends(get_db)):
     """Update a page - matches Express: { success, data: page }"""
     try:
@@ -141,7 +141,7 @@ async def update_page_endpoint(page_id: str, request: PageUpdateRequest, db: Ses
         }
 
 
-@router.delete("/{page_id}")
+@router.delete("/{page_id}/")
 async def delete_page(page_id: str, db: Session = Depends(get_db)):
     """Soft delete a page - matches Express: { success, message }"""
     try:
@@ -170,7 +170,7 @@ async def delete_page(page_id: str, db: Session = Depends(get_db)):
         }
 
 
-@router.put("/{page_id}/layout")
+@router.put("/{page_id}/layout/")
 async def update_page_layout(page_id: str, request: dict, db: Session = Depends(get_db)):
     """Update page layout - matches Express: { success, data: page }"""
     try:
@@ -201,7 +201,7 @@ async def update_page_layout(page_id: str, request: dict, db: Session = Depends(
         }
 
 
-@router.post("/{page_id}/restore")
+@router.post("/{page_id}/restore/")
 async def restore_page(page_id: str, db: Session = Depends(get_db)):
     """Restore a deleted page - matches Express: { success, data: page, message }"""
     try:
@@ -241,7 +241,7 @@ async def restore_page(page_id: str, db: Session = Depends(get_db)):
         }
 
 
-@router.delete("/{page_id}/permanent")
+@router.delete("/{page_id}/permanent/")
 async def permanent_delete_page(page_id: str, db: Session = Depends(get_db)):
     """Permanently delete a page - matches Express: { success, message }"""
     try:

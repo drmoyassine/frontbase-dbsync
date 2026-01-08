@@ -120,7 +120,7 @@ async def list_datasources(
     return datasources
 
 
-@router.get("/{datasource_id}", response_model=DatasourceResponse)
+@router.get("/{datasource_id}/", response_model=DatasourceResponse)
 async def get_datasource(
     datasource_id: str,
     db: AsyncSession = Depends(get_db)
@@ -142,7 +142,7 @@ async def get_datasource(
     return datasource
 
 
-@router.put("/{datasource_id}", response_model=DatasourceResponse)
+@router.put("/{datasource_id}/", response_model=DatasourceResponse)
 async def update_datasource(
     datasource_id: str,
     data: DatasourceUpdate,
@@ -183,7 +183,7 @@ async def update_datasource(
     return datasource
 
 
-@router.delete("/{datasource_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{datasource_id}/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_datasource(
     datasource_id: str,
     db: AsyncSession = Depends(get_db)

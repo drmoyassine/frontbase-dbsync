@@ -35,7 +35,7 @@ async def get_variable(variable_id: str, db: Session = Depends(get_db)):
     
     return variable
 
-@router.put("/{variable_id}", response_model=VariableResponse)
+@router.put("/{variable_id}/", response_model=VariableResponse)
 async def update_variable_endpoint(variable_id: str, request: VariableUpdateRequest, db: Session = Depends(get_db)):
     """Update a variable"""
     from ..models.models import AppVariable
@@ -57,7 +57,7 @@ async def update_variable_endpoint(variable_id: str, request: VariableUpdateRequ
     db.refresh(variable)
     return variable
 
-@router.delete("/{variable_id}")
+@router.delete("/{variable_id}/")
 async def delete_variable(variable_id: str, db: Session = Depends(get_db)):
     """Delete a variable"""
     from ..models.models import AppVariable

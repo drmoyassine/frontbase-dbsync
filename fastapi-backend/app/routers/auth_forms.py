@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Any
 from datetime import datetime
 import uuid
 import json
@@ -48,6 +48,12 @@ class AuthFormResponse(AuthFormBase):
         from_attributes = True
 
 
+class SuccessResponse(BaseModel):
+    success: bool
+    data: Any = None
+    error: Optional[str] = None
+
+
 def parse_json_field(value, default):
     """Safely parse a JSON field."""
     if not value:
@@ -62,37 +68,40 @@ def parse_json_field(value, default):
             return default
 
 
-@router.get("/", response_model=List[AuthFormResponse])
+def row_to_dict(row):
+    """Convert a database row to a dict."""
+    return {
+        "id": row.id,
+        "name": row.name,
+        "type": row.type,
+        "config": parse_json_field(row.config, {}),
+        "target_contact_type": row.target_contact_type,
+        "allowed_contact_types": parse_json_field(row.allowed_contact_types, []),
+        "redirect_url": row.redirect_url,
+        "is_active": bool(row.is_active),
+        "created_at": row.created_at,
+        "updated_at": row.updated_at
+    }
+
+
+@router.get("/")
 async def list_auth_forms(db: Session = Depends(get_db)):
     """List all auth forms"""
     try:
         result = db.execute(text("SELECT * FROM auth_forms ORDER BY created_at DESC"))
         rows = result.fetchall()
         
-        forms = []
-        for row in rows:
-            forms.append({
-                "id": row.id,
-                "name": row.name,
-                "type": row.type,
-                "config": parse_json_field(row.config, {}),
-                "target_contact_type": row.target_contact_type,
-                "allowed_contact_types": parse_json_field(row.allowed_contact_types, []),
-                "redirect_url": row.redirect_url,
-                "is_active": bool(row.is_active),
-                "created_at": row.created_at,
-                "updated_at": row.updated_at
-            })
+        forms = [row_to_dict(row) for row in rows]
         
-        return forms
+        return {"success": True, "data": forms}
     except Exception as e:
         import traceback
         print(f"Error listing auth forms: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"success": False, "error": str(e)}
 
 
-@router.get("/{form_id}/", response_model=AuthFormResponse)
+@router.get("/{form_id}/")
 async def get_auth_form(form_id: str, db: Session = Depends(get_db)):
     """Get a single auth form by ID"""
     try:
@@ -103,27 +112,14 @@ async def get_auth_form(form_id: str, db: Session = Depends(get_db)):
         row = result.fetchone()
         
         if not row:
-            raise HTTPException(status_code=404, detail="Auth form not found")
+            return {"success": False, "error": "Auth form not found"}
         
-        return {
-            "id": row.id,
-            "name": row.name,
-            "type": row.type,
-            "config": parse_json_field(row.config, {}),
-            "target_contact_type": row.target_contact_type,
-            "allowed_contact_types": parse_json_field(row.allowed_contact_types, []),
-            "redirect_url": row.redirect_url,
-            "is_active": bool(row.is_active),
-            "created_at": row.created_at,
-            "updated_at": row.updated_at
-        }
-    except HTTPException:
-        raise
+        return {"success": True, "data": row_to_dict(row)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"success": False, "error": str(e)}
 
 
-@router.post("/", response_model=AuthFormResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_auth_form(form: AuthFormCreate, db: Session = Depends(get_db)):
     """Create a new auth form"""
     try:
@@ -155,23 +151,26 @@ async def create_auth_form(form: AuthFormCreate, db: Session = Depends(get_db)):
         db.commit()
         
         return {
-            "id": form_id,
-            "name": form.name,
-            "type": form.type,
-            "config": form.config,
-            "target_contact_type": form.target_contact_type,
-            "allowed_contact_types": form.allowed_contact_types,
-            "redirect_url": form.redirect_url,
-            "is_active": form.is_active,
-            "created_at": now,
-            "updated_at": now
+            "success": True,
+            "data": {
+                "id": form_id,
+                "name": form.name,
+                "type": form.type,
+                "config": form.config or {},
+                "target_contact_type": form.target_contact_type,
+                "allowed_contact_types": form.allowed_contact_types or [],
+                "redirect_url": form.redirect_url,
+                "is_active": form.is_active,
+                "created_at": now,
+                "updated_at": now
+            }
         }
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"success": False, "error": str(e)}
 
 
-@router.put("/{form_id}/", response_model=AuthFormResponse)
+@router.put("/{form_id}/")
 async def update_auth_form(form_id: str, form: AuthFormUpdate, db: Session = Depends(get_db)):
     """Update an existing auth form"""
     try:
@@ -183,7 +182,7 @@ async def update_auth_form(form_id: str, form: AuthFormUpdate, db: Session = Dep
         existing = result.fetchone()
         
         if not existing:
-            raise HTTPException(status_code=404, detail="Auth form not found")
+            return {"success": False, "error": "Auth form not found"}
         
         # Build update
         updates = []
@@ -221,15 +220,19 @@ async def update_auth_form(form_id: str, form: AuthFormUpdate, db: Session = Dep
             db.commit()
         
         # Return updated form
-        return await get_auth_form(form_id, db)
-    except HTTPException:
-        raise
+        result = db.execute(
+            text("SELECT * FROM auth_forms WHERE id = :id"),
+            {"id": form_id}
+        )
+        row = result.fetchone()
+        
+        return {"success": True, "data": row_to_dict(row)}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"success": False, "error": str(e)}
 
 
-@router.delete("/{form_id}/", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{form_id}/")
 async def delete_auth_form(form_id: str, db: Session = Depends(get_db)):
     """Delete an auth form"""
     try:
@@ -238,15 +241,15 @@ async def delete_auth_form(form_id: str, db: Session = Depends(get_db)):
             {"id": form_id}
         )
         if not result.fetchone():
-            raise HTTPException(status_code=404, detail="Auth form not found")
+            return {"success": False, "error": "Auth form not found"}
         
         db.execute(
             text("DELETE FROM auth_forms WHERE id = :id"),
             {"id": form_id}
         )
         db.commit()
-    except HTTPException:
-        raise
+        
+        return {"success": True, "data": None}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"success": False, "error": str(e)}

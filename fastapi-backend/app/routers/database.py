@@ -162,7 +162,7 @@ async def test_supabase(request: DatabaseConnectionRequest):
 
 # Duplicate function removed
 
-@router.get("/table-data/{table_name}")
+@router.get("/table-data/{table_name}/")
 async def get_table_data(
     table_name: str,
     request: Request,
@@ -472,7 +472,7 @@ async def get_tables(db: Session = Depends(get_db)):
     """Get database tables (aliased to supabase-tables)"""
     return await get_supabase_tables(db)
 
-@router.get("/table-schema/{table_name}")
+@router.get("/table-schema/{table_name}/")
 async def get_table_schema(table_name: str, db: Session = Depends(get_db)):
     """Get table schema with foreign key information"""
     try:

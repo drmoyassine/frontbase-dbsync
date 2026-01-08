@@ -153,7 +153,7 @@ logger.info("Routers included successfully")
 
 
 
-@sync_app.get("/docs/views", include_in_schema=False)
+@sync_app.get("/docs/views/", include_in_schema=False)
 async def views_swagger_ui():
     """Serves a customized, compact Swagger UI for Views."""
     custom_css = """

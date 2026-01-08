@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
-from app.routers import pages, project, variables, database, rls, actions
+from app.routers import pages, project, variables, database, rls, actions, auth_forms
 from app.middleware.test_mode import TestModeMiddleware
 
 logger = logging.getLogger(__name__)
@@ -127,6 +127,7 @@ app.include_router(variables.router)
 app.include_router(database.router)
 app.include_router(rls.router)
 app.include_router(actions.router, prefix="/api/actions", tags=["Actions"])
+app.include_router(auth_forms.router, prefix="/api/auth-forms", tags=["Auth Forms"])
 
 # Mount DB-Synchronizer Service
 from app.services.sync.main import sync_app

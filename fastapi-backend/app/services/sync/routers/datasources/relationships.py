@@ -17,7 +17,7 @@ router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.relationships")
 
 
-@router.get("/{datasource_id}/relationships")
+@router.get("/{datasource_id}/relationships/")
 async def get_datasource_relationships(
     datasource_id: str,
     refresh: bool = False,

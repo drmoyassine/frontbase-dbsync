@@ -20,7 +20,7 @@ router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.schema")
 
 
-@router.get("/{datasource_id}/tables", response_model=List[str])
+@router.get("/{datasource_id}/tables/", response_model=List[str])
 async def get_datasource_tables(
     datasource_id: str,
     db: AsyncSession = Depends(get_db)

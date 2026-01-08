@@ -316,7 +316,7 @@ async def delete_policy(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/tables/{table_name}/toggle")
+@router.post("/tables/{table_name}/toggle/")
 async def toggle_table_rls(
     table_name: str,
     request: ToggleRLSRequest,
@@ -668,7 +668,7 @@ async def delete_rls_metadata(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/metadata/verify")
+@router.post("/metadata/verify/")
 async def verify_rls_metadata(request: VerifyRLSRequest, db: Session = Depends(get_db)):
     """Verify if a policy's current USING expression matches the stored hash"""
     try:

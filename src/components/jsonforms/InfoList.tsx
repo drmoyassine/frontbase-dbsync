@@ -68,12 +68,39 @@ export const InfoList: React.FC<InfoListProps> = ({
     const [loading, setLoading] = useState(true);
 
     // Helper: Get value from record, supporting dotted paths for related data
+    // Follows same pattern as DataTableCell for consistency
     const getNestedValue = (rec: Record<string, any>, columnName: string): any => {
-        if (columnName.includes('.')) {
-            const [table, col] = columnName.split('.');
-            return rec[table]?.[col];
+        // For non-dotted columns, just return directly
+        if (!columnName.includes('.')) {
+            return rec[columnName];
         }
-        return rec[columnName];
+
+        // For dotted columns (related data), try multiple access patterns:
+
+        // 1. First, try flattened key format (sync API returns this): rec["providers.name"]
+        if (rec[columnName] !== undefined) {
+            return rec[columnName];
+        }
+
+        // 2. Fallback: try nested object format (legacy API): rec.providers.name
+        const [tableName, colName] = columnName.split('.');
+        let relationData = rec[tableName];
+
+        // 3. Case-insensitive lookup if direct access fails
+        if (!relationData) {
+            const lowerTableName = tableName.toLowerCase();
+            const matchingKey = Object.keys(rec).find(k => k.toLowerCase() === lowerTableName);
+            if (matchingKey) {
+                relationData = rec[matchingKey];
+            }
+        }
+
+        // 4. Handle array case where relation might be [{...}]
+        if (Array.isArray(relationData)) {
+            return relationData[0]?.[colName];
+        }
+
+        return relationData?.[colName];
     };
 
     // Fetch schema and record with FK expansion

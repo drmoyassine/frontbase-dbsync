@@ -38,7 +38,7 @@ def _get_error_suggestion(e: Exception) -> Optional[str]:
     return None
 
 
-@router.post("/{datasource_id}/test", response_model=DatasourceTestResult)
+@router.post("/{datasource_id}/test/", response_model=DatasourceTestResult)
 async def test_datasource(
     datasource_id: str,
     db: AsyncSession = Depends(get_db)
@@ -124,7 +124,7 @@ async def test_new_datasource(data: DatasourceTestRequest):
         )
 
 
-@router.post("/{datasource_id}/test-update", response_model=DatasourceTestResult)
+@router.post("/{datasource_id}/test-update/", response_model=DatasourceTestResult)
 async def test_datasource_update(
     datasource_id: str,
     data: DatasourceUpdate,

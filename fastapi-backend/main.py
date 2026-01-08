@@ -137,7 +137,7 @@ app.mount("/api/sync", sync_app)
 async def root():
     return {"message": "Frontbase-DBSync API is running", "test_mode": True}
 
-@app.get("/health")
+@app.get("/health/")
 async def health_check():
     return {"status": "healthy", "message": "API is operational", "test_mode": True}
 

@@ -98,7 +98,7 @@ class TrailingSlashMiddleware:
 sync_app.add_middleware(TrailingSlashMiddleware)
 
 # Register specific routes BEFORE parametrized routers to avoid conflicts
-@sync_app.get("/health")
+@sync_app.get("/health/")
 async def health():
     """Health check endpoint."""
     return {"status": "healthy"}

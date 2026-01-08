@@ -315,7 +315,7 @@ export function UniversalDataTable({
             </div>
 
             {binding.pagination?.enabled && (
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-2 py-4">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 px-2 py-4">
                 <div className="text-sm text-muted-foreground">
                   {(() => {
                     const page = currentPagination.page;
@@ -326,10 +326,10 @@ export function UniversalDataTable({
 
                     return (
                       <>
-                        {/* Mobile: Short format */}
-                        <span className="sm:hidden">{`${start}-${end} of ${count}`}</span>
+                        {/* Mobile/Tablet: Short format */}
+                        <span className="md:hidden">{`${start}-${end} of ${count}`}</span>
                         {/* Desktop: Full format */}
-                        <span className="hidden sm:inline">{`Showing ${start}-${end} of ${count} entries (Page ${page + 1} of ${totalPages || 1})`}</span>
+                        <span className="hidden md:inline">{`Showing ${start}-${end} of ${count} entries (Page ${page + 1} of ${totalPages || 1})`}</span>
                       </>
                     );
                   })()}
@@ -342,7 +342,7 @@ export function UniversalDataTable({
                     disabled={currentPagination.page === 0 || loading}
                   >
                     <ChevronLeft className="h-4 w-4" />
-                    <span className="hidden sm:inline">Previous</span>
+                    <span className="hidden md:inline">Previous</span>
                   </Button>
                   <Button
                     variant="outline"
@@ -350,7 +350,7 @@ export function UniversalDataTable({
                     onClick={() => setPagination(currentPagination.page + 1)}
                     disabled={(currentPagination.page + 1) * currentPagination.pageSize >= count || loading}
                   >
-                    <span className="hidden sm:inline">Next</span>
+                    <span className="hidden md:inline">Next</span>
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>

@@ -38,7 +38,9 @@ export const FieldSettingsPopover: React.FC<FieldSettingsPopoverProps> = ({
 }) => {
     const [open, setOpen] = useState(false);
     const [label, setLabel] = useState(settings?.label || fieldName);
-    const [type, setType] = useState(settings?.type || 'text');
+    // For FK fields (fkTable present), default to 'select' not 'text'
+    const [type, setType] = useState(settings?.type || (fkTable ? 'select' : 'text'));
+    const [typeExplicitlyChanged, setTypeExplicitlyChanged] = useState(false);
     const [required, setRequired] = useState(settings?.validation?.required || false);
     const [fkDisplayColumn, setFkDisplayColumn] = useState(settings?.fkDisplayColumn || '');
     const [fkColumns, setFkColumns] = useState<string[]>([]);
@@ -71,9 +73,11 @@ export const FieldSettingsPopover: React.FC<FieldSettingsPopoverProps> = ({
     // Sync state when settings change
     useEffect(() => {
         setLabel(settings?.label || fieldName);
-        setType(settings?.type || 'text');
+        // For FK fields, default to 'select' not 'text'
+        setType(settings?.type || (fkTable ? 'select' : 'text'));
         setRequired(settings?.validation?.required || false);
         setFkDisplayColumn(settings?.fkDisplayColumn || '');
+        setTypeExplicitlyChanged(false);
     }, [settings, fieldName]);
 
     // Don't wrap if not in builder mode
@@ -86,7 +90,8 @@ export const FieldSettingsPopover: React.FC<FieldSettingsPopoverProps> = ({
             ...settings,
             ...updates,
             label: updates.label !== undefined ? updates.label : label,
-            type: updates.type !== undefined ? updates.type : type,
+            // Only save type if it was explicitly changed by user, to prevent corrupting FK detection
+            ...(updates.type !== undefined || typeExplicitlyChanged ? { type: updates.type !== undefined ? updates.type : type } : {}),
         };
 
         if (componentType === 'Form' && updates.required !== undefined) {
@@ -210,6 +215,7 @@ export const FieldSettingsPopover: React.FC<FieldSettingsPopoverProps> = ({
                                         value={type}
                                         onValueChange={(value) => {
                                             setType(value);
+                                            setTypeExplicitlyChanged(true);
                                             handleSave({ type: value });
                                         }}
                                     >

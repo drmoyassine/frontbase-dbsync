@@ -13,7 +13,9 @@ COPY public ./public
 COPY index.html ./
 COPY vite.config.ts tsconfig*.json tailwind.config.ts postcss.config.js components.json ./
 
-# Build
+# Build with API URL (empty = same-origin, which is what we want for production)
+ARG VITE_API_URL=""
+ENV VITE_API_URL=${VITE_API_URL}
 ENV NODE_ENV=production
 RUN npm run build
 

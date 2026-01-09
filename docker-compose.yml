@@ -16,6 +16,11 @@ services:
       - REDIS_URL=redis://redis:6379/0
       # Actions Engine URL (internal network)
       - ACTIONS_ENGINE_URL=http://actions:3002
+      # Admin Authentication
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-false}
     volumes:
       - backend_data:/app/data
     depends_on:
@@ -41,6 +46,10 @@ services:
       - PORT=3002
       # Database for workflow storage (SQLite)
       - DATABASE_URL=file:/app/data/actions.db
+      # Webhook API keys (comma-separated)
+      - API_KEYS=${API_KEYS:-}
+      # Supabase JWT for end-user auth (optional)
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
     volumes:
       - actions_data:/app/data
     networks:

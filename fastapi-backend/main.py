@@ -107,7 +107,7 @@ class TrailingSlashMiddleware:
     Note: Excludes /api/auth/ routes which don't use trailing slashes.
     """
     # Paths that should NOT have trailing slashes added
-    EXCLUDE_PREFIXES = ["/api/auth/"]
+    EXCLUDE_PREFIXES = ["/api/auth"]
     
     def __init__(self, app: ASGIApp):
         self.app = app

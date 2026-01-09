@@ -65,6 +65,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        # Empty = use relative URLs (recommended for production)
+        VITE_API_URL: ""
     ports:
       - "8080:80"
     depends_on:

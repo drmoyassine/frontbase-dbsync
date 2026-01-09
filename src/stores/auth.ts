@@ -37,8 +37,9 @@ interface AuthState {
   forceReauth: () => void;
 }
 
-// API base URL
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// API base URL - empty string means same-origin (for production)
+// Set VITE_API_URL=http://localhost:8000 for local development
+const API_BASE = import.meta.env.VITE_API_URL ?? '';
 
 export const useAuthStore = create<AuthState>()(
   persist(

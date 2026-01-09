@@ -16,6 +16,8 @@
         "@hono/swagger-ui": "^0.4.0",
         "@hono/zod-openapi": "^0.18.0",
         "@libsql/client": "^0.14.0",
+        "@neondatabase/serverless": "^1.0.2",
+        "@planetscale/database": "^1.19.0",
         "drizzle-orm": "^0.38.0",
         "hono": "^4.6.0",
         "postgres": "^3.4.0",

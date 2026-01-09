@@ -1,47 +1,51 @@
 /**
- * Database Connection - DB Agnostic Layer
+ * Database Connection - Universal HTTP-First Layer
  * 
- * Switches between SQLite (via libsql) and PostgreSQL based on environment.
+ * For LOCAL DEVELOPMENT: Uses LibSQL (SQLite) - single driver type
+ * For PRODUCTION/EDGE: Environment determines driver:
+ *   - DB_TYPE=neon: Neon PostgreSQL (HTTP)
+ *   - DB_TYPE=turso: Turso SQLite (HTTP)
+ *   - DB_TYPE=sqlite: Local SQLite file
+ * 
+ * Edge-compatible: No Node.js-specific dependencies (fs, path removed)
  */
 
-import { drizzle as drizzleLibsql } from 'drizzle-orm/libsql';
-import { drizzle as drizzlePostgres } from 'drizzle-orm/postgres-js';
+import { drizzle } from 'drizzle-orm/libsql';
 import { createClient } from '@libsql/client';
-import postgres from 'postgres';
 import * as schema from './schema';
 
+// Database type from environment
 const dbType = process.env.DB_TYPE || 'sqlite';
 
-let db: ReturnType<typeof drizzleLibsql> | ReturnType<typeof drizzlePostgres>;
+// For local development, we use LibSQL which is compatible with:
+// - Local SQLite files (file: protocol)
+// - Turso remote databases (https: protocol)
+// This gives us a single driver type and eliminates union type issues
 
-if (dbType === 'postgres') {
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-        throw new Error('DATABASE_URL is required for PostgreSQL connection');
+let connectionUrl: string;
+let authToken: string | undefined;
+
+if (dbType === 'turso') {
+    // Turso Remote SQLite (HTTP-first, Edge-compatible)
+    connectionUrl = process.env.TURSO_DATABASE_URL || '';
+    authToken = process.env.TURSO_AUTH_TOKEN;
+    if (!connectionUrl) {
+        throw new Error('TURSO_DATABASE_URL is required for Turso connection');
     }
-    const client = postgres(connectionString);
-    db = drizzlePostgres(client, { schema }) as any;
-    console.log('📦 Connected to PostgreSQL');
+    console.log('📦 Connected to Turso SQLite (HTTP)');
 } else {
-    // Use file: protocol for local SQLite with relative path
+    // Local SQLite via libsql (for development)
     const sqlitePath = process.env.SQLITE_PATH || './data/actions.db';
-
-    // Ensure data directory exists
-    const fs = await import('fs');
-    const path = await import('path');
-    const dataDir = path.dirname(sqlitePath);
-    if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-    }
-
-    // Create libsql client (pure JS, no native dependencies)
-    const client = createClient({
-        url: `file:${sqlitePath}`,
-    });
-
-    db = drizzleLibsql(client, { schema });
+    connectionUrl = `file:${sqlitePath}`;
     console.log(`📦 Connected to SQLite: ${sqlitePath}`);
 }
 
-export { db };
+// Create the client with single driver type
+const client = createClient({
+    url: connectionUrl,
+    authToken
+});
+
+// Single driver type - no union!
+export const db = drizzle(client, { schema });
 export type DbClient = typeof db;

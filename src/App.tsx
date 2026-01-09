@@ -8,7 +8,10 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useDashboardStore } from "@/stores/dashboard";
 import { useBuilderStore } from "@/stores/builder";
+import { useAuthStore } from "@/stores/auth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+
 // Unified Shell & DB-Sync Pages
 import { Layout as UnifiedShell } from "./modules/dbsync/components/Layout";
 import { Dashboard as Overview } from "./modules/dbsync/pages/Dashboard";
@@ -23,9 +26,14 @@ import { PagesPanel } from "@/components/dashboard/PagesPanel";
 import { UsersPanel } from "@/components/dashboard/UsersPanel";
 import { StoragePanel } from "@/components/dashboard/StoragePanel";
 import { SettingsPanel } from "@/components/dashboard/SettingsPanel";
-// Note: DatabasePanel is arguably replaced by Data Studio, or could be kept if needed.
-// For now, adhering to the requested structure.
 
+// Auth Pages
+import LoginPage from "./pages/auth/LoginPage";
+
+// Public Pages
+import LandingPage from "./pages/LandingPage";
+
+// Other Pages
 import BuilderPage from "./pages/BuilderPage";
 import ActionsPage from "./pages/ActionsPage";
 import VariablesPage from "./pages/VariablesPage";
@@ -51,9 +59,17 @@ const persister = createSyncStoragePersister({
 const App = () => {
   const { fetchConnections } = useDashboardStore();
   const { loadPagesFromDatabase, loadVariablesFromDatabase, loadProjectFromDatabase } = useBuilderStore();
+  const { isAuthenticated, checkAuth } = useAuthStore();
 
-  // Initialize app on mount - load all data immediately (no auth check)
+  // Check auth on mount
   useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  // Initialize app data only when authenticated
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
     const initializeApp = async () => {
       await Promise.all([
         fetchConnections().catch(console.error),
@@ -64,7 +80,7 @@ const App = () => {
     };
 
     initializeApp();
-  }, [fetchConnections, loadProjectFromDatabase, loadPagesFromDatabase, loadVariablesFromDatabase]);
+  }, [isAuthenticated, fetchConnections, loadProjectFromDatabase, loadPagesFromDatabase, loadVariablesFromDatabase]);
 
   return (
     <ErrorBoundary>
@@ -77,31 +93,37 @@ const App = () => {
           <Sonner />
           <BrowserRouter>
             <Routes>
-              {/* Unified App Shell */}
-              <Route element={<UnifiedShell />}>
-                <Route path="/" element={<Overview />} />
+              {/* Public Routes */}
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/embed/auth/:formId" element={<EmbedAuthPage />} />
 
-                <Route path="/pages" element={<PagesPanel />} />
-                <Route path="/actions" element={<ActionsPage />} />
+              {/* Protected Routes - Require Authentication */}
+              <Route element={<ProtectedRoute />}>
+                {/* Unified App Shell */}
+                <Route element={<UnifiedShell />}>
+                  <Route path="/dashboard" element={<Overview />} />
+                  <Route path="/pages" element={<PagesPanel />} />
+                  <Route path="/actions" element={<ActionsPage />} />
 
-                {/* Data Studio (Tabbed Interface) */}
-                <Route path="/data-studio" element={<DataStudio />}>
-                  <Route index element={<Navigate to="datasources" replace />} />
-                  <Route path="datasources" element={<Datasources />} />
-                  <Route path="sync-configs" element={<SyncConfigs />} />
-                  <Route path="conflicts" element={<Conflicts />} />
-                  <Route path="jobs" element={<Jobs />} />
+                  {/* Data Studio (Tabbed Interface) */}
+                  <Route path="/data-studio" element={<DataStudio />}>
+                    <Route index element={<Navigate to="datasources" replace />} />
+                    <Route path="datasources" element={<Datasources />} />
+                    <Route path="sync-configs" element={<SyncConfigs />} />
+                    <Route path="conflicts" element={<Conflicts />} />
+                    <Route path="jobs" element={<Jobs />} />
+                  </Route>
+
+                  <Route path="/users" element={<UsersPanel />} />
+                  <Route path="/storage" element={<StoragePanel />} />
+                  <Route path="/settings" element={<SettingsPanel />} />
                 </Route>
 
-                <Route path="/users" element={<UsersPanel />} />
-                <Route path="/storage" element={<StoragePanel />} />
-                <Route path="/settings" element={<SettingsPanel />} />
+                {/* Standalone / Fullscreen Pages (Protected) */}
+                <Route path="/builder/:pageId" element={<BuilderPage />} />
+                <Route path="/variables" element={<VariablesPage />} />
               </Route>
-
-              {/* Standalone / Fullscreen Pages */}
-              <Route path="/builder/:pageId" element={<BuilderPage />} />
-              <Route path="/variables" element={<VariablesPage />} />
-              <Route path="/embed/auth/:formId" element={<EmbedAuthPage />} />
 
               {/* 404 */}
               <Route path="*" element={<NotFound />} />
@@ -114,3 +136,4 @@ const App = () => {
 };
 
 export default App;
+

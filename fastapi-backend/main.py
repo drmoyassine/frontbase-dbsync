@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
-from app.routers import pages, project, variables, database, rls, actions, auth_forms
+from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth
 from app.middleware.test_mode import TestModeMiddleware
 
 logger = logging.getLogger(__name__)
@@ -103,15 +103,22 @@ class TrailingSlashMiddleware:
     """
     Middleware that adds trailing slash to paths internally.
     This prevents 307 redirects that can cause mixed-content issues.
+    
+    Note: Excludes /api/auth/ routes which don't use trailing slashes.
     """
+    # Paths that should NOT have trailing slashes added
+    EXCLUDE_PREFIXES = ["/api/auth/"]
+    
     def __init__(self, app: ASGIApp):
         self.app = app
     
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
         if scope["type"] == "http":
             path = scope["path"]
+            # Skip excluded paths
+            should_skip = any(path.startswith(prefix) for prefix in self.EXCLUDE_PREFIXES)
             # Add trailing slash if missing and not a file path (no extension)
-            if not path.endswith("/") and "." not in path.split("/")[-1]:
+            if not should_skip and not path.endswith("/") and "." not in path.split("/")[-1]:
                 scope["path"] = path + "/"
         await self.app(scope, receive, send)
 
@@ -121,6 +128,7 @@ app.add_middleware(TrailingSlashMiddleware)
 app.add_middleware(TestModeMiddleware, test_mode=True)
 
 # Include routers
+app.include_router(auth.router)  # Auth routes (login, logout, me)
 app.include_router(pages.router)
 app.include_router(project.router)
 app.include_router(variables.router)

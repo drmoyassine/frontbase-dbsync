@@ -37,9 +37,23 @@ interface AuthState {
   forceReauth: () => void;
 }
 
-// API base URL - empty string means same-origin (for production)
+// API base URL - prefer relative URLs in production for proper HTTPS handling
 // Set VITE_API_URL=http://localhost:8000 for local development
-const API_BASE = import.meta.env.VITE_API_URL ?? '';
+const getApiBase = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+
+  // If no URL set or empty, use relative paths (recommended for production)
+  if (!envUrl) return '';
+
+  // If URL matches current origin, use relative paths to avoid protocol issues
+  if (typeof window !== 'undefined' && envUrl.includes(window.location.hostname)) {
+    return '';
+  }
+
+  return envUrl;
+};
+
+const API_BASE = getApiBase();
 
 export const useAuthStore = create<AuthState>()(
   persist(

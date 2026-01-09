@@ -37,19 +37,28 @@ interface AuthState {
   forceReauth: () => void;
 }
 
-// API base URL - prefer relative URLs in production for proper HTTPS handling
-// Set VITE_API_URL=http://localhost:8000 for local development
-const getApiBase = () => {
+// API base URL - ALWAYS use relative URLs in production for proper HTTPS handling
+// Set VITE_API_URL=http://localhost:8000 for local development only
+const getApiBase = (): string => {
   const envUrl = import.meta.env.VITE_API_URL;
 
-  // If no URL set or empty, use relative paths (recommended for production)
-  if (!envUrl) return '';
+  // Debug logging (remove in production)
+  console.log('[Auth] VITE_API_URL:', envUrl);
+  console.log('[Auth] window.location.origin:', typeof window !== 'undefined' ? window.location.origin : 'N/A');
 
-  // If URL matches current origin, use relative paths to avoid protocol issues
-  if (typeof window !== 'undefined' && envUrl.includes(window.location.hostname)) {
-    return '';
+  // If no URL set or empty, use relative paths
+  if (!envUrl || envUrl === '') return '';
+
+  // In production (HTTPS), always use relative paths to avoid mixed content
+  if (typeof window !== 'undefined') {
+    // If on HTTPS or same hostname, use relative URLs
+    if (window.location.protocol === 'https:' || envUrl.includes(window.location.hostname)) {
+      console.log('[Auth] Using relative URLs (production mode)');
+      return '';
+    }
   }
 
+  console.log('[Auth] Using absolute URL:', envUrl);
   return envUrl;
 };
 

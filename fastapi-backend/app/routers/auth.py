@@ -107,7 +107,7 @@ def get_current_user(request: Request) -> Optional[dict]:
     return ADMIN_USERS.get(email)
 
 
-@router.post("/login/", response_model=AuthResponse)
+@router.post("/login", response_model=AuthResponse)
 async def login(request: LoginRequest, response: Response):
     """Login with email and password"""
     user = ADMIN_USERS.get(request.email)
@@ -142,7 +142,7 @@ async def login(request: LoginRequest, response: Response):
     )
 
 
-@router.post("/register/", response_model=AuthResponse)
+@router.post("/register", response_model=AuthResponse)
 async def register(request: RegisterRequest, response: Response):
     """Register a new admin user (disabled in production)"""
     # Check if registration is allowed
@@ -191,7 +191,7 @@ async def register(request: RegisterRequest, response: Response):
     )
 
 
-@router.get("/me/")
+@router.get("/me")
 async def get_me(request: Request):
     """Get current authenticated user"""
     user = get_current_user(request)
@@ -210,7 +210,7 @@ async def get_me(request: Request):
     }
 
 
-@router.post("/logout/")
+@router.post("/logout")
 async def logout(request: Request, response: Response):
     """Logout and clear session"""
     token = request.cookies.get(SESSION_COOKIE_NAME)

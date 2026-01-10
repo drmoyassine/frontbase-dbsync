@@ -143,6 +143,7 @@ export const FormPropertiesPanel: React.FC<FormPropertiesPanelProps> = ({
                                 focusedField={focusedField}
                                 onFocusHandled={() => useBuilderStore.getState().setFocusedField(null)}
                                 componentType={type}
+                                dataSourceId={props.dataSourceId}
                             />
                         </div>
                     )}

@@ -9,22 +9,26 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { FieldSettingsPopup } from './FieldSettingsPopup';
+import { FieldSettingsPopover } from './FieldSettingsPopover';
 import type { ColumnSchema } from '@/types/schema';
 
-// Helper for sortable item
+// Helper for sortable item with inline popover
 const SortableFieldItem = ({
     id,
     column,
     override,
     onToggleVisibility,
-    onSettingsClick
+    onSaveSettings,
+    componentType,
+    dataSourceId
 }: {
     id: string,
     column: ColumnSchema,
     override: any,
     onToggleVisibility: (visible: boolean) => void,
-    onSettingsClick: () => void
+    onSaveSettings: (settings: any) => void,
+    componentType: 'Form' | 'InfoList',
+    dataSourceId?: string
 }) => {
     const {
         attributes,
@@ -60,24 +64,31 @@ const SortableFieldItem = ({
                 <GripVertical className="w-3.5 h-3.5" />
             </div>
 
-            {/* Field Name & Settings Trigger */}
-            <div
-                className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer group"
-                onClick={onSettingsClick}
+            {/* Field Name & Settings Popover (inline) */}
+            <FieldSettingsPopover
+                fieldName={column.name}
+                settings={override || {}}
+                onSave={onSaveSettings}
+                componentType={componentType}
+                fkTable={column.is_foreign ? column.foreign_table : undefined}
+                dataSourceId={dataSourceId}
+                isBuilderMode={true}
             >
-                <span className="font-medium text-sm truncate select-none">
-                    {override?.label || column.name}
-                </span>
-                <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer group">
+                    <span className="font-medium text-sm truncate select-none">
+                        {override?.label || column.name}
+                    </span>
+                    <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
 
-                {/* Badges - Only PK/FK */}
-                {column.primary_key && (
-                    <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">PK</Badge>
-                )}
-                {column.is_foreign && (
-                    <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-blue-50 text-blue-700 border-blue-200">FK</Badge>
-                )}
-            </div>
+                    {/* Badges - Only PK/FK */}
+                    {column.primary_key && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">PK</Badge>
+                    )}
+                    {column.is_foreign && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-blue-50 text-blue-700 border-blue-200">FK</Badge>
+                    )}
+                </div>
+            </FieldSettingsPopover>
 
             {/* Visibility Toggle */}
             <Switch
@@ -98,6 +109,7 @@ interface FieldConfiguratorProps {
     focusedField?: { componentId: string; fieldName: string } | null;
     onFocusHandled?: () => void;
     componentType?: 'Form' | 'InfoList';
+    dataSourceId?: string;
 }
 
 export const FieldConfigurator: React.FC<FieldConfiguratorProps> = ({
@@ -108,25 +120,22 @@ export const FieldConfigurator: React.FC<FieldConfiguratorProps> = ({
     onOrderChange,
     focusedField,
     onFocusHandled,
-    componentType = 'Form'
+    componentType = 'Form',
+    dataSourceId
 }) => {
     const [search, setSearch] = useState('');
-    const [editingField, setEditingField] = useState<string | null>(null);
 
-    // Track last processed field to prevent re-opening on re-renders
+    // Track last processed field to prevent re-processing on re-renders
     const lastFocusedRef = React.useRef<string | null>(null);
 
-    // Auto-open settings when field is focused from canvas
+    // Handle focus events from canvas (just mark as handled since popover is inline)
     React.useEffect(() => {
         if (focusedField?.fieldName) {
             const key = `${focusedField.componentId}:${focusedField.fieldName}`;
             // If it's a new focus event (different from last handled), process it
             if (lastFocusedRef.current !== key) {
-                setEditingField(focusedField.fieldName);
                 lastFocusedRef.current = key;
-
                 // Notify parent that we've handled this focus event
-                // This allows the parent to clear the store state so it doesn't trigger again on remount
                 if (onFocusHandled) {
                     onFocusHandled();
                 }
@@ -269,7 +278,9 @@ export const FieldConfigurator: React.FC<FieldConfiguratorProps> = ({
                                 column={col}
                                 override={overrides[col.name]}
                                 onToggleVisibility={(visible) => toggleVisibility(col.name, visible)}
-                                onSettingsClick={() => setEditingField(col.name)}
+                                onSaveSettings={(settings) => updateSettings(col.name, settings)}
+                                componentType={componentType}
+                                dataSourceId={dataSourceId}
                             />
                         ))}
                         {filteredFields.length === 0 && (
@@ -280,20 +291,6 @@ export const FieldConfigurator: React.FC<FieldConfiguratorProps> = ({
                     </div>
                 </SortableContext>
             </DndContext>
-
-            {editingField && (
-                <FieldSettingsPopup
-                    open={!!editingField}
-                    onOpenChange={(open) => !open && setEditingField(null)}
-                    fieldName={editingField}
-                    settings={{
-                        ...overrides[editingField],
-                        originalType: columns.find(c => c.name === editingField)?.type || 'unknown'
-                    }}
-                    onSave={(settings) => updateSettings(editingField, settings)}
-                    componentType={componentType}
-                />
-            )}
         </div>
     );
 };

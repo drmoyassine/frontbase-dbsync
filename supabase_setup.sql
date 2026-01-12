@@ -263,7 +263,8 @@ CREATE OR REPLACE FUNCTION frontbase_search_rows(
   search_query text,
   search_cols text[], -- e.g. ARRAY['users.email', 'profiles.name']
   page int DEFAULT 1,
-  page_size int DEFAULT 10
+  page_size int DEFAULT 10,
+  filters jsonb DEFAULT '[]'::jsonb  -- NEW: Support for simultaneous filtering
 )
 RETURNS json
 LANGUAGE plpgsql
@@ -278,8 +279,16 @@ DECLARE
   join_item jsonb;
   join_clause text := '';
   where_clause text := '';
+  search_where text := '';
+  filter_where text := '';
   col text;
   first_col boolean := true;
+  filter_item jsonb;
+  filter_col text;
+  filter_type text;
+  filter_value jsonb;
+  condition text;
+  quoted_col text;
 BEGIN
   -- Build JOIN clause
   FOR join_item IN SELECT * FROM jsonb_array_elements(joins)
@@ -287,18 +296,83 @@ BEGIN
     join_clause := join_clause || ' ' || (join_item->>'type') || ' JOIN ' || (join_item->>'table') || ' ON ' || (join_item->>'on');
   END LOOP;
 
-  -- Build WHERE clause for Search
-  IF array_length(search_cols, 1) > 0 THEN
-    where_clause := 'WHERE ';
+  -- 1. Build Search Conditions
+  IF array_length(search_cols, 1) > 0 AND search_query IS NOT NULL AND search_query != '' THEN
+    search_where := '(';
     FOREACH col IN ARRAY search_cols
     LOOP
       IF NOT first_col THEN
-        where_clause := where_clause || ' OR ';
+        search_where := search_where || ' OR ';
       END IF;
       -- ILIKE for case-insensitive search
-      where_clause := where_clause || col || '::text ILIKE ' || quote_literal('%' || search_query || '%');
+      search_where := search_where || col || '::text ILIKE ' || quote_literal('%' || search_query || '%');
       first_col := false;
     END LOOP;
+    search_where := search_where || ')';
+  END IF;
+
+  -- 2. Build Filter Conditions (Reuse logic from frontbase_get_rows)
+  FOR filter_item IN SELECT * FROM jsonb_array_elements(filters)
+  LOOP
+    filter_col := filter_item->>'column';
+    filter_type := filter_item->>'filterType';
+    filter_value := filter_item->'value';
+    
+    -- Skip if no column or value
+    IF filter_col IS NULL OR filter_col = '' OR filter_value IS NULL THEN
+      CONTINUE;
+    END IF;
+    
+    -- Handle schema/table qualification
+    DECLARE
+        parts text[];
+    BEGIN
+        IF filter_col LIKE '%.%' THEN
+            parts := string_to_array(filter_col, '.');
+            quoted_col := format('%I.%I', parts[1], parts[2]);
+        ELSE
+            quoted_col := format('%I', filter_col);
+        END IF;
+    END;
+
+    -- Build condition based on filter type
+    condition := NULL;
+    
+    CASE filter_type
+      WHEN 'text' THEN
+        IF filter_value::text != 'null' AND filter_value::text != '""' THEN
+          condition := format('%s ILIKE %L', quoted_col, '%' || (filter_value#>>'{}') || '%');
+        END IF;
+      WHEN 'equal', 'dropdown', 'select' THEN
+        IF filter_value::text != 'null' AND filter_value::text != '""' THEN
+           condition := format('%s::text = %L', quoted_col, filter_value#>>'{}');
+        END IF;
+      WHEN 'boolean' THEN
+        IF filter_value::text != 'null' THEN
+          condition := format('%s IS %s', quoted_col, (filter_value#>>'{}')::boolean);
+        END IF;
+    END CASE;
+    
+    -- Append condition to filter_where
+    IF condition IS NOT NULL AND condition != '' THEN
+      IF filter_where = '' THEN
+        filter_where := condition;
+      ELSE
+        filter_where := filter_where || ' AND ' || condition;
+      END IF;
+    END IF;
+  END LOOP;
+
+  -- 3. Combine clauses
+  IF search_where != '' OR filter_where != '' THEN
+      where_clause := 'WHERE ';
+      IF search_where != '' AND filter_where != '' THEN
+          where_clause := where_clause || search_where || ' AND ' || filter_where;
+      ELSIF search_where != '' THEN
+          where_clause := where_clause || search_where;
+      ELSE
+          where_clause := where_clause || filter_where;
+      END IF;
   END IF;
 
   offset_val := (page - 1) * page_size;
@@ -581,7 +655,8 @@ BEGIN
   END IF;
 
   -- Construct Query
-  -- Note: We use %s for table identifiers because they are already safely formatted above using %I
+  -- Note: We use %I for column names to ensure they are quoted
+  -- target_table_ident is already quoted above via format
   query := format('SELECT DISTINCT t.%I FROM %s t', target_col, target_table_ident);
 
   -- Optional Inner Join
@@ -593,7 +668,7 @@ BEGIN
   END IF;
 
   -- Order
-  query := query || format(' ORDER BY t.%I ASC', target_col);
+  query := format('%s ORDER BY t.%I ASC', query, target_col);
 
   -- Execute
   EXECUTE 'SELECT json_agg(val) FROM (' || query || ') v(val)' INTO result;

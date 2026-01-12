@@ -25,6 +25,14 @@ interface QueryConfig {
     pageSize: number;
     sortColumn?: string;
     sortDirection?: 'asc' | 'desc';
+    // Added for RPC support
+    tableName?: string;
+    columns?: string;
+    joins?: any[];
+    searchColumns?: string[];
+    frontendFilters?: FilterConfig[];
+    useRpc?: boolean;
+    rpcUrl?: string;
 }
 
 // Filter configuration from builder

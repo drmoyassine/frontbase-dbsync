@@ -468,42 +468,77 @@ export function DataTable({ binding, initialData = [], initialTotal = 0, classNa
         return () => clearTimeout(timer);
     }, [searchQuery]);
 
-    // Fetch dynamic filter options
+    // Fetch dynamic filter options (with cascading filter + search support)
     React.useEffect(() => {
         const fetchFilterOptions = async () => {
             if (!binding.frontendFilters) return;
 
             const newOptions: Record<string, { label: string; value: string }[]> = {};
+            const queryConfig = binding.dataRequest?.queryConfig;
 
             for (const filter of binding.frontendFilters) {
-                if (filter.optionsDataRequest && !fetchedOptions[filter.column]) {
-                    try {
-                        const response = await fetch('/api/data/execute', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ dataRequest: filter.optionsDataRequest })
+                // Only fetch for dropdown/multiselect filters with optionsDataRequest
+                if (!filter.optionsDataRequest) continue;
+                if (!['dropdown', 'multiselect'].includes(filter.filterType)) continue;
+
+                try {
+                    // Build cascading filter context (exclude current filter)
+                    const cascadingFilters = Object.entries(filterValues)
+                        .filter(([col]) => col !== filter.column)
+                        .filter(([, val]) => val !== undefined && val !== null && val !== '')
+                        .map(([column, value]) => {
+                            const filterConfig = binding.frontendFilters?.find(f => f.column === column);
+                            return {
+                                column,
+                                filterType: filterConfig?.filterType || 'text',
+                                value
+                            };
                         });
-                        const result = await response.json();
 
-                        let rawOptions: any[] = [];
-                        if (result.success) {
-                            // RPC frontbase_get_distinct_values returns a simple array via json_agg
-                            rawOptions = result.data?.rows || result.data || [];
-                        }
+                    // Build request body with cascading filters + search query
+                    const requestBody: Record<string, any> = {
+                        ...filter.optionsDataRequest.body,
+                        filters: cascadingFilters
+                    };
 
-                        if (Array.isArray(rawOptions)) {
-                            newOptions[filter.column] = rawOptions.map((val: any) => {
-                                // Handle potential object wrapper or raw value
-                                const strVal = (val !== null && typeof val === 'object') ? Object.values(val)[0] as string : String(val);
-                                return {
-                                    label: strVal,
-                                    value: strVal
-                                };
-                            });
-                        }
-                    } catch (e) {
-                        console.error("Error fetching options for", filter.column, e);
+                    // Add search context if there's an active search
+                    if (searchDebounce && searchDebounce.trim() !== '') {
+                        requestBody.search_query = searchDebounce;
+                        // Use searchColumns from queryConfig, or fallback to visible text columns
+                        requestBody.search_cols = queryConfig?.searchColumns ||
+                            columns.filter(col => !col.includes('.')); // Exclude FK columns as fallback
                     }
+
+                    const response = await fetch('/api/data/execute', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            dataRequest: {
+                                ...filter.optionsDataRequest,
+                                body: requestBody
+                            }
+                        })
+                    });
+                    const result = await response.json();
+
+                    let rawOptions: any[] = [];
+                    if (result.success) {
+                        // RPC frontbase_get_distinct_values returns a simple array via json_agg
+                        rawOptions = result.data?.rows || result.data || [];
+                    }
+
+                    if (Array.isArray(rawOptions)) {
+                        newOptions[filter.column] = rawOptions.map((val: any) => {
+                            // Handle potential object wrapper or raw value
+                            const strVal = (val !== null && typeof val === 'object') ? Object.values(val)[0] as string : String(val);
+                            return {
+                                label: strVal,
+                                value: strVal
+                            };
+                        });
+                    }
+                } catch (e) {
+                    console.error("Error fetching options for", filter.column, e);
                 }
             }
 
@@ -513,7 +548,7 @@ export function DataTable({ binding, initialData = [], initialTotal = 0, classNa
         };
 
         fetchFilterOptions();
-    }, [binding.frontendFilters]);
+    }, [binding.frontendFilters, filterValues, searchDebounce, columns]);  // Re-fetch when filters OR search change
 
 
 

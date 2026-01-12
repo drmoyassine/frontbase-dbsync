@@ -464,7 +464,18 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                     <div>
                         <TableSelector
                             value={effectiveBinding.tableName}
-                            onValueChange={(value) => updateBinding({ tableName: value })}
+                            onValueChange={(value) => {
+                                // When table changes, reset all schema-dependent fields
+                                updateBinding({
+                                    tableName: value,
+                                    columnOverrides: {},       // Clear column display settings
+                                    columnOrder: [],           // Clear column order
+                                    foreignKeys: [],           // Clear foreign key info
+                                    searchColumns: undefined,  // Clear search column selection
+                                    frontendFilters: [],       // Clear configured filters
+                                    sorting: { enabled: true, column: undefined, direction: 'asc' }, // Reset sort
+                                });
+                            }}
                             dataSourceId={effectiveBinding.dataSourceId}
                         />
                     </div>

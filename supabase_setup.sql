@@ -409,6 +409,11 @@ END;
 $$;
 
 -- 4. Distinct Values
+-- ============================================================
+-- LEGACY/DEPRECATED: This function is superseded by frontbase_get_distinct_values (Section 8)
+-- which supports cascading filters and search query context.
+-- TODO: Confirm no usage and remove in future cleanup.
+-- ============================================================
 CREATE OR REPLACE FUNCTION frontbase_get_distinct(
   table_name text,
   column_name text,
@@ -614,14 +619,21 @@ BEGIN
 END;
 $$;
 
--- 8. Get Distinct Values (Generic with Optional Join)
--- Usage: fetch unique values for a column, optionally filtering by an INNER JOIN to another table
+-- 8. Get Distinct Values (Generic with Optional Join + Cascading Filters + Search)
+-- Usage: fetch unique values for a column, optionally filtering by other active filters AND current search query
+-- Example 1: Get cities only where country = 'USA'
+--   SELECT frontbase_get_distinct_values('cities', 'city_name', NULL, NULL, NULL, '[{"column": "country", "filterType": "dropdown", "value": "USA"}]'::jsonb)
+-- Example 2: Get countries that match search "University" across name column
+--   SELECT frontbase_get_distinct_values('universities', 'country', NULL, NULL, NULL, '[]'::jsonb, 'University', ARRAY['name'])
 CREATE OR REPLACE FUNCTION frontbase_get_distinct_values(
   target_table text,
   target_col text,
   join_table text DEFAULT NULL,
   target_join_col text DEFAULT NULL,
-  join_table_col text DEFAULT NULL
+  join_table_col text DEFAULT NULL,
+  filters jsonb DEFAULT '[]'::jsonb,       -- Cascading filter context
+  search_query text DEFAULT NULL,          -- NEW: Current search query
+  search_cols text[] DEFAULT '{}'::text[]  -- NEW: Columns to search across
 )
 RETURNS json
 LANGUAGE plpgsql
@@ -632,6 +644,17 @@ DECLARE
   result json;
   target_table_ident text;
   join_table_ident text;
+  where_clause text := '';
+  filter_where text := '';
+  search_where text := '';
+  filter_item jsonb;
+  filter_col text;
+  filter_type text;
+  filter_value jsonb;
+  condition text;
+  quoted_col text;
+  col text;
+  first_col boolean := true;
 BEGIN
   -- Basic Validation
   IF target_table IS NULL OR target_col IS NULL THEN
@@ -654,6 +677,104 @@ BEGIN
     END IF;
   END IF;
 
+  -- 1. Build Search Conditions (if search_query provided)
+  IF search_query IS NOT NULL AND search_query != '' AND array_length(search_cols, 1) > 0 THEN
+    search_where := '(';
+    first_col := true;
+    FOREACH col IN ARRAY search_cols
+    LOOP
+      IF NOT first_col THEN
+        search_where := search_where || ' OR ';
+      END IF;
+      -- Handle table.column notation for search columns
+      IF col LIKE '%.%' THEN
+        search_where := search_where || format('t.%I::text ILIKE %L', split_part(col, '.', 2), '%' || search_query || '%');
+      ELSE
+        search_where := search_where || format('t.%I::text ILIKE %L', col, '%' || search_query || '%');
+      END IF;
+      first_col := false;
+    END LOOP;
+    search_where := search_where || ')';
+  END IF;
+
+  -- 2. Build Filter Conditions (cascading filter support)
+  FOR filter_item IN SELECT * FROM jsonb_array_elements(filters)
+  LOOP
+    filter_col := filter_item->>'column';
+    filter_type := filter_item->>'filterType';
+    filter_value := filter_item->'value';
+    
+    -- Skip if no column or value
+    IF filter_col IS NULL OR filter_col = '' OR filter_value IS NULL THEN
+      CONTINUE;
+    END IF;
+    
+    -- Handle table.column notation
+    DECLARE
+        parts text[];
+    BEGIN
+        IF filter_col LIKE '%.%' THEN
+            parts := string_to_array(filter_col, '.');
+            quoted_col := format('t.%I', parts[2]);  -- Use table alias 't'
+        ELSE
+            quoted_col := format('t.%I', filter_col);
+        END IF;
+    END;
+
+    -- Build condition based on filter type
+    condition := NULL;
+    
+    CASE filter_type
+      WHEN 'text' THEN
+        IF filter_value::text != 'null' AND filter_value::text != '""' THEN
+          condition := format('%s ILIKE %L', quoted_col, '%' || (filter_value#>>'{}') || '%');
+        END IF;
+        
+      WHEN 'dropdown', 'select' THEN
+        IF filter_value::text != 'null' AND filter_value::text != '""' THEN
+          condition := format('%s::text = %L', quoted_col, filter_value#>>'{}');
+        END IF;
+        
+      WHEN 'multiselect' THEN
+        IF jsonb_typeof(filter_value) = 'array' AND jsonb_array_length(filter_value) > 0 THEN
+          condition := format('%s IN (SELECT jsonb_array_elements_text(%L::jsonb))', quoted_col, filter_value::text);
+        END IF;
+        
+      WHEN 'boolean' THEN
+        IF filter_value::text = 'true' OR filter_value::text = 'false' THEN
+          condition := format('%s = %s', quoted_col, filter_value::boolean);
+        END IF;
+        
+      ELSE
+        -- Default: exact match
+        IF filter_value::text != 'null' AND filter_value::text != '""' THEN
+          condition := format('%s::text = %L', quoted_col, filter_value#>>'{}');
+        END IF;
+    END CASE;
+    
+    -- Append condition to filter_where
+    IF condition IS NOT NULL AND condition != '' THEN
+      IF filter_where = '' THEN
+        filter_where := condition;
+      ELSE
+        filter_where := filter_where || ' AND ' || condition;
+      END IF;
+    END IF;
+  END LOOP;
+
+  -- 3. Combine search and filter clauses
+  -- Logic: (search_conditions) AND (filter_conditions)
+  IF search_where != '' OR filter_where != '' THEN
+    where_clause := 'WHERE ';
+    IF search_where != '' AND filter_where != '' THEN
+      where_clause := where_clause || search_where || ' AND ' || filter_where;
+    ELSIF search_where != '' THEN
+      where_clause := where_clause || search_where;
+    ELSE
+      where_clause := where_clause || filter_where;
+    END IF;
+  END IF;
+
   -- Construct Query
   -- Note: We use %I for column names to ensure they are quoted
   -- target_table_ident is already quoted above via format
@@ -665,6 +786,11 @@ BEGIN
        ' INNER JOIN %s j ON t.%I = j.%I', 
        join_table_ident, target_join_col, join_table_col
      );
+  END IF;
+
+  -- Apply WHERE clause (search + filters)
+  IF where_clause != '' THEN
+    query := query || ' ' || where_clause;
   END IF;
 
   -- Order

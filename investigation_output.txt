@@ -1,0 +1,12 @@
+======================================================================
+INVESTIGATION: Filter Options Not Populating in Browser
+======================================================================
+
+[1] Checking FastAPI /api/pages/public/cc response...
+Traceback (most recent call last):
+  File "C:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\investigate_filters_browser.py", line 39, in <module>
+    print(f"\u2705 FastAPI returns {len(filters)} filters")
+  File "C:\Users\drmoy\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 0: character maps to <undefined>

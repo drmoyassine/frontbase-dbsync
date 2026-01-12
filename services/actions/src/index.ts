@@ -8,6 +8,7 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { swaggerUI } from '@hono/swagger-ui';
 import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
 
 // Middleware imports
 import { cors } from 'hono/cors';
@@ -24,12 +25,50 @@ import { deployRoute } from './routes/deploy';
 import { executeRoute } from './routes/execute';
 import { webhookRoute } from './routes/webhook';
 import { executionsRoute } from './routes/executions';
+import { pagesRoute } from './routes/pages';
+import { importRoute } from './routes/import';
+import { dataRoute } from './routes/data';
 
 // Auth middleware (Sprint 2)
 import { apiKeyAuth } from './middleware/auth';
 
-// Create OpenAPI-enabled Hono app
-const app = new OpenAPIHono();
+// Create OpenAPI-enabled Hono app with validation error logging
+const app = new OpenAPIHono({
+    defaultHook: (result, c) => {
+        if (!result.success) {
+            console.error('[Zod Validation Error] Request body validation failed:');
+            console.error(JSON.stringify(result.error.issues, null, 2));
+            return c.json({
+                success: false,
+                error: 'Validation failed',
+                details: result.error.issues,
+            }, 400);
+        }
+    }
+});
+
+// =============================================================================
+// Global Error Handler - Log Zod validation errors
+// =============================================================================
+app.onError((err, c) => {
+    console.error('[Global Error]', err);
+
+    // Check if it's a Zod validation error
+    if (err.name === 'ZodError' || (err as any).issues) {
+        console.error('[Zod Validation Error] Details:');
+        console.error(JSON.stringify((err as any).issues || err, null, 2));
+        return c.json({
+            success: false,
+            error: 'Validation failed',
+            details: (err as any).issues || err.message,
+        }, 400);
+    }
+
+    return c.json({
+        success: false,
+        error: err.message || 'Internal server error',
+    }, 500);
+});
 
 // =============================================================================
 // Global Middleware Stack (Sprint 0: Foundation)
@@ -64,10 +103,10 @@ app.use('*', cors({
 // =============================================================================
 
 // Webhook routes require API key authentication
-app.use('/webhook/*', apiKeyAuth);
+app.use('/api/webhook/*', apiKeyAuth);
 
 // OpenAPI Info
-app.doc('/openapi.json', {
+app.doc('/api/openapi.json', {
     openapi: '3.1.0',
     info: {
         title: 'Frontbase Actions Engine API',
@@ -80,17 +119,30 @@ app.doc('/openapi.json', {
 });
 
 // Swagger UI
-app.get('/docs', swaggerUI({ url: '/openapi.json' }));
+app.get('/api/docs', swaggerUI({ url: '/api/openapi.json' }));
 
-// Routes
-app.route('/health', healthRoute);
-app.route('/deploy', deployRoute);
-app.route('/execute', executeRoute);
-app.route('/webhook', webhookRoute);
-app.route('/executions', executionsRoute);
+// =============================================================================
+// API Routes (under /api/ prefix)
+// =============================================================================
+app.route('/api/health', healthRoute);
+app.route('/api/deploy', deployRoute);
+app.route('/api/execute', executeRoute);
+app.route('/api/webhook', webhookRoute);
+app.route('/api/executions', executionsRoute);
+app.route('/api/import', importRoute); // Publish contract import endpoint
+app.route('/api/data', dataRoute); // Data API for client hydration
 
-// Root redirect to docs
-app.get('/', (c) => c.redirect('/docs'));
+// =============================================================================
+// Static Files (for hydrate.js and other client assets)
+// =============================================================================
+app.use('/static/*', serveStatic({ root: './public', rewriteRequestPath: (path) => path.replace('/static', '') }));
+
+// =============================================================================
+// SSR Pages (Sprint 3) - Clean URLs at root level
+// =============================================================================
+app.route('', pagesRoute); // Pages at /{slug}
+
+// Root shows docs (or could show homepage)
 
 // Start server with Node.js adapter
 const port = parseInt(process.env.PORT || '3002');

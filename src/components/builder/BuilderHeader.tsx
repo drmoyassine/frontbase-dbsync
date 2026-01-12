@@ -113,8 +113,18 @@ export const BuilderHeader: React.FC<{
     };
 
     const handlePublish = async () => {
-      if (currentPageId) {
-        await publishPage(currentPageId);
+      if (currentPageId && currentPage) {
+        // Publish the page (saves first if needed, sends to Hono, returns preview URL)
+        const previewUrl = await publishPage(currentPageId);
+
+        // Open SSR preview in new tab if we got a URL back
+        if (previewUrl) {
+          window.open(previewUrl, '_blank');
+        } else {
+          // Fallback to constructed URL if no URL returned
+          const fallbackUrl = `http://localhost:3002/${currentPage.slug}`;
+          window.open(fallbackUrl, '_blank');
+        }
       }
     };
 
@@ -285,15 +295,20 @@ export const BuilderHeader: React.FC<{
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Publish Page</AlertDialogTitle>
+                <AlertDialogTitle>Publish & Preview</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will make your page publicly accessible. Are you sure you want to publish it?
+                  {hasUnsavedChanges && "Your changes will be saved. "}
+                  This will publish your page and open a preview at:
+                  <br />
+                  <code className="text-xs bg-muted px-1 py-0.5 rounded mt-1 inline-block">
+                    {currentPage ? `http://localhost:3002/${currentPage.slug}` : 'Loading...'}
+                  </code>
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction onClick={handlePublish}>
-                  Publish
+                  Publish & Preview
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

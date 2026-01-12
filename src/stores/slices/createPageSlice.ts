@@ -191,26 +191,46 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
     },
 
     publishPage: async (pageId: string) => {
-        const { pages, updatePage, setSaving, setUnsavedChanges } = get();
+        const { pages, updatePage, setSaving, setUnsavedChanges, savePageToDatabase } = get();
         const page = pages.find(p => p.id === pageId);
         if (!page) return;
 
         setSaving(true);
         try {
-            updatePage(pageId, { isPublic: true });
+            // First save any unsaved changes
+            const { hasUnsavedChanges } = get();
+            if (hasUnsavedChanges) {
+                await savePageToDatabase(pageId);
+            }
 
-            await updatePageApi(pageId, { ...page, isPublic: true });
-
-            setUnsavedChanges(false);
-
-            toast({
-                title: "Page published",
-                description: "Page has been published successfully"
+            // Call the publish endpoint (FastAPI → Hono)
+            const response = await fetch(`http://localhost:8000/api/pages/${pageId}/publish/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
             });
+
+            const result = await response.json();
+
+            if (result.success) {
+                // Update local state
+                updatePage(pageId, { isPublic: true });
+                setUnsavedChanges(false);
+
+                toast({
+                    title: "Page published",
+                    description: result.message || "Page has been published successfully"
+                });
+
+                // Return the preview URL for the caller to use
+                return result.previewUrl;
+            } else {
+                throw new Error(result.error || 'Failed to publish page');
+            }
         } catch (error: any) {
+            console.error('Publish error:', error);
             toast({
                 title: "Error publishing page",
-                description: error.response?.data?.message || error.message || "Failed to publish page",
+                description: error.message || "Failed to publish page to Edge",
                 variant: "destructive"
             });
         } finally {

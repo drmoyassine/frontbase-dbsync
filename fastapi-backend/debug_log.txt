@@ -1,0 +1,42 @@
+
+--- convert_component trace ---
+Component: 1768122835722-0.32224414052406636
+Binding keys: ['componentId', 'dataSourceId', 'tableName', 'columnOverrides', 'columnOrder', 'filtering', 'pagination', 'sorting', 'refreshInterval', 'foreignKeys', 'frontendFilters', 'searchColumns']
+Datasource ID in binding: None
+Available Datasources: ['ab497b53-1805-4cdf-b9ff-2ff76f1802c9']
+
+--- convert_component trace ---
+Component: 1768122835722-0.32224414052406636
+Binding keys: ['componentId', 'dataSourceId', 'tableName', 'columnOverrides', 'columnOrder', 'filtering', 'pagination', 'sorting', 'refreshInterval', 'foreignKeys', 'frontendFilters', 'searchColumns']
+Datasource ID in binding: ab497b53-1805-4cdf-b9ff-2ff76f1802c9
+Available Datasources: ['ab497b53-1805-4cdf-b9ff-2ff76f1802c9']
+
+--- convert_component trace ---
+Component: 1768122835722-0.32224414052406636
+Binding keys: ['componentId', 'dataSourceId', 'tableName', 'columnOverrides', 'columnOrder', 'filtering', 'pagination', 'sorting', 'refreshInterval', 'foreignKeys', 'frontendFilters', 'searchColumns']
+Datasource ID in binding: ab497b53-1805-4cdf-b9ff-2ff76f1802c9
+Available Datasources: ['ab497b53-1805-4cdf-b9ff-2ff76f1802c9']
+
+--- convert_component trace ---
+Component: 1768122835722-0.32224414052406636
+Binding keys: ['componentId', 'dataSourceId', 'tableName', 'columnOverrides', 'columnOrder', 'filtering', 'pagination', 'sorting', 'refreshInterval', 'foreignKeys', 'frontendFilters', 'searchColumns']
+Datasource ID in binding: ab497b53-1805-4cdf-b9ff-2ff76f1802c9
+Available Datasources: ['ab497b53-1805-4cdf-b9ff-2ff76f1802c9']
+
+--- convert_component trace ---
+Component: 1768122835722-0.32224414052406636
+Binding keys: ['componentId', 'dataSourceId', 'tableName', 'columnOverrides', 'columnOrder', 'filtering', 'pagination', 'sorting', 'refreshInterval', 'foreignKeys', 'frontendFilters', 'searchColumns']
+Datasource ID in binding: ab497b53-1805-4cdf-b9ff-2ff76f1802c9
+Available Datasources: ['ab497b53-1805-4cdf-b9ff-2ff76f1802c9']
+
+--- convert_component trace ---
+Component: 1768122835722-0.32224414052406636
+Binding keys: ['componentId', 'dataSourceId', 'tableName', 'columnOverrides', 'columnOrder', 'filtering', 'pagination', 'sorting', 'refreshInterval', 'foreignKeys', 'frontendFilters', 'searchColumns']
+Datasource ID in binding: ab497b53-1805-4cdf-b9ff-2ff76f1802c9
+Available Datasources: ['ab497b53-1805-4cdf-b9ff-2ff76f1802c9']
+
+--- convert_component trace ---
+Component: 1768122835722-0.32224414052406636
+Binding keys: ['componentId', 'dataSourceId', 'tableName', 'columnOverrides', 'columnOrder', 'filtering', 'pagination', 'sorting', 'refreshInterval', 'foreignKeys', 'frontendFilters', 'searchColumns']
+Datasource ID in binding: ab497b53-1805-4cdf-b9ff-2ff76f1802c9
+Available Datasources: ['ab497b53-1805-4cdf-b9ff-2ff76f1802c9']

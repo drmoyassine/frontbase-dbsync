@@ -1,0 +1,4175 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Frontbase-DBSync API",
+    "description": "Unified API for Frontbase and DB-Sync functionality",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Login",
+        "description": "Login with email and password",
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Register",
+        "description": "Register a new admin user (disabled in production)",
+        "operationId": "register_api_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Get Me",
+        "description": "Get current authenticated user",
+        "operationId": "get_me_api_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Logout",
+        "description": "Logout and clear session",
+        "operationId": "logout_api_auth_logout_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pages/": {
+      "get": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Get Pages",
+        "description": "Get all pages - matches Express: { success, data: pages[] }",
+        "operationId": "get_pages_api_pages__get",
+        "parameters": [
+          {
+            "name": "includeDeleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Includedeleted"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Create Page Endpoint",
+        "description": "Create a new page - matches Express: { success, data: page }",
+        "operationId": "create_page_endpoint_api_pages__post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pages/public/{slug}/": {
+      "get": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Get Public Page",
+        "description": "Get a public page by slug for SSR.\nNo authentication required - used by Hono Edge Engine.\nReturns page data if page exists and is public (or all for now during dev).",
+        "operationId": "get_public_page_api_pages_public__slug___get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pages/{page_id}/publish/": {
+      "post": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Publish Page",
+        "description": "Publish a page to Hono Edge Engine.\nGathers page data and sends to Hono /api/import endpoint.",
+        "operationId": "publish_page_api_pages__page_id__publish__post",
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Page Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pages/{page_id}/": {
+      "get": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Get Page",
+        "description": "Get a page by ID - matches Express: { success, data: page }",
+        "operationId": "get_page_api_pages__page_id___get",
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Page Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Update Page Endpoint",
+        "description": "Update a page - matches Express: { success, data: page }",
+        "operationId": "update_page_endpoint_api_pages__page_id___put",
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Page Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Delete Page",
+        "description": "Soft delete a page - matches Express: { success, message }",
+        "operationId": "delete_page_api_pages__page_id___delete",
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Page Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pages/{page_id}/layout/": {
+      "put": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Update Page Layout",
+        "description": "Update page layout - matches Express: { success, data: page }",
+        "operationId": "update_page_layout_api_pages__page_id__layout__put",
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Page Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "title": "Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pages/{page_id}/restore/": {
+      "post": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Restore Page",
+        "description": "Restore a deleted page - matches Express: { success, data: page, message }",
+        "operationId": "restore_page_api_pages__page_id__restore__post",
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Page Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pages/{page_id}/permanent/": {
+      "delete": {
+        "tags": [
+          "pages"
+        ],
+        "summary": "Permanent Delete Page",
+        "description": "Permanently delete a page - matches Express: { success, message }",
+        "operationId": "permanent_delete_page_api_pages__page_id__permanent__delete",
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Page Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/project/": {
+      "get": {
+        "tags": [
+          "project"
+        ],
+        "summary": "Get Project Endpoint",
+        "description": "Get project settings",
+        "operationId": "get_project_endpoint_api_project__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "project"
+        ],
+        "summary": "Update Project Endpoint",
+        "description": "Update project settings",
+        "operationId": "update_project_endpoint_api_project__put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/variables/": {
+      "get": {
+        "tags": [
+          "variables"
+        ],
+        "summary": "Get Variables",
+        "description": "Get all variables",
+        "operationId": "get_variables_api_variables__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VariableResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Get Variables Api Variables  Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "variables"
+        ],
+        "summary": "Create Variable Endpoint",
+        "description": "Create a new variable",
+        "operationId": "create_variable_endpoint_api_variables__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VariableCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VariableResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/variables/{variable_id}": {
+      "get": {
+        "tags": [
+          "variables"
+        ],
+        "summary": "Get Variable",
+        "description": "Get a variable by ID",
+        "operationId": "get_variable_api_variables__variable_id__get",
+        "parameters": [
+          {
+            "name": "variable_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Variable Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VariableResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/variables/{variable_id}/": {
+      "put": {
+        "tags": [
+          "variables"
+        ],
+        "summary": "Update Variable Endpoint",
+        "description": "Update a variable",
+        "operationId": "update_variable_endpoint_api_variables__variable_id___put",
+        "parameters": [
+          {
+            "name": "variable_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Variable Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VariableUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VariableResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "variables"
+        ],
+        "summary": "Delete Variable",
+        "description": "Delete a variable",
+        "operationId": "delete_variable_api_variables__variable_id___delete",
+        "parameters": [
+          {
+            "name": "variable_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Variable Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/connections/": {
+      "get": {
+        "tags": [
+          "database"
+        ],
+        "summary": "Get Connections",
+        "description": "Get database connections",
+        "operationId": "get_connections_api_database_connections__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseConnectionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/test-supabase/": {
+      "post": {
+        "tags": [
+          "database"
+        ],
+        "summary": "Test Supabase",
+        "description": "Test Supabase connection credentials - tries service key first, falls back to anon key",
+        "operationId": "test_supabase_api_database_test_supabase__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseConnectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/table-data/{table_name}/": {
+      "get": {
+        "tags": [
+          "database"
+        ],
+        "summary": "Get Table Data",
+        "description": "Get table data with pagination and filtering",
+        "operationId": "get_table_data_api_database_table_data__table_name___get",
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "orderBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Orderby"
+            }
+          },
+          {
+            "name": "orderDirection",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "asc",
+              "title": "Orderdirection"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "builder",
+              "title": "Mode"
+            }
+          },
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "*",
+              "title": "Select"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/distinct-values/": {
+      "post": {
+        "tags": [
+          "database"
+        ],
+        "summary": "Get Distinct Values",
+        "description": "Get distinct values for a column",
+        "operationId": "get_distinct_values_api_database_distinct_values__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "title": "Request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/advanced-query/": {
+      "post": {
+        "tags": [
+          "database"
+        ],
+        "summary": "Advanced Query",
+        "description": "Execute advanced query",
+        "operationId": "advanced_query_api_database_advanced_query__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "title": "Request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/supabase-tables/": {
+      "get": {
+        "tags": [
+          "database"
+        ],
+        "summary": "Get Supabase Tables",
+        "description": "Get database tables",
+        "operationId": "get_supabase_tables_api_database_supabase_tables__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/tables/": {
+      "get": {
+        "tags": [
+          "database"
+        ],
+        "summary": "Get Tables",
+        "description": "Get database tables (aliased to supabase-tables)",
+        "operationId": "get_tables_api_database_tables__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/table-schema/{table_name}/": {
+      "get": {
+        "tags": [
+          "database"
+        ],
+        "summary": "Get Table Schema",
+        "description": "Get table schema with foreign key information",
+        "operationId": "get_table_schema_api_database_table_schema__table_name___get",
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/connect-supabase/": {
+      "post": {
+        "tags": [
+          "database"
+        ],
+        "summary": "Connect Supabase",
+        "description": "Connect to Supabase",
+        "operationId": "connect_supabase_api_database_connect_supabase__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseConnectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/disconnect-supabase/": {
+      "delete": {
+        "tags": [
+          "database"
+        ],
+        "summary": "Disconnect Supabase",
+        "description": "Disconnect from Supabase",
+        "operationId": "disconnect_supabase_api_database_disconnect_supabase__delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/rls/policies/": {
+      "get": {
+        "tags": [
+          "rls"
+        ],
+        "summary": "List Policies",
+        "description": "List all RLS policies in the schema",
+        "operationId": "list_policies_api_database_rls_policies__get",
+        "parameters": [
+          {
+            "name": "schema",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "public",
+              "title": "Schema"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "rls"
+        ],
+        "summary": "Create Policy",
+        "description": "Create a new RLS policy",
+        "operationId": "create_policy_api_database_rls_policies__post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePolicyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/rls/tables/": {
+      "get": {
+        "tags": [
+          "rls"
+        ],
+        "summary": "Get Tables Rls Status",
+        "description": "Get RLS status for all tables",
+        "operationId": "get_tables_rls_status_api_database_rls_tables__get",
+        "parameters": [
+          {
+            "name": "schema",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "public",
+              "title": "Schema"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/rls/policies/{table_name}": {
+      "get": {
+        "tags": [
+          "rls"
+        ],
+        "summary": "Get Table Policies",
+        "description": "Get policies for a specific table",
+        "operationId": "get_table_policies_api_database_rls_policies__table_name__get",
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          },
+          {
+            "name": "schema",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "public",
+              "title": "Schema"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/rls/policies/{table_name}/{policy_name}": {
+      "put": {
+        "tags": [
+          "rls"
+        ],
+        "summary": "Update Policy",
+        "description": "Update an existing RLS policy",
+        "operationId": "update_policy_api_database_rls_policies__table_name___policy_name__put",
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          },
+          {
+            "name": "policy_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Policy Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePolicyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "rls"
+        ],
+        "summary": "Delete Policy",
+        "description": "Delete an RLS policy",
+        "operationId": "delete_policy_api_database_rls_policies__table_name___policy_name__delete",
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          },
+          {
+            "name": "policy_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Policy Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/rls/tables/{table_name}/toggle/": {
+      "post": {
+        "tags": [
+          "rls"
+        ],
+        "summary": "Toggle Table Rls",
+        "description": "Enable or disable RLS on a table",
+        "operationId": "toggle_table_rls_api_database_rls_tables__table_name__toggle__post",
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToggleRLSRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/rls/batch/": {
+      "post": {
+        "tags": [
+          "rls"
+        ],
+        "summary": "Create Batch Policies",
+        "description": "Create multiple RLS policies in a single HTTP request using batch RPC function",
+        "operationId": "create_batch_policies_api_database_rls_batch__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBatchPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/rls/bulk-delete/": {
+      "post": {
+        "tags": [
+          "rls"
+        ],
+        "summary": "Bulk Delete Policies",
+        "description": "Delete multiple RLS policies from Supabase in bulk",
+        "operationId": "bulk_delete_policies_api_database_rls_bulk_delete__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/rls/metadata/": {
+      "get": {
+        "tags": [
+          "rls"
+        ],
+        "summary": "Get All Rls Metadata",
+        "description": "Get all stored RLS metadata for categorization by contact_type",
+        "operationId": "get_all_rls_metadata_api_database_rls_metadata__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "rls"
+        ],
+        "summary": "Save Rls Metadata",
+        "description": "Save metadata when creating a policy",
+        "operationId": "save_rls_metadata_api_database_rls_metadata__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RLSMetadataRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/rls/metadata/{table_name}/{policy_name}": {
+      "get": {
+        "tags": [
+          "rls"
+        ],
+        "summary": "Get Rls Metadata",
+        "description": "Get stored metadata for a policy",
+        "operationId": "get_rls_metadata_api_database_rls_metadata__table_name___policy_name__get",
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          },
+          {
+            "name": "policy_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Policy Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "rls"
+        ],
+        "summary": "Delete Rls Metadata",
+        "description": "Delete metadata",
+        "operationId": "delete_rls_metadata_api_database_rls_metadata__table_name___policy_name__delete",
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          },
+          {
+            "name": "policy_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Policy Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/database/rls/metadata/verify/": {
+      "post": {
+        "tags": [
+          "rls"
+        ],
+        "summary": "Verify Rls Metadata",
+        "description": "Verify if a policy's current USING expression matches the stored hash",
+        "operationId": "verify_rls_metadata_api_database_rls_metadata_verify__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyRLSRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/drafts/": {
+      "get": {
+        "tags": [
+          "Actions"
+        ],
+        "summary": "List Drafts",
+        "description": "List all workflow drafts",
+        "operationId": "list_drafts_api_actions_drafts__get",
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDraftListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Actions"
+        ],
+        "summary": "Create Draft",
+        "description": "Create a new workflow draft",
+        "operationId": "create_draft_api_actions_drafts__post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDraftCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDraftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/drafts/{draft_id}": {
+      "get": {
+        "tags": [
+          "Actions"
+        ],
+        "summary": "Get Draft",
+        "description": "Get a specific workflow draft",
+        "operationId": "get_draft_api_actions_drafts__draft_id__get",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDraftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Actions"
+        ],
+        "summary": "Update Draft",
+        "description": "Update a workflow draft",
+        "operationId": "update_draft_api_actions_drafts__draft_id__patch",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDraftUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDraftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Actions"
+        ],
+        "summary": "Delete Draft",
+        "description": "Delete a workflow draft",
+        "operationId": "delete_draft_api_actions_drafts__draft_id__delete",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/drafts/{draft_id}/publish": {
+      "post": {
+        "tags": [
+          "Actions"
+        ],
+        "summary": "Publish Draft",
+        "description": "Publish a workflow draft to the Actions Runtime (Hono).\n\nThis deploys the workflow so it can be executed via the runtime API.",
+        "operationId": "publish_draft_api_actions_drafts__draft_id__publish_post",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/drafts/{draft_id}/test": {
+      "post": {
+        "tags": [
+          "Actions"
+        ],
+        "summary": "Test Draft",
+        "description": "Test-execute a workflow draft.\n\nThis publishes the draft temporarily (if not already published)\nand triggers an execution.",
+        "operationId": "test_draft_api_actions_drafts__draft_id__test_post",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestExecuteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestExecuteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/executions/{draft_id}": {
+      "get": {
+        "tags": [
+          "Actions"
+        ],
+        "summary": "Get Draft Executions",
+        "description": "Get execution history for a draft from the Actions Engine",
+        "operationId": "get_draft_executions_api_actions_executions__draft_id__get",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth-forms/": {
+      "get": {
+        "tags": [
+          "Auth Forms"
+        ],
+        "summary": "List Auth Forms",
+        "description": "List all auth forms",
+        "operationId": "list_auth_forms_api_auth_forms__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Auth Forms"
+        ],
+        "summary": "Create Auth Form",
+        "description": "Create a new auth form",
+        "operationId": "create_auth_form_api_auth_forms__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthFormCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth-forms/{form_id}/": {
+      "get": {
+        "tags": [
+          "Auth Forms"
+        ],
+        "summary": "Get Auth Form",
+        "description": "Get a single auth form by ID",
+        "operationId": "get_auth_form_api_auth_forms__form_id___get",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Auth Forms"
+        ],
+        "summary": "Update Auth Form",
+        "description": "Update an existing auth form",
+        "operationId": "update_auth_form_api_auth_forms__form_id___put",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthFormUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Auth Forms"
+        ],
+        "summary": "Delete Auth Form",
+        "description": "Delete an auth form",
+        "operationId": "delete_auth_form_api_auth_forms__form_id___delete",
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Root",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/": {
+      "get": {
+        "summary": "Health Check",
+        "operationId": "health_check_health__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuthFormCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config",
+            "default": {}
+          },
+          "target_contact_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Contact Type"
+          },
+          "allowed_contact_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Contact Types",
+            "default": []
+          },
+          "redirect_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Url"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "AuthFormCreate"
+      },
+      "AuthFormUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config"
+          },
+          "target_contact_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Contact Type"
+          },
+          "allowed_contact_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Contact Types"
+          },
+          "redirect_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Url"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "title": "AuthFormUpdate"
+      },
+      "AuthResponse": {
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user",
+          "message"
+        ],
+        "title": "AuthResponse"
+      },
+      "BulkDeleteRequest": {
+        "properties": {
+          "policies": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Policies"
+          }
+        },
+        "type": "object",
+        "required": [
+          "policies"
+        ],
+        "title": "BulkDeleteRequest"
+      },
+      "CreateBatchPolicyRequest": {
+        "properties": {
+          "policyBaseName": {
+            "type": "string",
+            "title": "Policybasename"
+          },
+          "tableRules": {
+            "items": {
+              "$ref": "#/components/schemas/TableRulePolicyData"
+            },
+            "type": "array",
+            "title": "Tablerules"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles",
+            "default": [
+              "authenticated"
+            ]
+          },
+          "permissive": {
+            "type": "boolean",
+            "title": "Permissive",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "policyBaseName",
+          "tableRules"
+        ],
+        "title": "CreateBatchPolicyRequest"
+      },
+      "CreatePolicyRequest": {
+        "properties": {
+          "tableName": {
+            "type": "string",
+            "title": "Tablename"
+          },
+          "policyName": {
+            "type": "string",
+            "title": "Policyname"
+          },
+          "operation": {
+            "type": "string",
+            "title": "Operation"
+          },
+          "usingExpression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usingexpression"
+          },
+          "checkExpression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkexpression"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles",
+            "default": [
+              "authenticated"
+            ]
+          },
+          "permissive": {
+            "type": "boolean",
+            "title": "Permissive",
+            "default": true
+          },
+          "propagateTo": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Propagateto",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "tableName",
+          "policyName",
+          "operation"
+        ],
+        "title": "CreatePolicyRequest"
+      },
+      "DatabaseConnectionRequest": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Url"
+          },
+          "anonKey": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Anonkey"
+          },
+          "serviceKey": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Servicekey"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "anonKey"
+        ],
+        "title": "DatabaseConnectionRequest"
+      },
+      "DatabaseConnectionResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success"
+        ],
+        "title": "DatabaseConnectionResponse"
+      },
+      "ExecutionStatus": {
+        "type": "string",
+        "enum": [
+          "started",
+          "executing",
+          "completed",
+          "error",
+          "cancelled"
+        ],
+        "title": "ExecutionStatus",
+        "description": "Workflow execution statuses"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest"
+      },
+      "NodePosition": {
+        "properties": {
+          "x": {
+            "type": "number",
+            "title": "X"
+          },
+          "y": {
+            "type": "number",
+            "title": "Y"
+          }
+        },
+        "type": "object",
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "NodePosition",
+        "description": "Position of a node on the canvas"
+      },
+      "PageCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Slug"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "keywords": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keywords"
+          },
+          "isPublic": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ispublic",
+            "default": false
+          },
+          "isHomepage": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ishomepage",
+            "default": false
+          },
+          "layoutData": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layoutdata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "slug"
+        ],
+        "title": "PageCreateRequest"
+      },
+      "PageUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "keywords": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keywords"
+          },
+          "isPublic": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ispublic"
+          },
+          "isHomepage": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ishomepage"
+          },
+          "layoutData": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layoutdata"
+          }
+        },
+        "type": "object",
+        "title": "PageUpdateRequest"
+      },
+      "Parameter": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "Parameter",
+        "description": "Node parameter definition"
+      },
+      "ProjectResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "supabase_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supabase Url"
+          },
+          "supabase_anon_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supabase Anon Key"
+          },
+          "usersConfig": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usersconfig"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProjectResponse"
+      },
+      "ProjectUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "supabase_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supabase Url"
+          },
+          "supabase_anon_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supabase Anon Key"
+          },
+          "supabase_service_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supabase Service Key"
+          },
+          "usersConfig": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usersconfig"
+          }
+        },
+        "type": "object",
+        "title": "ProjectUpdateRequest"
+      },
+      "PublishResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "workflow_id": {
+            "type": "string",
+            "title": "Workflow Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "message",
+          "workflow_id",
+          "version"
+        ],
+        "title": "PublishResponse",
+        "description": "Response from publishing a workflow"
+      },
+      "RLSMetadataRequest": {
+        "properties": {
+          "tableName": {
+            "type": "string",
+            "title": "Tablename"
+          },
+          "policyName": {
+            "type": "string",
+            "title": "Policyname"
+          },
+          "formData": {
+            "type": "object",
+            "title": "Formdata"
+          },
+          "generatedUsing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generatedusing"
+          },
+          "generatedCheck": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generatedcheck"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tableName",
+          "policyName",
+          "formData"
+        ],
+        "title": "RLSMetadataRequest"
+      },
+      "RegisterRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "RegisterRequest"
+      },
+      "SuccessResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "message"
+        ],
+        "title": "SuccessResponse"
+      },
+      "TableRulePolicyData": {
+        "properties": {
+          "tableName": {
+            "type": "string",
+            "title": "Tablename"
+          },
+          "operation": {
+            "type": "string",
+            "title": "Operation"
+          },
+          "usingExpression": {
+            "type": "string",
+            "title": "Usingexpression"
+          },
+          "checkExpression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkexpression"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tableName",
+          "operation",
+          "usingExpression"
+        ],
+        "title": "TableRulePolicyData"
+      },
+      "TestExecuteRequest": {
+        "properties": {
+          "parameters": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parameters"
+          }
+        },
+        "type": "object",
+        "title": "TestExecuteRequest",
+        "description": "Request to test-execute a workflow draft"
+      },
+      "TestExecuteResponse": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ExecutionStatus"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "execution_id",
+          "status"
+        ],
+        "title": "TestExecuteResponse",
+        "description": "Response from test execution"
+      },
+      "ToggleRLSRequest": {
+        "properties": {
+          "enable": {
+            "type": "boolean",
+            "title": "Enable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enable"
+        ],
+        "title": "ToggleRLSRequest"
+      },
+      "TriggerType": {
+        "type": "string",
+        "enum": [
+          "manual",
+          "http_webhook",
+          "scheduled",
+          "data_change"
+        ],
+        "title": "TriggerType",
+        "description": "Workflow trigger types"
+      },
+      "UpdatePolicyRequest": {
+        "properties": {
+          "newPolicyName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newpolicyname"
+          },
+          "operation": {
+            "type": "string",
+            "title": "Operation"
+          },
+          "usingExpression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usingexpression"
+          },
+          "checkExpression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkexpression"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles",
+            "default": [
+              "authenticated"
+            ]
+          },
+          "permissive": {
+            "type": "boolean",
+            "title": "Permissive",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "operation"
+        ],
+        "title": "UpdatePolicyRequest"
+      },
+      "UserResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "UserResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VariableCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "pattern": "^(variable|calculated)$",
+            "title": "Type"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "formula": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formula"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "VariableCreateRequest"
+      },
+      "VariableResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "formula": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formula"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "created_at"
+        ],
+        "title": "VariableResponse"
+      },
+      "VariableUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(variable|calculated)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "formula": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formula"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "title": "VariableUpdateRequest"
+      },
+      "VerifyRLSRequest": {
+        "properties": {
+          "tableName": {
+            "type": "string",
+            "title": "Tablename"
+          },
+          "policyName": {
+            "type": "string",
+            "title": "Policyname"
+          },
+          "currentUsing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentusing"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tableName",
+          "policyName"
+        ],
+        "title": "VerifyRLSRequest"
+      },
+      "WorkflowDraftCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "trigger_type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TriggerType"
+              }
+            ],
+            "default": "manual"
+          },
+          "trigger_config": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Config"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowNode"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowEdge"
+            },
+            "type": "array",
+            "title": "Edges"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "WorkflowDraftCreate",
+        "description": "Schema for creating a new workflow draft"
+      },
+      "WorkflowDraftListResponse": {
+        "properties": {
+          "drafts": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowDraftResponse"
+            },
+            "type": "array",
+            "title": "Drafts"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drafts",
+          "total"
+        ],
+        "title": "WorkflowDraftListResponse",
+        "description": "Response for listing workflow drafts"
+      },
+      "WorkflowDraftResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "trigger_type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TriggerType"
+              }
+            ],
+            "default": "manual"
+          },
+          "trigger_config": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Config"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowNode"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowEdge"
+            },
+            "type": "array",
+            "title": "Edges"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "is_published": {
+            "type": "boolean",
+            "title": "Is Published",
+            "default": false
+          },
+          "published_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published Version"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "WorkflowDraftResponse",
+        "description": "Response schema for workflow drafts"
+      },
+      "WorkflowDraftUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "trigger_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TriggerType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trigger_config": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Config"
+          },
+          "nodes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WorkflowNode"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nodes"
+          },
+          "edges": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WorkflowEdge"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edges"
+          }
+        },
+        "type": "object",
+        "title": "WorkflowDraftUpdate",
+        "description": "Schema for updating an existing workflow draft (partial)"
+      },
+      "WorkflowEdge": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "sourceOutput": {
+            "type": "string",
+            "title": "Sourceoutput"
+          },
+          "targetInput": {
+            "type": "string",
+            "title": "Targetinput"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "target",
+          "sourceOutput",
+          "targetInput"
+        ],
+        "title": "WorkflowEdge",
+        "description": "Connection between two nodes"
+      },
+      "WorkflowNode": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "position": {
+            "$ref": "#/components/schemas/NodePosition"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/Parameter"
+            },
+            "type": "array",
+            "title": "Inputs"
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/Parameter"
+            },
+            "type": "array",
+            "title": "Outputs"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "position"
+        ],
+        "title": "WorkflowNode",
+        "description": "A single node in the workflow graph"
+      }
+    }
+  }
+}

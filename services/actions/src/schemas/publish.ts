@@ -111,7 +111,7 @@ export type ComponentBinding = z.infer<typeof ComponentBindingSchema>;
 
 export const ComponentStylesSchema = z.record(z.string(), z.any()).nullable().optional();
 
-export const PageComponentSchema: z.ZodType<PageComponent> = z.lazy(() =>
+export const PageComponentSchema: z.ZodType<PageComponent, z.ZodTypeDef, unknown> = z.lazy(() =>
     z.object({
         id: z.string(),
         type: z.string(), // ComponentTypeSchema is too strict for flexibility

@@ -330,7 +330,7 @@ export function DataTable({ binding, initialData = [], initialTotal = 0, classNa
                 if (search) {
                     // Search mode
                     rpcBody.search_query = search;
-                    rpcBody.search_cols = (queryConfig.searchColumns && queryConfig.searchColumns.length > 0)
+                    rpcBody.search_cols = (queryConfig.searchColumns?.length || 0) > 0
                         ? queryConfig.searchColumns
                         : []; // RPC will auto-detect text columns
                 } else {

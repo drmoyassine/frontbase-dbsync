@@ -21,7 +21,7 @@ export interface PageSlice {
 
     // Database integration
     savePageToDatabase: (pageId: string) => Promise<void>;
-    publishPage: (pageId: string) => Promise<void>;
+    publishPage: (pageId: string) => Promise<string | undefined>;
     togglePageVisibility: (pageId: string) => Promise<void>;
     loadPagesFromDatabase: (includeDeleted?: boolean) => Promise<void>;
     createPageInDatabase: (pageData: Omit<Page, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string | null>;

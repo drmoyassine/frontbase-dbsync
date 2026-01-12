@@ -73,6 +73,7 @@ class DataRequest(BaseModel):
     body: Optional[Dict[str, Any]] = None  # For POST requests (SQL queries)
     result_path: str = Field("", alias="resultPath")  # JSON path to extract data (e.g., "rows", "data")
     flatten_relations: bool = Field(True, alias="flattenRelations")  # Flatten nested objects to "table.column"
+    query_config: Optional[Dict[str, Any]] = Field(None, alias="queryConfig")  # Added for DataTable RPC config
     
     class Config:
         populate_by_name = True
@@ -86,6 +87,13 @@ class ComponentBinding(BaseModel):
     columns: Optional[List[str]] = None
     column_order: Optional[List[str]] = Field(None, alias="columnOrder")  # Added for React DataTable support
     column_overrides: Optional[Dict[str, ColumnOverride]] = Field(None, alias="columnOverrides")
+    
+    # Dynamic feature configuration
+    frontend_filters: Optional[List[Dict[str, Any]]] = Field(None, alias="frontendFilters")
+    sorting: Optional[Dict[str, Any]] = None
+    pagination: Optional[Dict[str, Any]] = None
+    filtering: Optional[Dict[str, Any]] = None
+    
     filters: Optional[Dict[str, Any]] = None
     primary_key: Optional[str] = Field(None, alias="primaryKey")
     foreign_keys: Optional[List[ForeignKey]] = Field(None, alias="foreignKeys")

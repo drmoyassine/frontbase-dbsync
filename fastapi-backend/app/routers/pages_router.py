@@ -441,6 +441,30 @@ def _compute_supabase_request(binding: dict, datasource) -> dict:
             'frontendFilters': frontend_filters
         }
     }
+    
+    
+    # DEBUG TRACE TO FILE
+    try:
+        with open("debug_log.txt", "a") as f:
+            f.write(f"\n--- _compute_supabase_request trace ---\n")
+            f.write(f"Incoming Binding Keys: {list(binding.keys())}\n")
+            if 'filtering' in binding:
+                f.write(f"Incoming Filtering: {binding['filtering']}\n")
+            else:
+                f.write("Incoming Filtering: MISSING\n")
+                
+            f.write(f"Generated Result Keys: {list(result.keys())}\n")
+            if 'queryConfig' in result:
+                f.write(f"queryConfig keys: {list(result['queryConfig'].keys())}\n")
+            else:
+                f.write("queryConfig MISSING in result\n")
+            f.write("--------------------------------\n")
+    except Exception as e:
+        print(f"Failed to log: {e}")
+        
+    return result
+
+
 
 
 def _compute_sql_request(binding: dict, datasource, ds_type: str) -> dict:
@@ -537,27 +561,52 @@ def convert_component(c: dict, datasources_list: list = None) -> dict:
     result = map_styles_schema(result)
     
     # Step 3: Enrich binding with dataRequest
-    if 'binding' in result and datasources:
+    if 'binding' in result:
         binding = result['binding']
-        ds_id = binding.get('datasourceId') or binding.get('datasource_id')
-        datasource = find_datasource(datasources, ds_id)
+        # Handle all casing variations: datasourceId, datasource_id, dataSourceId
+        ds_id = binding.get('datasourceId') or binding.get('datasource_id') or binding.get('dataSourceId')
         
-        if datasource:
-            # CRITICAL: This preserves frontendFilters with optionsDataRequest
-            result['binding'] = enrich_binding_with_data_request(
-                binding,
-                datasource,
-                compute_data_request,  # Pass as function
-                component_id=result.get('id')  # Add componentId for Pydantic validation
-            )
-            
-            print(f"[convert_component] Enriched {result.get('type', 'component')} binding")
-            if 'frontendFilters' in result['binding']:
-                print(f"  → Preserved {len(result['binding']['frontendFilters'])} filters")
+        # DEBUG TRACE START
+        try:
+            with open("debug_log.txt", "a") as f:
+                f.write(f"\n--- convert_component trace ---\n")
+                f.write(f"Component: {result.get('id', 'unknown')}\n")
+                f.write(f"Binding keys: {list(binding.keys())}\n")
+                f.write(f"Datasource ID in binding: {ds_id}\n")
+                f.write(f"Available Datasources: {[d.id for d in datasources]}\n")
+        except: pass
+        # DEBUG TRACE END
 
-            # MAP columns -> columnOrder because React DataTable expects columnOrder
-            if 'columns' in result['binding'] and result['binding']['columns']:
-                result['binding']['columnOrder'] = result['binding']['columns']
+        if datasources:
+            datasource = find_datasource(datasources, ds_id)
+            
+            if datasource:
+                 # CRITICAL: This preserves frontendFilters with optionsDataRequest
+                result['binding'] = enrich_binding_with_data_request(
+                    binding,
+                    datasource,
+                    compute_data_request,  # Pass as function
+                    component_id=result.get('id')  # Add componentId for Pydantic validation
+                )
+                
+                print(f"[convert_component] Enriched {result.get('type', 'component')} binding")
+                if 'frontendFilters' in result['binding']:
+                    print(f"  → Preserved {len(result['binding']['frontendFilters'])} filters")
+
+                # MAP columns -> columnOrder because React DataTable expects columnOrder
+                if 'columns' in result['binding'] and result['binding']['columns']:
+                    result['binding']['columnOrder'] = result['binding']['columns']
+            else:
+                try:
+                    with open("debug_log.txt", "a") as f:
+                        f.write(f"Datasource NOT FOUND for ID: {ds_id}\n")
+                except: pass
+        else:
+             try:
+                with open("debug_log.txt", "a") as f:
+                    f.write(f"NO DATASOURCES AVAILABLE\n")
+             except: pass
+
     
     # Step 4: Process children recursively
     result = process_component_children(
@@ -650,23 +699,35 @@ async def publish_page(page_id: str, db: Session = Depends(get_db)):
         #      with open("debug_publish_trace.log", "w") as f:
         #          if publish_data.layout_data.content:
         #              binding = publish_data.layout_data.content[0].binding
-        #              # Handle if binding is a Pydantic model or dict
-        #              if hasattr(binding, 'model_dump'):
-        #                  b_dict = binding.model_dump()
-        #              elif hasattr(binding, '__dict__'):
-        #                  b_dict = binding.__dict__
-        #              else:
-        #                  b_dict = binding
+        #              f.write(f"Binding Object: {binding}\n")
+        #              
+        #              if binding:
+        #                  # Check raw object fields
+        #                  f.write(f"Binding.data_request: {binding.data_request}\n")
+        #                  if binding.data_request:
+        #                      f.write(f"DataRequest.query_config: {binding.data_request.query_config}\n")
+        #                  f.write(f"Binding.filtering: {binding.filtering}\n")
         #                  
-        #              f.write(f"Binding Keys: {b_dict.keys()}\n")
-        #              f.write(f"TableName: {b_dict.get('tableName')}\n")
-        #              f.write(f"Columns: {b_dict.get('columns')}\n")
-        #              f.write(f"ColumnOrder: {b_dict.get('columnOrder')}\n")
+        #                  # Check Dumped
+        #                  dumped = publish_data.model_dump(by_alias=True, exclude_none=True)
+        #                  dumped_binding = dumped['layoutData']['content'][0]['binding']
+        #                  f.write(f"Dumped Binding Keys: {dumped_binding.keys()}\n")
+        #                  if 'dataRequest' in dumped_binding:
+        #                      f.write(f"Dumped DataRequest Keys: {dumped_binding['dataRequest'].keys()}\n")
+        #                      if 'queryConfig' in dumped_binding['dataRequest']:
+        #                          f.write(f"Dumped queryConfig: {dumped_binding['dataRequest']['queryConfig']}\n")
+        #                      else:
+        #                          f.write("Dumped queryConfig MISSING\n")
+        #                  if 'filtering' in dumped_binding:
+        #                      f.write(f"Dumped filtering: {dumped_binding['filtering']}\n")
+        #                  else:
+        #                      f.write("Dumped filtering MISSING\n")
         #          else:
         #              f.write("No content in layoutData\n")
         # except Exception as e:
         #      with open("debug_publish_trace.log", "a") as f:
         #          f.write(f"Error tracing payload: {e}\n")
+
 
         # Build payload for Hono
         payload = ImportPagePayload(

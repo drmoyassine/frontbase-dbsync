@@ -102,6 +102,15 @@ temp_*.db
 !src/assets/**/*.png
 !src/assets/**/*.jpg
 
+# Temporary debugging/testing scripts (created during troubleshooting)
+test_*.py
+verify_*.py
+diagnose_*.py
+investigate_*.py
+debug_*.txt
+debug_*.py
+check_*.py
+
 # =============================================================================
 # Temporary & Generated Files
 # =============================================================================

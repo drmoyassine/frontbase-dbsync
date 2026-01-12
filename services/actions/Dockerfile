@@ -9,8 +9,10 @@ RUN npm install
 
 # Copy source files
 COPY src ./src
+COPY public ./public
 COPY tsconfig.json ./
 COPY drizzle.config.ts ./
+COPY vite.config.ts ./
 
 # Build TypeScript
 RUN npm run build
@@ -26,6 +28,7 @@ RUN npm install --production
 
 # Copy built files
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/public ./public
 
 # Copy drizzle config for migrations (if needed at runtime)
 COPY drizzle.config.ts ./

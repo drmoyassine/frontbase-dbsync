@@ -470,7 +470,6 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                                     tableName: value,
                                     columnOverrides: {},       // Clear column display settings
                                     columnOrder: [],           // Clear column order
-                                    foreignKeys: [],           // Clear foreign key info
                                     searchColumns: undefined,  // Clear search column selection
                                     frontendFilters: [],       // Clear configured filters
                                     sorting: { enabled: true, column: undefined, direction: 'asc' }, // Reset sort

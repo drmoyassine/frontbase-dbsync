@@ -34,6 +34,7 @@ interface PageData {
     isPublic: boolean;
     isHomepage: boolean;
     layoutData: PageLayoutData;
+    datasources?: Record<string, unknown>[];
 }
 
 // Response schemas

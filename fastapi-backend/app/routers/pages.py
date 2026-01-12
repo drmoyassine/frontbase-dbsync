@@ -266,3 +266,27 @@ async def permanent_delete_page(page_id: str, db: Session = Depends(get_db)):
             "success": False,
             "error": str(e)
         }
+
+
+@router.get("/public/{slug}")
+async def get_public_page(slug: str, db: Session = Depends(get_db)):
+    """Get a public page by slug - used by Hono SSR fallback"""
+    try:
+        page = get_page_by_slug(db, slug)
+        if not page:
+             raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Page not found"
+            )
+        
+        return {
+            "success": True,
+            "data": serialize_page(page)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }

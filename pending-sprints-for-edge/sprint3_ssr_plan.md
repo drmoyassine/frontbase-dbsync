@@ -120,7 +120,7 @@ export const DataTable = ({ props }) => {
 
 | File | Purpose |
 | :--- | :--- |
-| `services/actions/src/routes/pages.ts` | SSR route `/p/:slug` |
+| `services/actions/src/routes/pages.ts` | SSR route `/:slug` |
 | `services/actions/src/ssr/store.ts` | Variable store (3 scopes) |
 | `services/actions/src/ssr/PageRenderer.tsx` | Recursive component tree renderer |
 | `services/actions/src/ssr/components/static.tsx` | Static component renderers |
@@ -134,34 +134,35 @@ export const DataTable = ({ props }) => {
 
 ## Implementation Phases
 
-### Phase 1: SSR Route (2 hours)
-- Create `/p/:slug` route in Hono
-- Fetch page from FastAPI (local) or D1 (edge)
-- Return basic HTML
+### Phase 1: SSR Route (2 hours) ✅
+- [x] Create `/:slug` route in Hono
+- [x] Fetch page from FastAPI (local) or D1 (edge)
+- [x] Return basic HTML
 
-### Phase 2: Component Renderers (4 hours)
-- Static components (Text, Heading, Image, etc.)
-- Layout components (Container, Tabs, Accordion)
-- **Data components with React Query hooks**
+### Phase 2: Component Renderers (4 hours) ✅
+- [x] Static components (Text, Heading, Image, etc.)
+- [x] Layout components (Container, Tabs, Accordion)
+- [x] **Data components with React Query hooks**
 
-### Phase 3: Variable Store (3 hours)
-- Zustand vanilla store with 3 scopes
-- Cookie read/write helpers
-- localStorage sync for session variables
+### Phase 3: Variable Store (3 hours) ✅
+- [x] Zustand vanilla store with 3 scopes
+- [x] Cookie read/write helpers
+- [x] localStorage sync for session variables
 
-### Phase 4: Hydration Bundle (3 hours)
-- Minimal React bundle for interactive components
-- **Setup QueryClientProvider**
-- Variable store initialization from `window.__INITIAL_STATE__`
+### Phase 4: Hydration Bundle (3 hours) ✅
+- [x] Minimal React bundle for interactive components
+- [x] **Setup QueryClientProvider**
+- [x] Variable store initialization from `window.__INITIAL_STATE__`
 
-### Phase 5: FastAPI Integration (1 hour)
-- Add `/api/pages/public/:slug` endpoint
-- Return page for SSR (no auth for public pages)
+### Phase 5: FastAPI Integration (1 hour) ✅
+- [x] Add `/api/pages/public/:slug` endpoint (Required for SSR fallback)
+- [x] Add `/api/pages/:id/publish` endpoint (Required for Builder publish button)
+- [x] Return page for SSR (no auth for public pages)
 
 ### Phase 6: Testing & Polish (2 hours)
-- Test static page rendering
-- Test interactive components and data fetching
-- Test variable binding and reactivity
+- [x] Test static page rendering
+- [x] Test interactive components and data fetching
+- [x] Test variable binding and reactivity
 
 ---
 

@@ -46,6 +46,8 @@ services:
       - PORT=3002
       # Database for workflow storage (SQLite)
       - DATABASE_URL=file:/app/data/actions.db
+      # FastAPI backend URL (Docker internal network)
+      - FASTAPI_URL=http://backend:8000
       # Webhook API keys (comma-separated)
       - API_KEYS=${API_KEYS:-}
       # Supabase JWT for end-user auth (optional)

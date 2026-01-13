@@ -152,6 +152,7 @@ serve({
     port,
 }, (info) => {
     console.log(`🚀 Actions Engine running on http://localhost:${info.port}`);
+    console.log(`📍 PUBLIC_URL: ${process.env.PUBLIC_URL || '(not set - using request headers)'}`);
 });
 
 export default app;

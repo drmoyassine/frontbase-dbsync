@@ -34,6 +34,13 @@ def upgrade() -> None:
     # Check if columns exist before adding (idempotent)
     conn = op.get_bind()
     
+    # First check if table exists
+    result = conn.execute(sa.text("SELECT name FROM sqlite_master WHERE type='table' AND name='table_schema_cache'"))
+    if not result.fetchone():
+        # Table doesn't exist - it will be created with correct schema by SQLAlchemy
+        # Skip the ALTER TABLE commands
+        return
+    
     # Get existing columns
     result = conn.execute(sa.text("PRAGMA table_info(table_schema_cache)"))
     existing_columns = {row[1] for row in result.fetchall()}

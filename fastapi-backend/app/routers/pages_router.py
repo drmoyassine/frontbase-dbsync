@@ -739,6 +739,9 @@ async def publish_page(page_id: str, db: Session = Depends(get_db)):
         hono_url = os.getenv("HONO_URL", "http://localhost:3002")
         import_url = f"{hono_url}/api/import"
         
+        print(f"[Publish] HONO_URL env: {os.getenv('HONO_URL', '(not set)')}")
+        print(f"[Publish] Sending to: {import_url}")
+        
         # Send to Hono
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -747,6 +750,7 @@ async def publish_page(page_id: str, db: Session = Depends(get_db)):
                 headers={"Content-Type": "application/json"},
                 timeout=10.0
             )
+            print(f"[Publish] Response status: {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()

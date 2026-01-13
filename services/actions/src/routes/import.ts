@@ -86,14 +86,18 @@ importRoute.post('/', async (c) => {
         const publicUrl = process.env.PUBLIC_URL;
         let previewUrl: string;
 
+        console.log(`[Import] Building preview URL - PUBLIC_URL env: "${publicUrl}"`);
+
         if (publicUrl) {
             // Production: use configured public URL
             previewUrl = `${publicUrl.replace(/\/$/, '')}/${page.slug}`;
+            console.log(`[Import] Using PUBLIC_URL: ${previewUrl}`);
         } else {
             // Development: use request headers
             const host = c.req.header('host') || 'localhost:3002';
             const protocol = c.req.header('x-forwarded-proto') || 'http';
             previewUrl = `${protocol}://${host}/${page.slug}`;
+            console.log(`[Import] Using request headers fallback: ${previewUrl}`);
         }
 
         return c.json({

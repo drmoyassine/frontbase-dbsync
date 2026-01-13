@@ -204,7 +204,8 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
             }
 
             // Call the publish endpoint (FastAPI → Hono)
-            const response = await fetch(`http://localhost:8000/api/pages/${pageId}/publish/`, {
+            const apiBaseUrl = import.meta.env.VITE_API_URL || '';
+            const response = await fetch(`${apiBaseUrl}/api/pages/${pageId}/publish/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
             });

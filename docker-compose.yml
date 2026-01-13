@@ -16,6 +16,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       # Actions Engine URL (internal network)
       - ACTIONS_ENGINE_URL=http://actions:3002
+      - HONO_URL=http://actions:3002
       # Admin Authentication
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
@@ -52,6 +53,8 @@ services:
       - API_KEYS=${API_KEYS:-}
       # Supabase JWT for end-user auth (optional)
       - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
+      # Public URL for generating preview links (set to your domain in production)
+      - PUBLIC_URL=${PUBLIC_URL:-}
     volumes:
       - actions_data:/app/data
     networks:

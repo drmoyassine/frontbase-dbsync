@@ -82,10 +82,19 @@ importRoute.post('/', async (c) => {
         // Upsert the page
         const result = await upsertPublishedPage(page);
 
-        // Build preview URL
-        const host = c.req.header('host') || 'localhost:3002';
-        const protocol = c.req.header('x-forwarded-proto') || 'http';
-        const previewUrl = `${protocol}://${host}/${page.slug}`;
+        // Build preview URL - use PUBLIC_URL env var for production, fallback to host header for dev
+        const publicUrl = process.env.PUBLIC_URL;
+        let previewUrl: string;
+
+        if (publicUrl) {
+            // Production: use configured public URL
+            previewUrl = `${publicUrl.replace(/\/$/, '')}/${page.slug}`;
+        } else {
+            // Development: use request headers
+            const host = c.req.header('host') || 'localhost:3002';
+            const protocol = c.req.header('x-forwarded-proto') || 'http';
+            previewUrl = `${protocol}://${host}/${page.slug}`;
+        }
 
         return c.json({
             success: true,

@@ -327,32 +327,77 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     return c.html(htmlDoc);
 });
 
-// Homepage route - redirects to homepage or shows API docs
+// Homepage route - renders homepage directly or shows fallback
 pagesRoute.get('/', async (c) => {
-    // Try to find a page marked as homepage
-    const apiBase = process.env.FASTAPI_URL || 'http://127.0.0.1:8000';
+    // Try to find a page marked as homepage from local storage first
+    const { getHomepage: getLocalHomepage } = await import('../db/pages-store');
 
     try {
-        // Check if there's a homepage page
-        const response = await fetch(`${apiBase}/api/pages/`, {
-            headers: { 'Accept': 'application/json' },
-        });
+        const homepage = await getLocalHomepage();
 
-        if (response.ok) {
-            const result = await response.json();
-            const homepage = result.data?.find((p: any) => p.isHomepage && !p.deletedAt);
+        if (homepage) {
+            console.log(`[SSR] Rendering homepage: ${homepage.slug} (v${homepage.version})`);
 
-            if (homepage) {
-                // Redirect to the homepage slug
-                return c.redirect(`/${homepage.slug}`);
-            }
+            // Create variable store with 3 scopes
+            const store = createVariableStore();
+
+            // Prepare page data for the template
+            const page: PageData = {
+                id: homepage.id,
+                slug: homepage.slug,
+                title: homepage.title,
+                description: homepage.description,
+                name: homepage.name,
+                isPublic: homepage.isPublic,
+                isHomepage: homepage.isHomepage,
+                layoutData: homepage.layoutData as unknown as PageLayoutData,
+                datasources: homepage.datasources as unknown as Record<string, unknown>[] | undefined,
+            };
+
+            // Render the page content
+            const bodyHtml = await renderPage(page.layoutData.content || [], store);
+
+            // Build initial state from store
+            const initialState = {
+                global: store.getAll('global'),
+                page: store.getAll('page'),
+                component: store.getAll('component'),
+            };
+
+            // Return full HTML page
+            const fullHtml = renderFullPage(page, bodyHtml, initialState);
+            return c.html(fullHtml);
         }
     } catch (error) {
         console.error('Error fetching homepage:', error);
     }
 
-    // Fallback: redirect to API docs
-    return c.redirect('/api/docs');
+    // Fallback: Show a welcome page with link to dashboard
+    return c.html(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Frontbase</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 2rem; }
+        .container { max-width: 600px; margin: 0 auto; text-align: center; padding-top: 4rem; }
+        h1 { color: #1e293b; }
+        p { color: #64748b; }
+        a { display: inline-block; background: #1e293b; color: white; padding: 0.75rem 2rem; border-radius: 0.5rem; text-decoration: none; margin-top: 1rem; }
+        a:hover { background: #334155; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to Frontbase</h1>
+        <p>Start building your amazing website with our visual page builder.</p>
+        <a href="/dashboard">Get Started</a>
+    </div>
+</body>
+</html>
+    `);
 });
 
 export { pagesRoute };

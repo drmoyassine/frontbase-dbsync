@@ -146,6 +146,7 @@ export const SuccessResponseSchema = z.object({
 
 export type TriggerType = z.infer<typeof TriggerTypeSchema>;
 export type ExecutionStatus = z.infer<typeof ExecutionStatusSchema>;
+export type NodeExecutionStatus = z.infer<typeof NodeExecutionStatusSchema>;
 export type WorkflowNode = z.infer<typeof WorkflowNodeSchema>;
 export type WorkflowEdge = z.infer<typeof WorkflowEdgeSchema>;
 export type Workflow = z.infer<typeof WorkflowSchema>;

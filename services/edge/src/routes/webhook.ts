@@ -92,9 +92,9 @@ webhookRoute.openapi(route, async (c) => {
 
     return c.json({
         executionId,
-        status: 'started',
+        status: 'started' as const,
         message: 'Webhook received, execution started',
-    });
+    }, 200);
 });
 
 export { webhookRoute };

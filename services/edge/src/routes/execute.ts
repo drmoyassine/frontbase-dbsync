@@ -40,6 +40,14 @@ const route = createRoute({
                 },
             },
         },
+        400: {
+            description: 'Bad request (e.g., workflow inactive)',
+            content: {
+                'application/json': {
+                    schema: ErrorResponseSchema,
+                },
+            },
+        },
         404: {
             description: 'Workflow not found',
             content: {
@@ -95,9 +103,9 @@ executeRoute.openapi(route, async (c) => {
 
     return c.json({
         executionId,
-        status: 'started',
+        status: 'started' as const,
         message: 'Workflow execution started',
-    });
+    }, 200);
 });
 
 export { executeRoute };

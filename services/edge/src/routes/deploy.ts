@@ -79,11 +79,11 @@ deployRoute.openapi(route, async (c) => {
                 .where(eq(workflows.id, body.id));
 
             return c.json({
-                success: true,
+                success: true as const,
                 message: 'Workflow updated successfully',
                 workflowId: body.id,
                 version: newVersion,
-            });
+            }, 200);
         } else {
             // Insert new workflow
             await db.insert(workflows).values({
@@ -102,11 +102,11 @@ deployRoute.openapi(route, async (c) => {
             });
 
             return c.json({
-                success: true,
+                success: true as const,
                 message: 'Workflow deployed successfully',
                 workflowId: body.id,
                 version: 1,
-            });
+            }, 200);
         }
     } catch (error: any) {
         return c.json({

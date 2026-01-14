@@ -5,7 +5,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { db } from '../db';
 import { executions } from '../db/schema';
-import { ExecutionSchema, ErrorResponseSchema } from '../schemas';
+import { ExecutionSchema, ErrorResponseSchema, ExecutionStatus, TriggerType } from '../schemas';
 import { eq, desc } from 'drizzle-orm';
 
 const executionsRoute = new OpenAPIHono();
@@ -60,8 +60,8 @@ executionsRoute.openapi(getRoute, async (c) => {
     return c.json({
         id: execution.id,
         workflowId: execution.workflowId,
-        status: execution.status,
-        triggerType: execution.triggerType,
+        status: execution.status as ExecutionStatus,
+        triggerType: execution.triggerType as TriggerType,
         triggerPayload: execution.triggerPayload ? JSON.parse(execution.triggerPayload) : undefined,
         nodeExecutions: execution.nodeExecutions ? JSON.parse(execution.nodeExecutions) : [],
         result: execution.result ? JSON.parse(execution.result) : undefined,
@@ -69,7 +69,7 @@ executionsRoute.openapi(getRoute, async (c) => {
         usage: execution.usage || undefined,
         startedAt: execution.startedAt,
         endedAt: execution.endedAt || undefined,
-    });
+    }, 200);
 });
 
 // List executions for a workflow
@@ -117,15 +117,15 @@ executionsRoute.openapi(listRoute, async (c) => {
         executions: results.map(e => ({
             id: e.id,
             workflowId: e.workflowId,
-            status: e.status,
-            triggerType: e.triggerType,
+            status: e.status as ExecutionStatus,
+            triggerType: e.triggerType as TriggerType,
             error: e.error || undefined,
             usage: e.usage || undefined,
             startedAt: e.startedAt,
             endedAt: e.endedAt || undefined,
         })),
         total: results.length,
-    });
+    }, 200);
 });
 
 export { executionsRoute };

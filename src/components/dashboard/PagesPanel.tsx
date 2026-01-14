@@ -158,7 +158,7 @@ export const PagesPanel: React.FC = () => {
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
                   <CardTitle className="text-lg">{page.name}</CardTitle>
-                  <CardDescription>/{page.slug}</CardDescription>
+                  <CardDescription>{page.isHomepage ? '/' : `/${page.slug}`}</CardDescription>
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

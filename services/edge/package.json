@@ -1,5 +1,5 @@
 {
-    "name": "@frontbase/actions",
+    "name": "@frontbase/edge",
     "version": "0.1.0",
     "type": "module",
     "scripts": {

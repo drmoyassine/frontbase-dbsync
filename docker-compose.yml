@@ -14,9 +14,8 @@ services:
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - REDIS_URL=redis://redis:6379/0
-      # Actions Engine URL (internal network)
-      - ACTIONS_ENGINE_URL=http://actions:3002
-      - HONO_URL=http://actions:3002
+      # Edge Engine URL (internal network)
+      - EDGE_URL=http://edge:3002
       # Admin Authentication
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
@@ -26,7 +25,7 @@ services:
       - backend_data:/app/data
     depends_on:
       - redis
-      - actions
+      - edge
     networks:
       - frontbase
     restart: unless-stopped
@@ -36,17 +35,17 @@ services:
       timeout: 10s
       retries: 3
 
-  actions:
+  edge:
     build:
-      context: ./services/actions
+      context: ./services/edge
       dockerfile: Dockerfile
     expose:
       - "3002"
     environment:
       - NODE_ENV=production
       - PORT=3002
-      # Database for workflow storage (SQLite)
-      - DATABASE_URL=file:/app/data/actions.db
+      # Database for edge storage (SQLite)
+      - DATABASE_URL=file:/app/data/edge.db
       # FastAPI backend URL (Docker internal network)
       - FASTAPI_URL=http://backend:8000
       # Webhook API keys (comma-separated)
@@ -56,7 +55,7 @@ services:
       # Public URL for generating preview links (set to your domain in production)
       - PUBLIC_URL=${PUBLIC_URL:-}
     volumes:
-      - actions_data:/app/data
+      - edge_data:/app/data
     networks:
       - frontbase
     restart: unless-stopped
@@ -77,7 +76,7 @@ services:
       - "8080:80"
     depends_on:
       - backend
-      - actions
+      - edge
     networks:
       - frontbase
     restart: unless-stopped
@@ -106,5 +105,5 @@ networks:
 
 volumes:
   backend_data:
-  actions_data:
+  edge_data:
   redis_data:

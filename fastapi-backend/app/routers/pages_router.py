@@ -70,7 +70,7 @@ async def get_pages(includeDeleted: bool = False, db: Session = Depends(get_db))
 async def get_public_page(slug: str, db: Session = Depends(get_db)):
     """
     Get a public page by slug for SSR.
-    No authentication required - used by Hono Edge Engine.
+    No authentication required - used by Edge Engine.
     Returns page data if page exists and is public (or all for now during dev).
     """
     try:
@@ -182,7 +182,7 @@ def compute_data_request(
 ) -> dict:
     """
     Compute a pre-computed HTTP request spec for a data binding.
-    This runs at PUBLISH TIME so Hono doesn't need adapter logic.
+    This runs at PUBLISH TIME so Edge doesn't need adapter logic.
     Returns a dict compatible with DataRequest schema.
     """
     ds_type = datasource.type if hasattr(datasource, 'type') else datasource.get('type', 'supabase')
@@ -675,8 +675,8 @@ def convert_to_publish_schema(page: Page, db: Session) -> PublishPageRequest:
 @router.post("/{page_id}/publish/")
 async def publish_page(page_id: str, db: Session = Depends(get_db)):
     """
-    Publish a page to Hono Edge Engine.
-    Gathers page data and sends to Hono /api/import endpoint.
+    Publish a page to Edge Engine.
+    Gathers page data and sends to Edge /api/import endpoint.
     """
     try:
         # Get the page
@@ -728,21 +728,20 @@ async def publish_page(page_id: str, db: Session = Depends(get_db)):
         #      with open("debug_publish_trace.log", "a") as f:
         #          f.write(f"Error tracing payload: {e}\n")
 
-
-        # Build payload for Hono
+        # Build payload for Edge Engine
         payload = ImportPagePayload(
             page=publish_data,
             force=True  # Always overwrite on publish
         )
         
-        # Get Hono URL from environment
-        hono_url = os.getenv("HONO_URL", "http://localhost:3002")
-        import_url = f"{hono_url}/api/import"
+        # Get Edge URL from environment
+        edge_url = os.getenv("EDGE_URL", "http://localhost:3002")
+        import_url = f"{edge_url}/api/import"
         
-        print(f"[Publish] HONO_URL env: {os.getenv('HONO_URL', '(not set)')}")
+        print(f"[Publish] EDGE_URL env: {os.getenv('EDGE_URL', '(not set)')}")
         print(f"[Publish] Sending to: {import_url}")
         
-        # Send to Hono
+        # Send to Edge Engine
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 import_url,
@@ -768,7 +767,7 @@ async def publish_page(page_id: str, db: Session = Depends(get_db)):
             else:
                 return {
                     "success": False,
-                    "error": f"Hono import failed: {response.status_code}",
+                    "error": f"Edge import failed: {response.status_code}",
                     "details": response.text
                 }
                 
@@ -777,7 +776,7 @@ async def publish_page(page_id: str, db: Session = Depends(get_db)):
     except httpx.ConnectError:
         return {
             "success": False,
-            "error": "Cannot connect to Hono Edge Engine. Is it running?"
+            "error": "Cannot connect to Edge Engine. Is it running?"
         }
     except Exception as e:
         return {

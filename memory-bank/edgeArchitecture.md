@@ -1,10 +1,10 @@
-# Actions Engine Architecture
+# Edge Engine Architecture
 
-> Last Updated: 2026-01-07
+> Last Updated: 2026-01-14
 
 ## Overview
 
-The Actions Engine enables workflow automation in Frontbase. It uses a **split architecture** with FastAPI handling design-time operations and Hono handling runtime execution.
+The Edge Engine enables SSR pages and workflow automation in Frontbase. It uses a **split architecture** with FastAPI handling design-time operations and Hono (Edge) handling runtime execution.
 
 ## Architecture Diagram
 
@@ -67,7 +67,7 @@ The Actions Engine enables workflow automation in Frontbase. It uses a **split a
 | Database | Location | Services | Contents |
 |----------|----------|----------|----------|
 | `unified.db` | `fastapi-backend/unified.db` | FastAPI, DB-Sync | Pages, Projects, Datasources, Drafts |
-| `actions.db` | `services/actions/data/actions.db` | Hono Actions Engine | Published Workflows, Executions |
+| `edge.db` | `services/edge/data/edge.db` | Hono Edge Engine | Published Pages, Workflows, Executions |
 
 **Why separate?**
 - Actions Engine is edge-deployable (Cloudflare Workers, Vercel Edge)
@@ -86,20 +86,20 @@ The Actions Engine enables workflow automation in Frontbase. It uses a **split a
   - `POST /api/actions/drafts/{id}/publish` - Deploy to Hono
   - `POST /api/actions/drafts/{id}/test` - Test execution
 
-### Hono Actions Engine (TypeScript)
+### Hono Edge Engine (TypeScript)
 - **Port**: 3002
-- **Purpose**: Workflow runtime, execution, webhooks
-- **Database**: `data/actions.db` (SQLite via libsql)
+- **Purpose**: SSR pages, workflow runtime, execution, webhooks
+- **Database**: `data/edge.db` (SQLite via libsql)
 - **Key Routes**:
-  - `POST /deploy` - Receive published workflow
+  - `POST /api/import` - Receive published page
   - `POST /execute/{id}` - Execute workflow
   - `POST /webhook/{id}` - External trigger
-  - `GET /executions/{id}` - Execution status
+  - `GET /:slug` - SSR page rendering
 
 ### Frontend (Vite/React)
 - **Port**: 5173
 - **Purpose**: UI, workflow editor, component builder
-- **Proxy**: `/api/*` → FastAPI, `/actions/*` → Hono
+- **Proxy**: `/api/*` → FastAPI, `/edge/*` → Hono
 
 ## Startup Procedure
 
@@ -110,8 +110,8 @@ The Actions Engine enables workflow automation in Frontbase. It uses a **split a
 cd fastapi-backend
 python -m uvicorn main:app --reload --port 8000
 
-# Terminal 2: Actions Engine
-cd services/actions
+# Terminal 2: Edge Engine
+cd services/edge
 npm run dev
 
 # Terminal 3: Frontend
@@ -128,7 +128,7 @@ Docker Compose includes:
 - `backend` (FastAPI) - runs migrations via `docker_entrypoint.sh`
 - `frontend` (Nginx serving built React)
 - `redis` (for Celery/caching)
-- **Note**: Actions Engine should be added to docker-compose for full deployment
+- **Note**: Edge Engine is included in docker-compose for full deployment
 
 ## Database Migrations
 
@@ -145,9 +145,9 @@ alembic upgrade head
 
 **Docker**: Migrations run automatically via `docker_entrypoint.sh` on container start.
 
-### Hono Actions Engine (Drizzle)
+### Hono Edge Engine (Drizzle)
 ```bash
-cd services/actions
+cd services/edge
 
 # Generate migration
 npm run db:generate
@@ -162,15 +162,15 @@ npm run db:push
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | `sqlite:///./unified.db` | Main database |
-| `ACTIONS_ENGINE_URL` | `http://localhost:3002` | Hono endpoint |
+| `EDGE_URL` | `http://localhost:3002` | Edge endpoint |
 | `SECRET_KEY` | (required) | JWT signing key |
 
-### Hono Actions Engine
+### Hono Edge Engine
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `3002` | Server port |
 | `DB_TYPE` | `sqlite` | Database type |
-| `SQLITE_PATH` | `./data/actions.db` | SQLite file path |
+| `SQLITE_PATH` | `./data/edge.db` | SQLite file path |
 
 ## Deployment Options
 

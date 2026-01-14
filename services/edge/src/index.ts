@@ -1,8 +1,8 @@
 /**
- * Frontbase Actions Engine - Runtime Service
+ * Frontbase Edge Engine - Runtime Service
  * 
- * Hono-based workflow execution server with Zod-OpenAPI validation.
- * Handles published workflows, webhooks, and execution monitoring.
+ * Hono-based SSR and no-code execution platform for edge deployment.
+ * Handles published pages, workflows, webhooks, and execution monitoring.
  */
 
 import { OpenAPIHono } from '@hono/zod-openapi';
@@ -109,9 +109,9 @@ app.use('/api/webhook/*', apiKeyAuth);
 app.doc('/api/openapi.json', {
     openapi: '3.1.0',
     info: {
-        title: 'Frontbase Actions Engine API',
+        title: 'Frontbase Edge Engine API',
         version: '0.1.0',
-        description: 'Runtime API for executing published workflows and handling triggers.',
+        description: 'Edge runtime API for SSR pages, workflows, and triggers.',
     },
     servers: [
         { url: 'http://localhost:3002', description: 'Local development' },
@@ -151,8 +151,9 @@ serve({
     fetch: app.fetch,
     port,
 }, (info) => {
-    console.log(`🚀 Actions Engine running on http://localhost:${info.port}`);
+    console.log(`🚀 Edge Engine running on http://localhost:${info.port}`);
     console.log(`📍 PUBLIC_URL: ${process.env.PUBLIC_URL || '(not set - using request headers)'}`);
 });
+
 
 export default app;

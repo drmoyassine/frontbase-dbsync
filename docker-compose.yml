@@ -45,6 +45,7 @@ services:
       - NODE_ENV=production
       - PORT=3002
       # Database for edge storage (SQLite)
+      - SQLITE_PATH=/app/data/edge.db
       - DATABASE_URL=file:/app/data/edge.db
       # FastAPI backend URL (Docker internal network)
       - FASTAPI_URL=http://backend:8000
@@ -52,8 +53,8 @@ services:
       - API_KEYS=${API_KEYS:-}
       # Supabase JWT for end-user auth (optional)
       - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
-      # Public URL for generating preview links (uses Easypanel's PRIMARY_DOMAIN)
-      - PUBLIC_URL=https://${PRIMARY_DOMAIN:-localhost:3002}
+      # Public URL for preview links (set PRIMARY_DOMAIN in Easypanel, or leave empty for auto-detect)
+      - PUBLIC_URL=${PRIMARY_DOMAIN:+https://${PRIMARY_DOMAIN}}
     volumes:
       - edge_data:/app/data
     networks:

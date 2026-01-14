@@ -52,8 +52,8 @@ services:
       - API_KEYS=${API_KEYS:-}
       # Supabase JWT for end-user auth (optional)
       - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
-      # Public URL for generating preview links (set to your domain in production)
-      - PUBLIC_URL=${PUBLIC_URL:-}
+      # Public URL for generating preview links (uses Easypanel's PRIMARY_DOMAIN)
+      - PUBLIC_URL=https://${PRIMARY_DOMAIN:-localhost:3002}
     volumes:
       - edge_data:/app/data
     networks:

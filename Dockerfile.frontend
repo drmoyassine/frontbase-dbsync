@@ -5,6 +5,10 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
+
+# Increase memory limit for Node to prevent OOM during build
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+
 RUN npm install
 
 # Copy source and config files
@@ -17,7 +21,11 @@ COPY vite.config.ts tsconfig*.json tailwind.config.ts postcss.config.js componen
 ARG VITE_API_URL=""
 ENV VITE_API_URL=${VITE_API_URL}
 ENV NODE_ENV=production
-RUN npm run build
+
+# Run build and verify output exists
+RUN npm run build && \
+    if [ ! -d "dist" ]; then echo "ERROR: Build failed - dist folder not created" && exit 1; fi && \
+    ls -la dist/
 
 # Stage 2: Serve with Nginx
 FROM nginx:alpine

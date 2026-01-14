@@ -1,12 +1,22 @@
+"""
+Page CRUD operations router.
+Handles create, read, update, delete operations for pages.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional, Any, Dict
-from ..database.utils import get_db, create_page, get_all_pages, update_page, get_page_by_slug, get_current_timestamp
-from ..models.schemas import PageCreateRequest, PageUpdateRequest, PageResponse
-from ..models.models import Page
+from typing import Optional, Any
 from pydantic import BaseModel
+import json
+import time
 
-router = APIRouter(prefix="/api/pages", tags=["pages"])
+from ...database.utils import get_db, create_page, update_page, get_page_by_slug, get_current_timestamp
+from ...models.schemas import PageCreateRequest, PageUpdateRequest
+from ...models.models import Page
+
+
+router = APIRouter()
+
 
 # Response wrapper to match Express format
 class ApiResponse(BaseModel):
@@ -15,10 +25,9 @@ class ApiResponse(BaseModel):
     error: Optional[str] = None
     message: Optional[str] = None
 
-# Helper to serialize Page to dict with camelCase
+
 def serialize_page(page: Page) -> dict:
-    """Convert Page model to dict matching Express format"""
-    import json
+    """Convert Page model to dict matching Express format (camelCase)"""
     layout_data = page.layout_data
     if isinstance(layout_data, str):
         try:
@@ -141,35 +150,6 @@ async def update_page_endpoint(page_id: str, request: PageUpdateRequest, db: Ses
         }
 
 
-@router.delete("/{page_id}/")
-async def delete_page(page_id: str, db: Session = Depends(get_db)):
-    """Soft delete a page - matches Express: { success, message }"""
-    try:
-        page = db.query(Page).filter(Page.id == page_id).first()
-        if not page:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Page not found"
-            )
-        
-        # Append timestamp to slug to allow reuse (matching Express)
-        page.slug = f"{page.slug}-deleted-{int(__import__('time').time() * 1000)}"
-        page.deleted_at = get_current_timestamp()
-        db.commit()
-        
-        return {
-            "success": True,
-            "message": "Page moved to trash successfully"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
-
 @router.put("/{page_id}/layout/")
 async def update_page_layout(page_id: str, request: dict, db: Session = Depends(get_db)):
     """Update page layout - matches Express: { success, data: page }"""
@@ -201,6 +181,35 @@ async def update_page_layout(page_id: str, request: dict, db: Session = Depends(
         }
 
 
+@router.delete("/{page_id}/")
+async def delete_page(page_id: str, db: Session = Depends(get_db)):
+    """Soft delete a page - matches Express: { success, message }"""
+    try:
+        page = db.query(Page).filter(Page.id == page_id).first()
+        if not page:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Page not found"
+            )
+        
+        # Append timestamp to slug to allow reuse (matching Express)
+        page.slug = f"{page.slug}-deleted-{int(time.time() * 1000)}"
+        page.deleted_at = get_current_timestamp()
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": "Page moved to trash successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
 @router.post("/{page_id}/restore/")
 async def restore_page(page_id: str, db: Session = Depends(get_db)):
     """Restore a deleted page - matches Express: { success, data: page, message }"""
@@ -220,7 +229,7 @@ async def restore_page(page_id: str, db: Session = Depends(get_db)):
         # Check if original slug is available
         existing = db.query(Page).filter(Page.slug == new_slug, Page.id != page_id, Page.deleted_at == None).first()
         if existing:
-            new_slug = f"{new_slug}-restored-{int(__import__('time').time() * 1000)}"
+            new_slug = f"{new_slug}-restored-{int(time.time() * 1000)}"
         
         page.slug = new_slug
         page.deleted_at = None
@@ -258,30 +267,6 @@ async def permanent_delete_page(page_id: str, db: Session = Depends(get_db)):
         return {
             "success": True,
             "message": "Page permanently deleted"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
-
-@router.get("/public/{slug}")
-async def get_public_page(slug: str, db: Session = Depends(get_db)):
-    """Get a public page by slug - used by Hono SSR fallback"""
-    try:
-        page = get_page_by_slug(db, slug)
-        if not page:
-             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Page not found"
-            )
-        
-        return {
-            "success": True,
-            "data": serialize_page(page)
         }
     except HTTPException:
         raise

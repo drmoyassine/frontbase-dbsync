@@ -47,6 +47,7 @@ services:
       # Database for edge storage (SQLite)
       - SQLITE_PATH=/app/data/edge.db
       - DATABASE_URL=file:/app/data/edge.db
+      - PAGES_DB_URL=file:/app/data/pages.db
       # FastAPI backend URL (Docker internal network)
       - FASTAPI_URL=http://backend:8000
       # Webhook API keys (comma-separated)

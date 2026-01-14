@@ -320,8 +320,8 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     // Generate full HTML document
     const htmlDoc = generateHtmlDocument(page, bodyHtml, initialState);
 
-    // Set cache headers for Edge CDN
-    c.header('Cache-Control', 'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400');
+    // Set cache headers (Disabled for debugging/immediate updates)
+    c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
     c.header('Content-Type', 'text/html; charset=utf-8');
 
     return c.html(htmlDoc);

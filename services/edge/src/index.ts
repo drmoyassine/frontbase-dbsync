@@ -28,6 +28,7 @@ import { executionsRoute } from './routes/executions';
 import { pagesRoute } from './routes/pages';
 import { importRoute } from './routes/import';
 import { dataRoute } from './routes/data';
+import { runStartupSync } from './startup/sync.js';
 
 // Auth middleware (Sprint 2)
 import { apiKeyAuth } from './middleware/auth';
@@ -153,6 +154,11 @@ serve({
 }, (info) => {
     console.log(`🚀 Edge Engine running on http://localhost:${info.port}`);
     console.log(`📍 PUBLIC_URL: ${process.env.PUBLIC_URL || '(not set - using request headers)'}`);
+
+    // Run startup sync in background (non-blocking)
+    runStartupSync().catch(err => {
+        console.error('[Startup Sync] Error:', err);
+    });
 });
 
 

@@ -161,8 +161,8 @@ export type SeoData = z.infer<typeof SeoDataSchema>;
 // =============================================================================
 
 export const PublishPageSchema = z.object({
-    // Page identity
-    id: z.string().uuid(),
+    // Page identity (can be UUID or custom string ID like "default-homepage")
+    id: z.string().min(1),
     slug: z.string().min(1),
     name: z.string(),
     title: z.string().optional(),

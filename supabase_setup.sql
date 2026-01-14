@@ -759,21 +759,17 @@ BEGIN
 END;
 $$;
 
--- 8. Get Distinct Values (Generic with Optional Join + Cascading Filters + Search)
--- Usage: fetch unique values for a column, optionally filtering by other active filters AND current search query
--- Example 1: Get cities only where country = 'USA'
---   SELECT frontbase_get_distinct_values('cities', 'city_name', NULL, NULL, NULL, '[{"column": "country", "filterType": "dropdown", "value": "USA"}]'::jsonb)
--- Example 2: Get countries that match search "University" across name column
---   SELECT frontbase_get_distinct_values('universities', 'country', NULL, NULL, NULL, '[]'::jsonb, 'University', ARRAY['name'])
+-- 8. Get Distinct Values with Auto-Join Detection
+-- Usage: fetch unique values for a column, auto-joins missing tables referenced in filters
 CREATE OR REPLACE FUNCTION frontbase_get_distinct_values(
   target_table text,
   target_col text,
   join_table text DEFAULT NULL,
   target_join_col text DEFAULT NULL,
   join_table_col text DEFAULT NULL,
-  filters jsonb DEFAULT '[]'::jsonb,       -- Cascading filter context
-  search_query text DEFAULT NULL,          -- NEW: Current search query
-  search_cols text[] DEFAULT '{}'::text[]  -- NEW: Columns to search across
+  filters jsonb DEFAULT '[]'::jsonb,
+  search_query text DEFAULT NULL,
+  search_cols text[] DEFAULT '{}'::text[]
 )
 RETURNS json
 LANGUAGE plpgsql
@@ -784,6 +780,7 @@ DECLARE
   result json;
   target_table_ident text;
   join_table_ident text;
+  join_clause text := '';
   where_clause text := '';
   filter_where text := '';
   search_where text := '';
@@ -795,6 +792,11 @@ DECLARE
   quoted_col text;
   col text;
   first_col boolean := true;
+  -- Auto-join variables
+  joined_tables text[] := ARRAY[]::text[];
+  ref_table text;
+  fk_col text;
+  fk_ref_col text;
 BEGIN
   -- Basic Validation
   IF target_table IS NULL OR target_col IS NULL THEN
@@ -808,16 +810,60 @@ BEGIN
     target_table_ident := format('%I', target_table);
   END IF;
 
-  -- Handle Schema Qualification for Join Table
+  -- Initialize joined_tables with target table
+  joined_tables := array_append(joined_tables, target_table);
+
+  -- Handle explicit join_table parameter
   IF join_table IS NOT NULL THEN
     IF join_table LIKE '%.%' THEN
       join_table_ident := format('%I.%I', split_part(join_table, '.', 1), split_part(join_table, '.', 2));
     ELSE
       join_table_ident := format('%I', join_table);
     END IF;
+    
+    IF target_join_col IS NOT NULL AND join_table_col IS NOT NULL THEN
+      join_clause := format(' INNER JOIN %s j ON t.%I = j.%I', join_table_ident, target_join_col, join_table_col);
+      joined_tables := array_append(joined_tables, join_table);
+    END IF;
   END IF;
 
-  -- 1. Build Search Conditions (if search_query provided)
+  -- Step 1: Scan filters for table.column references and auto-join missing tables
+  FOR filter_item IN SELECT * FROM jsonb_array_elements(filters)
+  LOOP
+    filter_col := filter_item->>'column';
+    
+    IF filter_col LIKE '%.%' THEN
+      ref_table := split_part(filter_col, '.', 1);
+      
+      IF ref_table != target_table AND NOT (ref_table = ANY(joined_tables)) THEN
+        -- Lookup FK relationship from information_schema
+        SELECT 
+          kcu.column_name,
+          ccu.column_name
+        INTO fk_col, fk_ref_col
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu 
+          ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage ccu
+          ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_schema = 'public'
+          AND tc.table_name = target_table
+          AND ccu.table_name = ref_table
+        LIMIT 1;
+        
+        IF fk_col IS NOT NULL THEN
+          join_clause := join_clause || format(
+            ' LEFT JOIN %I ON t.%I = %I.%I',
+            ref_table, fk_col, ref_table, fk_ref_col
+          );
+          joined_tables := array_append(joined_tables, ref_table);
+        END IF;
+      END IF;
+    END IF;
+  END LOOP;
+
+  -- Step 2: Build Search Conditions
   IF search_query IS NOT NULL AND search_query != '' AND array_length(search_cols, 1) > 0 THEN
     search_where := '(';
     first_col := true;
@@ -826,9 +872,9 @@ BEGIN
       IF NOT first_col THEN
         search_where := search_where || ' OR ';
       END IF;
-      -- Handle table.column notation for search columns
       IF col LIKE '%.%' THEN
-        search_where := search_where || format('t.%I::text ILIKE %L', split_part(col, '.', 2), '%' || search_query || '%');
+        search_where := search_where || format('%I.%I::text ILIKE %L', 
+          split_part(col, '.', 1), split_part(col, '.', 2), '%' || search_query || '%');
       ELSE
         search_where := search_where || format('t.%I::text ILIKE %L', col, '%' || search_query || '%');
       END IF;
@@ -837,42 +883,41 @@ BEGIN
     search_where := search_where || ')';
   END IF;
 
-  -- 2. Build Filter Conditions (cascading filter support)
+  -- Step 3: Build Filter Conditions
   FOR filter_item IN SELECT * FROM jsonb_array_elements(filters)
   LOOP
     filter_col := filter_item->>'column';
     filter_type := filter_item->>'filterType';
     filter_value := filter_item->'value';
     
-    -- Skip if no column or value
     IF filter_col IS NULL OR filter_col = '' OR filter_value IS NULL THEN
       CONTINUE;
     END IF;
     
-    -- Handle table.column notation
+    -- Handle table.column notation - use full table reference if it's a joined table
     DECLARE
         parts text[];
     BEGIN
         IF filter_col LIKE '%.%' THEN
             parts := string_to_array(filter_col, '.');
-            quoted_col := format('t.%I', parts[2]);  -- Use table alias 't'
+            -- Use actual table name for joined tables, not alias
+            quoted_col := format('%I.%I', parts[1], parts[2]);
         ELSE
             quoted_col := format('t.%I', filter_col);
         END IF;
     END;
 
-    -- Build condition based on filter type
     condition := NULL;
     
     CASE filter_type
       WHEN 'text' THEN
         IF filter_value::text != 'null' AND filter_value::text != '""' THEN
-          condition := format('%s ILIKE %L', quoted_col, '%' || (filter_value#>>'{}') || '%');
+          condition := format('%s ILIKE %L', quoted_col, '%' || (filter_value#>>'{}'::text[]) || '%');
         END IF;
         
       WHEN 'dropdown', 'select' THEN
         IF filter_value::text != 'null' AND filter_value::text != '""' THEN
-          condition := format('%s::text = %L', quoted_col, filter_value#>>'{}');
+          condition := format('%s::text = %L', quoted_col, filter_value#>>'{}'::text[]);
         END IF;
         
       WHEN 'multiselect' THEN
@@ -886,13 +931,11 @@ BEGIN
         END IF;
         
       ELSE
-        -- Default: exact match
         IF filter_value::text != 'null' AND filter_value::text != '""' THEN
-          condition := format('%s::text = %L', quoted_col, filter_value#>>'{}');
+          condition := format('%s::text = %L', quoted_col, filter_value#>>'{}'::text[]);
         END IF;
     END CASE;
     
-    -- Append condition to filter_where
     IF condition IS NOT NULL AND condition != '' THEN
       IF filter_where = '' THEN
         filter_where := condition;
@@ -902,8 +945,7 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- 3. Combine search and filter clauses
-  -- Logic: (search_conditions) AND (filter_conditions)
+  -- Step 4: Combine clauses
   IF search_where != '' OR filter_where != '' THEN
     where_clause := 'WHERE ';
     IF search_where != '' AND filter_where != '' THEN
@@ -915,28 +957,16 @@ BEGIN
     END IF;
   END IF;
 
-  -- Construct Query
-  -- Note: We use %I for column names to ensure they are quoted
-  -- target_table_ident is already quoted above via format
+  -- Step 5: Construct and execute query
   query := format('SELECT DISTINCT t.%I FROM %s t', target_col, target_table_ident);
-
-  -- Optional Inner Join
-  IF join_table IS NOT NULL AND target_join_col IS NOT NULL AND join_table_col IS NOT NULL THEN
-     query := query || format(
-       ' INNER JOIN %s j ON t.%I = j.%I', 
-       join_table_ident, target_join_col, join_table_col
-     );
-  END IF;
-
-  -- Apply WHERE clause (search + filters)
+  query := query || join_clause;
+  
   IF where_clause != '' THEN
     query := query || ' ' || where_clause;
   END IF;
-
-  -- Order
+  
   query := format('%s ORDER BY t.%I ASC', query, target_col);
 
-  -- Execute
   EXECUTE 'SELECT json_agg(val) FROM (' || query || ') v(val)' INTO result;
 
   RETURN COALESCE(result, '[]'::json);

@@ -96,11 +96,20 @@ importRoute.post('/', async (c) => {
             previewUrl = `${publicUrl.replace(/\/$/, '')}/${pageUrlPath}`;
             console.log(`[Import] Using PUBLIC_URL: ${previewUrl}`);
         } else {
-            // Development: use request headers
+            // Fallback: use request headers
             const host = c.req.header('host') || 'localhost:3002';
-            const protocol = c.req.header('x-forwarded-proto') || 'http';
-            previewUrl = `${protocol}://${host}/${pageUrlPath}`;
-            console.log(`[Import] Using request headers fallback: ${previewUrl}`);
+
+            // CHECK: If request came from internal Docker network (e.g. FastAPI calling Edge),
+            // the host might be 'edge:3002'. In this case, return a RELATIVE path
+            // so the frontend opens it relative to the current domain.
+            if (host.includes('edge')) {
+                previewUrl = `/${pageUrlPath}`;
+                console.log(`[Import] Internal host detected (${host}), returning relative path: ${previewUrl}`);
+            } else {
+                const protocol = c.req.header('x-forwarded-proto') || 'http';
+                previewUrl = `${protocol}://${host}/${pageUrlPath}`;
+                console.log(`[Import] Using request headers fallback: ${previewUrl}`);
+            }
         }
 
         return c.json({

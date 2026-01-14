@@ -809,6 +809,37 @@ async def get_page(page_id: str, db: Session = Depends(get_db)):
         }
 
 
+@router.get("/homepage/")
+async def get_homepage(db: Session = Depends(get_db)):
+    """
+    Get the homepage for Edge pull-publish.
+    Edge calls this when it has no homepage in its local DB.
+    """
+    try:
+        homepage = db.query(Page).filter(
+            Page.is_homepage == True,
+            Page.deleted_at == None
+        ).first()
+        
+        if not homepage:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No homepage configured"
+            )
+        
+        return {
+            "success": True,
+            "data": serialize_page(homepage)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
 @router.post("/", status_code=201)
 async def create_page_endpoint(request: PageCreateRequest, db: Session = Depends(get_db)):
     """Create a new page - matches Express: { success, data: page }"""

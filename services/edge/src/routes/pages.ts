@@ -327,17 +327,59 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     return c.html(htmlDoc);
 });
 
-// Homepage route - renders homepage directly or shows fallback
+// Homepage route - renders homepage directly or pulls from FastAPI
 pagesRoute.get('/', async (c) => {
     // Try to find a page marked as homepage from local storage first
-    const { getHomepage: getLocalHomepage } = await import('../db/pages-store');
+    const { getHomepage: getLocalHomepage, upsertPublishedPage } = await import('../db/pages-store');
 
     try {
-        const homepage = await getLocalHomepage();
+        let homepage = await getLocalHomepage();
 
         if (homepage) {
             console.log(`[SSR] Rendering homepage: ${homepage.slug} (v${homepage.version})`);
+        } else {
+            // Pull-publish: Fetch homepage from FastAPI and store locally
+            console.log('[SSR] No local homepage found, pulling from FastAPI...');
 
+            const fastapiUrl = process.env.FASTAPI_URL || 'http://backend:8000';
+            try {
+                const response = await fetch(`${fastapiUrl}/api/pages/homepage/`);
+
+                if (response.ok) {
+                    const result = await response.json();
+                    const pageData = result.data;
+
+                    // Convert to publish format and store
+                    const publishData = {
+                        id: pageData.id,
+                        slug: pageData.slug,
+                        name: pageData.name,
+                        title: pageData.title || undefined,
+                        description: pageData.description || undefined,
+                        layoutData: pageData.layoutData,
+                        seoData: pageData.seoData || undefined,
+                        datasources: pageData.datasources || undefined,
+                        version: 1,
+                        publishedAt: new Date().toISOString(),
+                        isPublic: pageData.isPublic ?? true,
+                        isHomepage: true,
+                    };
+
+                    await upsertPublishedPage(publishData);
+                    console.log(`[SSR] Pull-published homepage: ${pageData.slug}`);
+
+                    // Set homepage for rendering
+                    homepage = publishData;
+                } else {
+                    console.warn(`[SSR] FastAPI homepage fetch failed: ${response.status}`);
+                }
+            } catch (fetchError) {
+                console.error('[SSR] Pull-publish failed:', fetchError);
+            }
+        }
+
+        // Render the homepage if we have one
+        if (homepage) {
             // Create variable store with 3 scopes
             const store = createVariableStore();
 
@@ -372,14 +414,14 @@ pagesRoute.get('/', async (c) => {
         console.error('Error fetching homepage:', error);
     }
 
-    // Fallback: Show a welcome page with link to dashboard
+    // Ultimate fallback: No homepage in FastAPI either
     return c.html(`
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome to Frontbase</title>
+    <title>No Homepage Configured</title>
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 2rem; }
         .container { max-width: 600px; margin: 0 auto; text-align: center; padding-top: 4rem; }
@@ -391,9 +433,9 @@ pagesRoute.get('/', async (c) => {
 </head>
 <body>
     <div class="container">
-        <h1>Welcome to Frontbase</h1>
-        <p>Start building your amazing website with our visual page builder.</p>
-        <a href="/dashboard">Get Started</a>
+        <h1>No Homepage Configured</h1>
+        <p>Create a homepage in the dashboard and mark it as the homepage.</p>
+        <a href="/dashboard">Go to Dashboard</a>
     </div>
 </body>
 </html>

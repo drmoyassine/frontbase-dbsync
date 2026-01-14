@@ -9,6 +9,8 @@ import { OpenAPIHono } from '@hono/zod-openapi';
 import { swaggerUI } from '@hono/swagger-ui';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Middleware imports
 import { cors } from 'hono/cors';
@@ -136,7 +138,11 @@ app.route('/api/data', dataRoute); // Data API for client hydration
 // =============================================================================
 // Static Files (for hydrate.js and other client assets)
 // =============================================================================
-app.use('/static/*', serveStatic({ root: './public', rewriteRequestPath: (path) => path.replace('/static', '') }));
+// Get absolute path to public folder (works in Docker where cwd may differ)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicPath = path.resolve(__dirname, '../public');
+app.use('/static/*', serveStatic({ root: publicPath, rewriteRequestPath: (p) => p.replace('/static', '') }));
 
 // =============================================================================
 // SSR Pages (Sprint 3) - Clean URLs at root level

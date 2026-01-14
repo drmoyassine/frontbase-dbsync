@@ -397,17 +397,17 @@ pagesRoute.get('/', async (c) => {
             };
 
             // Render the page content
-            const bodyHtml = await renderPage(page.layoutData.content || [], store);
+            const bodyHtml = renderPage(page.layoutData, store);
 
-            // Build initial state from store
+            // Build initial state from store (same pattern as slug route)
             const initialState = {
-                global: store.getAll('global'),
-                page: store.getAll('page'),
-                component: store.getAll('component'),
+                pageVariables: store.getPageVariables(),
+                sessionVariables: store.getSessionVariables(),
+                cookies: store.getCookies(),
             };
 
             // Return full HTML page
-            const fullHtml = renderFullPage(page, bodyHtml, initialState);
+            const fullHtml = generateHtmlDocument(page, bodyHtml, initialState);
             return c.html(fullHtml);
         }
     } catch (error) {

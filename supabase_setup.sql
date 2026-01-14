@@ -34,7 +34,7 @@ CREATE OR REPLACE FUNCTION frontbase_get_rows(
   sort_dir text DEFAULT 'asc',
   page int DEFAULT 1,
   page_size int DEFAULT 10,
-  filters jsonb DEFAULT '[]'::jsonb  -- NEW: Array of filter objects
+  filters jsonb DEFAULT '[]'::jsonb  -- Array of filter objects
 )
 RETURNS json
 LANGUAGE plpgsql
@@ -56,14 +56,89 @@ DECLARE
   filter_value jsonb;
   condition text;
   quoted_col text;
+  -- Auto-join variables
+  joined_tables text[] := ARRAY[]::text[];
+  ref_table text;
+  fk_col text;
+  fk_ref_col text;
 BEGIN
-  -- Build JOIN clause
+  -- Step 1: Collect already-joined tables from joins parameter
   FOR join_item IN SELECT * FROM jsonb_array_elements(joins)
   LOOP
-    join_clause := join_clause || ' ' || (join_item->>'type') || ' JOIN ' || (join_item->>'table') || ' ON ' || (join_item->>'on');
+    joined_tables := array_append(joined_tables, (join_item->>'table'));
+    join_clause := join_clause || ' ' || (join_item->>'type') || ' JOIN ' || 
+                   format('%I', (join_item->>'table')) || ' ON ' || (join_item->>'on');
   END LOOP;
   
-  -- Build WHERE clause from filters
+  -- Step 2: Scan filters for table.column references and auto-join missing tables
+  FOR filter_item IN SELECT * FROM jsonb_array_elements(filters)
+  LOOP
+    filter_col := filter_item->>'column';
+    
+    IF filter_col LIKE '%.%' THEN
+      ref_table := split_part(filter_col, '.', 1);
+      
+      -- Check if this table is already joined
+      IF ref_table != table_name AND NOT (ref_table = ANY(joined_tables)) THEN
+        -- Lookup FK relationship from information_schema
+        SELECT 
+          kcu.column_name,
+          ccu.column_name
+        INTO fk_col, fk_ref_col
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu 
+          ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage ccu
+          ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_schema = 'public'
+          AND tc.table_name = table_name
+          AND ccu.table_name = ref_table
+        LIMIT 1;
+        
+        -- If FK found, add the JOIN
+        IF fk_col IS NOT NULL THEN
+          join_clause := join_clause || format(
+            ' LEFT JOIN %I ON %I.%I = %I.%I',
+            ref_table, table_name, fk_col, ref_table, fk_ref_col
+          );
+          joined_tables := array_append(joined_tables, ref_table);
+        END IF;
+      END IF;
+    END IF;
+  END LOOP;
+  
+  -- Step 3: Also check sort column for table.column reference
+  IF sort_col IS NOT NULL AND sort_col LIKE '%.%' THEN
+    ref_table := replace(split_part(sort_col, '.', 1), '"', '');
+    
+    IF ref_table != table_name AND NOT (ref_table = ANY(joined_tables)) THEN
+      SELECT 
+        kcu.column_name,
+        ccu.column_name
+      INTO fk_col, fk_ref_col
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu 
+        ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+      JOIN information_schema.constraint_column_usage ccu
+        ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_schema = 'public'
+        AND tc.table_name = table_name
+        AND ccu.table_name = ref_table
+      LIMIT 1;
+      
+      IF fk_col IS NOT NULL THEN
+        join_clause := join_clause || format(
+          ' LEFT JOIN %I ON %I.%I = %I.%I',
+          ref_table, table_name, fk_col, ref_table, fk_ref_col
+        );
+        joined_tables := array_append(joined_tables, ref_table);
+      END IF;
+    END IF;
+  END IF;
+  
+  -- Step 4: Build WHERE clause from filters
   FOR filter_item IN SELECT * FROM jsonb_array_elements(filters)
   LOOP
     filter_col := filter_item->>'column';
@@ -75,16 +150,13 @@ BEGIN
       CONTINUE;
     END IF;
     
-    -- Handle schema/table qualification for column (e.g. "auth.users.email" or "table.col")
+    -- Handle schema/table qualification for column
     DECLARE
         parts text[];
     BEGIN
         IF filter_col LIKE '%.%' THEN
             parts := string_to_array(filter_col, '.');
-            -- Format as "part1"."part2" (supports unlimited depth effectively, but usually 2)
-            -- For simplicity in common case of table.col:
             quoted_col := format('%I.%I', parts[1], parts[2]);
-            -- If 3 parts (schema.table.col): quoted_col := format('%I.%I.%I', parts[1], parts[2], parts[3]);
         ELSE
             quoted_col := format('%I', filter_col);
         END IF;
@@ -95,25 +167,21 @@ BEGIN
     
     CASE filter_type
       WHEN 'text' THEN
-        -- Text search with ILIKE
         IF filter_value::text != 'null' AND filter_value::text != '""' THEN
-          condition := format('%s ILIKE %L', quoted_col, '%' || (filter_value#>>'{}') || '%');
+          condition := format('%s ILIKE %L', quoted_col, '%' || (filter_value#>>'{}'::text[]) || '%');
         END IF;
         
       WHEN 'dropdown' THEN
-        -- Exact match
         IF filter_value::text != 'null' AND filter_value::text != '""' THEN
-          condition := format('%s = %L', quoted_col, filter_value#>>'{}');
+          condition := format('%s = %L', quoted_col, filter_value#>>'{}'::text[]);
         END IF;
         
       WHEN 'multiselect' THEN
-        -- IN clause for array of values
         IF jsonb_array_length(filter_value) > 0 THEN
           condition := format('%s IN (SELECT jsonb_array_elements_text(%L::jsonb))', quoted_col, filter_value::text);
         END IF;
         
       WHEN 'number' THEN
-        -- Number range: expects {min: X, max: Y}
         IF filter_value->>'min' IS NOT NULL THEN
           condition := format('%s >= %s', quoted_col, (filter_value->>'min')::numeric);
         END IF;
@@ -125,7 +193,6 @@ BEGIN
         END IF;
         
       WHEN 'dateRange' THEN
-        -- Date range: expects {start: 'YYYY-MM-DD', end: 'YYYY-MM-DD'} or {lastDays: N}
         IF filter_value->>'lastDays' IS NOT NULL THEN
           condition := format('%s >= NOW() - INTERVAL %L', quoted_col, (filter_value->>'lastDays')::int || ' days');
         ELSE
@@ -141,13 +208,11 @@ BEGIN
         END IF;
         
       WHEN 'boolean' THEN
-        -- Boolean comparison
         IF filter_value::text = 'true' OR filter_value::text = 'false' THEN
           condition := format('%s = %s', quoted_col, filter_value::boolean);
         END IF;
         
       ELSE
-        -- Unknown filter type, skip
         condition := NULL;
     END CASE;
     
@@ -161,15 +226,13 @@ BEGIN
     END IF;
   END LOOP;
   
-  -- Build ORDER BY clause
+  -- Step 5: Build ORDER BY clause
   IF sort_col IS NOT NULL AND sort_col != '' THEN
     DECLARE
         sort_table text;
         clean_sort_col text;
         col_type text;
     BEGIN
-        -- Attempt to detect table and column name
-        -- Handle "table"."column" format
         IF sort_col LIKE '%.%' THEN
            sort_table := split_part(sort_col, '.', 1);
            clean_sort_col := split_part(sort_col, '.', 2);
@@ -178,29 +241,24 @@ BEGIN
            clean_sort_col := sort_col;
         END IF;
 
-        -- Clean quotes
         sort_table := replace(sort_table, '"', '');
         clean_sort_col := replace(clean_sort_col, '"', '');
 
-        -- Lookup Type
         SELECT data_type INTO col_type
         FROM information_schema.columns
         WHERE table_schema = 'public' 
           AND information_schema.columns.table_name = sort_table 
           AND column_name = clean_sort_col;
         
-        -- Build quoted column reference for ORDER BY
         DECLARE
             quoted_sort_col text;
         BEGIN
             IF sort_col LIKE '%.%' THEN
-                -- Quote both parts: table.column -> "table"."column"
                 quoted_sort_col := format('%I.%I', sort_table, clean_sort_col);
             ELSE
                 quoted_sort_col := format('%I', clean_sort_col);
             END IF;
 
-            -- Apply LOWER if Text
             IF col_type IN ('text', 'character varying', 'varchar', 'char', 'citext') THEN
                  order_clause := 'ORDER BY LOWER(' || quoted_sort_col || '::text) ' || COALESCE(sort_dir, 'asc');
             ELSE
@@ -208,7 +266,6 @@ BEGIN
             END IF;
         END;
     EXCEPTION WHEN OTHERS THEN
-        -- Fallback if something goes wrong (e.g. strict permissions or weird identifiers)
         order_clause := 'ORDER BY ' || sort_col || ' ' || COALESCE(sort_dir, 'asc');
     END;
   ELSE
@@ -217,7 +274,7 @@ BEGIN
 
   offset_val := (page - 1) * page_size;
 
-  -- Construct Main Query (now with WHERE clause)
+  -- Step 6: Construct and execute main query
   query := format(
     'SELECT %s FROM %I %s %s %s LIMIT %s OFFSET %s',
     columns,
@@ -229,10 +286,9 @@ BEGIN
     offset_val
   );
 
-  -- Execute Main Query
   EXECUTE 'SELECT json_agg(t) FROM (' || query || ') t' INTO result;
 
-  -- Construct Count Query (for pagination - also needs WHERE clause)
+  -- Step 7: Count query
   count_query := format(
     'SELECT COUNT(*) FROM %I %s %s',
     table_name,
@@ -242,20 +298,20 @@ BEGIN
   
   EXECUTE count_query INTO total_count;
 
-  -- Return combined result
   RETURN json_build_object(
     'rows', COALESCE(result, '[]'::json),
     'total', total_count,
     'page', page,
     'page_size', page_size,
     '_debug_order', order_clause,
-    '_debug_where', where_clause
+    '_debug_where', where_clause,
+    '_debug_joins', join_clause
   );
 END;
 $$;
 
--- 3. Universal Search
--- Usage: search across specific columns with joins
+-- 3. Universal Search with Auto-Join Detection
+-- Usage: search across specific columns with joins, auto-detects missing JOINs
 CREATE OR REPLACE FUNCTION frontbase_search_rows(
   table_name text,
   columns text,
@@ -264,7 +320,7 @@ CREATE OR REPLACE FUNCTION frontbase_search_rows(
   search_cols text[], -- e.g. ARRAY['users.email', 'profiles.name']
   page int DEFAULT 1,
   page_size int DEFAULT 10,
-  filters jsonb DEFAULT '[]'::jsonb  -- NEW: Support for simultaneous filtering
+  filters jsonb DEFAULT '[]'::jsonb  -- Support for simultaneous filtering
 )
 RETURNS json
 LANGUAGE plpgsql
@@ -289,41 +345,122 @@ DECLARE
   filter_value jsonb;
   condition text;
   quoted_col text;
+  -- Auto-join variables
+  joined_tables text[] := ARRAY[]::text[];
+  ref_table text;
+  fk_col text;
+  fk_ref_col text;
 BEGIN
-  -- Build JOIN clause
+  -- Step 1: Collect already-joined tables from joins parameter
   FOR join_item IN SELECT * FROM jsonb_array_elements(joins)
   LOOP
-    join_clause := join_clause || ' ' || (join_item->>'type') || ' JOIN ' || (join_item->>'table') || ' ON ' || (join_item->>'on');
+    joined_tables := array_append(joined_tables, (join_item->>'table'));
+    join_clause := join_clause || ' ' || (join_item->>'type') || ' JOIN ' || 
+                   format('%I', (join_item->>'table')) || ' ON ' || (join_item->>'on');
   END LOOP;
 
-  -- 1. Build Search Conditions
+  -- Step 2: Scan search columns for table.column references and auto-join missing tables
+  IF search_cols IS NOT NULL THEN
+    FOREACH col IN ARRAY search_cols
+    LOOP
+      IF col LIKE '%.%' THEN
+        ref_table := split_part(col, '.', 1);
+        
+        IF ref_table != table_name AND NOT (ref_table = ANY(joined_tables)) THEN
+          SELECT 
+            kcu.column_name,
+            ccu.column_name
+          INTO fk_col, fk_ref_col
+          FROM information_schema.table_constraints tc
+          JOIN information_schema.key_column_usage kcu 
+            ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+          JOIN information_schema.constraint_column_usage ccu
+            ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+          WHERE tc.constraint_type = 'FOREIGN KEY'
+            AND tc.table_schema = 'public'
+            AND tc.table_name = table_name
+            AND ccu.table_name = ref_table
+          LIMIT 1;
+          
+          IF fk_col IS NOT NULL THEN
+            join_clause := join_clause || format(
+              ' LEFT JOIN %I ON %I.%I = %I.%I',
+              ref_table, table_name, fk_col, ref_table, fk_ref_col
+            );
+            joined_tables := array_append(joined_tables, ref_table);
+          END IF;
+        END IF;
+      END IF;
+    END LOOP;
+  END IF;
+
+  -- Step 3: Scan filters for table.column references and auto-join missing tables
+  FOR filter_item IN SELECT * FROM jsonb_array_elements(filters)
+  LOOP
+    filter_col := filter_item->>'column';
+    
+    IF filter_col LIKE '%.%' THEN
+      ref_table := split_part(filter_col, '.', 1);
+      
+      IF ref_table != table_name AND NOT (ref_table = ANY(joined_tables)) THEN
+        SELECT 
+          kcu.column_name,
+          ccu.column_name
+        INTO fk_col, fk_ref_col
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu 
+          ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage ccu
+          ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_schema = 'public'
+          AND tc.table_name = table_name
+          AND ccu.table_name = ref_table
+        LIMIT 1;
+        
+        IF fk_col IS NOT NULL THEN
+          join_clause := join_clause || format(
+            ' LEFT JOIN %I ON %I.%I = %I.%I',
+            ref_table, table_name, fk_col, ref_table, fk_ref_col
+          );
+          joined_tables := array_append(joined_tables, ref_table);
+        END IF;
+      END IF;
+    END IF;
+  END LOOP;
+
+  -- Step 4: Build Search Conditions
   IF array_length(search_cols, 1) > 0 AND search_query IS NOT NULL AND search_query != '' THEN
     search_where := '(';
+    first_col := true;
     FOREACH col IN ARRAY search_cols
     LOOP
       IF NOT first_col THEN
         search_where := search_where || ' OR ';
       END IF;
-      -- ILIKE for case-insensitive search
-      search_where := search_where || col || '::text ILIKE ' || quote_literal('%' || search_query || '%');
+      -- Handle table.column notation
+      IF col LIKE '%.%' THEN
+        search_where := search_where || format('%I.%I::text ILIKE %L', 
+          split_part(col, '.', 1), split_part(col, '.', 2), '%' || search_query || '%');
+      ELSE
+        search_where := search_where || format('%I::text ILIKE %L', col, '%' || search_query || '%');
+      END IF;
       first_col := false;
     END LOOP;
     search_where := search_where || ')';
   END IF;
 
-  -- 2. Build Filter Conditions (Reuse logic from frontbase_get_rows)
+  -- Step 5: Build Filter Conditions
   FOR filter_item IN SELECT * FROM jsonb_array_elements(filters)
   LOOP
     filter_col := filter_item->>'column';
     filter_type := filter_item->>'filterType';
     filter_value := filter_item->'value';
     
-    -- Skip if no column or value
     IF filter_col IS NULL OR filter_col = '' OR filter_value IS NULL THEN
       CONTINUE;
     END IF;
     
-    -- Handle schema/table qualification
     DECLARE
         parts text[];
     BEGIN
@@ -335,25 +472,27 @@ BEGIN
         END IF;
     END;
 
-    -- Build condition based on filter type
     condition := NULL;
     
     CASE filter_type
       WHEN 'text' THEN
         IF filter_value::text != 'null' AND filter_value::text != '""' THEN
-          condition := format('%s ILIKE %L', quoted_col, '%' || (filter_value#>>'{}') || '%');
+          condition := format('%s ILIKE %L', quoted_col, '%' || (filter_value#>>'{}'::text[]) || '%');
         END IF;
       WHEN 'equal', 'dropdown', 'select' THEN
         IF filter_value::text != 'null' AND filter_value::text != '""' THEN
-           condition := format('%s::text = %L', quoted_col, filter_value#>>'{}');
+           condition := format('%s::text = %L', quoted_col, filter_value#>>'{}'::text[]);
+        END IF;
+      WHEN 'multiselect' THEN
+        IF jsonb_typeof(filter_value) = 'array' AND jsonb_array_length(filter_value) > 0 THEN
+          condition := format('%s IN (SELECT jsonb_array_elements_text(%L::jsonb))', quoted_col, filter_value::text);
         END IF;
       WHEN 'boolean' THEN
-        IF filter_value::text != 'null' THEN
-          condition := format('%s IS %s', quoted_col, (filter_value#>>'{}')::boolean);
+        IF filter_value::text = 'true' OR filter_value::text = 'false' THEN
+          condition := format('%s = %s', quoted_col, filter_value::boolean);
         END IF;
     END CASE;
     
-    -- Append condition to filter_where
     IF condition IS NOT NULL AND condition != '' THEN
       IF filter_where = '' THEN
         filter_where := condition;
@@ -363,7 +502,7 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- 3. Combine clauses
+  -- Step 6: Combine clauses
   IF search_where != '' OR filter_where != '' THEN
       where_clause := 'WHERE ';
       IF search_where != '' AND filter_where != '' THEN
@@ -377,7 +516,7 @@ BEGIN
 
   offset_val := (page - 1) * page_size;
 
-  -- Main Query
+  -- Step 7: Main Query
   query := format(
     'SELECT %s FROM %I %s %s LIMIT %s OFFSET %s',
     columns,
@@ -390,7 +529,7 @@ BEGIN
 
   EXECUTE 'SELECT json_agg(t) FROM (' || query || ') t' INTO result;
 
-  -- Count Query
+  -- Step 8: Count Query
   count_query := format(
     'SELECT COUNT(*) FROM %I %s %s',
     table_name,
@@ -403,7 +542,8 @@ BEGIN
   RETURN json_build_object(
     'rows', COALESCE(result, '[]'::json),
     'total', total_count,
-    'page', page
+    'page', page,
+    '_debug_joins', join_clause
   );
 END;
 $$;

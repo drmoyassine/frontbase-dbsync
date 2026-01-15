@@ -291,7 +291,7 @@ export function DataTable({ binding, initialData = [], initialTotal = 0, classNa
     }, [binding, pageSize, sortColumn, sortDirection, columns, filterValues]);
 
     // Fetch data from server
-    const fetchData = useCallback(async (page: number, sort?: string, sortDir?: string, search?: string) => {
+    const fetchData = useCallback(async (page: number, sort?: string, sortDir?: string, search?: string, overrideFilters?: Record<string, any>) => {
         try {
             setLoading(true);
             setError(null);
@@ -303,8 +303,9 @@ export function DataTable({ binding, initialData = [], initialTotal = 0, classNa
                 const effectiveSortCol = sort || sortColumn || queryConfig.sortColumn || null;
                 const effectiveSortDir = sortDir || sortDirection || queryConfig.sortDirection || 'asc';
 
-                // Build filters from filterValues
-                const filters = Object.entries(filterValues).map(([column, value]) => {
+                // Build filters from provided overrideFilters or current filterValues state
+                const effectiveFilterValues = overrideFilters !== undefined ? overrideFilters : filterValues;
+                const filters = Object.entries(effectiveFilterValues).map(([column, value]) => {
                     const filterConfig = (binding.frontendFilters || queryConfig.frontendFilters || [])
                         .find((f: any) => f.column === column);
                     return {
@@ -619,7 +620,8 @@ export function DataTable({ binding, initialData = [], initialTotal = 0, classNa
                             }
                             setFilterValues(newFilterValues);
                             setCurrentPage(0);
-                            fetchData(0, sortColumn || undefined, sortDirection, searchDebounce || undefined);
+                            // Pass newFilterValues directly to avoid React state timing bug
+                            fetchData(0, sortColumn || undefined, sortDirection, searchDebounce || undefined, newFilterValues);
                         };
 
                         return (
@@ -675,7 +677,8 @@ export function DataTable({ binding, initialData = [], initialTotal = 0, classNa
                             onClick={() => {
                                 setFilterValues({});
                                 setCurrentPage(0);
-                                fetchData(0, sortColumn || undefined, sortDirection, searchDebounce || undefined);
+                                // Pass empty filters directly to avoid React state timing bug
+                                fetchData(0, sortColumn || undefined, sortDirection, searchDebounce || undefined, {});
                             }}
                             className="self-end px-3 py-1.5 text-xs rounded border border-input hover:bg-muted"
                         >

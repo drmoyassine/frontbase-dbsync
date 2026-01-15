@@ -101,7 +101,7 @@ def convert_component(c: dict, datasources_list: list = None) -> dict:
                 
                 print(f"[convert_component] Enriched {result.get('type', 'component')} binding")
                 if 'frontendFilters' in result['binding']:
-                    print(f"  → Preserved {len(result['binding']['frontendFilters'])} filters")
+                    print(f"  - Preserved {len(result['binding']['frontendFilters'])} filters")
 
                 # MAP columns -> columnOrder because React DataTable expects columnOrder
                 if 'columns' in result['binding'] and result['binding']['columns']:

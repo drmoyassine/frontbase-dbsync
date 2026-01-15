@@ -97,8 +97,9 @@ export function renderDataComponent(
 // =============================================================================
 
 function renderDataTable(id: string, props: Record<string, unknown>, propsJson: string): string {
-    const tableName = props.tableName as string || props.table as string || '';
     const binding = props.binding as Record<string, unknown> || {};
+    // Read tableName from binding first (where the builder stores it), then fallback to props
+    const tableName = (binding.tableName as string) || props.tableName as string || props.table as string || '';
     const columns = binding.columnOrder as string[] || props.columns as string[] || [];
     const title = escapeHtml(String(props.title || `Table: ${tableName}`));
     const showPagination = (binding.pagination as any)?.enabled !== false;

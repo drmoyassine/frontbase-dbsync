@@ -59,6 +59,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
+        "@frontbase/datatable": path.resolve(__dirname, "./packages/datatable/src/index.ts"),
       },
     },
     // Expose server-side env vars to client

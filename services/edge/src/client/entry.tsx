@@ -1,14 +1,26 @@
 /**
- * React Hydration Entry Point
+ * React Hydration Entry Point with React Query
  * 
  * Selectively hydrates React components on SSR pages.
- * Non-React components continue to use vanilla JS from hydrate.js
+ * Includes QueryClientProvider for @frontbase/datatable caching.
  */
 
 import { hydrateRoot } from 'react-dom/client';
 import { StrictMode } from 'react';
-import { DataTable } from '../components/DataTable';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { DataTable } from '../components/datatable';
 import './globals.css';
+
+// Create QueryClient with sensible defaults for SSR hydration
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            staleTime: 60_000, // 1 minute
+            refetchOnWindowFocus: false,
+            retry: 1,
+        },
+    },
+});
 
 // Component registry
 const components: Record<string, React.ComponentType<any>> = {
@@ -55,10 +67,13 @@ function hydrateReactComponents() {
 
             console.log(`[React Hydrate] Hydrating ${componentName}`, props);
 
+            // Wrap in QueryClientProvider for React Query caching support
             hydrateRoot(
                 element,
                 <StrictMode>
-                    <Component {...props} />
+                    <QueryClientProvider client={queryClient}>
+                        <Component {...props} />
+                    </QueryClientProvider>
                 </StrictMode>
             );
         } catch (err) {
@@ -93,4 +108,5 @@ if (typeof window !== 'undefined') {
 // Expose for debugging
 if (typeof window !== 'undefined') {
     (window as any).__REACT_COMPONENTS__ = components;
+    (window as any).__REACT_QUERY_CLIENT__ = queryClient;
 }

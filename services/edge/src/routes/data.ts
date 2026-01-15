@@ -100,6 +100,10 @@ async function executeDataRequest(dataRequest: DataRequest): Promise<{ data: any
     // Add body for POST requests
     if (dataRequest.body && dataRequest.method === 'POST') {
         fetchOptions.body = JSON.stringify(dataRequest.body);
+        // Debug: log filters if present
+        if (dataRequest.body.filters && dataRequest.body.filters.length > 0) {
+            console.log(`[Data Execute] Filters:`, JSON.stringify(dataRequest.body.filters));
+        }
     }
 
     // Execute HTTP request

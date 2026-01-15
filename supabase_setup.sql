@@ -70,7 +70,48 @@ BEGIN
                    format('%I', (join_item->>'table')) || ' ON ' || (join_item->>'on');
   END LOOP;
   
-  -- Step 2: Scan filters for table.column references and auto-join missing tables
+  -- Step 2: Scan columns string for "table"."column" patterns and auto-join missing tables
+  -- Pattern: "tablename"."columnname" in the SELECT columns
+  DECLARE
+    col_pattern text;
+    match_record record;
+  BEGIN
+    -- Use regex to find all "table"."column" patterns in the columns string
+    FOR match_record IN 
+      SELECT (regexp_matches(columns, '"([a-zA-Z_][a-zA-Z0-9_]*)"\.', 'g'))[1] AS tbl
+    LOOP
+      ref_table := match_record.tbl;
+      
+      -- Skip if it's the main table or already joined
+      IF ref_table != table_name AND NOT (ref_table = ANY(joined_tables)) THEN
+        -- Lookup FK relationship from information_schema
+        SELECT 
+          kcu.column_name,
+          ccu.column_name
+        INTO fk_col, fk_ref_col
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu 
+          ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage ccu
+          ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_schema = 'public'
+          AND tc.table_name = table_name
+          AND ccu.table_name = ref_table
+        LIMIT 1;
+        
+        IF fk_col IS NOT NULL THEN
+          join_clause := join_clause || format(
+            ' LEFT JOIN %I ON %I.%I = %I.%I',
+            ref_table, table_name, fk_col, ref_table, fk_ref_col
+          );
+          joined_tables := array_append(joined_tables, ref_table);
+        END IF;
+      END IF;
+    END LOOP;
+  END;
+  
+  -- Step 3: Scan filters for table.column references and auto-join missing tables
   FOR filter_item IN SELECT * FROM jsonb_array_elements(filters)
   LOOP
     filter_col := filter_item->>'column';
@@ -108,7 +149,7 @@ BEGIN
     END IF;
   END LOOP;
   
-  -- Step 3: Also check sort column for table.column reference
+  -- Step 4: Also check sort column for table.column reference
   IF sort_col IS NOT NULL AND sort_col LIKE '%.%' THEN
     ref_table := replace(split_part(sort_col, '.', 1), '"', '');
     
@@ -138,7 +179,7 @@ BEGIN
     END IF;
   END IF;
   
-  -- Step 4: Build WHERE clause from filters
+  -- Step 5: Build WHERE clause from filters
   FOR filter_item IN SELECT * FROM jsonb_array_elements(filters)
   LOOP
     filter_col := filter_item->>'column';
@@ -226,7 +267,7 @@ BEGIN
     END IF;
   END LOOP;
   
-  -- Step 5: Build ORDER BY clause
+  -- Step 6: Build ORDER BY clause
   IF sort_col IS NOT NULL AND sort_col != '' THEN
     DECLARE
         sort_table text;
@@ -274,7 +315,7 @@ BEGIN
 
   offset_val := (page - 1) * page_size;
 
-  -- Step 6: Construct and execute main query
+  -- Step 7: Construct and execute main query
   query := format(
     'SELECT %s FROM %I %s %s %s LIMIT %s OFFSET %s',
     columns,
@@ -288,7 +329,7 @@ BEGIN
 
   EXECUTE 'SELECT json_agg(t) FROM (' || query || ') t' INTO result;
 
-  -- Step 7: Count query
+  -- Step 8: Count query
   count_query := format(
     'SELECT COUNT(*) FROM %I %s %s',
     table_name,

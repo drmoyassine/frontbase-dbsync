@@ -96,7 +96,7 @@ BEGIN
           ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
         WHERE tc.constraint_type = 'FOREIGN KEY'
           AND tc.table_schema = 'public'
-          AND tc.table_name = table_name
+          AND tc.table_name = frontbase_get_rows.table_name
           AND ccu.table_name = ref_table
         LIMIT 1;
         
@@ -133,7 +133,7 @@ BEGIN
           ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
         WHERE tc.constraint_type = 'FOREIGN KEY'
           AND tc.table_schema = 'public'
-          AND tc.table_name = table_name
+          AND tc.table_name = frontbase_get_rows.table_name
           AND ccu.table_name = ref_table
         LIMIT 1;
         
@@ -165,7 +165,7 @@ BEGIN
         ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
       WHERE tc.constraint_type = 'FOREIGN KEY'
         AND tc.table_schema = 'public'
-        AND tc.table_name = table_name
+        AND tc.table_name = frontbase_get_rows.table_name
         AND ccu.table_name = ref_table
       LIMIT 1;
       
@@ -419,7 +419,7 @@ BEGIN
             ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
           WHERE tc.constraint_type = 'FOREIGN KEY'
             AND tc.table_schema = 'public'
-            AND tc.table_name = table_name
+            AND tc.table_name = frontbase_search_rows.table_name
             AND ccu.table_name = ref_table
           LIMIT 1;
           
@@ -455,7 +455,7 @@ BEGIN
           ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
         WHERE tc.constraint_type = 'FOREIGN KEY'
           AND tc.table_schema = 'public'
-          AND tc.table_name = table_name
+          AND tc.table_name = frontbase_search_rows.table_name
           AND ccu.table_name = ref_table
         LIMIT 1;
         
@@ -889,7 +889,7 @@ BEGIN
           ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
         WHERE tc.constraint_type = 'FOREIGN KEY'
           AND tc.table_schema = 'public'
-          AND tc.table_name = target_table
+          AND tc.table_name = frontbase_get_distinct_values.target_table
           AND ccu.table_name = ref_table
         LIMIT 1;
         

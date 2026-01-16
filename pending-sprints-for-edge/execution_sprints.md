@@ -324,6 +324,15 @@ The following items are **NOT in MVP** but planned for future releases:
 - Multi-environment sync (dev/staging/prod)
 - **When:** When team collaboration or compliance (SOC2/HIPAA) required
 
+### Future Sprint: Storage Architecture Refactor
+
+- **Move admin storage APIs to FastAPI** (FileBrowser calls FastAPI, not Hono)
+- **On-demand edge shipping**: Only include storage routes in edge bundle if published pages use storage
+- **Tree-shaking**: Remove unused storage code from edge bundle (~50KB savings)
+- **Follows "Compute on Publish" pattern**: Same as DataTable - admin on FastAPI, runtime on Edge
+- **Current state**: Storage admin calls Hono directly (works but architecturally inconsistent)
+- **When:** Before production or when bundle size matters
+
 ---
 
 ## Sprint Summary

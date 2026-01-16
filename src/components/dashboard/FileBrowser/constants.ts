@@ -1,6 +1,6 @@
 // FileBrowser Constants
 
-export const EDGE_API = import.meta.env.VITE_EDGE_API_URL || 'http://localhost:3002';
+export const EDGE_API = import.meta.env.VITE_EDGE_API_URL || '';
 
 export const MIME_TYPE_OPTIONS = [
     { label: 'Images (any)', value: 'image/*' },

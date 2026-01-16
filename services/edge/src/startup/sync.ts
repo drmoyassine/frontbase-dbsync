@@ -7,7 +7,7 @@
 
 import { initPagesDb, upsertPublishedPage, getHomepage } from '../db/pages-store.js';
 
-const FASTAPI_URL = process.env.FASTAPI_URL || 'http://backend:8000';
+const FASTAPI_URL = process.env.FASTAPI_URL || 'http://localhost:8000';
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 3000; // 3 seconds between retries
 

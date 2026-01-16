@@ -8,7 +8,7 @@ The Edge Engine enables SSR pages and workflow automation in Frontbase. It uses 
 
 ## Architecture Diagram
 
-```mermaid
+```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           FRONTBASE STUDIO                               │
 │                        (React Frontend :5173)                            │
@@ -64,13 +64,12 @@ The Edge Engine enables SSR pages and workflow automation in Frontbase. It uses 
 
 ## Database Separation
 
-| Database     | Location                       | Services         | Contents                                 |
-|--------------|--------------------------------|------------------|------------------------------------------|
-| `unified.db` | `fastapi-backend/unified.db`   | FastAPI, DB-Sync | Pages, Projects, Datasources, Drafts     |
-| `edge.db`    | `services/edge/data/edge.db`   | Hono Edge Engine | Published Pages, Workflows, Executions   |
+| Database | Location | Services | Contents |
+|----------|----------|----------|----------|
+| `unified.db` | `fastapi-backend/unified.db` | FastAPI, DB-Sync | Pages, Projects, Datasources, Drafts |
+| `edge.db` | `services/edge/data/edge.db` | Hono Edge Engine | Published Pages, Workflows, Executions |
 
 **Why separate?**
-
 - Actions Engine is edge-deployable (Cloudflare Workers, Vercel Edge)
 - Runtime can scale independently of builder
 - Clear separation: design-time vs runtime data
@@ -78,7 +77,6 @@ The Edge Engine enables SSR pages and workflow automation in Frontbase. It uses 
 ## Services
 
 ### FastAPI Backend (Python)
-
 - **Port**: 8000
 - **Purpose**: Builder API, draft management, publishing
 - **Database**: `unified.db` (SQLite, async via aiosqlite)
@@ -89,7 +87,6 @@ The Edge Engine enables SSR pages and workflow automation in Frontbase. It uses 
   - `POST /api/actions/drafts/{id}/test` - Test execution
 
 ### Hono Edge Engine (TypeScript)
-
 - **Port**: 3002
 - **Purpose**: SSR pages, workflow runtime, execution, webhooks
 - **Database**: `data/edge.db` (SQLite via libsql)
@@ -100,7 +97,6 @@ The Edge Engine enables SSR pages and workflow automation in Frontbase. It uses 
   - `GET /:slug` - SSR page rendering
 
 ### Frontend (Vite/React)
-
 - **Port**: 5173
 - **Purpose**: UI, workflow editor, component builder
 - **Proxy**: `/api/*` → FastAPI, `/edge/*` → Hono
@@ -129,7 +125,6 @@ docker-compose up -d
 ```
 
 Docker Compose includes:
-
 - `backend` (FastAPI) - runs migrations via `docker_entrypoint.sh`
 - `frontend` (Nginx serving built React)
 - `redis` (for Celery/caching)
@@ -138,7 +133,6 @@ Docker Compose includes:
 ## Database Migrations
 
 ### FastAPI (Alembic)
-
 ```bash
 cd fastapi-backend
 
@@ -152,7 +146,6 @@ alembic upgrade head
 **Docker**: Migrations run automatically via `docker_entrypoint.sh` on container start.
 
 ### Hono Edge Engine (Drizzle)
-
 ```bash
 cd services/edge
 
@@ -166,37 +159,32 @@ npm run db:push
 ## Environment Variables
 
 ### FastAPI
-
-| Variable       | Default                  | Description      |
-|----------------|--------------------------|------------------|
-| `DATABASE_URL` | `sqlite:///./unified.db` | Main database    |
-| `EDGE_URL`     | `http://localhost:3002`  | Edge endpoint    |
-| `SECRET_KEY`   | (required)               | JWT signing key  |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `sqlite:///./unified.db` | Main database |
+| `EDGE_URL` | `http://localhost:3002` | Edge endpoint |
+| `SECRET_KEY` | (required) | JWT signing key |
 
 ### Hono Edge Engine
-
-| Variable      | Default          | Description      |
-|---------------|------------------|------------------|
-| `PORT`        | `3002`           | Server port      |
-| `DB_TYPE`     | `sqlite`         | Database type    |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3002` | Server port |
+| `DB_TYPE` | `sqlite` | Database type |
 | `SQLITE_PATH` | `./data/edge.db` | SQLite file path |
 
 ## Deployment Options
 
 ### Option 1: VPS / Docker (Current)
-
 - All services on same server via docker-compose
 - Nginx proxies `/api/*` → FastAPI, `/actions/*` → Hono
 - Simplest setup, good for small-medium scale
 
 ### Option 2: Hybrid (VPS + Edge)
-
 - FastAPI + Frontend on VPS
 - Hono deployed to Cloudflare Workers / Vercel Edge
 - Best performance for global users
 
 ### Option 3: Full Cloud
-
 - FastAPI on AWS Lambda / Cloud Run
 - Hono on edge
 - Frontend on Vercel/Netlify
@@ -209,7 +197,7 @@ This section documents how to migrate the Hono Actions Engine from Docker to edg
 
 ### Current Architecture (Docker)
 
-```mermaid
+```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Nginx (Frontend Container :8080)                               │
 │  ┌─────────────────────────────────────────────────────────────┐│
@@ -225,7 +213,7 @@ This section documents how to migrate the Hono Actions Engine from Docker to edg
 
 ### Target Architecture (Edge)
 
-```mermaid
+```
                        ┌──────────────────┐
                        │  Your Domain     │
                        │  frontbase.io    │
@@ -245,18 +233,16 @@ This section documents how to migrate the Hono Actions Engine from Docker to edg
 ### Migration Steps
 
 #### Step 1: Database Migration (Required for Edge)
-
 Edge runtimes can't use local SQLite. Choose an edge-compatible database:
 
-| Provider          | Type                 | Latency | Notes                             |
-|-------------------|----------------------|---------|-----------------------------------|
-| **Turso**         | SQLite (distributed) | ~5ms    | Drizzle-compatible, same schema   |
-| **Cloudflare D1** | SQLite               | ~2ms    | Workers-only                      |
-| **PlanetScale**   | MySQL                | ~10ms   | Generous free tier                |
-| **Neon**          | Postgres             | ~15ms   | Serverless Postgres               |
+| Provider | Type | Latency | Notes |
+|----------|------|---------|-------|
+| **Turso** | SQLite (distributed) | ~5ms | Drizzle-compatible, same schema |
+| **Cloudflare D1** | SQLite | ~2ms | Workers-only |
+| **PlanetScale** | MySQL | ~10ms | Generous free tier |
+| **Neon** | Postgres | ~15ms | Serverless Postgres |
 
 **Update Drizzle config:**
-
 ```ts
 // services/actions/drizzle.config.ts
 import { createClient } from '@libsql/client';
@@ -268,7 +254,6 @@ const client = createClient({
 ```
 
 #### Step 2: Update Hono for Workers
-
 Hono is already edge-native. Minimal changes needed:
 
 ```ts
@@ -282,7 +267,6 @@ export default app;  // That's it!
 ```
 
 Create `wrangler.toml`:
-
 ```toml
 name = "frontbase-actions"
 main = "dist/index.js"
@@ -298,7 +282,6 @@ database_id = "your-db-id"
 ```
 
 #### Step 3: Update Frontend API Client
-
 ```ts
 // src/lib/actionsClient.ts
 const ACTIONS_URL = import.meta.env.VITE_ACTIONS_URL || '/actions';
@@ -307,7 +290,6 @@ const ACTIONS_URL = import.meta.env.VITE_ACTIONS_URL || '/actions';
 ```
 
 #### Step 4: Update FastAPI Publish Endpoint
-
 ```python
 # fastapi-backend/app/routers/actions.py
 import os
@@ -320,14 +302,12 @@ ACTIONS_ENGINE_URL = os.getenv(
 ```
 
 #### Step 5: Remove Nginx Proxy (Edge Only)
-
 When Actions Engine is on edge, remove `/actions/*` from nginx.conf.
 Frontend calls the edge URL directly via `VITE_ACTIONS_URL`.
 
 ### Deployment Commands
 
 **Cloudflare Workers:**
-
 ```bash
 cd services/actions
 npm run build
@@ -335,7 +315,6 @@ npx wrangler deploy
 ```
 
 **Vercel Edge:**
-
 ```bash
 cd services/actions
 vercel --prod
@@ -343,28 +322,26 @@ vercel --prod
 
 ### Environment Variables Comparison
 
-| Variable       | Docker                      | Edge (Workers)           |
-|----------------|-----------------------------|--------------------------|
-| `DATABASE_URL` | `file:/app/data/actions.db` | `libsql://...turso.io`   |
-| `TURSO_TOKEN`  | N/A                         | Required                 |
-| `PORT`         | `3002`                      | N/A (managed)            |
+| Variable | Docker | Edge (Workers) |
+|----------|--------|----------------|
+| `DATABASE_URL` | `file:/app/data/actions.db` | `libsql://...turso.io` |
+| `TURSO_TOKEN` | N/A | Required |
+| `PORT` | `3002` | N/A (managed) |
 
 ### Rollback Plan
-
 If edge deployment has issues:
-
 1. Revert `VITE_ACTIONS_URL` to `/actions`
 2. Restore `/actions/*` in nginx.conf
 3. Redeploy Docker containers
 
 ### Performance Expectations
 
-| Metric                     | Docker (Single VPS) | Edge (Global)    |
-|----------------------------|---------------------|------------------|
-| Workflow execution latency | ~100-300ms          | ~20-50ms         |
-| Cold start                 | N/A                 | ~5-20ms          |
-| Geographic coverage        | Single region       | 300+ PoPs        |
-| Scaling                    | Manual/vertical     | Automatic        |
+| Metric | Docker (Single VPS) | Edge (Global) |
+|--------|---------------------|---------------|
+| Workflow execution latency | ~100-300ms | ~20-50ms |
+| Cold start | N/A | ~5-20ms |
+| Geographic coverage | Single region | 300+ PoPs |
+| Scaling | Manual/vertical | Automatic |
 
 ## Workflow Lifecycle
 

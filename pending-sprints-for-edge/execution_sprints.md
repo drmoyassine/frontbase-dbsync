@@ -12,6 +12,7 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 > **Before starting ANY sprint**, complete this mandatory review step.
 
 ### Review Checklist
+
 - [ ] **Codebase Context**: Read relevant source files to understand current implementation
 - [ ] **Design Patterns**: Identify existing patterns to maintain consistency
 - [ ] **Affected Files**: List all files that will be created/modified/deleted
@@ -23,25 +24,29 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 ---
 
 ## ✅ Sprint 0: Foundation (COMPLETE)
+
 **Goal:** Establish the core middleware stack without changing functionality.
 **Risk:** Low
 **Estimated Effort:** 1-2 days
 
-### Pre-Sprint Review
+### Sprint 0 Pre-Sprint Review
+
 - [x] Review `services/actions/src/index.ts` current middleware setup
 - [x] Review `services/actions/package.json` for existing Hono packages
 - [x] List affected files and confirm no breaking changes
 - [x] Refine tasks based on findings
 
-### Tasks
+### Sprint 0 Tasks
+
 - [x] Add global middleware to `services/actions/src/index.ts`:
-    - `requestId()`, `logger()`, `secureHeaders()`, `compress()`, `timeout()`, `bodyLimit()`
+  - `requestId()`, `logger()`, `secureHeaders()`, `compress()`, `timeout()`, `bodyLimit()`
 - [x] Add CORS to API routes
 - [x] Implement `factory` pattern (`createFactory`) for handler structure
 - [x] Use `combine` to group middleware chains for organization
 - [x] Verify local dev still works (`npm run dev`)
 
-### Acceptance Criteria
+### Sprint 0 Acceptance Criteria
+
 - [x] All existing endpoints still function
 - [x] `X-Request-ID` header appears in responses
 - [x] Response compression is active
@@ -49,25 +54,29 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 ---
 
 ## ✅ Sprint 1: Universal Database Layer (COMPLETE)
+
 **Goal:** Replace Node.js-specific DB drivers with HTTP-based drivers.
 **Risk:** Medium (Core change)
 **Estimated Effort:** 2-3 days
 
-### Pre-Sprint Review
+### Sprint 1 Pre-Sprint Review
+
 - [x] Review `services/actions/src/db/index.ts` current implementation
 - [x] Review `services/actions/src/db/schema.ts` for Drizzle compatibility
 - [x] Identify all files importing from `db/`
 - [x] Check Neon/Turso/PlanetScale driver documentation for Drizzle integration
 - [x] Refine tasks based on findings
 
-### Tasks
+### Sprint 1 Tasks
+
 - [x] Install universal drivers
 - [x] Refactor `services/actions/src/db/index.ts`:
-    - Remove `fs`, `path`, `postgres` imports
-    - Implement Neon HTTP driver for Postgres
+  - Remove `fs`, `path`, `postgres` imports
+  - Implement Neon HTTP driver for Postgres
 - [x] Update environment variable documentation
 
-### Acceptance Criteria
+### Sprint 1 Acceptance Criteria
+
 - [x] Works locally with `DATABASE_URL` pointing to Neon or Turso
 - [x] No `fs` or `path` imports remain in `src/`
 - [x] Existing API tests pass
@@ -75,33 +84,39 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 ---
 
 ## ✅ Sprint 2: Authentication & Security (COMPLETE)
+
 **Goal:** Secure the Edge Engine with JWT verification and API key support.
 **Risk:** Medium
 **Estimated Effort:** 2-3 days
 
-### Pre-Sprint Review
+### Sprint 2 Pre-Sprint Review
+
 - [x] Review FastAPI auth flow to understand token format
 - [x] Review Supabase JWT structure and claims
 - [x] Identify which routes need protection (`/execute`, `/executions`, `/webhook`)
 - [x] Check existing CORS setup from Sprint 0
 - [x] Refine tasks based on findings
 
-### Tasks
+### Sprint 2 Tasks
+
 - [x] Add `bearer-auth` middleware for API key access (`/webhook`)
 - [x] Document auth flow in README
 
-### Acceptance Criteria
+### Sprint 2 Acceptance Criteria
+
 - [x] API key allows webhook triggers
 - [x] Unauthenticated webhook requests return 401
 
 ---
 
 ## ✅ Sprint 2 Extended: Full Auth Shell (COMPLETE)
+
 **Goal:** Cross-layer authentication for React, FastAPI, and Hono.
 **Risk:** Medium
 **Estimated Effort:** 1 day
 
-### Tasks
+### Sprint 2+ Tasks
+
 - [x] **React**: LoginPage, ProtectedRoute, auth store with real API calls
 - [x] **FastAPI**: Auth router (login, logout, me endpoints)
 - [x] **Hono**: Webhook auth middleware
@@ -110,6 +125,7 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 - [x] Fixed proxy headers for HTTPS redirects in production
 
 ### Files Modified
+
 - `src/stores/auth.ts` - Real auth with API calls
 - `src/components/auth/ProtectedRoute.tsx` - Route guard
 - `src/pages/auth/LoginPage.tsx` - Admin login page
@@ -119,14 +135,16 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 
 ---
 
-## 🚧 Sprint 3: SSR Pages Engine (IN PROGRESS)
+## ✅ Sprint 3: SSR Pages Engine (COMPLETE)
+
 **Goal:** Render published pages on the Edge.
 **Risk:** Medium-High (New feature)
 **Estimated Effort:** 1.5-2 days
 
 > See `sprint3_ssr_plan.md` for detailed implementation plan.
 
-### Pre-Sprint Review
+### Sprint 3 Pre-Sprint Review
+
 - [x] Review FastAPI page schema storage
 - [x] Review existing React component library for SSR compatibility
 - [x] Identify page schema structure (JSON format)
@@ -134,12 +152,14 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 - [x] Plan approved
 
 ### Key Decisions
+
 - **Variable Scopes**: Page Variables, Session Variables, Cookies
 - **Edge Architecture**: No FastAPI on edge, uses D1/KV
 - **Component Tiers**: Static, Interactive, Data-Driven
 - **Hydration**: React hydrates interactive components
 
-### Tasks
+### Sprint 3 Tasks
+
 - [x] Create SSR route `/:slug` in Hono
 - [x] Create variable store (3 scopes)
 - [x] Create static component renderers
@@ -149,7 +169,8 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 - [x] Add FastAPI public page endpoint
 - [x] Add FastAPI publish endpoint (New Requirement)
 
-### Acceptance Criteria
+### Sprint 3 Acceptance Criteria
+
 - [x] `GET /my-page` returns full HTML
 - [x] Cached responses return Cache-Control headers
 - [x] Variables persist per scope (18/18 tests passed)
@@ -157,92 +178,180 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 
 ---
 
-## Sprint 4: Real-Time & WebSockets
-**Goal:** Stream workflow execution logs to the Builder UI.
+## ✅ Sprint 3.5: Stability & Enhancements (COMPLETE)
+
+**Goal:** Stabilize core components and fix critical infrastructure.
 **Risk:** Medium
 **Estimated Effort:** 2-3 days
 
-### Tasks
-- [ ] Implement `/ws/executions/:id` using `websocket` helper
-- [ ] Modify `runtime.ts` to emit events during execution
-- [ ] Add WebSocket connection handler in Builder UI (React)
-- [ ] Implement `hono/client` for type-safe React-to-Hono communication
-- [ ] Test with local and Edge deployments
+### Sprint 3.5 Tasks
 
-### Acceptance Criteria
-- Builder connects to WebSocket
-- Execution status updates in real-time
-- Connection closes gracefully on completion
+- [x] **DataTable Refactor**: Modularized into `datatable/` directory (`SearchableSelect`, `Pagination`)
+- [x] **Routing Fix**: Corrected Nginx routing for `/api/database/*`
+- [x] **Advanced Search**: Simultaneous server-side search & filtering
+- [x] **Cascading Filters**: Implemented dependent dropdowns
 
 ---
+## Sprint 4: Storage & Cache (MVP)
 
-## Sprint 5: Storage Integration
-**Goal:** Enable file uploads and binary handling.
+**Goal:** Integrate Supabase Storage for file handling and Upstash Redis for caching/queues.
 **Risk:** Low
-**Estimated Effort:** 1-2 days
+**Estimated Effort:** 2-3 days
 
-### Tasks
-- [ ] Install `s3-lite-client`
-- [ ] Create `services/actions/src/storage/index.ts`
-- [ ] Add S3 config env vars
-- [ ] Add `/upload` endpoint (if needed for Actions)
-- [ ] Document S3-compatible provider setup (R2, MinIO)
+> See `sprint4_storage_cache_plan.md` for detailed implementation plan.
 
-### Acceptance Criteria
-- Can upload/download files via API
-- Works with Cloudflare R2 and local MinIO
+### Sprint 4 Tasks
+
+- [ ] **Supabase Storage Integration**
+  - [ ] Create `services/actions/src/storage/supabase.ts`
+  - [ ] Implement upload/download via Supabase JS client
+  - [ ] Add presigned URL generation for direct uploads
+  - [ ] Create `/api/storage/upload` endpoint in Hono
+- [ ] **Upstash Redis Integration**
+  - [ ] Install `@upstash/redis`
+  - [ ] Create `services/actions/src/cache/redis.ts`
+  - [ ] Implement caching middleware for API responses
+  - [ ] Add queue support for async operations
+- [ ] **Documentation**
+  - [ ] Document environment variables
+  - [ ] Add setup guide for Supabase Storage bucket
+
+### Sprint 4 Acceptance Criteria
+
+- [ ] Can upload files to Supabase Storage via API
+- [ ] Can generate presigned URLs for direct uploads
+- [ ] Redis caching reduces repeated API calls
+- [ ] Works in both local Docker and edge deployment
 
 ---
 
-## Sprint 6: Observability
-**Goal:** Implement logging, tracing, and error tracking.
+## Sprint 5: Automation Engine + Deploy (MVP)
+
+**Goal:** Enhance the Dafthunk automation engine and enable one-click deployment to edge platforms.
+**Risk:** Medium
+**Estimated Effort:** 3-4 days
+
+> See `sprint5_automation_deploy_plan.md` for detailed implementation plan.
+
+### Sprint 5 Tasks
+
+- [ ] **Automation Engine Enhancement**
+  - [ ] Add new Dafthunk node types (HTTP Request, Transform, Condition)
+  - [ ] Implement workflow scheduling (cron-based triggers)
+  - [ ] Add workflow versioning and history
+  - [ ] Create workflow testing/debugging UI
+- [ ] **Edge Deployment**
+  - [ ] Add `wrangler.toml` for Cloudflare Workers
+  - [ ] Create deployment scripts for one-click deploy
+  - [ ] Support deployment targets:
+    - [ ] Cloudflare Workers
+    - [ ] Vercel Edge Functions
+    - [ ] Supabase Edge Functions
+  - [ ] Add deployment status tracking in Builder
+- [ ] **Environment Configuration**
+  - [ ] Secrets management for edge deployments
+  - [ ] Environment variable injection
+
+### Sprint 5 Acceptance Criteria
+
+- [ ] New automation nodes work in workflow editor
+- [ ] Workflows can be scheduled with cron triggers
+- [ ] One-click deploy to Cloudflare Workers works
+- [ ] Deployment status visible in Builder UI
+- [ ] Secrets are securely managed
+
+---
+
+## Sprint 6: UI Components (MVP Final)
+
+**Goal:** Add essential UI components for data visualization and landing pages.
 **Risk:** Low
-**Estimated Effort:** 1-2 days
+**Estimated Effort:** 2-3 days
 
-### Tasks
-- [ ] Integrate Axiom for logs
-- [ ] (Optional) Add Sentry for errors
-- [ ] (Optional) Add OpenTelemetry tracing
+### Sprint 6 Tasks
 
-### Acceptance Criteria
-- Logs appear in Axiom dashboard
-- Request IDs are searchable
+- [ ] **Charts Component**
+  - [ ] Integrate charting library (Chart.js or Recharts)
+  - [ ] Create `ChartRenderer` for SSR pages
+  - [ ] Support chart types: Bar, Line, Pie, Area
+  - [ ] Add data binding to chart props
+- [ ] **Landing Page Components** (if time permits)
+  - [ ] Hero section with gradient backgrounds
+  - [ ] Feature grid with icons
+  - [ ] Testimonial carousel
+  - [ ] Pricing table
+  - [ ] CTA sections
+- [ ] **Component Polish**
+  - [ ] Improve existing component styling
+  - [ ] Add animation/transitions
+  - [ ] Mobile responsiveness audit
+
+### Sprint 6 Acceptance Criteria
+
+- [ ] Charts render with data from Supabase
+- [ ] Charts are interactive (hover, click events)
+- [ ] Landing page components drag-and-drop ready
+- [ ] All components work in SSR and client modes
 
 ---
 
-## Sprint 7: Edge Deployment
-**Goal:** Deploy to Cloudflare Workers (or other Edge provider).
-**Risk:** Low (if previous sprints completed)
-**Estimated Effort:** 1-2 days
+## Post-MVP: Future Sprints
 
-### Tasks
-- [ ] Add `wrangler.toml` for Cloudflare Workers
-- [ ] Configure environment variables in Cloudflare dashboard
-- [ ] Test deployment with `wrangler deploy`
-- [ ] Verify all endpoints work on Edge
-- [ ] Document deployment process
+The following items are **NOT in MVP** but planned for future releases:
 
-### Acceptance Criteria
-- Engine runs on `*.workers.dev` subdomain
-- All tests pass on Edge
-- Latency is acceptable (<100ms p50 globally)
+### Future Sprint: Observability
+
+- Axiom/Sentry logging integration
+- OpenTelemetry tracing
+- Performance dashboards
+
+### Future Sprint: Custom WebSockets
+
+- Custom WebSocket implementation (currently use Supabase Realtime)
+- Real-time workflow execution streaming
+
+### Future Sprint: Multi-Database Support
+
+- Neon/PlanetScale drivers
+- Self-hosted Postgres/MySQL support
+
+### Future Sprint: Enterprise Secrets Management (Infisical)
+
+- Self-hosted [Infisical](https://github.com/Infisical/infisical) integration
+- Deploy-time secrets injection (preserves edge self-sufficiency)
+- End-to-end encrypted secrets storage
+- Audit logs and access control
+- Multi-environment sync (dev/staging/prod)
+- **When:** When team collaboration or compliance (SOC2/HIPAA) required
 
 ---
 
 ## Sprint Summary
 
-| Sprint | Name | Effort | Status |
-| :--- | :--- | :--- | :--- |
-| 0 | Foundation | 1-2d | ✅ Complete |
-| 1 | Universal DB | 2-3d | ✅ Complete |
-| 2 | Auth & Security | 2-3d | ✅ Complete |
-| 2+ | Full Auth Shell | 1d | ✅ Complete |
-| 3 | SSR Pages | 1.5-2d | ✅ Complete |
-| 4 | WebSockets | 2-3d | Pending |
-| 5 | Storage | 1-2d | Pending |
-| 6 | Observability | 1-2d | Pending |
-| 7 | Edge Deployment | 1-2d | Pending |
+| Sprint | Name                    | Effort  | Status       |
+|--------|-------------------------|---------|--------------|
+| 0      | Foundation              | 1-2d    | ✅ Complete  |
+| 1      | Universal DB            | 2-3d    | ✅ Complete  |
+| 2      | Auth & Security         | 2-3d    | ✅ Complete  |
+| 2+     | Full Auth Shell         | 1d      | ✅ Complete  |
+| 3      | SSR Pages               | 1.5-2d  | ✅ Complete  |
+| 3.5    | Stability               | 2-3d    | ✅ Complete  |
+| 4      | Storage & Cache         | 2-3d    | Pending      |
+| 5      | Automation + Deploy     | 3-4d    | Pending      |
+| 6      | UI Components           | 2-3d    | Pending      |
 
-**Completed:** Sprints 0, 1, 2, 2+, 3
-**Next:** Sprint 4 (Real-Time & WebSockets)
-**Remaining:** ~5-7 days
+**Completed:** Sprints 0, 1, 2, 2+, 3, 3.5
+**Next:** Sprint 4 (Storage & Cache)
+**Remaining MVP:** ~7-10 days
+
+---
+
+## MVP Services Stack
+
+| Service       | Provider         | Purpose                    |
+|---------------|------------------|----------------------------|
+| Database      | Supabase         | Primary data store         |
+| Storage       | Supabase Storage | File uploads               |
+| Cache/Queues  | Upstash Redis    | Caching, background jobs   |
+| Realtime      | Supabase Realtime| Live updates (if needed)   |
+| Edge Runtime  | Cloudflare Workers / Vercel Edge | SSR + Automation |

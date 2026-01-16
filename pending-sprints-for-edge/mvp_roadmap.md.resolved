@@ -1,0 +1,50 @@
+# MVP Sprint Roadmap
+
+**Captured:** 2026-01-13 02:40 AM
+
+---
+
+## Completed ✅
+
+- **Sprint 0-2+:** Foundation, Database, Auth
+- **Sprint 3:** SSR Pages Engine (100% complete)
+
+---
+
+## Remaining MVP Sprints
+
+### Sprint 4 (Next): Storage & Cache
+- Supabase Storage integration
+- Upstash Redis for caching/queues
+
+### Sprint 5: Automation Engine + Deploy
+- Dafthunk nodes/engine enhancement
+- Deployment to Edge (as Hono edge functions)
+- **One-click Deploy to:**
+  - Supabase Functions
+  - Cloudflare Workers
+  - Vercel Edge
+
+### Sprint 6 (Final): UI Components
+- Charts component
+- Landing page lego components (if possible)
+
+---
+
+## MVP Services Stack
+
+| Service | Provider |
+|:--------|:---------|
+| Database | Supabase |
+| Storage | Supabase Storage |
+| Cache/Queues | Upstash Redis |
+| Realtime | Supabase Realtime (if needed) |
+
+---
+
+## What's NOT in MVP
+
+- Neon/PlanetScale support
+- Self-hosted Postgres/MySQL
+- Custom WebSockets (use Supabase Realtime)
+- Observability (Sprint 6 from original plan)

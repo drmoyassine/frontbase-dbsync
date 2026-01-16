@@ -6,6 +6,7 @@ import { Database, RefreshCw, Check, X, Save, Loader2 } from 'lucide-react';
 export default function Settings() {
     const queryClient = useQueryClient();
     const [redisUrl, setRedisUrl] = React.useState('');
+    const [redisToken, setRedisToken] = React.useState('');
     const [redisEnabled, setRedisEnabled] = React.useState(false);
     const [cacheTtlData, setCacheTtlData] = React.useState(60);
     const [cacheTtlCount, setCacheTtlCount] = React.useState(300);
@@ -21,6 +22,7 @@ export default function Settings() {
     React.useEffect(() => {
         if (settings) {
             setRedisUrl(settings.redis_url || '');
+            setRedisToken(settings.redis_token || '');
             setRedisEnabled(settings.redis_enabled);
             setCacheTtlData(settings.cache_ttl_data);
             setCacheTtlCount(settings.cache_ttl_count);
@@ -54,6 +56,7 @@ export default function Settings() {
     const handleSave = () => {
         saveMutation.mutate({
             redis_url: redisUrl || null,
+            redis_token: redisToken || null,
             redis_enabled: redisEnabled,
             cache_ttl_data: cacheTtlData,
             cache_ttl_count: cacheTtlCount,
@@ -95,15 +98,27 @@ export default function Settings() {
                     </p>
 
                     <div className="form-group">
-                        <label className="form-label">Redis URL</label>
+                        <label className="form-label">Upstash Redis REST URL</label>
                         <input
                             type="text"
                             className="form-input"
-                            placeholder="redis://username:password@host:port/db"
+                            placeholder="https://xxx.upstash.io"
                             value={redisUrl}
                             onChange={(e) => handleChange(setRedisUrl)(e.target.value)}
                         />
-                        <span className="form-hint">Example: redis://default:mypassword@redis.example.com:6379/0</span>
+                        <span className="form-hint">Get this from your Upstash Redis dashboard</span>
+                    </div>
+
+                    <div className="form-group" style={{ marginTop: '1rem' }}>
+                        <label className="form-label">Upstash Redis REST Token</label>
+                        <input
+                            type="password"
+                            className="form-input"
+                            placeholder="AXXXaaaa..."
+                            value={redisToken}
+                            onChange={(e) => handleChange(setRedisToken)(e.target.value)}
+                        />
+                        <span className="form-hint">REST API token from Upstash dashboard (keep secret)</span>
                     </div>
 
                     <div className="form-row" style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>

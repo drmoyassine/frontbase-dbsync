@@ -21,3 +21,30 @@ async def update_project_endpoint(request: ProjectUpdateRequest, db: Session = D
     """Update project settings"""
     project = update_project(db, request.dict(exclude_unset=True))
     return project
+
+@router.get("/internal/creds/", include_in_schema=False)
+async def get_internal_creds(db: Session = Depends(get_db)):
+    """
+    Internal endpoint for Edge Service to get decrypted credentials.
+    Standard API users should NOT access this.
+    """
+    from ..database.utils import decrypt_data
+    
+    project = get_project(db)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not configured")
+        
+    response = {
+        "supabaseUrl": project.supabase_url,
+        "supabaseKey": project.supabase_anon_key,
+        "supabaseServiceKey": None
+    }
+    
+    # Decrypt service key if present
+    if project.supabase_service_key_encrypted:
+        try:
+            response["supabaseServiceKey"] = decrypt_data(project.supabase_service_key_encrypted)
+        except Exception:
+            pass
+            
+    return response

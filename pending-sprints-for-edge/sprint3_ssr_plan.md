@@ -1,6 +1,7 @@
 # Sprint 3: SSR Pages Engine
 
 ## Overview
+
 Render published pages on the Edge with server-side rendering, client hydration, and reactive state management.
 
 **Estimated Effort:** 1.5-2 days
@@ -16,6 +17,7 @@ Render published pages on the Edge with server-side rendering, client hydration,
 | **Cookies** | Custom expiry | ✅ Persists | ✅ Yes | Auth token, consent, theme |
 
 ### Implementation Details
+
 - **Page Variables**: Zustand in-memory (vanilla mode for edge compatibility)
 - **Session Variables**: localStorage + Zustand sync, cleared on logout, populated on login from DB
 - **Cookies**: Browser cookies via Hono helpers, configurable expiry, httpOnly option
@@ -24,7 +26,7 @@ Render published pages on the Edge with server-side rendering, client hydration,
 
 ## SSR Architecture
 
-```
+```mermaid
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        REQUEST FLOW                                  │
 ├─────────────────────────────────────────────────────────────────────┤
@@ -46,13 +48,15 @@ Render published pages on the Edge with server-side rendering, client hydration,
 ### Deployment Modes
 
 **Local/Docker:**
-```
+
+```mermaid
 Hono → FastAPI → SQLite/Postgres (page schema)
                → Supabase (user data via sync service)
 ```
 
 **Edge (Cloudflare/Vercel):**
-```
+
+```mermaid
 Hono → D1/KV (page schema)
      → User's Supabase (direct, NO FastAPI!)
 ```
@@ -70,6 +74,7 @@ Hono → D1/KV (page schema)
 ### React Query Implementation (Hydration)
 
 **1. Hydration Bundle (`hydrate.tsx`)**
+
 ```tsx
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -92,6 +97,7 @@ export function hydrateApp() {
 ```
 
 **2. Data Components (`DataTable.tsx`)**
+
 ```tsx
 export const DataTable = ({ props }) => {
   // Use React Query for data fetching
@@ -135,31 +141,37 @@ export const DataTable = ({ props }) => {
 ## Implementation Phases
 
 ### Phase 1: SSR Route (2 hours) ✅
+
 - [x] Create `/:slug` route in Hono
 - [x] Fetch page from FastAPI (local) or D1 (edge)
 - [x] Return basic HTML
 
 ### Phase 2: Component Renderers (4 hours) ✅
+
 - [x] Static components (Text, Heading, Image, etc.)
 - [x] Layout components (Container, Tabs, Accordion)
 - [x] **Data components with React Query hooks**
 
 ### Phase 3: Variable Store (3 hours) ✅
+
 - [x] Zustand vanilla store with 3 scopes
 - [x] Cookie read/write helpers
 - [x] localStorage sync for session variables
 
 ### Phase 4: Hydration Bundle (3 hours) ✅
+
 - [x] Minimal React bundle for interactive components
 - [x] **Setup QueryClientProvider**
 - [x] Variable store initialization from `window.__INITIAL_STATE__`
 
 ### Phase 5: FastAPI Integration (1 hour) ✅
+
 - [x] Add `/api/pages/public/:slug` endpoint (Required for SSR fallback)
 - [x] Add `/api/pages/:id/publish` endpoint (Required for Builder publish button)
 - [x] Return page for SSR (no auth for public pages)
 
 ### Phase 6: Testing & Polish (2 hours)
+
 - [x] Test static page rendering
 - [x] Test interactive components and data fetching
 - [x] Test variable binding and reactivity
@@ -167,6 +179,7 @@ export const DataTable = ({ props }) => {
 ---
 
 ## Edge Compatibility Checklist
+
 - [x] Zustand vanilla (no Node deps)
 - [x] All storage APIs client-side only
 - [x] Cookies readable via Hono `getCookie()`

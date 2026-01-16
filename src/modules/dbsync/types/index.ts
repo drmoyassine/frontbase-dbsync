@@ -116,6 +116,7 @@ export interface Conflict {
 
 export interface RedisSettings {
     redis_url: string | null
+    redis_token: string | null  // Upstash REST API token
     redis_enabled: boolean
     cache_ttl_data: number
     cache_ttl_count: number

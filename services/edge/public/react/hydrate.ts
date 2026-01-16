@@ -8,7 +8,7 @@
 
 import { hydrateRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createClientStore, VariableStore } from '../src/ssr/store';
+import { createClientStore, VariableStore } from '../../src/ssr/store';
 
 // Global state
 let queryClient: QueryClient;

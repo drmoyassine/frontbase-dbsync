@@ -22,6 +22,9 @@ ARG VITE_API_URL=""
 ENV VITE_API_URL=${VITE_API_URL}
 ENV NODE_ENV=production
 
+# Cache buster - always invalidates
+ARG CACHEBUST=1
+
 # Run build and verify output exists
 RUN npm run build && \
     if [ ! -d "dist" ]; then echo "ERROR: Build failed - dist folder not created" && exit 1; fi && \

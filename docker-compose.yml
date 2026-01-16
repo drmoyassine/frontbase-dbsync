@@ -74,6 +74,8 @@ services:
       args:
         # Empty = use relative URLs (recommended for production)
         VITE_API_URL: ""
+        # Bust cache on every deploy - change this value to force rebuild
+        CACHEBUST: "20260117-v1"
     ports:
       - "8080:80"
     depends_on:

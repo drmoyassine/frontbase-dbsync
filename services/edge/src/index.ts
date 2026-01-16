@@ -89,7 +89,7 @@ app.use('*', secureHeaders());
 // Performance
 app.use('*', compress());
 app.use('*', timeout(29000)); // 29s (Cloudflare Workers limit)
-app.use('*', bodyLimit({ maxSize: 1024 * 1024 })); // 1MB
+app.use('*', bodyLimit({ maxSize: 50 * 1024 * 1024 })); // 50MB for file uploads
 
 // CORS for API routes
 app.use('/api/*', cors({
@@ -136,7 +136,10 @@ app.route('/api/webhook', webhookRoute);
 app.route('/api/executions', executionsRoute);
 app.route('/api/import', importRoute); // Publish contract import endpoint
 app.route('/api/data', dataRoute); // Data API for client hydration
-app.route('/api/storage', storageRoute); // Sprint 4: Storage
+
+// Sprint 4: Storage with higher body limit for file uploads
+app.use('/api/storage/upload', bodyLimit({ maxSize: 50 * 1024 * 1024 })); // 50MB for uploads
+app.route('/api/storage', storageRoute);
 app.route('/api/cache', cacheRoute); // Sprint 4: Cache
 
 // =============================================================================

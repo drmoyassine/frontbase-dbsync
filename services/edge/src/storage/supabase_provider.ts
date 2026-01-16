@@ -3,23 +3,38 @@
  * 
  * Edge-compatible storage operations using @supabase/supabase-js.
  * Credentials are fetched from the database (configured via Settings UI).
+ * 
+ * Implements IStorageProvider for seamless integration with other S3-compatible
+ * storage providers (AWS S3, Cloudflare R2, MinIO, etc.).
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { IStorageProvider, StorageFile, StorageBucket, UploadOptions, BucketOptions } from './types';
 
+export interface SupabaseStorageConfig {
+  url: string;
+  key: string;
+  bucket?: string;
+}
+
+// Keep legacy interface for backward compatibility
 export interface StorageConfig {
   supabaseUrl: string;
   supabaseKey: string;
   bucket?: string;
 }
 
-export class SupabaseStorage {
+export class SupabaseStorage implements IStorageProvider {
   private client: SupabaseClient;
   private bucket: string;
 
-  constructor(config: StorageConfig) {
-    this.client = createClient(config.supabaseUrl, config.supabaseKey);
+  constructor(config: StorageConfig | SupabaseStorageConfig) {
+    // Support both old and new config formats
+    const url = (config as any).supabaseUrl || (config as any).url;
+    const key = (config as any).supabaseKey || (config as any).key;
+    this.client = createClient(url, key);
     this.bucket = config.bucket || 'uploads';
+    console.log('[SUPABASE.TS] Class instance created');
   }
 
   /**
@@ -39,10 +54,35 @@ export class SupabaseStorage {
       });
 
     if (error) {
-      console.error('Supabase upload error details:', JSON.stringify(error, null, 2));
       const err = error as any;
-      const msg = err.message || err.error_description || err.error || JSON.stringify(error);
-      throw new Error(`Storage upload failed: ${msg}`);
+      let msg = error.message;
+
+      // Handle the case where message is literally "{}" or empty (Supabase bug)
+      if (!msg || msg === '{}') {
+        // Check originalError which contains the actual HTTP Response
+        if (err.originalError && typeof err.originalError.status === 'number') {
+          const status = err.originalError.status;
+          const statusText = err.originalError.statusText || '';
+
+          // Map common HTTP status codes to user-friendly messages
+          const statusMessages: Record<number, string> = {
+            400: 'Bad request - the file may already exist or be invalid',
+            401: 'Authentication failed - please check your credentials',
+            403: 'Permission denied - you do not have access to this bucket',
+            404: 'Bucket or path not found',
+            409: 'The resource already exists',
+            413: 'File too large',
+            429: 'Too many requests - please try again later',
+          };
+
+          msg = statusMessages[status] || `Upload failed: ${status} ${statusText}`.trim();
+        } else {
+          // Try alternative properties
+          msg = err.error_description || err.error || err.code || err.statusText || 'Unknown upload error';
+        }
+      }
+
+      throw new Error(msg);
     }
 
     return {
@@ -54,9 +94,10 @@ export class SupabaseStorage {
   /**
    * Download a file from Supabase Storage
    */
-  async download(path: string): Promise<Blob> {
+  async download(path: string, bucket?: string): Promise<Blob> {
+    const targetBucket = bucket || this.bucket;
     const { data, error } = await this.client.storage
-      .from(this.bucket)
+      .from(targetBucket)
       .download(path);
 
     if (error) {
@@ -131,7 +172,7 @@ export class SupabaseStorage {
   /**
    * Calculate total size of a folder recursively
    */
-  private async getFolderSize(bucket: string, prefix: string): Promise<number> {
+  async getFolderSize(bucket: string, prefix: string): Promise<number> {
     const { data, error } = await this.client.storage.from(bucket).list(prefix);
     if (error || !data) return 0;
 
@@ -161,7 +202,7 @@ export class SupabaseStorage {
   async list(
     path?: string,
     options?: { limit?: number; offset?: number; bucket?: string; search?: string }
-  ): Promise<any[]> {
+  ): Promise<StorageFile[]> {
     const targetBucket = options?.bucket || this.bucket;
     const { data, error } = await this.client.storage
       .from(targetBucket)
@@ -202,6 +243,15 @@ export class SupabaseStorage {
   }
 
   /**
+   * Create a virtual folder (via placeholder file)
+   */
+  async createFolder(folderPath: string, bucket: string): Promise<void> {
+    const placeholder = new Blob([''], { type: 'application/x-directory' });
+    const targetBucket = bucket || this.bucket;
+    await this.upload(`${folderPath}/.folder`, placeholder, { bucket: targetBucket });
+  }
+
+  /**
    * Generate a signed URL for direct upload (presigned)
    */
   async createSignedUploadUrl(path: string): Promise<string> {
@@ -235,9 +285,10 @@ export class SupabaseStorage {
   /**
    * Get public URL for a file (bucket must be public)
    */
-  getPublicUrl(path: string): string {
+  getPublicUrl(path: string, bucket?: string): string {
+    const targetBucket = bucket || this.bucket;
     const { data } = this.client.storage
-      .from(this.bucket)
+      .from(targetBucket)
       .getPublicUrl(path);
 
     return data.publicUrl;
@@ -246,7 +297,7 @@ export class SupabaseStorage {
   /**
    * List all buckets with metadata and calculated total size
    */
-  async listBuckets(): Promise<{ id: string; name: string; public: boolean; created_at: string; provider: string; size: number }[]> {
+  async listBuckets(): Promise<StorageBucket[]> {
     const { data, error } = await this.client.storage.listBuckets();
 
     if (error) {

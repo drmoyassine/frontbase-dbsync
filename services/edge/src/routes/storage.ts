@@ -5,7 +5,7 @@
  */
 
 import { Hono } from 'hono';
-import { createStorage, StorageConfig } from '../storage/supabase';
+import { createStorage, StorageConfig } from '../storage/supabase_provider';
 
 const storageRoute = new Hono();
 
@@ -157,10 +157,22 @@ storageRoute.post('/upload', async (c) => {
             publicUrl: result.publicUrl,
         });
     } catch (error) {
+
         console.error('Upload Error:', error);
+
+        // Extract error message properly
+        let errorMessage = 'Upload failed';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (error && typeof error === 'object') {
+            errorMessage = (error as any).message || JSON.stringify(error);
+        }
+
         return c.json({
             success: false,
-            error: error instanceof Error ? error.message : 'Upload failed',
+            error: errorMessage,
         }, 500);
     }
 });

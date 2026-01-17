@@ -20,9 +20,14 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Sync result type
+ */
+type SyncResult = { status: 'success' } | { status: 'not-configured' } | { status: 'error'; retry: boolean };
+
+/**
  * Fetch Redis settings from FastAPI and initialize Redis client
  */
-async function syncRedisSettingsFromFastAPI(): Promise<boolean> {
+async function syncRedisSettingsFromFastAPI(): Promise<SyncResult> {
     try {
         const response = await fetch(`${FASTAPI_URL}/api/sync/settings/redis/`, {
             headers: { 'Accept': 'application/json' },
@@ -31,7 +36,7 @@ async function syncRedisSettingsFromFastAPI(): Promise<boolean> {
 
         if (!response.ok) {
             console.warn(`[Startup Sync] Redis settings fetch failed: ${response.status}`);
-            return false;
+            return { status: 'error', retry: response.status >= 500 };
         }
 
         const settings = await response.json();
@@ -39,14 +44,20 @@ async function syncRedisSettingsFromFastAPI(): Promise<boolean> {
         if (settings.redis_enabled && settings.redis_url && settings.redis_token) {
             initRedis({ url: settings.redis_url, token: settings.redis_token });
             console.log('[Startup Sync] ✅ Redis initialized from settings');
-            return true;
+            return { status: 'success' };
         } else {
-            console.log('[Startup Sync] Redis not enabled or not configured');
-            return false;
+            console.log('[Startup Sync] ℹ️ Redis not enabled or not configured in Settings UI');
+            return { status: 'not-configured' };
         }
     } catch (error) {
-        console.warn('[Startup Sync] Redis settings sync failed:', error);
-        return false;
+        // Network error - FastAPI not ready yet
+        const isConnectionError = (error as any)?.cause?.code === 'ECONNREFUSED';
+        if (isConnectionError) {
+            console.warn('[Startup Sync] ⏳ FastAPI not ready yet, will retry...');
+        } else {
+            console.warn('[Startup Sync] Redis settings sync failed:', (error as Error).message);
+        }
+        return { status: 'error', retry: true };
     }
 }
 
@@ -120,12 +131,20 @@ export async function runStartupSync(): Promise<void> {
     // Sync Redis settings with retries (FastAPI may not be ready yet)
     console.log('[Startup Sync] Syncing Redis settings...');
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        const redisSuccess = await syncRedisSettingsFromFastAPI();
-        if (redisSuccess) {
+        const result = await syncRedisSettingsFromFastAPI();
+
+        if (result.status === 'success') {
+            break; // Redis initialized
+        }
+
+        if (result.status === 'not-configured') {
+            // Valid response, but Redis not set up - no need to retry
             break;
         }
-        if (attempt < MAX_RETRIES) {
-            console.log(`[Startup Sync] Redis sync attempt ${attempt}/${MAX_RETRIES} failed, retrying in ${RETRY_DELAY_MS / 1000}s...`);
+
+        // Error occurred - retry if recoverable
+        if (result.status === 'error' && result.retry && attempt < MAX_RETRIES) {
+            console.log(`[Startup Sync] Attempt ${attempt}/${MAX_RETRIES}, retrying in ${RETRY_DELAY_MS / 1000}s...`);
             await sleep(RETRY_DELAY_MS);
         }
     }

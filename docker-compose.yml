@@ -56,7 +56,8 @@ services:
     volumes:
       - edge_data:/app/data
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - frontbase
     restart: unless-stopped

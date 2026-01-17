@@ -13,7 +13,6 @@ services:
       # For Postgres migration, use: DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASS}@postgres:5432/${DB_NAME}
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
-      - REDIS_URL=redis://redis:6379/0
       # Edge Engine URL (internal network)
       - EDGE_URL=http://edge:3002
       # Admin Authentication

@@ -2,7 +2,7 @@
 
 Based on the Universal Edge Implementation Plan, here are the phased sprints organized by dependency order.
 
-**Last Updated:** 2026-01-13 01:31 AM
+**Last Updated:** 2026-01-18 01:22 AM
 
 ---
 
@@ -192,7 +192,7 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 - [x] **Cascading Filters**: Implemented dependent dropdowns
 
 ---
-## Sprint 4: Storage & Cache (MVP)
+## ✅ Sprint 4: Storage & Cache (COMPLETE)
 
 **Goal:** Integrate Supabase Storage for file handling and Upstash Redis for caching/queues.
 **Risk:** Low
@@ -202,26 +202,31 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 
 ### Sprint 4 Tasks
 
-- [ ] **Supabase Storage Integration**
-  - [ ] Create `services/actions/src/storage/supabase.ts`
-  - [ ] Implement upload/download via Supabase JS client
-  - [ ] Add presigned URL generation for direct uploads
-  - [ ] Create `/api/storage/upload` endpoint in Hono
-- [ ] **Upstash Redis Integration**
-  - [ ] Install `@upstash/redis`
-  - [ ] Create `services/actions/src/cache/redis.ts`
-  - [ ] Implement caching middleware for API responses
-  - [ ] Add queue support for async operations
-- [ ] **Documentation**
-  - [ ] Document environment variables
-  - [ ] Add setup guide for Supabase Storage bucket
+- [x] **Supabase Storage Integration**
+  - [x] Create `services/edge/src/storage/supabase.ts`
+  - [x] Implement upload/download via Supabase JS client
+  - [x] Add presigned URL generation for direct uploads
+  - [x] Create `/api/storage/*` endpoints in Hono
+  - [x] FileBrowser UI with breadcrumb navigation
+- [x] **Unified Redis Architecture** (HTTP-First)
+  - [x] Install `@upstash/redis`
+  - [x] Create `services/edge/src/cache/redis.ts` (dual adapter: Upstash HTTP + SRH)
+  - [x] Add `serverless-redis-http` to docker-compose for local dev
+  - [x] Settings UI with two-path selector (Upstash vs Self-Hosted)
+  - [x] Startup sync: Edge fetches Redis config from FastAPI
+  - [x] SSR data caching via `cached()` wrapper in `data.ts`
+  - [x] Alembic migrations to pre-seed Docker Redis defaults
+- [x] **Documentation**
+  - [x] `services/edge/src/cache/README.md` — full architecture guide
+  - [x] Knowledge item: `unified_frontbase_architecture`
 
 ### Sprint 4 Acceptance Criteria
 
-- [ ] Can upload files to Supabase Storage via API
-- [ ] Can generate presigned URLs for direct uploads
-- [ ] Redis caching reduces repeated API calls
-- [ ] Works in both local Docker and edge deployment
+- [x] Can upload files to Supabase Storage via API
+- [x] Can generate presigned URLs for direct uploads
+- [x] Redis caching reduces repeated API calls (Edge SSR)
+- [x] Works in both local Docker (`localhost:8079`) and VPS (`redis-http:80`)
+- [x] Settings UI allows switching between Upstash and Self-Hosted
 
 ---
 
@@ -322,7 +327,40 @@ The following items are **NOT in MVP** but planned for future releases:
 - End-to-end encrypted secrets storage
 - Audit logs and access control
 - Multi-environment sync (dev/staging/prod)
+- Multi-environment sync (dev/staging/prod)
 - **When:** When team collaboration or compliance (SOC2/HIPAA) required
+
+### Future Sprint: Local Data Proxy (Hybrid Edge)
+
+- **Goal:** Connect Edge workers to local/private infrastructure (Redis, SQL) without public IPs.
+- **Tools:** `serverless-redis-http`, `ngrok`, or Cloudflare Tunnels.
+- **Use Case:** Developing locally with "production-like" Edge constraints, or connecting Edge apps to on-premise legacy databases.
+- **Implementation:**
+  - Containerize proxy services (e.g., `srh` for Redis).
+  - Provide easy "dev-mode" docker-compose to spin up proxies side-by-side.
+  - Test suite for Hybrid connectivity.
+
+### Future Sprint: One-Click Integrations
+
+- **Goal:** Simplify connecting third-party services (Upstash, Supabase, Vercel) via OAuth/management APIs.
+- **Features:**
+  - **Upstash:** "Connect with Upstash" button -> Auto-create/select database -> Auto-fill Redis credentials.
+  - **Supabase:** Project selector via Management API.
+  - **Vercel:** Auto-deploy integration.
+- **When:** To improve "Time to Hello World" and onboarding UX.
+
+### Future Sprint: Backend Redis Caching
+
+- **Goal:** Extend Redis caching to FastAPI backend for data source operations.
+- **Use Cases:**
+  - **Schema Discovery**: Cache table/column metadata from user databases (speeds up Table Selector dropdowns)
+  - **External API Caching**: Cache responses from slow APIs (WordPress, Airtable, etc.)
+  - **Rate Limiting**: Protect backend endpoints from abuse
+- **Implementation:**
+  - Wire existing `redis_client.py` helpers (`cache_get`/`cache_set`) into data source routers
+  - Add `@cached` decorator pattern for endpoint handlers
+  - Share TTL configuration from Settings UI
+- **When:** When external API integrations (WordPress, etc.) are added
 
 ### Future Sprint: Storage Architecture Refactor
 
@@ -345,13 +383,13 @@ The following items are **NOT in MVP** but planned for future releases:
 | 2+     | Full Auth Shell         | 1d      | ✅ Complete  |
 | 3      | SSR Pages               | 1.5-2d  | ✅ Complete  |
 | 3.5    | Stability               | 2-3d    | ✅ Complete  |
-| 4      | Storage & Cache         | 2-3d    | Pending      |
+| 4      | Storage & Cache         | 2-3d    | ✅ Complete  |
 | 5      | Automation + Deploy     | 3-4d    | Pending      |
 | 6      | UI Components           | 2-3d    | Pending      |
 
-**Completed:** Sprints 0, 1, 2, 2+, 3, 3.5
-**Next:** Sprint 4 (Storage & Cache)
-**Remaining MVP:** ~7-10 days
+**Completed:** Sprints 0, 1, 2, 2+, 3, 3.5, 4
+**Next:** Sprint 5 (Automation + Deploy)
+**Remaining MVP:** ~5-7 days
 
 ---
 

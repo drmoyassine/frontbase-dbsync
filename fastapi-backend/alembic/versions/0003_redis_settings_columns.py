@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '0003_redis_settings_columns'
-down_revision: Union[str, None] = '0002_sync_schema_updates'
+down_revision: Union[str, None] = '0002_sync_schema'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useDataBindingStore } from '@/stores/data-binding-simple';
 
 interface TableSelectorProps {
   value?: string;
@@ -30,8 +31,12 @@ export function TableSelector({
 }: TableSelectorProps) {
   const [open, setOpen] = useState(false);
 
-  // Fetch tables from the selected datasource
-  const { data: tables = [], isLoading, error, refetch } = useQuery<string[]>({
+  // For MVP: Use data-binding store tables when no dataSourceId (Supabase direct mode)
+  const { tables: supabaseTables, tablesLoading: supabaseLoading, connected } = useDataBindingStore();
+  const useSupabaseDirect = !dataSourceId && connected;
+
+  // Fetch tables from the selected datasource (only when dataSourceId is provided)
+  const { data: datasourceTables = [], isLoading: datasourceLoading, error, refetch } = useQuery<string[]>({
     queryKey: ['datasource-tables', dataSourceId],
     queryFn: async () => {
       if (!dataSourceId) return [];
@@ -42,6 +47,13 @@ export function TableSelector({
     enabled: !!dataSourceId,
     staleTime: 30000, // Cache for 30 seconds
   });
+
+  // Use appropriate tables based on mode
+  const tables = useSupabaseDirect
+    ? supabaseTables.map(t => t.name) // Supabase tables have {name, row_count} structure
+    : datasourceTables;
+  const isLoading = useSupabaseDirect ? supabaseLoading : datasourceLoading;
+  const hasSource = useSupabaseDirect || !!dataSourceId;
 
   // Reset table selection when datasource changes
   React.useEffect(() => {
@@ -68,11 +80,11 @@ export function TableSelector({
         variant === 'compact' ? "flex-1 h-9" : "w-full",
         !value && "text-muted-foreground"
       )}
-      disabled={disabled || isLoading || !dataSourceId}
+      disabled={disabled || isLoading || !hasSource}
     >
       <span className="truncate">
-        {!dataSourceId
-          ? "Select datasource first"
+        {!hasSource
+          ? "Not connected to database"
           : isLoading
             ? "Loading tables..."
             : value || placeholder}
@@ -157,14 +169,14 @@ export function TableSelector({
         )}
       </div>
       {selector}
-      {!isLoading && !dataSourceId && (
+      {!isLoading && !hasSource && (
         <p className="text-sm text-muted-foreground">
-          Please select a datasource to view available tables.
+          Please connect to a database to view available tables.
         </p>
       )}
-      {!isLoading && dataSourceId && tables.length === 0 && !error && (
+      {!isLoading && hasSource && tables.length === 0 && !error && (
         <p className="text-sm text-muted-foreground">
-          No tables found in this datasource.
+          No tables found.
         </p>
       )}
       {error && (

@@ -298,7 +298,11 @@ function getFileIcon(name: string) {
 }
 
 // Components
-export function FileBrowser() {
+interface FileBrowserProps {
+    onNavigationChange?: (isBrowsing: boolean) => void;
+}
+
+export function FileBrowser({ onNavigationChange }: FileBrowserProps) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
 
@@ -313,7 +317,8 @@ export function FileBrowser() {
     // Auto-deselect on navigation
     React.useEffect(() => {
         setSelectedFiles(new Set());
-    }, [currentBucket, currentPath]);
+        onNavigationChange?.(!!currentBucket || !!currentPath);
+    }, [currentBucket, currentPath, onNavigationChange]);
 
     // Bucket Dialog State
     const [isBucketDialogOpen, setIsBucketDialogOpen] = useState(false);

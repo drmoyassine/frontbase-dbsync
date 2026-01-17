@@ -4,10 +4,30 @@
  * Hono routes for file upload, download, and management via Supabase Storage.
  */
 
-import { Hono } from 'hono';
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { createStorage, StorageConfig } from '../storage/supabase_provider';
+import {
+    StorageErrorSchema,
+    PresignRequestSchema,
+    PresignResponseSchema,
+    CreateFolderRequestSchema,
+    CreateFolderResponseSchema,
+    UploadRequestSchema,
+    UploadResponseSchema,
+    ListFilesQuerySchema,
+    ListFilesResponseSchema,
+    DeleteRequestSchema,
+    ListBucketsResponseSchema,
+    CreateBucketRequestSchema,
+    UpdateBucketRequestSchema,
+    BucketSchema,
+    BucketResponseSchema,
+    MoveRequestSchema,
+    SignedUrlQuerySchema,
+    SuccessResponseSchema
+} from '../schemas/storage';
 
-const storageRoute = new Hono();
+const storageRoute = new OpenAPIHono();
 
 // =============================================================================
 // Helper: Get storage config from request context or database
@@ -19,6 +39,7 @@ let lastFetchTime = 0;
 const CACHE_TTL = 60 * 1000; // 1 minute
 
 async function getStorageConfig(): Promise<StorageConfig | null> {
+    // ... (rest of getStorageConfig stays same)
     // 1. Check environment variables (Priority 1)
     const envUrl = process.env.SUPABASE_URL;
     const envKey = process.env.SUPABASE_SERVICE_KEY;
@@ -63,17 +84,60 @@ async function getStorageConfig(): Promise<StorageConfig | null> {
 // =============================================================================
 // POST /presign - Get presigned upload URL
 // =============================================================================
-storageRoute.post('/presign', async (c) => {
+const presignRoute = createRoute({
+    method: 'post',
+    path: '/presign',
+    tags: ['Storage'],
+    summary: 'Get presigned upload URL',
+    description: 'Generates a signed URL for direct file upload to Supabase Storage.',
+    request: {
+        body: {
+            content: {
+                'application/json': {
+                    schema: PresignRequestSchema,
+                },
+            },
+        },
+    },
+    responses: {
+        200: {
+            description: 'Presigned URL generated',
+            content: {
+                'application/json': {
+                    schema: PresignResponseSchema,
+                },
+            },
+        },
+        400: {
+            description: 'Storage not configured',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        500: {
+            description: 'Internal server error',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+    },
+});
+
+storageRoute.openapi(presignRoute, async (c) => {
     const config = await getStorageConfig();
     if (!config) {
         return c.json({ success: false, error: 'Storage not configured' }, 400);
     }
 
     try {
-        const { path } = await c.req.json<{ path: string }>();
+        const { path } = c.req.valid('json');
         const storage = createStorage(config);
         const signedUrl = await storage.createSignedUploadUrl(path);
-        return c.json({ success: true, signedUrl, path });
+        return c.json({ success: true, signedUrl, path }, 200);
     } catch (error) {
         return c.json({
             success: false,
@@ -85,18 +149,57 @@ storageRoute.post('/presign', async (c) => {
 // =============================================================================
 // POST /create-folder - Create a folder by uploading a placeholder file
 // =============================================================================
-storageRoute.post('/create-folder', async (c) => {
+const createFolderRoute = createRoute({
+    method: 'post',
+    path: '/create-folder',
+    tags: ['Storage'],
+    summary: 'Create a folder',
+    description: 'Creates a folder by uploading a .folder placeholder file to Supabase Storage.',
+    request: {
+        body: {
+            content: {
+                'application/json': {
+                    schema: CreateFolderRequestSchema,
+                },
+            },
+        },
+    },
+    responses: {
+        200: {
+            description: 'Folder created',
+            content: {
+                'application/json': {
+                    schema: CreateFolderResponseSchema,
+                },
+            },
+        },
+        400: {
+            description: 'Invalid request',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        500: {
+            description: 'Internal server error',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+    },
+});
+
+storageRoute.openapi(createFolderRoute, async (c) => {
     const config = await getStorageConfig();
     if (!config) {
         return c.json({ success: false, error: 'Storage not configured' }, 400);
     }
 
     try {
-        const { folderPath, bucket } = await c.req.json<{ folderPath: string; bucket: string }>();
-
-        if (!folderPath || !bucket) {
-            return c.json({ success: false, error: 'folderPath and bucket are required' }, 400);
-        }
+        const { folderPath, bucket } = c.req.valid('json');
 
         // Supabase doesn't have native folder creation - we create a placeholder file
         const placeholderPath = folderPath.endsWith('/') ? `${folderPath}.folder` : `${folderPath}/.folder`;
@@ -106,7 +209,7 @@ storageRoute.post('/create-folder', async (c) => {
         const placeholderContent = new Blob([''], { type: 'text/plain' });
         await storage.upload(placeholderPath, placeholderContent, { bucket, upsert: true });
 
-        return c.json({ success: true, folderPath, message: 'Folder created' });
+        return c.json({ success: true, folderPath, message: 'Folder created' }, 200);
     } catch (error) {
         console.error('Create folder error:', error);
         return c.json({
@@ -119,7 +222,58 @@ storageRoute.post('/create-folder', async (c) => {
 // =============================================================================
 // POST /upload - Direct upload (small files only)
 // =============================================================================
-storageRoute.post('/upload', async (c) => {
+const uploadRoute = createRoute({
+    method: 'post',
+    path: '/upload',
+    tags: ['Storage'],
+    summary: 'Direct file upload',
+    description: 'Uploads a file directly (limited to 5MB, use presigned URL for larger files).',
+    request: {
+        body: {
+            content: {
+                'multipart/form-data': {
+                    schema: UploadRequestSchema,
+                },
+            },
+        },
+    },
+    responses: {
+        200: {
+            description: 'File uploaded',
+            content: {
+                'application/json': {
+                    schema: UploadResponseSchema,
+                },
+            },
+        },
+        400: {
+            description: 'Invalid request',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        413: {
+            description: 'File too large',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        500: {
+            description: 'Internal server error',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+    },
+});
+
+storageRoute.openapi(uploadRoute, async (c) => {
     const config = await getStorageConfig();
     if (!config) {
         return c.json({ success: false, error: 'Storage not configured' }, 400);
@@ -154,8 +308,8 @@ storageRoute.post('/upload', async (c) => {
         return c.json({
             success: true,
             path: result.path,
-            publicUrl: result.publicUrl,
-        });
+            publicUrl: result.publicUrl || '',
+        }, 200);
     } catch (error) {
 
         console.error('Upload Error:', error);
@@ -180,22 +334,59 @@ storageRoute.post('/upload', async (c) => {
 // =============================================================================
 // GET /list - List files in a directory
 // =============================================================================
-storageRoute.get('/list', async (c) => {
+const listFilesRoute = createRoute({
+    method: 'get',
+    path: '/list',
+    tags: ['Storage'],
+    summary: 'List files',
+    description: 'Lists files and folders in a specified path within a bucket.',
+    request: {
+        query: ListFilesQuerySchema,
+    },
+    responses: {
+        200: {
+            description: 'File list retrieved',
+            content: {
+                'application/json': {
+                    schema: ListFilesResponseSchema,
+                },
+            },
+        },
+        400: {
+            description: 'Invalid request',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        500: {
+            description: 'Internal server error',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+    },
+});
+
+storageRoute.openapi(listFilesRoute, async (c) => {
     const config = await getStorageConfig();
     if (!config) {
         return c.json({ success: false, error: 'Storage not configured' }, 400);
     }
 
-    const bucket = c.req.query('bucket') || config.bucket;
-    const path = c.req.query('path') || '';
-    const limit = parseInt(c.req.query('limit') || '100');
-    const offset = parseInt(c.req.query('offset') || '0');
-    const search = c.req.query('search');
+    const { bucket: queryBucket, path: queryPath, limit: queryLimit, offset: queryOffset, search } = c.req.valid('query');
+    const bucket = queryBucket || config.bucket;
+    const path = queryPath || '';
+    const limit = parseInt(queryLimit);
+    const offset = parseInt(queryOffset);
     const storage = createStorage(config);
 
     try {
         const files = await storage.list(path, { limit, offset, bucket, search });
-        return c.json({ success: true, files });
+        return c.json({ success: true, files }, 200);
     } catch (error) {
         return c.json({
             success: false,
@@ -207,17 +398,60 @@ storageRoute.get('/list', async (c) => {
 // =============================================================================
 // DELETE /delete - Delete a file
 // =============================================================================
-storageRoute.delete('/delete', async (c) => {
+const deleteFileRoute = createRoute({
+    method: 'delete',
+    path: '/delete',
+    tags: ['Storage'],
+    summary: 'Delete files',
+    description: 'Deletes one or more files from a bucket.',
+    request: {
+        body: {
+            content: {
+                'application/json': {
+                    schema: DeleteRequestSchema,
+                },
+            },
+        },
+    },
+    responses: {
+        200: {
+            description: 'Files deleted',
+            content: {
+                'application/json': {
+                    schema: SuccessResponseSchema,
+                },
+            },
+        },
+        400: {
+            description: 'Invalid request',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        500: {
+            description: 'Internal server error',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+    },
+});
+
+storageRoute.openapi(deleteFileRoute, async (c) => {
     const config = await getStorageConfig();
     if (!config) {
         return c.json({ success: false, error: 'Storage not configured' }, 400);
     }
 
     try {
-        const { paths, bucket } = await c.req.json<{ paths: string | string[]; bucket?: string }>();
+        const { paths, bucket } = c.req.valid('json');
         const storage = createStorage(config);
         await storage.delete(paths, { bucket });
-        return c.json({ success: true });
+        return c.json({ success: true }, 200);
     } catch (error) {
         return c.json({
             success: false,
@@ -229,7 +463,41 @@ storageRoute.delete('/delete', async (c) => {
 // =============================================================================
 // GET /buckets - List all buckets
 // =============================================================================
-storageRoute.get('/buckets', async (c) => {
+const listBucketsRoute = createRoute({
+    method: 'get',
+    path: '/buckets',
+    tags: ['Storage'],
+    summary: 'List buckets',
+    description: 'Lists all available storage buckets.',
+    responses: {
+        200: {
+            description: 'Bucket list retrieved',
+            content: {
+                'application/json': {
+                    schema: ListBucketsResponseSchema,
+                },
+            },
+        },
+        400: {
+            description: 'Invalid request',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        500: {
+            description: 'Internal server error',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+    },
+});
+
+storageRoute.openapi(listBucketsRoute, async (c) => {
     const config = await getStorageConfig();
     if (!config) {
         return c.json({ success: false, error: 'Storage not configured' }, 400);
@@ -239,7 +507,7 @@ storageRoute.get('/buckets', async (c) => {
 
     try {
         const buckets = await storage.listBuckets();
-        return c.json({ success: true, buckets });
+        return c.json({ success: true, buckets }, 200);
     } catch (error) {
         return c.json({
             success: false,
@@ -251,26 +519,64 @@ storageRoute.get('/buckets', async (c) => {
 // =============================================================================
 // POST /buckets - Create a bucket
 // =============================================================================
-storageRoute.post('/buckets', async (c) => {
+const createBucketRoute = createRoute({
+    method: 'post',
+    path: '/buckets',
+    tags: ['Storage'],
+    summary: 'Create a bucket',
+    description: 'Creates a new storage bucket in Supabase.',
+    request: {
+        body: {
+            content: {
+                'application/json': {
+                    schema: CreateBucketRequestSchema,
+                },
+            },
+        },
+    },
+    responses: {
+        200: {
+            description: 'Bucket created',
+            content: {
+                'application/json': {
+                    schema: BucketResponseSchema,
+                },
+            },
+        },
+        400: {
+            description: 'Invalid request',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        500: {
+            description: 'Internal server error',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+    },
+});
+
+storageRoute.openapi(createBucketRoute, async (c) => {
     const config = await getStorageConfig();
     if (!config) {
         return c.json({ success: false, error: 'Storage not configured' }, 400);
     }
 
     try {
-        const { name, public: isPublic, file_size_limit, allowed_mime_types } = await c.req.json<{
-            name: string;
-            public?: boolean;
-            file_size_limit?: number;
-            allowed_mime_types?: string[];
-        }>();
+        const { name, public: isPublic, file_size_limit, allowed_mime_types } = c.req.valid('json');
         const storage = createStorage(config);
         const bucket = await storage.createBucket(name, {
             public: isPublic,
             file_size_limit,
             allowed_mime_types
         });
-        return c.json({ success: true, bucket });
+        return c.json({ success: true, bucket }, 200);
     } catch (error) {
         return c.json({
             success: false,
@@ -282,7 +588,46 @@ storageRoute.post('/buckets', async (c) => {
 // =============================================================================
 // GET /buckets/:id - Get bucket details
 // =============================================================================
-storageRoute.get('/buckets/:id', async (c) => {
+const getBucketRoute = createRoute({
+    method: 'get',
+    path: '/buckets/{id}',
+    tags: ['Storage'],
+    summary: 'Get bucket details',
+    description: 'Retrieves details for a specific storage bucket.',
+    request: {
+        params: z.object({
+            id: z.string().openapi({ example: 'my-bucket' }),
+        }),
+    },
+    responses: {
+        200: {
+            description: 'Bucket details retrieved',
+            content: {
+                'application/json': {
+                    schema: BucketResponseSchema,
+                },
+            },
+        },
+        400: {
+            description: 'Invalid request',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        500: {
+            description: 'Internal server error',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+    },
+});
+
+storageRoute.openapi(getBucketRoute, async (c) => {
     const config = await getStorageConfig();
     if (!config) {
         return c.json({ success: false, error: 'Storage not configured' }, 400);
@@ -293,7 +638,7 @@ storageRoute.get('/buckets/:id', async (c) => {
 
     try {
         const bucket = await storage.getBucket(id);
-        return c.json({ success: true, bucket });
+        return c.json({ success: true, bucket }, 200);
     } catch (error) {
         return c.json({
             success: false,
@@ -305,7 +650,53 @@ storageRoute.get('/buckets/:id', async (c) => {
 // =============================================================================
 // PUT /buckets/:id - Update bucket
 // =============================================================================
-storageRoute.put('/buckets/:id', async (c) => {
+const updateBucketRoute = createRoute({
+    method: 'put',
+    path: '/buckets/{id}',
+    tags: ['Storage'],
+    summary: 'Update a bucket',
+    description: 'Updates settings for an existing storage bucket.',
+    request: {
+        params: z.object({
+            id: z.string(),
+        }),
+        body: {
+            content: {
+                'application/json': {
+                    schema: UpdateBucketRequestSchema,
+                },
+            },
+        },
+    },
+    responses: {
+        200: {
+            description: 'Bucket updated',
+            content: {
+                'application/json': {
+                    schema: SuccessResponseSchema,
+                },
+            },
+        },
+        400: {
+            description: 'Invalid request',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        500: {
+            description: 'Internal server error',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+    },
+});
+
+storageRoute.openapi(updateBucketRoute, async (c) => {
     const config = await getStorageConfig();
     if (!config) {
         return c.json({ success: false, error: 'Storage not configured' }, 400);
@@ -315,17 +706,13 @@ storageRoute.put('/buckets/:id', async (c) => {
     const storage = createStorage(config);
 
     try {
-        const { public: isPublic, file_size_limit, allowed_mime_types } = await c.req.json<{
-            public: boolean;
-            file_size_limit?: number;
-            allowed_mime_types?: string[];
-        }>();
+        const { public: isPublic, file_size_limit, allowed_mime_types } = c.req.valid('json');
         const result = await storage.updateBucket(id, {
             public: isPublic,
             file_size_limit,
             allowed_mime_types
         });
-        return c.json({ success: true, message: result.message });
+        return c.json({ success: true, message: result.message }, 200);
     } catch (error) {
         return c.json({
             success: false,
@@ -337,7 +724,46 @@ storageRoute.put('/buckets/:id', async (c) => {
 // =============================================================================
 // DELETE /buckets/:id - Delete bucket
 // =============================================================================
-storageRoute.delete('/buckets/:id', async (c) => {
+const deleteBucketRoute = createRoute({
+    method: 'delete',
+    path: '/buckets/{id}',
+    tags: ['Storage'],
+    summary: 'Delete a bucket',
+    description: 'Deletes a storage bucket. The bucket must be empty.',
+    request: {
+        params: z.object({
+            id: z.string(),
+        }),
+    },
+    responses: {
+        200: {
+            description: 'Bucket deleted',
+            content: {
+                'application/json': {
+                    schema: SuccessResponseSchema,
+                },
+            },
+        },
+        400: {
+            description: 'Invalid request',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        500: {
+            description: 'Internal server error',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+    },
+});
+
+storageRoute.openapi(deleteBucketRoute, async (c) => {
     const config = await getStorageConfig();
     if (!config) {
         return c.json({ success: false, error: 'Storage not configured' }, 400);
@@ -348,7 +774,7 @@ storageRoute.delete('/buckets/:id', async (c) => {
 
     try {
         const result = await storage.deleteBucket(id);
-        return c.json({ success: true, message: result.message });
+        return c.json({ success: true, message: result.message }, 200);
     } catch (error) {
         return c.json({
             success: false,
@@ -360,7 +786,46 @@ storageRoute.delete('/buckets/:id', async (c) => {
 // =============================================================================
 // POST /buckets/:id/empty - Empty bucket
 // =============================================================================
-storageRoute.post('/buckets/:id/empty', async (c) => {
+const emptyBucketRoute = createRoute({
+    method: 'post',
+    path: '/buckets/{id}/empty',
+    tags: ['Storage'],
+    summary: 'Empty a bucket',
+    description: 'Deletes all files within a storage bucket.',
+    request: {
+        params: z.object({
+            id: z.string(),
+        }),
+    },
+    responses: {
+        200: {
+            description: 'Bucket emptied',
+            content: {
+                'application/json': {
+                    schema: SuccessResponseSchema,
+                },
+            },
+        },
+        400: {
+            description: 'Invalid request',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        500: {
+            description: 'Internal server error',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+    },
+});
+
+storageRoute.openapi(emptyBucketRoute, async (c) => {
     const config = await getStorageConfig();
     if (!config) {
         return c.json({ success: false, error: 'Storage not configured' }, 400);
@@ -371,7 +836,7 @@ storageRoute.post('/buckets/:id/empty', async (c) => {
 
     try {
         const result = await storage.emptyBucket(id);
-        return c.json({ success: true, message: result.message });
+        return c.json({ success: true, message: result.message }, 200);
     } catch (error) {
         return c.json({
             success: false,
@@ -383,23 +848,61 @@ storageRoute.post('/buckets/:id/empty', async (c) => {
 // =============================================================================
 // POST /move - Move file
 // =============================================================================
-storageRoute.post('/move', async (c) => {
+const moveFileRoute = createRoute({
+    method: 'post',
+    path: '/move',
+    tags: ['Storage'],
+    summary: 'Move files',
+    description: 'Moves a file from one path/bucket to another.',
+    request: {
+        body: {
+            content: {
+                'application/json': {
+                    schema: MoveRequestSchema,
+                },
+            },
+        },
+    },
+    responses: {
+        200: {
+            description: 'File moved',
+            content: {
+                'application/json': {
+                    schema: SuccessResponseSchema,
+                },
+            },
+        },
+        400: {
+            description: 'Invalid request',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        500: {
+            description: 'Internal server error',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+    },
+});
+
+storageRoute.openapi(moveFileRoute, async (c) => {
     const config = await getStorageConfig();
     if (!config) {
         return c.json({ success: false, error: 'Storage not configured' }, 400);
     }
 
     try {
-        const { sourceKey, destinationKey, sourceBucket, destBucket } = await c.req.json<{
-            sourceKey: string;
-            destinationKey: string;
-            sourceBucket?: string;
-            destBucket?: string;
-        }>();
+        const { sourceKey, destinationKey, sourceBucket, destBucket } = c.req.valid('json');
 
         const storage = createStorage(config);
         const result = await storage.move(sourceKey, destinationKey, { sourceBucket, destBucket });
-        return c.json({ success: true, message: result.message });
+        return c.json({ success: true, message: result.message }, 200);
     } catch (error) {
         return c.json({
             success: false,
@@ -411,23 +914,61 @@ storageRoute.post('/move', async (c) => {
 // =============================================================================
 // POST /copy - Copy file
 // =============================================================================
-storageRoute.post('/copy', async (c) => {
+const copyFileRoute = createRoute({
+    method: 'post',
+    path: '/copy',
+    tags: ['Storage'],
+    summary: 'Copy files',
+    description: 'Copies a file from one path/bucket to another.',
+    request: {
+        body: {
+            content: {
+                'application/json': {
+                    schema: MoveRequestSchema,
+                },
+            },
+        },
+    },
+    responses: {
+        200: {
+            description: 'File copied',
+            content: {
+                'application/json': {
+                    schema: SuccessResponseSchema,
+                },
+            },
+        },
+        400: {
+            description: 'Invalid request',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        500: {
+            description: 'Internal server error',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+    },
+});
+
+storageRoute.openapi(copyFileRoute, async (c) => {
     const config = await getStorageConfig();
     if (!config) {
         return c.json({ success: false, error: 'Storage not configured' }, 400);
     }
 
     try {
-        const { sourceKey, destinationKey, sourceBucket, destBucket } = await c.req.json<{
-            sourceKey: string;
-            destinationKey: string;
-            sourceBucket?: string;
-            destBucket?: string;
-        }>();
+        const { sourceKey, destinationKey, sourceBucket, destBucket } = c.req.valid('json');
 
         const storage = createStorage(config);
         const result = await storage.copy(sourceKey, destinationKey, { sourceBucket, destBucket });
-        return c.json({ success: true, message: result.message });
+        return c.json({ success: true, message: result.message }, 200);
     } catch (error) {
         return c.json({
             success: false,
@@ -439,15 +980,51 @@ storageRoute.post('/copy', async (c) => {
 // =============================================================================
 // GET /signed-url - Get signed download URL
 // =============================================================================
-storageRoute.get('/signed-url', async (c) => {
+const getSignedUrlRoute = createRoute({
+    method: 'get',
+    path: '/signed-url',
+    tags: ['Storage'],
+    summary: 'Get signed download URL',
+    description: 'Generates a signed URL for temporary access to a private file.',
+    request: {
+        query: SignedUrlQuerySchema,
+    },
+    responses: {
+        200: {
+            description: 'Signed URL generated',
+            content: {
+                'application/json': {
+                    schema: PresignResponseSchema,
+                },
+            },
+        },
+        400: {
+            description: 'Invalid request',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+        500: {
+            description: 'Internal server error',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
+    },
+});
+
+storageRoute.openapi(getSignedUrlRoute, async (c) => {
     const config = await getStorageConfig();
     if (!config) {
         return c.json({ success: false, error: 'Storage not configured' }, 400);
     }
 
-    const path = c.req.query('path');
-    const bucket = c.req.query('bucket');
-    const expiresIn = parseInt(c.req.query('expiresIn') || '3600');
+    const { path, bucket, expiresIn: queryExpiresIn } = c.req.valid('query');
+    const expiresIn = parseInt(queryExpiresIn);
 
     if (!path) {
         return c.json({ success: false, error: 'Path is required' }, 400);
@@ -457,7 +1034,7 @@ storageRoute.get('/signed-url', async (c) => {
 
     try {
         const signedUrl = await storage.createSignedUrl(path, expiresIn, bucket);
-        return c.json({ success: true, signedUrl, path });
+        return c.json({ success: true, signedUrl, path }, 200);
     } catch (error) {
         return c.json({
             success: false,

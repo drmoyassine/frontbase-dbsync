@@ -230,15 +230,48 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 
 ---
 
-## Sprint 5: Automation Engine + Deploy (MVP)
+## Sprint 5: UI Components (MVP)
+
+**Goal:** Add essential UI components for data visualization and landing pages.
+**Risk:** Low
+**Estimated Effort:** 2-3 days
+
+### Sprint 5 Tasks
+
+- [ ] **Charts Component**
+  - [ ] Integrate charting library (Chart.js or Recharts)
+  - [ ] Create `ChartRenderer` for SSR pages
+  - [ ] Support chart types: Bar, Line, Pie, Area
+  - [ ] Add data binding to chart props
+- [ ] **Landing Page Components** (if time permits)
+  - [ ] Hero section with gradient backgrounds
+  - [ ] Feature grid with icons
+  - [ ] Testimonial carousel
+  - [ ] Pricing table
+  - [ ] CTA sections
+- [ ] **Component Polish**
+  - [ ] Improve existing component styling
+  - [ ] Add animation/transitions
+  - [ ] Mobile responsiveness audit
+
+### Sprint 5 Acceptance Criteria
+
+- [ ] Charts render with data from Supabase
+- [ ] Charts are interactive (hover, click events)
+- [ ] Landing page components drag-and-drop ready
+- [ ] All components work in SSR and client modes
+
+---
+
+## Sprint 6: Automation Engine + Deploy (MVP Final)
 
 **Goal:** Enhance the Dafthunk automation engine and enable one-click deployment to edge platforms.
 **Risk:** Medium
 **Estimated Effort:** 3-4 days
 
-> See `sprint5_automation_deploy_plan.md` for detailed implementation plan.
+> See `archive/sprint6_automation_deploy_plan.md` for detailed implementation plan.
 
-### Sprint 5 Tasks
+### Sprint 6 Tasks
 
 - [ ] **Automation Engine Enhancement**
   - [ ] Add new Dafthunk node types (HTTP Request, Transform, Condition)
@@ -257,46 +290,13 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
   - [ ] Secrets management for edge deployments
   - [ ] Environment variable injection
 
-### Sprint 5 Acceptance Criteria
+### Sprint 6 Acceptance Criteria
 
 - [ ] New automation nodes work in workflow editor
 - [ ] Workflows can be scheduled with cron triggers
 - [ ] One-click deploy to Cloudflare Workers works
 - [ ] Deployment status visible in Builder UI
 - [ ] Secrets are securely managed
-
----
-
-## Sprint 6: UI Components (MVP Final)
-
-**Goal:** Add essential UI components for data visualization and landing pages.
-**Risk:** Low
-**Estimated Effort:** 2-3 days
-
-### Sprint 6 Tasks
-
-- [ ] **Charts Component**
-  - [ ] Integrate charting library (Chart.js or Recharts)
-  - [ ] Create `ChartRenderer` for SSR pages
-  - [ ] Support chart types: Bar, Line, Pie, Area
-  - [ ] Add data binding to chart props
-- [ ] **Landing Page Components** (if time permits)
-  - [ ] Hero section with gradient backgrounds
-  - [ ] Feature grid with icons
-  - [ ] Testimonial carousel
-  - [ ] Pricing table
-  - [ ] CTA sections
-- [ ] **Component Polish**
-  - [ ] Improve existing component styling
-  - [ ] Add animation/transitions
-  - [ ] Mobile responsiveness audit
-
-### Sprint 6 Acceptance Criteria
-
-- [ ] Charts render with data from Supabase
-- [ ] Charts are interactive (hover, click events)
-- [ ] Landing page components drag-and-drop ready
-- [ ] All components work in SSR and client modes
 
 ---
 
@@ -384,11 +384,11 @@ The following items are **NOT in MVP** but planned for future releases:
 | 3      | SSR Pages               | 1.5-2d  | ✅ Complete  |
 | 3.5    | Stability               | 2-3d    | ✅ Complete  |
 | 4      | Storage & Cache         | 2-3d    | ✅ Complete  |
-| 5      | Automation + Deploy     | 3-4d    | Pending      |
-| 6      | UI Components           | 2-3d    | Pending      |
+| 5      | UI Components           | 2-3d    | Pending      |
+| 6      | Automation + Deploy     | 3-4d    | Pending      |
 
 **Completed:** Sprints 0, 1, 2, 2+, 3, 3.5, 4
-**Next:** Sprint 5 (Automation + Deploy)
+**Next:** Sprint 5 (UI Components)
 **Remaining MVP:** ~5-7 days
 
 ---

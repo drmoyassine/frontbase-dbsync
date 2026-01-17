@@ -23,8 +23,6 @@ services:
       - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-false}
     volumes:
       - backend_data:/app/data
-    depends_on:
-      - redis
     networks:
       - frontbase
     restart: unless-stopped

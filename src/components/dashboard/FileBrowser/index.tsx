@@ -37,11 +37,17 @@ import { fetchBuckets, fetchFiles, getSignedUrl } from './api';
 import { useFileBrowserState } from './hooks/useFileBrowserState';
 import { useStorageMutations } from './hooks/useStorageMutations';
 
-export function FileBrowser() {
+// Types
+interface FileBrowserProps {
+    onNavigationChange?: (isBrowsing: boolean) => void;
+}
+
+export function FileBrowser({ onNavigationChange }: FileBrowserProps = {}) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const [isRefreshing, setIsRefreshing] = React.useState(false);
+    const [uploadingCount, setUploadingCount] = React.useState(0);
 
     // Use refactored state hook
     const state = useFileBrowserState();
@@ -60,6 +66,11 @@ export function FileBrowser() {
         isMoveDialogOpen, setIsMoveDialogOpen, moveTargets, setMoveTargets, moveDestBucket, setMoveDestBucket, moveDestPath, setMoveDestPath, handleMove,
         handleBucketClick, handleBack,
     } = state;
+
+    // Notify parent about navigation state
+    React.useEffect(() => {
+        onNavigationChange?.(!!currentBucket);
+    }, [currentBucket, onNavigationChange]);
 
     // Use refactored mutations hook
     const mutations = useStorageMutations({
@@ -124,9 +135,11 @@ export function FileBrowser() {
     };
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            uploadMutation.mutate(file);
+        const files = e.target.files;
+        if (files && files.length > 0) {
+            setUploadingCount(files.length);
+            // Upload files sequentially
+            Array.from(files).forEach(file => uploadMutation.mutate(file));
         }
         e.target.value = '';
     };
@@ -239,6 +252,37 @@ export function FileBrowser() {
     const totalBucketPages = getTotalBucketPages(filteredAndSortedBuckets);
     const sortedFiles = files ? getSortedFiles(files) : [];
     const filteredFiles = sortedFiles.filter((f) => fileSearch === '' || f.name.toLowerCase().includes(fileSearch.toLowerCase()));
+
+    // Get current bucket data for breadcrumb
+    const currentBucketData = buckets?.find(b => b.name === currentBucket);
+
+    // Build breadcrumb segments for file list view
+    const breadcrumbSegments = React.useMemo(() => {
+        const segments: { label: string; path: string | null }[] = [
+            { label: currentBucketData?.provider || 'Supabase', path: null }, // Provider - go to bucket list
+            { label: currentBucket || '', path: '' }, // Bucket root
+        ];
+        if (currentPath) {
+            const parts = currentPath.split('/');
+            parts.forEach((part, index) => {
+                segments.push({
+                    label: part,
+                    path: parts.slice(0, index + 1).join('/')
+                });
+            });
+        }
+        return segments;
+    }, [currentBucket, currentPath, currentBucketData?.provider]);
+
+    const handleBreadcrumbClick = (segment: { label: string; path: string | null }) => {
+        if (segment.path === null) {
+            setCurrentBucket(null);
+            setCurrentPath('');
+        } else {
+            setCurrentPath(segment.path);
+        }
+        setPage(0);
+    };
 
     // =========================================================================
     // RENDER: Bucket List View
@@ -468,12 +512,35 @@ export function FileBrowser() {
                         <Button variant="ghost" size="sm" onClick={handleBack}>
                             <ArrowLeft className="h-4 w-4" />
                         </Button>
-                        <div>
-                            <CardTitle className="flex items-center gap-2 text-lg">
-                                <FolderOpen className="h-5 w-5" />
-                                {currentBucket}{currentPath && `/${currentPath}`}
-                            </CardTitle>
-                        </div>
+                        {/* Breadcrumb Navigation */}
+                        <nav className="flex items-center gap-1 text-sm">
+                            {breadcrumbSegments.map((segment, index) => (
+                                <React.Fragment key={index}>
+                                    {index > 0 && <span className="text-muted-foreground mx-1">/</span>}
+                                    {index === 0 ? (
+                                        <Badge
+                                            variant="outline"
+                                            className="cursor-pointer hover:bg-muted text-[10px] font-semibold bg-[#006239]/10 text-[#006239] border-[#006239]/20"
+                                            onClick={() => handleBreadcrumbClick(segment)}
+                                        >
+                                            {segment.label}
+                                        </Badge>
+                                    ) : index === breadcrumbSegments.length - 1 ? (
+                                        <span className="font-medium flex items-center gap-1">
+                                            <FolderOpen className="h-4 w-4" />
+                                            {segment.label}
+                                        </span>
+                                    ) : (
+                                        <button
+                                            className="text-muted-foreground hover:text-foreground hover:underline"
+                                            onClick={() => handleBreadcrumbClick(segment)}
+                                        >
+                                            {segment.label}
+                                        </button>
+                                    )}
+                                </React.Fragment>
+                            ))}
+                        </nav>
                     </div>
                     <div className="flex gap-2 items-center">
                         {selectedFiles.size > 0 && (
@@ -499,9 +566,37 @@ export function FileBrowser() {
                             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}><RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} /></Button>
                             <Button variant="outline" size="sm" onClick={() => setIsFolderDialogOpen(true)}><FolderPlus className="h-4 w-4 mr-1" /> New Folder</Button>
                             <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploadMutation.isPending}>
-                                <Upload className="h-4 w-4 mr-1" /> {uploadMutation.isPending ? 'Uploading...' : 'Upload'}
+                                <Upload className="h-4 w-4 mr-1" /> {uploadMutation.isPending ? `Uploading${uploadingCount > 1 ? ` ${uploadingCount}` : ''}...` : 'Upload'}
                             </Button>
-                            <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} />
+                            {/* Bucket Actions Hamburger Menu */}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" size="sm" className="h-9 w-9 p-0">
+                                        <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => {
+                                        const bucket = buckets?.find(b => b.name === currentBucket);
+                                        if (bucket) handleOpenEditBucket(bucket, {} as React.MouseEvent);
+                                    }}>
+                                        <Settings className="h-4 w-4 mr-2" /> Bucket Settings
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => {
+                                        const bucket = buckets?.find(b => b.name === currentBucket);
+                                        if (bucket) setConfirmDialog({ isOpen: true, title: 'Empty Bucket', description: `Are you sure you want to empty "${bucket.name}"? This will delete all files.`, actionLabel: 'Empty', variant: 'destructive', actionType: 'empty', targetId: bucket.id });
+                                    }}>
+                                        <Archive className="h-4 w-4 mr-2" /> Empty Bucket
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem className="text-destructive" onClick={() => {
+                                        const bucket = buckets?.find(b => b.name === currentBucket);
+                                        if (bucket) setConfirmDialog({ isOpen: true, title: 'Delete Bucket', description: `Are you sure you want to delete "${bucket.name}"?`, actionLabel: 'Delete', variant: 'destructive', actionType: 'deleteBucket', targetId: bucket.id });
+                                    }}>
+                                        <X className="h-4 w-4 mr-2" /> Delete Bucket
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
                         </div>
                     </div>
                 </div>

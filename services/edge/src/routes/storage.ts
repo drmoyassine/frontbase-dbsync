@@ -44,9 +44,10 @@ async function getStorageConfig(): Promise<StorageConfig | null> {
     const envUrl = process.env.SUPABASE_URL;
     const envKey = process.env.SUPABASE_SERVICE_KEY;
     const envBucket = process.env.SUPABASE_STORAGE_BUCKET || 'uploads';
+    const envDatasourceName = process.env.SUPABASE_DATASOURCE_NAME || 'Supabase';
 
     if (envUrl && envKey) {
-        return { supabaseUrl: envUrl, supabaseKey: envKey, bucket: envBucket };
+        return { supabaseUrl: envUrl, supabaseKey: envKey, bucket: envBucket, datasourceName: envDatasourceName };
     }
 
     // 2. Check cache
@@ -68,8 +69,10 @@ async function getStorageConfig(): Promise<StorageConfig | null> {
                 cachedConfig = {
                     supabaseUrl: data.supabaseUrl,
                     supabaseKey: data.supabaseServiceKey || data.supabaseKey,
-                    bucket: envBucket // Bucket still mainly from env or default
+                    bucket: envBucket, // Bucket still mainly from env or default
+                    datasourceName: data.datasourceName || envDatasourceName
                 };
+                console.log(`[Storage Config] datasourceName: ${cachedConfig.datasourceName}`);
                 lastFetchTime = now;
                 return cachedConfig;
             }

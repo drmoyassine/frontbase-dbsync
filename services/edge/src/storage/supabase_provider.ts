@@ -22,11 +22,13 @@ export interface StorageConfig {
   supabaseUrl: string;
   supabaseKey: string;
   bucket?: string;
+  datasourceName?: string;
 }
 
 export class SupabaseStorage implements IStorageProvider {
   private client: SupabaseClient;
   private bucket: string;
+  private datasourceName: string;
 
   constructor(config: StorageConfig | SupabaseStorageConfig) {
     // Support both old and new config formats
@@ -34,7 +36,8 @@ export class SupabaseStorage implements IStorageProvider {
     const key = (config as any).supabaseKey || (config as any).key;
     this.client = createClient(url, key);
     this.bucket = config.bucket || 'uploads';
-    console.log('[SUPABASE.TS] Class instance created');
+    this.datasourceName = (config as any).datasourceName || 'Supabase';
+    console.log('[SUPABASE.TS] Class instance created, datasourceName:', this.datasourceName);
   }
 
   /**
@@ -312,7 +315,7 @@ export class SupabaseStorage implements IStorageProvider {
         name: bucket.name,
         public: bucket.public,
         created_at: bucket.created_at,
-        provider: 'Supabase',
+        provider: this.datasourceName,
         size: size
       };
     }));

@@ -11,6 +11,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 import uuid
+from datetime import datetime, timezone
 
 
 # revision identifiers, used by Alembic.
@@ -29,17 +30,19 @@ def upgrade() -> None:
     row = result.fetchone()
     
     if not row:
-        # Create project_settings record with UUID and Redis defaults
+        # Create project_settings record with UUID, Redis defaults, and updated_at
         new_id = str(uuid.uuid4())
+        current_time = datetime.now(timezone.utc)
+        
         conn.execute(sa.text("""
             INSERT INTO project_settings (
                 id, redis_url, redis_token, redis_type, redis_enabled, 
-                cache_ttl_data, cache_ttl_count
+                cache_ttl_data, cache_ttl_count, updated_at
             ) VALUES (
                 :id, 'http://redis-http:80', 'dev_token_change_in_prod', 'self-hosted', 1,
-                60, 300
+                60, 300, :updated_at
             )
-        """), {"id": new_id})
+        """), {"id": new_id, "updated_at": current_time})
         print(f"[Migration 0005] Created project_settings with Docker Redis defaults (id={new_id})")
     else:
         settings_id, redis_url, redis_enabled = row

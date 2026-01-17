@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useDataBindingStore } from '@/stores/data-binding-simple';
 
 interface TableSelectorProps {
   value?: string;
@@ -31,12 +30,8 @@ export function TableSelector({
 }: TableSelectorProps) {
   const [open, setOpen] = useState(false);
 
-  // For MVP: Use data-binding store tables when no dataSourceId (Supabase direct mode)
-  const { tables: supabaseTables, tablesLoading: supabaseLoading, connected } = useDataBindingStore();
-  const useSupabaseDirect = !dataSourceId && connected;
-
-  // Fetch tables from the selected datasource (only when dataSourceId is provided)
-  const { data: datasourceTables = [], isLoading: datasourceLoading, error, refetch } = useQuery<string[]>({
+  // Fetch tables from the selected datasource
+  const { data: tables = [], isLoading, error, refetch } = useQuery<string[]>({
     queryKey: ['datasource-tables', dataSourceId],
     queryFn: async () => {
       if (!dataSourceId) return [];
@@ -48,12 +43,7 @@ export function TableSelector({
     staleTime: 30000, // Cache for 30 seconds
   });
 
-  // Use appropriate tables based on mode
-  const tables = useSupabaseDirect
-    ? supabaseTables.map(t => t.name) // Supabase tables have {name, row_count} structure
-    : datasourceTables;
-  const isLoading = useSupabaseDirect ? supabaseLoading : datasourceLoading;
-  const hasSource = useSupabaseDirect || !!dataSourceId;
+  const hasSource = !!dataSourceId;
 
   // Reset table selection when datasource changes
   React.useEffect(() => {

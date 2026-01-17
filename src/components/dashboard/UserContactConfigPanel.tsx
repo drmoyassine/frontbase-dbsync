@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { datasourcesApi } from '@/modules/dbsync/api/datasources';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -6,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { TableSelector } from '@/components/data-binding/TableSelector';
+import { AuthProviderSelector } from './AuthProviderSelector';
 import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useDashboardStore } from '@/stores/dashboard';
@@ -272,6 +275,7 @@ export function UserContactConfigPanel() {
     createdAtColumn: '',
   });
   const [enabled, setEnabledState] = useState(true);
+  const [authDataSourceId, setAuthDataSourceId] = useState<string | null>(null);
   const [contactTypes, setContactTypes] = useState<Record<string, string>>({});
   const [contactTypeHomePages, setContactTypeHomePages] = useState<Record<string, string>>({});
   const [permissionLevels, setPermissionLevels] = useState<Record<string, string>>({});
@@ -300,14 +304,30 @@ export function UserContactConfigPanel() {
       setContactTypeHomePages(config.contactTypeHomePages || {});
       setPermissionLevels(config.permissionLevels || {});
       setEnabledState(config.enabled);
+      setAuthDataSourceId(config.authDataSourceId || null);
 
       if (config.contactsTable) {
+        // If it's a datasource-based table, we might need a different loader eventually
+        // for now loadTableSchema in data-binding-simple is for primary Supabase
         loadTableSchema(config.contactsTable);
       }
     }
   }, [config, loadTableSchema]);
 
-  const tableSchema = selectedTable ? schemas.get(selectedTable) : null;
+  // Fetch schema from datasource if present, otherwise use data-binding store
+  const { data: datasourceSchema } = useQuery({
+    queryKey: ['datasource-schema', authDataSourceId, selectedTable],
+    queryFn: async () => {
+      if (!authDataSourceId || !selectedTable) return null;
+      const res = await datasourcesApi.getTableSchema(authDataSourceId, selectedTable);
+      return res.data;
+    },
+    enabled: !!authDataSourceId && !!selectedTable
+  });
+
+  const tableSchema = authDataSourceId
+    ? (datasourceSchema ? { columns: datasourceSchema.columns.map((c: any) => ({ name: c.name, type: c.type })) } : null)
+    : (selectedTable ? schemas.get(selectedTable) : null);
 
   // Deduplicate and filter columns
   const availableColumns = React.useMemo(() => {
@@ -323,7 +343,7 @@ export function UserContactConfigPanel() {
 
   const handleTableChange = async (tableName: string) => {
     setSelectedTable(tableName);
-    if (tableName) {
+    if (tableName && !authDataSourceId) {
       await loadTableSchema(tableName);
     }
   };
@@ -340,6 +360,7 @@ export function UserContactConfigPanel() {
 
     setConfig({
       contactsTable: selectedTable,
+      authDataSourceId: authDataSourceId || undefined,
       columnMapping: {
         authUserIdColumn: columns.authUserIdColumn,
         contactIdColumn: columns.contactIdColumn,
@@ -401,13 +422,21 @@ export function UserContactConfigPanel() {
         )}
 
         <div className="space-y-6">
+          <AuthProviderSelector
+            value={authDataSourceId || undefined}
+            onValueChange={setAuthDataSourceId}
+          />
+
+          <Separator />
+
           <div>
             <Label htmlFor="contacts-table" className="text-sm font-medium mb-1.5 block">Contacts Table</Label>
             <TableSelector
               value={selectedTable}
               onValueChange={handleTableChange}
+              dataSourceId={authDataSourceId || undefined}
               placeholder="Select contact table"
-              disabled={!connected}
+              disabled={!authDataSourceId && !connected}
             />
           </div>
 

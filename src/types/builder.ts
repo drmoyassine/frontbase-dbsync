@@ -59,6 +59,7 @@ export interface Page {
 
 export interface UserContactConfig {
     contactsTable: string;
+    authDataSourceId?: string; // ID of the datasource acting as auth provider (e.g. Supabase)
     columnMapping: {
         authUserIdColumn: string;
         contactIdColumn: string;

@@ -117,8 +117,18 @@ export async function runStartupSync(): Promise<void> {
     // Initialize pages database first
     await initPagesDb();
 
-    // Sync Redis settings (no retries, just try once)
-    await syncRedisSettingsFromFastAPI();
+    // Sync Redis settings with retries (FastAPI may not be ready yet)
+    console.log('[Startup Sync] Syncing Redis settings...');
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        const redisSuccess = await syncRedisSettingsFromFastAPI();
+        if (redisSuccess) {
+            break;
+        }
+        if (attempt < MAX_RETRIES) {
+            console.log(`[Startup Sync] Redis sync attempt ${attempt}/${MAX_RETRIES} failed, retrying in ${RETRY_DELAY_MS / 1000}s...`);
+            await sleep(RETRY_DELAY_MS);
+        }
+    }
 
     // Check if we already have a homepage
     const existingHomepage = await getHomepage();

@@ -11,6 +11,9 @@ ENV NODE_OPTIONS="--max-old-space-size=2048"
 
 RUN npm install
 
+# Cache buster - MUST be before COPY src to invalidate source cache
+ARG CACHEBUST=1
+
 # Copy source and config files
 COPY src ./src
 COPY public ./public
@@ -21,9 +24,6 @@ COPY vite.config.ts tsconfig*.json tailwind.config.ts postcss.config.js componen
 ARG VITE_API_URL=""
 ENV VITE_API_URL=${VITE_API_URL}
 ENV NODE_ENV=production
-
-# Cache buster - always invalidates
-ARG CACHEBUST=1
 
 # Run build and verify output exists
 RUN npm run build && \

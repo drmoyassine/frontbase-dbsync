@@ -1,11 +1,11 @@
-"""Pre-seed Docker Redis defaults
+"""Fix pre-seed: Create project_settings if missing
 
-Revision ID: 0004_preseed_docker_redis
-Revises: 0003_redis_settings_columns
-Create Date: 2026-01-18 00:32:00
+Revision ID: 0005_fix_preseed_insert
+Revises: 0004_preseed_docker_redis
+Create Date: 2026-01-18 00:40:00
 
-This migration pre-seeds Redis configuration for out-of-box Docker setup.
-Runs separately since 0003 may have already been applied before pre-seed logic was added.
+Migration 0004 failed because project_settings didn't exist.
+This migration creates the record if missing and sets Redis defaults.
 """
 from typing import Sequence, Union
 from alembic import op
@@ -13,14 +13,14 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '0004_preseed_docker_redis'
-down_revision: Union[str, None] = '0003_redis_settings_columns'
+revision: str = '0005_fix_preseed_insert'
+down_revision: Union[str, None] = '0004_preseed_docker_redis'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Pre-seed Docker Redis defaults if not already configured."""
+    """Create project_settings record with Redis defaults if missing."""
     conn = op.get_bind()
     
     # Check if project_settings record exists
@@ -38,10 +38,10 @@ def upgrade() -> None:
                 60, 300
             )
         """))
-        print("[Migration 0004] Created project_settings with Docker Redis defaults")
+        print("[Migration 0005] Created project_settings with Docker Redis defaults")
     else:
         settings_id, redis_url, redis_enabled = row
-        # Only seed if not already configured
+        # Update if not already configured
         if not redis_url or not redis_enabled:
             conn.execute(sa.text("""
                 UPDATE project_settings SET
@@ -51,11 +51,11 @@ def upgrade() -> None:
                     redis_enabled = 1
                 WHERE id = :id
             """), {"id": settings_id})
-            print("[Migration 0004] Pre-seeded Docker Redis defaults (redis-http:80)")
+            print("[Migration 0005] Pre-seeded Docker Redis defaults")
         else:
-            print(f"[Migration 0004] Redis already configured: {redis_url}")
+            print(f"[Migration 0005] Redis already configured: {redis_url}")
 
 
 def downgrade() -> None:
-    """Clear Redis settings (optional - usually not needed)."""
+    """Nothing to do - leave settings as-is."""
     pass

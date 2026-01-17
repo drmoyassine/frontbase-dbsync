@@ -13,6 +13,7 @@ RUN npm install
 
 # Cache buster - MUST be before COPY src to invalidate source cache
 ARG CACHEBUST=1
+RUN echo "Cache bust: ${CACHEBUST}"
 
 # Copy source and config files
 COPY src ./src

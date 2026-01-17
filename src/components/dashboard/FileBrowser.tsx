@@ -140,7 +140,7 @@ type SortKey = 'name' | 'type' | 'updated_at' | 'size';
 type SortDirection = 'asc' | 'desc';
 
 // API functions
-const EDGE_API = import.meta.env.VITE_EDGE_API_URL || 'http://localhost:3002';
+const EDGE_API = import.meta.env.VITE_EDGE_API_URL || '';
 
 async function createBucket(name: string, isPublic: boolean, fileSizeLimit?: number, allowedMimeTypes?: string[]) {
     const res = await fetch(`${EDGE_API}/api/storage/buckets`, {

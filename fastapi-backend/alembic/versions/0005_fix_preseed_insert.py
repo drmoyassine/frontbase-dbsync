@@ -10,6 +10,7 @@ This migration creates the record if missing and sets Redis defaults.
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
+import uuid
 
 
 # revision identifiers, used by Alembic.
@@ -28,17 +29,18 @@ def upgrade() -> None:
     row = result.fetchone()
     
     if not row:
-        # Create project_settings record with Redis defaults
+        # Create project_settings record with UUID and Redis defaults
+        new_id = str(uuid.uuid4())
         conn.execute(sa.text("""
             INSERT INTO project_settings (
-                redis_url, redis_token, redis_type, redis_enabled, 
+                id, redis_url, redis_token, redis_type, redis_enabled, 
                 cache_ttl_data, cache_ttl_count
             ) VALUES (
-                'http://redis-http:80', 'dev_token_change_in_prod', 'self-hosted', 1,
+                :id, 'http://redis-http:80', 'dev_token_change_in_prod', 'self-hosted', 1,
                 60, 300
             )
-        """))
-        print("[Migration 0005] Created project_settings with Docker Redis defaults")
+        """), {"id": new_id})
+        print(f"[Migration 0005] Created project_settings with Docker Redis defaults (id={new_id})")
     else:
         settings_id, redis_url, redis_enabled = row
         # Update if not already configured

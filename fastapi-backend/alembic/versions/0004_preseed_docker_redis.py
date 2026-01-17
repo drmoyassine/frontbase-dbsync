@@ -5,7 +5,7 @@ Revises: 0003_redis_settings_columns
 Create Date: 2026-01-18 00:32:00
 
 This migration pre-seeds Redis configuration for out-of-box Docker setup.
-Runs separately since 0003 may have already been applied before pre-seed logic was added.
+Note: If project_settings doesn't exist yet, migration 0005 handles it.
 """
 from typing import Sequence, Union
 from alembic import op
@@ -20,26 +20,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Pre-seed Docker Redis defaults if not already configured."""
+    """Pre-seed Docker Redis defaults if record exists."""
     conn = op.get_bind()
     
     # Check if project_settings record exists
     result = conn.execute(sa.text("SELECT id, redis_url, redis_enabled FROM project_settings LIMIT 1"))
     row = result.fetchone()
     
-    if not row:
-        # Create project_settings record with Redis defaults
-        conn.execute(sa.text("""
-            INSERT INTO project_settings (
-                redis_url, redis_token, redis_type, redis_enabled, 
-                cache_ttl_data, cache_ttl_count
-            ) VALUES (
-                'http://redis-http:80', 'dev_token_change_in_prod', 'self-hosted', 1,
-                60, 300
-            )
-        """))
-        print("[Migration 0004] Created project_settings with Docker Redis defaults")
-    else:
+    if row:
         settings_id, redis_url, redis_enabled = row
         # Only seed if not already configured
         if not redis_url or not redis_enabled:
@@ -51,11 +39,14 @@ def upgrade() -> None:
                     redis_enabled = 1
                 WHERE id = :id
             """), {"id": settings_id})
-            print("[Migration 0004] Pre-seeded Docker Redis defaults (redis-http:80)")
+            print("[Migration 0004] Pre-seeded Docker Redis defaults")
         else:
             print(f"[Migration 0004] Redis already configured: {redis_url}")
+    else:
+        # Record doesn't exist - migration 0005 will handle it
+        print("[Migration 0004] No project_settings yet - 0005 will create it")
 
 
 def downgrade() -> None:
-    """Clear Redis settings (optional - usually not needed)."""
+    """Nothing to do."""
     pass

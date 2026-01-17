@@ -58,6 +58,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+      redis-http:
+        condition: service_healthy
     networks:
       - frontbase
     restart: unless-stopped
@@ -111,10 +113,17 @@ services:
     ports:
       - "8079:80"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     networks:
       - frontbase
     restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 networks:
   frontbase:

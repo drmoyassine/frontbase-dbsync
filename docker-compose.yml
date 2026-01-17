@@ -101,6 +101,21 @@ services:
       timeout: 5s
       retries: 5
 
+  # Upstash-compatible HTTP proxy for local Redis (enables Edge to use HTTP locally)
+  redis-http:
+    image: hiett/serverless-redis-http:latest
+    environment:
+      SRH_MODE: env
+      SRH_TOKEN: "dev_token_change_in_prod"
+      SRH_CONNECTION_STRING: "redis://redis:6379"
+    ports:
+      - "8079:80"
+    depends_on:
+      - redis
+    networks:
+      - frontbase
+    restart: unless-stopped
+
 networks:
   frontbase:
     driver: bridge

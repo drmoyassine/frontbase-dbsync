@@ -5,11 +5,17 @@
  * Uses datasource configs from published pages.
  * GET /api/data/:table - Fetch data from user's datasource
  * POST /api/data/execute - Execute pre-computed DataRequest (Phase 10)
+ * 
+ * Redis Cache Integration:
+ * - Uses cached() wrapper for automatic L2 caching
+ * - Cache key based on URL + body hash
+ * - TTL configurable (default 60s)
  */
 
 import { Hono } from 'hono';
 import { handleDataQuery, createDatasourceAdapter } from '../db/datasource-adapter';
 import { listPublishedPages, getPublishedPageBySlug } from '../db/pages-store';
+import { getRedis, cached } from '../cache/redis.js';
 import type { DatasourceConfig, DataRequest } from '../schemas/publish';
 
 export const dataRoute = new Hono();
@@ -90,6 +96,38 @@ async function executeDataRequest(dataRequest: DataRequest): Promise<{ data: any
     }
 
     console.log(`[Data Execute] Fetching: ${url.substring(0, 100)}...`);
+
+    // Generate cache key from URL + body hash
+    const cacheKey = `data:${url}:${dataRequest.body ? JSON.stringify(dataRequest.body) : ''}`;
+    const cacheTTL = 60; // 60 seconds default
+
+    // Try to use Redis cache if available
+    try {
+        const redis = getRedis();
+        return await cached<{ data: any[]; total: number | null }>(cacheKey, async () => {
+            return await executeDataRequestUncached(dataRequest, url, headers);
+        }, cacheTTL);
+    } catch (e) {
+        // Redis not initialized or cache error - fetch directly
+        if ((e as Error).message?.includes('not initialized')) {
+            // Silent - Redis just not configured
+        } else {
+            console.warn('[Data Execute] Redis cache error, falling back to direct fetch:', e);
+        }
+    }
+
+    // No Redis or cache error - fetch directly
+    return await executeDataRequestUncached(dataRequest, url, headers);
+}
+
+/**
+ * Execute the actual HTTP request (uncached)
+ */
+async function executeDataRequestUncached(
+    dataRequest: DataRequest,
+    url: string,
+    headers: Record<string, string>
+): Promise<{ data: any[]; total: number | null }> {
 
     // Build fetch options
     const fetchOptions: RequestInit = {

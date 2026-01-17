@@ -33,6 +33,8 @@ async def load_settings_from_db():
                 if settings:
                     _settings_cache = {
                         "url": settings.redis_url,
+                        "token": settings.redis_token,
+                        "type": settings.redis_type,
                         "enabled": settings.redis_enabled,
                         "ttl_data": settings.cache_ttl_data,
                         "ttl_count": settings.cache_ttl_count
@@ -143,11 +145,38 @@ async def cache_delete_pattern(redis_url: str, pattern: str) -> int:
         return 0
 
 
-async def test_redis_connection(redis_url: str) -> tuple[bool, str]:
-    """Test Redis connection. Returns (success, message)."""
+async def test_redis_connection(
+    redis_url: str,
+    redis_token: str = None,
+    redis_type: str = "upstash"
+) -> tuple[bool, str]:
+    """Test Redis connection. Supports both Upstash (HTTP) and TCP connections."""
     if not redis_url:
         return False, "Redis URL is empty"
     
+    # Upstash-style HTTP connection (or SRH proxy)
+    if redis_type == "upstash" or redis_url.startswith("https://") or redis_url.startswith("http://"):
+        if not redis_token:
+            return False, "Redis token is required for Upstash/HTTP connections"
+        try:
+            import httpx
+            # Upstash REST API uses POST to /ping
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.post(
+                    f"{redis_url.rstrip('/')}/",
+                    headers={"Authorization": f"Bearer {redis_token}"},
+                    json=["PING"]
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("result") == "PONG" or (isinstance(data, list) and data[0].get("result") == "PONG"):
+                        return True, "Connected successfully (Upstash/HTTP)"
+                    return True, f"Connected (Response: {data})"
+                return False, f"HTTP {response.status_code}: {response.text[:100]}"
+        except Exception as e:
+            return False, f"HTTP connection failed: {str(e)}"
+    
+    # Traditional TCP connection
     try:
         client = await redis.from_url(
             redis_url, 

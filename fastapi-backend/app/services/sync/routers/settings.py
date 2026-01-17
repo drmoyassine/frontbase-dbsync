@@ -18,6 +18,8 @@ router = APIRouter()
 class RedisSettingsUpdate(BaseModel):
     """Schema for updating Redis settings."""
     redis_url: Optional[str] = None
+    redis_token: Optional[str] = None
+    redis_type: str = "upstash"  # "upstash" | "self-hosted"
     redis_enabled: bool = False
     cache_ttl_data: int = 60
     cache_ttl_count: int = 300
@@ -26,6 +28,8 @@ class RedisSettingsUpdate(BaseModel):
 class RedisSettingsResponse(BaseModel):
     """Schema for Redis settings response."""
     redis_url: Optional[str] = None
+    redis_token: Optional[str] = None
+    redis_type: str = "upstash"
     redis_enabled: bool = False
     cache_ttl_data: int = 60
     cache_ttl_count: int = 300
@@ -52,6 +56,8 @@ async def get_redis_settings(db: AsyncSession = Depends(get_db)):
     
     return RedisSettingsResponse(
         redis_url=settings.redis_url,
+        redis_token=settings.redis_token,
+        redis_type=settings.redis_type,
         redis_enabled=settings.redis_enabled,
         cache_ttl_data=settings.cache_ttl_data,
         cache_ttl_count=settings.cache_ttl_count,
@@ -71,6 +77,8 @@ async def update_redis_settings(
         # Create new settings record
         settings = ProjectSettings(
             redis_url=data.redis_url,
+            redis_token=data.redis_token,
+            redis_type=data.redis_type,
             redis_enabled=data.redis_enabled,
             cache_ttl_data=data.cache_ttl_data,
             cache_ttl_count=data.cache_ttl_count,
@@ -79,6 +87,8 @@ async def update_redis_settings(
     else:
         # Update existing
         settings.redis_url = data.redis_url
+        settings.redis_token = data.redis_token
+        settings.redis_type = data.redis_type
         settings.redis_enabled = data.redis_enabled
         settings.cache_ttl_data = data.cache_ttl_data
         settings.cache_ttl_count = data.cache_ttl_count
@@ -92,14 +102,20 @@ async def update_redis_settings(
     
     return RedisSettingsResponse(
         redis_url=settings.redis_url,
+        redis_token=settings.redis_token,
+        redis_type=settings.redis_type,
         redis_enabled=settings.redis_enabled,
         cache_ttl_data=settings.cache_ttl_data,
         cache_ttl_count=settings.cache_ttl_count,
     )
 
 
-@router.post("/redis/test", response_model=RedisTestResult)
+@router.post("/redis/test/", response_model=RedisTestResult)
 async def test_redis(data: RedisSettingsUpdate):
-    """Test Redis connection with provided URL."""
-    success, message = await test_redis_connection(data.redis_url)
+    """Test Redis connection with provided URL and token."""
+    success, message = await test_redis_connection(
+        redis_url=data.redis_url,
+        redis_token=data.redis_token,
+        redis_type=data.redis_type
+    )
     return RedisTestResult(success=success, message=message)

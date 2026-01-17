@@ -1,34 +1,200 @@
 /**
- * Upstash Redis Cache Service
+ * Unified Redis Cache Service
  * 
- * Edge-compatible caching using @upstash/redis HTTP client.
- * Works on Cloudflare Workers, Vercel Edge, and Node.js.
+ * Supports both @upstash/redis (HTTP/REST) and ioredis (TCP/Local).
+ * Automatically selects the driver based on the connection URL protocol.
  */
 
-import { Redis } from '@upstash/redis';
+import { Redis as UpstashRedis } from '@upstash/redis';
 
 export interface RedisConfig {
     url: string;
-    token: string;
+    token?: string;
 }
 
-let redisInstance: Redis | null = null;
+// Unified interface for both clients
+interface RedisClientAdapter {
+    get<T>(key: string): Promise<T | null>;
+    set(key: string, value: string): Promise<void | any>;
+    setex(key: string, seconds: number, value: string): Promise<void | any>;
+    del(...keys: string[]): Promise<number>;
+    keys(pattern: string): Promise<string[]>;
+    ping(): Promise<string>;
+
+    // Queue ops
+    lpush(key: string, ...elements: string[]): Promise<number>;
+    rpop(key: string): Promise<string | null>;
+    llen(key: string): Promise<number>;
+
+    // Rate limiting
+    incr(key: string): Promise<number>;
+    expire(key: string, seconds: number): Promise<number>;
+}
+
+// Adapter for Upstash (HTTP)
+class UpstashAdapter implements RedisClientAdapter {
+    private client: UpstashRedis;
+
+    constructor(url: string, token: string) {
+        this.client = new UpstashRedis({ url, token });
+    }
+
+    async get<T>(key: string): Promise<T | null> {
+        return this.client.get<T>(key);
+    }
+
+    async set(key: string, value: string) {
+        return this.client.set(key, value);
+    }
+
+    async setex(key: string, seconds: number, value: string) {
+        return this.client.setex(key, seconds, value);
+    }
+
+    async del(...keys: string[]) {
+        return this.client.del(...keys);
+    }
+
+    async keys(pattern: string) {
+        return this.client.keys(pattern);
+    }
+
+    async ping() {
+        return this.client.ping();
+    }
+
+    async lpush(key: string, ...elements: string[]) {
+        return this.client.lpush(key, ...elements);
+    }
+
+    async rpop(key: string) {
+        return this.client.rpop(key);
+    }
+
+    async llen(key: string) {
+        return this.client.llen(key);
+    }
+
+    async incr(key: string) {
+        return this.client.incr(key);
+    }
+
+    async expire(key: string, seconds: number) {
+        return this.client.expire(key, seconds);
+    }
+}
+
+// Adapter for IORedis (TCP)
+class IoRedisAdapter implements RedisClientAdapter {
+    private client: any;
+    private initialized: Promise<void>;
+
+    constructor(url: string) {
+        this.initialized = this.initClient(url);
+    }
+
+    private async initClient(url: string) {
+        try {
+            // Dynamic import to avoid bundling 'net' in Edge runtimes
+            const { default: IORedis } = await import('ioredis');
+            this.client = new IORedis(url);
+        } catch (error) {
+            console.error('Failed to load ioredis. Ensure you are running in a Node.js environment for TCP connections.', error);
+            throw error;
+        }
+    }
+
+    private async ensureClient() {
+        await this.initialized;
+        if (!this.client) throw new Error('Redis client not initialized');
+    }
+
+    async get<T>(key: string): Promise<T | null> {
+        await this.ensureClient();
+        const value = await this.client.get(key);
+        if (!value) return null;
+        try {
+            return JSON.parse(value) as T;
+        } catch {
+            return value as unknown as T;
+        }
+    }
+
+    async set(key: string, value: string) {
+        await this.ensureClient();
+        return this.client.set(key, value);
+    }
+
+    async setex(key: string, seconds: number, value: string) {
+        await this.ensureClient();
+        return this.client.setex(key, seconds, value);
+    }
+
+    async del(...keys: string[]) {
+        await this.ensureClient();
+        return this.client.del(...keys);
+    }
+
+    async keys(pattern: string) {
+        await this.ensureClient();
+        return this.client.keys(pattern);
+    }
+
+    async ping() {
+        await this.ensureClient();
+        return this.client.ping();
+    }
+
+    async lpush(key: string, ...elements: string[]) {
+        await this.ensureClient();
+        return this.client.lpush(key, ...elements);
+    }
+
+    async rpop(key: string) {
+        await this.ensureClient();
+        return this.client.rpop(key);
+    }
+
+    async llen(key: string) {
+        await this.ensureClient();
+        return this.client.llen(key);
+    }
+
+    async incr(key: string) {
+        await this.ensureClient();
+        return this.client.incr(key);
+    }
+
+    async expire(key: string, seconds: number) {
+        await this.ensureClient();
+        return this.client.expire(key, seconds);
+    }
+}
+
+let redisInstance: RedisClientAdapter | null = null;
 
 /**
- * Initialize Redis client with Upstash credentials
+ * Initialize Redis client with provided config.
+ * Selects UpstashAdapter for HTTP/HTTPS URLs.
+ * Selects IoRedisAdapter for Redis/Rediss URLs.
  */
-export function initRedis(config: RedisConfig): Redis {
-    redisInstance = new Redis({
-        url: config.url,
-        token: config.token,
-    });
+export function initRedis(config: RedisConfig): RedisClientAdapter {
+    if (config.url.startsWith('http')) {
+        if (!config.token) {
+            throw new Error('Redis Token is required for Upstash HTTP connection');
+        }
+        redisInstance = new UpstashAdapter(config.url, config.token);
+    } else {
+        // Assume TCP (redis://)
+        redisInstance = new IoRedisAdapter(config.url);
+    }
     return redisInstance;
 }
 
 /**
  * Get the Redis instance (must be initialized first)
  */
-export function getRedis(): Redis {
+export function getRedis(): RedisClientAdapter {
     if (!redisInstance) {
         throw new Error('Redis not initialized. Call initRedis() first.');
     }
@@ -53,6 +219,9 @@ export async function cached<T>(
 
     // Execute function and cache result
     const result = await fn();
+    // Use JSON.stringify because our adapters expect string values for set
+    // Note: Upstash adapter's underlying client might auto-serialize, but we unified to string
+    // logic in get<T> to handle parsing.
     await redis.setex(key, ttlSeconds, JSON.stringify(result));
 
     return result;
@@ -86,10 +255,12 @@ export async function set<T>(
     ttlSeconds?: number
 ): Promise<void> {
     const redis = getRedis();
+    const stringValue = JSON.stringify(value);
+
     if (ttlSeconds) {
-        await redis.setex(key, ttlSeconds, JSON.stringify(value));
+        await redis.setex(key, ttlSeconds, stringValue);
     } else {
-        await redis.set(key, JSON.stringify(value));
+        await redis.set(key, stringValue);
     }
 }
 
@@ -119,7 +290,8 @@ export async function enqueue<T>(queue: string, data: T): Promise<void> {
 export async function dequeue<T>(queue: string): Promise<T | null> {
     const redis = getRedis();
     const item = await redis.rpop(queue);
-    return item ? JSON.parse(item as string) : null;
+    // Adapters return string | null
+    return item ? JSON.parse(item) : null;
 }
 
 /**
@@ -166,6 +338,7 @@ export async function rateLimit(
 export async function testConnection(): Promise<{ success: boolean; message: string }> {
     try {
         const redis = getRedis();
+        // Ping returns 'PONG' or similar string. The adapter interface defines ping(): Promise<string>.
         await redis.ping();
         return { success: true, message: 'Redis connection successful' };
     } catch (error) {

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Settings, Database, Globe, Palette, Loader2, Check, X, RefreshCw } from 'lucide-react';
+import { Settings, Globe, Palette, Loader2, Check, X, RefreshCw, Database } from 'lucide-react';
 import { useBuilderStore } from '@/stores/builder';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '@/modules/dbsync/api';
@@ -17,6 +18,8 @@ export const SettingsPanel: React.FC = () => {
 
   // Redis state
   const [redisUrl, setRedisUrl] = useState('');
+  const [redisToken, setRedisToken] = useState('');
+  const [redisType, setRedisType] = useState<'upstash' | 'self-hosted'>('upstash');
   const [redisEnabled, setRedisEnabled] = useState(false);
   const [cacheTtlData, setCacheTtlData] = useState(60);
   const [cacheTtlCount, setCacheTtlCount] = useState(300);
@@ -31,6 +34,8 @@ export const SettingsPanel: React.FC = () => {
   useEffect(() => {
     if (redisSettings) {
       setRedisUrl(redisSettings.redis_url || '');
+      setRedisToken(redisSettings.redis_token || '');
+      setRedisType(redisSettings.redis_type || 'upstash');
       setRedisEnabled(redisSettings.redis_enabled);
       setCacheTtlData(redisSettings.cache_ttl_data);
       setCacheTtlCount(redisSettings.cache_ttl_count);
@@ -65,245 +70,287 @@ export const SettingsPanel: React.FC = () => {
         </p>
       </div>
 
-      <div className="grid gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Palette className="h-5 w-5" />
-              Project Details
-            </CardTitle>
-            <CardDescription>
-              Basic information about your project
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="project-name">Project Name</Label>
-              <Input
-                id="project-name"
-                defaultValue={project?.name || ''}
-                placeholder="My Awesome Website"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="project-description">Description</Label>
-              <Textarea
-                id="project-description"
-                defaultValue={project?.description || ''}
-                placeholder="Describe your project..."
-                rows={3}
-              />
-            </div>
-            <Button>Save Changes</Button>
-          </CardContent>
-        </Card>
+      <Tabs defaultValue="general" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="cache">Cache & Performance</TabsTrigger>
+        </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Database className="h-5 w-5" />
-              Supabase Integration
-            </CardTitle>
-            <CardDescription>
-              Connect your Supabase project for backend functionality
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="supabase-url">Supabase URL</Label>
-              <Input
-                id="supabase-url"
-                placeholder="https://your-project.supabase.co"
-                defaultValue={project?.supabaseUrl || ''}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="supabase-key">Supabase Anon Key</Label>
-              <Input
-                id="supabase-key"
-                type="password"
-                placeholder="Your Supabase anonymous key"
-                defaultValue={project?.supabaseAnonKey || ''}
-              />
-            </div>
-            <Button>Update Integration</Button>
-          </CardContent>
-        </Card>
-
-        {/* Redis Cache Configuration */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <RefreshCw className="h-5 w-5" />
-              Redis Cache Configuration
-            </CardTitle>
-            <CardDescription>
-              Configure Redis caching to improve data loading performance
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {isRedisLoading ? (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading settings...
+        <TabsContent value="general" className="space-y-6 mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Globe className="h-5 w-5" />
+                Project Details
+              </CardTitle>
+              <CardDescription>
+                Configure default SEO and meta information for your website
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="default-title">Default Page Title</Label>
+                <Input
+                  id="default-title"
+                  placeholder="My Website"
+                />
               </div>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="redis-url">Redis URL</Label>
-                  <Input
-                    id="redis-url"
-                    placeholder="redis://username:password@host:port/db"
-                    value={redisUrl}
-                    onChange={(e) => { setRedisUrl(e.target.value); handleRedisChange(); }}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Example: redis://default:mypassword@redis.example.com:6379/0
-                  </p>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="default-description">Default Meta Description</Label>
+                <Textarea
+                  id="default-description"
+                  placeholder="A description of your website..."
+                  rows={2}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="default-keywords">Default Keywords</Label>
+                <Input
+                  id="default-keywords"
+                  placeholder="keyword1, keyword2, keyword3"
+                />
+              </div>
+              <div className="pt-2">
+                <Button>Save Changes</Button>
+              </div>
+            </CardContent>
+          </Card>
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => testRedisMutation.mutate({ redis_url: redisUrl })}
-                    disabled={!redisUrl || testRedisMutation.isPending}
-                  >
-                    {testRedisMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                    )}
-                    Test Connection
-                  </Button>
-                  {testResult && (
-                    <div className={`flex items-center gap-1 text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
-                      {testResult.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                      {testResult.message}
+          <Separator />
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-destructive">Danger Zone</CardTitle>
+              <CardDescription>
+                Irreversible and destructive actions
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="destructive">
+                Delete Project
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="cache" className="space-y-6 mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <RefreshCw className="h-5 w-5" />
+                Redis Cache Configuration
+              </CardTitle>
+              <CardDescription>
+                Configure Redis caching to improve data loading performance
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isRedisLoading ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading settings...
+                </div>
+              ) : (
+                <>
+                  {/* Two-Path Selector */}
+                  <div className="space-y-3">
+                    <Label>Redis Provider</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => { setRedisType('upstash'); handleRedisChange(); }}
+                        className={`p-4 rounded-lg border-2 text-left transition-all ${redisType === 'upstash'
+                            ? 'border-primary bg-primary/5'
+                            : 'border-muted hover:border-muted-foreground/30'
+                          }`}
+                      >
+                        <div className="font-medium">Upstash (Managed)</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Serverless Redis with built-in REST API. Zero config.
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setRedisType('self-hosted'); handleRedisChange(); }}
+                        className={`p-4 rounded-lg border-2 text-left transition-all ${redisType === 'self-hosted'
+                            ? 'border-primary bg-primary/5'
+                            : 'border-muted hover:border-muted-foreground/30'
+                          }`}
+                      >
+                        <div className="font-medium">Self-Hosted (BYO)</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Your own Redis with our HTTP proxy.
+                        </p>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Upstash Path */}
+                  {redisType === 'upstash' && (
+                    <div className="space-y-4 p-4 rounded-lg bg-muted/30">
+                      <div className="space-y-2">
+                        <Label htmlFor="redis-url">Upstash REST URL</Label>
+                        <Input
+                          id="redis-url"
+                          placeholder="https://your-instance.upstash.io"
+                          value={redisUrl}
+                          onChange={(e) => { setRedisUrl(e.target.value); handleRedisChange(); }}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="redis-token">Upstash REST Token</Label>
+                        <Input
+                          id="redis-token"
+                          type="password"
+                          placeholder="AX...your-upstash-token"
+                          value={redisToken}
+                          onChange={(e) => { setRedisToken(e.target.value); handleRedisChange(); }}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Find these in your Upstash Console → Database → REST API
+                        </p>
+                      </div>
                     </div>
                   )}
-                </div>
 
-                <Separator />
+                  {/* Self-Hosted Path */}
+                  {redisType === 'self-hosted' && (
+                    <div className="space-y-4 p-4 rounded-lg bg-muted/30">
+                      <div className="p-3 rounded-md bg-blue-500/10 border border-blue-500/20 text-sm">
+                        <div className="font-medium text-blue-600 dark:text-blue-400 mb-1">
+                          📦 Deploy serverless-redis-http (SRH)
+                        </div>
+                        <p className="text-muted-foreground text-xs mb-2">
+                          SRH is a lightweight proxy that adds REST API to your Redis. Run it as a sidecar:
+                        </p>
+                        <pre className="text-xs bg-black/20 p-2 rounded overflow-x-auto">
+                          {`docker run -d \\
+  -e SRH_MODE=env \\
+  -e SRH_TOKEN=your_secret_token \\
+  -e SRH_CONNECTION_STRING=redis://your-redis:6379 \\
+  -p 8079:80 \\
+  hiett/serverless-redis-http:latest`}
+                        </pre>
+                      </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Enable Redis Caching</Label>
-                    <p className="text-xs text-muted-foreground">
-                      When disabled, all data is fetched directly from the source
-                    </p>
-                  </div>
-                  <Switch
-                    checked={redisEnabled}
-                    onCheckedChange={(checked) => { setRedisEnabled(checked); handleRedisChange(); }}
-                    disabled={!redisUrl}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="ttl-data">Data Cache TTL (seconds)</Label>
-                    <Input
-                      id="ttl-data"
-                      type="number"
-                      value={cacheTtlData}
-                      onChange={(e) => { setCacheTtlData(parseInt(e.target.value)); handleRedisChange(); }}
-                      disabled={!redisEnabled}
-                    />
-                    <p className="text-xs text-muted-foreground">How long to cache record data</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="ttl-count">Count Cache TTL (seconds)</Label>
-                    <Input
-                      id="ttl-count"
-                      type="number"
-                      value={cacheTtlCount}
-                      onChange={(e) => { setCacheTtlCount(parseInt(e.target.value)); handleRedisChange(); }}
-                      disabled={!redisEnabled}
-                    />
-                    <p className="text-xs text-muted-foreground">How long to cache record counts</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    onClick={() => saveRedisMutation.mutate({
-                      redis_url: redisUrl || null,
-                      redis_enabled: redisEnabled,
-                      cache_ttl_data: cacheTtlData,
-                      cache_ttl_count: cacheTtlCount,
-                    })}
-                    disabled={!hasRedisChanges || saveRedisMutation.isPending}
-                  >
-                    {saveRedisMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : null}
-                    Save Redis Settings
-                  </Button>
-                  {saveRedisMutation.isSuccess && !hasRedisChanges && (
-                    <span className="text-sm text-green-600 flex items-center gap-1">
-                      <Check className="h-4 w-4" /> Saved
-                    </span>
+                      <div className="space-y-2">
+                        <Label htmlFor="redis-url">SRH Proxy URL</Label>
+                        <Input
+                          id="redis-url"
+                          placeholder="http://localhost:8079"
+                          value={redisUrl}
+                          onChange={(e) => { setRedisUrl(e.target.value); handleRedisChange(); }}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="redis-token">SRH Token</Label>
+                        <Input
+                          id="redis-token"
+                          type="password"
+                          placeholder="The SRH_TOKEN you set above"
+                          value={redisToken}
+                          onChange={(e) => { setRedisToken(e.target.value); handleRedisChange(); }}
+                        />
+                      </div>
+                    </div>
                   )}
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe className="h-5 w-5" />
-              SEO & Meta
-            </CardTitle>
-            <CardDescription>
-              Default SEO settings for your website
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="default-title">Default Page Title</Label>
-              <Input
-                id="default-title"
-                placeholder="My Website"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="default-description">Default Meta Description</Label>
-              <Textarea
-                id="default-description"
-                placeholder="A description of your website..."
-                rows={2}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="default-keywords">Default Keywords</Label>
-              <Input
-                id="default-keywords"
-                placeholder="keyword1, keyword2, keyword3"
-              />
-            </div>
-            <Button>Save SEO Settings</Button>
-          </CardContent>
-        </Card>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => testRedisMutation.mutate({
+                        redis_url: redisUrl,
+                        redis_token: redisToken,
+                        redis_type: redisType
+                      })}
+                      disabled={!redisUrl || !redisToken || testRedisMutation.isPending}
+                    >
+                      {testRedisMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                      )}
+                      Test Connection
+                    </Button>
+                    {testResult && (
+                      <div className={`flex items-center gap-1 text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                        {testResult.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                        {testResult.message}
+                      </div>
+                    )}
+                  </div>
 
-        <Separator />
+                  <Separator />
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-destructive">Danger Zone</CardTitle>
-            <CardDescription>
-              Irreversible and destructive actions
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="destructive">
-              Delete Project
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable Redis Caching</Label>
+                      <p className="text-xs text-muted-foreground">
+                        When disabled, all data is fetched directly from the source
+                      </p>
+                    </div>
+                    <Switch
+                      checked={redisEnabled}
+                      onCheckedChange={(checked) => { setRedisEnabled(checked); handleRedisChange(); }}
+                      disabled={!redisUrl}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="ttl-data">Data Cache TTL (seconds)</Label>
+                      <Input
+                        id="ttl-data"
+                        type="number"
+                        value={cacheTtlData}
+                        onChange={(e) => { setCacheTtlData(parseInt(e.target.value)); handleRedisChange(); }}
+                        disabled={!redisEnabled}
+                      />
+                      <p className="text-xs text-muted-foreground">How long to cache record data</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="ttl-count">Count Cache TTL (seconds)</Label>
+                      <Input
+                        id="ttl-count"
+                        type="number"
+                        value={cacheTtlCount}
+                        onChange={(e) => { setCacheTtlCount(parseInt(e.target.value)); handleRedisChange(); }}
+                        disabled={!redisEnabled}
+                      />
+                      <p className="text-xs text-muted-foreground">How long to cache record counts</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={() => saveRedisMutation.mutate({
+                        redis_url: redisUrl || null,
+                        redis_token: redisToken || null,
+                        redis_type: redisType,
+                        redis_enabled: redisEnabled,
+                        cache_ttl_data: cacheTtlData,
+                        cache_ttl_count: cacheTtlCount,
+                      })}
+                      disabled={!hasRedisChanges || saveRedisMutation.isPending}
+                    >
+                      {saveRedisMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : null}
+                      Save Redis Settings
+                    </Button>
+                    {saveRedisMutation.isSuccess && !hasRedisChanges && (
+                      <span className="text-sm text-green-600 flex items-center gap-1">
+                        <Check className="h-4 w-4" /> Saved
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

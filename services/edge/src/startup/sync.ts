@@ -1,11 +1,12 @@
 /**
- * Startup Sync - Proactive Homepage Sync on Edge Boot
+ * Startup Sync - Proactive Homepage + Redis Settings Sync on Edge Boot
  * 
- * On startup, Edge fetches the homepage from FastAPI and stores locally.
+ * On startup, Edge fetches the homepage and Redis settings from FastAPI and stores locally.
  * Includes retry logic to wait for FastAPI to be ready.
  */
 
 import { initPagesDb, upsertPublishedPage, getHomepage } from '../db/pages-store.js';
+import { initRedis } from '../cache/redis.js';
 
 const FASTAPI_URL = process.env.FASTAPI_URL || 'http://localhost:8000';
 const MAX_RETRIES = 5;
@@ -16,6 +17,37 @@ const RETRY_DELAY_MS = 3000; // 3 seconds between retries
  */
 function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Fetch Redis settings from FastAPI and initialize Redis client
+ */
+async function syncRedisSettingsFromFastAPI(): Promise<boolean> {
+    try {
+        const response = await fetch(`${FASTAPI_URL}/api/sync/settings/redis/`, {
+            headers: { 'Accept': 'application/json' },
+            signal: AbortSignal.timeout(5000),
+        });
+
+        if (!response.ok) {
+            console.warn(`[Startup Sync] Redis settings fetch failed: ${response.status}`);
+            return false;
+        }
+
+        const settings = await response.json();
+
+        if (settings.redis_enabled && settings.redis_url && settings.redis_token) {
+            initRedis({ url: settings.redis_url, token: settings.redis_token });
+            console.log('[Startup Sync] ✅ Redis initialized from settings');
+            return true;
+        } else {
+            console.log('[Startup Sync] Redis not enabled or not configured');
+            return false;
+        }
+    } catch (error) {
+        console.warn('[Startup Sync] Redis settings sync failed:', error);
+        return false;
+    }
 }
 
 /**
@@ -80,10 +112,13 @@ async function syncHomepageFromFastAPI(): Promise<boolean> {
  * Called once when Edge boots up
  */
 export async function runStartupSync(): Promise<void> {
-    console.log('[Startup Sync] 🚀 Starting homepage sync...');
+    console.log('[Startup Sync] 🚀 Starting homepage + Redis sync...');
 
     // Initialize pages database first
     await initPagesDb();
+
+    // Sync Redis settings (no retries, just try once)
+    await syncRedisSettingsFromFastAPI();
 
     // Check if we already have a homepage
     const existingHomepage = await getHomepage();

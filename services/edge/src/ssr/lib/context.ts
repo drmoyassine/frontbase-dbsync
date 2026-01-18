@@ -178,15 +178,34 @@ function buildVisitorContext(request: Request): VisitorContext {
     const isLocalhost = !rawIp || rawIp === '127.0.0.1' || rawIp === '::1' || rawIp.startsWith('192.168.') || rawIp.startsWith('10.');
 
     // Get country and city (with localhost fallback)
-    let country = headers.get('CF-IPCountry') || cf?.country || '';
+    const countryCode = headers.get('CF-IPCountry') || cf?.country || '';
+    let country = countryCode;
     let city = cf?.city || '';
-    let timezone = cf?.timezone || 'UTC';
+
+    // Convert country code to full name using built-in Intl API
+    if (countryCode && countryCode.length === 2 && countryCode !== 'XX') {
+        try {
+            const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
+            country = regionNames.of(countryCode) || countryCode;
+        } catch (e) {
+            console.warn('[SSR] Failed to convert country code:', countryCode);
+        }
+    }
+
+    // Timezone detection:
+    // 1. Check for client-side enhanced cookie (priority)
+    // 2. On Cloudflare Workers: Use cf.timezone
+    // 3. On localhost: Use server's timezone
+    // 4. Default: 'UTC'
+    const cookies = parseCookies(headers.get('Cookie') || '');
+    let timezone = cookies['visitor-tz'] || cf?.timezone || 'UTC';
 
     // Localhost detection: Provide mock values for local development
-    if (isLocalhost && (!country || country === '')) {
+    if (isLocalhost && (!countryCode || countryCode === '')) {
         country = 'Local';
         city = 'Development';
-        timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+        // Note: This gets the SERVER's timezone, not the visitor's
+        timezone = cookies['visitor-tz'] || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     }
 
     return {

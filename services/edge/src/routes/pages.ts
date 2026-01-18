@@ -526,8 +526,11 @@ pagesRoute.get('/', async (c) => {
                 cookies: context.cookies,
             };
 
+            // Fetch tracking config
+            const trackingConfig = await fetchTrackingConfig();
+
             // Return full HTML page
-            const fullHtml = generateHtmlDocument(page, bodyHtml, initialState);
+            const fullHtml = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig);
             return c.html(fullHtml);
         }
     } catch (error) {

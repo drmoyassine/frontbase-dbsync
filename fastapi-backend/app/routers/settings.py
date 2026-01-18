@@ -1,16 +1,99 @@
 """
-Settings API - Privacy & Tracking Configuration
+Settings API - Privacy & Tracking Configuration + Redis Cache
 
-Manages global settings including visitor tracking configuration.
+Manages global settings including visitor tracking configuration and Redis caching.
 """
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Literal
 import json
 import os
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+
+# =============================================================================
+# Redis Cache Settings
+# =============================================================================
+
+class RedisSettings(BaseModel):
+    redis_url: Optional[str] = None
+    redis_token: Optional[str] = None
+    redis_type: Literal["upstash", "self-hosted"] = "upstash"
+    redis_enabled: bool = False
+    cache_ttl_data: int = 60
+    cache_ttl_count: int = 300
+
+
+class RedisTestResult(BaseModel):
+    success: bool
+    message: str
+
+
+@router.get("/redis/", response_model=RedisSettings)
+async def get_redis_settings():
+    """
+    Get Redis cache settings.
+    """
+    settings = load_settings()
+    redis = settings.get("redis", {})
+    
+    return RedisSettings(
+        redis_url=redis.get("redis_url"),
+        redis_token=redis.get("redis_token"),
+        redis_type=redis.get("redis_type", "upstash"),
+        redis_enabled=redis.get("redis_enabled", False),
+        cache_ttl_data=redis.get("cache_ttl_data", 60),
+        cache_ttl_count=redis.get("cache_ttl_count", 300),
+    )
+
+
+@router.put("/redis/", response_model=RedisSettings)
+async def update_redis_settings(settings_update: RedisSettings):
+    """
+    Update Redis cache settings.
+    """
+    settings = load_settings()
+    settings["redis"] = settings_update.dict()
+    save_settings(settings)
+    
+    return settings_update
+
+
+@router.post("/redis/test/", response_model=RedisTestResult)
+async def test_redis_connection(settings_update: RedisSettings):
+    """
+    Test Redis connection with provided settings.
+    """
+    if not settings_update.redis_url or not settings_update.redis_token:
+        return RedisTestResult(success=False, message="URL and Token are required")
+    
+    try:
+        import httpx
+        
+        # Test connection using Upstash REST API format
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                settings_update.redis_url,
+                headers={
+                    "Authorization": f"Bearer {settings_update.redis_token}",
+                    "Content-Type": "application/json",
+                },
+                json=["PING"],
+                timeout=10.0,
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("result") == "PONG":
+                    return RedisTestResult(success=True, message="Connection successful!")
+                else:
+                    return RedisTestResult(success=True, message=f"Connected: {data}")
+            else:
+                return RedisTestResult(success=False, message=f"HTTP {response.status_code}: {response.text}")
+    except Exception as e:
+        return RedisTestResult(success=False, message=str(e))
 
 
 # =============================================================================
@@ -22,15 +105,25 @@ class AdvancedVariableConfig(BaseModel):
     expose: bool = True
 
 
-# Configurable visitor variables with collect/expose toggles
+# Configurable advanced visitor variables (separate from basic always-on variables)
 class AdvancedVariables(BaseModel):
-    timezone: AdvancedVariableConfig = AdvancedVariableConfig()
+    ip: AdvancedVariableConfig = AdvancedVariableConfig(collect=False, expose=False)
+    browser: AdvancedVariableConfig = AdvancedVariableConfig()
+    os: AdvancedVariableConfig = AdvancedVariableConfig()
+    language: AdvancedVariableConfig = AdvancedVariableConfig()
     viewport: AdvancedVariableConfig = AdvancedVariableConfig()
     themePreference: AdvancedVariableConfig = AdvancedVariableConfig()
     connectionType: AdvancedVariableConfig = AdvancedVariableConfig(collect=True, expose=False)
-    ip: AdvancedVariableConfig = AdvancedVariableConfig(collect=False, expose=False)
-    country: AdvancedVariableConfig = AdvancedVariableConfig()
-    city: AdvancedVariableConfig = AdvancedVariableConfig()
+    referrer: AdvancedVariableConfig = AdvancedVariableConfig()
+    isBot: AdvancedVariableConfig = AdvancedVariableConfig()
+
+
+# Cookie-based visitor variables (require enableVisitorTracking)
+class CookieVariables(BaseModel):
+    isFirstVisit: AdvancedVariableConfig = AdvancedVariableConfig()
+    visitCount: AdvancedVariableConfig = AdvancedVariableConfig()
+    firstVisitAt: AdvancedVariableConfig = AdvancedVariableConfig()
+    landingPage: AdvancedVariableConfig = AdvancedVariableConfig()
 
 
 class PrivacySettings(BaseModel):
@@ -38,6 +131,7 @@ class PrivacySettings(BaseModel):
     cookieExpiryDays: int = 365
     requireCookieConsent: bool = True
     advancedVariables: AdvancedVariables = AdvancedVariables()
+    cookieVariables: CookieVariables = CookieVariables()
 
 
 # File-based settings storage (simple MVP approach)
@@ -87,13 +181,24 @@ async def get_privacy_settings():
     # Parse advancedVariables with defaults
     adv_raw = privacy.get("advancedVariables", {})
     advanced = AdvancedVariables(
-        timezone=AdvancedVariableConfig(**adv_raw.get("timezone", {})),
+        ip=AdvancedVariableConfig(**adv_raw.get("ip", {"collect": False, "expose": False})),
+        browser=AdvancedVariableConfig(**adv_raw.get("browser", {})),
+        os=AdvancedVariableConfig(**adv_raw.get("os", {})),
+        language=AdvancedVariableConfig(**adv_raw.get("language", {})),
         viewport=AdvancedVariableConfig(**adv_raw.get("viewport", {})),
         themePreference=AdvancedVariableConfig(**adv_raw.get("themePreference", {})),
         connectionType=AdvancedVariableConfig(**adv_raw.get("connectionType", {"collect": True, "expose": False})),
-        ip=AdvancedVariableConfig(**adv_raw.get("ip", {"collect": False, "expose": False})),
-        country=AdvancedVariableConfig(**adv_raw.get("country", {})),
-        city=AdvancedVariableConfig(**adv_raw.get("city", {})),
+        referrer=AdvancedVariableConfig(**adv_raw.get("referrer", {})),
+        isBot=AdvancedVariableConfig(**adv_raw.get("isBot", {})),
+    )
+    
+    # Parse cookieVariables with defaults
+    cookie_raw = privacy.get("cookieVariables", {})
+    cookies = CookieVariables(
+        isFirstVisit=AdvancedVariableConfig(**cookie_raw.get("isFirstVisit", {})),
+        visitCount=AdvancedVariableConfig(**cookie_raw.get("visitCount", {})),
+        firstVisitAt=AdvancedVariableConfig(**cookie_raw.get("firstVisitAt", {})),
+        landingPage=AdvancedVariableConfig(**cookie_raw.get("landingPage", {})),
     )
     
     return PrivacySettings(
@@ -101,6 +206,7 @@ async def get_privacy_settings():
         cookieExpiryDays=privacy.get("cookieExpiryDays", 365),
         requireCookieConsent=privacy.get("requireCookieConsent", True),
         advancedVariables=advanced,
+        cookieVariables=cookies,
     )
 
 

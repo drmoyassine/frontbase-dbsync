@@ -180,7 +180,18 @@ function buildVisitorContext(request: Request): VisitorContext {
     // Get country and city (with localhost fallback)
     const countryCode = headers.get('CF-IPCountry') || cf?.country || '';
     let country = countryCode;
+
+    // Timezone detection:
+    const cookies = parseCookies(headers.get('Cookie') || '');
+    let timezone = cookies['visitor-tz'] || cf?.timezone || 'UTC';
+
+    // City detection:
+    // 1. From Cloudflare Workers cf object
+    // 2. Fallback: Parse from timezone string (e.g. "Asia/Kuwait" -> "Kuwait")
     let city = cf?.city || '';
+    if (!city && timezone && timezone.includes('/')) {
+        city = timezone.split('/').pop()?.replace(/_/g, ' ') || '';
+    }
 
     // Convert country code to full name using built-in Intl API
     if (countryCode && countryCode.length === 2 && countryCode !== 'XX') {
@@ -191,14 +202,6 @@ function buildVisitorContext(request: Request): VisitorContext {
             console.warn('[SSR] Failed to convert country code:', countryCode);
         }
     }
-
-    // Timezone detection:
-    // 1. Check for client-side enhanced cookie (priority)
-    // 2. On Cloudflare Workers: Use cf.timezone
-    // 3. On localhost: Use server's timezone
-    // 4. Default: 'UTC'
-    const cookies = parseCookies(headers.get('Cookie') || '');
-    let timezone = cookies['visitor-tz'] || cf?.timezone || 'UTC';
 
     // Localhost detection: Provide mock values for local development
     if (isLocalhost && (!countryCode || countryCode === '')) {

@@ -19,16 +19,16 @@ interface VariablePickerProps {
 }
 
 // Group icons and labels
-const GROUP_CONFIG: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
-    page: { icon: <FileText className="h-4 w-4" />, label: 'Page', color: 'text-blue-500' },
-    user: { icon: <User className="h-4 w-4" />, label: 'User', color: 'text-green-500' },
-    visitor: { icon: <Globe className="h-4 w-4" />, label: 'Visitor', color: 'text-purple-500' },
-    url: { icon: <Link className="h-4 w-4" />, label: 'URL Params', color: 'text-orange-500' },
-    system: { icon: <Clock className="h-4 w-4" />, label: 'System', color: 'text-cyan-500' },
-    record: { icon: <Database className="h-4 w-4" />, label: 'Record', color: 'text-pink-500' },
-    local: { icon: <Box className="h-4 w-4" />, label: 'Local', color: 'text-yellow-600' },
-    session: { icon: <Layers className="h-4 w-4" />, label: 'Session', color: 'text-indigo-500' },
-    cookies: { icon: <Cookie className="h-4 w-4" />, label: 'Cookies', color: 'text-amber-600' },
+const GROUP_CONFIG: Record<string, { icon: React.ReactNode; label: string; color: string; description: string }> = {
+    page: { icon: <FileText className="h-4 w-4" />, label: 'Page', color: 'text-blue-500', description: 'Current page details' },
+    visitor: { icon: <Globe className="h-4 w-4" />, label: 'Visitor', color: 'text-purple-500', description: 'Visitor info & location' },
+    user: { icon: <User className="h-4 w-4" />, label: 'User', color: 'text-green-500', description: 'Authenticated user data' },
+    url: { icon: <Link className="h-4 w-4" />, label: 'URL Params', color: 'text-orange-500', description: 'Query string parameters' },
+    system: { icon: <Clock className="h-4 w-4" />, label: 'System', color: 'text-cyan-500', description: 'Date and time info' },
+    record: { icon: <Database className="h-4 w-4" />, label: 'Record', color: 'text-pink-500', description: 'Current record data' },
+    local: { icon: <Box className="h-4 w-4" />, label: 'Local', color: 'text-yellow-600', description: 'Page-level variables' },
+    session: { icon: <Layers className="h-4 w-4" />, label: 'Session', color: 'text-indigo-500', description: 'Session storage values' },
+    cookies: { icon: <Cookie className="h-4 w-4" />, label: 'Cookies', color: 'text-amber-600', description: 'Browser cookie values' },
 };
 
 export function VariablePicker({
@@ -213,15 +213,22 @@ export function VariablePicker({
                 <>
                     {/* Header with back button when in a group */}
                     {activeGroup && (
-                        <div
-                            className="header-back"
-                            onClick={() => setActiveGroup(null)}
-                        >
-                            <ChevronLeft className="h-4 w-4" />
-                            <span className={GROUP_CONFIG[activeGroup]?.color}>
-                                {GROUP_CONFIG[activeGroup]?.icon}
-                            </span>
-                            <span className="font-medium">{GROUP_CONFIG[activeGroup]?.label || activeGroup}</span>
+                        <div className="header-back-container">
+                            <div
+                                className="header-back"
+                                onClick={() => setActiveGroup(null)}
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                                <span className={GROUP_CONFIG[activeGroup]?.color}>
+                                    {GROUP_CONFIG[activeGroup]?.icon}
+                                </span>
+                                <span className="font-medium">{GROUP_CONFIG[activeGroup]?.label || activeGroup}</span>
+                            </div>
+                            {GROUP_CONFIG[activeGroup]?.description && (
+                                <div className="text-xs text-muted-foreground px-3 pb-2 pt-0.5 ml-6 border-b border-border/50 mb-1">
+                                    {GROUP_CONFIG[activeGroup].description}
+                                </div>
+                            )}
                         </div>
                     )}
 

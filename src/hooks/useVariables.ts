@@ -76,15 +76,6 @@ function getDefaultVariables(): VariablesResponse {
             { path: 'page.description', type: 'string', source: 'page', description: 'Meta description' },
             { path: 'page.image', type: 'string', source: 'page', description: 'OG image URL' },
 
-            // User
-            { path: 'user.id', type: 'string', source: 'user', description: 'User ID' },
-            { path: 'user.email', type: 'string', source: 'user', description: 'Email address' },
-            { path: 'user.name', type: 'string', source: 'user', description: 'Full name' },
-            { path: 'user.firstName', type: 'string', source: 'user', description: 'First name' },
-            { path: 'user.lastName', type: 'string', source: 'user', description: 'Last name' },
-            { path: 'user.avatar', type: 'string', source: 'user', description: 'Avatar URL' },
-            { path: 'user.role', type: 'string', source: 'user', description: 'User role' },
-
             // Visitor (Basic - Always Available)
             { path: 'visitor.country', type: 'string', source: 'visitor', description: 'Country code' },
             { path: 'visitor.city', type: 'string', source: 'visitor', description: 'City name' },
@@ -97,8 +88,17 @@ function getDefaultVariables(): VariablesResponse {
             { path: 'visitor.os', type: 'string', source: 'visitor', description: 'Operating system' },
             { path: 'visitor.language', type: 'string', source: 'visitor', description: 'Preferred language' },
 
+            // User
+            { path: 'user.id', type: 'string', source: 'user', description: 'User ID' },
+            { path: 'user.email', type: 'string', source: 'user', description: 'Email address' },
+            { path: 'user.name', type: 'string', source: 'user', description: 'Full name' },
+            { path: 'user.firstName', type: 'string', source: 'user', description: 'First name' },
+            { path: 'user.lastName', type: 'string', source: 'user', description: 'Last name' },
+            { path: 'user.avatar', type: 'string', source: 'user', description: 'Avatar URL' },
+            { path: 'user.role', type: 'string', source: 'user', description: 'User role' },
+
             // URL
-            { path: 'url.*', type: 'string', source: 'url', description: 'Query parameter' },
+            { path: 'url.param_name', type: 'string', source: 'url', description: 'Value of query parameter (e.g. ?id=123)' },
 
             // System
             { path: 'system.date', type: 'string', source: 'system', description: 'Current date (UTC)' },
@@ -109,12 +109,13 @@ function getDefaultVariables(): VariablesResponse {
             { path: 'system.day', type: 'number', source: 'system', description: 'Current day' },
 
             // Record (data binding)
-            { path: 'record.*', type: 'any', source: 'record', description: 'Data record field' },
+
+            { path: 'record.field_name', type: 'any', source: 'record', description: 'Field from the current data record' },
 
             // User-defined
-            { path: 'local.*', type: 'any', source: 'local', description: 'Page-level variable' },
-            { path: 'session.*', type: 'any', source: 'session', description: 'Session variable' },
-            { path: 'cookies.*', type: 'string', source: 'cookies', description: 'Cookie value' },
+            { path: 'local.variable_name', type: 'any', source: 'local', description: 'Page-level local variable' },
+            { path: 'session.variable_name', type: 'any', source: 'session', description: 'Session storage variable' },
+            { path: 'cookies.cookie_name', type: 'string', source: 'cookies', description: 'Browser cookie value' },
         ],
         filters: [
             // Built-in LiquidJS filters

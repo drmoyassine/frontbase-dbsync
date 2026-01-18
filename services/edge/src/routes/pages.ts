@@ -157,6 +157,19 @@ function generateHtmlDocument(
     <!-- Prefetch hydration bundles -->
     <link rel="modulepreload" href="/static/hydrate.js">
     <link rel="modulepreload" href="/static/react/hydrate.js">
+
+    <!-- Client-Side Visitor Context Enhancement -->
+    <script>
+    (function() {
+        // Automatically detect visitor timezone for server-side city detection
+        if (!document.cookie.includes('visitor-tz=')) {
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            document.cookie = "visitor-tz=" + tz + "; path=/; max-age=31536000; SameSite=Lax";
+            // Optional: Reload if critical, but better to just let it take effect next request
+            // console.log('[Visitor] Detected timezone:', tz);
+        }
+    })();
+    </script>
     
     <!-- Tailwind CSS (for builder previews) -->
     <script src="https://cdn.tailwindcss.com"></script>

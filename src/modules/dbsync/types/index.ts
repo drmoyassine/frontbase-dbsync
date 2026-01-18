@@ -131,4 +131,10 @@ export interface PrivacySettings {
     enableVisitorTracking: boolean
     cookieExpiryDays: number
     requireCookieConsent: boolean
+    // Enhanced Tracking Flags
+    trackTimezone?: boolean
+    trackDeviceSpecs?: boolean
+    trackConnectivity?: boolean
+    trackTheme?: boolean
+    trackAnalyticsPresence?: boolean
 }

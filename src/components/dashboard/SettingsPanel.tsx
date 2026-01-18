@@ -27,9 +27,17 @@ export const SettingsPanel: React.FC = () => {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Privacy state
+  // Privacy state
   const [enableVisitorTracking, setEnableVisitorTracking] = useState(false);
   const [cookieExpiryDays, setCookieExpiryDays] = useState(365);
   const [requireCookieConsent, setRequireCookieConsent] = useState(true);
+  // Enhanced Tracking State
+  const [trackTimezone, setTrackTimezone] = useState(true);
+  const [trackDeviceSpecs, setTrackDeviceSpecs] = useState(true);
+  const [trackConnectivity, setTrackConnectivity] = useState(true);
+  const [trackTheme, setTrackTheme] = useState(true);
+  const [trackAnalyticsPresence, setTrackAnalyticsPresence] = useState(true);
+
   const [hasPrivacyChanges, setHasPrivacyChanges] = useState(false);
 
   const { data: redisSettings, isLoading: isRedisLoading } = useQuery({
@@ -75,9 +83,16 @@ export const SettingsPanel: React.FC = () => {
 
   useEffect(() => {
     if (privacySettings) {
-      setEnableVisitorTracking(privacySettings.enableVisitorTracking);
-      setCookieExpiryDays(privacySettings.cookieExpiryDays);
-      setRequireCookieConsent(privacySettings.requireCookieConsent);
+      if (privacySettings) {
+        setEnableVisitorTracking(privacySettings.enableVisitorTracking);
+        setCookieExpiryDays(privacySettings.cookieExpiryDays);
+        setRequireCookieConsent(privacySettings.requireCookieConsent);
+        setTrackTimezone(privacySettings.trackTimezone ?? true);
+        setTrackDeviceSpecs(privacySettings.trackDeviceSpecs ?? true);
+        setTrackConnectivity(privacySettings.trackConnectivity ?? true);
+        setTrackTheme(privacySettings.trackTheme ?? true);
+        setTrackAnalyticsPresence(privacySettings.trackAnalyticsPresence ?? true);
+      }
     }
   }, [privacySettings]);
 
@@ -458,6 +473,59 @@ export const SettingsPanel: React.FC = () => {
                           <li><code className="text-xs bg-muted px-1.5 py-0.5 rounded">visitor.landingPage</code> - First page visited</li>
                         </ul>
                       </div>
+
+                      <Separator />
+
+                      <div className="space-y-4">
+                        <Label className="text-base font-semibold">Extended Enhanced Tracking</Label>
+                        <p className="text-sm text-muted-foreground -mt-3">
+                          Select specific client-side data points to collect. Disabling these reduces personalization but increases privacy.
+                        </p>
+
+                        <div className="grid gap-4 pl-2 border-l-2 border-muted ml-1">
+
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                              <Label className="font-normal">Track Timezone</Label>
+                              <p className="text-xs text-muted-foreground">Detect accurate visitor timezone (e.g., "Asia/Kuwait") instead of UTC</p>
+                            </div>
+                            <Switch checked={trackTimezone} onCheckedChange={(c) => { setTrackTimezone(c); handlePrivacyChange(); }} />
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                              <Label className="font-normal">Track Device Specs</Label>
+                              <p className="text-xs text-muted-foreground">Screen resolution, viewport size, and pixel ratio for responsive logic</p>
+                            </div>
+                            <Switch checked={trackDeviceSpecs} onCheckedChange={(c) => { setTrackDeviceSpecs(c); handlePrivacyChange(); }} />
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                              <Label className="font-normal">Track Connectivity</Label>
+                              <p className="text-xs text-muted-foreground">Network connection type (4G/WiFi) and online status</p>
+                            </div>
+                            <Switch checked={trackConnectivity} onCheckedChange={(c) => { setTrackConnectivity(c); handlePrivacyChange(); }} />
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                              <Label className="font-normal">Track Theme Preference</Label>
+                              <p className="text-xs text-muted-foreground">System dark/light mode preference</p>
+                            </div>
+                            <Switch checked={trackTheme} onCheckedChange={(c) => { setTrackTheme(c); handlePrivacyChange(); }} />
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                              <Label className="font-normal">Track Analytics Presence</Label>
+                              <p className="text-xs text-muted-foreground">Detect presence of other analytics tools (GA, FB Pixel) for context</p>
+                            </div>
+                            <Switch checked={trackAnalyticsPresence} onCheckedChange={(c) => { setTrackAnalyticsPresence(c); handlePrivacyChange(); }} />
+                          </div>
+
+                        </div>
+                      </div>
                     </>
                   )}
 
@@ -469,6 +537,11 @@ export const SettingsPanel: React.FC = () => {
                         enableVisitorTracking,
                         cookieExpiryDays,
                         requireCookieConsent,
+                        trackTimezone,
+                        trackDeviceSpecs,
+                        trackConnectivity,
+                        trackTheme,
+                        trackAnalyticsPresence,
                       })}
                       disabled={!hasPrivacyChanges || savePrivacyMutation.isPending}
                     >

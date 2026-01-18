@@ -11,6 +11,7 @@ import { getCookie } from 'hono/cookie';
 import { renderPage } from '../ssr/PageRenderer.js';
 import { createVariableStore, VariableStore } from '../ssr/store.js';
 import { buildTemplateContext, PageData as ContextPageData } from '../ssr/lib/context.js';
+import { getDefaultTrackingConfig, TrackingConfig } from '../ssr/lib/tracking.js';
 
 // Type definitions for page data
 interface PageComponent {
@@ -134,11 +135,25 @@ async function fetchPage(slug: string): Promise<PageData | null> {
     }
 }
 
+async function fetchTrackingConfig(): Promise<TrackingConfig> {
+    const apiBase = process.env.FASTAPI_URL || 'http://127.0.0.1:8000';
+    try {
+        const response = await fetch(`${apiBase}/api/settings/privacy`);
+        if (response.ok) {
+            return await response.json();
+        }
+    } catch (error) {
+        console.warn('[SSR] Failed to fetch tracking config:', error);
+    }
+    return getDefaultTrackingConfig();
+}
+
 // Generate the full HTML document
 function generateHtmlDocument(
     page: PageData,
     bodyHtml: string,
-    initialState: Record<string, unknown>
+    initialState: Record<string, unknown>,
+    trackingConfig: TrackingConfig
 ): string {
     const title = page.title || page.name;
     const description = page.description || '';
@@ -159,14 +174,62 @@ function generateHtmlDocument(
     <link rel="modulepreload" href="/static/react/hydrate.js">
 
     <!-- Client-Side Visitor Context Enhancement -->
+    <!-- Client-Side Visitor Context Enhancement -->
     <script>
     (function() {
-        // Automatically detect visitor timezone for server-side city detection
-        if (!document.cookie.includes('visitor-tz=')) {
-            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            document.cookie = "visitor-tz=" + tz + "; path=/; max-age=31536000; SameSite=Lax";
-            // Optional: Reload if critical, but better to just let it take effect next request
-            // console.log('[Visitor] Detected timezone:', tz);
+        // Configuration from server settings
+        const config = ${JSON.stringify({
+        tz: trackingConfig.trackTimezone ?? true,
+        sd: trackingConfig.trackDeviceSpecs ?? true,
+        conn: trackingConfig.trackConnectivity ?? true,
+        theme: trackingConfig.trackTheme ?? true,
+        analytics: trackingConfig.trackAnalyticsPresence ?? true
+    })};
+
+        if (sessionStorage.getItem('visitor-enhanced')) return;
+
+        const data = {};
+
+        // Timezone
+        if (config.tz) {
+            data.tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        }
+
+        // Screen & Device
+        if (config.sd) {
+            data.sd = screen.width + 'x' + screen.height;
+            data.vp = innerWidth + 'x' + innerHeight;
+            data.dpr = devicePixelRatio;
+            data.touch = 'ontouchstart' in window;
+        }
+
+        // Connectivity
+        if (config.conn && navigator.connection) {
+            data.conn = navigator.connection.effectiveType;
+        }
+
+        // Theme
+        if (config.theme) {
+            data.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+
+        // Analytics Presence (Context only)
+        if (config.analytics) {
+            const getCookie = (name) => document.cookie.split('; ').some(row => row.trim().startsWith(name + '='));
+            data.ga = getCookie('_ga');
+            data.fbp = getCookie('_fbp');
+        }
+
+        if (Object.keys(data).length > 0) {
+            // Enhanced JSON cookie
+            document.cookie = "visitor-enhanced=" + encodeURIComponent(JSON.stringify(data)) + "; path=/; max-age=31536000; SameSite=Lax";
+            
+            // Legacy / Simple Timezone Cookie fallback
+            if (data.tz) {
+                document.cookie = "visitor-tz=" + data.tz + "; path=/; max-age=31536000; SameSite=Lax";
+            }
+
+            sessionStorage.setItem('visitor-enhanced', '1');
         }
     })();
     </script>
@@ -351,8 +414,11 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
         cookies: context.cookies,
     };
 
+    // Fetch tracking config
+    const trackingConfig = await fetchTrackingConfig();
+
     // Generate full HTML document
-    const htmlDoc = generateHtmlDocument(page, bodyHtml, initialState);
+    const htmlDoc = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig);
 
     // Set cache headers (Disabled for debugging/immediate updates)
     c.header('Cache-Control', 'no-cache, no-store, must-revalidate');

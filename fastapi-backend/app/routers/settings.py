@@ -21,6 +21,12 @@ class PrivacySettings(BaseModel):
     enableVisitorTracking: bool = False
     cookieExpiryDays: int = 365
     requireCookieConsent: bool = True
+    # Enhanced Tracking Flags
+    trackTimezone: bool = True
+    trackDeviceSpecs: bool = True
+    trackConnectivity: bool = True
+    trackTheme: bool = True
+    trackAnalyticsPresence: bool = True
 
 
 # File-based settings storage (simple MVP approach)

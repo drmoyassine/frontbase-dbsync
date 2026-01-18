@@ -10,6 +10,7 @@ import { html } from 'hono/html';
 import { getCookie } from 'hono/cookie';
 import { renderPage } from '../ssr/PageRenderer.js';
 import { createVariableStore, VariableStore } from '../ssr/store.js';
+import { buildTemplateContext, PageData as ContextPageData } from '../ssr/lib/context.js';
 
 // Type definitions for page data
 interface PageComponent {
@@ -295,26 +296,46 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     //     return c.json({ error: 'Unauthorized', message: 'This page is private' }, 403);
     // }
 
-    // Create variable store with 3 scopes
-    const store = createVariableStore();
+    // Build page data for template context
+    const contextPageData: ContextPageData = {
+        id: page.id,
+        title: page.title || page.name,
+        slug: page.slug,
+        description: page.description,
+        published: page.isPublic,
+        createdAt: (page as any).createdAt || new Date().toISOString(),
+        updatedAt: (page as any).updatedAt || new Date().toISOString(),
+        canonicalUrl: undefined,
+        ogImage: undefined,
+        ogType: 'website',
+        customVariables: {},
+    };
 
-    // Initialize cookies from request
-    const theme = getCookie(c, 'theme') || 'light';
-    const authToken = getCookie(c, 'sb-access-token');
+    // Build template context for LiquidJS
+    const context = await buildTemplateContext(
+        c.req.raw,
+        contextPageData,
+        undefined,  // trackingConfig (use defaults)
+        undefined   // dataContext
+    );
 
-    store.setCookie('theme', theme);
-    if (authToken) {
-        store.setCookie('sb-access-token', authToken);
-    }
+    // DEBUG: Log visitor context
+    console.log('[SSR] Visitor Context:', JSON.stringify({
+        country: context.visitor.country,
+        city: context.visitor.city,
+        ip: context.visitor.ip,
+        device: context.visitor.device,
+        browser: context.visitor.browser,
+    }, null, 2));
 
-    // Render page components to HTML
-    const bodyHtml = renderPage(page.layoutData, store);
+    // Render page components to HTML (async with LiquidJS)
+    const bodyHtml = await renderPage(page.layoutData, context);
 
     // Prepare initial state for client hydration
     const initialState = {
-        pageVariables: store.getPageVariables(),
-        sessionVariables: store.getSessionVariables(),
-        cookies: { theme },
+        pageVariables: context.local,
+        sessionVariables: context.session,
+        cookies: context.cookies,
     };
 
     // Generate full HTML document
@@ -380,9 +401,6 @@ pagesRoute.get('/', async (c) => {
 
         // Render the homepage if we have one
         if (homepage) {
-            // Create variable store with 3 scopes
-            const store = createVariableStore();
-
             // Prepare page data for the template
             const page: PageData = {
                 id: homepage.id,
@@ -396,14 +414,37 @@ pagesRoute.get('/', async (c) => {
                 datasources: homepage.datasources as unknown as Record<string, unknown>[] | undefined,
             };
 
-            // Render the page content
-            const bodyHtml = renderPage(page.layoutData, store);
+            // Build page data for template context
+            const contextPageData: ContextPageData = {
+                id: homepage.id,
+                title: homepage.title || homepage.name,
+                slug: homepage.slug,
+                description: homepage.description,
+                published: homepage.isPublic,
+                createdAt: homepage.publishedAt || new Date().toISOString(),
+                updatedAt: homepage.publishedAt || new Date().toISOString(),
+                canonicalUrl: undefined,
+                ogImage: undefined,
+                ogType: 'website',
+                customVariables: {},
+            };
 
-            // Build initial state from store (same pattern as slug route)
+            // Build template context for LiquidJS
+            const context = await buildTemplateContext(
+                c.req.raw,
+                contextPageData,
+                undefined,  // trackingConfig
+                undefined   // dataContext
+            );
+
+            // Render the page content (async with LiquidJS)
+            const bodyHtml = await renderPage(page.layoutData, context);
+
+            // Build initial state from context
             const initialState = {
-                pageVariables: store.getPageVariables(),
-                sessionVariables: store.getSessionVariables(),
-                cookies: store.getCookies(),
+                pageVariables: context.local,
+                sessionVariables: context.session,
+                cookies: context.cookies,
             };
 
             // Return full HTML page

@@ -1,4 +1,4 @@
-# Active Context
+f# Active Context
 
 This file tracks the project's current status, including recent changes, current goals, and open questions.
 2026-01-15 - 🔧 DATATABLE REFACTOR: Split `DataTable.tsx` into modular components (`datatable/`)

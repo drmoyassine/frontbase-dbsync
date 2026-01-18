@@ -371,6 +371,35 @@ The following items are **NOT in MVP** but planned for future releases:
 - **Current state**: Storage admin calls Hono directly (works but architecturally inconsistent)
 - **When:** Before production or when bundle size matters
 
+### Future Sprint: GDPR Compliance Enhancements
+
+- **Goal:** Full GDPR compliance for visitor tracking and privacy features.
+- **Features:**
+  - **Cookie Consent Banner**: UI component that shows before setting tracking cookies
+    - Accept/Reject buttons
+    - Store consent choice in cookie
+    - Only set tracking cookies after explicit consent
+    - Configurable banner text and styling
+  - **IP Anonymization Toggle**: Privacy setting to anonymize IP addresses
+    - Remove last octet (e.g., `192.168.1.123` → `192.168.1.0`)
+    - Apply to `visitor.ip` before storage/logging
+    - Comply with GDPR "privacy by design" principle
+  - **Privacy Policy Template**: Auto-generated privacy policy page
+    - Explains what data is collected (cookies, IP, headers)
+    - Links to GDPR rights (access, deletion, portability)
+    - Customizable per-project branding
+    - Route: `/privacy` (auto-generated)
+  - **Data Retention Controls**: Configure how long visitor data persists
+    - Auto-delete tracking cookies after expiry
+    - Purge visitor logs older than X days
+- **Implementation:**
+  - Create `ConsentBanner.tsx` component (edge-rendered)
+  - Add `anonymizeIPs` to `PrivacySettings` model
+  - Update `context.ts` to check consent before tracking
+  - Generate privacy policy from template engine
+- **When:** Before launching in EU markets or handling EU user data
+
+
 ---
 
 ## Sprint Summary

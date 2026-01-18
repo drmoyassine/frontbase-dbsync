@@ -8,8 +8,7 @@
 
 import { hydrateRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-// @ts-ignore - This file is compiled separately for the browser bundle
-import { createClientStore, VariableStore } from '../src/ssr/store.js';
+import { createClientStore, VariableStore } from '../src/ssr/store';
 
 // Global state
 let queryClient: QueryClient;

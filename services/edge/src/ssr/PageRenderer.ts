@@ -3,12 +3,15 @@
  * 
  * Recursively renders page components to HTML string.
  * Supports static, interactive, and data-driven components.
+ * Uses LiquidJS for template variable resolution.
  */
 
 import { VariableStore } from './store.js';
 import { renderStaticComponent } from './components/static.js';
 import { renderInteractiveComponent } from './components/interactive.js';
 import { renderDataComponent } from './components/data.js';
+import { liquid } from './lib/liquid.js';
+import type { TemplateContext } from './lib/context.js';
 
 // Type definitions
 export interface PageComponent {
@@ -58,25 +61,30 @@ function classifyComponent(type: string): 'static' | 'interactive' | 'data' | 'l
 }
 
 /**
- * Resolve dynamic props that contain variable references.
- * Variables are expressed as {{variableName}} or ${variableName}
+ * Resolve dynamic props that contain LiquidJS template expressions.
+ * Supports: {{ variable }}, {{ var | filter }}, {% if %}...{% endif %}, {% for %}...{% endfor %}
+ * NOW ASYNC due to LiquidJS.
  */
-function resolveProps(
+async function resolveProps(
     props: Record<string, unknown> | undefined,
-    store: VariableStore
-): Record<string, unknown> {
+    context: TemplateContext
+): Promise<Record<string, unknown>> {
     if (!props) return {};
 
     const resolved: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(props)) {
-        if (typeof value === 'string') {
-            // Check for variable expressions: {{var}} or ${var}
-            resolved[key] = value.replace(/\{\{(\w+(?:\.\w+)?)\}\}|\$\{(\w+(?:\.\w+)?)\}/g, (_, v1, v2) => {
-                const varName = v1 || v2;
-                const resolvedValue = store.resolveVariable(varName);
-                return resolvedValue !== undefined ? String(resolvedValue) : '';
-            });
+        if (typeof value === 'string' && (value.includes('{{') || value.includes('{%'))) {
+            // Use LiquidJS for template rendering
+            try {
+                resolved[key] = await liquid.parseAndRender(value, context);
+            } catch (error) {
+                console.error(`Template error in prop "${key}":`, error);
+                resolved[key] = value; // Fallback to original value
+            }
+        } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            // Recursively resolve nested objects
+            resolved[key] = await resolveProps(value as Record<string, unknown>, context);
         } else {
             resolved[key] = value;
         }
@@ -87,10 +95,15 @@ function resolveProps(
 
 /**
  * Render a single component to HTML.
+ * NOW ASYNC due to LiquidJS template resolution.
  */
-function renderComponent(component: PageComponent, store: VariableStore, depth: number = 0): string {
+async function renderComponent(
+    component: PageComponent,
+    context: TemplateContext,
+    depth: number = 0
+): Promise<string> {
     const { id, type, props, styles, children, binding } = component;
-    const resolvedProps = resolveProps(props, store);
+    const resolvedProps = await resolveProps(props, context);
 
     // Inject styles and className from component definition into resolvedProps
     if (styles) {
@@ -104,8 +117,10 @@ function renderComponent(component: PageComponent, store: VariableStore, depth: 
 
     const classification = classifyComponent(type);
 
-    // Render children recursively
-    const childrenHtml = children?.map(child => renderComponent(child, store, depth + 1)).join('') || '';
+    // Render children recursively (async)
+    const childrenHtml = children
+        ? (await Promise.all(children.map(child => renderComponent(child, context, depth + 1)))).join('')
+        : '';
 
     switch (classification) {
         case 'static':
@@ -232,8 +247,12 @@ function buildClassName(...classes: (string | undefined)[]): string {
 
 /**
  * Main entry point: Render a page layout to HTML.
+ * NOW ASYNC due to LiquidJS template resolution.
  */
-export function renderPage(layoutData: PageLayoutData, store: VariableStore): string {
+export async function renderPage(
+    layoutData: PageLayoutData,
+    context: TemplateContext
+): Promise<string> {
     if (!layoutData || !layoutData.content) {
         return '<div class="fb-empty">No content</div>';
     }
@@ -277,12 +296,13 @@ export function renderPage(layoutData: PageLayoutData, store: VariableStore): st
         rootStyle = buildStyleString(rootProps as Record<string, unknown>);
     }
 
-    // Render all top-level components - wrapped for proper block layout
-    const contentHtml = layoutData.content
-        .map(component => renderComponent(component, store))
-        .join('');
+    // Render all top-level components (async) - wrapped for proper block layout
+    const contentHtml = (await Promise.all(
+        layoutData.content.map(component => renderComponent(component, context))
+    )).join('');
 
     return `<div class="fb-page ${rootClass}" style="${rootStyle}">${contentHtml}</div>`;
 }
 
 export { renderComponent, resolveProps, classifyComponent };
+export type { TemplateContext };

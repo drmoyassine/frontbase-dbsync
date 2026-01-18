@@ -126,3 +126,9 @@ export interface RedisTestResult {
     success: boolean
     message: string
 }
+
+export interface PrivacySettings {
+    enableVisitorTracking: boolean
+    cookieExpiryDays: number
+    requireCookieConsent: boolean
+}

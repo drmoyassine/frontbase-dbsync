@@ -22,6 +22,7 @@ import { DataBindingModal } from './data-binding/DataBindingModal';
 import { DataTablePropertiesPanel } from '@/components/builder/data-table/DataTablePropertiesPanel';
 import { FormPropertiesPanel } from './form/FormPropertiesPanel';
 import { ActionProperties } from '@/components/builder/properties/ActionProperties';
+import { VariableInput } from './VariableInput';
 
 // Helper to find component recursively
 const findComponent = (components: any[], id: string): any => {
@@ -163,11 +164,11 @@ export const PropertiesPanel = () => {
         return (
           <>
             <div className="space-y-2">
-              <Label htmlFor="heading-text">Text</Label>
-              <Input
-                id="heading-text"
+              <Label htmlFor="heading-text">Text <span className="text-muted-foreground text-xs">(@ for variables)</span></Label>
+              <VariableInput
                 value={props.text || ''}
-                onChange={(e) => updateComponentProp('text', e.target.value)}
+                onChange={(value) => updateComponentProp('text', value)}
+                placeholder="Enter heading text or type @ for variables"
               />
             </div>
             <div className="space-y-2">
@@ -194,12 +195,12 @@ export const PropertiesPanel = () => {
         return (
           <>
             <div className="space-y-2">
-              <Label htmlFor="text-content">Content</Label>
-              <Textarea
-                id="text-content"
+              <Label htmlFor="text-content">Content <span className="text-muted-foreground text-xs">(@ for variables)</span></Label>
+              <VariableInput
                 value={props.text || ''}
-                onChange={(e) => updateComponentProp('text', e.target.value)}
-                rows={4}
+                onChange={(value) => updateComponentProp('text', value)}
+                multiline
+                placeholder="Enter text or type @ for variables"
               />
             </div>
             {renderDataBindingButton()}
@@ -343,11 +344,11 @@ export const PropertiesPanel = () => {
         return (
           <>
             <div className="space-y-2">
-              <Label htmlFor="badge-text">Text</Label>
-              <Input
-                id="badge-text"
+              <Label htmlFor="badge-text">Text <span className="text-muted-foreground text-xs">(@ for variables)</span></Label>
+              <VariableInput
                 value={props.text || ''}
-                onChange={(e) => updateComponentProp('text', e.target.value)}
+                onChange={(value) => updateComponentProp('text', value)}
+                placeholder="Badge text"
               />
             </div>
             <div className="space-y-2">
@@ -616,11 +617,10 @@ export const PropertiesPanel = () => {
       <div className="flex-1 overflow-y-auto">
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="component-title" className="text-sm font-medium">Component Title</Label>
-            <Input
-              id="component-title"
+            <Label htmlFor="component-title" className="text-sm font-medium">Component Title <span className="text-muted-foreground text-xs">(@ for variables)</span></Label>
+            <VariableInput
               value={selectedComponent.props.title || ''}
-              onChange={(e) => updateComponentProp('title', e.target.value)}
+              onChange={(value) => updateComponentProp('title', value)}
               placeholder="Enter component title"
             />
           </div>

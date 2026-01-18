@@ -34,6 +34,7 @@
         "drizzle-orm": "^0.38.0",
         "hono": "^4.6.0",
         "ioredis": "^5.9.2",
+        "liquidjs": "^10.24.0",
         "lucide-react": "^0.562.0",
         "postgres": "^3.4.0",
         "react": "^19.2.3",

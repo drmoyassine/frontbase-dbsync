@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Settings, Globe, Palette, Loader2, Check, X, RefreshCw, Database } from 'lucide-react';
+import { Settings, Globe, Palette, Loader2, Check, X, RefreshCw, Database, Shield } from 'lucide-react';
 import { useBuilderStore } from '@/stores/builder';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '@/modules/dbsync/api';
@@ -25,6 +25,12 @@ export const SettingsPanel: React.FC = () => {
   const [cacheTtlCount, setCacheTtlCount] = useState(300);
   const [hasRedisChanges, setHasRedisChanges] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Privacy state
+  const [enableVisitorTracking, setEnableVisitorTracking] = useState(false);
+  const [cookieExpiryDays, setCookieExpiryDays] = useState(365);
+  const [requireCookieConsent, setRequireCookieConsent] = useState(true);
+  const [hasPrivacyChanges, setHasPrivacyChanges] = useState(false);
 
   const { data: redisSettings, isLoading: isRedisLoading } = useQuery({
     queryKey: ['redisSettings'],
@@ -61,6 +67,32 @@ export const SettingsPanel: React.FC = () => {
     setTestResult(null);
   };
 
+  // Privacy queries
+  const { data: privacySettings, isLoading: isPrivacyLoading } = useQuery({
+    queryKey: ['privacySettings'],
+    queryFn: () => settingsApi.getPrivacy().then(r => r.data),
+  });
+
+  useEffect(() => {
+    if (privacySettings) {
+      setEnableVisitorTracking(privacySettings.enableVisitorTracking);
+      setCookieExpiryDays(privacySettings.cookieExpiryDays);
+      setRequireCookieConsent(privacySettings.requireCookieConsent);
+    }
+  }, [privacySettings]);
+
+  const savePrivacyMutation = useMutation({
+    mutationFn: (data: any) => settingsApi.updatePrivacy(data).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['privacySettings'] });
+      setHasPrivacyChanges(false);
+    },
+  });
+
+  const handlePrivacyChange = () => {
+    setHasPrivacyChanges(true);
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -71,9 +103,10 @@ export const SettingsPanel: React.FC = () => {
       </div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
+        <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="cache">Cache & Performance</TabsTrigger>
+          <TabsTrigger value="privacy">Privacy & Tracking</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-6 mt-6">
@@ -160,8 +193,8 @@ export const SettingsPanel: React.FC = () => {
                         type="button"
                         onClick={() => { setRedisType('upstash'); handleRedisChange(); }}
                         className={`p-4 rounded-lg border-2 text-left transition-all ${redisType === 'upstash'
-                            ? 'border-primary bg-primary/5'
-                            : 'border-muted hover:border-muted-foreground/30'
+                          ? 'border-primary bg-primary/5'
+                          : 'border-muted hover:border-muted-foreground/30'
                           }`}
                       >
                         <div className="font-medium">Upstash (Managed)</div>
@@ -173,8 +206,8 @@ export const SettingsPanel: React.FC = () => {
                         type="button"
                         onClick={() => { setRedisType('self-hosted'); handleRedisChange(); }}
                         className={`p-4 rounded-lg border-2 text-left transition-all ${redisType === 'self-hosted'
-                            ? 'border-primary bg-primary/5'
-                            : 'border-muted hover:border-muted-foreground/30'
+                          ? 'border-primary bg-primary/5'
+                          : 'border-muted hover:border-muted-foreground/30'
                           }`}
                       >
                         <div className="font-medium">Self-Hosted (BYO)</div>
@@ -340,6 +373,111 @@ export const SettingsPanel: React.FC = () => {
                       Save Redis Settings
                     </Button>
                     {saveRedisMutation.isSuccess && !hasRedisChanges && (
+                      <span className="text-sm text-green-600 flex items-center gap-1">
+                        <Check className="h-4 w-4" /> Saved
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="privacy" className="space-y-6 mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Privacy & Tracking
+              </CardTitle>
+              <CardDescription>
+                Configure visitor tracking to enable personalization features
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isPrivacyLoading ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading settings...
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable visitor tracking cookies</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Track first visit, visit count, and landing page for personalization
+                      </p>
+                    </div>
+                    <Switch
+                      checked={enableVisitorTracking}
+                      onCheckedChange={(checked) => { setEnableVisitorTracking(checked); handlePrivacyChange(); }}
+                    />
+                  </div>
+
+                  {enableVisitorTracking && (
+                    <>
+                      <Separator />
+
+                      <div className="space-y-2">
+                        <Label htmlFor="cookie-expiry">Cookie expiry (days)</Label>
+                        <Input
+                          id="cookie-expiry"
+                          type="number"
+                          value={cookieExpiryDays}
+                          onChange={(e) => { setCookieExpiryDays(parseInt(e.target.value)); handlePrivacyChange(); }}
+                          min={1}
+                          max={730}
+                          className="max-w-[200px]"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          How long to remember visitors (1-730 days). Default: 365 days.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label>Require cookie consent banner</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Show consent before setting tracking cookies (GDPR compliant)
+                          </p>
+                        </div>
+                        <Switch
+                          checked={requireCookieConsent}
+                          onCheckedChange={(checked) => { setRequireCookieConsent(checked); handlePrivacyChange(); }}
+                        />
+                      </div>
+
+                      <div className="p-4 rounded-lg bg-muted/50 border">
+                        <div className="font-medium mb-2">Available Variables:</div>
+                        <ul className="space-y-1 text-sm text-muted-foreground">
+                          <li><code className="text-xs bg-muted px-1.5 py-0.5 rounded">visitor.isFirstVisit</code> - Boolean indicating first visit</li>
+                          <li><code className="text-xs bg-muted px-1.5 py-0.5 rounded">visitor.visitCount</code> - Number of visits</li>
+                          <li><code className="text-xs bg-muted px-1.5 py-0.5 rounded">visitor.firstVisitAt</code> - Timestamp of first visit</li>
+                          <li><code className="text-xs bg-muted px-1.5 py-0.5 rounded">visitor.landingPage</code> - First page visited</li>
+                        </ul>
+                      </div>
+                    </>
+                  )}
+
+                  <Separator />
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={() => savePrivacyMutation.mutate({
+                        enableVisitorTracking,
+                        cookieExpiryDays,
+                        requireCookieConsent,
+                      })}
+                      disabled={!hasPrivacyChanges || savePrivacyMutation.isPending}
+                    >
+                      {savePrivacyMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : null}
+                      Save Privacy Settings
+                    </Button>
+                    {savePrivacyMutation.isSuccess && !hasPrivacyChanges && (
                       <span className="text-sm text-green-600 flex items-center gap-1">
                         <Check className="h-4 w-4" /> Saved
                       </span>

@@ -39,7 +39,7 @@ export const useComponentTextEditor = (componentId: string | undefined) => {
                     !isPreviewMode && 'cursor-text hover:bg-accent/20 rounded-sm transition-colors duration-200'
                 )}
                 style={style}
-                onDoubleClick={(e) => {
+                onClick={(e) => {
                     if (!isPreviewMode && componentId) {
                         e.stopPropagation();
                         setEditingComponentId(componentId);

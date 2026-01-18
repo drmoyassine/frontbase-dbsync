@@ -279,6 +279,23 @@ function PrivacyTrackingSettings() {
     const [enableVisitorTracking, setEnableVisitorTracking] = React.useState(false);
     const [cookieExpiryDays, setCookieExpiryDays] = React.useState(365);
     const [requireCookieConsent, setRequireCookieConsent] = React.useState(true);
+    const [advancedVariables, setAdvancedVariables] = React.useState<PrivacySettings['advancedVariables']>({
+        ip: { collect: false, expose: false },
+        browser: { collect: true, expose: true },
+        os: { collect: true, expose: true },
+        language: { collect: true, expose: true },
+        viewport: { collect: true, expose: true },
+        themePreference: { collect: true, expose: true },
+        connectionType: { collect: true, expose: false },
+        referrer: { collect: true, expose: true },
+        isBot: { collect: true, expose: true },
+    });
+    const [cookieVariables, setCookieVariables] = React.useState<PrivacySettings['cookieVariables']>({
+        isFirstVisit: { collect: true, expose: true },
+        visitCount: { collect: true, expose: true },
+        firstVisitAt: { collect: true, expose: true },
+        landingPage: { collect: true, expose: true },
+    });
     const [hasChanges, setHasChanges] = React.useState(false);
 
     const { data: settings, isLoading } = useQuery({
@@ -291,6 +308,43 @@ function PrivacyTrackingSettings() {
             setEnableVisitorTracking(settings.enableVisitorTracking);
             setCookieExpiryDays(settings.cookieExpiryDays);
             setRequireCookieConsent(settings.requireCookieConsent);
+            // Handle migration from old settings structure - merge with defaults
+            const defaultAdvanced = {
+                ip: { collect: false, expose: false },
+                browser: { collect: true, expose: true },
+                os: { collect: true, expose: true },
+                language: { collect: true, expose: true },
+                viewport: { collect: true, expose: true },
+                themePreference: { collect: true, expose: true },
+                connectionType: { collect: true, expose: false },
+                referrer: { collect: true, expose: true },
+                isBot: { collect: true, expose: true },
+            };
+            setAdvancedVariables({
+                ip: settings.advancedVariables?.ip ?? defaultAdvanced.ip,
+                browser: settings.advancedVariables?.browser ?? defaultAdvanced.browser,
+                os: settings.advancedVariables?.os ?? defaultAdvanced.os,
+                language: settings.advancedVariables?.language ?? defaultAdvanced.language,
+                viewport: settings.advancedVariables?.viewport ?? defaultAdvanced.viewport,
+                themePreference: settings.advancedVariables?.themePreference ?? defaultAdvanced.themePreference,
+                connectionType: settings.advancedVariables?.connectionType ?? defaultAdvanced.connectionType,
+                referrer: settings.advancedVariables?.referrer ?? defaultAdvanced.referrer,
+                isBot: settings.advancedVariables?.isBot ?? defaultAdvanced.isBot,
+            });
+            const defaultCookieVars = {
+                isFirstVisit: { collect: true, expose: true },
+                visitCount: { collect: true, expose: true },
+                firstVisitAt: { collect: true, expose: true },
+                landingPage: { collect: true, expose: true },
+            };
+            if (settings.cookieVariables) {
+                setCookieVariables({
+                    isFirstVisit: settings.cookieVariables.isFirstVisit ?? defaultCookieVars.isFirstVisit,
+                    visitCount: settings.cookieVariables.visitCount ?? defaultCookieVars.visitCount,
+                    firstVisitAt: settings.cookieVariables.firstVisitAt ?? defaultCookieVars.firstVisitAt,
+                    landingPage: settings.cookieVariables.landingPage ?? defaultCookieVars.landingPage,
+                });
+            }
         }
     }, [settings]);
 
@@ -307,11 +361,21 @@ function PrivacyTrackingSettings() {
         setHasChanges(true);
     };
 
+    const handleAdvancedChange = (key: keyof PrivacySettings['advancedVariables'], field: 'collect' | 'expose', value: boolean) => {
+        setAdvancedVariables(prev => ({
+            ...prev,
+            [key]: { ...prev[key], [field]: value }
+        }));
+        setHasChanges(true);
+    };
+
     const handleSave = () => {
         saveMutation.mutate({
             enableVisitorTracking,
             cookieExpiryDays,
             requireCookieConsent,
+            cookieVariables,
+            advancedVariables,
         });
     };
 
@@ -325,6 +389,14 @@ function PrivacyTrackingSettings() {
             </div>
         );
     }
+
+    // Configurable variables metadata
+    const configurableVars = [
+        { key: 'ip' as const, label: 'IP Address', description: 'Visitor IP (privacy sensitive)' },
+        { key: 'browser' as const, label: 'Browser', description: 'Browser name (Chrome, Safari)' },
+        { key: 'os' as const, label: 'Operating System', description: 'OS name (Windows, macOS)' },
+        { key: 'language' as const, label: 'Language', description: 'Preferred language (en, ar)' },
+    ];
 
     return (
         <div className="card">
@@ -387,14 +459,58 @@ function PrivacyTrackingSettings() {
                         </div>
 
                         <div className="info-box" style={{ marginTop: '1.5rem' }}>
-                            <strong>Available Variables:</strong>
+                            <strong>📌 Basic Variables (Always Available):</strong>
                             <ul style={{ marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
-                                <li><code>visitor.isFirstVisit</code> - Boolean indicating first visit</li>
-                                <li><code>visitor.visitCount</code> - Number of visits</li>
-                                <li><code>visitor.firstVisitAt</code> - Timestamp of first visit</li>
-                                <li><code>visitor.landingPage</code> - First page visited</li>
+                                <li><code>visitor.country</code> - Country code</li>
+                                <li><code>visitor.city</code> - City name</li>
+                                <li><code>visitor.timezone</code> - Timezone offset</li>
+                                <li><code>visitor.device</code> - Device type (mobile/tablet/desktop)</li>
                             </ul>
                         </div>
+
+                        <hr style={{ margin: '1.5rem 0', borderColor: 'var(--border-color)' }} />
+
+                        <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            ⚙️ Configurable Variables
+                        </h3>
+                        <p className="form-hint" style={{ marginBottom: '1rem' }}>
+                            Configure collection and exposure of extended visitor data.
+                        </p>
+
+                        <table className="config-table">
+                            <thead>
+                                <tr>
+                                    <th style={{ textAlign: 'left' }}>Variable</th>
+                                    <th style={{ textAlign: 'center', width: '80px' }}>Collect</th>
+                                    <th style={{ textAlign: 'center', width: '80px' }}>Expose</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {configurableVars.map(({ key, label, description }) => (
+                                    <tr key={key}>
+                                        <td>
+                                            <strong>{label}</strong>
+                                            <div className="form-hint" style={{ marginTop: '0.25rem' }}>{description}</div>
+                                        </td>
+                                        <td style={{ textAlign: 'center' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={advancedVariables[key].collect}
+                                                onChange={(e) => handleAdvancedChange(key, 'collect', e.target.checked)}
+                                            />
+                                        </td>
+                                        <td style={{ textAlign: 'center' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={advancedVariables[key].expose}
+                                                onChange={(e) => handleAdvancedChange(key, 'expose', e.target.checked)}
+                                                disabled={!advancedVariables[key].collect}
+                                            />
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </>
                 )}
 
@@ -428,6 +544,30 @@ function PrivacyTrackingSettings() {
                     border-radius: 3px;
                     font-size: 0.875em;
                     font-family: monospace;
+                }
+                .config-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+                .config-table th,
+                .config-table td {
+                    padding: 0.75rem 0.5rem;
+                    border-bottom: 1px solid var(--border-color);
+                }
+                .config-table th {
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    color: var(--text-muted);
+                }
+                .config-table input[type="checkbox"] {
+                    width: 1.25rem;
+                    height: 1.25rem;
+                    cursor: pointer;
+                }
+                .config-table input[type="checkbox"]:disabled {
+                    opacity: 0.4;
+                    cursor: not-allowed;
                 }
                 .spin {
                     animation: spin 1s linear infinite;

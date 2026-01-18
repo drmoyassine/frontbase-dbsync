@@ -183,7 +183,18 @@ function buildVisitorContext(request: Request): VisitorContext {
 
     // Timezone detection:
     const cookies = parseCookies(headers.get('Cookie') || '');
-    let timezone = cookies['visitor-tz'] || cf?.timezone || 'UTC';
+
+    // Parse visitor-enhanced JSON cookie (set by client-side script)
+    let clientEnhanced: { tz?: string; vp?: string; theme?: string; conn?: string } = {};
+    const enhancedCookie = cookies['visitor-enhanced'];
+    if (enhancedCookie) {
+        try {
+            clientEnhanced = JSON.parse(decodeURIComponent(enhancedCookie));
+        } catch { /* Invalid JSON, ignore */ }
+    }
+
+    // Use client timezone if available, else fallback to Cloudflare or cookie
+    let timezone = clientEnhanced.tz || cookies['visitor-tz'] || cf?.timezone || 'UTC';
 
     // City detection:
     // 1. From Cloudflare Workers cf object
@@ -208,7 +219,7 @@ function buildVisitorContext(request: Request): VisitorContext {
         country = 'Local';
         city = 'Development';
         // Note: This gets the SERVER's timezone, not the visitor's
-        timezone = cookies['visitor-tz'] || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+        timezone = clientEnhanced.tz || cookies['visitor-tz'] || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     }
 
     return {
@@ -222,6 +233,10 @@ function buildVisitorContext(request: Request): VisitorContext {
         language: headers.get('Accept-Language')?.split(',')[0]?.split(';')[0] || 'en',
         referrer: headers.get('Referer') || '',
         isBot: /bot|crawl|spider|slurp|googlebot|bingbot/i.test(userAgent),
+        // Client-side enhanced fields
+        viewport: clientEnhanced.vp,
+        themePreference: clientEnhanced.theme as 'dark' | 'light' | undefined,
+        connectionType: clientEnhanced.conn,
     };
 }
 

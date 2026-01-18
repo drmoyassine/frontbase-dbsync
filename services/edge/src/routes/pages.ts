@@ -174,61 +174,37 @@ function generateHtmlDocument(
     <link rel="modulepreload" href="/static/react/hydrate.js">
 
     <!-- Client-Side Visitor Context Enhancement -->
-    <!-- Client-Side Visitor Context Enhancement -->
     <script>
     (function() {
-        // Configuration from server settings
-        const config = ${JSON.stringify({
-        tz: trackingConfig.trackTimezone ?? true,
-        sd: trackingConfig.trackDeviceSpecs ?? true,
-        conn: trackingConfig.trackConnectivity ?? true,
-        theme: trackingConfig.trackTheme ?? true,
-        analytics: trackingConfig.trackAnalyticsPresence ?? true
-    })};
-
         if (sessionStorage.getItem('visitor-enhanced')) return;
-
+        
+        // Configuration from advancedVariables
+        const adv = ${JSON.stringify(trackingConfig.advancedVariables || {})};
         const data = {};
 
-        // Timezone
-        if (config.tz) {
-            data.tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        // Timezone as UTC offset (+3, -5.5)
+        if (adv.timezone?.collect !== false) {
+            const offset = -new Date().getTimezoneOffset() / 60;
+            data.tz = (offset >= 0 ? '+' : '') + offset;
         }
 
-        // Screen & Device
-        if (config.sd) {
-            data.sd = screen.width + 'x' + screen.height;
+        // Viewport only
+        if (adv.viewport?.collect !== false) {
             data.vp = innerWidth + 'x' + innerHeight;
-            data.dpr = devicePixelRatio;
-            data.touch = 'ontouchstart' in window;
         }
 
-        // Connectivity
-        if (config.conn && navigator.connection) {
-            data.conn = navigator.connection.effectiveType;
-        }
-
-        // Theme
-        if (config.theme) {
+        // Theme preference
+        if (adv.themePreference?.collect !== false) {
             data.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         }
 
-        // Analytics Presence (Context only)
-        if (config.analytics) {
-            const getCookie = (name) => document.cookie.split('; ').some(row => row.trim().startsWith(name + '='));
-            data.ga = getCookie('_ga');
-            data.fbp = getCookie('_fbp');
+        // Connection type
+        if (adv.connectionType?.collect !== false && navigator.connection) {
+            data.conn = navigator.connection.effectiveType;
         }
 
         if (Object.keys(data).length > 0) {
-            // Enhanced JSON cookie
             document.cookie = "visitor-enhanced=" + encodeURIComponent(JSON.stringify(data)) + "; path=/; max-age=31536000; SameSite=Lax";
-            
-            // Legacy / Simple Timezone Cookie fallback
-            if (data.tz) {
-                document.cookie = "visitor-tz=" + data.tz + "; path=/; max-age=31536000; SameSite=Lax";
-            }
-
             sessionStorage.setItem('visitor-enhanced', '1');
         }
     })();

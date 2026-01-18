@@ -17,16 +17,27 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 # Privacy & Tracking Settings
 # =============================================================================
 
+class AdvancedVariableConfig(BaseModel):
+    collect: bool = True
+    expose: bool = True
+
+
+# Configurable visitor variables with collect/expose toggles
+class AdvancedVariables(BaseModel):
+    timezone: AdvancedVariableConfig = AdvancedVariableConfig()
+    viewport: AdvancedVariableConfig = AdvancedVariableConfig()
+    themePreference: AdvancedVariableConfig = AdvancedVariableConfig()
+    connectionType: AdvancedVariableConfig = AdvancedVariableConfig(collect=True, expose=False)
+    ip: AdvancedVariableConfig = AdvancedVariableConfig(collect=False, expose=False)
+    country: AdvancedVariableConfig = AdvancedVariableConfig()
+    city: AdvancedVariableConfig = AdvancedVariableConfig()
+
+
 class PrivacySettings(BaseModel):
     enableVisitorTracking: bool = False
     cookieExpiryDays: int = 365
     requireCookieConsent: bool = True
-    # Enhanced Tracking Flags
-    trackTimezone: bool = True
-    trackDeviceSpecs: bool = True
-    trackConnectivity: bool = True
-    trackTheme: bool = True
-    trackAnalyticsPresence: bool = True
+    advancedVariables: AdvancedVariables = AdvancedVariables()
 
 
 # File-based settings storage (simple MVP approach)
@@ -63,24 +74,37 @@ def save_settings(settings: dict):
         raise HTTPException(status_code=500, detail=f"Failed to save settings: {e}")
 
 
-@router.get("/privacy", response_model=PrivacySettings)
+@router.get("/privacy/", response_model=PrivacySettings)
 async def get_privacy_settings():
     """
     Get privacy and tracking settings.
     
-    Returns configuration for visitor tracking cookies.
+    Returns configuration for visitor tracking cookies and advanced variables.
     """
     settings = load_settings()
     privacy = settings.get("privacy", {})
+    
+    # Parse advancedVariables with defaults
+    adv_raw = privacy.get("advancedVariables", {})
+    advanced = AdvancedVariables(
+        timezone=AdvancedVariableConfig(**adv_raw.get("timezone", {})),
+        viewport=AdvancedVariableConfig(**adv_raw.get("viewport", {})),
+        themePreference=AdvancedVariableConfig(**adv_raw.get("themePreference", {})),
+        connectionType=AdvancedVariableConfig(**adv_raw.get("connectionType", {"collect": True, "expose": False})),
+        ip=AdvancedVariableConfig(**adv_raw.get("ip", {"collect": False, "expose": False})),
+        country=AdvancedVariableConfig(**adv_raw.get("country", {})),
+        city=AdvancedVariableConfig(**adv_raw.get("city", {})),
+    )
     
     return PrivacySettings(
         enableVisitorTracking=privacy.get("enableVisitorTracking", False),
         cookieExpiryDays=privacy.get("cookieExpiryDays", 365),
         requireCookieConsent=privacy.get("requireCookieConsent", True),
+        advancedVariables=advanced,
     )
 
 
-@router.put("/privacy", response_model=PrivacySettings)
+@router.put("/privacy/", response_model=PrivacySettings)
 async def update_privacy_settings(settings_update: PrivacySettings):
     """
     Update privacy and tracking settings.

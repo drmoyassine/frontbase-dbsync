@@ -85,12 +85,14 @@ function getDefaultVariables(): VariablesResponse {
             { path: 'user.avatar', type: 'string', source: 'user', description: 'Avatar URL' },
             { path: 'user.role', type: 'string', source: 'user', description: 'User role' },
 
-            // Visitor
-            { path: 'visitor.ip', type: 'string', source: 'visitor', description: 'IP address' },
+            // Visitor (Basic - Always Available)
             { path: 'visitor.country', type: 'string', source: 'visitor', description: 'Country code' },
-            { path: 'visitor.city', type: 'string', source: 'visitor', description: 'City' },
-            { path: 'visitor.timezone', type: 'string', source: 'visitor', description: 'Timezone' },
-            { path: 'visitor.device', type: 'string', source: 'visitor', description: 'Device type' },
+            { path: 'visitor.city', type: 'string', source: 'visitor', description: 'City name' },
+            { path: 'visitor.timezone', type: 'string', source: 'visitor', description: 'Timezone offset' },
+            { path: 'visitor.device', type: 'string', source: 'visitor', description: 'Device type (mobile/tablet/desktop)' },
+
+            // Visitor (Configurable - Controlled by Settings > Privacy & Tracking)
+            { path: 'visitor.ip', type: 'string', source: 'visitor', description: 'IP address' },
             { path: 'visitor.browser', type: 'string', source: 'visitor', description: 'Browser name' },
             { path: 'visitor.os', type: 'string', source: 'visitor', description: 'Operating system' },
             { path: 'visitor.language', type: 'string', source: 'visitor', description: 'Preferred language' },

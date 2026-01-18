@@ -27,16 +27,32 @@ export const SettingsPanel: React.FC = () => {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Privacy state
-  // Privacy state
   const [enableVisitorTracking, setEnableVisitorTracking] = useState(false);
   const [cookieExpiryDays, setCookieExpiryDays] = useState(365);
   const [requireCookieConsent, setRequireCookieConsent] = useState(true);
-  // Enhanced Tracking State
-  const [trackTimezone, setTrackTimezone] = useState(true);
-  const [trackDeviceSpecs, setTrackDeviceSpecs] = useState(true);
-  const [trackConnectivity, setTrackConnectivity] = useState(true);
-  const [trackTheme, setTrackTheme] = useState(true);
-  const [trackAnalyticsPresence, setTrackAnalyticsPresence] = useState(true);
+
+  // Advanced Variables (each has collect + expose toggles)
+  // Basic variables (country, city, timezone, device) are always available - not configurable
+  const defaultVar = { collect: true, expose: true };
+  const [advancedVariables, setAdvancedVariables] = useState({
+    ip: { collect: false, expose: false },
+    browser: { ...defaultVar },
+    os: { ...defaultVar },
+    language: { ...defaultVar },
+    viewport: { ...defaultVar },
+    themePreference: { ...defaultVar },
+    connectionType: { collect: true, expose: false },
+    referrer: { ...defaultVar },
+    isBot: { ...defaultVar },
+  });
+
+  // Cookie-based variables (require enableVisitorTracking)
+  const [cookieVariables, setCookieVariables] = useState({
+    isFirstVisit: { ...defaultVar },
+    visitCount: { ...defaultVar },
+    firstVisitAt: { ...defaultVar },
+    landingPage: { ...defaultVar },
+  });
 
   const [hasPrivacyChanges, setHasPrivacyChanges] = useState(false);
 
@@ -83,15 +99,29 @@ export const SettingsPanel: React.FC = () => {
 
   useEffect(() => {
     if (privacySettings) {
-      if (privacySettings) {
-        setEnableVisitorTracking(privacySettings.enableVisitorTracking);
-        setCookieExpiryDays(privacySettings.cookieExpiryDays);
-        setRequireCookieConsent(privacySettings.requireCookieConsent);
-        setTrackTimezone(privacySettings.trackTimezone ?? true);
-        setTrackDeviceSpecs(privacySettings.trackDeviceSpecs ?? true);
-        setTrackConnectivity(privacySettings.trackConnectivity ?? true);
-        setTrackTheme(privacySettings.trackTheme ?? true);
-        setTrackAnalyticsPresence(privacySettings.trackAnalyticsPresence ?? true);
+      setEnableVisitorTracking(privacySettings.enableVisitorTracking);
+      setCookieExpiryDays(privacySettings.cookieExpiryDays);
+      setRequireCookieConsent(privacySettings.requireCookieConsent);
+      if (privacySettings.advancedVariables) {
+        setAdvancedVariables((prev) => ({
+          ip: privacySettings.advancedVariables.ip ?? prev.ip,
+          browser: privacySettings.advancedVariables.browser ?? prev.browser,
+          os: privacySettings.advancedVariables.os ?? prev.os,
+          language: privacySettings.advancedVariables.language ?? prev.language,
+          viewport: privacySettings.advancedVariables.viewport ?? prev.viewport,
+          themePreference: privacySettings.advancedVariables.themePreference ?? prev.themePreference,
+          connectionType: privacySettings.advancedVariables.connectionType ?? prev.connectionType,
+          referrer: privacySettings.advancedVariables.referrer ?? prev.referrer,
+          isBot: privacySettings.advancedVariables.isBot ?? prev.isBot,
+        }));
+      }
+      if (privacySettings.cookieVariables) {
+        setCookieVariables((prev) => ({
+          isFirstVisit: privacySettings.cookieVariables.isFirstVisit ?? prev.isFirstVisit,
+          visitCount: privacySettings.cookieVariables.visitCount ?? prev.visitCount,
+          firstVisitAt: privacySettings.cookieVariables.firstVisitAt ?? prev.firstVisitAt,
+          landingPage: privacySettings.cookieVariables.landingPage ?? prev.landingPage,
+        }));
       }
     }
   }, [privacySettings]);
@@ -410,7 +440,7 @@ export const SettingsPanel: React.FC = () => {
                 Configure visitor tracking to enable personalization features
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               {isPrivacyLoading ? (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -418,116 +448,325 @@ export const SettingsPanel: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label>Enable visitor tracking cookies</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Track first visit, visit count, and landing page for personalization
+                  {/* Section 1: Basic Variables (Always Available) */}
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="text-base font-semibold flex items-center gap-2">
+                        <Globe className="h-4 w-4" />
+                        Basic Variables (Always Available)
+                      </Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        These variables are always collected and available in templates. No configuration needed.
                       </p>
                     </div>
-                    <Switch
-                      checked={enableVisitorTracking}
-                      onCheckedChange={(checked) => { setEnableVisitorTracking(checked); handlePrivacyChange(); }}
-                    />
+
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="text-left px-4 py-2 font-medium">Variable</th>
+                            <th className="text-center px-4 py-2 font-medium w-24">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-t">
+                            <td className="px-4 py-3">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.country</code>
+                              <div className="text-xs text-muted-foreground mt-1">Country name (e.g., Kuwait, USA)</div>
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <span className="text-xs bg-green-500/10 text-green-600 px-2 py-0.5 rounded-full">Always On</span>
+                            </td>
+                          </tr>
+                          <tr className="border-t">
+                            <td className="px-4 py-3">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.city</code>
+                              <div className="text-xs text-muted-foreground mt-1">City name (e.g., Kuwait City, Dubai)</div>
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <span className="text-xs bg-green-500/10 text-green-600 px-2 py-0.5 rounded-full">Always On</span>
+                            </td>
+                          </tr>
+                          <tr className="border-t">
+                            <td className="px-4 py-3">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.timezone</code>
+                              <div className="text-xs text-muted-foreground mt-1">UTC offset (e.g., +03:00, -05:00)</div>
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <span className="text-xs bg-green-500/10 text-green-600 px-2 py-0.5 rounded-full">Always On</span>
+                            </td>
+                          </tr>
+                          <tr className="border-t">
+                            <td className="px-4 py-3">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.device</code>
+                              <div className="text-xs text-muted-foreground mt-1">Device type: mobile, tablet, or desktop</div>
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <span className="text-xs bg-green-500/10 text-green-600 px-2 py-0.5 rounded-full">Always On</span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
 
-                  {enableVisitorTracking && (
-                    <>
-                      <Separator />
+                  <Separator />
 
-                      <div className="space-y-2">
-                        <Label htmlFor="cookie-expiry">Cookie expiry (days)</Label>
-                        <Input
-                          id="cookie-expiry"
-                          type="number"
-                          value={cookieExpiryDays}
-                          onChange={(e) => { setCookieExpiryDays(parseInt(e.target.value)); handlePrivacyChange(); }}
-                          min={1}
-                          max={730}
-                          className="max-w-[200px]"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          How long to remember visitors (1-730 days). Default: 365 days.
+                  {/* Section 2: Advanced Variables (Configurable) */}
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="text-base font-semibold">⚙️ Advanced Variables</Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Configure collection and exposure of extended visitor data. When "Expose" is enabled, variables appear in the @ picker.
+                      </p>
+                    </div>
+
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="text-left px-4 py-2 font-medium">Variable</th>
+                            <th className="text-center px-4 py-2 font-medium w-24">Collect</th>
+                            <th className="text-center px-4 py-2 font-medium w-24">Expose</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* IP Address */}
+                          <tr className="border-t">
+                            <td className="px-4 py-3">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.ip</code>
+                              <div className="text-xs text-muted-foreground mt-1">Visitor IP (privacy sensitive)</div>
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.ip.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, ip: { ...prev.ip, collect: c, expose: c ? prev.ip.expose : false } })); handlePrivacyChange(); }} />
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.ip.expose} disabled={!advancedVariables.ip.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, ip: { ...prev.ip, expose: c } })); handlePrivacyChange(); }} />
+                            </td>
+                          </tr>
+                          {/* Browser */}
+                          <tr className="border-t">
+                            <td className="px-4 py-3">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.browser</code>
+                              <div className="text-xs text-muted-foreground mt-1">Chrome, Safari, Firefox, Edge</div>
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.browser.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, browser: { ...prev.browser, collect: c, expose: c ? prev.browser.expose : false } })); handlePrivacyChange(); }} />
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.browser.expose} disabled={!advancedVariables.browser.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, browser: { ...prev.browser, expose: c } })); handlePrivacyChange(); }} />
+                            </td>
+                          </tr>
+                          {/* OS */}
+                          <tr className="border-t">
+                            <td className="px-4 py-3">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.os</code>
+                              <div className="text-xs text-muted-foreground mt-1">Windows, macOS, iOS, Android</div>
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.os.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, os: { ...prev.os, collect: c, expose: c ? prev.os.expose : false } })); handlePrivacyChange(); }} />
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.os.expose} disabled={!advancedVariables.os.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, os: { ...prev.os, expose: c } })); handlePrivacyChange(); }} />
+                            </td>
+                          </tr>
+                          {/* Language */}
+                          <tr className="border-t">
+                            <td className="px-4 py-3">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.language</code>
+                              <div className="text-xs text-muted-foreground mt-1">Browser language (en, ar)</div>
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.language.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, language: { ...prev.language, collect: c, expose: c ? prev.language.expose : false } })); handlePrivacyChange(); }} />
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.language.expose} disabled={!advancedVariables.language.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, language: { ...prev.language, expose: c } })); handlePrivacyChange(); }} />
+                            </td>
+                          </tr>
+                          {/* Viewport */}
+                          <tr className="border-t">
+                            <td className="px-4 py-3">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.viewport</code>
+                              <div className="text-xs text-muted-foreground mt-1">Browser window size (1440x900)</div>
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.viewport.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, viewport: { ...prev.viewport, collect: c, expose: c ? prev.viewport.expose : false } })); handlePrivacyChange(); }} />
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.viewport.expose} disabled={!advancedVariables.viewport.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, viewport: { ...prev.viewport, expose: c } })); handlePrivacyChange(); }} />
+                            </td>
+                          </tr>
+                          {/* Theme Preference */}
+                          <tr className="border-t">
+                            <td className="px-4 py-3">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.themePreference</code>
+                              <div className="text-xs text-muted-foreground mt-1">Dark/light mode preference</div>
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.themePreference.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, themePreference: { ...prev.themePreference, collect: c, expose: c ? prev.themePreference.expose : false } })); handlePrivacyChange(); }} />
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.themePreference.expose} disabled={!advancedVariables.themePreference.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, themePreference: { ...prev.themePreference, expose: c } })); handlePrivacyChange(); }} />
+                            </td>
+                          </tr>
+                          {/* Connection Type */}
+                          <tr className="border-t">
+                            <td className="px-4 py-3">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.connectionType</code>
+                              <div className="text-xs text-muted-foreground mt-1">Network type (4g, wifi)</div>
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.connectionType.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, connectionType: { ...prev.connectionType, collect: c, expose: c ? prev.connectionType.expose : false } })); handlePrivacyChange(); }} />
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.connectionType.expose} disabled={!advancedVariables.connectionType.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, connectionType: { ...prev.connectionType, expose: c } })); handlePrivacyChange(); }} />
+                            </td>
+                          </tr>
+                          {/* Referrer */}
+                          <tr className="border-t">
+                            <td className="px-4 py-3">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.referrer</code>
+                              <div className="text-xs text-muted-foreground mt-1">Referring URL</div>
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.referrer.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, referrer: { ...prev.referrer, collect: c, expose: c ? prev.referrer.expose : false } })); handlePrivacyChange(); }} />
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.referrer.expose} disabled={!advancedVariables.referrer.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, referrer: { ...prev.referrer, expose: c } })); handlePrivacyChange(); }} />
+                            </td>
+                          </tr>
+                          {/* Is Bot */}
+                          <tr className="border-t">
+                            <td className="px-4 py-3">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.isBot</code>
+                              <div className="text-xs text-muted-foreground mt-1">Identify crawlers and bots</div>
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.isBot.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, isBot: { ...prev.isBot, collect: c, expose: c ? prev.isBot.expose : false } })); handlePrivacyChange(); }} />
+                            </td>
+                            <td className="text-center px-4 py-3">
+                              <Switch checked={advancedVariables.isBot.expose} disabled={!advancedVariables.isBot.collect} onCheckedChange={(c) => { setAdvancedVariables(prev => ({ ...prev, isBot: { ...prev.isBot, expose: c } })); handlePrivacyChange(); }} />
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Section 3: Cookie-Based Variables (Repeat Visits) */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base font-semibold">🍪 Cookie-Based Variables</Label>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Track repeat visits using cookies. Enables first visit detection and visit counting.
                         </p>
                       </div>
+                      <Switch
+                        checked={enableVisitorTracking}
+                        onCheckedChange={(checked) => { setEnableVisitorTracking(checked); handlePrivacyChange(); }}
+                      />
+                    </div>
 
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label>Require cookie consent banner</Label>
-                          <p className="text-xs text-muted-foreground">
-                            Show consent before setting tracking cookies (GDPR compliant)
-                          </p>
+                    {enableVisitorTracking && (
+                      <>
+                        <div className="border rounded-lg overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="text-left px-4 py-2 font-medium">Variable</th>
+                                <th className="text-center px-4 py-2 font-medium w-24">Collect</th>
+                                <th className="text-center px-4 py-2 font-medium w-24">Expose</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-t">
+                                <td className="px-4 py-3">
+                                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.isFirstVisit</code>
+                                  <div className="text-xs text-muted-foreground mt-1">Is this the first visit?</div>
+                                </td>
+                                <td className="text-center px-4 py-3">
+                                  <Switch checked={cookieVariables.isFirstVisit.collect} onCheckedChange={(c) => { setCookieVariables(prev => ({ ...prev, isFirstVisit: { ...prev.isFirstVisit, collect: c, expose: c ? prev.isFirstVisit.expose : false } })); handlePrivacyChange(); }} />
+                                </td>
+                                <td className="text-center px-4 py-3">
+                                  <Switch checked={cookieVariables.isFirstVisit.expose} disabled={!cookieVariables.isFirstVisit.collect} onCheckedChange={(c) => { setCookieVariables(prev => ({ ...prev, isFirstVisit: { ...prev.isFirstVisit, expose: c } })); handlePrivacyChange(); }} />
+                                </td>
+                              </tr>
+                              <tr className="border-t">
+                                <td className="px-4 py-3">
+                                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.visitCount</code>
+                                  <div className="text-xs text-muted-foreground mt-1">Total visit count</div>
+                                </td>
+                                <td className="text-center px-4 py-3">
+                                  <Switch checked={cookieVariables.visitCount.collect} onCheckedChange={(c) => { setCookieVariables(prev => ({ ...prev, visitCount: { ...prev.visitCount, collect: c, expose: c ? prev.visitCount.expose : false } })); handlePrivacyChange(); }} />
+                                </td>
+                                <td className="text-center px-4 py-3">
+                                  <Switch checked={cookieVariables.visitCount.expose} disabled={!cookieVariables.visitCount.collect} onCheckedChange={(c) => { setCookieVariables(prev => ({ ...prev, visitCount: { ...prev.visitCount, expose: c } })); handlePrivacyChange(); }} />
+                                </td>
+                              </tr>
+                              <tr className="border-t">
+                                <td className="px-4 py-3">
+                                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.firstVisitAt</code>
+                                  <div className="text-xs text-muted-foreground mt-1">First visit timestamp</div>
+                                </td>
+                                <td className="text-center px-4 py-3">
+                                  <Switch checked={cookieVariables.firstVisitAt.collect} onCheckedChange={(c) => { setCookieVariables(prev => ({ ...prev, firstVisitAt: { ...prev.firstVisitAt, collect: c, expose: c ? prev.firstVisitAt.expose : false } })); handlePrivacyChange(); }} />
+                                </td>
+                                <td className="text-center px-4 py-3">
+                                  <Switch checked={cookieVariables.firstVisitAt.expose} disabled={!cookieVariables.firstVisitAt.collect} onCheckedChange={(c) => { setCookieVariables(prev => ({ ...prev, firstVisitAt: { ...prev.firstVisitAt, expose: c } })); handlePrivacyChange(); }} />
+                                </td>
+                              </tr>
+                              <tr className="border-t">
+                                <td className="px-4 py-3">
+                                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">visitor.landingPage</code>
+                                  <div className="text-xs text-muted-foreground mt-1">Original landing page URL</div>
+                                </td>
+                                <td className="text-center px-4 py-3">
+                                  <Switch checked={cookieVariables.landingPage.collect} onCheckedChange={(c) => { setCookieVariables(prev => ({ ...prev, landingPage: { ...prev.landingPage, collect: c, expose: c ? prev.landingPage.expose : false } })); handlePrivacyChange(); }} />
+                                </td>
+                                <td className="text-center px-4 py-3">
+                                  <Switch checked={cookieVariables.landingPage.expose} disabled={!cookieVariables.landingPage.collect} onCheckedChange={(c) => { setCookieVariables(prev => ({ ...prev, landingPage: { ...prev.landingPage, expose: c } })); handlePrivacyChange(); }} />
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
                         </div>
-                        <Switch
-                          checked={requireCookieConsent}
-                          onCheckedChange={(checked) => { setRequireCookieConsent(checked); handlePrivacyChange(); }}
-                        />
-                      </div>
 
-                      <div className="p-4 rounded-lg bg-muted/50 border">
-                        <div className="font-medium mb-2">Available Variables:</div>
-                        <ul className="space-y-1 text-sm text-muted-foreground">
-                          <li><code className="text-xs bg-muted px-1.5 py-0.5 rounded">visitor.isFirstVisit</code> - Boolean indicating first visit</li>
-                          <li><code className="text-xs bg-muted px-1.5 py-0.5 rounded">visitor.visitCount</code> - Number of visits</li>
-                          <li><code className="text-xs bg-muted px-1.5 py-0.5 rounded">visitor.firstVisitAt</code> - Timestamp of first visit</li>
-                          <li><code className="text-xs bg-muted px-1.5 py-0.5 rounded">visitor.landingPage</code> - First page visited</li>
-                        </ul>
-                      </div>
-
-                      <Separator />
-
-                      <div className="space-y-4">
-                        <Label className="text-base font-semibold">Extended Enhanced Tracking</Label>
-                        <p className="text-sm text-muted-foreground -mt-3">
-                          Select specific client-side data points to collect. Disabling these reduces personalization but increases privacy.
-                        </p>
-
-                        <div className="grid gap-4 pl-2 border-l-2 border-muted ml-1">
-
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                              <Label className="font-normal">Track Timezone</Label>
-                              <p className="text-xs text-muted-foreground">Detect accurate visitor timezone (e.g., "Asia/Kuwait") instead of UTC</p>
-                            </div>
-                            <Switch checked={trackTimezone} onCheckedChange={(c) => { setTrackTimezone(c); handlePrivacyChange(); }} />
+                        <div className="grid grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <Label htmlFor="cookie-expiry">Cookie expiry (days)</Label>
+                            <Input
+                              id="cookie-expiry"
+                              type="number"
+                              value={cookieExpiryDays}
+                              onChange={(e) => { setCookieExpiryDays(parseInt(e.target.value)); handlePrivacyChange(); }}
+                              min={1}
+                              max={730}
+                              className="max-w-[200px]"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              How long to remember visitors (1-730 days)
+                            </p>
                           </div>
 
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-start justify-between">
                             <div className="space-y-0.5">
-                              <Label className="font-normal">Track Device Specs</Label>
-                              <p className="text-xs text-muted-foreground">Screen resolution, viewport size, and pixel ratio for responsive logic</p>
+                              <Label>Require cookie consent</Label>
+                              <p className="text-xs text-muted-foreground">
+                                Show consent before setting cookies (GDPR)
+                              </p>
                             </div>
-                            <Switch checked={trackDeviceSpecs} onCheckedChange={(c) => { setTrackDeviceSpecs(c); handlePrivacyChange(); }} />
+                            <Switch
+                              checked={requireCookieConsent}
+                              onCheckedChange={(checked) => { setRequireCookieConsent(checked); handlePrivacyChange(); }}
+                            />
                           </div>
-
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                              <Label className="font-normal">Track Connectivity</Label>
-                              <p className="text-xs text-muted-foreground">Network connection type (4G/WiFi) and online status</p>
-                            </div>
-                            <Switch checked={trackConnectivity} onCheckedChange={(c) => { setTrackConnectivity(c); handlePrivacyChange(); }} />
-                          </div>
-
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                              <Label className="font-normal">Track Theme Preference</Label>
-                              <p className="text-xs text-muted-foreground">System dark/light mode preference</p>
-                            </div>
-                            <Switch checked={trackTheme} onCheckedChange={(c) => { setTrackTheme(c); handlePrivacyChange(); }} />
-                          </div>
-
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                              <Label className="font-normal">Track Analytics Presence</Label>
-                              <p className="text-xs text-muted-foreground">Detect presence of other analytics tools (GA, FB Pixel) for context</p>
-                            </div>
-                            <Switch checked={trackAnalyticsPresence} onCheckedChange={(c) => { setTrackAnalyticsPresence(c); handlePrivacyChange(); }} />
-                          </div>
-
                         </div>
-                      </div>
-                    </>
-                  )}
+                      </>
+                    )}
+                  </div>
 
                   <Separator />
 
@@ -537,11 +776,8 @@ export const SettingsPanel: React.FC = () => {
                         enableVisitorTracking,
                         cookieExpiryDays,
                         requireCookieConsent,
-                        trackTimezone,
-                        trackDeviceSpecs,
-                        trackConnectivity,
-                        trackTheme,
-                        trackAnalyticsPresence,
+                        cookieVariables,
+                        advancedVariables,
                       })}
                       disabled={!hasPrivacyChanges || savePrivacyMutation.isPending}
                     >

@@ -128,14 +128,40 @@ export interface RedisTestResult {
     message: string
 }
 
+export interface AdvancedVariableConfig {
+    collect: boolean
+    expose: boolean
+}
+
+// Advanced visitor variables (configurable via Settings > Privacy & Tracking)
+// Basic variables (country, city, timezone, device) are ALWAYS available - not listed here
+export interface AdvancedVariables {
+    ip: AdvancedVariableConfig
+    browser: AdvancedVariableConfig
+    os: AdvancedVariableConfig
+    language: AdvancedVariableConfig
+    viewport: AdvancedVariableConfig
+    themePreference: AdvancedVariableConfig
+    connectionType: AdvancedVariableConfig
+    referrer: AdvancedVariableConfig
+    isBot: AdvancedVariableConfig
+}
+
+// Cookie-based visitor variables (require enableVisitorTracking)
+export interface CookieVariables {
+    isFirstVisit: AdvancedVariableConfig
+    visitCount: AdvancedVariableConfig
+    firstVisitAt: AdvancedVariableConfig
+    landingPage: AdvancedVariableConfig
+}
+
 export interface PrivacySettings {
+    // Cookie-based repeat visit tracking
     enableVisitorTracking: boolean
     cookieExpiryDays: number
     requireCookieConsent: boolean
-    // Enhanced Tracking Flags
-    trackTimezone?: boolean
-    trackDeviceSpecs?: boolean
-    trackConnectivity?: boolean
-    trackTheme?: boolean
-    trackAnalyticsPresence?: boolean
+    // Cookie-based variable toggles
+    cookieVariables: CookieVariables
+    // Advanced variable toggles
+    advancedVariables: AdvancedVariables
 }

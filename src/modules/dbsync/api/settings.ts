@@ -1,12 +1,21 @@
-import { api } from './client'
+import axios from 'axios'
+import { getFastApiBaseUrl } from '../../../lib/portConfig'
 import { RedisSettings, RedisTestResult, PrivacySettings } from '../types'
 
+// Settings API uses the main FastAPI app, not the /api/sync sub-app
+const mainApi = axios.create({
+    baseURL: `${getFastApiBaseUrl()}/api`,
+    headers: {
+        'Content-Type': 'application/json',
+    },
+})
+
 export const settingsApi = {
-    getRedis: () => api.get<RedisSettings>('/settings/redis'),
-    updateRedis: (data: Partial<RedisSettings>) => api.put<RedisSettings>('/settings/redis', data),
-    testRedis: (data: Partial<RedisSettings>) => api.post<RedisTestResult>('/settings/redis/test', data),
+    getRedis: () => mainApi.get<RedisSettings>('/settings/redis/'),
+    updateRedis: (data: Partial<RedisSettings>) => mainApi.put<RedisSettings>('/settings/redis/', data),
+    testRedis: (data: Partial<RedisSettings>) => mainApi.post<RedisTestResult>('/settings/redis/test/', data),
 
     // Privacy & Tracking
-    getPrivacy: () => api.get<PrivacySettings>('/settings/privacy'),
-    updatePrivacy: (data: PrivacySettings) => api.put<PrivacySettings>('/settings/privacy', data),
+    getPrivacy: () => mainApi.get<PrivacySettings>('/settings/privacy/'),
+    updatePrivacy: (data: PrivacySettings) => mainApi.put<PrivacySettings>('/settings/privacy/', data),
 }

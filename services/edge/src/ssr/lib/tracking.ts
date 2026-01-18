@@ -8,16 +8,30 @@
 // Types
 // =============================================================================
 
+export interface AdvancedVariableConfig {
+    collect: boolean;
+    expose: boolean;
+}
+
+// Advanced visitor variables (configurable via Settings > Privacy & Tracking)
+// Basic variables (country, city, timezone, device) are ALWAYS available - not listed here
+export interface AdvancedVariables {
+    ip: AdvancedVariableConfig;
+    browser: AdvancedVariableConfig;
+    os: AdvancedVariableConfig;
+    language: AdvancedVariableConfig;
+    viewport: AdvancedVariableConfig;
+    themePreference: AdvancedVariableConfig;
+    connectionType: AdvancedVariableConfig;
+    referrer: AdvancedVariableConfig;
+    isBot: AdvancedVariableConfig;
+}
+
 export interface TrackingConfig {
     enableVisitorTracking: boolean;
     cookieExpiryDays: number;
     requireCookieConsent: boolean;
-    // Enhanced Tracking Flags
-    trackTimezone?: boolean;
-    trackDeviceSpecs?: boolean;
-    trackConnectivity?: boolean;
-    trackTheme?: boolean;
-    trackAnalyticsPresence?: boolean;
+    advancedVariables?: AdvancedVariables;
 }
 
 export interface TrackingVariables {
@@ -43,6 +57,10 @@ export interface VisitorContext {
     visitCount?: number;
     firstVisitAt?: string;
     landingPage?: string;
+    // Client-side enhanced fields
+    viewport?: string;
+    themePreference?: 'dark' | 'light';
+    connectionType?: string;
 }
 
 // =============================================================================

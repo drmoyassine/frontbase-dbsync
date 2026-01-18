@@ -57,6 +57,15 @@
 - **Performance**: Optimized RPC calls for large datasets
 - **Key Files**: `src/components/datatable/`, `frontbase_search_rows` (RPC)
 
+### Phase 6: Settings & VariablePicker Refactor ✅ (2026-01-18)
+
+- **Logic Extraction**: Created `useRedisSettings` and `usePrivacySettings` hooks
+- **UI Standardization**: Created shared `RedisSettingsForm`, `PrivacySettingsForm`, `ProjectDetailsForm` components
+- **Module Upgrade**: dbsync Settings now supports Self-Hosted Redis (was Upstash-only)
+- **Code Reduction**: `SettingsPanel.tsx` (~800 → ~80 lines), `dbsync/Settings.tsx` (~580 → ~75 lines)
+- **Tailwind Migration**: VariablePicker converted from ~100 line inline `<style>` block to Tailwind classes
+- **Key Files**: `src/components/dashboard/settings/hooks/`, `src/components/dashboard/settings/shared/`
+
 ### 1. FastAPI Primary Backend ✅
 
 - **Migration**: Completed full migration from Express.js to FastAPI

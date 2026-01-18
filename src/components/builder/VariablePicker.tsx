@@ -180,13 +180,8 @@ export function VariablePicker({
         return (
             <div
                 ref={listRef}
-                className="variable-picker"
-                style={{
-                    position: 'fixed',
-                    top: position.top,
-                    left: position.left,
-                    zIndex: 9999,
-                }}
+                className="fixed z-[9999] bg-popover border border-border rounded-lg shadow-lg max-h-80 min-w-[260px] max-w-[360px] overflow-y-auto"
+                style={{ top: position.top, left: position.left }}
             >
                 <div className="p-3 text-sm text-muted-foreground">
                     No variables found
@@ -198,14 +193,9 @@ export function VariablePicker({
     return (
         <div
             ref={listRef}
-            className="variable-picker"
+            className="fixed z-[9999] bg-popover border border-border rounded-lg shadow-lg max-h-80 min-w-[260px] max-w-[360px] overflow-y-auto"
             onMouseDown={(e) => e.preventDefault()}
-            style={{
-                position: 'fixed',
-                top: position.top,
-                left: position.left,
-                zIndex: 9999,
-            }}
+            style={{ top: position.top, left: position.left }}
         >
             {isLoading ? (
                 <div className="p-3 text-sm text-muted-foreground">Loading...</div>
@@ -215,7 +205,7 @@ export function VariablePicker({
                     {activeGroup && (
                         <div className="header-back-container">
                             <div
-                                className="header-back"
+                                className="flex items-center gap-2 px-3 py-2 bg-muted border-b border-border cursor-pointer text-sm hover:bg-accent"
                                 onClick={() => setActiveGroup(null)}
                             >
                                 <ChevronLeft className="h-4 w-4" />
@@ -234,9 +224,9 @@ export function VariablePicker({
 
                     {/* Groups view */}
                     {!activeGroup && filteredGroups.length > 0 && (
-                        <div className="section">
-                            <div className="section-header">
-                                <span className="icon">📁</span> Variable Groups
+                        <div className="py-1">
+                            <div className="px-3 py-2 text-[0.7rem] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                                <span>📁</span> Variable Groups
                             </div>
                             {filteredGroups.map((group, i) => {
                                 const config = GROUP_CONFIG[group] || { icon: <Box className="h-4 w-4" />, label: group, color: 'text-gray-500' };
@@ -246,16 +236,16 @@ export function VariablePicker({
                                         key={group}
                                         ref={i === selectedIndex ? selectedRef : null}
                                         className={cn(
-                                            'group-item',
-                                            i === selectedIndex && 'selected'
+                                            'px-3 py-2.5 cursor-pointer flex items-center gap-2.5 text-sm transition-colors',
+                                            i === selectedIndex && 'bg-accent'
                                         )}
                                         onClick={() => handleSelect(i)}
                                         onMouseEnter={() => setSelectedIndex(i)}
                                     >
-                                        <span className={cn('icon', config.color)}>{config.icon}</span>
-                                        <span className="label">{config.label}</span>
-                                        <span className="count">{count}</span>
-                                        <ChevronRight className="h-4 w-4 chevron" />
+                                        <span className={cn('flex-shrink-0', config.color)}>{config.icon}</span>
+                                        <span className="font-medium text-foreground">{config.label}</span>
+                                        <span className="ml-auto text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{count}</span>
+                                        <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                     </div>
                                 );
                             })}
@@ -264,7 +254,7 @@ export function VariablePicker({
 
                     {/* Variables in active group */}
                     {activeGroup && filteredVariables.length > 0 && (
-                        <div className="section">
+                        <div className="py-1">
                             {filteredVariables.map((v, i) => {
                                 // Get the property name (after the dot)
                                 const propName = v.path.split('.').pop() || v.path;
@@ -273,16 +263,16 @@ export function VariablePicker({
                                         key={v.path}
                                         ref={i === selectedIndex ? selectedRef : null}
                                         className={cn(
-                                            'item',
-                                            i === selectedIndex && 'selected'
+                                            'px-3 py-2 cursor-pointer flex items-center gap-2 text-sm transition-colors',
+                                            i === selectedIndex && 'bg-accent'
                                         )}
                                         onClick={() => handleSelect(i)}
                                         onMouseEnter={() => setSelectedIndex(i)}
                                     >
-                                        <span className="path">{propName}</span>
-                                        <span className="type">{v.type}</span>
+                                        <span className="font-mono font-medium text-foreground">{propName}</span>
+                                        <span className="text-[0.7rem] text-muted-foreground bg-muted px-1 py-0.5 rounded">{v.type}</span>
                                         {v.description && (
-                                            <span className="description">{v.description}</span>
+                                            <span className="text-xs text-muted-foreground ml-auto whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">{v.description}</span>
                                         )}
                                     </div>
                                 );
@@ -292,9 +282,9 @@ export function VariablePicker({
 
                     {/* Filters (only in root view) */}
                     {!activeGroup && showFilters && filteredFilters.length > 0 && (
-                        <div className="section">
-                            <div className="section-header">
-                                <span className="icon">🔧</span> Filters
+                        <div className="py-1">
+                            <div className="px-3 py-2 text-[0.7rem] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                                <span>🔧</span> Filters
                             </div>
                             {filteredFilters.map((f, i) => {
                                 const actualIndex = i + filteredGroups.length;
@@ -303,17 +293,17 @@ export function VariablePicker({
                                         key={f.name}
                                         ref={actualIndex === selectedIndex ? selectedRef : null}
                                         className={cn(
-                                            'item',
-                                            actualIndex === selectedIndex && 'selected'
+                                            'px-3 py-2 cursor-pointer flex items-center gap-2 text-sm transition-colors',
+                                            actualIndex === selectedIndex && 'bg-accent'
                                         )}
                                         onClick={() => handleSelect(actualIndex)}
                                         onMouseEnter={() => setSelectedIndex(actualIndex)}
                                     >
-                                        <span className="name">{f.name}</span>
+                                        <span className="font-mono font-medium text-foreground">{f.name}</span>
                                         {f.args && f.args.length > 0 && (
-                                            <span className="args">({f.args.join(', ')})</span>
+                                            <span className="text-[0.7rem] text-muted-foreground bg-muted px-1 py-0.5 rounded">({f.args.join(', ')})</span>
                                         )}
-                                        <span className="description">{f.description}</span>
+                                        <span className="text-xs text-muted-foreground ml-auto">{f.description}</span>
                                     </div>
                                 );
                             })}
@@ -321,114 +311,6 @@ export function VariablePicker({
                     )}
                 </>
             )}
-
-            <style>{`
-                .variable-picker {
-                    background: hsl(var(--popover));
-                    border: 1px solid hsl(var(--border));
-                    border-radius: 0.5rem;
-                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-                    max-height: 320px;
-                    min-width: 260px;
-                    max-width: 360px;
-                    overflow-y: auto;
-                }
-                .variable-picker .header-back {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    padding: 0.5rem 0.75rem;
-                    background: hsl(var(--muted));
-                    border-bottom: 1px solid hsl(var(--border));
-                    cursor: pointer;
-                    font-size: 0.875rem;
-                }
-                .variable-picker .header-back:hover {
-                    background: hsl(var(--accent));
-                }
-                .variable-picker .section {
-                    padding: 0.25rem 0;
-                }
-                .variable-picker .section-header {
-                    padding: 0.5rem 0.75rem;
-                    font-size: 0.7rem;
-                    font-weight: 600;
-                    color: hsl(var(--muted-foreground));
-                    text-transform: uppercase;
-                    letter-spacing: 0.05em;
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                }
-                .variable-picker .group-item {
-                    padding: 0.625rem 0.75rem;
-                    cursor: pointer;
-                    display: flex;
-                    align-items: center;
-                    gap: 0.625rem;
-                    font-size: 0.875rem;
-                    transition: background 0.1s;
-                }
-                .variable-picker .group-item:hover,
-                .variable-picker .group-item.selected {
-                    background: hsl(var(--accent));
-                }
-                .variable-picker .group-item .icon {
-                    flex-shrink: 0;
-                }
-                .variable-picker .group-item .label {
-                    font-weight: 500;
-                    color: hsl(var(--foreground));
-                }
-                .variable-picker .group-item .count {
-                    margin-left: auto;
-                    font-size: 0.75rem;
-                    color: hsl(var(--muted-foreground));
-                    background: hsl(var(--muted));
-                    padding: 0.125rem 0.375rem;
-                    border-radius: 9999px;
-                }
-                .variable-picker .group-item .chevron {
-                    color: hsl(var(--muted-foreground));
-                    flex-shrink: 0;
-                }
-                .variable-picker .item {
-                    padding: 0.5rem 0.75rem;
-                    cursor: pointer;
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    font-size: 0.875rem;
-                    transition: background 0.1s;
-                }
-                .variable-picker .item:hover,
-                .variable-picker .item.selected {
-                    background: hsl(var(--accent));
-                }
-                .variable-picker .item .path,
-                .variable-picker .item .name {
-                    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-                    font-weight: 500;
-                    color: hsl(var(--foreground));
-                }
-                .variable-picker .item .type,
-                .variable-picker .item .args {
-                    font-size: 0.7rem;
-                    color: hsl(var(--muted-foreground));
-                    background: hsl(var(--muted));
-                    padding: 0.0625rem 0.25rem;
-                    border-radius: 0.25rem;
-                }
-                .variable-picker .item .description {
-                    font-size: 0.75rem;
-                    color: hsl(var(--muted-foreground));
-                    margin-left: auto;
-                    white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    max-width: 120px;
-                }
-            `}</style>
         </div>
     );
 }

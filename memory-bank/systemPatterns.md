@@ -47,6 +47,18 @@ This file documents recurring patterns and standards used in the project.
 - **Components**: ComponentPalette, BuilderCanvas, LayersPanel
 - **Benefits**: Hardware-accelerated CSS transforms, accessibility, consistent behavior
 
+### Shared Settings Hooks Pattern (NEW - 2026-01-18)
+- **Pattern**: Centralized state management for settings forms
+- **Implementation**:
+  - `useRedisSettings()` - Redis configuration state + mutations
+  - `usePrivacySettings()` - Privacy configuration state + mutations
+- **Shared Components**:
+  - `RedisSettingsForm` - Redis UI with Upstash/Self-Hosted selector
+  - `PrivacySettingsForm` - Privacy tables with variable toggles
+  - `ProjectDetailsForm` - SEO/meta settings
+- **Benefits**: Single source of truth, consistent behavior between Dashboard and Module
+- **Files**: `src/components/dashboard/settings/hooks/`, `src/components/dashboard/settings/shared/`
+
 ## Architecture Patterns
 
 ### State Management

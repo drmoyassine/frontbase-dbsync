@@ -1,6 +1,8 @@
 f# Active Context
 
 This file tracks the project's current status, including recent changes, current goals, and open questions.
+2026-01-18 - 🔧 SETTINGS REFACTOR: Extracted shared hooks and forms for Settings components (SettingsPanel, dbsync Settings)
+2026-01-18 - 🎨 VARIABLE PICKER: Replaced inline styles with Tailwind CSS classes
 2026-01-15 - 🔧 DATATABLE REFACTOR: Split `DataTable.tsx` into modular components (`datatable/`)
 2026-01-15 - 🐛 ROUTING FIX: Fixed Nginx routing for `/api/database/*` to direct to FastAPI
 2026-01-14 - 🔍 ENHANCEMENT: Simultaneous Search & Filter in `frontbase_search_rows`

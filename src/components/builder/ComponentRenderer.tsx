@@ -115,6 +115,18 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         cssStyles.borderRadius = `${value}px`;
       } else if (key === 'opacity' && typeof value === 'number') {
         cssStyles.opacity = value / 100;
+      } else if (key === 'horizontalAlign' && typeof value === 'string') {
+        // Handle horizontal alignment via auto margins
+        if (value === 'center') {
+          cssStyles.marginLeft = 'auto';
+          cssStyles.marginRight = 'auto';
+        } else if (value === 'right') {
+          cssStyles.marginLeft = 'auto';
+          cssStyles.marginRight = '0';
+        } else {
+          cssStyles.marginLeft = '0';
+          cssStyles.marginRight = 'auto';
+        }
       } else if (typeof value === 'string') {
         // Direct CSS property (flexDirection, backgroundColor, etc.)
         cssStyles[key] = value;

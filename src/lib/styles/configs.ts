@@ -74,6 +74,37 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         fromCSSValue: (css) => css.trim()
     },
 
+    alignSelf: {
+        id: 'alignSelf',
+        name: 'Align Self',
+        category: 'Layout',
+        controlType: 'select',
+        defaultValue: 'auto',
+        options: ['auto', 'flex-start', 'center', 'flex-end', 'stretch'],
+        useToggleGroup: true,
+        toCSSValue: (value) => value,
+        fromCSSValue: (css) => css.trim(),
+        description: 'Overrides parent align-items for this element'
+    },
+
+    horizontalAlign: {
+        id: 'horizontalAlign',
+        name: 'Horizontal Align',
+        category: 'Layout',
+        controlType: 'select',
+        defaultValue: 'left',
+        options: ['left', 'center', 'right'],
+        useToggleGroup: true,
+        toCSSValue: (value) => {
+            // Uses margin-left/right auto to position
+            if (value === 'center') return { marginLeft: 'auto', marginRight: 'auto' };
+            if (value === 'right') return { marginLeft: 'auto', marginRight: '0' };
+            return { marginLeft: '0', marginRight: 'auto' };
+        },
+        fromCSSValue: () => 'left',
+        description: 'Horizontal position within parent (uses auto margins)'
+    },
+
     // ===== SPACING =====
     padding: {
         id: 'padding',
@@ -350,7 +381,7 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
 
 // Category organization
 export const CSS_CATEGORIES = {
-    'Layout': ['display', 'position', 'flexDirection', 'justifyContent', 'alignItems', 'flexWrap'],
+    'Layout': ['display', 'position', 'flexDirection', 'justifyContent', 'alignItems', 'alignSelf', 'flexWrap', 'horizontalAlign'],
     'Spacing': ['padding', 'margin', 'gap'],
     'Sizing': ['size', 'width', 'height', 'minWidth', 'maxWidth'],
     'Typography': ['fontSize', 'fontWeight', 'lineHeight', 'textAlign'],

@@ -26,12 +26,14 @@ export const PropertyControl: React.FC<PropertyControlProps> = ({
 }) => {
     return (
         <div className="property-control border border-border rounded-md p-2 mb-2 bg-background/50">
-            <div className="flex items-center gap-2 justify-between">
-                {/* Label */}
-                <Label className="font-medium text-xs whitespace-nowrap flex-shrink-0">{config.name}</Label>
+            {/* Label as superscript - small text above controls */}
+            <Label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">
+                {config.name}
+            </Label>
 
+            <div className="flex items-center gap-2 justify-between">
                 {/* Control input - takes remaining space */}
-                <div className="property-control-input flex-1 flex justify-end">
+                <div className="property-control-input flex-1">
                     {config.controlType === 'select' && config.useToggleGroup && (
                         <ToggleGroupControl config={config} value={value} onChange={onChange} />
                     )}

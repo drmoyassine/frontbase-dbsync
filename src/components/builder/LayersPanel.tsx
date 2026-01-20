@@ -147,10 +147,14 @@ export const LayersPanel: React.FC = () => {
                   key={component.id}
                   component={component}
                   index={index}
+                  depth={0}
                   isSelected={selectedComponentId === component.id}
                   isExpanded={expandedComponents.has(component.id)}
+                  expandedComponents={expandedComponents}
                   onSelect={() => setSelectedComponentId(component.id)}
                   onToggleExpand={() => toggleExpanded(component.id)}
+                  onSelectChild={(id: string) => setSelectedComponentId(id)}
+                  onToggleExpandChild={(id: string) => toggleExpanded(id)}
                   getComponentIcon={getComponentIcon}
                 />
               ))}
@@ -165,20 +169,28 @@ export const LayersPanel: React.FC = () => {
 interface SortableLayerItemProps {
   component: ComponentData;
   index: number;
+  depth?: number;
   isSelected: boolean;
   isExpanded: boolean;
+  expandedComponents: Set<string>;
   onSelect: () => void;
   onToggleExpand: () => void;
+  onSelectChild: (id: string) => void;
+  onToggleExpandChild: (id: string) => void;
   getComponentIcon: (type: string) => string;
 }
 
 const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
   component,
   index,
+  depth = 0,
   isSelected,
   isExpanded,
+  expandedComponents,
   onSelect,
   onToggleExpand,
+  onSelectChild,
+  onToggleExpandChild,
   getComponentIcon
 }) => {
   const {
@@ -199,75 +211,102 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
   const hasChildren = component.children && component.children.length > 0;
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        "group flex items-center gap-2 px-2 py-1.5 rounded",
-        "hover:bg-accent",
-        isSelected && "bg-accent border-l-2 border-primary"
-      )}
-    >
-      {/* Drag Handle */}
+    <>
       <div
-        {...attributes}
-        {...listeners}
-        className="cursor-grab active:cursor-grabbing"
+        ref={setNodeRef}
+        style={style}
+        className={cn(
+          "group flex items-center gap-2 px-2 py-1.5 rounded",
+          "hover:bg-accent",
+          isSelected && "bg-accent border-l-2 border-primary"
+        )}
       >
-        <GripVertical className="h-4 w-4 text-muted-foreground" />
-      </div>
+        {/* Indentation for depth */}
+        {depth > 0 && <div style={{ width: depth * 16 }} />}
 
-      {/* Expand/Collapse */}
-      {hasChildren ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onToggleExpand}
-          className="h-5 w-5 p-0"
+        {/* Drag Handle */}
+        <div
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing"
         >
-          {isExpanded ? (
-            <ChevronDown className="h-3 w-3" />
-          ) : (
-            <ChevronRight className="h-3 w-3" />
-          )}
-        </Button>
-      ) : (
-        <div className="w-5" />
-      )}
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </div>
 
-      {/* Icon & Name */}
-      <div
-        className="flex-1 flex items-center gap-2 cursor-pointer"
-        onClick={onSelect}
-      >
-        <span className="text-sm">{getComponentIcon(component.type)}</span>
-        <span className="text-sm font-medium truncate">
-          {component.type}
-        </span>
-      </div>
-
-      {/* Actions */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+        {/* Expand/Collapse */}
+        {hasChildren ? (
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+            onClick={onToggleExpand}
+            className="h-5 w-5 p-0"
           >
-            <MoreHorizontal className="h-4 w-4" />
+            {isExpanded ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
           </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem>
-            <Copy className="h-4 w-4 mr-2" />
-            Duplicate
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-destructive">
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+        ) : (
+          <div className="w-5" />
+        )}
+
+        {/* Icon & Name */}
+        <div
+          className="flex-1 flex items-center gap-2 cursor-pointer"
+          onClick={onSelect}
+        >
+          <span className="text-sm">{getComponentIcon(component.type)}</span>
+          <span className="text-sm font-medium truncate">
+            {component.type}
+          </span>
+        </div>
+
+        {/* Actions */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem>
+              <Copy className="h-4 w-4 mr-2" />
+              Duplicate
+            </DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive">
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Render children when expanded */}
+      {isExpanded && hasChildren && (
+        <div className="ml-2">
+          {component.children!.map((child, childIndex) => (
+            <SortableLayerItem
+              key={child.id}
+              component={child}
+              index={childIndex}
+              depth={depth + 1}
+              isSelected={expandedComponents.has('selected-' + child.id)}
+              isExpanded={expandedComponents.has(child.id)}
+              expandedComponents={expandedComponents}
+              onSelect={() => onSelectChild(child.id)}
+              onToggleExpand={() => onToggleExpandChild(child.id)}
+              onSelectChild={onSelectChild}
+              onToggleExpandChild={onToggleExpandChild}
+              getComponentIcon={getComponentIcon}
+            />
+          ))}
+        </div>
+      )}
+    </>
   );
 };

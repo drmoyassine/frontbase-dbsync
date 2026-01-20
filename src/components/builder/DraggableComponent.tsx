@@ -87,6 +87,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
+    textAlign: 'inherit' as const,
   };
 
   return (
@@ -105,7 +106,6 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
       {/* The actual component */}
       <div
         ref={setNodeRef}
-        style={style}
         {...attributes}
         {...listeners}
         onClick={(e) => onSelect(component.id, e)}
@@ -118,6 +118,12 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
             'hover:ring-2 hover:ring-dashed hover:ring-primary/30': !isSelected && !isPreviewMode,
           }
         )}
+        style={{
+          ...style,
+          textAlign: 'inherit',
+          // Layout components need width:100% to fill parent
+          width: ['Container', 'Row', 'Column'].includes(component.type) ? '100%' : undefined,
+        }}
       >
         {/* Corner Handles - only visible when selected */}
         {isSelected && !isPreviewMode && (
@@ -130,7 +136,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
         )}
 
         {/* Component Content */}
-        {component.type === 'Container' ? (
+        {['Container', 'Row', 'Column'].includes(component.type) ? (
           <ContainerComponent
             component={component}
             pageId={pageId}
@@ -151,7 +157,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
             }}
           />
         )}
-      </div>  {/* End Component Content */}
+      </div>
 
       {/* Drop zone after last component */}
       {!isPreviewMode && isLastComponent && (
@@ -186,8 +192,10 @@ const ContainerComponent: React.FC<{
   });
 
   // Use ComponentRenderer for Container to apply styles properly
+  // NOTE: We use Fragment (not a div) to avoid adding an intermediate wrapper
+  // that would override the Container's flex/grid layout
   const containerChildren = component.children?.length > 0 ? (
-    <div className="space-y-4">
+    <>
       {component.children.map((child: any, index: number) => (
         <DraggableComponent
           key={child.id}
@@ -204,7 +212,7 @@ const ContainerComponent: React.FC<{
           }}
         />
       ))}
-    </div>
+    </>
   ) : (
     !isPreviewMode && (
       <div className="text-center py-8">
@@ -214,7 +222,7 @@ const ContainerComponent: React.FC<{
   );
 
   return (
-    <div ref={setDropRef} className={cn({
+    <div ref={setDropRef} style={{ textAlign: 'inherit', width: '100%' }} className={cn({
       'ring-2 ring-primary/50 ring-offset-2': isOver && !isPreviewMode,
     })}>
       <ComponentRenderer

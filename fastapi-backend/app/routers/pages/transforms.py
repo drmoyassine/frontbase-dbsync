@@ -36,19 +36,55 @@ def normalize_binding_location(component: Dict) -> Dict:
 def map_styles_schema(component: Dict) -> Dict:
     """
     Maps stylesData → styles for SSR compatibility.
+    MERGES template defaults (styles) with user edits (stylesData.values).
     Returns new component dict.
     
     Args:
-        component: Component dict with stylesData
+        component: Component dict with styles and/or stylesData
         
     Returns:
-        New component dict with styles instead of stylesData
+        New component dict with merged styles
     """
     result = dict(component)
     
+    # Start with existing styles (template defaults)
+    existing_styles = result.get('styles', {})
+    
+    # If existing_styles is already in the new format, extract values
+    if isinstance(existing_styles, dict) and 'values' in existing_styles:
+        base_styles = existing_styles.get('values', {})
+    else:
+        base_styles = existing_styles if isinstance(existing_styles, dict) else {}
+    
+    # Get user edits from stylesData
     if 'stylesData' in result:
-        result['styles'] = result['stylesData']
+        styles_data = result['stylesData']
+        
+        # Handle new format: { activeProperties: [...], values: {...}, stylingMode: '...' }
+        if isinstance(styles_data, dict) and 'values' in styles_data:
+            user_styles = styles_data.get('values', {})
+        else:
+            user_styles = styles_data if isinstance(styles_data, dict) else {}
+        
+        # Merge: template defaults + user edits (user edits take precedence)
+        merged_styles = {**base_styles, **user_styles}
+        
+        # Store as the new format for SSR compatibility
+        result['styles'] = {
+            'activeProperties': styles_data.get('activeProperties', list(merged_styles.keys())),
+            'values': merged_styles,
+            'stylingMode': styles_data.get('stylingMode', 'visual')
+        }
+        
         del result['stylesData']
+    elif base_styles:
+        # No stylesData but has existing styles - ensure consistent format
+        if not isinstance(existing_styles, dict) or 'values' not in existing_styles:
+            result['styles'] = {
+                'activeProperties': list(base_styles.keys()),
+                'values': base_styles,
+                'stylingMode': 'visual'
+            }
     
     return result
 

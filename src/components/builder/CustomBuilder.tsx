@@ -21,6 +21,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 import { toast } from 'sonner';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { getSectionTemplate, expandTemplate } from './templates/sectionTemplates';
 import './builder.css';
 
 export const CustomBuilder: React.FC = () => {
@@ -138,13 +139,26 @@ export const CustomBuilder: React.FC = () => {
     if (overData?.type === 'drop-zone' && isNewComponent) {
       console.log('Dropped new component on drop zone:', overData.index);
 
-      const newComponent = {
-        id: `${Date.now()} -${Math.random()} `,
-        type: activeData.type,
-        props: {},
-        styles: {},
-        children: []
-      };
+      let newComponent;
+
+      // If this is a template section, expand it
+      if (activeData.isTemplate) {
+        const template = getSectionTemplate(activeData.type);
+        if (template) {
+          newComponent = expandTemplate(template);
+        }
+      }
+
+      // Fallback for non-template components
+      if (!newComponent) {
+        newComponent = {
+          id: `${Date.now()} -${Math.random()} `,
+          type: activeData.type,
+          props: {},
+          styles: {},
+          children: []
+        };
+      }
 
       if (currentPageId) {
         moveComponent(
@@ -159,17 +173,86 @@ export const CustomBuilder: React.FC = () => {
       return;
     }
 
+    // Handle drops INTO containers (Container, Row, Column)
+    if (overData?.type === 'container' && isNewComponent) {
+      console.log('Dropped component into container:', overData.componentId);
+
+      let newComponent;
+
+      // If this is a template section, expand it
+      if (activeData.isTemplate) {
+        const template = getSectionTemplate(activeData.type);
+        if (template) {
+          newComponent = expandTemplate(template);
+        }
+      }
+
+      // Fallback for non-template components
+      if (!newComponent) {
+        newComponent = {
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: activeData.type,
+          props: {},
+          styles: {},
+          children: []
+        };
+      }
+
+      if (currentPageId) {
+        // Add to end of container's children
+        moveComponent(
+          currentPageId,
+          null,  // null means it's a new component
+          newComponent,
+          -1,  // -1 = append to end
+          overData.componentId  // Parent container ID
+        );
+        setSelectedComponentId(newComponent.id);
+      }
+      return;
+    }
+
+    // Handle EXISTING component drops INTO containers
+    if (overData?.type === 'container' && isExistingComponent) {
+      console.log('Moving existing component into container:', overData.componentId);
+
+      if (currentPageId && activeData.component) {
+        moveComponent(
+          currentPageId,
+          activeData.component.id,
+          activeData.component,
+          -1,  // -1 = append to end
+          overData.componentId,  // Target container
+          activeData.parentId  // Source parent
+        );
+      }
+      return;
+    }
+
     // Handle drops on empty canvas
     if (over.id === 'canvas-drop-zone' && isNewComponent) {
       console.log('Dropped component on empty canvas:', activeData.type);
 
-      const newComponent = {
-        id: `${Date.now()} -${Math.random()} `,
-        type: activeData.type,
-        props: {},
-        styles: {},
-        children: []
-      };
+      let newComponent;
+
+      // If this is a template section, expand it
+      if (activeData.isTemplate) {
+        const template = getSectionTemplate(activeData.type);
+        if (template) {
+          newComponent = expandTemplate(template);
+        }
+      }
+
+      // Fallback for non-template components
+      if (!newComponent) {
+        newComponent = {
+          id: `${Date.now()} -${Math.random()} `,
+          type: activeData.type,
+          props: {},
+          styles: {},
+          children: []
+        };
+      }
 
       if (currentPageId) {
         moveComponent(currentPageId, null, newComponent, 0);

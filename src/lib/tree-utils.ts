@@ -29,6 +29,7 @@ export const removeComponentFromTree = (items: ComponentData[], id: string): Com
 
 /**
  * Recursively inserts a component into the tree at a specific index.
+ * If index is -1, appends to the end.
  */
 export const insertComponentIntoTree = (
     items: ComponentData[],
@@ -39,14 +40,22 @@ export const insertComponentIntoTree = (
     if (!targetId) {
         // Insert at root level
         const newItems = [...items];
-        newItems.splice(index, 0, comp);
+        if (index === -1) {
+            newItems.push(comp);
+        } else {
+            newItems.splice(index, 0, comp);
+        }
         return newItems;
     }
 
     return items.map(item => {
         if (item.id === targetId) {
             const newChildren = item.children ? [...item.children] : [];
-            newChildren.splice(index, 0, comp);
+            if (index === -1) {
+                newChildren.push(comp);
+            } else {
+                newChildren.splice(index, 0, comp);
+            }
             return { ...item, children: newChildren };
         }
         if (item.children) {

@@ -10,6 +10,7 @@ import { VariableStore } from './store.js';
 import { renderStaticComponent } from './components/static.js';
 import { renderInteractiveComponent } from './components/interactive.js';
 import { renderDataComponent } from './components/data.js';
+import * as landing from './components/landing/index.js';
 import { liquid } from './lib/liquid.js';
 import type { TemplateContext } from './lib/context.js';
 
@@ -49,14 +50,20 @@ const LAYOUT_COMPONENTS = new Set([
     'Stack', 'Group', 'Box', 'Paper', 'Panel'
 ]);
 
+// Landing page section components
+const LANDING_COMPONENTS = new Set([
+    'Hero', 'Features', 'Pricing', 'CTA', 'Navbar', 'FAQ', 'LogoCloud', 'Footer'
+]);
+
 /**
  * Classify a component by its type.
  */
-function classifyComponent(type: string): 'static' | 'interactive' | 'data' | 'layout' | 'unknown' {
+function classifyComponent(type: string): 'static' | 'interactive' | 'data' | 'layout' | 'landing' | 'unknown' {
     if (STATIC_COMPONENTS.has(type)) return 'static';
     if (INTERACTIVE_COMPONENTS.has(type)) return 'interactive';
     if (DATA_COMPONENTS.has(type)) return 'data';
     if (LAYOUT_COMPONENTS.has(type)) return 'layout';
+    if (LANDING_COMPONENTS.has(type)) return 'landing';
     return 'unknown';
 }
 
@@ -137,12 +144,47 @@ async function renderComponent(
             return renderDataComponent(type, id, resolvedProps, childrenHtml);
 
         case 'layout':
-            // Fallback for layout if function missing, or use static
-            return renderStaticComponent(type, id, resolvedProps, childrenHtml);
+            // Render layout components with proper styles
+            return renderLayoutComponent(type, id, resolvedProps, component.styles || {}, childrenHtml);
+
+        case 'landing':
+            // Render landing page section components
+            return renderLandingComponent(type, id, resolvedProps, component.styles);
 
         default:
             // Unknown component - render as a generic div with data attribute
             return `<div data-fb-component="${type}" data-fb-id="${id}" class="fb-unknown">${childrenHtml}</div>`;
+    }
+}
+
+/**
+ * Render landing page section components.
+ */
+function renderLandingComponent(
+    type: string,
+    id: string,
+    props: Record<string, unknown>,
+    stylesData?: Record<string, any>
+): string {
+    switch (type) {
+        case 'Hero':
+            return landing.renderHero(id, props as any, stylesData as any);
+        case 'Features':
+            return landing.renderFeatures(id, props as any, stylesData as any);
+        case 'Pricing':
+            return landing.renderPricing(id, props as any, stylesData as any);
+        case 'CTA':
+            return landing.renderCTA(id, props as any, stylesData as any);
+        case 'Navbar':
+            return landing.renderNavbar(id, props as any, stylesData as any);
+        case 'FAQ':
+            return landing.renderFAQ(id, props as any, stylesData as any);
+        case 'LogoCloud':
+            return landing.renderLogoCloud(id, props as any, stylesData as any);
+        case 'Footer':
+            return landing.renderFooter(id, props as any, stylesData as any);
+        default:
+            return `<div data-fb-component="${type}" data-fb-id="${id}" class="fb-landing-unknown"></div>`;
     }
 }
 
@@ -153,47 +195,139 @@ function renderLayoutComponent(
     type: string,
     id: string,
     props: Record<string, unknown>,
+    styles: Record<string, any>,
     childrenHtml: string
 ): string {
-    const style = buildStyleString(props);
+    // Build inline style from both props and styles object
+    const inlineStyle = buildInlineStyles(props, styles);
     const className = buildClassName('fb-layout', type.toLowerCase(), props.className as string);
 
     switch (type) {
         case 'Container':
-            return `<div id="${id}" class="${className}" style="${style}">${childrenHtml}</div>`;
+            // Add margin:0 auto for centering, text-align:center for content alignment
+            return `<div id="${id}" class="${className}" style="margin:0 auto;text-align:center;${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Section':
-            return `<section id="${id}" class="${className}" style="${style}">${childrenHtml}</section>`;
+            return `<section id="${id}" class="${className}" style="${inlineStyle}">${childrenHtml}</section>`;
 
         case 'Row':
-            return `<div id="${id}" class="${className} fb-row" style="display:flex;flex-direction:row;${style}">${childrenHtml}</div>`;
+            return `<div id="${id}" class="${className} fb-row" style="display:flex;flex-direction:row;min-height:50px;${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Column':
-            return `<div id="${id}" class="${className} fb-column" style="display:flex;flex-direction:column;${style}">${childrenHtml}</div>`;
+            return `<div id="${id}" class="${className} fb-column" style="display:flex;flex-direction:column;min-height:50px;min-width:50px;${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Flex':
-            const flexDirection = (props.direction as string) || 'row';
-            const justify = (props.justify as string) || 'flex-start';
-            const align = (props.align as string) || 'stretch';
-            const gap = (props.gap as string) || '0';
-            return `<div id="${id}" class="${className}" style="display:flex;flex-direction:${flexDirection};justify-content:${justify};align-items:${align};gap:${gap};${style}">${childrenHtml}</div>`;
+            const flexDirection = (styles.flexDirection as string) || (props.direction as string) || 'row';
+            const justify = (styles.justifyContent as string) || (props.justify as string) || 'flex-start';
+            const align = (styles.alignItems as string) || (props.align as string) || 'stretch';
+            const gap = (styles.gap as string) || (props.gap as string) || '0';
+            return `<div id="${id}" class="${className}" style="display:flex;flex-direction:${flexDirection};justify-content:${justify};align-items:${align};gap:${gap};${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Grid':
             const columns = (props.columns as number) || 2;
-            const gridGap = (props.gap as string) || '1rem';
-            return `<div id="${id}" class="${className}" style="display:grid;grid-template-columns:repeat(${columns},1fr);gap:${gridGap};${style}">${childrenHtml}</div>`;
+            const gridGap = (styles.gap as string) || (props.gap as string) || '1rem';
+            return `<div id="${id}" class="${className}" style="display:grid;grid-template-columns:repeat(${columns},1fr);gap:${gridGap};${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Stack':
-            const stackGap = (props.gap as string) || '1rem';
-            return `<div id="${id}" class="${className}" style="display:flex;flex-direction:column;gap:${stackGap};${style}">${childrenHtml}</div>`;
+            const stackGap = (styles.gap as string) || (props.gap as string) || '1rem';
+            return `<div id="${id}" class="${className}" style="display:flex;flex-direction:column;gap:${stackGap};${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Box':
         case 'Paper':
         case 'Panel':
         case 'Group':
         default:
-            return `<div id="${id}" class="${className}" style="${style}">${childrenHtml}</div>`;
+            return `<div id="${id}" class="${className}" style="${inlineStyle}">${childrenHtml}</div>`;
     }
+}
+
+/**
+ * Build inline styles from both props and component styles object.
+ * The styles object takes precedence.
+ * 
+ * Supports both formats:
+ * - Old flat format: { justifyContent: 'center', padding: '24px' }
+ * - New stylesData format: { activeProperties: [...], values: {...}, stylingMode: 'visual' }
+ */
+function buildInlineStyles(props: Record<string, unknown>, styles: Record<string, any>): string {
+    const cssProps: Record<string, string> = {};
+
+    // First, apply props-based styles
+    const propMap: Record<string, string> = {
+        padding: 'padding',
+        margin: 'margin',
+        width: 'width',
+        height: 'height',
+        maxWidth: 'max-width',
+        minWidth: 'min-width',
+        backgroundColor: 'background-color',
+        color: 'color',
+    };
+
+    for (const [prop, css] of Object.entries(propMap)) {
+        if (props[prop] !== undefined) {
+            cssProps[css] = String(props[prop]);
+        }
+    }
+
+    // Handle styles object - detect which format it is
+    let styleValues: Record<string, any> = {};
+
+    if (styles && typeof styles === 'object') {
+        // New stylesData format: { activeProperties: [...], values: {...}, stylingMode: '...' }
+        if ('values' in styles && typeof styles.values === 'object') {
+            styleValues = styles.values || {};
+        }
+        // Old flat format: { justifyContent: 'center', ... }
+        else {
+            // Filter out non-CSS keys
+            const nonCssKeys = ['activeProperties', 'stylingMode'];
+            for (const [key, value] of Object.entries(styles)) {
+                if (!nonCssKeys.includes(key)) {
+                    styleValues[key] = value;
+                }
+            }
+        }
+    }
+
+    // Apply style values - convert camelCase to kebab-case for CSS
+    for (const [key, value] of Object.entries(styleValues)) {
+        if (value === undefined || value === null || value === '') continue;
+
+        // Handle special 'size' object: { width, widthUnit, height, heightUnit }
+        if (key === 'size' && typeof value === 'object') {
+            const sizeObj = value as any;
+            if (sizeObj.width !== undefined && sizeObj.width !== 'auto') {
+                const widthUnit = sizeObj.widthUnit || 'px';
+                cssProps['width'] = `${sizeObj.width}${widthUnit}`;
+            }
+            if (sizeObj.height !== undefined && sizeObj.height !== 'auto') {
+                const heightUnit = sizeObj.heightUnit || 'px';
+                cssProps['height'] = `${sizeObj.height}${heightUnit}`;
+            }
+            continue;
+        }
+
+        // Handle padding/margin objects: { top, right, bottom, left }
+        if ((key === 'padding' || key === 'margin') && typeof value === 'object') {
+            const boxObj = value as any;
+            if (boxObj.top !== undefined) cssProps[`${key}-top`] = `${boxObj.top}px`;
+            if (boxObj.right !== undefined) cssProps[`${key}-right`] = `${boxObj.right}px`;
+            if (boxObj.bottom !== undefined) cssProps[`${key}-bottom`] = `${boxObj.bottom}px`;
+            if (boxObj.left !== undefined) cssProps[`${key}-left`] = `${boxObj.left}px`;
+            continue;
+        }
+
+        // Skip any remaining object values (would become [object Object])
+        if (typeof value === 'object') continue;
+
+        const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+        cssProps[cssKey] = String(value);
+    }
+
+    return Object.entries(cssProps)
+        .map(([key, value]) => `${key}:${value}`)
+        .join(';');
 }
 
 /**

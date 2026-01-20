@@ -32,6 +32,8 @@ import {
 
 import {
   ContainerRenderer,
+  RowRenderer,
+  ColumnRenderer,
   TabsRenderer,
   AccordionRenderer,
   BreadcrumbRenderer
@@ -97,11 +99,13 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         cssStyles.marginLeft = `${(value as any).left}px`;
       } else if (key === 'size' && typeof value === 'object') {
         const sizeVal = value as any;
-        if (sizeVal.width !== 'auto') {
-          cssStyles.width = `${sizeVal.width}${sizeVal.widthUnit}`;
+        if (sizeVal.width !== 'auto' && sizeVal.width !== undefined) {
+          const widthUnit = sizeVal.widthUnit || 'px';
+          cssStyles.width = `${sizeVal.width}${widthUnit}`;
         }
-        if (sizeVal.height !== 'auto') {
-          cssStyles.height = `${sizeVal.height}${sizeVal.heightUnit}`;
+        if (sizeVal.height !== 'auto' && sizeVal.height !== undefined) {
+          const heightUnit = sizeVal.heightUnit || 'px';
+          cssStyles.height = `${sizeVal.height}${heightUnit}`;
         }
       } else if (key === 'gap' && typeof value === 'number') {
         cssStyles.gap = `${value}px`;
@@ -261,6 +265,8 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
 
     // Layout
     case 'Container': return <ContainerRenderer {...rendererProps} />;
+    case 'Row': return <RowRenderer {...rendererProps} />;
+    case 'Column': return <ColumnRenderer {...rendererProps} />;
     case 'Tabs': return <TabsRenderer {...rendererProps} />;
     case 'Accordion': return <AccordionRenderer {...rendererProps} />;
     case 'Breadcrumb': return <BreadcrumbRenderer {...rendererProps} />;

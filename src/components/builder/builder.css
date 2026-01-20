@@ -32,6 +32,7 @@
 /* Canvas */
 .builder-canvas {
   flex: 1;
+  min-width: 0; /* Prevent flex overflow */
   overflow: auto;
   background: hsl(var(--muted) / 0.3);
   order: 2;

@@ -40,24 +40,24 @@ export function isTailwindValue(property: string, value: string): boolean {
 
 export function generateTailwindClass(property: string, value: string): string | null {
   if (!isTailwindValue(property, value)) return null;
-  
+
   switch (property) {
     case 'fontSize':
       return `text-${value}`;
     case 'fontWeight':
       return `font-${value}`;
     case 'textColor':
-      return value === 'primary' ? 'text-primary' : 
-             value === 'secondary' ? 'text-secondary' :
-             value === 'muted' ? 'text-muted-foreground' :
-             value === 'accent' ? 'text-accent-foreground' :
-             value === 'destructive' ? 'text-destructive' : null;
+      return value === 'primary' ? 'text-primary' :
+        value === 'secondary' ? 'text-secondary' :
+          value === 'muted' ? 'text-muted-foreground' :
+            value === 'accent' ? 'text-accent-foreground' :
+              value === 'destructive' ? 'text-destructive' : null;
     case 'backgroundColor':
       return value === 'primary' ? 'bg-primary' :
-             value === 'secondary' ? 'bg-secondary' :
-             value === 'muted' ? 'bg-muted' :
-             value === 'accent' ? 'bg-accent' :
-             value === 'card' ? 'bg-card' : null;
+        value === 'secondary' ? 'bg-secondary' :
+          value === 'muted' ? 'bg-muted' :
+            value === 'accent' ? 'bg-accent' :
+              value === 'card' ? 'bg-card' : null;
     case 'padding':
       return `p-${value}`;
     case 'paddingTop':
@@ -107,15 +107,15 @@ export function generateTailwindClass(property: string, value: string): string |
       };
       return alignMap[value] || null;
     case 'display':
-      return value === 'flex' ? 'flex' : 
-             value === 'block' ? 'block' :
-             value === 'grid' ? 'grid' :
-             value === 'none' ? 'hidden' : null;
+      return value === 'flex' ? 'flex' :
+        value === 'block' ? 'block' :
+          value === 'grid' ? 'grid' :
+            value === 'none' ? 'hidden' : null;
     case 'flexDirection':
       return value === 'row' ? 'flex-row' :
-             value === 'column' ? 'flex-col' :
-             value === 'row-reverse' ? 'flex-row-reverse' :
-             value === 'column-reverse' ? 'flex-col-reverse' : null;
+        value === 'column' ? 'flex-col' :
+          value === 'row-reverse' ? 'flex-row-reverse' :
+            value === 'column-reverse' ? 'flex-col-reverse' : null;
     case 'gap':
       return `gap-${value}`;
     default:
@@ -124,47 +124,47 @@ export function generateTailwindClass(property: string, value: string): string |
 }
 
 export function generateStyles(
-  styles: ComponentStyles, 
+  styles: ComponentStyles,
   responsiveStyles?: ResponsiveStyles,
   currentViewport: 'mobile' | 'tablet' | 'desktop' = 'desktop'
 ): { classes: string; inlineStyles: React.CSSProperties } {
   const tailwindClasses: string[] = [];
   const inlineStyles: React.CSSProperties = {};
-  
+
   // Apply base styles
   Object.entries(styles).forEach(([property, value]) => {
     if (!value) return;
-    
+
     const tailwindClass = generateTailwindClass(property, value);
-    
+
     if (tailwindClass) {
       tailwindClasses.push(tailwindClass);
     } else {
-      const cssProperty = property.replace(/([A-Z])/g, '-$1').toLowerCase();
-      inlineStyles[cssProperty as keyof React.CSSProperties] = value as any;
+      // React inline styles use camelCase, so keep the property as-is
+      inlineStyles[property as keyof React.CSSProperties] = value as any;
     }
   });
-  
+
   // Apply responsive styles for current viewport
   if (responsiveStyles) {
     const viewportStyles = responsiveStyles[currentViewport];
     if (viewportStyles) {
       Object.entries(viewportStyles).forEach(([property, value]) => {
         if (!value) return;
-        
+
         const tailwindClass = generateTailwindClass(property, value);
-        
+
         if (tailwindClass) {
           // For current viewport, these styles override base styles
           tailwindClasses.push(tailwindClass);
         } else {
-          const cssProperty = property.replace(/([A-Z])/g, '-$1').toLowerCase();
-          inlineStyles[cssProperty as keyof React.CSSProperties] = value as any;
+          // React inline styles use camelCase, so keep the property as-is
+          inlineStyles[property as keyof React.CSSProperties] = value as any;
         }
       });
     }
   }
-  
+
   return {
     classes: tailwindClasses.join(' '),
     inlineStyles
@@ -173,7 +173,7 @@ export function generateStyles(
 
 export function generateResponsiveCSS(responsiveStyles: ResponsiveStyles): string {
   const css: string[] = [];
-  
+
   if (responsiveStyles.mobile) {
     css.push('@media (max-width: 767px) {');
     Object.entries(responsiveStyles.mobile).forEach(([property, value]) => {
@@ -184,7 +184,7 @@ export function generateResponsiveCSS(responsiveStyles: ResponsiveStyles): strin
     });
     css.push('}');
   }
-  
+
   if (responsiveStyles.tablet) {
     css.push('@media (min-width: 768px) and (max-width: 1023px) {');
     Object.entries(responsiveStyles.tablet).forEach(([property, value]) => {
@@ -195,7 +195,7 @@ export function generateResponsiveCSS(responsiveStyles: ResponsiveStyles): strin
     });
     css.push('}');
   }
-  
+
   if (responsiveStyles.desktop) {
     css.push('@media (min-width: 1024px) {');
     Object.entries(responsiveStyles.desktop).forEach(([property, value]) => {
@@ -206,7 +206,7 @@ export function generateResponsiveCSS(responsiveStyles: ResponsiveStyles): strin
     });
     css.push('}');
   }
-  
+
   return css.join('\n');
 }
 
@@ -223,7 +223,7 @@ export function getStylePresets() {
     },
     {
       id: 'center-vertical',
-      name: 'Center Vertically', 
+      name: 'Center Vertically',
       description: 'Center content vertically',
       styles: {
         display: 'flex',

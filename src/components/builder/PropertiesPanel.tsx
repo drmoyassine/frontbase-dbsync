@@ -23,6 +23,7 @@ import { DataTablePropertiesPanel } from '@/components/builder/data-table/DataTa
 import { FormPropertiesPanel } from './form/FormPropertiesPanel';
 import { ActionProperties } from '@/components/builder/properties/ActionProperties';
 import { VariableInput } from './VariableInput';
+import { ArrayEditor } from './ArrayEditor';
 
 // Helper to find component recursively
 const findComponent = (components: any[], id: string): any => {
@@ -571,6 +572,11 @@ export const PropertiesPanel = () => {
             type="InfoList"
           />
         );
+
+      // === LANDING PAGE COMPONENTS ===
+      // These are now templates that expand into primitive components.
+      // Each child component uses its own property panel (Container, Heading, Text, etc.)
+      // No custom property panels needed here anymore.
 
       default:
         return (

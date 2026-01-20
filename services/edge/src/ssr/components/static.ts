@@ -126,7 +126,7 @@ function renderText(id: string, props: Record<string, unknown>): string {
     const size = props.size as string || 'base';
     const weight = props.weight as string || 'normal';
     const color = props.color as string || 'inherit';
-    const align = props.align as string || 'left';
+    const align = props.align as string || 'inherit';  // Inherit from parent
 
     const style = `font-size:var(--fb-text-${size}, 1rem);font-weight:${weight};color:${color};text-align:${align}`;
     const attrs = getCommonAttributes(id, `fb-text fb-text-${size}`, props, style);
@@ -137,7 +137,7 @@ function renderText(id: string, props: Record<string, unknown>): string {
 function renderHeading(id: string, props: Record<string, unknown>): string {
     const content = escapeHtml(String(props.content || props.text || ''));
     const level = Math.min(Math.max(Number(props.level) || 2, 1), 6);
-    const align = props.align as string || 'left';
+    const align = props.align as string || 'inherit';  // Inherit from parent for centering
     const color = props.color as string || 'inherit';
 
     const style = `text-align:${align};color:${color}`;
@@ -149,7 +149,7 @@ function renderHeading(id: string, props: Record<string, unknown>): string {
 
 function renderParagraph(id: string, props: Record<string, unknown>): string {
     const content = escapeHtml(String(props.content || props.text || ''));
-    const align = props.align as string || 'left';
+    const align = props.align as string || 'inherit';  // Inherit from parent
     const color = props.color as string || 'inherit';
 
     const style = `text-align:${align};color:${color}`;

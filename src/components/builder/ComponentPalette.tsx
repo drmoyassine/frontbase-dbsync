@@ -4,6 +4,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useBuilderStore } from '@/stores/builder';
+import { getSectionTemplate, expandTemplate } from './templates/sectionTemplates';
 import {
   Search,
   MousePointer,
@@ -15,7 +16,11 @@ import {
   Image,
   Calendar,
   Globe,
-  FileText
+  FileText,
+  Menu,
+  DollarSign,
+  HelpCircle,
+  Sparkles
 } from 'lucide-react';
 
 const componentCategories = {
@@ -38,6 +43,8 @@ const componentCategories = {
 
       // Layout Components (Container MOVED HERE)
       { name: 'Container', icon: Layout, description: 'Layout container', section: 'layout' },
+      { name: 'Row', icon: Layout, description: 'Horizontal flex row', section: 'layout' },
+      { name: 'Column', icon: Layout, description: 'Vertical flex column', section: 'layout' },
       { name: 'Card', icon: Layout, description: 'Content card', section: 'layout' },
       { name: 'Grid', icon: Layout, description: 'Grid layout', section: 'layout' },
       { name: 'Flex', icon: Layout, description: 'Flex container', section: 'layout' },
@@ -68,6 +75,23 @@ const componentCategories = {
       { name: 'Progress', icon: BarChart, description: 'Progress indicator', section: 'data' },
       { name: 'Avatar', icon: MousePointer, description: 'User avatar', section: 'data' },
     ]
+  },
+  sections: {
+    icon: Sparkles,
+    label: 'Sections',
+    components: [
+      // Landing Page Sections - these expand into child components
+      { name: '_separator_landing', icon: Layout, description: 'Landing Page Sections', section: 'separator' },
+
+      { name: 'Hero', icon: Layout, description: 'Hero section with CTA', section: 'landing', isTemplate: true },
+      { name: 'Features', icon: Layout, description: 'Feature cards grid', section: 'landing', isTemplate: true },
+      { name: 'Pricing', icon: DollarSign, description: 'Pricing table', section: 'landing', isTemplate: true },
+      { name: 'CTA', icon: MousePointer, description: 'Call to action banner', section: 'landing', isTemplate: true },
+      { name: 'Navbar', icon: Menu, description: 'Navigation bar', section: 'landing', isTemplate: true },
+      { name: 'FAQ', icon: HelpCircle, description: 'FAQ accordion', section: 'landing', isTemplate: true },
+      { name: 'LogoCloud', icon: Image, description: 'Partner logos', section: 'landing', isTemplate: true },
+      { name: 'Footer', icon: Layout, description: 'Page footer', section: 'landing', isTemplate: true },
+    ]
   }
 };
 
@@ -92,7 +116,8 @@ const DraggableComponentItem: React.FC<{ component: any }> = ({ component }) => 
     id: `palette-${component.name}`,
     data: {
       type: component.name,
-      name: component.name
+      name: component.name,
+      isTemplate: component.isTemplate
     }
   });
 
@@ -105,13 +130,26 @@ const DraggableComponentItem: React.FC<{ component: any }> = ({ component }) => 
 
   const handleDoubleClick = () => {
     if (currentPageId) {
-      const newComponent = {
-        id: `${Date.now()}-${Math.random()}`,
-        type: component.name,
-        props: {},
-        styles: {},
-        children: []
-      };
+      let newComponent;
+
+      // If this is a template section, expand it into child components
+      if (component.isTemplate) {
+        const template = getSectionTemplate(component.name);
+        if (template) {
+          newComponent = expandTemplate(template);
+        }
+      }
+
+      // Fallback for non-template components
+      if (!newComponent) {
+        newComponent = {
+          id: `${Date.now()}-${Math.random()}`,
+          type: component.name,
+          props: {},
+          styles: {},
+          children: []
+        };
+      }
 
       moveComponent(currentPageId, null, newComponent, 999);
       setSelectedComponentId(newComponent.id);

@@ -122,7 +122,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
           ...style,
           textAlign: 'inherit',
           // Layout components need width:100% to fill parent
-          width: ['Container', 'Row', 'Column'].includes(component.type) ? '100%' : undefined,
+          width: ['Container', 'Row', 'Column', 'Card'].includes(component.type) ? '100%' : undefined,
         }}
       >
         {/* Corner Handles - only visible when selected */}
@@ -136,7 +136,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
         )}
 
         {/* Component Content */}
-        {['Container', 'Row', 'Column'].includes(component.type) ? (
+        {['Container', 'Row', 'Column', 'Card'].includes(component.type) ? (
           <ContainerComponent
             component={component}
             pageId={pageId}

@@ -280,19 +280,36 @@ function renderSpacer(id: string, props: Record<string, unknown>): string {
 }
 
 function renderIcon(id: string, props: Record<string, unknown>): string {
-    const name = props.name as string || props.icon as string || 'circle';
-    const size = props.size as string || '1.5rem';
+    const icon = (props.icon || props.name || '⭐') as string;
+    const size = props.size as string || 'md';
     const color = props.color as string || 'currentColor';
 
-    // For now, render as a placeholder - in production this would use an icon library
-    const style = `width:${size};height:${size};color:${color};display:inline-flex;align-items:center;justify-content:center`;
-    const attrs = getCommonAttributes(id, 'fb-icon', props, style);
+    // Size mapping
+    const sizeStyles: Record<string, string> = {
+        xs: 'width:1rem;height:1rem;font-size:1rem',
+        sm: 'width:1.5rem;height:1.5rem;font-size:1.25rem',
+        md: 'width:2rem;height:2rem;font-size:1.5rem',
+        lg: 'width:2.5rem;height:2.5rem;font-size:2rem',
+        xl: 'width:3rem;height:3rem;font-size:2.5rem',
+    };
 
-    return `<span ${attrs} data-icon="${escapeHtml(name)}">
-        <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-        </svg>
-    </span>`;
+    const sizeStyle = sizeStyles[size] || sizeStyles.md;
+
+    // Check if it's an emoji (short string with no URL characters)
+    const isEmoji = icon.length <= 4 && !/^[a-zA-Z0-9\/]/.test(icon);
+    // Check if it's an image URL
+    const isUrl = icon.startsWith('http') || icon.startsWith('/');
+
+    if (isUrl) {
+        const style = `${sizeStyle};object-fit:contain`;
+        const attrs = getCommonAttributes(id, 'fb-icon', props, style);
+        return `<img ${attrs} src="${escapeHtml(icon)}" alt="" />`;
+    }
+
+    // Render as emoji or text icon
+    const style = `${sizeStyle};display:inline-flex;align-items:center;justify-content:center;${isEmoji ? '' : `color:${color}`}`;
+    const attrs = getCommonAttributes(id, 'fb-icon', props, style);
+    return `<span ${attrs}>${escapeHtml(icon)}</span>`;
 }
 
 function renderAvatar(id: string, props: Record<string, unknown>): string {

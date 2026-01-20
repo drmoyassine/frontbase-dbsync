@@ -36,6 +36,7 @@ export function getDefaultProps(componentType: string): Record<string, any> {
     Container: { className: 'p-6' },
     Image: { src: '/placeholder.svg', alt: 'Placeholder image', width: '200px', height: '200px' },
     Link: { text: 'Link', href: '#', target: '_self' },
+    Icon: { icon: '⭐', size: 'md', color: 'currentColor' },
     DataTable: { binding: null },
     KPICard: { binding: null },
     Chart: { binding: null, chartType: 'bar' },

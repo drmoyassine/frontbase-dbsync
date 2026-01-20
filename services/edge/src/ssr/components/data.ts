@@ -31,16 +31,93 @@ function getCommonAttributes(
     extraAttrs: string = ''
 ): string {
     // Merge base class with prop className (e.g. Tailwind classes)
-    const className = [baseClass, props.className].filter(Boolean).join(' ');
+    let className = [baseClass, props.className].filter(Boolean).join(' ');
 
-    // Merge extra inline styles with prop styles
-    const propStyle = props.style as Record<string, any> || {};
-    const propStyleString = Object.entries(propStyle)
-        .map(([k, v]) => {
-            const key = k.replace(/([A-Z])/g, '-$1').toLowerCase();
-            return `${key}:${v}`;
-        })
-        .join(';');
+    let propStyleString = '';
+
+    const propStyle = props.style as any || {};
+
+    // Handle NEW StylesData format: { activeProperties: [...], values: {...} } or just { values: {...} }
+    if (propStyle && typeof propStyle === 'object' && ('values' in propStyle || 'activeProperties' in propStyle)) {
+        if (propStyle.values) {
+            const { values } = propStyle;
+            const styleParts: string[] = [];
+
+            // Apply ALL styles from values
+            for (const [prop, value] of Object.entries(values)) {
+                if (value === undefined || value === null || value === '' || prop === 'className') {
+                    continue;
+                }
+
+                // Handle special 'size' object: { width, widthUnit, height, heightUnit }
+                if (prop === 'size' && typeof value === 'object') {
+                    const sizeObj = value as any;
+                    if (sizeObj.width !== undefined && sizeObj.width !== 'auto') {
+                        const widthUnit = sizeObj.widthUnit || 'px';
+                        styleParts.push(`width:${sizeObj.width}${widthUnit}`);
+                    }
+                    if (sizeObj.height !== undefined && sizeObj.height !== 'auto') {
+                        const heightUnit = sizeObj.heightUnit || 'px';
+                        styleParts.push(`height:${sizeObj.height}${heightUnit}`);
+                    }
+                    continue;
+                }
+
+                // Handle padding/margin objects: { top, right, bottom, left }
+                if ((prop === 'padding' || prop === 'margin') && typeof value === 'object') {
+                    const boxObj = value as any;
+                    if (boxObj.top !== undefined) styleParts.push(`${prop}-top:${boxObj.top}px`);
+                    if (boxObj.right !== undefined) styleParts.push(`${prop}-right:${boxObj.right}px`);
+                    if (boxObj.bottom !== undefined) styleParts.push(`${prop}-bottom:${boxObj.bottom}px`);
+                    if (boxObj.left !== undefined) styleParts.push(`${prop}-left:${boxObj.left}px`);
+                    continue;
+                }
+
+                // Handle horizontalAlign: converts to margin-left/right auto
+                if (prop === 'horizontalAlign' && typeof value === 'string') {
+                    if (value === 'center') {
+                        styleParts.push('margin-left:auto');
+                        styleParts.push('margin-right:auto');
+                    } else if (value === 'right') {
+                        styleParts.push('margin-left:auto');
+                        styleParts.push('margin-right:0');
+                    } else {
+                        styleParts.push('margin-left:0');
+                        styleParts.push('margin-right:auto');
+                    }
+                    continue;
+                }
+
+                // Skip any remaining object values (would become [object Object])
+                if (typeof value === 'object') {
+                    continue;
+                }
+
+                // Convert camelCase to kebab-case for CSS
+                const cssKey = prop.replace(/([A-Z])/g, '-$1').toLowerCase();
+                styleParts.push(`${cssKey}:${value}`);
+            }
+
+            // Check for className in values
+            if (values.className) {
+                className = [className, values.className].filter(Boolean).join(' ');
+            }
+
+            propStyleString = styleParts.join(';');
+        }
+    }
+    // Handle standard style object
+    else {
+        propStyleString = Object.entries(propStyle)
+            .map(([k, v]) => {
+                // Skip object values
+                if (typeof v === 'object') return '';
+                const key = k.replace(/([A-Z])/g, '-$1').toLowerCase();
+                return `${key}:${v}`;
+            })
+            .filter(Boolean)
+            .join(';');
+    }
 
     const finalStyle = [extraStyle, propStyleString].filter(Boolean).join(';');
 
@@ -244,13 +321,25 @@ function renderDataCard(id: string, props: Record<string, unknown>, childrenHtml
     const style = `border:1px solid #e5e7eb;border-radius:0.5rem;overflow:hidden`;
     const attrs = getCommonAttributes(id, 'fb-datacard', props, style, 'datacard', propsJson);
 
+    // Check if we have children content - if so, don't show skeleton placeholders
+    const hasChildren = childrenHtml && childrenHtml.trim().length > 0;
+
+    // Only show skeleton placeholders when there's no title/subtitle AND no children
+    const titleHtml = title
+        ? `<h4 style="margin:0 0 0.25rem 0;font-weight:600">${title}</h4>`
+        : (hasChildren ? '' : '<div class="fb-skeleton" style="height:1.25rem;width:60%;margin-bottom:0.5rem">&nbsp;</div>');
+
+    const subtitleHtml = subtitle
+        ? `<p style="margin:0;color:#6b7280;font-size:0.875rem">${subtitle}</p>`
+        : (hasChildren ? '' : '<div class="fb-skeleton" style="height:0.875rem;width:80%">&nbsp;</div>');
+
     return `<div ${attrs}>
         ${image ? `<div class="fb-datacard-image" style="height:160px;background:#f3f4f6">
             <img src="${escapeHtml(image)}" alt="" style="width:100%;height:100%;object-fit:cover" loading="lazy" />
         </div>` : ''}
         <div class="fb-datacard-content" style="padding:1rem">
-            ${title ? `<h4 style="margin:0 0 0.25rem 0;font-weight:600">${title}</h4>` : '<div class="fb-skeleton" style="height:1.25rem;width:60%;margin-bottom:0.5rem">&nbsp;</div>'}
-            ${subtitle ? `<p style="margin:0;color:#6b7280;font-size:0.875rem">${subtitle}</p>` : '<div class="fb-skeleton" style="height:0.875rem;width:80%">&nbsp;</div>'}
+            ${titleHtml}
+            ${subtitleHtml}
             ${childrenHtml}
         </div>
     </div>`;

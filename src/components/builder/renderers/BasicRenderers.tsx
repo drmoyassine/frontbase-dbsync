@@ -57,19 +57,25 @@ export const HeadingRenderer: React.FC<RendererProps> = ({ effectiveProps, combi
     );
 };
 
-export const CardRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, inlineStyles }) => (
-    <Card className={combinedClassName} style={inlineStyles}>
-        <CardHeader>
-            <CardTitle>{effectiveProps.title || 'Card Title'}</CardTitle>
-            {effectiveProps.description && <CardDescription>{effectiveProps.description}</CardDescription>}
-        </CardHeader>
-        {effectiveProps.content && (
-            <CardContent>
-                <p>{effectiveProps.content}</p>
+export const CardRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, inlineStyles, children }) => {
+    // Check if we have children components - if so, they ARE the content
+    const hasChildren = React.Children.count(children) > 0;
+
+    return (
+        <Card className={combinedClassName} style={inlineStyles}>
+            {/* Only show header if we have title/description AND no children */}
+            {(!hasChildren && (effectiveProps.title || effectiveProps.description)) && (
+                <CardHeader>
+                    {effectiveProps.title && <CardTitle>{effectiveProps.title}</CardTitle>}
+                    {effectiveProps.description && <CardDescription>{effectiveProps.description}</CardDescription>}
+                </CardHeader>
+            )}
+            <CardContent className={hasChildren ? 'p-4' : ''}>
+                {hasChildren ? children : (effectiveProps.content && <p>{effectiveProps.content}</p>)}
             </CardContent>
-        )}
-    </Card>
-);
+        </Card>
+    );
+};
 
 export const BadgeRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, createEditableText }) => (
     <Badge variant={effectiveProps.variant || 'default'}>
@@ -127,3 +133,46 @@ export const LinkRenderer: React.FC<RendererProps> = ({ effectiveProps, combined
         {createEditableText(effectiveProps.text || 'Link', 'text', 'text-primary hover:underline', inlineStyles)}
     </a>
 );
+
+export const IconRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, inlineStyles }) => {
+    const icon = effectiveProps.icon || effectiveProps.name || '⭐';
+    const size = effectiveProps.size || 'md';
+    const color = effectiveProps.color || 'currentColor';
+
+    // Size classes
+    const sizeClasses = {
+        xs: 'w-4 h-4 text-base',
+        sm: 'w-6 h-6 text-xl',
+        md: 'w-8 h-8 text-2xl',
+        lg: 'w-10 h-10 text-3xl',
+        xl: 'w-12 h-12 text-4xl',
+    };
+
+    const sizeClass = sizeClasses[size as keyof typeof sizeClasses] || sizeClasses.md;
+
+    // Check if it's an emoji (short string with no URL characters)
+    const isEmoji = icon.length <= 4 && !/^[a-zA-Z0-9\/]/.test(icon);
+    // Check if it's an image URL
+    const isUrl = icon.startsWith('http') || icon.startsWith('/');
+
+    if (isUrl) {
+        return (
+            <img
+                src={icon}
+                alt=""
+                className={cn('object-contain', sizeClass, combinedClassName)}
+                style={{ color, ...inlineStyles }}
+            />
+        );
+    }
+
+    // Render as emoji or text icon
+    return (
+        <span
+            className={cn('inline-flex items-center justify-center', sizeClass, combinedClassName)}
+            style={{ color: isEmoji ? undefined : color, ...inlineStyles }}
+        >
+            {icon}
+        </span>
+    );
+};

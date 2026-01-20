@@ -19,7 +19,8 @@ import {
   SeparatorRenderer,
   AvatarRenderer,
   ProgressRenderer,
-  LinkRenderer
+  LinkRenderer,
+  IconRenderer
 } from './renderers/BasicRenderers';
 
 import {
@@ -267,6 +268,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     case 'Avatar': return <AvatarRenderer {...rendererProps} />;
     case 'Progress': return <ProgressRenderer {...rendererProps} />;
     case 'Link': return <LinkRenderer {...rendererProps} />;
+    case 'Icon': return <IconRenderer {...rendererProps} />;
 
     // Form
     case 'Input': return <InputRenderer {...rendererProps} />;

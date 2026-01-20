@@ -20,7 +20,18 @@ import {
   Menu,
   DollarSign,
   HelpCircle,
-  Sparkles
+  Sparkles,
+  // Layout component icons
+  Square,
+  Rows3,
+  Columns3,
+  CreditCard,
+  LayoutGrid,
+  AlignJustify,
+  Minus,
+  PanelTop,
+  ChevronDown,
+  Star
 } from 'lucide-react';
 
 const componentCategories = {
@@ -37,20 +48,21 @@ const componentCategories = {
       { name: 'Heading', icon: Type, description: 'Headings (H1-H6)', section: 'basic' },
       { name: 'Link', icon: Globe, description: 'Navigation link', section: 'basic' },
       { name: 'Image', icon: Image, description: 'Image display', section: 'basic' },
+      { name: 'Icon', icon: Star, description: 'Icon/emoji display', section: 'basic' },
 
       // Layout separator
       { name: '_separator_layout', icon: Layout, description: 'Layout Components', section: 'separator' },
 
       // Layout Components (Container MOVED HERE)
-      { name: 'Container', icon: Layout, description: 'Layout container', section: 'layout' },
-      { name: 'Row', icon: Layout, description: 'Horizontal flex row', section: 'layout' },
-      { name: 'Column', icon: Layout, description: 'Vertical flex column', section: 'layout' },
-      { name: 'Card', icon: Layout, description: 'Content card', section: 'layout' },
-      { name: 'Grid', icon: Layout, description: 'Grid layout', section: 'layout' },
-      { name: 'Flex', icon: Layout, description: 'Flex container', section: 'layout' },
-      { name: 'Separator', icon: Layout, description: 'Visual separator', section: 'layout' },
-      { name: 'Tabs', icon: Layout, description: 'Tabbed content', section: 'layout' },
-      { name: 'Accordion', icon: Layout, description: 'Collapsible content', section: 'layout' },
+      { name: 'Container', icon: Square, description: 'Layout container', section: 'layout' },
+      { name: 'Row', icon: Rows3, description: 'Horizontal flex row', section: 'layout' },
+      { name: 'Column', icon: Columns3, description: 'Vertical flex column', section: 'layout' },
+      { name: 'Card', icon: CreditCard, description: 'Content card', section: 'layout' },
+      { name: 'Grid', icon: LayoutGrid, description: 'Grid layout', section: 'layout' },
+      { name: 'Flex', icon: AlignJustify, description: 'Flex container', section: 'layout' },
+      { name: 'Separator', icon: Minus, description: 'Visual separator', section: 'layout' },
+      { name: 'Tabs', icon: PanelTop, description: 'Tabbed content', section: 'layout' },
+      { name: 'Accordion', icon: ChevronDown, description: 'Collapsible content', section: 'layout' },
     ]
   },
   data: {

@@ -89,7 +89,7 @@ export const pageAPI = {
   // Update page
   updatePage: async (id: string, pageData: any): Promise<APIResponse> => {
     try {
-      const response = await fetch(`/api/pages/${id}`, {
+      const response = await fetch(`/api/pages/${id}/`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -106,7 +106,7 @@ export const pageAPI = {
   // Update page layout data only
   updatePageLayout: async (id: string, layoutData: any): Promise<APIResponse> => {
     try {
-      const response = await fetch(`/api/pages/${id}/layout`, {
+      const response = await fetch(`/api/pages/${id}/layout/`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

@@ -45,7 +45,7 @@ class PageCreateRequest(BaseModel):
 
 class PageUpdateRequest(BaseModel):
     name: Optional[constr(min_length=1, max_length=100)] = None
-    slug: Optional[constr(min_length=1, max_length=100)] = None
+    slug: Optional[str] = Field(default=None, max_length=100)  # Allow empty string for homepage
     title: Optional[str] = None
     description: Optional[str] = None
     keywords: Optional[str] = None

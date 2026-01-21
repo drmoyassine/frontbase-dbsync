@@ -16,6 +16,8 @@ interface VariablePickerProps {
     searchTerm: string;
     position: { top: number; left: number };
     showFilters?: boolean;
+    /** Optional list of allowed variable groups (e.g., ['visitor', 'system', 'user', 'record']) */
+    allowedGroups?: string[];
 }
 
 // Group icons and labels
@@ -37,6 +39,7 @@ export function VariablePicker({
     searchTerm,
     position,
     showFilters = false,
+    allowedGroups,
 }: VariablePickerProps) {
     const { variables, filters, isLoading } = useVariables();
     const [selectedIndex, setSelectedIndex] = useState(0);
@@ -56,10 +59,14 @@ export function VariablePicker({
         return groups;
     }, [variables]);
 
-    // Get available groups
+    // Get available groups (filtered by allowedGroups if provided)
     const availableGroups = useMemo(() => {
-        return Object.keys(groupedVariables).filter(g => groupedVariables[g].length > 0);
-    }, [groupedVariables]);
+        const allGroups = Object.keys(groupedVariables).filter(g => groupedVariables[g].length > 0);
+        if (allowedGroups && allowedGroups.length > 0) {
+            return allGroups.filter(g => allowedGroups.includes(g));
+        }
+        return allGroups;
+    }, [groupedVariables, allowedGroups]);
 
     // Filter based on search term
     const filteredGroups = useMemo(() => {

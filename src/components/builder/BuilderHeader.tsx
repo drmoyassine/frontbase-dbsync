@@ -122,7 +122,8 @@ export const BuilderHeader: React.FC<{
           window.open(previewUrl, '_blank');
         } else {
           // Fallback to constructed URL if no URL returned
-          const fallbackUrl = `http://localhost:3002/${currentPage.slug}`;
+          const pagePath = currentPage.isHomepage ? '' : currentPage.slug;
+          const fallbackUrl = `http://localhost:3002/${pagePath}`;
           window.open(fallbackUrl, '_blank');
         }
       }
@@ -301,7 +302,7 @@ export const BuilderHeader: React.FC<{
                   This will publish your page and open a preview at:
                   <br />
                   <code className="text-xs bg-muted px-1 py-0.5 rounded mt-1 inline-block">
-                    {currentPage ? `http://localhost:3002/${currentPage.slug}` : 'Loading...'}
+                    {currentPage ? `http://localhost:3002/${currentPage.isHomepage ? '' : currentPage.slug}` : 'Loading...'}
                   </code>
                 </AlertDialogDescription>
               </AlertDialogHeader>

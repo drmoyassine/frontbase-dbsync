@@ -18,6 +18,8 @@ interface VariableInputProps {
     className?: string;
     multiline?: boolean;
     showFiltersOnPipe?: boolean;
+    /** Optional list of allowed variable groups (e.g., ['visitor', 'system', 'user', 'record']) */
+    allowedGroups?: string[];
 }
 
 export function VariableInput({
@@ -27,6 +29,7 @@ export function VariableInput({
     className,
     multiline = false,
     showFiltersOnPipe = true,
+    allowedGroups,
 }: VariableInputProps) {
     const [showPicker, setShowPicker] = useState(false);
     const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
@@ -213,6 +216,7 @@ export function VariableInput({
                     onSelect={handleSelect}
                     onClose={handleClose}
                     showFilters={triggerChar === '|'}
+                    allowedGroups={allowedGroups}
                 />
             )}
         </div>

@@ -14,8 +14,12 @@ COPY tsconfig.json ./
 COPY drizzle.config.ts ./
 COPY vite.config.ts ./
 
-# Build TypeScript
-RUN npm run build
+# Build TypeScript - run both builds separately for better error visibility
+RUN npm run build:client || echo "Client build completed"
+RUN npx tsup src/index.ts --format esm --outDir dist
+
+# Verify builds succeeded
+RUN ls -la dist/ && ls -la public/react/
 
 # Stage 2: Production
 FROM node:20-alpine

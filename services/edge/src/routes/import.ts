@@ -15,6 +15,11 @@ import {
     getPublishedPageBySlug,
     initPagesDb
 } from '../db/pages-store';
+import {
+    updateProjectSettings,
+    getProjectSettings,
+    initProjectSettingsDb
+} from '../db/project-settings';
 
 // Create the import route (non-OpenAPI for better error handling)
 export const importRoute = new Hono();
@@ -130,6 +135,58 @@ importRoute.post('/', async (c) => {
 });
 
 // =============================================================================
+// POST /api/import/settings - Sync project settings (favicon, branding)
+// =============================================================================
+
+importRoute.post('/settings', async (c) => {
+    try {
+        const body = await c.req.json();
+
+        console.log('[Import Settings] Received:', Object.keys(body));
+
+        // Update project settings in local store
+        await updateProjectSettings({
+            faviconUrl: body.faviconUrl || null,
+            logoUrl: body.logoUrl || null,
+            siteName: body.siteName || body.name || null,
+            siteDescription: body.siteDescription || body.description || null,
+            appUrl: body.appUrl || null,
+        });
+
+        return c.json({
+            success: true,
+            message: 'Project settings synced successfully',
+        }, 200);
+
+    } catch (error) {
+        console.error('[Import Settings] Error:', error);
+        return c.json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        }, 500);
+    }
+});
+
+// =============================================================================
+// GET /api/import/settings - Get current project settings
+// =============================================================================
+
+importRoute.get('/settings', async (c) => {
+    try {
+        const settings = await getProjectSettings();
+        return c.json({
+            success: true,
+            settings,
+        }, 200);
+    } catch (error) {
+        return c.json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        }, 500);
+    }
+});
+
+// =============================================================================
 // GET /api/import/status - Check import service status
 // =============================================================================
 
@@ -140,5 +197,6 @@ importRoute.get('/status', async (c) => {
     });
 });
 
-// Initialize database on module load
+// Initialize databases on module load
 initPagesDb().catch(console.error);
+initProjectSettingsDb().catch(console.error);

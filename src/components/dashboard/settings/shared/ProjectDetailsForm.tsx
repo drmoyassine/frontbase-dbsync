@@ -70,13 +70,12 @@ export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps
 
         setIsUploading(true);
         try {
-            // Create FormData for upload
+            // Create FormData for upload - use backend assets endpoint (not user storage)
             const uploadData = new FormData();
             uploadData.append('file', file);
-            uploadData.append('bucket', 'assets');
-            uploadData.append('path', 'favicon');
+            uploadData.append('asset_type', 'favicon');
 
-            const response = await fetch('/api/storage/upload/', {
+            const response = await fetch('/api/project/assets/upload', {
                 method: 'POST',
                 body: uploadData,
             });

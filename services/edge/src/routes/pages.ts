@@ -12,6 +12,7 @@ import { renderPage } from '../ssr/PageRenderer.js';
 import { createVariableStore, VariableStore } from '../ssr/store.js';
 import { buildTemplateContext, PageData as ContextPageData } from '../ssr/lib/context.js';
 import { getDefaultTrackingConfig, TrackingConfig } from '../ssr/lib/tracking.js';
+import { getFaviconUrl, DEFAULT_FAVICON } from '../db/project-settings.js';
 
 // Type definitions for page data
 interface PageComponent {
@@ -153,7 +154,8 @@ function generateHtmlDocument(
     page: PageData,
     bodyHtml: string,
     initialState: Record<string, unknown>,
-    trackingConfig: TrackingConfig
+    trackingConfig: TrackingConfig,
+    faviconUrl: string = DEFAULT_FAVICON
 ): string {
     const title = page.title || page.name;
     const description = page.description || '';
@@ -169,9 +171,9 @@ function generateHtmlDocument(
     ${keywords ? `<meta name="keywords" content="${escapeHtml(keywords)}">` : ''}
     <meta name="generator" content="Frontbase">
     
-    <!-- Favicon - Default Frontbase logo -->
-    <link rel="icon" type="image/png" href="/static/icon.png">
-    <link rel="apple-touch-icon" href="/static/icon.png">
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="${faviconUrl}">
+    <link rel="apple-touch-icon" href="${faviconUrl}">
     
     <!-- Prefetch hydration bundles -->
     <link rel="modulepreload" href="/static/hydrate.js">
@@ -397,8 +399,11 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     // Fetch tracking config
     const trackingConfig = await fetchTrackingConfig();
 
+    // Get favicon from local project settings (self-sufficient, no FastAPI call)
+    const faviconUrl = await getFaviconUrl();
+
     // Generate full HTML document
-    const htmlDoc = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig);
+    const htmlDoc = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl);
 
     // Set cache headers (Disabled for debugging/immediate updates)
     c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -509,8 +514,11 @@ pagesRoute.get('/', async (c) => {
             // Fetch tracking config
             const trackingConfig = await fetchTrackingConfig();
 
+            // Get favicon from local project settings (self-sufficient)
+            const faviconUrl = await getFaviconUrl();
+
             // Return full HTML page
-            const fullHtml = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig);
+            const fullHtml = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl);
             return c.html(fullHtml);
         }
     } catch (error) {

@@ -142,6 +142,13 @@ app.include_router(settings.router)  # Privacy & Tracking settings
 from app.services.sync.main import sync_app
 app.mount("/api/sync", sync_app)
 
+# Mount static assets directory for branding files (favicon, logo, etc.)
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+ASSETS_DIR = Path(__file__).parent / "static" / "assets"
+ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
+
 @app.get("/")
 async def root():
     return {"message": "Frontbase-DBSync API is running", "test_mode": True}

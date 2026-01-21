@@ -30,9 +30,6 @@ import { SettingsPanel } from "@/components/dashboard/SettingsPanel";
 // Auth Pages
 import LoginPage from "./pages/auth/LoginPage";
 
-// Public Pages
-import LandingPage from "./pages/LandingPage";
-
 // Other Pages
 import BuilderPage from "./pages/BuilderPage";
 import ActionsPage from "./pages/ActionsPage";
@@ -91,10 +88,10 @@ const App = () => {
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          <BrowserRouter>
+          <BrowserRouter basename="/frontbase-admin">
             <Routes>
-              {/* Public Routes */}
-              <Route path="/" element={<LandingPage />} />
+              {/* Admin root redirects to dashboard */}
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/embed/auth/:formId" element={<EmbedAuthPage />} />
 

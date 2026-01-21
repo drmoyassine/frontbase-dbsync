@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
-    base: '/',
+    base: '/frontbase-admin/',
     server: {
       host: "::",
       port: 5173,

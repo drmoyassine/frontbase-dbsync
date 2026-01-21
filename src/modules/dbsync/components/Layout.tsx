@@ -13,7 +13,7 @@ import {
 import { useState } from 'react'
 
 const navItems = [
-    { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/pages', label: 'Pages', icon: FileText },
     { path: '/data-studio', label: 'Data Studio', icon: Database },
     { path: '/actions', label: 'Automations', icon: Workflow },

@@ -86,6 +86,8 @@ export interface ProjectConfig {
     id: string;
     name: string;
     description?: string;
+    appUrl?: string; // Public URL for publish/preview (e.g., https://mysite.com)
+    faviconUrl?: string; // Custom favicon URL (uploaded to storage)
     supabaseUrl?: string;
     supabaseAnonKey?: string;
     usersConfig?: UserContactConfig;

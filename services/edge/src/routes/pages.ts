@@ -169,6 +169,10 @@ function generateHtmlDocument(
     ${keywords ? `<meta name="keywords" content="${escapeHtml(keywords)}">` : ''}
     <meta name="generator" content="Frontbase">
     
+    <!-- Favicon - Default Frontbase logo -->
+    <link rel="icon" type="image/png" href="/static/icon.png">
+    <link rel="apple-touch-icon" href="/static/icon.png">
+    
     <!-- Prefetch hydration bundles -->
     <link rel="modulepreload" href="/static/hydrate.js">
     <link rel="modulepreload" href="/static/react/hydrate.js">

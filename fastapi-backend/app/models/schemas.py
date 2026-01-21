@@ -103,6 +103,8 @@ class TableSchemaResponse(BaseModel):
 class ProjectUpdateRequest(BaseModel):
     name: Optional[constr(min_length=1, max_length=100)] = None
     description: Optional[str] = None
+    app_url: Optional[str] = Field(default=None, alias="appUrl")
+    favicon_url: Optional[str] = Field(default=None, alias="faviconUrl")
     supabase_url: Optional[constr(min_length=1)] = None
     supabase_anon_key: Optional[constr(min_length=1)] = None
     supabase_service_key: Optional[constr(min_length=1)] = None
@@ -115,6 +117,8 @@ class ProjectResponse(BaseModel):
     id: str
     name: str
     description: Optional[str] = None
+    app_url: Optional[str] = Field(default=None, alias="appUrl")
+    favicon_url: Optional[str] = Field(default=None, alias="faviconUrl")
     supabase_url: Optional[str] = None
     supabase_anon_key: Optional[str] = None
     users_config: Optional[Dict[str, Any]] = Field(default=None, alias="usersConfig")

@@ -77,6 +77,18 @@ export const BuilderHeader: React.FC<{
 
     const currentPage = pages.find(page => page.id === currentPageId);
 
+    // Get publish URL - use configured appUrl or fallback to auto-detect
+    const getPublishUrl = (pagePath: string = '') => {
+      if (project?.appUrl) {
+        // Use configured app URL
+        const baseUrl = project.appUrl.replace(/\/$/, ''); // Remove trailing slash
+        return `${baseUrl}/${pagePath}`;
+      }
+      // Fallback: auto-detect from current origin, swap builder port for edge port
+      const baseUrl = window.location.origin.replace(':5173', ':3002');
+      return `${baseUrl}/${pagePath}`;
+    };
+
     // Get unified page status
     const getPageStatus = () => {
       if (!currentPage) return null;
@@ -123,8 +135,7 @@ export const BuilderHeader: React.FC<{
         } else {
           // Fallback to constructed URL if no URL returned
           const pagePath = currentPage.isHomepage ? '' : currentPage.slug;
-          const fallbackUrl = `http://localhost:3002/${pagePath}`;
-          window.open(fallbackUrl, '_blank');
+          window.open(getPublishUrl(pagePath), '_blank');
         }
       }
     };
@@ -302,7 +313,7 @@ export const BuilderHeader: React.FC<{
                   This will publish your page and open a preview at:
                   <br />
                   <code className="text-xs bg-muted px-1 py-0.5 rounded mt-1 inline-block">
-                    {currentPage ? `http://localhost:3002/${currentPage.isHomepage ? '' : currentPage.slug}` : 'Loading...'}
+                    {currentPage ? getPublishUrl(currentPage.isHomepage ? '' : currentPage.slug) : 'Loading...'}
                   </code>
                 </AlertDialogDescription>
               </AlertDialogHeader>

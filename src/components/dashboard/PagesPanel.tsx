@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,19 +25,21 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, MoreHorizontal, Eye, Edit, Copy, Trash2, FileText, RotateCcw, Trash } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Eye, Edit, Copy, Trash2, FileText, RotateCcw, Trash, CheckSquare, Square } from 'lucide-react';
 import { toast } from 'sonner';
 import { CreatePageDialog } from './CreatePageDialog';
 
 export const PagesPanel: React.FC = () => {
   const navigate = useNavigate();
-  const { pages, createPage, deletePage, restorePage, permanentDeletePage, setCurrentPageId, loadPagesFromDatabase } = useBuilderStore();
+  const { project, pages, createPage, deletePage, restorePage, permanentDeletePage, setCurrentPageId, loadPagesFromDatabase } = useBuilderStore();
   const { isAuthenticated, isLoading } = useAuthStore();
   const { searchQuery, setSearchQuery, filterStatus } = useDashboardStore();
   const [isCreating, setIsCreating] = useState(false);
   const [isLoadingPages, setIsLoadingPages] = useState(true);
   const [showTrash, setShowTrash] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
 
   // Load pages from database when component mounts or trash mode changes
   useEffect(() => {
@@ -59,6 +62,11 @@ export const PagesPanel: React.FC = () => {
     loadPages();
   }, [loadPagesFromDatabase, isAuthenticated, isLoading, showTrash]);
 
+  // Clear selection when switching between views
+  useEffect(() => {
+    setSelectedPages(new Set());
+  }, [showTrash]);
+
   const filteredPages = (pages || []).filter(page => {
     // Filter by trash state
     const isDeleted = !!page.deletedAt;
@@ -72,6 +80,16 @@ export const PagesPanel: React.FC = () => {
     return matchesTrashView && matchesSearch && matchesFilter;
   });
 
+  // Get publish URL for preview
+  const getPublishUrl = (pagePath: string = '') => {
+    if (project?.appUrl) {
+      const baseUrl = project.appUrl.replace(/\/$/, '');
+      return `${baseUrl}/${pagePath}`;
+    }
+    const baseUrl = window.location.origin.replace(':5173', ':3002');
+    return `${baseUrl}/${pagePath}`;
+  };
+
   const handlePageCreated = (pageId: string) => {
     setCurrentPageId(pageId);
     navigate(`/builder/${pageId}`);
@@ -81,6 +99,12 @@ export const PagesPanel: React.FC = () => {
   const handleEditPage = (pageId: string) => {
     setCurrentPageId(pageId);
     navigate(`/builder/${pageId}`);
+  };
+
+  const handlePreviewPage = (page: any) => {
+    const pagePath = page.isHomepage ? '' : page.slug;
+    const url = getPublishUrl(pagePath);
+    window.open(url, '_blank');
   };
 
   const handleDeletePage = async (pageId: string) => {
@@ -112,6 +136,66 @@ export const PagesPanel: React.FC = () => {
     }
   };
 
+  // Multiselect handlers
+  const togglePageSelection = (pageId: string) => {
+    setSelectedPages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(pageId)) {
+        newSet.delete(pageId);
+      } else {
+        newSet.add(pageId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllPages = () => {
+    if (selectedPages.size === filteredPages.length) {
+      setSelectedPages(new Set());
+    } else {
+      setSelectedPages(new Set(filteredPages.map(p => p.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const pagesToDelete = Array.from(selectedPages);
+
+    // Don't allow deleting all pages
+    const remainingPages = pages.filter(p => !selectedPages.has(p.id) && !p.deletedAt);
+    if (remainingPages.length === 0 && !showTrash) {
+      toast.error('Cannot delete all pages. At least one page must remain.');
+      setShowBulkDeleteDialog(false);
+      return;
+    }
+
+    try {
+      if (showTrash) {
+        // Permanent delete
+        await Promise.all(pagesToDelete.map(id => permanentDeletePage(id)));
+        toast.success(`Permanently deleted ${pagesToDelete.length} pages`);
+      } else {
+        // Move to trash
+        await Promise.all(pagesToDelete.map(id => deletePage(id)));
+        toast.success(`Moved ${pagesToDelete.length} pages to trash`);
+      }
+      setSelectedPages(new Set());
+    } catch (error) {
+      toast.error('Failed to delete some pages');
+    }
+    setShowBulkDeleteDialog(false);
+  };
+
+  const handleBulkRestore = async () => {
+    const pagesToRestore = Array.from(selectedPages);
+    try {
+      await Promise.all(pagesToRestore.map(id => restorePage(id)));
+      toast.success(`Restored ${pagesToRestore.length} pages`);
+      setSelectedPages(new Set());
+    } catch (error) {
+      toast.error('Failed to restore some pages');
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -139,22 +223,103 @@ export const PagesPanel: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex items-center space-x-2">
-        <div className="relative">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search pages..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 w-[300px]"
-          />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <div className="relative">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search pages..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 w-[300px]"
+            />
+          </div>
         </div>
+
+        {/* Bulk actions */}
+        {filteredPages.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={selectAllPages}
+              className="gap-2"
+            >
+              {selectedPages.size === filteredPages.length ? (
+                <CheckSquare className="h-4 w-4" />
+              ) : (
+                <Square className="h-4 w-4" />
+              )}
+              {selectedPages.size === filteredPages.length ? 'Deselect All' : 'Select All'}
+            </Button>
+
+            {selectedPages.size > 0 && (
+              <>
+                {showTrash && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBulkRestore}
+                    className="gap-2"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Restore ({selectedPages.size})
+                  </Button>
+                )}
+                <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="gap-2"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      {showTrash ? 'Delete Forever' : 'Trash All'} ({selectedPages.size})
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        {showTrash ? 'Permanently Delete Pages?' : 'Move Pages to Trash?'}
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {showTrash
+                          ? `This will permanently delete ${selectedPages.size} pages. This action cannot be undone.`
+                          : `This will move ${selectedPages.size} pages to trash. You can restore them later.`}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleBulkDelete}
+                        className={showTrash ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
+                      >
+                        {showTrash ? 'Delete Forever' : 'Move to Trash'}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredPages.map((page) => (
-          <Card key={page.id} className="hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3">
+          <Card
+            key={page.id}
+            className={`hover:shadow-md transition-shadow relative ${selectedPages.has(page.id) ? 'ring-2 ring-primary' : ''}`}
+          >
+            {/* Checkbox for multiselect */}
+            <div className="absolute top-3 left-3 z-10">
+              <Checkbox
+                checked={selectedPages.has(page.id)}
+                onCheckedChange={() => togglePageSelection(page.id)}
+              />
+            </div>
+
+            <CardHeader className="pb-3 pl-10">
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
                   <CardTitle className="text-lg">{page.name}</CardTitle>
@@ -270,7 +435,11 @@ export const PagesPanel: React.FC = () => {
                     Edit
                   </Button>
                   {page.isPublic && (
-                    <Button size="sm" variant="outline">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handlePreviewPage(page)}
+                    >
                       <Eye className="mr-2 h-4 w-4" />
                       Preview
                     </Button>

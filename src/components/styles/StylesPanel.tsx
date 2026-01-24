@@ -37,12 +37,19 @@ interface StylesPanelProps {
     styles: StylesData;
     onUpdate: (styles: StylesData) => void;
     title?: string;
+    // Responsive styling context
+    currentViewport?: 'mobile' | 'tablet' | 'desktop';
+    viewportOverrides?: Record<string, any>;  // Current viewport's overrides
+    onResetProperty?: (propertyId: string) => void;  // Reset property to inherited value
 }
 
 export const StylesPanel: React.FC<StylesPanelProps> = ({
     styles,
     onUpdate,
-    title = 'Styles'
+    title = 'Styles',
+    currentViewport = 'desktop',
+    viewportOverrides = {},
+    onResetProperty
 }) => {
     // Track which accordion categories are open
     const [openCategories, setOpenCategories] = useState<string[]>([]);
@@ -182,6 +189,11 @@ export const StylesPanel: React.FC<StylesPanelProps> = ({
                                                 const config = CSS_PROPERTY_CONFIGS[propertyId];
                                                 if (!config) return null;
 
+                                                // Check if this property has a viewport-specific override
+                                                const hasViewportOverride = propertyId in viewportOverrides;
+                                                // Property is inherited if on non-desktop and no override exists
+                                                const isInherited = currentViewport !== 'desktop' && !hasViewportOverride;
+
                                                 return (
                                                     <PropertyControl
                                                         key={propertyId}
@@ -189,6 +201,10 @@ export const StylesPanel: React.FC<StylesPanelProps> = ({
                                                         value={styles.values[propertyId]}
                                                         onChange={(value) => updateValues({ ...styles.values, [propertyId]: value })}
                                                         onRemove={() => removeProperty(propertyId)}
+                                                        currentViewport={currentViewport}
+                                                        hasViewportOverride={hasViewportOverride}
+                                                        isInherited={isInherited}
+                                                        onResetToInherited={onResetProperty ? () => onResetProperty(propertyId) : undefined}
                                                     />
                                                 );
                                             })

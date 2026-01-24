@@ -56,9 +56,22 @@ export interface StyleValues {
     [propertyId: string]: any;
 }
 
+export type ViewportType = 'mobile' | 'tablet' | 'desktop';
+
+// Viewport-specific style overrides (only stores differences from base)
+export interface ViewportOverrides {
+    mobile?: Partial<StyleValues>;
+    tablet?: Partial<StyleValues>;
+    // desktop uses base 'values'
+}
+
 export interface StylesData {
     activeProperties: string[];
     values: StyleValues;
+
+    // Viewport-specific overrides (only stores differences)
+    viewportOverrides?: ViewportOverrides;
+
     stylingMode: 'visual' | 'css';
     rawCSS?: string;
 }
@@ -76,4 +89,11 @@ export interface BoxShadowValue {
     blur: number;
     spread: number;
     color: string;
+}
+
+// Visibility settings for per-viewport component visibility
+export interface VisibilitySettings {
+    mobile: boolean;   // default: true (visible)
+    tablet: boolean;   // default: true (visible)
+    desktop: boolean;  // default: true (visible)
 }

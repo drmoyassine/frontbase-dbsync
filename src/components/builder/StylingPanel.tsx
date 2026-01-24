@@ -1,21 +1,38 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Trash2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Trash2, Copy, Monitor, Tablet, Smartphone } from 'lucide-react';
 import { useBuilderStore } from '@/stores/builder';
 import { StylesPanel } from '@/components/styles/StylesPanel';
-import type { StylesData } from '@/lib/styles/types';
+import type { StylesData, ViewportType, VisibilitySettings } from '@/lib/styles/types';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
+
+const VIEWPORT_LABELS: Record<ViewportType, { label: string; icon: React.ElementType }> = {
+  desktop: { label: 'Desktop', icon: Monitor },
+  tablet: { label: 'Tablet', icon: Tablet },
+  mobile: { label: 'Mobile', icon: Smartphone },
+};
 
 export const StylingPanel: React.FC = () => {
   const {
     selectedComponentId,
     currentPageId,
+    currentViewport,
     pages,
     updatePage,
     setSelectedComponentId
   } = useBuilderStore();
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
 
   const currentPage = pages.find(page => page.id === currentPageId);
 
@@ -90,27 +107,88 @@ export const StylingPanel: React.FC = () => {
   };
 
   // Get component styles in StylesData format (or create default)
+  // For non-desktop viewports, merge base values with viewport overrides
   const getComponentStyles = (): StylesData => {
-    if (selectedComponent.stylesData) {
-      return selectedComponent.stylesData;
-    }
-    // Return empty styles if no stylesData exists
-    return {
+    const baseStyles: StylesData = selectedComponent.stylesData || {
       activeProperties: [],
       values: {},
       stylingMode: 'visual'
     };
+
+    // For desktop, return base styles as-is
+    if (currentViewport === 'desktop') {
+      return baseStyles;
+    }
+
+    // For mobile/tablet, merge base values with viewport overrides
+    const viewportOverrides = baseStyles.viewportOverrides?.[currentViewport] || {};
+
+    // Collect active properties from both base and viewport overrides
+    const overridePropertyIds = Object.keys(viewportOverrides);
+    const allActiveProperties = [...new Set([
+      ...baseStyles.activeProperties,
+      ...overridePropertyIds
+    ])];
+
+    return {
+      ...baseStyles,
+      activeProperties: allActiveProperties,
+      values: {
+        ...baseStyles.values,
+        ...viewportOverrides
+      }
+    };
   };
 
   // Update component with new StylesData
+  // For desktop: update base values
+  // For mobile/tablet: update viewportOverrides
   const handleStylesUpdate = (newStyles: StylesData) => {
     if (!currentPage) return;
+
+    const existingStyles: StylesData = selectedComponent.stylesData || {
+      activeProperties: [],
+      values: {},
+      stylingMode: 'visual'
+    };
+
+    let updatedStylesData: StylesData;
+
+    if (currentViewport === 'desktop') {
+      // Desktop: update base values directly
+      updatedStylesData = {
+        ...existingStyles,
+        activeProperties: newStyles.activeProperties,
+        values: newStyles.values,
+        stylingMode: newStyles.stylingMode,
+        rawCSS: newStyles.rawCSS
+      };
+    } else {
+      // Mobile/Tablet: extract override values (differences from base)
+      const baseValues = existingStyles.values || {};
+      const overrideValues: Record<string, any> = {};
+
+      // Only store values that differ from base
+      for (const [key, value] of Object.entries(newStyles.values)) {
+        // Always store if it's a viewport-specific edit
+        // (In a more advanced version, we could compare to base and only store differences)
+        overrideValues[key] = value;
+      }
+
+      updatedStylesData = {
+        ...existingStyles,
+        viewportOverrides: {
+          ...existingStyles.viewportOverrides,
+          [currentViewport]: overrideValues
+        }
+      };
+    }
 
     const updatedContent = updateComponentInContent(
       currentPage.layoutData.content,
       selectedComponentId!,
       {
-        stylesData: newStyles
+        stylesData: updatedStylesData
       }
     );
 
@@ -122,23 +200,194 @@ export const StylingPanel: React.FC = () => {
     });
   };
 
+  // Copy all styles from another viewport to the current viewport
+  const copyStylesFromViewport = (sourceViewport: ViewportType) => {
+    if (!currentPage || !selectedComponent.stylesData) return;
+
+    const existingStyles: StylesData = selectedComponent.stylesData;
+
+    // Get source styles - either base values or viewport overrides
+    const sourceStyles = sourceViewport === 'desktop'
+      ? existingStyles.values || {}
+      : { ...existingStyles.values, ...existingStyles.viewportOverrides?.[sourceViewport] || {} };
+
+    let updatedStylesData: StylesData;
+
+    if (currentViewport === 'desktop') {
+      // Copy to desktop = replace base values
+      updatedStylesData = {
+        ...existingStyles,
+        values: { ...sourceStyles }
+      };
+    } else {
+      // Copy to mobile/tablet = replace viewport overrides
+      updatedStylesData = {
+        ...existingStyles,
+        viewportOverrides: {
+          ...existingStyles.viewportOverrides,
+          [currentViewport]: { ...sourceStyles }
+        }
+      };
+    }
+
+    const updatedContent = updateComponentInContent(
+      currentPage.layoutData.content,
+      selectedComponentId!,
+      { stylesData: updatedStylesData }
+    );
+
+    updatePage(currentPage.id, {
+      layoutData: {
+        ...currentPage.layoutData,
+        content: updatedContent
+      }
+    });
+  };
+
+  // Reset a property to its inherited value (remove from viewport overrides)
+  const resetPropertyToInherited = (propertyId: string) => {
+    if (!currentPage || currentViewport === 'desktop') return;
+
+    const existingStyles: StylesData = selectedComponent.stylesData || {
+      activeProperties: [],
+      values: {},
+      stylingMode: 'visual'
+    };
+
+    // Remove the property from current viewport overrides
+    const currentOverrides = { ...existingStyles.viewportOverrides?.[currentViewport] || {} };
+    delete currentOverrides[propertyId];
+
+    const updatedStylesData: StylesData = {
+      ...existingStyles,
+      viewportOverrides: {
+        ...existingStyles.viewportOverrides,
+        [currentViewport]: currentOverrides
+      }
+    };
+
+    const updatedContent = updateComponentInContent(
+      currentPage.layoutData.content,
+      selectedComponentId!,
+      { stylesData: updatedStylesData }
+    );
+
+    updatePage(currentPage.id, {
+      layoutData: {
+        ...currentPage.layoutData,
+        content: updatedContent
+      }
+    });
+  };
+
+  // Get visibility settings with defaults (all visible by default)
+  const getVisibility = (): VisibilitySettings => {
+    return selectedComponent.visibility || {
+      mobile: true,
+      tablet: true,
+      desktop: true
+    };
+  };
+
+  // Update visibility for a specific viewport
+  const updateVisibility = (viewport: keyof VisibilitySettings, visible: boolean) => {
+    if (!currentPage) return;
+
+    const currentVisibility = getVisibility();
+    const updatedContent = updateComponentInContent(
+      currentPage.layoutData.content,
+      selectedComponentId!,
+      {
+        visibility: {
+          ...currentVisibility,
+          [viewport]: visible
+        }
+      }
+    );
+
+    updatePage(currentPage.id, {
+      layoutData: {
+        ...currentPage.layoutData,
+        content: updatedContent
+      }
+    });
+  };
+
+  const CurrentViewportIcon = VIEWPORT_LABELS[currentViewport].icon;
+  const otherViewports = (['desktop', 'tablet', 'mobile'] as ViewportType[]).filter(v => v !== currentViewport);
+
   return (
     <div className="h-full flex flex-col bg-background">
       {/* Header */}
       <div className="p-4 border-b border-border">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-2">
           <div>
             <h3 className="font-semibold text-sm">{selectedComponent.type}</h3>
             <p className="text-xs text-muted-foreground">Component Styling</p>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowDeleteDialog(true)}
-            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            {/* Copy from dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {otherViewports.map(viewport => {
+                  const ViewportIcon = VIEWPORT_LABELS[viewport].icon;
+                  return (
+                    <DropdownMenuItem key={viewport} onClick={() => copyStylesFromViewport(viewport)}>
+                      <ViewportIcon className="h-4 w-4 mr-2" />
+                      Copy from {VIEWPORT_LABELS[viewport].label}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Delete button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowDeleteDialog(true)}
+              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Viewport badge */}
+        <Badge variant="outline" className="text-xs mb-3">
+          <CurrentViewportIcon className="h-3 w-3 mr-1" />
+          Editing: {VIEWPORT_LABELS[currentViewport].label}
+        </Badge>
+
+        {/* Visibility per viewport */}
+        <div className="flex items-center gap-3">
+          <Label className="text-xs text-muted-foreground">Visible on:</Label>
+          <label className="flex items-center gap-1 text-xs cursor-pointer">
+            <Checkbox
+              checked={getVisibility().desktop}
+              onCheckedChange={(checked) => updateVisibility('desktop', !!checked)}
+            />
+            <Monitor className="h-3 w-3 text-muted-foreground" />
+          </label>
+          <label className="flex items-center gap-1 text-xs cursor-pointer">
+            <Checkbox
+              checked={getVisibility().tablet}
+              onCheckedChange={(checked) => updateVisibility('tablet', !!checked)}
+            />
+            <Tablet className="h-3 w-3 text-muted-foreground" />
+          </label>
+          <label className="flex items-center gap-1 text-xs cursor-pointer">
+            <Checkbox
+              checked={getVisibility().mobile}
+              onCheckedChange={(checked) => updateVisibility('mobile', !!checked)}
+            />
+            <Smartphone className="h-3 w-3 text-muted-foreground" />
+          </label>
         </div>
       </div>
 
@@ -148,6 +397,11 @@ export const StylingPanel: React.FC = () => {
           styles={getComponentStyles()}
           onUpdate={handleStylesUpdate}
           title=""
+          currentViewport={currentViewport}
+          viewportOverrides={
+            selectedComponent.stylesData?.viewportOverrides?.[currentViewport] || {}
+          }
+          onResetProperty={resetPropertyToInherited}
         />
       </div>
 

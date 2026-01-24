@@ -21,6 +21,7 @@ export interface PageComponent {
     props?: Record<string, unknown>;
     styles?: Record<string, any>;
     binding?: Record<string, any>;
+    visibility?: { mobile: boolean; tablet: boolean; desktop: boolean; };
     children?: PageComponent[];
 }
 
@@ -144,8 +145,8 @@ async function renderComponent(
             return renderDataComponent(type, id, resolvedProps, childrenHtml);
 
         case 'layout':
-            // Render layout components with proper styles
-            return renderLayoutComponent(type, id, resolvedProps, component.styles || {}, childrenHtml);
+            // Render layout components with proper styles and visibility
+            return renderLayoutComponent(type, id, resolvedProps, component.styles || {}, childrenHtml, component.visibility);
 
         case 'landing':
             // Render landing page section components
@@ -196,49 +197,59 @@ function renderLayoutComponent(
     id: string,
     props: Record<string, unknown>,
     styles: Record<string, any>,
-    childrenHtml: string
+    childrenHtml: string,
+    visibility?: { mobile: boolean; tablet: boolean; desktop: boolean; }
 ): string {
     // Build inline style from both props and styles object
     const inlineStyle = buildInlineStyles(props, styles);
     const className = buildClassName('fb-layout', type.toLowerCase(), props.className as string);
 
+    // Generate responsive CSS media queries for viewport overrides
+    const responsiveCSS = buildResponsiveCSS(id, styles);
+
+    // Generate visibility CSS for hidden viewports
+    const visibilityCSS = buildVisibilityCSS(id, visibility);
+
+    // Combine CSS blocks
+    const combinedCSS = responsiveCSS + visibilityCSS;
+
     switch (type) {
         case 'Container':
             // Center the container itself with margin auto, but don't force text-align
             // User should control text-align via styles
-            return `<div id="${id}" class="${className}" style="margin:0 auto;${inlineStyle}">${childrenHtml}</div>`;
+            return `${combinedCSS}<div id="${id}" class="${className}" style="margin:0 auto;${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Section':
-            return `<section id="${id}" class="${className}" style="${inlineStyle}">${childrenHtml}</section>`;
+            return `${combinedCSS}<section id="${id}" class="${className}" style="${inlineStyle}">${childrenHtml}</section>`;
 
         case 'Row':
-            return `<div id="${id}" class="${className} fb-row" style="display:flex;flex-direction:row;width:100%;min-height:50px;${inlineStyle}">${childrenHtml}</div>`;
+            return `${combinedCSS}<div id="${id}" class="${className} fb-row" style="display:flex;flex-direction:row;width:100%;min-height:50px;${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Column':
-            return `<div id="${id}" class="${className} fb-column" style="display:flex;flex-direction:column;min-height:50px;min-width:50px;${inlineStyle}">${childrenHtml}</div>`;
+            return `${combinedCSS}<div id="${id}" class="${className} fb-column" style="display:flex;flex-direction:column;min-height:50px;min-width:50px;${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Flex':
             const flexDirection = (styles.flexDirection as string) || (props.direction as string) || 'row';
             const justify = (styles.justifyContent as string) || (props.justify as string) || 'flex-start';
             const align = (styles.alignItems as string) || (props.align as string) || 'stretch';
             const gap = (styles.gap as string) || (props.gap as string) || '0';
-            return `<div id="${id}" class="${className}" style="display:flex;flex-direction:${flexDirection};justify-content:${justify};align-items:${align};gap:${gap};${inlineStyle}">${childrenHtml}</div>`;
+            return `${combinedCSS}<div id="${id}" class="${className}" style="display:flex;flex-direction:${flexDirection};justify-content:${justify};align-items:${align};gap:${gap};${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Grid':
             const columns = (props.columns as number) || 2;
             const gridGap = (styles.gap as string) || (props.gap as string) || '1rem';
-            return `<div id="${id}" class="${className}" style="display:grid;grid-template-columns:repeat(${columns},1fr);gap:${gridGap};${inlineStyle}">${childrenHtml}</div>`;
+            return `${combinedCSS}<div id="${id}" class="${className}" style="display:grid;grid-template-columns:repeat(${columns},1fr);gap:${gridGap};${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Stack':
             const stackGap = (styles.gap as string) || (props.gap as string) || '1rem';
-            return `<div id="${id}" class="${className}" style="display:flex;flex-direction:column;gap:${stackGap};${inlineStyle}">${childrenHtml}</div>`;
+            return `${combinedCSS}<div id="${id}" class="${className}" style="display:flex;flex-direction:column;gap:${stackGap};${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Box':
         case 'Paper':
         case 'Panel':
         case 'Group':
         default:
-            return `<div id="${id}" class="${className}" style="${inlineStyle}">${childrenHtml}</div>`;
+            return `${combinedCSS}<div id="${id}" class="${className}" style="${inlineStyle}">${childrenHtml}</div>`;
     }
 }
 
@@ -344,6 +355,133 @@ function buildInlineStyles(props: Record<string, unknown>, styles: Record<string
     return Object.entries(cssProps)
         .map(([key, value]) => `${key}:${value}`)
         .join(';');
+}
+
+/**
+ * Build responsive CSS media queries for viewport-specific style overrides.
+ * Returns a <style> tag with media queries for tablet and mobile.
+ * 
+ * Breakpoints (mobile-first order for cascade):
+ * - Desktop: no media query (base styles via inline)
+ * - Tablet: @media (max-width: 1024px)
+ * - Mobile: @media (max-width: 640px)
+ */
+function buildResponsiveCSS(componentId: string, styles: Record<string, any>): string {
+    if (!styles || !styles.viewportOverrides) {
+        return '';
+    }
+
+    const viewportOverrides = styles.viewportOverrides;
+    const cssRules: string[] = [];
+
+    // Helper to convert style values to CSS properties
+    const valuesToCSS = (values: Record<string, any>): string => {
+        const props: string[] = [];
+        for (const [key, value] of Object.entries(values)) {
+            if (value === undefined || value === null || value === '') continue;
+
+            // Handle special 'size' object
+            if (key === 'size' && typeof value === 'object') {
+                const sizeObj = value as any;
+                if (sizeObj.width !== undefined && sizeObj.width !== 'auto') {
+                    const widthUnit = sizeObj.widthUnit || 'px';
+                    props.push(`width:${sizeObj.width}${widthUnit}`);
+                }
+                if (sizeObj.height !== undefined && sizeObj.height !== 'auto') {
+                    const heightUnit = sizeObj.heightUnit || 'px';
+                    props.push(`height:${sizeObj.height}${heightUnit}`);
+                }
+                continue;
+            }
+
+            // Handle padding/margin objects
+            if ((key === 'padding' || key === 'margin') && typeof value === 'object') {
+                const boxObj = value as any;
+                if (boxObj.top !== undefined) props.push(`${key}-top:${boxObj.top}px`);
+                if (boxObj.right !== undefined) props.push(`${key}-right:${boxObj.right}px`);
+                if (boxObj.bottom !== undefined) props.push(`${key}-bottom:${boxObj.bottom}px`);
+                if (boxObj.left !== undefined) props.push(`${key}-left:${boxObj.left}px`);
+                continue;
+            }
+
+            // Handle horizontalAlign
+            if (key === 'horizontalAlign' && typeof value === 'string') {
+                if (value === 'center') {
+                    props.push('margin-left:auto', 'margin-right:auto');
+                } else if (value === 'right') {
+                    props.push('margin-left:auto', 'margin-right:0');
+                } else {
+                    props.push('margin-left:0', 'margin-right:auto');
+                }
+                continue;
+            }
+
+            // Skip object values
+            if (typeof value === 'object') continue;
+
+            const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+            props.push(`${cssKey}:${value}`);
+        }
+        return props.join(';');
+    };
+
+    // Tablet overrides (max-width: 1024px)
+    if (viewportOverrides.tablet && Object.keys(viewportOverrides.tablet).length > 0) {
+        const tabletCSS = valuesToCSS(viewportOverrides.tablet);
+        if (tabletCSS) {
+            cssRules.push(`@media(max-width:1024px){#${componentId}{${tabletCSS}}}`);
+        }
+    }
+
+    // Mobile overrides (max-width: 640px)
+    if (viewportOverrides.mobile && Object.keys(viewportOverrides.mobile).length > 0) {
+        const mobileCSS = valuesToCSS(viewportOverrides.mobile);
+        if (mobileCSS) {
+            cssRules.push(`@media(max-width:640px){#${componentId}{${mobileCSS}}}`);
+        }
+    }
+
+    if (cssRules.length === 0) {
+        return '';
+    }
+
+    return `<style>${cssRules.join('')}</style>`;
+}
+
+/**
+ * Build CSS media queries for per-viewport visibility.
+ * Generates display:none rules for viewports where component is hidden.
+ * 
+ * Default visibility is true (visible) for all viewports.
+ */
+function buildVisibilityCSS(componentId: string, visibility: any): string {
+    if (!visibility) return '';
+
+    const { mobile = true, tablet = true, desktop = true } = visibility;
+
+    // If all visible, no CSS needed
+    if (mobile && tablet && desktop) return '';
+
+    const cssRules: string[] = [];
+
+    // Desktop hidden (min-width: 1025px)
+    if (!desktop) {
+        cssRules.push(`@media(min-width:1025px){#${componentId}{display:none!important}}`);
+    }
+
+    // Tablet hidden (641px - 1024px)
+    if (!tablet) {
+        cssRules.push(`@media(min-width:641px) and (max-width:1024px){#${componentId}{display:none!important}}`);
+    }
+
+    // Mobile hidden (max-width: 640px)
+    if (!mobile) {
+        cssRules.push(`@media(max-width:640px){#${componentId}{display:none!important}}`);
+    }
+
+    if (cssRules.length === 0) return '';
+
+    return `<style>${cssRules.join('')}</style>`;
 }
 
 /**

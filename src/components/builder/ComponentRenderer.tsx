@@ -78,13 +78,33 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   const { currentViewport, setFocusedField } = useBuilderStore();
   const { createEditableText } = useComponentTextEditor(id);
 
+  // Check visibility for current viewport
+  const visibility = (component as any).visibility || { mobile: true, tablet: true, desktop: true };
+  const isHiddenForViewport = visibility[currentViewport] === false;
+
+  // If hidden for current viewport, render with visual indicator (in builder mode)
+  // We don't return null so users can still select and edit hidden components
+  const hiddenStyles = isHiddenForViewport ? {
+    opacity: 0.3,
+    outline: '2px dashed var(--muted-foreground)',
+    outlineOffset: '-2px',
+    position: 'relative' as const,
+  } : {};
+
   // Convert stylesData to CSS styles (new system)
+  // Merges base values with viewport-specific overrides
   const stylesDataStyles = React.useMemo(() => {
     const stylesData = (component as any).stylesData;
     if (!stylesData?.values) return {};
 
+    // Merge base values with viewport overrides
+    const baseValues = stylesData.values;
+    const viewportOverrides = currentViewport !== 'desktop'
+      ? stylesData.viewportOverrides?.[currentViewport] || {}
+      : {};
+    const values = { ...baseValues, ...viewportOverrides };
+
     const cssStyles: Record<string, any> = {};
-    const values = stylesData.values;
 
     // Map property values to CSS
     Object.entries(values).forEach(([key, value]) => {
@@ -147,7 +167,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     });
 
     return cssStyles;
-  }, [(component as any).stylesData]);
+  }, [(component as any).stylesData, currentViewport]);
 
   // Process legacy styles object - handle both flat format and NEW StylesData format
   const processedLegacyStyles = React.useMemo(() => {
@@ -335,7 +355,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   const rendererProps = {
     effectiveProps,
     combinedClassName,
-    inlineStyles,
+    inlineStyles: { ...inlineStyles, ...hiddenStyles },
     createEditableText,
     children,
     componentId: id,

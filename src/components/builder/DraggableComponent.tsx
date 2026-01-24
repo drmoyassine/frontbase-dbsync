@@ -91,85 +91,82 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
   };
 
   return (
-    <>
-      {/* Drop zone before component */}
+    // Use a wrapper that acts as a single grid item
+    // The inner component will be styled, but the wrapper becomes the grid child
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      onClick={(e) => onSelect(component.id, e)}
+      className={cn(
+        'transition-all duration-200 relative group',
+        {
+          'ring-2 ring-primary ring-offset-2 rounded-md': isSelected && !isPreviewMode,
+          'cursor-pointer': !isPreviewMode,
+          'cursor-move': !isPreviewMode && isDragging,
+          'hover:ring-2 hover:ring-dashed hover:ring-primary/30': !isSelected && !isPreviewMode,
+        }
+      )}
+      style={{
+        ...style,
+        textAlign: 'inherit',
+      }}
+    >
+      {/* Drop zone before component - positioned at top edge */}
       {!isPreviewMode && (
         <div
           ref={setDropBefore}
           className={cn(
-            'h-2 -my-1 transition-all',
-            isOverBefore && 'h-8 bg-primary/10 border-2 border-dashed border-primary rounded-md'
+            'absolute top-0 left-0 right-0 h-2 -translate-y-1/2 z-10 transition-all',
+            isOverBefore && 'h-4 bg-primary/20 border-2 border-dashed border-primary rounded-md'
           )}
         />
       )}
 
-      {/* The actual component */}
-      <div
-        ref={setNodeRef}
-        {...attributes}
-        {...listeners}
-        onClick={(e) => onSelect(component.id, e)}
-        className={cn(
-          'transition-all duration-200 relative group',
-          {
-            'ring-2 ring-primary ring-offset-2 rounded-md': isSelected && !isPreviewMode,
-            'cursor-pointer': !isPreviewMode,
-            'cursor-move': !isPreviewMode && isDragging,
-            'hover:ring-2 hover:ring-dashed hover:ring-primary/30': !isSelected && !isPreviewMode,
-          }
-        )}
-        style={{
-          ...style,
-          textAlign: 'inherit',
-          // All components need width:100% wrapper for margin-based centering to work
-          width: '100%',
-        }}
-      >
-        {/* Corner Handles - only visible when selected */}
-        {isSelected && !isPreviewMode && (
-          <>
-            <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-primary rounded-full z-10 pointer-events-none" />
-            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-primary rounded-full z-10 pointer-events-none" />
-            <div className="absolute -bottom-1 -left-1 w-2.5 h-2.5 bg-primary rounded-full z-10 pointer-events-none" />
-            <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-primary rounded-full z-10 pointer-events-none" />
-          </>
-        )}
+      {/* Corner Handles - only visible when selected */}
+      {isSelected && !isPreviewMode && (
+        <>
+          <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-primary rounded-full z-10 pointer-events-none" />
+          <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-primary rounded-full z-10 pointer-events-none" />
+          <div className="absolute -bottom-1 -left-1 w-2.5 h-2.5 bg-primary rounded-full z-10 pointer-events-none" />
+          <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-primary rounded-full z-10 pointer-events-none" />
+        </>
+      )}
 
-        {/* Component Content */}
-        {['Container', 'Row', 'Column', 'Card'].includes(component.type) ? (
-          <ContainerComponent
-            component={component}
-            pageId={pageId}
-          />
-        ) : (
-          <ComponentRenderer
-            component={component}
-            isSelected={isSelected}
-            onComponentClick={(componentId, event) => onSelect(componentId, event)}
-            onDoubleClick={(componentId, event) => {
-              event.stopPropagation();
-              // Double-click to edit text for text-based components
-              const textComponents = ['Text', 'Heading', 'Button', 'Badge', 'Link'];
-              if (textComponents.includes(component.type) && !isPreviewMode) {
-                const { setEditingComponentId } = useBuilderStore.getState();
-                setEditingComponentId(componentId);
-              }
-            }}
-          />
-        )}
-      </div>
+      {/* Component Content */}
+      {['Container', 'Row', 'Column', 'Card'].includes(component.type) ? (
+        <ContainerComponent
+          component={component}
+          pageId={pageId}
+        />
+      ) : (
+        <ComponentRenderer
+          component={component}
+          isSelected={isSelected}
+          onComponentClick={(componentId, event) => onSelect(componentId, event)}
+          onDoubleClick={(componentId, event) => {
+            event.stopPropagation();
+            // Double-click to edit text for text-based components
+            const textComponents = ['Text', 'Heading', 'Button', 'Badge', 'Link'];
+            if (textComponents.includes(component.type) && !isPreviewMode) {
+              const { setEditingComponentId } = useBuilderStore.getState();
+              setEditingComponentId(componentId);
+            }
+          }}
+        />
+      )}
 
-      {/* Drop zone after last component */}
+      {/* Drop zone after last component - positioned at bottom edge */}
       {!isPreviewMode && isLastComponent && (
         <div
           ref={setDropAfter}
           className={cn(
-            'h-2 -my-1 transition-all',
-            isOverAfter && 'h-8 bg-primary/10 border-2 border-dashed border-primary rounded-md'
+            'absolute bottom-0 left-0 right-0 h-2 translate-y-1/2 z-10 transition-all',
+            isOverAfter && 'h-4 bg-primary/20 border-2 border-dashed border-primary rounded-md'
           )}
         />
       )}
-    </>
+    </div>
   );
 };
 
@@ -222,7 +219,7 @@ const ContainerComponent: React.FC<{
   );
 
   return (
-    <div ref={setDropRef} style={{ textAlign: 'inherit', width: '100%' }} className={cn({
+    <div ref={setDropRef} style={{ textAlign: 'inherit' }} className={cn({
       'ring-2 ring-primary/50 ring-offset-2': isOver && !isPreviewMode,
     })}>
       <ComponentRenderer

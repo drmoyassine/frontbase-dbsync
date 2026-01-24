@@ -204,8 +204,9 @@ function renderLayoutComponent(
 
     switch (type) {
         case 'Container':
-            // Add margin:0 auto for centering, text-align:center for content alignment
-            return `<div id="${id}" class="${className}" style="margin:0 auto;text-align:center;${inlineStyle}">${childrenHtml}</div>`;
+            // Center the container itself with margin auto, but don't force text-align
+            // User should control text-align via styles
+            return `<div id="${id}" class="${className}" style="margin:0 auto;${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Section':
             return `<section id="${id}" class="${className}" style="${inlineStyle}">${childrenHtml}</section>`;

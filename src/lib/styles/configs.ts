@@ -5,14 +5,14 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
     // ===== LAYOUT =====
     display: {
         id: 'display',
-        name: 'Display',
+        name: 'Layout Mode',
         category: 'Layout',
         controlType: 'select',
         defaultValue: 'block',
         options: ['block', 'inline', 'flex', 'grid', 'inline-block', 'inline-flex', 'none'],
         toCSSValue: (value) => value,
         fromCSSValue: (css) => css.trim(),
-        description: 'Sets the display behavior of an element'
+        description: 'How this element behaves in the layout. Use "flex" to arrange children in rows or columns.'
     },
 
     position: {
@@ -24,68 +24,61 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         options: ['static', 'relative', 'absolute', 'fixed', 'sticky'],
         toCSSValue: (value) => value,
         fromCSSValue: (css) => css.trim(),
-        description: 'Sets the positioning method'
+        description: 'How this element is positioned. Use "relative" for slight offsets, "absolute" to place anywhere.'
     },
 
     flexDirection: {
         id: 'flexDirection',
-        name: 'Flex Direction',
+        name: 'Content Direction',
         category: 'Layout',
         controlType: 'select',
         defaultValue: 'row',
         options: ['row', 'column'],
         useToggleGroup: true,
         toCSSValue: (value) => value,
-        fromCSSValue: (css) => css.trim()
+        fromCSSValue: (css) => css.trim(),
+        description: 'Arrange children horizontally (row) or vertically (column). Requires Layout Mode: flex.'
     },
 
     justifyContent: {
         id: 'justifyContent',
-        name: 'Justify Content',
+        name: 'Distribute Content',
         category: 'Layout',
         controlType: 'select',
         defaultValue: 'flex-start',
         options: ['flex-start', 'center', 'flex-end', 'space-between', 'space-around'],
         useToggleGroup: true,
         toCSSValue: (value) => value,
-        fromCSSValue: (css) => css.trim()
+        fromCSSValue: (css) => css.trim(),
+        description: 'How children are spaced along the main axis. Use "space-between" for even gaps.'
     },
 
     alignItems: {
         id: 'alignItems',
-        name: 'Align Items',
+        name: 'Vertical Align',
         category: 'Layout',
         controlType: 'select',
         defaultValue: 'flex-start',
         options: ['flex-start', 'center', 'flex-end', 'stretch'],
         useToggleGroup: true,
         toCSSValue: (value) => value,
-        fromCSSValue: (css) => css.trim()
+        fromCSSValue: (css) => css.trim(),
+        description: 'Align children vertically within this container. Use "center" to vertically center.'
     },
 
     flexWrap: {
         id: 'flexWrap',
-        name: 'Flex Wrap',
+        name: 'Wrap Content',
         category: 'Layout',
         controlType: 'select',
         defaultValue: 'nowrap',
         options: ['nowrap', 'wrap', 'wrap-reverse'],
         toCSSValue: (value) => value,
-        fromCSSValue: (css) => css.trim()
+        fromCSSValue: (css) => css.trim(),
+        description: 'Whether children wrap to the next line when they overflow.'
     },
 
-    alignSelf: {
-        id: 'alignSelf',
-        name: 'Align Self',
-        category: 'Layout',
-        controlType: 'select',
-        defaultValue: 'auto',
-        options: ['auto', 'flex-start', 'center', 'flex-end', 'stretch'],
-        useToggleGroup: true,
-        toCSSValue: (value) => value,
-        fromCSSValue: (css) => css.trim(),
-        description: 'Overrides parent align-items for this element'
-    },
+    // alignSelf removed - too confusing for users
 
     horizontalAlign: {
         id: 'horizontalAlign',
@@ -102,7 +95,7 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
             return { marginLeft: '0', marginRight: 'auto' };
         },
         fromCSSValue: () => 'left',
-        description: 'Horizontal position within parent (uses auto margins)'
+        description: 'Position this element left, center, or right within its parent.'
     },
 
     // ===== SPACING =====
@@ -122,7 +115,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
                 bottom: parts[2] || parts[0] || 0,
                 left: parts[3] || parts[1] || parts[0] || 0
             };
-        }
+        },
+        description: 'Inner spacing between content and the border. Increases element size.'
     },
 
     margin: {
@@ -141,7 +135,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
                 bottom: parts[2] || parts[0] || 0,
                 left: parts[3] || parts[1] || parts[0] || 0
             };
-        }
+        },
+        description: 'Outer spacing between this element and its neighbors.'
     },
 
     gap: {
@@ -155,7 +150,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         max: 200,
         step: 5,
         toCSSValue: (value) => `${value}px`,
-        fromCSSValue: (css) => parseInt(css) || 30
+        fromCSSValue: (css) => parseInt(css) || 30,
+        description: 'Space between children in a flex or grid container.'
     },
 
     // ===== SIZING =====
@@ -170,7 +166,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
             const h = value.height === 'auto' ? 'auto' : `${value.height}${value.heightUnit}`;
             return { width: w, height: h };
         },
-        fromCSSValue: () => ({ width: 'auto', height: 'auto', widthUnit: 'px', heightUnit: 'px' })
+        fromCSSValue: () => ({ width: 'auto', height: 'auto', widthUnit: 'px', heightUnit: 'px' }),
+        description: 'Set width and height together. Use "auto" for natural sizing.'
     },
 
     width: {
@@ -182,7 +179,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         unit: 'px',
         min: 0,
         toCSSValue: (value) => value === 'auto' ? 'auto' : `${value}px`,
-        fromCSSValue: (css) => css === 'auto' ? 'auto' : parseInt(css) || 0
+        fromCSSValue: (css) => css === 'auto' ? 'auto' : parseInt(css) || 0,
+        description: 'Fixed width of the element in pixels.'
     },
 
     height: {
@@ -194,31 +192,88 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         unit: 'px',
         min: 0,
         toCSSValue: (value) => value === 'auto' ? 'auto' : `${value}px`,
-        fromCSSValue: (css) => css === 'auto' ? 'auto' : parseInt(css) || 0
+        fromCSSValue: (css) => css === 'auto' ? 'auto' : parseInt(css) || 0,
+        description: 'Fixed height of the element in pixels.'
     },
 
     minWidth: {
         id: 'minWidth',
         name: 'Min Width',
         category: 'Sizing',
-        controlType: 'number',
-        defaultValue: 0,
-        unit: 'px',
-        min: 0,
-        toCSSValue: (value) => `${value}px`,
-        fromCSSValue: (css) => parseInt(css) || 0
+        controlType: 'dimension',
+        dimension: 'width',
+        defaultValue: { value: 0, unit: 'px' },
+        toCSSValue: (val) => {
+            const v = val as { value: number | 'auto'; unit: string };
+            return v.value === 'auto' ? 'auto' : `${v.value}${v.unit}`;
+        },
+        fromCSSValue: (css) => {
+            if (css === 'auto') return { value: 'auto', unit: 'px' };
+            const num = parseInt(css) || 0;
+            const unit = css.includes('%') ? '%' : css.includes('vw') ? 'vw' : 'px';
+            return { value: num, unit };
+        },
+        description: 'Minimum width - element will not shrink below this.'
     },
 
     maxWidth: {
         id: 'maxWidth',
         name: 'Max Width',
         category: 'Sizing',
-        controlType: 'number',
-        defaultValue: 'none',
-        unit: 'px',
-        min: 0,
-        toCSSValue: (value) => value === 'none' ? 'none' : `${value}px`,
-        fromCSSValue: (css) => css === 'none' ? 'none' : parseInt(css) || 0
+        controlType: 'dimension',
+        dimension: 'width',
+        defaultValue: { value: 'none', unit: 'px' },
+        toCSSValue: (val) => {
+            const v = val as { value: number | 'none'; unit: string };
+            return v.value === 'none' ? 'none' : `${v.value}${v.unit}`;
+        },
+        fromCSSValue: (css) => {
+            if (css === 'none') return { value: 'none', unit: 'px' };
+            const num = parseInt(css) || 0;
+            const unit = css.includes('%') ? '%' : css.includes('vw') ? 'vw' : 'px';
+            return { value: num, unit };
+        },
+        description: 'Maximum width - element will not grow beyond this.'
+    },
+
+    minHeight: {
+        id: 'minHeight',
+        name: 'Min Height',
+        category: 'Sizing',
+        controlType: 'dimension',
+        dimension: 'height',
+        defaultValue: { value: 0, unit: 'px' },
+        toCSSValue: (val) => {
+            const v = val as { value: number | 'auto'; unit: string };
+            return v.value === 'auto' ? 'auto' : `${v.value}${v.unit}`;
+        },
+        fromCSSValue: (css) => {
+            if (css === 'auto') return { value: 'auto', unit: 'px' };
+            const num = parseInt(css) || 0;
+            const unit = css.includes('vh') ? 'vh' : 'px';
+            return { value: num, unit };
+        },
+        description: 'Minimum height - element will not shrink below this.'
+    },
+
+    maxHeight: {
+        id: 'maxHeight',
+        name: 'Max Height',
+        category: 'Sizing',
+        controlType: 'dimension',
+        dimension: 'height',
+        defaultValue: { value: 'none', unit: 'px' },
+        toCSSValue: (val) => {
+            const v = val as { value: number | 'none'; unit: string };
+            return v.value === 'none' ? 'none' : `${v.value}${v.unit}`;
+        },
+        fromCSSValue: (css) => {
+            if (css === 'none') return { value: 'none', unit: 'px' };
+            const num = parseInt(css) || 0;
+            const unit = css.includes('vh') ? 'vh' : 'px';
+            return { value: num, unit };
+        },
+        description: 'Maximum height - element will not grow beyond this.'
     },
 
     // ===== TYPOGRAPHY =====
@@ -233,7 +288,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         max: 72,
         step: 1,
         toCSSValue: (value) => `${value}px`,
-        fromCSSValue: (css) => parseInt(css) || 16
+        fromCSSValue: (css) => parseInt(css) || 16,
+        description: 'Size of the text in pixels.'
     },
 
     fontWeight: {
@@ -244,7 +300,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         defaultValue: '400',
         options: ['100', '200', '300', '400', '500', '600', '700', '800', '900'],
         toCSSValue: (value) => value,
-        fromCSSValue: (css) => css.trim()
+        fromCSSValue: (css) => css.trim(),
+        description: 'Thickness of text. 400 is normal, 700 is bold.'
     },
 
     lineHeight: {
@@ -257,7 +314,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         max: 3,
         step: 0.1,
         toCSSValue: (value) => String(value),
-        fromCSSValue: (css) => parseFloat(css) || 1.5
+        fromCSSValue: (css) => parseFloat(css) || 1.5,
+        description: 'Vertical spacing between lines of text. 1.5 is comfortable reading.'
     },
 
     textAlign: {
@@ -268,7 +326,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         defaultValue: 'left',
         options: ['left', 'center', 'right', 'justify'],
         toCSSValue: (value) => value,
-        fromCSSValue: (css) => css.trim()
+        fromCSSValue: (css) => css.trim(),
+        description: 'Horizontal alignment of text within the element.'
     },
 
     // ===== COLORS =====
@@ -279,7 +338,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         controlType: 'color',
         defaultValue: '#000000',
         toCSSValue: (value) => value,
-        fromCSSValue: (css) => css.trim()
+        fromCSSValue: (css) => css.trim(),
+        description: 'Color of the text inside this element.'
     },
 
     backgroundColor: {
@@ -289,7 +349,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         controlType: 'color',
         defaultValue: 'transparent',
         toCSSValue: (value) => value,
-        fromCSSValue: (css) => css.trim()
+        fromCSSValue: (css) => css.trim(),
+        description: 'Fill color behind this element.'
     },
 
     borderColor: {
@@ -299,7 +360,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         controlType: 'color',
         defaultValue: '#000000',
         toCSSValue: (value) => value,
-        fromCSSValue: (css) => css.trim()
+        fromCSSValue: (css) => css.trim(),
+        description: 'Color of the border around this element.'
     },
 
     // ===== EFFECTS =====
@@ -313,7 +375,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         max: 1,
         step: 0.1,
         toCSSValue: (value) => String(value),
-        fromCSSValue: (css) => parseFloat(css) || 1
+        fromCSSValue: (css) => parseFloat(css) || 1,
+        description: 'Transparency level. 1 is fully visible, 0 is invisible.'
     },
 
     borderRadius: {
@@ -325,7 +388,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         unit: 'px',
         min: 0,
         toCSSValue: (value) => `${value}px`,
-        fromCSSValue: (css) => parseInt(css) || 0
+        fromCSSValue: (css) => parseInt(css) || 0,
+        description: 'Rounds the corners. Higher values = more rounded.'
     },
 
     boxShadow: {
@@ -352,7 +416,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
                 spread: parseInt(parts[3]) || 0,
                 color: parts.slice(4).join(' ') || 'rgba(0,0,0,0.3)'
             };
-        }
+        },
+        description: 'Drop shadow effect. Set blur and y-offset for a nice elevation look.'
     },
 
     borderWidth: {
@@ -364,7 +429,8 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         unit: 'px',
         min: 0,
         toCSSValue: (value) => `${value}px`,
-        fromCSSValue: (css) => parseInt(css) || 0
+        fromCSSValue: (css) => parseInt(css) || 0,
+        description: 'Thickness of the border around this element.'
     },
 
     borderStyle: {
@@ -375,15 +441,16 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
         defaultValue: 'solid',
         options: ['none', 'solid', 'dashed', 'dotted', 'double'],
         toCSSValue: (value) => value,
-        fromCSSValue: (css) => css.trim()
+        fromCSSValue: (css) => css.trim(),
+        description: 'Type of border line - solid, dashed, dotted, etc.'
     }
 };
 
 // Category organization
 export const CSS_CATEGORIES = {
-    'Layout': ['display', 'position', 'flexDirection', 'justifyContent', 'alignItems', 'alignSelf', 'flexWrap', 'horizontalAlign'],
+    'Layout': ['display', 'position', 'flexDirection', 'justifyContent', 'alignItems', 'flexWrap', 'horizontalAlign'],
     'Spacing': ['padding', 'margin', 'gap'],
-    'Sizing': ['size', 'width', 'height', 'minWidth', 'maxWidth'],
+    'Sizing': ['size', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight'],
     'Typography': ['fontSize', 'fontWeight', 'lineHeight', 'textAlign'],
     'Colors': ['color', 'backgroundColor', 'borderColor'],
     'Effects': ['opacity', 'borderRadius', 'boxShadow', 'borderWidth', 'borderStyle']

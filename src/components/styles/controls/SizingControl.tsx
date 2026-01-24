@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Input } from '@/components/ui/input';
 import {
     Select,
@@ -8,11 +8,16 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 
+// Width units: px, %, vw
+type WidthUnit = 'px' | '%' | 'vw';
+// Height units: px, vh (removed % since it needs parent explicit height)
+type HeightUnit = 'px' | 'vh';
+
 interface SizeValue {
     width: number | 'auto';
     height: number | 'auto';
-    widthUnit: 'px' | '%';
-    heightUnit: 'px' | '%';
+    widthUnit: WidthUnit;
+    heightUnit: HeightUnit;
 }
 
 interface SizingControlProps {
@@ -43,11 +48,11 @@ export const SizingControl: React.FC<SizingControlProps> = ({
         onChange({ ...safeValue, height: parsed });
     };
 
-    const handleWidthUnitChange = (unit: 'px' | '%') => {
+    const handleWidthUnitChange = (unit: WidthUnit) => {
         onChange({ ...safeValue, widthUnit: unit });
     };
 
-    const handleHeightUnitChange = (unit: 'px' | '%') => {
+    const handleHeightUnitChange = (unit: HeightUnit) => {
         onChange({ ...safeValue, heightUnit: unit });
     };
 
@@ -70,6 +75,7 @@ export const SizingControl: React.FC<SizingControlProps> = ({
                     <SelectContent>
                         <SelectItem value="px">px</SelectItem>
                         <SelectItem value="%">%</SelectItem>
+                        <SelectItem value="vw">vw</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
@@ -90,7 +96,7 @@ export const SizingControl: React.FC<SizingControlProps> = ({
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="px">px</SelectItem>
-                        <SelectItem value="%">%</SelectItem>
+                        <SelectItem value="vh">vh</SelectItem>
                     </SelectContent>
                 </Select>
             </div>

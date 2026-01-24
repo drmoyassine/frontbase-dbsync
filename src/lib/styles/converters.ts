@@ -13,8 +13,17 @@ export const stylesToCSS = (values: StyleValues): string => {
 
         try {
             const cssValue = config.toCSSValue(value);
-            const cssPropertyName = propertyId.replace(/([A-Z])/g, '-$1').toLowerCase();
-            cssLines.push(`${cssPropertyName}: ${cssValue};`);
+
+            // Handle properties that return objects (like horizontalAlign => { marginLeft, marginRight })
+            if (typeof cssValue === 'object' && cssValue !== null) {
+                Object.entries(cssValue).forEach(([cssProp, cssVal]) => {
+                    const cssPropertyName = cssProp.replace(/([A-Z])/g, '-$1').toLowerCase();
+                    cssLines.push(`${cssPropertyName}: ${cssVal};`);
+                });
+            } else {
+                const cssPropertyName = propertyId.replace(/([A-Z])/g, '-$1').toLowerCase();
+                cssLines.push(`${cssPropertyName}: ${cssValue};`);
+            }
         } catch (error) {
             console.error(`Error converting ${propertyId} to CSS:`, error);
         }
@@ -25,10 +34,11 @@ export const stylesToCSS = (values: StyleValues): string => {
 
 /**
  * Convert CSS string to style values object
- * Note: This is a basic parser for now
+ * Handles reverse mapping for derived properties like horizontalAlign
  */
 export const cssToStyles = (css: string): StyleValues => {
     const values: StyleValues = {};
+    const rawValues: Record<string, string> = {};
 
     // Split by semicolons and process each declaration
     const declarations = css.split(';').map(d => d.trim()).filter(Boolean);
@@ -43,6 +53,9 @@ export const cssToStyles = (css: string): StyleValues => {
         // Convert CSS property name to camelCase
         const camelProperty = property.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
 
+        // Store raw values for pattern detection
+        rawValues[camelProperty] = value;
+
         const config = CSS_PROPERTY_CONFIGS[camelProperty];
         if (!config) return;
 
@@ -52,6 +65,25 @@ export const cssToStyles = (css: string): StyleValues => {
             console.error(`Error parsing ${property} from CSS:`, error);
         }
     });
+
+    // Detect patterns and convert to higher-level properties
+    // horizontalAlign: detect margin-left/right auto patterns
+    const ml = rawValues.marginLeft;
+    const mr = rawValues.marginRight;
+
+    if (ml === 'auto' && mr === 'auto') {
+        values.horizontalAlign = 'center';
+        delete values.marginLeft;
+        delete values.marginRight;
+    } else if (ml === 'auto' && (mr === '0' || mr === '0px' || !mr)) {
+        values.horizontalAlign = 'right';
+        delete values.marginLeft;
+        delete values.marginRight;
+    } else if ((ml === '0' || ml === '0px' || !ml) && mr === 'auto') {
+        values.horizontalAlign = 'left';
+        delete values.marginLeft;
+        delete values.marginRight;
+    }
 
     return values;
 };

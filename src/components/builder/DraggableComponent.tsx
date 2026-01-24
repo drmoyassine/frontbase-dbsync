@@ -121,8 +121,8 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
         style={{
           ...style,
           textAlign: 'inherit',
-          // Layout components need width:100% to fill parent
-          width: ['Container', 'Row', 'Column', 'Card'].includes(component.type) ? '100%' : undefined,
+          // All components need width:100% wrapper for margin-based centering to work
+          width: '100%',
         }}
       >
         {/* Corner Handles - only visible when selected */}

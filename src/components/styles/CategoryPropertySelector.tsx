@@ -6,6 +6,12 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Plus, Search } from 'lucide-react';
 import { CSS_PROPERTY_CONFIGS, CSS_CATEGORIES } from '@/lib/styles/configs';
 
@@ -83,16 +89,26 @@ export const CategoryPropertySelector: React.FC<CategoryPropertySelectorProps> =
                             All properties added
                         </div>
                     ) : (
-                        availableProperties.map((config) => (
-                            <Button
-                                key={config.id}
-                                variant="ghost"
-                                className="w-full justify-start text-xs h-7 px-2"
-                                onClick={() => handleSelect(config.id)}
-                            >
-                                {config.name}
-                            </Button>
-                        ))
+                        <TooltipProvider delayDuration={400}>
+                            {availableProperties.map((config) => (
+                                <Tooltip key={config.id}>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            className="w-full justify-start text-xs h-7 px-2"
+                                            onClick={() => handleSelect(config.id)}
+                                        >
+                                            {config.name}
+                                        </Button>
+                                    </TooltipTrigger>
+                                    {config.description && (
+                                        <TooltipContent side="left" className="max-w-[200px] text-xs">
+                                            {config.description}
+                                        </TooltipContent>
+                                    )}
+                                </Tooltip>
+                            ))}
+                        </TooltipProvider>
                     )}
                 </div>
             </PopoverContent>

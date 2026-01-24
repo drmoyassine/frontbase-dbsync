@@ -18,9 +18,12 @@ export function isTailwindValue(property: string, value: string): boolean {
       return TAILWIND_COLORS.includes(value) || value.startsWith('hsl(var(--');
     case 'padding':
     case 'margin':
+      return TAILWIND_SPACING.includes(value) || value.endsWith('rem') || value.endsWith('px');
     case 'width':
     case 'height':
-      return TAILWIND_SPACING.includes(value) || value.endsWith('rem') || value.endsWith('px');
+      // Only pure Tailwind spacing tokens are valid, not arbitrary px/% values
+      // Values like "100px" or "50%" should go to inline styles, not Tailwind classes
+      return TAILWIND_SPACING.includes(value);
     case 'borderRadius':
       return ['none', 'sm', 'md', 'lg', 'xl', '2xl', 'full'].includes(value);
     case 'display':
@@ -133,7 +136,7 @@ export function generateStyles(
 
   // Apply base styles
   Object.entries(styles).forEach(([property, value]) => {
-    if (!value) return;
+    if (value === undefined || value === null || value === '') return;
 
     const tailwindClass = generateTailwindClass(property, value);
 
@@ -150,7 +153,7 @@ export function generateStyles(
     const viewportStyles = responsiveStyles[currentViewport];
     if (viewportStyles) {
       Object.entries(viewportStyles).forEach(([property, value]) => {
-        if (!value) return;
+        if (value === undefined || value === null || value === '') return;
 
         const tailwindClass = generateTailwindClass(property, value);
 

@@ -16,10 +16,17 @@ export const ContainerRenderer: React.FC<RendererProps> = ({ effectiveProps, com
         !combinedClassName.includes('rounded') && !styles?.borderRadius ? 'rounded-lg' : ''
     );
 
+    // Apply margin:0 auto for centering the container itself
+    // Note: text-align should be controlled by user via styles, not forced
+    const mergedStyles: React.CSSProperties = {
+        margin: '0 auto',
+        ...inlineStyles
+    };
+
     return (
         <div
             className={containerClassName}
-            style={inlineStyles}
+            style={mergedStyles}
         >
             {children ? children : (
                 <p className="text-muted-foreground text-center">Container - Drop components here</p>

@@ -6,6 +6,7 @@ export type ControlType =
     | 'color'
     | 'spacing'
     | 'sizing'
+    | 'dimension'
     | 'composite'
     | 'toggle';
 
@@ -35,6 +36,9 @@ export interface CSSPropertyConfig {
     min?: number;
     max?: number;
     step?: number;
+
+    // For dimension controls (minWidth, maxWidth, etc.)
+    dimension?: 'width' | 'height';
 
     // For composite controls (like box-shadow)
     fields?: PropertyField[];

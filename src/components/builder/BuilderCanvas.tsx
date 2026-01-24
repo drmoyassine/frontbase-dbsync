@@ -62,7 +62,8 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
     const containerStyles = page.containerStyles;
 
     if (!containerStyles) {
-      return { display: 'flex', flexDirection: 'column' };
+      // Match SSR's .fb-page default styles: display:flex; flex-direction:column; padding:2rem; gap:1rem
+      return { display: 'flex', flexDirection: 'column', padding: '2rem', gap: '1rem' };
     }
 
     const styles: React.CSSProperties = {};

@@ -8,17 +8,30 @@ import { Progress } from '@/components/ui/progress';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { RendererProps } from './types';
+import { ICON_MAP } from '@/components/builder/properties/IconPicker';
 
-export const ButtonRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, inlineStyles, createEditableText }) => (
-    <Button
-        variant={effectiveProps.variant || 'default'}
-        size={effectiveProps.size || 'default'}
-        className={combinedClassName}
-        style={inlineStyles}
-    >
-        {createEditableText(effectiveProps.text || 'Button', 'text', '')}
-    </Button>
-);
+// Helper to render a Lucide icon by name
+const renderLucideIcon = (iconName: string, className?: string): React.ReactNode => {
+    if (!iconName) return null;
+    const IconComponent = ICON_MAP[iconName];
+    if (!IconComponent) return null;
+    return <IconComponent className={className} />;
+};
+
+export const ButtonRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, inlineStyles, createEditableText }) => {
+    return (
+        <Button
+            variant={effectiveProps.variant || 'default'}
+            size={effectiveProps.size || 'default'}
+            className={cn("gap-2", combinedClassName)}
+            style={inlineStyles}
+        >
+            {renderLucideIcon(effectiveProps.leftIcon, "w-4 h-4")}
+            {createEditableText(effectiveProps.text || 'Button', 'text', '')}
+            {renderLucideIcon(effectiveProps.rightIcon, "w-4 h-4")}
+        </Button>
+    );
+};
 
 export const TextRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, inlineStyles, createEditableText }) => {
     const TextComponent = effectiveProps.size === 'sm' ? 'p' : effectiveProps.size === 'lg' ? 'p' : 'p';
@@ -135,44 +148,67 @@ export const LinkRenderer: React.FC<RendererProps> = ({ effectiveProps, combined
 );
 
 export const IconRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, inlineStyles }) => {
-    const icon = effectiveProps.icon || effectiveProps.name || '⭐';
+    const iconName = effectiveProps.icon || effectiveProps.name || 'Star';
     const size = effectiveProps.size || 'md';
     const color = effectiveProps.color || 'currentColor';
 
     // Size classes
     const sizeClasses = {
-        xs: 'w-4 h-4 text-base',
-        sm: 'w-6 h-6 text-xl',
-        md: 'w-8 h-8 text-2xl',
-        lg: 'w-10 h-10 text-3xl',
-        xl: 'w-12 h-12 text-4xl',
+        xs: 'w-4 h-4',
+        sm: 'w-6 h-6',
+        md: 'w-8 h-8',
+        lg: 'w-10 h-10',
+        xl: 'w-12 h-12',
     };
 
     const sizeClass = sizeClasses[size as keyof typeof sizeClasses] || sizeClasses.md;
 
     // Check if it's an emoji (short string with no URL characters)
-    const isEmoji = icon.length <= 4 && !/^[a-zA-Z0-9\/]/.test(icon);
+    const isEmoji = iconName.length <= 4 && !/^[a-zA-Z0-9\/]/.test(iconName);
     // Check if it's an image URL
-    const isUrl = icon.startsWith('http') || icon.startsWith('/');
+    const isUrl = iconName.startsWith('http') || iconName.startsWith('/');
 
     if (isUrl) {
         return (
             <img
-                src={icon}
+                src={iconName}
                 alt=""
                 className={cn('object-contain', sizeClass, combinedClassName)}
+                style={{ ...inlineStyles }}
+            />
+        );
+    }
+
+    if (isEmoji) {
+        // Render as emoji
+        return (
+            <span
+                className={cn('inline-flex items-center justify-center', sizeClass, combinedClassName)}
+                style={{ ...inlineStyles }}
+            >
+                {iconName}
+            </span>
+        );
+    }
+
+    // Try to render as Lucide icon
+    const IconComponent = ICON_MAP[iconName];
+    if (IconComponent) {
+        return (
+            <IconComponent
+                className={cn(sizeClass, combinedClassName)}
                 style={{ color, ...inlineStyles }}
             />
         );
     }
 
-    // Render as emoji or text icon
+    // Fallback: render as text
     return (
         <span
             className={cn('inline-flex items-center justify-center', sizeClass, combinedClassName)}
-            style={{ color: isEmoji ? undefined : color, ...inlineStyles }}
+            style={{ color, ...inlineStyles }}
         >
-            {icon}
+            {iconName}
         </span>
     );
 };

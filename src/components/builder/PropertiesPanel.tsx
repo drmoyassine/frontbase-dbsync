@@ -24,6 +24,8 @@ import { FormPropertiesPanel } from './form/FormPropertiesPanel';
 import { ActionProperties } from '@/components/builder/properties/ActionProperties';
 import { VariableInput } from './VariableInput';
 import { ArrayEditor } from './ArrayEditor';
+import { IconPicker } from './properties/IconPicker';
+import { ColorPicker } from '@/components/builder/style-controls/ColorPicker';
 
 // Helper to find component recursively
 const findComponent = (components: any[], id: string): any => {
@@ -83,6 +85,17 @@ export const PropertiesPanel = () => {
     updateComponent(selectedComponentId, { [key]: value });
   };
 
+  const updateComponentStyle = (key: string, value: any) => {
+    // Helper to update specific styles via properties panel (like icon color)
+    const currentStyles = selectedComponent.styles || {};
+    updateComponent(selectedComponentId, {
+      styles: {
+        ...currentStyles,
+        [key]: value
+      }
+    });
+  };
+
   const deleteComponent = () => {
     removeComponent(selectedComponentId);
     setShowDeleteDialog(false);
@@ -111,7 +124,7 @@ export const PropertiesPanel = () => {
   };
 
   const renderPropertyFields = () => {
-    const { type, props } = selectedComponent;
+    const { type, props, styles = {} } = selectedComponent;
 
     switch (type) {
       case 'Container':
@@ -157,6 +170,58 @@ export const PropertiesPanel = () => {
                   <SelectItem value="gap-8">Large</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-4 pt-4 border-t">
+              <Label className="uppercase text-xs font-semibold text-muted-foreground">Background</Label>
+              <div className="space-y-2">
+                <Label htmlFor="bg-image">Image URL</Label>
+                <Input
+                  id="bg-image"
+                  value={styles.backgroundImage ? styles.backgroundImage.replace(/^url\(['"](.+)['"]\)$/, '$1') : ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateComponentStyle('backgroundImage', val ? `url('${val}')` : undefined);
+                  }}
+                  placeholder="https://example.com/image.jpg"
+                />
+              </div>
+
+              {styles.backgroundImage && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="bg-size">Size</Label>
+                    <Select value={styles.backgroundSize || 'cover'} onValueChange={(value) => updateComponentStyle('backgroundSize', value)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cover">Cover</SelectItem>
+                        <SelectItem value="contain">Contain</SelectItem>
+                        <SelectItem value="auto">Auto</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bg-pos">Position</Label>
+                    <Select value={styles.backgroundPosition || 'center'} onValueChange={(value) => updateComponentStyle('backgroundPosition', value)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="center">Center</SelectItem>
+                        <SelectItem value="top">Top</SelectItem>
+                        <SelectItem value="bottom">Bottom</SelectItem>
+                        <SelectItem value="left">Left</SelectItem>
+                        <SelectItem value="right">Right</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              <ColorPicker
+                label="Background Color"
+                value={styles.backgroundColor}
+                onChange={(value) => updateComponentStyle('backgroundColor', value)}
+                property="backgroundColor"
+              />
             </div>
           </>
         );
@@ -210,13 +275,105 @@ export const PropertiesPanel = () => {
 
       case 'Button':
         return (
-          <ActionProperties
-            componentId={selectedComponentId}
-            props={props}
-            updateComponentProp={updateComponentProp}
-            onDataBindingClick={() => setShowDataBinding(true)}
-            hasBinding={!!props.binding}
-          />
+          <>
+            <ActionProperties
+              componentId={selectedComponentId}
+              props={props}
+              updateComponentProp={updateComponentProp}
+              onDataBindingClick={() => setShowDataBinding(true)}
+              hasBinding={!!props.binding}
+            />
+            {/* Button Icon */}
+            <div className="space-y-3 pt-4 border-t">
+              <Label className="uppercase text-xs font-semibold text-muted-foreground">Button Icon</Label>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Icon</Label>
+                <IconPicker
+                  value={props.buttonIcon || props.leftIcon || props.rightIcon || ''}
+                  onChange={(icon) => {
+                    // Clear old props and set new unified icon
+                    updateComponentProp('buttonIcon', icon);
+                    updateComponentProp('leftIcon', props.iconPosition === 'right' ? '' : icon);
+                    updateComponentProp('rightIcon', props.iconPosition === 'right' ? icon : '');
+                  }}
+                />
+              </div>
+
+              {(props.buttonIcon || props.leftIcon || props.rightIcon) && (
+                <div className="space-y-2">
+                  <Label className="text-xs">Icon Position</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={props.iconPosition !== 'right' ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => {
+                        const icon = props.buttonIcon || props.leftIcon || props.rightIcon;
+                        updateComponentProp('iconPosition', 'left');
+                        updateComponentProp('leftIcon', icon);
+                        updateComponentProp('rightIcon', '');
+                      }}
+                    >
+                      Left
+                    </Button>
+                    <Button
+                      variant={props.iconPosition === 'right' ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => {
+                        const icon = props.buttonIcon || props.leftIcon || props.rightIcon;
+                        updateComponentProp('iconPosition', 'right');
+                        updateComponentProp('rightIcon', icon);
+                        updateComponentProp('leftIcon', '');
+                      }}
+                    >
+                      Right
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        );
+
+      case 'Icon':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Icon</Label>
+              <IconPicker
+                value={props.icon || props.name || 'Star'}
+                onChange={(icon) => updateComponentProp('icon', icon)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Size</Label>
+              <Select value={props.size || 'md'} onValueChange={(value) => updateComponentProp('size', value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="xs">Extra Small (xs)</SelectItem>
+                  <SelectItem value="sm">Small (sm)</SelectItem>
+                  <SelectItem value="md">Medium (md)</SelectItem>
+                  <SelectItem value="lg">Large (lg)</SelectItem>
+                  <SelectItem value="xl">Extra Large (xl)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <ColorPicker
+              label="Icon Color"
+              value={props.color || styles.color || '#000000'}
+              onChange={(color) => {
+                updateComponentProp('color', color);
+                updateComponentStyle('color', color);
+              }}
+              property="textColor"
+            />
+          </div>
         );
 
       case 'Input':

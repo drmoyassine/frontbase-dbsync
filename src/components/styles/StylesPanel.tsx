@@ -11,7 +11,7 @@ import { CategoryPropertySelector } from './CategoryPropertySelector';
 import { PropertyControl } from './PropertyControl';
 import { CSSEditor } from './CSSEditor';
 import { CSS_PROPERTY_CONFIGS, CSS_CATEGORIES, getAllCategories } from '@/lib/styles/configs';
-import { stylesToCSS } from '@/lib/styles/converters';
+import { stylesToCSS, cssToStyles } from '@/lib/styles/converters';
 import type { StylesData } from '@/lib/styles/types';
 import {
     LayoutGrid,
@@ -200,10 +200,24 @@ export const StylesPanel: React.FC<StylesPanelProps> = ({
                     })}
                 </Accordion>
             ) : (
-                /* CSS MODE */
+                /* CSS MODE - Editable with bidirectional sync */
                 <CSSEditor
                     css={stylesToCSS(styles.values)}
-                    readOnly
+                    onApply={(newCss) => {
+                        // Parse CSS and convert back to style values
+                        const parsedValues = cssToStyles(newCss);
+
+                        // Determine which properties are now active
+                        const newActiveProperties = Object.keys(parsedValues).filter(
+                            prop => CSS_PROPERTY_CONFIGS[prop]
+                        );
+
+                        onUpdate({
+                            ...styles,
+                            values: parsedValues,
+                            activeProperties: newActiveProperties
+                        });
+                    }}
                 />
             )}
         </div>

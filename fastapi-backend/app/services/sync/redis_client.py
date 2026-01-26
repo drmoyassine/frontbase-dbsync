@@ -76,9 +76,19 @@ async def get_redis_client(redis_url: Optional[str] = None) -> Optional[redis.Re
     """
     global _redis_client, _current_url
     
-    # Use provided URL or fallback to app settings
-    from app.services.sync.config import settings
-    url = redis_url or settings.redis_url
+    # Use provided URL or fallback to DB settings, then env settings
+    url = redis_url
+    
+    # Try DB settings if no explicit URL
+    if not url:
+        settings_cache = await get_configured_redis_settings()
+        if settings_cache and settings_cache.get("enabled"):
+            url = settings_cache.get("url")
+            
+    # Fallback to env settings
+    if not url:
+        from app.services.sync.config import settings
+        url = settings.redis_url
     
     if not url:
         return None

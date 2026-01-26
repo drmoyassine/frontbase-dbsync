@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Page } from '@/types/builder';
 import { BuilderState } from '../builder';
 import { toast } from '@/hooks/use-toast';
-import { getPages, createPage as createPageApi, updatePage as updatePageApi, deletePage as deletePageApi } from '../../services/pages-api';
+import { getPages, createPage as createPageApi, updatePage as updatePageApi, deletePage as deletePageApi, permanentDeletePage as permanentDeletePageApi } from '../../services/pages-api';
 
 export interface PageSlice {
     pages: Page[];
@@ -112,7 +112,7 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
         const { setSaving } = get();
         setSaving(true);
         try {
-            await deletePageApi(id);
+            await permanentDeletePageApi(id);
 
             set((state) => ({
                 pages: state.pages.filter(page => page.id !== id),

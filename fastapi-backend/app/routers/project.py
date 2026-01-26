@@ -27,7 +27,7 @@ ALLOWED_ASSET_TYPES = {
     }
 }
 
-@router.get("/", response_model=ProjectResponse)
+@router.get("/", response_model=ProjectResponse, response_model_by_alias=True)
 async def get_project_endpoint(db: Session = Depends(get_db)):
     """Get project settings"""
     project = get_project(db)
@@ -38,7 +38,7 @@ async def get_project_endpoint(db: Session = Depends(get_db)):
         
     return project
 
-@router.put("/", response_model=ProjectResponse)
+@router.put("/", response_model=ProjectResponse, response_model_by_alias=True)
 async def update_project_endpoint(request: ProjectUpdateRequest, db: Session = Depends(get_db)):
     """Update project settings and sync to Edge for SSR self-sufficiency"""
     import httpx

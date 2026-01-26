@@ -117,17 +117,18 @@ class ProjectResponse(BaseModel):
     id: str
     name: str
     description: Optional[str] = None
-    app_url: Optional[str] = Field(default=None, alias="appUrl")
-    favicon_url: Optional[str] = Field(default=None, alias="faviconUrl")
+    app_url: Optional[str] = Field(default=None, serialization_alias="appUrl")
+    favicon_url: Optional[str] = Field(default=None, serialization_alias="faviconUrl")
     supabase_url: Optional[str] = None
     supabase_anon_key: Optional[str] = None
-    users_config: Optional[Dict[str, Any]] = Field(default=None, alias="usersConfig")
+    users_config: Optional[Dict[str, Any]] = Field(default=None, serialization_alias="usersConfig")
     created_at: datetime
     updated_at: datetime
 
     class Config:
         from_attributes = True
         populate_by_name = True
+
 
     @field_validator('users_config', mode='before')
     @classmethod

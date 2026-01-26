@@ -13,6 +13,7 @@ import {
 import {
     upsertPublishedPage,
     getPublishedPageBySlug,
+    deletePublishedPage,
     initPagesDb
 } from '../db/pages-store';
 import {
@@ -127,6 +128,53 @@ importRoute.post('/', async (c) => {
 
     } catch (error) {
         console.error('[Import] Error:', error);
+        return c.json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        }, 500);
+    }
+});
+
+// =============================================================================
+// DELETE /api/import/:slug - Unpublish a page (remove from SSR)
+// =============================================================================
+
+importRoute.delete('/:slug', async (c) => {
+    try {
+        const slug = c.req.param('slug');
+
+        if (!slug) {
+            return c.json({
+                success: false,
+                error: 'Missing slug parameter',
+            }, 400);
+        }
+
+        console.log(`[Import] Unpublishing page: ${slug}`);
+
+        // Check if page exists
+        const existing = await getPublishedPageBySlug(slug);
+        if (!existing) {
+            console.log(`[Import] Page not found in SSR: ${slug}`);
+            // Return success anyway - page might already be unpublished
+            return c.json({
+                success: true,
+                message: `Page "${slug}" was not published`,
+            }, 200);
+        }
+
+        // Delete the page
+        await deletePublishedPage(slug);
+        console.log(`[Import] Successfully unpublished: ${slug}`);
+
+        return c.json({
+            success: true,
+            slug,
+            message: `Page "${slug}" unpublished successfully`,
+        }, 200);
+
+    } catch (error) {
+        console.error('[Import] Unpublish error:', error);
         return c.json({
             success: false,
             error: error instanceof Error ? error.message : 'Unknown error',

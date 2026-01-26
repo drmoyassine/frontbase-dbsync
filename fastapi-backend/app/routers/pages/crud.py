@@ -9,6 +9,8 @@ from typing import Optional, Any
 from pydantic import BaseModel
 import json
 import time
+import os
+import httpx
 
 from ...database.utils import get_db, create_page, update_page, get_page_by_slug, get_current_timestamp
 from ...models.schemas import PageCreateRequest, PageUpdateRequest
@@ -49,6 +51,28 @@ def serialize_page(page: Page) -> dict:
         "updatedAt": page.updated_at,
         "deletedAt": page.deleted_at
     }
+
+
+async def unpublish_from_edge(slug: str):
+    """
+    Call the edge SSR service to remove a page from its local storage.
+    This ensures deleted pages no longer render on the SSR endpoint.
+    """
+    edge_url = os.getenv("EDGE_SSR_URL", "http://localhost:3002")
+    
+    # Extract original slug if it was modified during soft delete
+    original_slug = slug.split("-deleted-")[0] if "-deleted-" in slug else slug
+    
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.delete(f"{edge_url}/api/import/{original_slug}")
+            if response.status_code == 200:
+                print(f"[Unpublish] Successfully removed from SSR: {original_slug}")
+            else:
+                print(f"[Unpublish] Edge returned {response.status_code}: {response.text}")
+    except Exception as e:
+        # Don't fail the delete operation if edge is unreachable
+        print(f"[Unpublish] Warning - could not reach edge service: {e}")
 
 
 @router.get("/")
@@ -192,10 +216,16 @@ async def delete_page(page_id: str, db: Session = Depends(get_db)):
                 detail="Page not found"
             )
         
+        # Store original slug before modifying (for unpublish)
+        original_slug = page.slug
+        
         # Append timestamp to slug to allow reuse (matching Express)
         page.slug = f"{page.slug}-deleted-{int(time.time() * 1000)}"
         page.deleted_at = get_current_timestamp()
         db.commit()
+        
+        # Unpublish from edge SSR service
+        await unpublish_from_edge(original_slug)
         
         return {
             "success": True,
@@ -260,6 +290,9 @@ async def permanent_delete_page(page_id: str, db: Session = Depends(get_db)):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Page not found"
             )
+        
+        # Unpublish from edge SSR service (handles -deleted- suffix)
+        await unpublish_from_edge(page.slug)
         
         db.delete(page)
         db.commit()

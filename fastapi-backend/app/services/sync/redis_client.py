@@ -85,6 +85,11 @@ async def get_redis_client(redis_url: Optional[str] = None) -> Optional[redis.Re
         if settings_cache and settings_cache.get("enabled"):
             url = settings_cache.get("url")
             
+    if url and (url.startswith("http://") or url.startswith("https://")):
+        logger.warning(f"Backend cannot use HTTP Redis URL ({url}). Falling back to environment default (TCP).")
+        # Reset url to force fallback to env settings
+        url = None
+
     # Fallback to env settings
     if not url:
         from app.services.sync.config import settings

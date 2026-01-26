@@ -19,7 +19,7 @@ export const getDefaultPageStyles = (): StylesData => {
             flexDirection: 'column',
             gap: 30,
             flexWrap: 'nowrap',
-            alignItems: 'flex-start',
+            alignItems: 'stretch',
             justifyContent: 'flex-start',
             backgroundColor: '#FFFFFF',
             padding: {

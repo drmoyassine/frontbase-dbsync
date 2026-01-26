@@ -1,6 +1,24 @@
 version: '3.8'
 
 services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: frontbase
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-frontbase-dev-password}
+      POSTGRES_DB: frontbase
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - frontbase
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U frontbase"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./fastapi-backend
@@ -8,13 +26,13 @@ services:
     expose:
       - "8000"
     environment:
-      # Database - SQLite for now (Postgres-ready: just change this URL)
-      - DATABASE_URL=sqlite+aiosqlite:///./data/unified.db
-      # For Postgres migration, use: DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASS}@postgres:5432/${DB_NAME}
+      # Database - PostgreSQL (schema auto-created on startup)
+      - DATABASE_URL=postgresql+asyncpg://frontbase:${DB_PASSWORD:-frontbase-dev-password}@postgres:5432/frontbase
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       # Edge Engine URL (internal network)
       - EDGE_URL=http://edge:3002
+      - EDGE_SSR_URL=http://edge:3002
       # Admin Authentication
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
@@ -22,6 +40,9 @@ services:
       - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-false}
     volumes:
       - backend_data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - frontbase
     restart: unless-stopped
@@ -108,10 +129,10 @@ services:
     image: hiett/serverless-redis-http:latest
     environment:
       SRH_MODE: env
-      SRH_TOKEN: "dev_token_change_in_prod"
+      SRH_TOKEN: ${REDIS_TOKEN:-dev_token_change_in_prod}
       SRH_CONNECTION_STRING: "redis://redis:6379"
-    ports:
-      - "8079:80"
+    expose:
+      - "80"
     depends_on:
       redis:
         condition: service_healthy
@@ -124,6 +145,8 @@ networks:
     driver: bridge
 
 volumes:
+  postgres_data:
   backend_data:
   edge_data:
   redis_data:
+

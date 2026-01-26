@@ -14,8 +14,8 @@ services:
 
   backend:
     environment:
-      # PostgreSQL connection (overrides SQLite default)
-      - DATABASE_URL=postgresql+asyncpg://frontbase:${DB_PASSWORD:-frontbase-dev-password}@postgres:5432/frontbase
+      # PostgreSQL connection - using psycopg2 (sync driver for Alembic migrations)
+      - DATABASE_URL=postgresql+psycopg2://frontbase:${DB_PASSWORD:-frontbase-dev-password}@postgres:5432/frontbase
     depends_on:
       postgres:
         condition: service_healthy

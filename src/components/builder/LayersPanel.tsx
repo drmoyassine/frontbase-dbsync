@@ -33,7 +33,9 @@ export const LayersPanel: React.FC = () => {
     pages,
     selectedComponentId,
     setSelectedComponentId,
-    updatePage
+    updatePage,
+    deleteComponent,
+    duplicateComponent
   } = useBuilderStore();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -156,6 +158,8 @@ export const LayersPanel: React.FC = () => {
                   onSelectChild={(id: string) => setSelectedComponentId(id)}
                   onToggleExpandChild={(id: string) => toggleExpanded(id)}
                   getComponentIcon={getComponentIcon}
+                  onDelete={(id) => currentPageId && deleteComponent(currentPageId, id)}
+                  onDuplicate={(id) => currentPageId && duplicateComponent(currentPageId, id)}
                 />
               ))}
             </SortableContext>
@@ -178,6 +182,8 @@ interface SortableLayerItemProps {
   onSelectChild: (id: string) => void;
   onToggleExpandChild: (id: string) => void;
   getComponentIcon: (type: string) => string;
+  onDelete: (componentId: string) => void;
+  onDuplicate: (componentId: string) => void;
 }
 
 const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
@@ -191,7 +197,9 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
   onToggleExpand,
   onSelectChild,
   onToggleExpandChild,
-  getComponentIcon
+  getComponentIcon,
+  onDelete,
+  onDuplicate
 }) => {
   const {
     attributes,
@@ -274,11 +282,14 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onDuplicate(component.id)}>
               <Copy className="h-4 w-4 mr-2" />
               Duplicate
             </DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive">
+            <DropdownMenuItem
+              className="text-destructive"
+              onClick={() => onDelete(component.id)}
+            >
               <Trash2 className="h-4 w-4 mr-2" />
               Delete
             </DropdownMenuItem>
@@ -303,6 +314,8 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
               onSelectChild={onSelectChild}
               onToggleExpandChild={onToggleExpandChild}
               getComponentIcon={getComponentIcon}
+              onDelete={onDelete}
+              onDuplicate={onDuplicate}
             />
           ))}
         </div>

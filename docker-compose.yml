@@ -41,7 +41,7 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     environment:
       # Database: set DATABASE=sqlite or DATABASE=postgres in .env
-      - DATABASE_URL=${DATABASE_URL:-sqlite+aiosqlite:///app/data/frontbase.db}
+      - DATABASE_URL=${DATABASE_URL:-sqlite+aiosqlite:////app/data/frontbase.db}
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       # Edge Engine URL (internal network)

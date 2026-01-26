@@ -46,6 +46,12 @@ export default defineConfig(({ mode }) => {
             delete proxyRes.headers['x-content-type-options'];
           }
         },
+        // Static assets (favicon, logos) stored on backend
+        '/static': {
+          target: 'http://localhost:8000',
+          changeOrigin: true,
+          secure: false,
+        },
         // Actions Engine proxy
         '/actions': {
           target: 'http://localhost:3002',

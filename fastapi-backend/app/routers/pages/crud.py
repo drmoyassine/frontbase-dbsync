@@ -218,14 +218,25 @@ async def delete_page(page_id: str, db: Session = Depends(get_db)):
         
         # Store original slug before modifying (for unpublish)
         original_slug = page.slug
+        was_homepage = page.is_homepage
         
         # Append timestamp to slug to allow reuse (matching Express)
         page.slug = f"{page.slug}-deleted-{int(time.time() * 1000)}"
         page.deleted_at = get_current_timestamp()
+        
+        # Clear homepage status when trashing
+        if was_homepage:
+            page.is_homepage = False
+        
         db.commit()
         
         # Unpublish from edge SSR service
         await unpublish_from_edge(original_slug)
+        
+        # If was homepage, also clear the homepage route
+        if was_homepage:
+            # The homepage in edge is stored by slug, which we already unpublished above
+            print(f"[Delete] Cleared homepage status for: {original_slug}")
         
         return {
             "success": True,

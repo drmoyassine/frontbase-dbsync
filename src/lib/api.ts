@@ -152,7 +152,7 @@ export const pageAPI = {
   // Permanently delete page
   permanentDeletePage: async (id: string): Promise<APIResponse> => {
     try {
-      const response = await fetch(`/api/pages/${id}/permanent`, {
+      const response = await fetch(`/api/pages/${id}/permanent/`, {
         method: 'DELETE',
         credentials: 'include'
       });

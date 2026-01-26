@@ -71,7 +71,7 @@ export const restorePage = async (pageId: string): Promise<Page> => {
 
 export const permanentDeletePage = async (pageId: string): Promise<void> => {
   try {
-    const response = await api.delete(`/api/pages/${pageId}/permanent`);
+    const response = await api.delete(`/api/pages/${pageId}/permanent/`);
     const result = response.data;
     if (!result.success) {
       throw new Error(result.error || 'Failed to permanently delete page');

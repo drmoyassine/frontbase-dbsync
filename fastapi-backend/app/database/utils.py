@@ -118,6 +118,8 @@ def update_project(db: Session, project_data: dict):
             id=generate_uuid(),
             name=project_data.get('name', 'Default Project'),
             description=project_data.get('description'),
+            app_url=project_data.get('app_url'),
+            favicon_url=project_data.get('favicon_url'),
             created_at=get_current_timestamp(),
             updated_at=get_current_timestamp()
         )
@@ -128,6 +130,10 @@ def update_project(db: Session, project_data: dict):
             project.name = project_data['name']
         if 'description' in project_data:
             project.description = project_data['description']
+        if 'app_url' in project_data:
+            project.app_url = project_data['app_url']
+        if 'favicon_url' in project_data:
+            project.favicon_url = project_data['favicon_url']
         if 'users_config' in project_data:
             config = project_data['users_config']
             project.users_config = json.dumps(config) if isinstance(config, (dict, list)) else config

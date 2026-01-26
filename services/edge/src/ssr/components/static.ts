@@ -182,7 +182,9 @@ function renderText(id: string, props: Record<string, unknown>): string {
 
 function renderHeading(id: string, props: Record<string, unknown>): string {
     const content = escapeHtml(String(props.content || props.text || ''));
-    const level = Math.min(Math.max(Number(props.level) || 2, 1), 6);
+    // Handle both 'h4' string format and numeric 4 format
+    const levelProp = String(props.level || '2').replace(/^h/i, '');
+    const level = Math.min(Math.max(Number(levelProp) || 2, 1), 6);
     const align = props.align as string || 'inherit';  // Inherit from parent for centering
     const color = props.color as string || 'inherit';
 

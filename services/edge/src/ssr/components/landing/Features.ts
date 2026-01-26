@@ -43,6 +43,7 @@ export function renderFeatures(
 
     const gridClasses = [
         'grid',
+        'grid-cols-1', // Explicitly 1 column on mobile
         'gap-6',
         'sm:gap-8',
         columns === 2 ? 'sm:grid-cols-2' : '',

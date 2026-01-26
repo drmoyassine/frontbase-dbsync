@@ -103,6 +103,10 @@ const componentCategories = {
       { name: 'FAQ', icon: HelpCircle, description: 'FAQ accordion', section: 'landing', isTemplate: true },
       { name: 'LogoCloud', icon: Image, description: 'Partner logos', section: 'landing', isTemplate: true },
       { name: 'Footer', icon: Layout, description: 'Page footer', section: 'landing', isTemplate: true },
+
+      // Page Templates separator
+      { name: '_separator_templates', icon: Sparkles, description: 'Full Page Templates', section: 'separator' },
+      { name: 'FrontbaseHomepage', icon: Sparkles, description: 'Complete Frontbase homepage', section: 'template', isTemplate: true },
     ]
   }
 };

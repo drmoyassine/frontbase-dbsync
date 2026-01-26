@@ -51,7 +51,9 @@ export const TextRenderer: React.FC<RendererProps> = ({ effectiveProps, combined
 };
 
 export const HeadingRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, inlineStyles, createEditableText }) => {
-    const HeadingTag = `h${effectiveProps.level || '2'}` as keyof JSX.IntrinsicElements;
+    // Handle both 'h4' format and '4' format - strip 'h' prefix if present
+    const levelStr = String(effectiveProps.level || '2').replace(/^h/i, '');
+    const HeadingTag = `h${levelStr}` as keyof JSX.IntrinsicElements;
     const headingClasses = {
         '1': 'text-4xl font-bold',
         '2': 'text-3xl font-semibold',
@@ -62,10 +64,10 @@ export const HeadingRenderer: React.FC<RendererProps> = ({ effectiveProps, combi
     };
     return (
         <HeadingTag
-            className={cn(headingClasses[effectiveProps.level as keyof typeof headingClasses] || 'text-2xl font-semibold', combinedClassName)}
+            className={cn(headingClasses[levelStr as keyof typeof headingClasses] || 'text-2xl font-semibold', combinedClassName)}
             style={inlineStyles}
         >
-            {createEditableText(effectiveProps.text || 'Heading', 'text', headingClasses[effectiveProps.level as keyof typeof headingClasses] || 'text-2xl font-semibold', inlineStyles)}
+            {createEditableText(effectiveProps.text || 'Heading', 'text', headingClasses[levelStr as keyof typeof headingClasses] || 'text-2xl font-semibold', inlineStyles)}
         </HeadingTag>
     );
 };

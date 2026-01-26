@@ -7,7 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Trash2, Database } from 'lucide-react';
+import { Trash2, Database, AlignLeft, AlignCenter, AlignRight, AlignJustify, Minus } from 'lucide-react';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -129,99 +130,243 @@ export const PropertiesPanel = () => {
     switch (type) {
       case 'Container':
         return (
+          <div className="text-sm text-muted-foreground p-4 text-center border border-dashed rounded-md">
+            Use the Styling Panel (palette icon) to customize layout, spacing, and background.
+          </div>
+        );
+
+      case 'Navbar':
+        return (
           <>
-            <div className="space-y-2">
-              <Label htmlFor="container-padding">Padding</Label>
-              <Select value={props.padding || 'p-4'} onValueChange={(value) => updateComponentProp('padding', value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="p-0">None</SelectItem>
-                  <SelectItem value="p-2">Small</SelectItem>
-                  <SelectItem value="p-4">Medium</SelectItem>
-                  <SelectItem value="p-8">Large</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="container-layout">Layout</Label>
-              <Select value={props.layout || 'flex-col'} onValueChange={(value) => updateComponentProp('layout', value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="flex-col">Vertical</SelectItem>
-                  <SelectItem value="flex-row">Horizontal</SelectItem>
-                  <SelectItem value="grid">Grid</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="container-gap">Gap</Label>
-              <Select value={props.gap || 'gap-4'} onValueChange={(value) => updateComponentProp('gap', value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="gap-0">None</SelectItem>
-                  <SelectItem value="gap-2">Small</SelectItem>
-                  <SelectItem value="gap-4">Medium</SelectItem>
-                  <SelectItem value="gap-8">Large</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-4 pt-4 border-t">
-              <Label className="uppercase text-xs font-semibold text-muted-foreground">Background</Label>
+            {/* Logo Section */}
+            <div className="space-y-3 pb-4 border-b">
+              <Label className="text-sm font-medium">Logo</Label>
               <div className="space-y-2">
-                <Label htmlFor="bg-image">Image URL</Label>
-                <Input
-                  id="bg-image"
-                  value={styles.backgroundImage ? styles.backgroundImage.replace(/^url\(['"](.+)['"]\)$/, '$1') : ''}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    updateComponentStyle('backgroundImage', val ? `url('${val}')` : undefined);
-                  }}
-                  placeholder="https://example.com/image.jpg"
-                />
+                <Label htmlFor="logo-type" className="text-xs text-muted-foreground">Type</Label>
+                <Select
+                  value={props.logo?.type || 'text'}
+                  onValueChange={(value) => updateComponentProp('logo', { ...props.logo, type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="text">Text (Brand Name)</SelectItem>
+                    <SelectItem value="image">Image (Logo)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-
-              {styles.backgroundImage && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="bg-size">Size</Label>
-                    <Select value={styles.backgroundSize || 'cover'} onValueChange={(value) => updateComponentStyle('backgroundSize', value)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cover">Cover</SelectItem>
-                        <SelectItem value="contain">Contain</SelectItem>
-                        <SelectItem value="auto">Auto</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="bg-pos">Position</Label>
-                    <Select value={styles.backgroundPosition || 'center'} onValueChange={(value) => updateComponentStyle('backgroundPosition', value)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="center">Center</SelectItem>
-                        <SelectItem value="top">Top</SelectItem>
-                        <SelectItem value="bottom">Bottom</SelectItem>
-                        <SelectItem value="left">Left</SelectItem>
-                        <SelectItem value="right">Right</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+              {(props.logo?.type || 'text') === 'text' ? (
+                <div className="space-y-2">
+                  <Label htmlFor="brand-name" className="text-xs text-muted-foreground">Brand Name</Label>
+                  <Input
+                    value={props.logo?.text || 'YourBrand'}
+                    onChange={(e) => updateComponentProp('logo', { ...props.logo, text: e.target.value })}
+                    placeholder="Enter brand name"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="logo-url" className="text-xs text-muted-foreground">Logo Image URL</Label>
+                  <Input
+                    value={props.logo?.imageUrl || ''}
+                    onChange={(e) => updateComponentProp('logo', { ...props.logo, imageUrl: e.target.value })}
+                    placeholder="https://example.com/logo.png"
+                  />
                 </div>
               )}
+              <div className="space-y-2">
+                <Label htmlFor="logo-link" className="text-xs text-muted-foreground">Logo Link</Label>
+                <Input
+                  value={props.logo?.link || '/'}
+                  onChange={(e) => updateComponentProp('logo', { ...props.logo, link: e.target.value })}
+                  placeholder="/"
+                />
+              </div>
+            </div>
 
-              <ColorPicker
-                label="Background Color"
-                value={styles.backgroundColor}
-                onChange={(value) => updateComponentStyle('backgroundColor', value)}
-                property="backgroundColor"
-              />
+            {/* Menu Items Section */}
+            <div className="space-y-3 py-4 border-b">
+              <Label className="text-sm font-medium">Menu Items</Label>
+              <div className="space-y-2">
+                {(props.menuItems || []).map((item: any, index: number) => (
+                  <div key={item.id || index} className="space-y-2 p-2 border rounded-md bg-muted/30">
+                    <div className="flex gap-2">
+                      <Input
+                        value={item.label || ''}
+                        onChange={(e) => {
+                          const newItems = [...(props.menuItems || [])];
+                          newItems[index] = { ...item, label: e.target.value };
+                          updateComponentProp('menuItems', newItems);
+                        }}
+                        placeholder="Menu label"
+                        className="h-8 flex-1"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        onClick={() => {
+                          const newItems = (props.menuItems || []).filter((_: any, i: number) => i !== index);
+                          updateComponentProp('menuItems', newItems);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="flex gap-2">
+                      <Select
+                        value={item.navType || 'scroll'}
+                        onValueChange={(value) => {
+                          const newItems = [...(props.menuItems || [])];
+                          newItems[index] = { ...item, navType: value };
+                          updateComponentProp('menuItems', newItems);
+                        }}
+                      >
+                        <SelectTrigger className="h-8 w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="scroll">Scroll</SelectItem>
+                          <SelectItem value="link">Link</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={item.target || ''}
+                        onChange={(e) => {
+                          const newItems = [...(props.menuItems || [])];
+                          newItems[index] = { ...item, target: e.target.value };
+                          updateComponentProp('menuItems', newItems);
+                        }}
+                        placeholder={item.navType === 'scroll' ? '#section-id' : '/page-url'}
+                        className="h-8 flex-1"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  const newItem = { id: `menu-${Date.now()}`, label: 'New Item', navType: 'scroll', target: '#' };
+                  updateComponentProp('menuItems', [...(props.menuItems || []), newItem]);
+                }}
+              >
+                + Add Menu Item
+              </Button>
+            </div>
+
+            {/* CTA Buttons Section */}
+            <div className="space-y-3 pt-4">
+              <Label className="text-sm font-medium">CTA Buttons</Label>
+
+              {/* Primary Button */}
+              <div className="space-y-2 p-2 border rounded-md">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground">Primary Button</Label>
+                  <Switch
+                    checked={props.primaryButton?.enabled !== false}
+                    onCheckedChange={(checked) => updateComponentProp('primaryButton', {
+                      ...props.primaryButton,
+                      enabled: checked
+                    })}
+                  />
+                </div>
+                {props.primaryButton?.enabled !== false && (
+                  <>
+                    <Input
+                      value={props.primaryButton?.text || 'Get Started'}
+                      onChange={(e) => updateComponentProp('primaryButton', {
+                        ...props.primaryButton,
+                        text: e.target.value
+                      })}
+                      placeholder="Button text"
+                      className="h-8"
+                    />
+                    <div className="flex gap-2">
+                      <Select
+                        value={props.primaryButton?.navType || 'link'}
+                        onValueChange={(value) => updateComponentProp('primaryButton', {
+                          ...props.primaryButton,
+                          navType: value
+                        })}
+                      >
+                        <SelectTrigger className="h-8 w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="scroll">Scroll</SelectItem>
+                          <SelectItem value="link">Link</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={props.primaryButton?.target || ''}
+                        onChange={(e) => updateComponentProp('primaryButton', {
+                          ...props.primaryButton,
+                          target: e.target.value
+                        })}
+                        placeholder={props.primaryButton?.navType === 'scroll' ? '#section-id' : '/page-url'}
+                        className="h-8 flex-1"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Secondary Button */}
+              <div className="space-y-2 p-2 border rounded-md">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground">Secondary Button</Label>
+                  <Switch
+                    checked={props.secondaryButton?.enabled === true}
+                    onCheckedChange={(checked) => updateComponentProp('secondaryButton', {
+                      ...props.secondaryButton,
+                      enabled: checked
+                    })}
+                  />
+                </div>
+                {props.secondaryButton?.enabled === true && (
+                  <>
+                    <Input
+                      value={props.secondaryButton?.text || 'Learn More'}
+                      onChange={(e) => updateComponentProp('secondaryButton', {
+                        ...props.secondaryButton,
+                        text: e.target.value
+                      })}
+                      placeholder="Button text"
+                      className="h-8"
+                    />
+                    <div className="flex gap-2">
+                      <Select
+                        value={props.secondaryButton?.navType || 'link'}
+                        onValueChange={(value) => updateComponentProp('secondaryButton', {
+                          ...props.secondaryButton,
+                          navType: value
+                        })}
+                      >
+                        <SelectTrigger className="h-8 w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="scroll">Scroll</SelectItem>
+                          <SelectItem value="link">Link</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={props.secondaryButton?.target || ''}
+                        onChange={(e) => updateComponentProp('secondaryButton', {
+                          ...props.secondaryButton,
+                          target: e.target.value
+                        })}
+                        placeholder={props.secondaryButton?.navType === 'scroll' ? '#section-id' : '/page-url'}
+                        className="h-8 flex-1"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </>
         );

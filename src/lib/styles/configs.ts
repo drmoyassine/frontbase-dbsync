@@ -334,7 +334,7 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
     color: {
         id: 'color',
         name: 'Text Color',
-        category: 'Colors',
+        category: 'Typography',
         controlType: 'color',
         defaultValue: '#000000',
         toCSSValue: (value) => value,
@@ -345,7 +345,7 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
     backgroundColor: {
         id: 'backgroundColor',
         name: 'Background Color',
-        category: 'Colors',
+        category: 'Backgrounds',
         controlType: 'color',
         defaultValue: 'transparent',
         toCSSValue: (value) => value,
@@ -356,12 +356,52 @@ export const CSS_PROPERTY_CONFIGS: Record<string, CSSPropertyConfig> = {
     borderColor: {
         id: 'borderColor',
         name: 'Border Color',
-        category: 'Colors',
+        category: 'Effects',
         controlType: 'color',
         defaultValue: '#000000',
         toCSSValue: (value) => value,
         fromCSSValue: (css) => css.trim(),
         description: 'Color of the border around this element.'
+    },
+
+    // ===== BACKGROUNDS =====
+    backgroundImage: {
+        id: 'backgroundImage',
+        name: 'Image URL',
+        category: 'Backgrounds',
+        controlType: 'text',
+        defaultValue: '',
+        toCSSValue: (value) => value ? `url('${value}')` : 'none',
+        fromCSSValue: (css) => {
+            if (!css || css === 'none') return '';
+            const match = css.match(/url\(['"]?(.+?)['"]?\)/);
+            return match ? match[1] : '';
+        },
+        description: 'URL of the background image.'
+    },
+
+    backgroundSize: {
+        id: 'backgroundSize',
+        name: 'Size',
+        category: 'Backgrounds',
+        controlType: 'select',
+        defaultValue: 'cover',
+        options: ['cover', 'contain', 'auto', '100% 100%'],
+        toCSSValue: (value) => value,
+        fromCSSValue: (css) => css.trim(),
+        description: 'How the image is resized. Cover fills the area.'
+    },
+
+    backgroundPosition: {
+        id: 'backgroundPosition',
+        name: 'Position',
+        category: 'Backgrounds',
+        controlType: 'select',
+        defaultValue: 'center',
+        options: ['center', 'top', 'bottom', 'left', 'right', 'top left', 'top right', 'bottom left', 'bottom right'],
+        toCSSValue: (value) => value,
+        fromCSSValue: (css) => css.trim(),
+        description: 'Where the image is placed within the element.'
     },
 
     // ===== EFFECTS =====
@@ -451,9 +491,9 @@ export const CSS_CATEGORIES = {
     'Layout': ['display', 'position', 'flexDirection', 'justifyContent', 'alignItems', 'flexWrap', 'horizontalAlign'],
     'Spacing': ['padding', 'margin', 'gap'],
     'Sizing': ['size', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight'],
-    'Typography': ['fontSize', 'fontWeight', 'lineHeight', 'textAlign'],
-    'Colors': ['color', 'backgroundColor', 'borderColor'],
-    'Effects': ['opacity', 'borderRadius', 'boxShadow', 'borderWidth', 'borderStyle']
+    'Typography': ['fontSize', 'fontWeight', 'lineHeight', 'textAlign', 'color'],
+    'Backgrounds': ['backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition'],
+    'Effects': ['opacity', 'borderRadius', 'borderColor', 'boxShadow', 'borderWidth', 'borderStyle']
 };
 
 // Helper to get all properties by category

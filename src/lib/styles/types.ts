@@ -8,7 +8,8 @@ export type ControlType =
     | 'sizing'
     | 'dimension'
     | 'composite'
-    | 'toggle';
+    | 'toggle'
+    | 'text';
 
 export interface PropertyField {
     name: string;

@@ -107,6 +107,12 @@ def get_current_user(request: Request) -> Optional[dict]:
     return ADMIN_USERS.get(email)
 
 
+@router.options("/login")
+async def login_options():
+    """Handle CORS preflight for login"""
+    return Response(status_code=200)
+
+
 @router.post("/login", response_model=AuthResponse)
 async def login(request: LoginRequest, response: Response):
     """Login with email and password"""

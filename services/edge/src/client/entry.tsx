@@ -99,10 +99,50 @@ function findComponentById(components: any[], id: string): any {
 // Run hydration when DOM is ready
 if (typeof window !== 'undefined') {
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', hydrateReactComponents);
+        document.addEventListener('DOMContentLoaded', () => {
+            hydrateReactComponents();
+            initMobileMenuToggle();
+        });
     } else {
         hydrateReactComponents();
+        initMobileMenuToggle();
     }
+}
+
+// Initialize mobile menu toggle for SSR Navbar
+function initMobileMenuToggle() {
+    const toggleButtons = document.querySelectorAll('[data-fb-mobile-menu-toggle]');
+
+    toggleButtons.forEach((button) => {
+        const navbar = button.closest('header');
+        const mobileMenu = navbar?.querySelector('[data-fb-mobile-menu]');
+
+        if (!mobileMenu) return;
+
+        button.addEventListener('click', () => {
+            const isHidden = mobileMenu.classList.contains('hidden');
+
+            if (isHidden) {
+                mobileMenu.classList.remove('hidden');
+                // Swap hamburger icon to X
+                button.innerHTML = `
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                `;
+            } else {
+                mobileMenu.classList.add('hidden');
+                // Swap X icon back to hamburger
+                button.innerHTML = `
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                `;
+            }
+        });
+    });
+
+    console.log(`📱 Mobile menu toggle initialized for ${toggleButtons.length} navbar(s)`);
 }
 
 // Expose for debugging

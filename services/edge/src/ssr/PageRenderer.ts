@@ -215,15 +215,43 @@ function renderLayoutComponent(
 
     switch (type) {
         case 'Container':
-            // Center the container itself with margin auto, but don't force text-align
-            // User should control text-align via styles
-            return `${combinedCSS}<div id="${id}" class="${className}" style="margin:0 auto;${inlineStyle}">${childrenHtml}</div>`;
+            // Check if this container uses grid layout
+            const containerDisplay = styles.display || '';
+            const isGridContainer = containerDisplay === 'grid';
+
+            if (isGridContainer) {
+                // Parse grid columns for responsive behavior
+                const gridCols = (() => {
+                    const colsStyle = styles.gridTemplateColumns || '';
+                    if (typeof colsStyle === 'string') {
+                        const match = colsStyle.match(/repeat\((\d+)/);
+                        if (match) return parseInt(match[1], 10);
+                    }
+                    return 2;
+                })();
+
+                // Build responsive grid classes: 1 col on mobile, 2 on tablet, N on desktop
+                const responsiveGridClass = gridCols <= 2
+                    ? 'grid grid-cols-1 md:grid-cols-2'
+                    : gridCols === 3
+                        ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+                        : `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${Math.min(gridCols, 4)}`;
+
+                // Remove grid-template-columns from inline style since we use Tailwind classes
+                const gridGapStyle = styles.gap ? `gap:${styles.gap};` : '';
+
+                return `${combinedCSS}<div id="${id}" class="${className} ${responsiveGridClass}" style="margin:0 auto;width:100%;${gridGapStyle}${inlineStyle.replace(/display:\s*grid[^;]*;?/gi, '').replace(/grid-template-columns[^;]*;?/gi, '')}">${childrenHtml}</div>`;
+            }
+
+            // Non-grid container
+            return `${combinedCSS}<div id="${id}" class="${className}" style="margin:0 auto;width:100%;${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Section':
             return `${combinedCSS}<section id="${id}" class="${className}" style="${inlineStyle}">${childrenHtml}</section>`;
 
         case 'Row':
-            return `${combinedCSS}<div id="${id}" class="${className} fb-row" style="display:flex;flex-direction:row;width:100%;min-height:50px;${inlineStyle}">${childrenHtml}</div>`;
+            // Row: flex on desktop, stack on mobile
+            return `${combinedCSS}<div id="${id}" class="${className} fb-row flex flex-col md:flex-row" style="width:100%;min-height:50px;${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Column':
             return `${combinedCSS}<div id="${id}" class="${className} fb-column" style="display:flex;flex-direction:column;min-height:50px;min-width:50px;${inlineStyle}">${childrenHtml}</div>`;
@@ -238,7 +266,13 @@ function renderLayoutComponent(
         case 'Grid':
             const columns = (props.columns as number) || 2;
             const gridGap = (styles.gap as string) || (props.gap as string) || '1rem';
-            return `${combinedCSS}<div id="${id}" class="${className}" style="display:grid;grid-template-columns:repeat(${columns},1fr);gap:${gridGap};${inlineStyle}">${childrenHtml}</div>`;
+            // Responsive grid: 1 col mobile, 2 col tablet, N col desktop
+            const gridResponsiveClass = columns <= 2
+                ? 'grid grid-cols-1 md:grid-cols-2'
+                : columns === 3
+                    ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+                    : `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${Math.min(columns, 4)}`;
+            return `${combinedCSS}<div id="${id}" class="${className} ${gridResponsiveClass}" style="gap:${gridGap};${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Stack':
             const stackGap = (styles.gap as string) || (props.gap as string) || '1rem';

@@ -290,30 +290,36 @@ export const ctaTemplate = (): ComponentTemplate => ({
  * Navbar Template
  */
 export const navbarTemplate = (): ComponentTemplate => ({
-    type: 'Container',
-    props: {},
-    styles: {
-        display: 'flex',
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '16px 24px',
-        borderBottom: '1px solid var(--border)'
-    },
-    children: [
-        { type: 'Heading', props: { text: 'YourBrand', level: 'h4' } },
-        {
-            type: 'Container',
-            props: {},
-            styles: { display: 'flex', flexDirection: 'row', gap: '24px' },
-            children: [
-                { type: 'Link', props: { text: 'Features', href: '#features' } },
-                { type: 'Link', props: { text: 'Pricing', href: '#pricing' } },
-                { type: 'Link', props: { text: 'About', href: '#about' } }
-            ]
+    type: 'Navbar',
+    props: {
+        logo: {
+            type: 'text',
+            text: 'YourBrand',
+            link: '/'
         },
-        { type: 'Button', props: { text: 'Get Started', variant: 'default' } }
-    ]
+        menuItems: [
+            { id: 'menu-1', label: 'Features', navType: 'scroll', target: '#features' },
+            { id: 'menu-2', label: 'Pricing', navType: 'scroll', target: '#pricing' },
+            { id: 'menu-3', label: 'About', navType: 'link', target: '/about' }
+        ],
+        primaryButton: {
+            enabled: true,
+            text: 'Get Started',
+            navType: 'link',
+            target: '/signup'
+        },
+        secondaryButton: {
+            enabled: false,
+            text: 'Learn More',
+            navType: 'scroll',
+            target: '#features'
+        }
+    },
+    styles: {
+        padding: '16px 24px',
+        borderBottom: '1px solid var(--border)',
+        backgroundColor: 'var(--background)'
+    }
 });
 
 /**
@@ -380,21 +386,24 @@ export const footerTemplate = (): ComponentTemplate => ({
         {
             type: 'Container',
             props: {},
-            styles: { display: 'flex', flexDirection: 'row', gap: '32px', justifyContent: 'space-between' },
+            // Responsive: wrap on narrow screens
+            styles: { display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '48px', justifyContent: 'space-between' },
             children: [
                 {
                     type: 'Container',
                     props: {},
-                    styles: { display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '250px' },
+                    // Allow description to grow but cap at reasonable width
+                    styles: { display: 'flex', flexDirection: 'column', gap: '12px', flex: '1 1 250px', maxWidth: '350px' },
                     children: [
                         { type: 'Heading', props: { text: 'YourBrand', level: 'h4' } },
-                        { type: 'Text', props: { text: 'Building the future of web development.' }, styles: { color: 'var(--muted-foreground)', fontSize: '14px' } }
+                        { type: 'Text', props: { text: 'Building the future of web development.' }, styles: { color: 'var(--muted-foreground)', fontSize: '14px', lineHeight: '1.5' } }
                     ]
                 },
                 {
                     type: 'Container',
                     props: {},
-                    styles: { display: 'flex', flexDirection: 'row', gap: '64px' },
+                    // Link columns: wrap on narrow screens
+                    styles: { display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '48px', flex: '1 1 auto' },
                     children: [
                         createFooterColumn('Product', ['Features', 'Pricing', 'Docs']),
                         createFooterColumn('Company', ['About', 'Blog', 'Careers'])
@@ -424,6 +433,465 @@ function createFooterColumn(title: string, links: string[]): ComponentTemplate {
 }
 
 /**
+ * Frontbase Homepage Template
+ * Complete landing page for Frontbase - WebSummit Pitch Ready
+ * All styles are editable in the styling panel
+ */
+export const frontbaseHomepageTemplate = (): ComponentTemplate => ({
+    type: 'Container',
+    props: {},
+    styles: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0',
+        padding: '0',
+        minHeight: '100vh'
+    },
+    children: [
+        // === NAVBAR ===
+        {
+            type: 'Navbar',
+            props: {
+                logo: {
+                    type: 'text',
+                    text: 'Frontbase',
+                    link: '/'
+                },
+                menuItems: [
+                    { id: 'menu-features', label: 'Features', navType: 'scroll', target: '#features' },
+                    { id: 'menu-integrations', label: 'Integrations', navType: 'scroll', target: '#integrations' },
+                    { id: 'menu-architecture', label: 'Architecture', navType: 'scroll', target: '#architecture' }
+                ],
+                primaryButton: {
+                    enabled: true,
+                    text: 'Join Private Alpha',
+                    navType: 'link',
+                    target: '/alpha'
+                }
+            },
+            styles: {
+                padding: '16px 48px',
+                borderBottom: '1px solid var(--border)',
+                backgroundColor: 'var(--background)'
+            }
+        },
+        // === HERO SECTION ===
+        {
+            type: 'Container',
+            props: {},
+            styles: {
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+                padding: '80px 48px',
+                gap: '24px',
+                minHeight: '500px',
+                backgroundColor: 'var(--background)'
+            },
+            children: [
+                { type: 'Badge', props: { text: '✨ Private Alpha', variant: 'secondary' } },
+                {
+                    type: 'Heading',
+                    props: { text: 'Build Edge Apps and Microservices Visually', level: 'h1' },
+                    styles: { fontSize: '56px', fontWeight: '800', maxWidth: '900px', lineHeight: '1.1' }
+                },
+                {
+                    type: 'Text',
+                    props: { text: 'The WordPress for Supabase. No-code when you want it. Real code when you need it.' },
+                    styles: { fontSize: '20px', color: 'var(--muted-foreground)', maxWidth: '700px' }
+                },
+                {
+                    type: 'Container',
+                    props: {},
+                    styles: { display: 'flex', flexDirection: 'row', gap: '16px', marginTop: '16px' },
+                    children: [
+                        { type: 'Button', props: { text: 'Join Private Alpha', variant: 'default' }, styles: { padding: '12px 32px', fontSize: '16px' } },
+                        { type: 'Button', props: { text: 'Star on GitHub', variant: 'outline' }, styles: { padding: '12px 32px', fontSize: '16px' } }
+                    ]
+                }
+            ]
+        },
+        // === TRUST BAR (Powered By) ===
+        {
+            type: 'Container',
+            props: {},
+            styles: {
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                padding: '48px 24px',
+                gap: '24px',
+                backgroundColor: 'var(--muted)'
+            },
+            children: [
+                { type: 'Text', props: { text: 'Powered by the modern stack you already love' }, styles: { color: 'var(--muted-foreground)', fontSize: '14px' } },
+                {
+                    type: 'Container',
+                    props: {},
+                    styles: { display: 'flex', flexDirection: 'row', gap: '48px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' },
+                    children: [
+                        { type: 'Text', props: { text: 'Supabase' }, styles: { fontWeight: '600', fontSize: '18px' } },
+                        { type: 'Text', props: { text: 'Cloudflare' }, styles: { fontWeight: '600', fontSize: '18px' } },
+                        { type: 'Text', props: { text: 'Vercel' }, styles: { fontWeight: '600', fontSize: '18px' } },
+                        { type: 'Text', props: { text: 'FastAPI' }, styles: { fontWeight: '600', fontSize: '18px' } },
+                        { type: 'Text', props: { text: 'React 19' }, styles: { fontWeight: '600', fontSize: '18px' } },
+                        { type: 'Text', props: { text: 'Hono' }, styles: { fontWeight: '600', fontSize: '18px' } }
+                    ]
+                }
+            ]
+        },
+        // === VALUE PROPS (4 Pillars) ===
+        {
+            type: 'Container',
+            props: {},
+            styles: {
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '80px 48px',
+                gap: '48px',
+                backgroundColor: 'var(--background)'
+            },
+            children: [
+                {
+                    type: 'Container',
+                    props: {},
+                    styles: { textAlign: 'center' },
+                    children: [
+                        { type: 'Heading', props: { text: 'Why Frontbase?', level: 'h2' }, styles: { fontSize: '40px', fontWeight: '700' } }
+                    ]
+                },
+                {
+                    type: 'Container',
+                    props: {},
+                    styles: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '32px' },
+                    children: [
+                        createValuePropCard('⚡', 'Edge-Native SSR', 'Sub-50ms globally. Hono-powered. Deploy to Cloudflare, Vercel, or Supabase Edge.'),
+                        createValuePropCard('🔌', 'BYOE', 'Bring Your Own Everything. Your databases, auth, storage, cache. We orchestrate.'),
+                        createValuePropCard('📦', 'No-Code → Real Code', 'Visual builder exports clean React 19 & Python. Zero lock-in. Eject anytime.'),
+                        createValuePropCard('🤖', 'AI-Ready', 'Python native backend. FastAPI + Pydantic. Ready for LangChain and AI agents.')
+                    ]
+                }
+            ]
+        },
+        // === BYOE SECTION ===
+        {
+            type: 'Container',
+            props: {},
+            styles: {
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '80px 48px',
+                gap: '48px',
+                backgroundColor: 'var(--muted)'
+            },
+            children: [
+                {
+                    type: 'Container',
+                    props: {},
+                    styles: { textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '12px' },
+                    children: [
+                        { type: 'Heading', props: { text: 'Bring Your Own Everything', level: 'h2' }, styles: { fontSize: '40px', fontWeight: '700' } },
+                        { type: 'Text', props: { text: "Don't rip and replace. Connect what you already use." }, styles: { color: 'var(--muted-foreground)', fontSize: '18px' } }
+                    ]
+                },
+                {
+                    type: 'Container',
+                    props: {},
+                    styles: { display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '24px' },
+                    children: [
+                        createBYOECard('🗄️', 'Databases', 'Supabase, PlanetScale, Neon, MySQL, PostgreSQL, SQLite'),
+                        createBYOECard('🔐', 'Auth', 'Supabase Auth, JWT Providers'),
+                        createBYOECard('📁', 'Storage', 'Supabase Storage, S3-compatible'),
+                        createBYOECard('⚡', 'Cache', 'Upstash Redis, Self-hosted Redis'),
+                        createBYOECard('🚀', 'Deploy', 'Cloudflare, Vercel, Supabase Edge, Docker')
+                    ]
+                }
+            ]
+        },
+        // === FEATURES GRID ===
+        {
+            type: 'Container',
+            props: {},
+            styles: {
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '80px 48px',
+                gap: '48px',
+                backgroundColor: 'var(--background)'
+            },
+            children: [
+                {
+                    type: 'Container',
+                    props: {},
+                    styles: { textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '12px' },
+                    children: [
+                        { type: 'Heading', props: { text: 'Everything You Need', level: 'h2' }, styles: { fontSize: '40px', fontWeight: '700' } },
+                        { type: 'Text', props: { text: 'A complete platform for building production apps' }, styles: { color: 'var(--muted-foreground)', fontSize: '18px' } }
+                    ]
+                },
+                {
+                    type: 'Container',
+                    props: {},
+                    styles: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' },
+                    children: [
+                        createFeatureCard2('🎨', 'Visual Builder', '40+ components. Drag-and-drop. Real-time preview. Responsive design tools.'),
+                        createFeatureCard2('⚡', 'Visual Automations', 'ReactFlow workflows. Trigger on data changes. API integrations. Webhooks.'),
+                        createFeatureCard2('🔒', 'Visual RLS Policies', 'Design Supabase row-level security without writing SQL.'),
+                        createFeatureCard2('🗄️', 'Database Management', 'Schema visualization. CRUD operations. Query builder. FK detection.'),
+                        createFeatureCard2('📊', 'Data Components', 'DataTable, Charts (Line/Bar/Pie), Forms, Cards. All data-bound.'),
+                        createFeatureCard2('🔍', 'SSR & SEO', 'Per-page SEO. Open Graph cards. Sitemaps. Canonical URLs.')
+                    ]
+                }
+            ]
+        },
+        // === TECH STACK ===
+        {
+            type: 'Container',
+            props: {},
+            styles: {
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '80px 48px',
+                gap: '48px',
+                backgroundColor: 'var(--muted)'
+            },
+            children: [
+                {
+                    type: 'Container',
+                    props: {},
+                    styles: { textAlign: 'center' },
+                    children: [
+                        { type: 'Heading', props: { text: 'Modern Tech Stack', level: 'h2' }, styles: { fontSize: '40px', fontWeight: '700' } }
+                    ]
+                },
+                {
+                    type: 'Container',
+                    props: {},
+                    styles: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '32px' },
+                    children: [
+                        createTechStackCard('Frontend', 'React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui, Zustand, TanStack Query'),
+                        createTechStackCard('Edge Engine', 'Hono 4.6, React 19 SSR, Drizzle ORM, LiquidJS, Tailwind CSS 4, Zod'),
+                        createTechStackCard('Backend', 'FastAPI, SQLAlchemy, Alembic, Pydantic, Python 3.11+')
+                    ]
+                }
+            ]
+        },
+        // === COMPARISON ===
+        {
+            type: 'Container',
+            props: {},
+            styles: {
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '80px 48px',
+                gap: '48px',
+                backgroundColor: 'var(--background)'
+            },
+            children: [
+                {
+                    type: 'Container',
+                    props: {},
+                    styles: { textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '12px' },
+                    children: [
+                        { type: 'Heading', props: { text: 'WordPress was built for 2005', level: 'h2' }, styles: { fontSize: '40px', fontWeight: '700' } },
+                        { type: 'Text', props: { text: 'Frontbase is built for 2025' }, styles: { fontSize: '24px', fontWeight: '600', color: 'var(--primary)' } }
+                    ]
+                },
+                {
+                    type: 'Container',
+                    props: {},
+                    styles: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '48px', maxWidth: '900px', margin: '0 auto' },
+                    children: [
+                        createComparisonCard('WordPress', ['PHP Monolith', 'Slow, requires hosting', 'MySQL only', 'Plugin-dependent AI', 'Theme lock-in', 'jQuery, legacy'], false),
+                        createComparisonCard('Frontbase', ['Edge-native serverless', 'Sub-50ms global', 'Any SQL database', 'Native Python AI', 'Clean React/TypeScript', 'React 19, Hono, Tailwind 4'], true)
+                    ]
+                }
+            ]
+        },
+        // === CTA SECTION ===
+        {
+            type: 'Container',
+            props: {},
+            styles: {
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                padding: '80px 48px',
+                gap: '24px',
+                backgroundColor: 'var(--primary)',
+                textAlign: 'center'
+            },
+            children: [
+                { type: 'Heading', props: { text: 'Ready to build on the edge?', level: 'h2' }, styles: { fontSize: '40px', fontWeight: '700', color: 'var(--primary-foreground)' } },
+                { type: 'Text', props: { text: 'Join the Private Alpha and start building today.' }, styles: { color: 'var(--primary-foreground)', opacity: '0.9', fontSize: '18px' } },
+                {
+                    type: 'Container',
+                    props: {},
+                    styles: { display: 'flex', flexDirection: 'row', gap: '16px', marginTop: '16px' },
+                    children: [
+                        { type: 'Button', props: { text: 'Join Private Alpha', variant: 'secondary' }, styles: { padding: '12px 32px', fontSize: '16px' } },
+                        { type: 'Button', props: { text: 'Star on GitHub', variant: 'outline' }, styles: { padding: '12px 32px', fontSize: '16px', borderColor: 'var(--primary-foreground)', color: 'var(--primary-foreground)' } }
+                    ]
+                }
+            ]
+        },
+        // === FOOTER ===
+        {
+            type: 'Container',
+            props: {},
+            styles: {
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '48px',
+                gap: '32px',
+                backgroundColor: 'var(--background)',
+                borderTop: '1px solid var(--border)'
+            },
+            children: [
+                {
+                    type: 'Container',
+                    props: {},
+                    styles: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '48px' },
+                    children: [
+                        createFooterColumn2('Frontbase', ['Open Source', 'MIT License']),
+                        createFooterColumn2('Product', ['Features', 'Pricing', 'Changelog']),
+                        createFooterColumn2('Resources', ['Documentation', 'GitHub', 'Discord']),
+                        createFooterColumn2('Legal', ['Privacy Policy', 'Terms of Service'])
+                    ]
+                },
+                { type: 'Separator', props: {} },
+                { type: 'Text', props: { text: '© 2025 Frontbase. Built with ❤️ for the edge.' }, styles: { textAlign: 'center', color: 'var(--muted-foreground)', fontSize: '14px' } }
+            ]
+        }
+    ]
+});
+
+// Helper functions for homepage template
+function createValuePropCard(icon: string, title: string, description: string): ComponentTemplate {
+    return {
+        type: 'Card',
+        props: {},
+        styles: { padding: '32px', textAlign: 'center' },
+        children: [
+            {
+                type: 'Container',
+                props: {},
+                styles: { display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center' },
+                children: [
+                    { type: 'Text', props: { text: icon }, styles: { fontSize: '48px' } },
+                    { type: 'Heading', props: { text: title, level: 'h3' }, styles: { fontSize: '20px', fontWeight: '600' } },
+                    { type: 'Text', props: { text: description }, styles: { color: 'var(--muted-foreground)', fontSize: '14px' } }
+                ]
+            }
+        ]
+    };
+}
+
+function createBYOECard(icon: string, title: string, providers: string): ComponentTemplate {
+    return {
+        type: 'Card',
+        props: {},
+        styles: { padding: '24px', textAlign: 'center' },
+        children: [
+            {
+                type: 'Container',
+                props: {},
+                styles: { display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' },
+                children: [
+                    { type: 'Text', props: { text: icon }, styles: { fontSize: '32px' } },
+                    { type: 'Heading', props: { text: title, level: 'h4' }, styles: { fontSize: '16px', fontWeight: '600' } },
+                    { type: 'Text', props: { text: providers }, styles: { color: 'var(--muted-foreground)', fontSize: '12px' } }
+                ]
+            }
+        ]
+    };
+}
+
+function createFeatureCard2(icon: string, title: string, description: string): ComponentTemplate {
+    return {
+        type: 'Card',
+        props: {},
+        styles: { padding: '32px' },
+        children: [
+            {
+                type: 'Container',
+                props: {},
+                styles: { display: 'flex', flexDirection: 'column', gap: '16px' },
+                children: [
+                    { type: 'Text', props: { text: icon }, styles: { fontSize: '40px' } },
+                    { type: 'Heading', props: { text: title, level: 'h3' }, styles: { fontSize: '20px', fontWeight: '600' } },
+                    { type: 'Text', props: { text: description }, styles: { color: 'var(--muted-foreground)', fontSize: '14px' } }
+                ]
+            }
+        ]
+    };
+}
+
+function createTechStackCard(title: string, techs: string): ComponentTemplate {
+    return {
+        type: 'Card',
+        props: {},
+        styles: { padding: '32px' },
+        children: [
+            {
+                type: 'Container',
+                props: {},
+                styles: { display: 'flex', flexDirection: 'column', gap: '16px' },
+                children: [
+                    { type: 'Heading', props: { text: title, level: 'h3' }, styles: { fontSize: '20px', fontWeight: '600' } },
+                    { type: 'Text', props: { text: techs }, styles: { color: 'var(--muted-foreground)', fontSize: '14px', lineHeight: '1.6' } }
+                ]
+            }
+        ]
+    };
+}
+
+function createComparisonCard(title: string, items: string[], isHighlighted: boolean): ComponentTemplate {
+    return {
+        type: 'Card',
+        props: {},
+        styles: {
+            padding: '32px',
+            border: isHighlighted ? '2px solid var(--primary)' : undefined,
+            backgroundColor: isHighlighted ? 'var(--primary)' : undefined
+        },
+        children: [
+            {
+                type: 'Container',
+                props: {},
+                styles: { display: 'flex', flexDirection: 'column', gap: '16px' },
+                children: [
+                    { type: 'Heading', props: { text: title, level: 'h3' }, styles: { fontSize: '24px', fontWeight: '700', color: isHighlighted ? 'var(--primary-foreground)' : undefined } },
+                    ...items.map(item => ({
+                        type: 'Text',
+                        props: { text: `• ${item}` },
+                        styles: { color: isHighlighted ? 'var(--primary-foreground)' : 'var(--muted-foreground)', fontSize: '14px' }
+                    }))
+                ]
+            }
+        ]
+    };
+}
+
+function createFooterColumn2(title: string, links: string[]): ComponentTemplate {
+    return {
+        type: 'Container',
+        props: {},
+        styles: { display: 'flex', flexDirection: 'column', gap: '12px' },
+        children: [
+            { type: 'Text', props: { text: title }, styles: { fontWeight: '600', fontSize: '14px' } },
+            ...links.map(link => ({
+                type: 'Link',
+                props: { text: link, href: `#${link.toLowerCase().replace(/\s+/g, '-')}` },
+                styles: { color: 'var(--muted-foreground)', fontSize: '14px' }
+            }))
+        ]
+    };
+}
+
+/**
  * Get template by name
  */
 export function getSectionTemplate(name: string): ComponentTemplate | null {
@@ -436,6 +904,7 @@ export function getSectionTemplate(name: string): ComponentTemplate | null {
         case 'FAQ': return faqTemplate();
         case 'LogoCloud': return logoCloudTemplate();
         case 'Footer': return footerTemplate();
+        case 'FrontbaseHomepage': return frontbaseHomepageTemplate();
         default: return null;
     }
 }
@@ -447,7 +916,7 @@ export function expandTemplate(template: ComponentTemplate): any {
     const expanded: any = {
         id: generateId(),
         type: template.type,
-        props: { ...template.props },
+        props: { ...(template.props || {}) },
         styles: template.styles || {},
         children: []
     };

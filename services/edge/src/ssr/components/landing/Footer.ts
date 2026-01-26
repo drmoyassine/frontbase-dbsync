@@ -95,16 +95,16 @@ export function renderFooter(
     return `
         <footer id="${id}" class="${footerClasses}" style="${inlineStyles}">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
-                <div class="grid gap-8 lg:grid-cols-5">
+                <div class="flex flex-col gap-8 md:flex-row md:flex-wrap md:justify-between">
                     <!-- Brand -->
-                    <div class="lg:col-span-2">
+                    <div class="flex-shrink-0 max-w-sm">
                         <a href="/" class="inline-flex items-center">${logoHtml}</a>
                         ${descriptionHtml}
                         ${socialsHtml ? `<div class="flex gap-4 mt-6">${socialsHtml}</div>` : ''}
                     </div>
                     
                     <!-- Link Columns -->
-                    <div class="lg:col-span-3 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+                    <div class="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:flex lg:gap-12">
                         ${columnsHtml}
                     </div>
                 </div>

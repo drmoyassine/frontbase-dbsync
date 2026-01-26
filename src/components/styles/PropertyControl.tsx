@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { X, HelpCircle, Smartphone, Tablet, Monitor } from 'lucide-react';
 import { SelectControl } from './controls/SelectControl';
@@ -118,6 +119,15 @@ export const PropertyControl: React.FC<PropertyControlProps> = ({
                             onChange={onChange}
                             dimension={(config as any).dimension || 'width'}
                             placeholder={(config as any).defaultValue?.value === 'none' ? 'none' : 'auto'}
+                        />
+                    )}
+
+                    {config.controlType === 'text' && (
+                        <Input
+                            value={value || ''}
+                            onChange={(e) => onChange(e.target.value)}
+                            className="h-7 text-xs px-2"
+                            placeholder={config.defaultValue || ''}
                         />
                     )}
                 </div>

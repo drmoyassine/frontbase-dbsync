@@ -103,3 +103,52 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Navbar responsive container queries - works in builder canvas */
+.fb-navbar {
+  container-type: inline-size;
+}
+
+.fb-navbar .fb-nav-desktop {
+  display: flex;
+}
+
+.fb-navbar .fb-nav-mobile-btn {
+  display: none;
+}
+
+@container (max-width: 768px) {
+  .fb-navbar .fb-nav-desktop {
+    display: none;
+  }
+
+  .fb-navbar .fb-nav-mobile-btn {
+    display: flex;
+  }
+}
+
+/* Builder Canvas Container Query Responsive Grids */
+.fb-container {
+  container-type: inline-size;
+}
+
+/* Default: show multi-column grids */
+.fb-container .fb-grid {
+  display: grid;
+}
+
+/* When container is narrow, stack items vertically */
+@container (max-width: 640px) {
+  .fb-container .fb-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Medium containers: 2 columns max */
+@container (min-width: 641px) and (max-width: 900px) {
+
+  .fb-container .fb-grid[data-cols="3"],
+  .fb-container .fb-grid[data-cols="4"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}

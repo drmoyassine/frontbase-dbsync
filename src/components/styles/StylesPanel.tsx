@@ -20,6 +20,7 @@ import {
     Type,
     Palette,
     Sparkles,
+    Image,
     LucideIcon
 } from 'lucide-react';
 
@@ -29,7 +30,7 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
     'Spacing': Space,
     'Sizing': Maximize2,
     'Typography': Type,
-    'Colors': Palette,
+    'Backgrounds': Image,
     'Effects': Sparkles,
 };
 

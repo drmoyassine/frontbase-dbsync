@@ -110,7 +110,7 @@ export function renderPricing(
         <section id="${id}" class="${sectionClasses}" style="${inlineStyles}">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 ${headerHtml}
-                <div class="grid gap-6 sm:gap-8 sm:grid-cols-2 ${gridCols} max-w-6xl mx-auto">
+                <div class="grid grid-cols-1 gap-6 sm:gap-8 sm:grid-cols-2 ${gridCols} max-w-6xl mx-auto">
                     ${plansHtml}
                 </div>
             </div>

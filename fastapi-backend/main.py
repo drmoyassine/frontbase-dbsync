@@ -81,15 +81,21 @@ if allow_all and is_windows:
     cors_origins = [
         "http://localhost:5173",  # Vite dev server
         "http://localhost:3000",  # Alternative port
+        "http://localhost:3001",  # Edge service
+        "http://localhost:8000",  # FastAPI self
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:8000",
+        "http://[::1]:5173",  # IPv6 localhost
+        "http://[::1]:8000",
     ]
     allow_all = False  # Now we have explicit origins, can enable credentials
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=not allow_all,  # Enable credentials with explicit origins
+    allow_origins=["*"],  # TEMP: Allow all origins for debugging
+    allow_credentials=False,  # Disabled with wildcard
     allow_methods=["*"],
     allow_headers=["*"],
 )

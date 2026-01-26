@@ -41,6 +41,10 @@ import {
 } from './renderers/LayoutRenderers';
 
 import {
+  NavbarRenderer
+} from './renderers/LandingRenderers';
+
+import {
   DataTableRenderer,
   KPICardRenderer,
   ChartRenderer,
@@ -394,6 +398,9 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     case 'Tabs': return <TabsRenderer {...rendererProps} />;
     case 'Accordion': return <AccordionRenderer {...rendererProps} />;
     case 'Breadcrumb': return <BreadcrumbRenderer {...rendererProps} />;
+
+    // Landing Page Sections
+    case 'Navbar': return <NavbarRenderer {...rendererProps} />;
 
     // Data
     case 'DataTable': return <DataTableRenderer {...rendererProps} />;

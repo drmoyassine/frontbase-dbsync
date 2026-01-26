@@ -34,12 +34,15 @@ def upgrade() -> None:
         new_id = str(uuid.uuid4())
         current_time = datetime.now(timezone.utc)
         
-        conn.execute(sa.text("""
+        dialect = conn.dialect.name
+        true_val = '1' if dialect == 'sqlite' else 'true'
+        
+        conn.execute(sa.text(f"""
             INSERT INTO project_settings (
                 id, redis_url, redis_token, redis_type, redis_enabled, 
                 cache_ttl_data, cache_ttl_count, updated_at
             ) VALUES (
-                :id, 'http://redis-http:80', 'dev_token_change_in_prod', 'self-hosted', 1,
+                :id, 'http://redis-http:80', 'dev_token_change_in_prod', 'self-hosted', {true_val},
                 60, 300, :updated_at
             )
         """), {"id": new_id, "updated_at": current_time})
@@ -48,12 +51,15 @@ def upgrade() -> None:
         settings_id, redis_url, redis_enabled = row
         # Update if not already configured
         if not redis_url or not redis_enabled:
-            conn.execute(sa.text("""
+            dialect = conn.dialect.name
+            true_val = '1' if dialect == 'sqlite' else 'true'
+
+            conn.execute(sa.text(f"""
                 UPDATE project_settings SET
                     redis_url = 'http://redis-http:80',
                     redis_token = 'dev_token_change_in_prod',
                     redis_type = 'self-hosted',
-                    redis_enabled = 1
+                    redis_enabled = {true_val}
                 WHERE id = :id
             """), {"id": settings_id})
             print("[Migration 0005] Pre-seeded Docker Redis defaults")

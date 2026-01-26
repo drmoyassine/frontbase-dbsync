@@ -31,12 +31,15 @@ def upgrade() -> None:
         settings_id, redis_url, redis_enabled = row
         # Only seed if not already configured
         if not redis_url or not redis_enabled:
-            conn.execute(sa.text("""
+            dialect = conn.dialect.name
+            true_val = '1' if dialect == 'sqlite' else 'true'
+            
+            conn.execute(sa.text(f"""
                 UPDATE project_settings SET
                     redis_url = 'http://redis-http:80',
                     redis_token = 'dev_token_change_in_prod',
                     redis_type = 'self-hosted',
-                    redis_enabled = 1
+                    redis_enabled = {true_val}
                 WHERE id = :id
             """), {"id": settings_id})
             print("[Migration 0004] Pre-seeded Docker Redis defaults")

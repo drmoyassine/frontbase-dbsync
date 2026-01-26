@@ -28,14 +28,14 @@ engine = create_async_engine(
 @event.listens_for(engine.sync_engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
     # Only run PRAGMA execution for SQLite connections
+    if "sqlite" not in str(settings.database_url):
+        return
+
     cursor = dbapi_connection.cursor()
     try:
-        # Check if it's a SQLite connection by attempting the PRAGMA
-        # Postgres throws syntax error on PRAGMA, so we catch it
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
     except:
-        # Not SQLite (likely Postgres), allow to proceed
         pass
     finally:
         cursor.close()

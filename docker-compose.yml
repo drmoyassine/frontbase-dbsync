@@ -16,8 +16,7 @@ services:
   # PostgreSQL Database (only starts when DATABASE=postgres)
   postgres:
     image: postgres:16-alpine
-    profiles:
-      - postgres
+    # Always starts - minimal overhead if using SQLite (just idles)
     environment:
       POSTGRES_USER: frontbase
       POSTGRES_PASSWORD: ${DB_PASSWORD:-frontbase-dev-password}

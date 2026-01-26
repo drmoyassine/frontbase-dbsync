@@ -25,12 +25,10 @@ def upgrade() -> None:
     inspector = inspect(conn)
     
     # Clean up any leftover temp tables from previous failed runs
+    # Use raw SQL with IF EXISTS for PostgreSQL compatibility
     for table_name in ['_alembic_tmp_table_schema_cache', '_alembic_tmp_app_variables', 
                        '_alembic_tmp_conflicts', '_alembic_tmp_user_sessions', '_alembic_tmp_user_settings']:
-        try:
-            op.drop_table(table_name)
-        except:
-            pass  # Table doesn't exist, that's fine
+        op.execute(sa.text(f'DROP TABLE IF EXISTS {table_name}'))
     
     # Check if table_schema_cache exists
     existing_tables = inspector.get_table_names()

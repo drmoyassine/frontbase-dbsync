@@ -443,6 +443,23 @@ export const PropertiesPanel = () => {
                 )}
               </div>
             </div>
+
+            {/* Dark Mode Toggle Section */}
+            <div className="space-y-3 pt-4 border-t">
+              <Label className="text-sm font-medium">Dark Mode</Label>
+              <div className="flex items-center justify-between space-y-0 rounded-md border p-3 bg-muted/30">
+                <div className="space-y-0.5">
+                  <Label className="text-xs font-medium">Show Dark Mode Toggle</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Display sun/moon icon to switch themes
+                  </p>
+                </div>
+                <Switch
+                  checked={props.showDarkModeToggle === true}
+                  onCheckedChange={(checked) => updateComponentProp('showDarkModeToggle', checked)}
+                />
+              </div>
+            </div>
           </>
         );
 

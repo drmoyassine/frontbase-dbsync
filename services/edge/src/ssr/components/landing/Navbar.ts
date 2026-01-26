@@ -55,6 +55,8 @@ export interface NavbarProps {
     sticky?: boolean;
     hideOnMobile?: boolean;
     hideOnDesktop?: boolean;
+    // Dark mode toggle
+    showDarkModeToggle?: boolean;
 }
 
 export function renderNavbar(
@@ -134,6 +136,26 @@ function renderNewFormat(
     // CTA Buttons HTML
     let buttonsHtml = '';
 
+    // Dark Mode Toggle (if enabled)
+    const darkModeToggleHtml = props.showDarkModeToggle ? `
+        <button 
+            type="button" 
+            class="p-2 rounded-lg hover:bg-accent transition-colors" 
+            data-fb-theme-toggle
+            aria-label="Toggle dark mode"
+            title="Toggle dark mode"
+        >
+            <!-- Sun icon (shown in dark mode) -->
+            <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+            </svg>
+            <!-- Moon icon (shown in light mode) -->
+            <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+            </svg>
+        </button>
+    ` : '';
+
     if (secondaryButton?.enabled) {
         const scrollAttr = secondaryButton.navType === 'scroll'
             ? `data-scroll-to="${escapeHtml(secondaryButton.target || '')}"`
@@ -173,16 +195,20 @@ function renderNewFormat(
                             ${menuItemsHtml}
                         </nav>
                         <div class="flex items-center gap-3">
+                            ${darkModeToggleHtml}
                             ${buttonsHtml}
                         </div>
                     </div>
                     
-                    <!-- Mobile Menu Button -->
-                    <button type="button" class="md:hidden p-2 rounded-lg hover:bg-accent" data-fb-mobile-menu-toggle>
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-                        </svg>
-                    </button>
+                    <!-- Mobile: Dark Mode Toggle + Menu Button -->
+                    <div class="md:hidden flex items-center gap-2">
+                        ${darkModeToggleHtml}
+                        <button type="button" class="p-2 rounded-lg hover:bg-accent" data-fb-mobile-menu-toggle>
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 
                 <!-- Mobile Menu (hidden by default) -->
@@ -196,6 +222,26 @@ function renderNewFormat(
                 </div>
             </div>
         </header>
+        ${props.showDarkModeToggle ? `
+        <script>
+            (function() {
+                // Initialize theme from localStorage or system preference
+                const savedTheme = localStorage.getItem('fb-theme');
+                if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                }
+                
+                // Handle theme toggle clicks
+                document.addEventListener('click', function(e) {
+                    const toggle = e.target.closest('[data-fb-theme-toggle]');
+                    if (toggle) {
+                        const isDark = document.documentElement.classList.toggle('dark');
+                        localStorage.setItem('fb-theme', isDark ? 'dark' : 'light');
+                    }
+                });
+            })();
+        </script>
+        ` : ''}
     `.trim();
 }
 

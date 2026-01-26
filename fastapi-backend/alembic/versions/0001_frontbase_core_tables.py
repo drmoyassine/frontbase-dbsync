@@ -56,6 +56,18 @@ def upgrade() -> None:
             VALUES ('default', 'My Frontbase Project', 'A new project created with Frontbase', {now_func}, {now_func})
         """)
     
+    # Project Settings table (needed for 0003 migration)
+    if not table_exists(inspector, 'project_settings'):
+        op.create_table('project_settings',
+            sa.Column('id', sa.String(36), primary_key=True),
+            sa.Column('redis_url', sa.String(512), nullable=True),
+            # redis_token and redis_type will be added in migration 0003
+            sa.Column('redis_enabled', sa.Boolean(), server_default='false'),
+            sa.Column('cache_ttl_data', sa.Integer(), server_default='60'),
+            sa.Column('cache_ttl_count', sa.Integer(), server_default='300'),
+            sa.Column('updated_at', sa.DateTime(timezone=True))
+        )
+    
     # Pages table
     if not table_exists(inspector, 'pages'):
         op.create_table('pages',

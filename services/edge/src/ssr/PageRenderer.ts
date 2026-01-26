@@ -113,20 +113,24 @@ async function renderComponent(
     const { id, type, props, styles, children, binding } = component;
     let resolvedProps = await resolveProps(props, context);
 
-    // Special handling for Navbar with useProjectLogo
-    if (type === 'Navbar' && resolvedProps.logo && (resolvedProps.logo as any).useProjectLogo) {
-        // Inject faviconUrl from project settings (Edge's local database)
-        const { getFaviconUrl } = await import('../db/project-settings.js');
-        const faviconUrl = await getFaviconUrl();
+    // Special handling for Navbar with useProjectLogo or showIcon
+    if (type === 'Navbar' && resolvedProps.logo) {
+        const logoProps = resolvedProps.logo as any;
+        // Inject faviconUrl if either useProjectLogo or showIcon is enabled
+        if (logoProps.useProjectLogo || logoProps.showIcon) {
+            // Inject faviconUrl from project settings (Edge's local database)
+            const { getFaviconUrl } = await import('../db/project-settings.js');
+            const faviconUrl = await getFaviconUrl();
 
-        // Inject the favicon URL into the logo imageUrl property
-        resolvedProps = {
-            ...resolvedProps,
-            logo: {
-                ...(resolvedProps.logo as any),
-                imageUrl: faviconUrl,
-            }
-        };
+            // Inject the favicon URL into the logo imageUrl property
+            resolvedProps = {
+                ...resolvedProps,
+                logo: {
+                    ...logoProps,
+                    imageUrl: faviconUrl,
+                }
+            };
+        }
     }
 
     // Inject styles and className from component definition into resolvedProps

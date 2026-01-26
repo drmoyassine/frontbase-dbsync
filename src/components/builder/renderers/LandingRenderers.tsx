@@ -11,6 +11,7 @@ interface NavbarProps {
         imageUrl?: string;
         link?: string;
         useProjectLogo?: boolean;
+        showIcon?: boolean; // Show icon alongside brand name text
     };
     menuItems?: Array<{
         id: string;
@@ -101,7 +102,7 @@ export const NavbarRenderer: React.FC<RendererProps> = ({
             <a
                 href={logo.link || '/'}
                 onClick={(e) => e.preventDefault()}
-                className="flex items-center shrink-0"
+                className="flex items-center shrink-0 gap-2"
             >
                 {logo.type === 'image' && logoImageUrl ? (
                     <img
@@ -110,9 +111,19 @@ export const NavbarRenderer: React.FC<RendererProps> = ({
                         className="h-8 w-auto"
                     />
                 ) : (
-                    <span className="text-xl font-bold">
-                        {logo.text || 'YourBrand'}
-                    </span>
+                    <>
+                        {/* Show icon alongside text if enabled */}
+                        {logo.showIcon && project?.faviconUrl && (
+                            <img
+                                src={project.faviconUrl}
+                                alt="Logo"
+                                className="h-6 w-6 object-contain"
+                            />
+                        )}
+                        <span className="text-xl font-bold">
+                            {logo.text || 'YourBrand'}
+                        </span>
+                    </>
                 )}
             </a>
 

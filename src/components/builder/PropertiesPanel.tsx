@@ -158,14 +158,49 @@ export const PropertiesPanel = () => {
                 </Select>
               </div>
               {(props.logo?.type || 'text') === 'text' ? (
-                <div className="space-y-2">
-                  <Label htmlFor="brand-name" className="text-xs text-muted-foreground">Brand Name</Label>
-                  <Input
-                    value={props.logo?.text || 'YourBrand'}
-                    onChange={(e) => updateComponentProp('logo', { ...props.logo, text: e.target.value })}
-                    placeholder="Enter brand name"
-                  />
-                </div>
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="brand-name" className="text-xs text-muted-foreground">Brand Name</Label>
+                    <Input
+                      value={props.logo?.text || 'YourBrand'}
+                      onChange={(e) => updateComponentProp('logo', { ...props.logo, text: e.target.value })}
+                      placeholder="Enter brand name"
+                    />
+                  </div>
+
+                  {/* Show Icon Toggle - for displaying logo next to text */}
+                  <div className="flex items-center justify-between space-y-0 rounded-md border p-3 bg-muted/30">
+                    <div className="space-y-0.5">
+                      <Label className="text-xs font-medium">Show Icon with Text</Label>
+                      <p className="text-xs text-muted-foreground">
+                        {project?.faviconUrl ? 'Display logo icon next to brand name' : 'Upload a logo in Settings first'}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={props.logo?.showIcon === true}
+                      onCheckedChange={(checked) => updateComponentProp('logo', {
+                        ...props.logo,
+                        showIcon: checked
+                      })}
+                      disabled={!project?.faviconUrl}
+                    />
+                  </div>
+
+                  {/* Icon preview when enabled */}
+                  {props.logo?.showIcon && project?.faviconUrl && (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Preview</Label>
+                      <div className="flex items-center gap-2 p-3 rounded-md border bg-muted/20">
+                        <img
+                          src={project.faviconUrl}
+                          alt="Logo icon"
+                          className="h-6 w-6 object-contain"
+                        />
+                        <span className="font-bold">{props.logo?.text || 'YourBrand'}</span>
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
                 <>
                   {/* Use Project Logo Toggle */}

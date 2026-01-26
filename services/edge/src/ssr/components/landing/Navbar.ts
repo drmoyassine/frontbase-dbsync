@@ -30,6 +30,7 @@ export interface NavbarProps {
         imageUrl?: string;
         link?: string;
         useProjectLogo?: boolean;
+        showIcon?: boolean; // Show icon alongside brand name text
     };
     menuItems?: NavMenuItem[];
     primaryButton?: {
@@ -93,11 +94,18 @@ function renderNewFormat(
     const primaryButton = props.primaryButton;
     const secondaryButton = props.secondaryButton;
 
-    // Logo HTML
+    // Logo HTML - support icon alongside text when showIcon is enabled
     const logoLink = logo.link || '/';
-    const logoHtml = logo.type === 'image' && logo.imageUrl
-        ? `<img src="${escapeHtml(logo.imageUrl)}" alt="Logo" class="h-8 w-auto" />`
-        : `<span class="text-xl font-bold">${escapeHtml(logo.text || 'YourBrand')}</span>`;
+    let logoHtml: string;
+
+    if (logo.type === 'image' && logo.imageUrl) {
+        logoHtml = `<img src="${escapeHtml(logo.imageUrl)}" alt="Logo" class="h-8 w-auto" />`;
+    } else if (logo.showIcon && logo.imageUrl) {
+        // Show icon alongside brand name text
+        logoHtml = `<img src="${escapeHtml(logo.imageUrl)}" alt="Logo" class="h-6 w-6 object-contain" /><span class="text-xl font-bold">${escapeHtml(logo.text || 'YourBrand')}</span>`;
+    } else {
+        logoHtml = `<span class="text-xl font-bold">${escapeHtml(logo.text || 'YourBrand')}</span>`;
+    }
 
     // Menu items HTML with scroll support
     const menuItemsHtml = menuItems.map(item => {
@@ -155,7 +163,7 @@ function renderNewFormat(
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex items-center justify-between py-4">
                     <!-- Logo -->
-                    <a href="${escapeHtml(logoLink)}" class="flex items-center">
+                    <a href="${escapeHtml(logoLink)}" class="flex items-center gap-2">
                         ${logoHtml}
                     </a>
                     

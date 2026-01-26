@@ -15,6 +15,26 @@ export const findComponent = (components: ComponentData[], id: string): Componen
 };
 
 /**
+ * Recursively finds a component by ID and returns it with its parent and index.
+ */
+export const findComponentWithParent = (
+    components: ComponentData[],
+    id: string,
+    parent: ComponentData | null = null
+): { component: ComponentData; parent: ComponentData | null; index: number; siblings: ComponentData[] } | null => {
+    for (let i = 0; i < components.length; i++) {
+        if (components[i].id === id) {
+            return { component: components[i], parent, index: i, siblings: components };
+        }
+        if (components[i].children) {
+            const found = findComponentWithParent(components[i].children, id, components[i]);
+            if (found) return found;
+        }
+    }
+    return null;
+};
+
+/**
  * Recursively removes a component by ID from a list of components.
  */
 export const removeComponentFromTree = (items: ComponentData[], id: string): ComponentData[] => {

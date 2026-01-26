@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { ComponentData } from '@/stores/builder';
 import { cn } from '@/lib/utils';
+import { findComponentWithParent, removeComponentFromTree, insertComponentIntoTree } from '@/lib/tree-utils';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -89,21 +90,61 @@ export const LayersPanel: React.FC = () => {
       return;
     }
 
-    const activeIndex = components.findIndex(c => c.id === active.id);
-    const overIndex = components.findIndex(c => c.id === over.id);
+    const content = currentPage.layoutData?.content || [];
 
-    if (activeIndex === -1 || overIndex === -1) {
+    // Find both components in the tree (works for nested components)
+    const activeResult = findComponentWithParent(content, String(active.id));
+    const overResult = findComponentWithParent(content, String(over.id));
+
+    if (!activeResult || !overResult) {
       return;
     }
 
-    // Reorder components
-    const reorderedComponents = arrayMove(components, activeIndex, overIndex);
+    // Only allow reordering within the same parent (same level)
+    const activeParentId = activeResult.parent?.id ?? null;
+    const overParentId = overResult.parent?.id ?? null;
+
+    if (activeParentId !== overParentId) {
+      // Different parents - don't allow cross-parent moves for now
+      console.log('Cannot move between different parents');
+      return;
+    }
+
+    // Same parent - reorder within siblings
+    const siblings = activeResult.siblings;
+    const activeIndex = activeResult.index;
+    const overIndex = overResult.index;
+
+    // Create deep copy of content and reorder
+    const deepClone = (arr: ComponentData[]): ComponentData[] =>
+      arr.map(c => ({ ...c, children: c.children ? deepClone(c.children) : undefined }));
+
+    let newContent = deepClone(content);
+
+    if (activeParentId === null) {
+      // Top-level reorder
+      newContent = arrayMove(newContent, activeIndex, overIndex);
+    } else {
+      // Nested reorder - find parent and reorder its children
+      const updateChildren = (items: ComponentData[]): ComponentData[] => {
+        return items.map(item => {
+          if (item.id === activeParentId && item.children) {
+            return { ...item, children: arrayMove(item.children, activeIndex, overIndex) };
+          }
+          if (item.children) {
+            return { ...item, children: updateChildren(item.children) };
+          }
+          return item;
+        });
+      };
+      newContent = updateChildren(newContent);
+    }
 
     // Update page with new component order
     updatePage(currentPageId, {
       layoutData: {
         ...currentPage.layoutData,
-        content: reorderedComponents
+        content: newContent
       }
     });
   };

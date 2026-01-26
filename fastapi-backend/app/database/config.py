@@ -6,19 +6,33 @@ from sqlalchemy.orm import sessionmaker
 # Database configuration - Use FastAPI's own unified database
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./unified.db")
 
-# Ensure we use the synchronous driver for the Main App
-# The Sync sub-app uses async ("sqlite+aiosqlite"), but Main App uses sync ("sqlite")
-SYNC_DATABASE_URL = DATABASE_URL.replace("sqlite+aiosqlite", "sqlite")
+# Convert async drivers to sync drivers for Alembic migrations
+# - SQLite: sqlite+aiosqlite -> sqlite
+# - PostgreSQL: postgresql+asyncpg -> postgresql+psycopg2
+SYNC_DATABASE_URL = DATABASE_URL.replace("sqlite+aiosqlite", "sqlite").replace("postgresql+asyncpg", "postgresql+psycopg2")
 
-# Create SQLAlchemy engine with increased pool settings for concurrent requests
-engine = create_engine(
-    SYNC_DATABASE_URL,
-    connect_args={"check_same_thread": False},  # Needed for SQLite
-    pool_size=20,  # Increased from default 5
-    max_overflow=30,  # Increased from default 10
-    pool_pre_ping=True,  # Verify connections before use
-    pool_recycle=3600  # Recycle connections after 1 hour
-)
+# Determine if using SQLite (needs different engine config)
+is_sqlite = SYNC_DATABASE_URL.startswith("sqlite")
+
+# Create SQLAlchemy engine with appropriate settings
+if is_sqlite:
+    engine = create_engine(
+        SYNC_DATABASE_URL,
+        connect_args={"check_same_thread": False},  # Needed for SQLite
+        pool_size=20,
+        max_overflow=30,
+        pool_pre_ping=True,
+        pool_recycle=3600
+    )
+else:
+    # PostgreSQL doesn't need check_same_thread
+    engine = create_engine(
+        SYNC_DATABASE_URL,
+        pool_size=20,
+        max_overflow=30,
+        pool_pre_ping=True,
+        pool_recycle=3600
+    )
 
 # Create SessionLocal class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

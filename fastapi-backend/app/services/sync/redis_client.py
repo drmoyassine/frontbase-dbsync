@@ -18,7 +18,7 @@ _settings_cache: Optional[dict] = None
 async def load_settings_from_db():
     """Force load settings from DB into cache."""
     global _settings_cache, _settings_cache_time
-    from app.services.sync.database import engine
+    from app.services.sync.database import async_session
     from app.services.sync.models.project_settings import ProjectSettings
     from sqlalchemy import select
     import asyncio
@@ -27,8 +27,8 @@ async def load_settings_from_db():
     try:
         # Use a timeout to prevent startup hangs if DB is locked
         async with asyncio.timeout(2.0):
-            async with engine.connect() as conn:
-                result = await conn.execute(select(ProjectSettings).limit(1))
+            async with async_session() as session:
+                result = await session.execute(select(ProjectSettings).limit(1))
                 settings = result.scalar_one_or_none()
                 if settings:
                     _settings_cache = {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, DragStartEvent, DragOverlay, DragOverEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useBuilderStore } from '@/stores/builder';
@@ -41,13 +41,19 @@ export const LayersPanel: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedComponents, setExpandedComponents] = useState<Set<string>>(new Set());
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
 
   const currentPage = pages.find(page => page.id === currentPageId);
   const components = currentPage?.layoutData?.content || [];
 
-  // Sensors for drag and drop
+  // Sensors for drag and drop - add activation distance to prevent accidental drags
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5, // 5px movement required to start drag
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -81,6 +87,25 @@ export const LayersPanel: React.FC = () => {
       'DataTable': '📊',
     };
     return iconMap[type] || '🔲';
+  };
+
+  // Find component in tree for drag overlay
+  const findActiveComponent = (id: string): ComponentData | null => {
+    const result = findComponentWithParent(components, id);
+    return result?.component || null;
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    setOverId(event.over ? String(event.over.id) : null);
+  };
+
+  const handleDragCancel = () => {
+    setActiveId(null);
+    setOverId(null);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -147,6 +172,10 @@ export const LayersPanel: React.FC = () => {
         content: newContent
       }
     });
+
+    // Reset drag state
+    setActiveId(null);
+    setOverId(null);
   };
 
   const filteredComponents = components.filter(component =>
@@ -179,7 +208,10 @@ export const LayersPanel: React.FC = () => {
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
           >
             <SortableContext
               items={filteredComponents.map(c => c.id)}
@@ -204,6 +236,17 @@ export const LayersPanel: React.FC = () => {
                 />
               ))}
             </SortableContext>
+
+            {/* Drag Overlay - shows visual preview snapped to mouse */}
+            <DragOverlay>
+              {activeId ? (
+                <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-accent border-2 border-primary shadow-lg opacity-90">
+                  <GripVertical className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">{getComponentIcon(findActiveComponent(activeId)?.type || '')}</span>
+                  <span className="text-sm font-medium">{findActiveComponent(activeId)?.type || 'Component'}</span>
+                </div>
+              ) : null}
+            </DragOverlay>
           </DndContext>
         )}
       </div>
@@ -225,6 +268,8 @@ interface SortableLayerItemProps {
   getComponentIcon: (type: string) => string;
   onDelete: (componentId: string) => void;
   onDuplicate: (componentId: string) => void;
+  isDropTarget?: boolean;
+  isBeingDragged?: boolean;
 }
 
 const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
@@ -240,7 +285,9 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
   onToggleExpandChild,
   getComponentIcon,
   onDelete,
-  onDuplicate
+  onDuplicate,
+  isDropTarget = false,
+  isBeingDragged = false
 }) => {
   const {
     attributes,
@@ -248,26 +295,32 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
     setNodeRef,
     transform,
     transition,
-    isDragging
+    isDragging,
+    isOver
   } = useSortable({ id: component.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.4 : 1,
   };
 
   const hasChildren = component.children && component.children.length > 0;
 
   return (
     <>
+      {/* Drop zone indicator above item */}
+      {isOver && !isDragging && (
+        <div className="h-0.5 bg-primary rounded-full mx-2 my-0.5" />
+      )}
       <div
         ref={setNodeRef}
         style={style}
         className={cn(
-          "group flex items-center gap-2 px-2 py-1.5 rounded",
+          "group flex items-center gap-2 px-2 py-1.5 rounded transition-all",
           "hover:bg-accent",
-          isSelected && "bg-accent border-l-2 border-primary"
+          isSelected && "bg-accent border-l-2 border-primary",
+          isDragging && "ring-2 ring-primary/30 bg-muted"
         )}
       >
         {/* Indentation for depth */}

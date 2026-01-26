@@ -2,6 +2,7 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { RendererProps } from './types';
+import { useBuilderStore } from '@/stores/builder';
 
 interface NavbarProps {
     logo?: {
@@ -9,6 +10,7 @@ interface NavbarProps {
         text?: string;
         imageUrl?: string;
         link?: string;
+        useProjectLogo?: boolean;
     };
     menuItems?: Array<{
         id: string;
@@ -47,6 +49,9 @@ export const NavbarRenderer: React.FC<RendererProps> = ({
     // Mobile menu state
     const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
+    // Access project for favicon URL
+    const { project } = useBuilderStore();
+
     // Safely access props with fallbacks
     const props = (effectiveProps || {}) as NavbarProps;
 
@@ -55,6 +60,11 @@ export const NavbarRenderer: React.FC<RendererProps> = ({
     const menuItems = Array.isArray(props.menuItems) ? props.menuItems : [];
     const primaryButton = props.primaryButton || { enabled: true, text: 'Get Started' };
     const secondaryButton = props.secondaryButton;
+
+    // Determine logo image URL: use project favicon if enabled and available
+    const logoImageUrl = (logo.useProjectLogo && project?.faviconUrl)
+        ? project.faviconUrl
+        : logo.imageUrl;
 
     const navClassName = cn(
         combinedClassName,
@@ -93,9 +103,9 @@ export const NavbarRenderer: React.FC<RendererProps> = ({
                 onClick={(e) => e.preventDefault()}
                 className="flex items-center shrink-0"
             >
-                {logo.type === 'image' && logo.imageUrl ? (
+                {logo.type === 'image' && logoImageUrl ? (
                     <img
-                        src={logo.imageUrl}
+                        src={logoImageUrl}
                         alt="Logo"
                         className="h-8 w-auto"
                     />

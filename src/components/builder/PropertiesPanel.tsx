@@ -48,7 +48,8 @@ export const PropertiesPanel = () => {
     pages,
     currentPageId,
     updateComponent,
-    removeComponent
+    removeComponent,
+    project
   } = useBuilderStore();
 
   const { getComponentBinding, setComponentBinding, initialize } = useDataBindingStore();
@@ -166,14 +167,53 @@ export const PropertiesPanel = () => {
                   />
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <Label htmlFor="logo-url" className="text-xs text-muted-foreground">Logo Image URL</Label>
-                  <Input
-                    value={props.logo?.imageUrl || ''}
-                    onChange={(e) => updateComponentProp('logo', { ...props.logo, imageUrl: e.target.value })}
-                    placeholder="https://example.com/logo.png"
-                  />
-                </div>
+                <>
+                  {/* Use Project Logo Toggle */}
+                  <div className="flex items-center justify-between space-y-0 rounded-md border p-3 bg-muted/30">
+                    <div className="space-y-0.5">
+                      <Label className="text-xs font-medium">Use Project Logo</Label>
+                      <p className="text-xs text-muted-foreground">
+                        {project?.faviconUrl ? 'Use favicon from Settings' : 'No logo uploaded yet'}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={props.logo?.useProjectLogo === true}
+                      onCheckedChange={(checked) => updateComponentProp('logo', {
+                        ...props.logo,
+                        useProjectLogo: checked,
+                        // Clear manual URL when enabling project logo
+                        imageUrl: checked ? '' : props.logo?.imageUrl
+                      })}
+                      disabled={!project?.faviconUrl}
+                    />
+                  </div>
+
+                  {/* Show project logo preview when enabled */}
+                  {props.logo?.useProjectLogo && project?.faviconUrl ? (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Project Logo Preview</Label>
+                      <div className="flex items-center gap-3 p-3 rounded-md border bg-muted/20">
+                        <img
+                          src={project.faviconUrl}
+                          alt="Project logo"
+                          className="h-8 w-8 object-contain rounded"
+                        />
+                        <span className="text-xs text-muted-foreground truncate">
+                          {project.faviconUrl}
+                        </span>
+                      </div>
+                    </div>
+                  ) : !props.logo?.useProjectLogo ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="logo-url" className="text-xs text-muted-foreground">Logo Image URL</Label>
+                      <Input
+                        value={props.logo?.imageUrl || ''}
+                        onChange={(e) => updateComponentProp('logo', { ...props.logo, imageUrl: e.target.value })}
+                        placeholder="https://example.com/logo.png"
+                      />
+                    </div>
+                  ) : null}
+                </>
               )}
               <div className="space-y-2">
                 <Label htmlFor="logo-link" className="text-xs text-muted-foreground">Logo Link</Label>

@@ -68,6 +68,7 @@ export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps
             return;
         }
 
+
         setIsUploading(true);
         try {
             // Create FormData for upload - use backend assets endpoint (not user storage)
@@ -75,21 +76,37 @@ export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps
             uploadData.append('file', file);
             uploadData.append('asset_type', 'favicon');
 
-            const response = await fetch('/api/project/assets/upload', {
+            const response = await fetch('/api/project/assets/upload/', {
                 method: 'POST',
                 body: uploadData,
             });
 
             if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Upload response error:', errorText);
                 throw new Error('Upload failed');
             }
 
             const result = await response.json();
+            console.log('Upload result:', result);
             const faviconUrl = result.url || result.publicUrl;
+
+            if (!faviconUrl) {
+                console.error('No URL in upload response:', result);
+                throw new Error('Upload succeeded but no URL returned');
+            }
 
             setFormData(prev => ({ ...prev, faviconUrl }));
             setFaviconPreview(faviconUrl);
-            toast.success('Favicon uploaded successfully');
+
+            // Auto-save to database after successful upload
+            try {
+                await updateProjectInDatabase({ faviconUrl });
+                toast.success('Favicon uploaded and saved successfully');
+            } catch (saveError) {
+                console.error('Failed to save favicon to database:', saveError);
+                toast.success('Favicon uploaded. Click "Save Changes" to persist.');
+            }
         } catch (error) {
             console.error('Favicon upload error:', error);
             toast.error('Failed to upload favicon');

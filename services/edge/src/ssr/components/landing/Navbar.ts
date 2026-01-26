@@ -29,6 +29,7 @@ export interface NavbarProps {
         text?: string;
         imageUrl?: string;
         link?: string;
+        useProjectLogo?: boolean;
     };
     menuItems?: NavMenuItem[];
     primaryButton?: {

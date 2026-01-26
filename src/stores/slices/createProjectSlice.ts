@@ -13,6 +13,20 @@ export interface ProjectSlice {
     updateProjectInDatabase: (projectData: Partial<ProjectConfig>) => Promise<void>;
 }
 
+// Transform API response (snake_case) to frontend format (camelCase)
+function transformProjectData(apiProject: any): ProjectConfig {
+    return {
+        ...apiProject,
+        appUrl: apiProject.app_url || apiProject.appUrl,
+        faviconUrl: apiProject.favicon_url || apiProject.faviconUrl,
+        supabaseUrl: apiProject.supabase_url || apiProject.supabaseUrl,
+        supabaseAnonKey: apiProject.supabase_anon_key || apiProject.supabaseAnonKey,
+        usersConfig: apiProject.users_config || apiProject.usersConfig,
+        createdAt: apiProject.created_at || apiProject.createdAt,
+        updatedAt: apiProject.updated_at || apiProject.updatedAt,
+    };
+}
+
 export const createProjectSlice: StateCreator<BuilderState, [], [], ProjectSlice> = (set, get) => ({
     project: null,
     isLoading: false,
@@ -24,8 +38,9 @@ export const createProjectSlice: StateCreator<BuilderState, [], [], ProjectSlice
     loadProjectFromDatabase: async () => {
         set({ isLoading: true, error: null });
         try {
-            const project = await getProjectApi();
-            set({ project: { ...project, createdAt: project.created_at, updatedAt: project.updated_at }, isLoading: false });
+            const apiProject = await getProjectApi();
+            const project = transformProjectData(apiProject);
+            set({ project, isLoading: false });
         } catch (error: any) {
             set({
                 error: error.response?.data?.message || 'Failed to fetch project',
@@ -36,8 +51,9 @@ export const createProjectSlice: StateCreator<BuilderState, [], [], ProjectSlice
     updateProjectInDatabase: async (projectData: Partial<ProjectConfig>) => {
         set({ isLoading: true, error: null });
         try {
-            const updatedProject = await updateProjectApi(projectData);
-            set({ project: { ...updatedProject, createdAt: updatedProject.created_at, updatedAt: updatedProject.updated_at }, isLoading: false });
+            const apiProject = await updateProjectApi(projectData);
+            const project = transformProjectData(apiProject);
+            set({ project, isLoading: false });
         } catch (error: any) {
             set({
                 error: error.response?.data?.message || 'Failed to update project',

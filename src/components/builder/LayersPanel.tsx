@@ -34,7 +34,7 @@ export const LayersPanel: React.FC = () => {
     selectedComponentId,
     setSelectedComponentId,
     updatePage,
-    deleteComponent,
+    removeComponent,
     duplicateComponent
   } = useBuilderStore();
 
@@ -158,8 +158,8 @@ export const LayersPanel: React.FC = () => {
                   onSelectChild={(id: string) => setSelectedComponentId(id)}
                   onToggleExpandChild={(id: string) => toggleExpanded(id)}
                   getComponentIcon={getComponentIcon}
-                  onDelete={(id) => currentPageId && deleteComponent(currentPageId, id)}
-                  onDuplicate={(id) => currentPageId && duplicateComponent(currentPageId, id)}
+                  onDelete={(id) => removeComponent(id)}
+                  onDuplicate={(id) => duplicateComponent(id)}
                 />
               ))}
             </SortableContext>

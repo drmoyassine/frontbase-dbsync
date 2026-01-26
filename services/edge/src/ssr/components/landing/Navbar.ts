@@ -226,19 +226,21 @@ function renderNewFormat(
         <script>
             (function() {
                 // Initialize theme from localStorage or system preference
-                const savedTheme = localStorage.getItem('fb-theme');
+                var savedTheme = localStorage.getItem('fb-theme');
                 if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                     document.documentElement.classList.add('dark');
                 }
                 
-                // Handle theme toggle clicks
-                document.addEventListener('click', function(e) {
-                    const toggle = e.target.closest('[data-fb-theme-toggle]');
-                    if (toggle) {
-                        const isDark = document.documentElement.classList.toggle('dark');
+                // Attach click handlers to all theme toggle buttons
+                var toggles = document.querySelectorAll('[data-fb-theme-toggle]');
+                for (var i = 0; i < toggles.length; i++) {
+                    toggles[i].addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        var isDark = document.documentElement.classList.toggle('dark');
                         localStorage.setItem('fb-theme', isDark ? 'dark' : 'light');
-                    }
-                });
+                    });
+                }
             })();
         </script>
         ` : ''}

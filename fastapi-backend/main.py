@@ -164,7 +164,7 @@ async def health_check():
     return {"status": "healthy", "message": "API is operational", "test_mode": True}
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)# trigger reload
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, proxy_headers=True, forwarded_allow_ips="*")# trigger reload
 # trigger reload 2
 # trigger reload 3
 # reload 4

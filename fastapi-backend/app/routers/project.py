@@ -65,7 +65,7 @@ async def update_project_endpoint(request: ProjectUpdateRequest, db: Session = D
     
     return project
 
-@router.post("/assets/upload")
+@router.post("/assets/upload/")
 async def upload_branding_asset(
     file: UploadFile = File(...),
     asset_type: str = Form(default="favicon"),

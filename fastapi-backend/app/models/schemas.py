@@ -1,7 +1,9 @@
 from pydantic import BaseModel, EmailStr, constr, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-import json
+
+from pydantic import BeforeValidator
+from typing import Annotated
 
 # Authentication Models
 class LoginRequest(BaseModel):
@@ -23,8 +25,8 @@ class UserResponse(BaseModel):
     id: str
     username: str
     email: Optional[str] = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: Annotated[datetime, BeforeValidator(lambda v: datetime.fromisoformat(v) if isinstance(v, str) else v)]
+    updated_at: Annotated[datetime, BeforeValidator(lambda v: datetime.fromisoformat(v) if isinstance(v, str) else v)]
 
     class Config:
         from_attributes = True
@@ -66,8 +68,8 @@ class PageResponse(BaseModel):
     is_public: bool
     is_homepage: bool
     layout_data: Dict[str, Any]
-    created_at: datetime
-    updated_at: datetime
+    created_at: Annotated[datetime, BeforeValidator(lambda v: datetime.fromisoformat(v) if isinstance(v, str) else v)]
+    updated_at: Annotated[datetime, BeforeValidator(lambda v: datetime.fromisoformat(v) if isinstance(v, str) else v)]
 
     @field_validator('layout_data', mode='before')
     @classmethod
@@ -122,8 +124,8 @@ class ProjectResponse(BaseModel):
     supabase_url: Optional[str] = None
     supabase_anon_key: Optional[str] = None
     users_config: Optional[Dict[str, Any]] = Field(default=None, serialization_alias="usersConfig")
-    created_at: datetime
-    updated_at: datetime
+    created_at: Annotated[datetime, BeforeValidator(lambda v: datetime.fromisoformat(v) if isinstance(v, str) else v)]
+    updated_at: Annotated[datetime, BeforeValidator(lambda v: datetime.fromisoformat(v) if isinstance(v, str) else v)]
 
     class Config:
         from_attributes = True
@@ -163,7 +165,7 @@ class VariableResponse(BaseModel):
     value: Optional[str] = None
     formula: Optional[str] = None
     description: Optional[str] = None
-    created_at: datetime
+    created_at: Annotated[datetime, BeforeValidator(lambda v: datetime.fromisoformat(v) if isinstance(v, str) else v)]
 
     class Config:
         from_attributes = True

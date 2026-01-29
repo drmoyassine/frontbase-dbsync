@@ -43,6 +43,7 @@ export interface ComponentDataBinding {
     frontendFilters?: FilterConfig[];
     rpcName?: string;
     params?: Record<string, any>;
+    fieldMapping?: Record<string, string>;
 }
 
 export interface UseSimpleDataOptions {

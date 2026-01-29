@@ -3,7 +3,7 @@ import { generateStyles } from '@/lib/styleUtils';
 import { ComponentStyles, ResponsiveStyles } from '@/types/styles';
 import { cn } from '@/lib/utils';
 import { useBuilderStore } from '@/stores/builder';
-import { useSimpleData } from '@/hooks/useSimpleData';
+import { useSimpleData, ComponentDataBinding } from '@/hooks/useSimpleData';
 import { useComponentTextEditor } from './hooks/useComponentTextEditor';
 
 // Import style processing utilities
@@ -119,8 +119,9 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     const newProps = { ...props };
 
     Object.entries(binding.fieldMapping).forEach(([propName, fieldName]) => {
-      if (record[fieldName] !== undefined) {
-        newProps[propName] = record[fieldName];
+      const field = fieldName as string;
+      if (record[field] !== undefined) {
+        newProps[propName] = record[field];
       }
     });
 
@@ -129,7 +130,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
 
   // Generate styles from the merged styles object
   const { classes: generatedClasses, inlineStyles } = generateStyles(
-    mergedStyles,
+    mergedStyles as ComponentStyles,
     component.responsiveStyles,
     currentViewport
   );

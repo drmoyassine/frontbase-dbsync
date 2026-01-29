@@ -2,13 +2,8 @@ import React, { useState } from 'react';
 import { useBuilderStore } from '@/stores/builder';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import { Trash2, Database, AlignLeft, AlignCenter, AlignRight, AlignJustify, Minus } from 'lucide-react';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Trash2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,11 +17,32 @@ import {
 import { DataBindingModal } from './data-binding/DataBindingModal';
 import { DataTablePropertiesPanel } from '@/components/builder/data-table/DataTablePropertiesPanel';
 import { FormPropertiesPanel } from './form/FormPropertiesPanel';
-import { ActionProperties } from '@/components/builder/properties/ActionProperties';
 import { VariableInput } from './VariableInput';
-import { ArrayEditor } from './ArrayEditor';
-import { IconPicker } from './properties/IconPicker';
-import { ColorPicker } from '@/components/builder/style-controls/ColorPicker';
+
+// Basic Components
+import {
+  HeadingProperties,
+  TextProperties,
+  ButtonProperties,
+  IconProperties,
+  LinkProperties,
+  ImageProperties,
+  InputProperties,
+  TextareaProperties,
+  SelectProperties,
+  ToggleProperties,
+  BadgeProperties,
+  AvatarProperties,
+  ProgressProperties,
+  AlertProperties,
+  ChartProperties,
+  GridProperties,
+} from './properties/basic';
+
+// Landing Components
+import { NavbarProperties } from './properties/landing';
+
+// Section Components
 import { LogoCloudProperties } from './properties/LogoCloudProperties';
 import { FeatureSectionProperties } from './properties/FeatureSectionProperties';
 import { DisplayProperties } from './properties/DisplayProperties';
@@ -43,8 +59,6 @@ const findComponent = (components: any[], id: string): any => {
   return null;
 };
 
-
-
 export const PropertiesPanel = () => {
   const {
     selectedComponentId,
@@ -55,7 +69,7 @@ export const PropertiesPanel = () => {
     project
   } = useBuilderStore();
 
-  const { getComponentBinding, setComponentBinding, initialize } = useDataBindingStore();
+  const { setComponentBinding, initialize } = useDataBindingStore();
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDataBinding, setShowDataBinding] = useState(false);
@@ -91,13 +105,9 @@ export const PropertiesPanel = () => {
   };
 
   const updateComponentStyle = (key: string, value: any) => {
-    // Helper to update specific styles via properties panel (like icon color)
     const currentStyles = selectedComponent.styles || {};
     updateComponent(selectedComponentId, {
-      styles: {
-        ...currentStyles,
-        [key]: value
-      }
+      styles: { ...currentStyles, [key]: value }
     });
   };
 
@@ -111,10 +121,13 @@ export const PropertiesPanel = () => {
     updateComponentProp('binding', binding);
   };
 
+  const onDataBindingClick = () => setShowDataBinding(true);
+
   const renderPropertyFields = () => {
     const { type, props, styles = {} } = selectedComponent;
 
     switch (type) {
+      // === CONTAINER ===
       case 'Container':
         return (
           <div className="text-sm text-muted-foreground p-4 text-center border border-dashed rounded-md">
@@ -122,893 +135,72 @@ export const PropertiesPanel = () => {
           </div>
         );
 
+      // === LANDING SECTIONS ===
       case 'LogoCloud':
-        return (
-          <LogoCloudProperties
-            componentId={selectedComponentId}
-            props={props}
-            updateComponentProp={updateComponentProp}
-          />
-        );
+        return <LogoCloudProperties componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} />;
 
       case 'FeatureSection':
-        return (
-          <FeatureSectionProperties
-            componentId={selectedComponentId}
-            props={props}
-            updateComponentProp={updateComponentProp}
-          />
-        );
+        return <FeatureSectionProperties componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} />;
 
       case 'Navbar':
-        return (
-          <>
-            {/* Logo Section */}
-            <div className="space-y-3 pb-4 border-b">
-              <Label className="text-sm font-medium">Logo</Label>
-              <div className="space-y-2">
-                <Label htmlFor="logo-type" className="text-xs text-muted-foreground">Type</Label>
-                <Select
-                  value={props.logo?.type || 'text'}
-                  onValueChange={(value) => updateComponentProp('logo', { ...props.logo, type: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="text">Text (Brand Name)</SelectItem>
-                    <SelectItem value="image">Image (Logo)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {(props.logo?.type || 'text') === 'text' ? (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="brand-name" className="text-xs text-muted-foreground">Brand Name</Label>
-                    <Input
-                      value={props.logo?.text || 'YourBrand'}
-                      onChange={(e) => updateComponentProp('logo', { ...props.logo, text: e.target.value })}
-                      placeholder="Enter brand name"
-                    />
-                  </div>
+        return <NavbarProperties componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} project={project} />;
 
-                  {/* Show Icon Toggle - for displaying logo next to text */}
-                  <div className="flex items-center justify-between space-y-0 rounded-md border p-3 bg-muted/30">
-                    <div className="space-y-0.5">
-                      <Label className="text-xs font-medium">Show Icon with Text</Label>
-                      <p className="text-xs text-muted-foreground">
-                        {project?.faviconUrl ? 'Display logo icon next to brand name' : 'Upload a logo in Settings first'}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={props.logo?.showIcon === true}
-                      onCheckedChange={(checked) => updateComponentProp('logo', {
-                        ...props.logo,
-                        showIcon: checked
-                      })}
-                      disabled={!project?.faviconUrl}
-                    />
-                  </div>
-
-                  {/* Icon preview when enabled */}
-                  {props.logo?.showIcon && project?.faviconUrl && (
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Preview</Label>
-                      <div className="flex items-center gap-2 p-3 rounded-md border bg-muted/20">
-                        <img
-                          src={project.faviconUrl}
-                          alt="Logo icon"
-                          className="h-6 w-6 object-contain"
-                        />
-                        <span className="font-bold">{props.logo?.text || 'YourBrand'}</span>
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  {/* Use Project Logo Toggle */}
-                  <div className="flex items-center justify-between space-y-0 rounded-md border p-3 bg-muted/30">
-                    <div className="space-y-0.5">
-                      <Label className="text-xs font-medium">Use Project Logo</Label>
-                      <p className="text-xs text-muted-foreground">
-                        {project?.faviconUrl ? 'Use favicon from Settings' : 'No logo uploaded yet'}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={props.logo?.useProjectLogo === true}
-                      onCheckedChange={(checked) => updateComponentProp('logo', {
-                        ...props.logo,
-                        useProjectLogo: checked,
-                        // Clear manual URL when enabling project logo
-                        imageUrl: checked ? '' : props.logo?.imageUrl
-                      })}
-                      disabled={!project?.faviconUrl}
-                    />
-                  </div>
-
-                  {/* Show project logo preview when enabled */}
-                  {props.logo?.useProjectLogo && project?.faviconUrl ? (
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Project Logo Preview</Label>
-                      <div className="flex items-center gap-3 p-3 rounded-md border bg-muted/20">
-                        <img
-                          src={project.faviconUrl}
-                          alt="Project logo"
-                          className="h-8 w-8 object-contain rounded"
-                        />
-                        <span className="text-xs text-muted-foreground truncate">
-                          {project.faviconUrl}
-                        </span>
-                      </div>
-                    </div>
-                  ) : !props.logo?.useProjectLogo ? (
-                    <div className="space-y-2">
-                      <Label htmlFor="logo-url" className="text-xs text-muted-foreground">Logo Image URL</Label>
-                      <Input
-                        value={props.logo?.imageUrl || ''}
-                        onChange={(e) => updateComponentProp('logo', { ...props.logo, imageUrl: e.target.value })}
-                        placeholder="https://example.com/logo.png"
-                      />
-                    </div>
-                  ) : null}
-                </>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="logo-link" className="text-xs text-muted-foreground">Logo Link</Label>
-                <Input
-                  value={props.logo?.link || '/'}
-                  onChange={(e) => updateComponentProp('logo', { ...props.logo, link: e.target.value })}
-                  placeholder="/"
-                />
-              </div>
-            </div>
-
-            {/* Menu Items Section */}
-            <div className="space-y-3 py-4 border-b">
-              <Label className="text-sm font-medium">Menu Items</Label>
-              <div className="space-y-2">
-                {(props.menuItems || []).map((item: any, index: number) => (
-                  <div key={item.id || index} className="space-y-2 p-2 border rounded-md bg-muted/30">
-                    <div className="flex gap-2">
-                      <Input
-                        value={item.label || ''}
-                        onChange={(e) => {
-                          const newItems = [...(props.menuItems || [])];
-                          newItems[index] = { ...item, label: e.target.value };
-                          updateComponentProp('menuItems', newItems);
-                        }}
-                        placeholder="Menu label"
-                        className="h-8 flex-1"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive"
-                        onClick={() => {
-                          const newItems = (props.menuItems || []).filter((_: any, i: number) => i !== index);
-                          updateComponentProp('menuItems', newItems);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="flex gap-2">
-                      <Select
-                        value={item.navType || 'scroll'}
-                        onValueChange={(value) => {
-                          const newItems = [...(props.menuItems || [])];
-                          newItems[index] = { ...item, navType: value };
-                          updateComponentProp('menuItems', newItems);
-                        }}
-                      >
-                        <SelectTrigger className="h-8 w-24">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="scroll">Scroll</SelectItem>
-                          <SelectItem value="link">Link</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        value={item.target || ''}
-                        onChange={(e) => {
-                          const newItems = [...(props.menuItems || [])];
-                          newItems[index] = { ...item, target: e.target.value };
-                          updateComponentProp('menuItems', newItems);
-                        }}
-                        placeholder={item.navType === 'scroll' ? '#section-id' : '/page-url'}
-                        className="h-8 flex-1"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => {
-                  const newItem = { id: `menu-${Date.now()}`, label: 'New Item', navType: 'scroll', target: '#' };
-                  updateComponentProp('menuItems', [...(props.menuItems || []), newItem]);
-                }}
-              >
-                + Add Menu Item
-              </Button>
-            </div>
-
-            {/* CTA Buttons Section */}
-            <div className="space-y-3 pt-4">
-              <Label className="text-sm font-medium">CTA Buttons</Label>
-
-              {/* Primary Button */}
-              <div className="space-y-2 p-2 border rounded-md">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs text-muted-foreground">Primary Button</Label>
-                  <Switch
-                    checked={props.primaryButton?.enabled !== false}
-                    onCheckedChange={(checked) => updateComponentProp('primaryButton', {
-                      ...props.primaryButton,
-                      enabled: checked
-                    })}
-                  />
-                </div>
-                {props.primaryButton?.enabled !== false && (
-                  <>
-                    <Input
-                      value={props.primaryButton?.text || 'Get Started'}
-                      onChange={(e) => updateComponentProp('primaryButton', {
-                        ...props.primaryButton,
-                        text: e.target.value
-                      })}
-                      placeholder="Button text"
-                      className="h-8"
-                    />
-                    <div className="flex gap-2">
-                      <Select
-                        value={props.primaryButton?.navType || 'link'}
-                        onValueChange={(value) => updateComponentProp('primaryButton', {
-                          ...props.primaryButton,
-                          navType: value
-                        })}
-                      >
-                        <SelectTrigger className="h-8 w-24">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="scroll">Scroll</SelectItem>
-                          <SelectItem value="link">Link</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        value={props.primaryButton?.target || ''}
-                        onChange={(e) => updateComponentProp('primaryButton', {
-                          ...props.primaryButton,
-                          target: e.target.value
-                        })}
-                        placeholder={props.primaryButton?.navType === 'scroll' ? '#section-id' : '/page-url'}
-                        className="h-8 flex-1"
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Secondary Button */}
-              <div className="space-y-2 p-2 border rounded-md">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs text-muted-foreground">Secondary Button</Label>
-                  <Switch
-                    checked={props.secondaryButton?.enabled === true}
-                    onCheckedChange={(checked) => updateComponentProp('secondaryButton', {
-                      ...props.secondaryButton,
-                      enabled: checked
-                    })}
-                  />
-                </div>
-                {props.secondaryButton?.enabled === true && (
-                  <>
-                    <Input
-                      value={props.secondaryButton?.text || 'Learn More'}
-                      onChange={(e) => updateComponentProp('secondaryButton', {
-                        ...props.secondaryButton,
-                        text: e.target.value
-                      })}
-                      placeholder="Button text"
-                      className="h-8"
-                    />
-                    <div className="flex gap-2">
-                      <Select
-                        value={props.secondaryButton?.navType || 'link'}
-                        onValueChange={(value) => updateComponentProp('secondaryButton', {
-                          ...props.secondaryButton,
-                          navType: value
-                        })}
-                      >
-                        <SelectTrigger className="h-8 w-24">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="scroll">Scroll</SelectItem>
-                          <SelectItem value="link">Link</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        value={props.secondaryButton?.target || ''}
-                        onChange={(e) => updateComponentProp('secondaryButton', {
-                          ...props.secondaryButton,
-                          target: e.target.value
-                        })}
-                        placeholder={props.secondaryButton?.navType === 'scroll' ? '#section-id' : '/page-url'}
-                        className="h-8 flex-1"
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Dark Mode Toggle Section */}
-            <div className="space-y-3 pt-4 border-t">
-              <Label className="text-sm font-medium">Dark Mode</Label>
-              <div className="flex items-center justify-between space-y-0 rounded-md border p-3 bg-muted/30">
-                <div className="space-y-0.5">
-                  <Label className="text-xs font-medium">Show Dark Mode Toggle</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Display sun/moon icon to switch themes
-                  </p>
-                </div>
-                <Switch
-                  checked={props.showDarkModeToggle === true}
-                  onCheckedChange={(checked) => updateComponentProp('showDarkModeToggle', checked)}
-                />
-              </div>
-            </div>
-          </>
-        );
-
+      // === TYPOGRAPHY ===
       case 'Heading':
-        return (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="heading-text">Text <span className="text-muted-foreground text-xs">(@ for variables)</span></Label>
-              <VariableInput
-                value={props.text || ''}
-                onChange={(value) => updateComponentProp('text', value)}
-                placeholder="Enter heading text or type @ for variables"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="heading-level">Level</Label>
-              <Select value={props.level || 'h1'} onValueChange={(value) => updateComponentProp('level', value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="h1">H1</SelectItem>
-                  <SelectItem value="h2">H2</SelectItem>
-                  <SelectItem value="h3">H3</SelectItem>
-                  <SelectItem value="h4">H4</SelectItem>
-                  <SelectItem value="h5">H5</SelectItem>
-                  <SelectItem value="h6">H6</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </>
-        );
+        return <HeadingProperties props={props} updateComponentProp={updateComponentProp} />;
 
       case 'Text':
-        return (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="text-content">Content <span className="text-muted-foreground text-xs">(@ for variables)</span></Label>
-              <VariableInput
-                value={props.text || ''}
-                onChange={(value) => updateComponentProp('text', value)}
-                multiline
-                placeholder="Enter text or type @ for variables"
-              />
-            </div>
-          </>
-        );
+        return <TextProperties props={props} updateComponentProp={updateComponentProp} />;
 
+      // === ACTIONS ===
       case 'Button':
-        return (
-          <>
-            <ActionProperties
-              componentId={selectedComponentId}
-              props={props}
-              updateComponentProp={updateComponentProp}
-              onDataBindingClick={() => setShowDataBinding(true)}
-              hasBinding={!!props.binding}
-            />
-            {/* Button Icon */}
-            <div className="space-y-3 pt-4 border-t">
-              <Label className="uppercase text-xs font-semibold text-muted-foreground">Button Icon</Label>
+        return <ButtonProperties componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} onDataBindingClick={onDataBindingClick} hasBinding={!!props.binding} />;
 
-              <div className="space-y-2">
-                <Label className="text-xs">Icon</Label>
-                <IconPicker
-                  value={props.buttonIcon || props.leftIcon || props.rightIcon || ''}
-                  onChange={(icon) => {
-                    // Clear old props and set new unified icon
-                    updateComponentProp('buttonIcon', icon);
-                    updateComponentProp('leftIcon', props.iconPosition === 'right' ? '' : icon);
-                    updateComponentProp('rightIcon', props.iconPosition === 'right' ? icon : '');
-                  }}
-                />
-              </div>
+      case 'Link':
+        return <LinkProperties props={props} updateComponentProp={updateComponentProp} onDataBindingClick={onDataBindingClick} />;
 
-              {(props.buttonIcon || props.leftIcon || props.rightIcon) && (
-                <div className="space-y-2">
-                  <Label className="text-xs">Icon Position</Label>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={props.iconPosition !== 'right' ? 'default' : 'outline'}
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => {
-                        const icon = props.buttonIcon || props.leftIcon || props.rightIcon;
-                        updateComponentProp('iconPosition', 'left');
-                        updateComponentProp('leftIcon', icon);
-                        updateComponentProp('rightIcon', '');
-                      }}
-                    >
-                      Left
-                    </Button>
-                    <Button
-                      variant={props.iconPosition === 'right' ? 'default' : 'outline'}
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => {
-                        const icon = props.buttonIcon || props.leftIcon || props.rightIcon;
-                        updateComponentProp('iconPosition', 'right');
-                        updateComponentProp('rightIcon', icon);
-                        updateComponentProp('leftIcon', '');
-                      }}
-                    >
-                      Right
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </>
-        );
-
+      // === MEDIA ===
       case 'Icon':
-        return (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Icon</Label>
-              <IconPicker
-                value={props.icon || props.name || 'Star'}
-                onChange={(icon) => updateComponentProp('icon', icon)}
-              />
-            </div>
+        return <IconProperties props={props} styles={styles} updateComponentProp={updateComponentProp} updateComponentStyle={updateComponentStyle} />;
 
-            <div className="space-y-2">
-              <Label>Size</Label>
-              <Select value={props.size || 'md'} onValueChange={(value) => updateComponentProp('size', value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="xs">Extra Small (xs)</SelectItem>
-                  <SelectItem value="sm">Small (sm)</SelectItem>
-                  <SelectItem value="md">Medium (md)</SelectItem>
-                  <SelectItem value="lg">Large (lg)</SelectItem>
-                  <SelectItem value="xl">Extra Large (xl)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+      case 'Image':
+        return <ImageProperties props={props} updateComponentProp={updateComponentProp} />;
 
-            <ColorPicker
-              label="Icon Color"
-              value={props.color || styles.color || '#000000'}
-              onChange={(color) => {
-                updateComponentProp('color', color);
-                updateComponentStyle('color', color);
-              }}
-              property="textColor"
-            />
-          </div>
-        );
+      case 'Avatar':
+        return <AvatarProperties props={props} updateComponentProp={updateComponentProp} />;
 
+      // === FORM INPUTS ===
       case 'Input':
-        return (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="input-label">Label</Label>
-              <Input
-                id="input-label"
-                value={props.label || ''}
-                onChange={(e) => updateComponentProp('label', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="input-placeholder">Placeholder</Label>
-              <Input
-                id="input-placeholder"
-                value={props.placeholder || ''}
-                onChange={(e) => updateComponentProp('placeholder', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="input-type">Type</Label>
-              <Select value={props.inputType || 'text'} onValueChange={(value) => updateComponentProp('inputType', value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="text">Text</SelectItem>
-                  <SelectItem value="email">Email</SelectItem>
-                  <SelectItem value="password">Password</SelectItem>
-                  <SelectItem value="number">Number</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </>
-        );
+        return <InputProperties props={props} updateComponentProp={updateComponentProp} />;
 
       case 'Textarea':
-        return (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="textarea-label">Label</Label>
-              <Input
-                id="textarea-label"
-                value={props.label || ''}
-                onChange={(e) => updateComponentProp('label', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="textarea-placeholder">Placeholder</Label>
-              <Input
-                id="textarea-placeholder"
-                value={props.placeholder || ''}
-                onChange={(e) => updateComponentProp('placeholder', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="textarea-rows">Rows</Label>
-              <Input
-                id="textarea-rows"
-                type="number"
-                value={props.rows || 3}
-                onChange={(e) => updateComponentProp('rows', parseInt(e.target.value))}
-              />
-            </div>
-          </>
-        );
+        return <TextareaProperties props={props} updateComponentProp={updateComponentProp} />;
 
       case 'Select':
-        return (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="select-placeholder">Placeholder</Label>
-              <Input
-                id="select-placeholder"
-                value={props.placeholder || ''}
-                onChange={(e) => updateComponentProp('placeholder', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="select-options">Options (one per line)</Label>
-              <Textarea
-                id="select-options"
-                value={(props.options || []).join('\n')}
-                onChange={(e) => updateComponentProp('options', e.target.value.split('\n').filter(Boolean))}
-                rows={4}
-              />
-            </div>
-          </>
-        );
+        return <SelectProperties props={props} updateComponentProp={updateComponentProp} />;
 
       case 'Checkbox':
       case 'Switch':
-        return (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="label-text">Label</Label>
-              <Input
-                id="label-text"
-                value={props.label || ''}
-                onChange={(e) => updateComponentProp('label', e.target.value)}
-              />
-            </div>
-          </>
-        );
+        return <ToggleProperties props={props} updateComponentProp={updateComponentProp} />;
+
+      // === DISPLAY ===
+      case 'Badge':
+        return <BadgeProperties props={props} updateComponentProp={updateComponentProp} />;
 
       case 'Alert':
-        return (
-          <div className="space-y-2">
-            <Label htmlFor="alert-message">Message</Label>
-            <Textarea
-              id="alert-message"
-              value={props.message || ''}
-              onChange={(e) => updateComponentProp('message', e.target.value)}
-              rows={3}
-            />
-          </div>
-        );
-
-      case 'Badge':
-        return (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="badge-text">Text <span className="text-muted-foreground text-xs">(@ for variables)</span></Label>
-              <VariableInput
-                value={props.text || ''}
-                onChange={(value) => updateComponentProp('text', value)}
-                placeholder="Badge text"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="badge-variant">Variant</Label>
-              <Select value={props.variant || 'default'} onValueChange={(value) => updateComponentProp('variant', value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="default">Default</SelectItem>
-                  <SelectItem value="secondary">Secondary</SelectItem>
-                  <SelectItem value="destructive">Destructive</SelectItem>
-                  <SelectItem value="outline">Outline</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="badge-icon">Icon (Optional)</Label>
-              <IconPicker
-                value={props.icon || ''}
-                onChange={(value) => updateComponentProp('icon', value)}
-              />
-            </div>
-            {props.icon && (
-              <div className="space-y-2">
-                <Label htmlFor="badge-icon-position">Icon Position</Label>
-                <Select value={props.iconPosition || 'left'} onValueChange={(value) => updateComponentProp('iconPosition', value)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="left">Left</SelectItem>
-                    <SelectItem value="right">Right</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="badge-bg-color">Background Color</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="badge-bg-color"
-                  type="color"
-                  value={props.backgroundColor || '#000000'}
-                  onChange={(e) => updateComponentProp('backgroundColor', e.target.value)}
-                  className="w-20 h-9 p-1 cursor-pointer"
-                />
-                <Input
-                  type="text"
-                  value={props.backgroundColor || ''}
-                  onChange={(e) => updateComponentProp('backgroundColor', e.target.value)}
-                  placeholder="CSS color"
-                  className="flex-1"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="badge-text-color">Text Color</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="badge-text-color"
-                  type="color"
-                  value={props.textColor || '#000000'}
-                  onChange={(e) => updateComponentProp('textColor', e.target.value)}
-                  className="w-20 h-9 p-1 cursor-pointer"
-                />
-                <Input
-                  type="text"
-                  value={props.textColor || ''}
-                  onChange={(e) => updateComponentProp('textColor', e.target.value)}
-                  placeholder="CSS color"
-                  className="flex-1"
-                />
-              </div>
-            </div>
-            {props.icon && (
-              <div className="space-y-2">
-                <Label htmlFor="badge-icon-color">Icon Color</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="badge-icon-color"
-                    type="color"
-                    value={props.iconColor || '#000000'}
-                    onChange={(e) => updateComponentProp('iconColor', e.target.value)}
-                    className="w-20 h-9 p-1 cursor-pointer"
-                  />
-                  <Input
-                    type="text"
-                    value={props.iconColor || ''}
-                    onChange={(e) => updateComponentProp('iconColor', e.target.value)}
-                    placeholder="CSS color"
-                    className="flex-1"
-                  />
-                </div>
-              </div>
-            )}
-          </>
-        );
-
-      case 'Avatar':
-        return (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="avatar-src">Image URL</Label>
-              <Input
-                id="avatar-src"
-                value={props.src || ''}
-                onChange={(e) => updateComponentProp('src', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="avatar-fallback">Fallback Text</Label>
-              <Input
-                id="avatar-fallback"
-                value={props.fallback || ''}
-                onChange={(e) => updateComponentProp('fallback', e.target.value)}
-                maxLength={2}
-              />
-            </div>
-          </>
-        );
+        return <AlertProperties props={props} updateComponentProp={updateComponentProp} />;
 
       case 'Progress':
-        return (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="progress-value">Value (0-100)</Label>
-              <Input
-                id="progress-value"
-                type="number"
-                min="0"
-                max="100"
-                value={props.value || 50}
-                onChange={(e) => updateComponentProp('value', parseInt(e.target.value))}
-              />
-            </div>
-          </>
-        );
+        return <ProgressProperties props={props} updateComponentProp={updateComponentProp} />;
 
-      case 'Image':
-        return (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="image-src">Image URL</Label>
-              <Input
-                id="image-src"
-                value={props.src || ''}
-                onChange={(e) => updateComponentProp('src', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="image-alt">Alt Text</Label>
-              <Input
-                id="image-alt"
-                value={props.alt || ''}
-                onChange={(e) => updateComponentProp('alt', e.target.value)}
-              />
-            </div>
-          </>
-        );
-
-      case 'Link':
-        return (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="link-text">Text</Label>
-              <Input
-                id="link-text"
-                value={props.text || ''}
-                onChange={(e) => updateComponentProp('text', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="link-href">URL</Label>
-              <Input
-                id="link-href"
-                value={props.href || ''}
-                onChange={(e) => updateComponentProp('href', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="link-target">Target</Label>
-              <Select value={props.target || '_self'} onValueChange={(value) => updateComponentProp('target', value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_self">Same Tab</SelectItem>
-                  <SelectItem value="_blank">New Tab</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                onClick={() => setShowDataBinding(true)}
-                className="w-full justify-start"
-              >
-                <Database className="mr-2 h-4 w-4" />
-                {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
-              </Button>
-            </div>
-          </>
-        );
-
+      // === DATA ===
       case 'Chart':
-        return (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="chart-type">Chart Type</Label>
-              <Select value={props.chartType || 'bar'} onValueChange={(value) => updateComponentProp('chartType', value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="bar">Bar Chart</SelectItem>
-                  <SelectItem value="line">Line Chart</SelectItem>
-                  <SelectItem value="pie">Pie Chart</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Data Binding</Label>
-              <Button
-                variant="outline"
-                onClick={() => setShowDataBinding(true)}
-                className="w-full justify-start"
-              >
-                <Database className="mr-2 h-4 w-4" />
-                {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
-              </Button>
-            </div>
-          </div>
-        );
+        return <ChartProperties props={props} updateComponentProp={updateComponentProp} onDataBindingClick={onDataBindingClick} />;
 
       case 'Grid':
-        return (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="grid-columns">Columns</Label>
-              <Select value={(props.columns || 3).toString()} onValueChange={(value) => updateComponentProp('columns', parseInt(value))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">1 Column</SelectItem>
-                  <SelectItem value="2">2 Columns</SelectItem>
-                  <SelectItem value="3">3 Columns</SelectItem>
-                  <SelectItem value="4">4 Columns</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Data Binding</Label>
-              <Button
-                variant="outline"
-                onClick={() => setShowDataBinding(true)}
-                className="w-full justify-start"
-              >
-                <Database className="mr-2 h-4 w-4" />
-                {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
-              </Button>
-            </div>
-          </div>
-        );
+        return <GridProperties props={props} updateComponentProp={updateComponentProp} onDataBindingClick={onDataBindingClick} />;
 
       case 'DataTable':
-        // Fix: Source binding directly from BuilderStore (authoritative) instead of auxiliary store
-        // This prevents stale/empty binding from overwriting the correct configuration
         const dataTableBinding = selectedComponent?.props?.binding;
         return (
           <DataTablePropertiesPanel
@@ -1022,47 +214,14 @@ export const PropertiesPanel = () => {
         );
 
       case 'Form':
-        return (
-          <FormPropertiesPanel
-            componentId={selectedComponentId}
-            props={props}
-            updateComponentProp={updateComponentProp}
-            type="Form"
-          />
-        );
+        return <FormPropertiesPanel componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} type="Form" />;
 
       case 'InfoList':
-        return (
-          <FormPropertiesPanel
-            componentId={selectedComponentId}
-            props={props}
-            updateComponentProp={updateComponentProp}
-            type="InfoList"
-          />
-        );
+        return <FormPropertiesPanel componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} type="InfoList" />;
 
-      // === LANDING PAGE COMPONENTS ===
-      // These are now templates that expand into primitive components.
-      // Each child component uses its own property panel (Container, Heading, Text, etc.)
-      // No custom property panels needed here anymore.
-
-
-      // Components handled by DisplayProperties
+      // === DISPLAY PROPERTIES (fallback for some types) ===
       case 'Card':
-      case 'Alert':
-      case 'Badge':
-      case 'Progress':
-      case 'Chart':
-      case 'Grid':
-        return (
-          <DisplayProperties
-            type={type}
-            props={props}
-            updateComponentProp={updateComponentProp}
-            onDataBindingClick={() => setShowDataBinding(true)}
-            hasBinding={!!props.binding}
-          />
-        );
+        return <DisplayProperties type={type} props={props} updateComponentProp={updateComponentProp} onDataBindingClick={onDataBindingClick} hasBinding={!!props.binding} />;
 
       default:
         return (

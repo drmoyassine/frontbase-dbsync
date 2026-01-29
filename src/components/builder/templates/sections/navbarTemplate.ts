@@ -1,30 +1,53 @@
 /**
  * Navbar Template
- * Creates a Navbar component with default configuration
+ * Creates a Navbar component with configurable options
  */
 
 import { ComponentTemplate } from '../types';
 
-export const navbarTemplate = (): ComponentTemplate => ({
+interface NavbarConfig {
+    logoText?: string;
+    logoLink?: string;
+    menuItems?: Array<{
+        id: string;
+        label: string;
+        navType: 'scroll' | 'link';
+        target: string;
+    }>;
+    primaryButton?: {
+        enabled: boolean;
+        text: string;
+        navType: 'scroll' | 'link';
+        target: string;
+    };
+    secondaryButton?: {
+        enabled: boolean;
+        text: string;
+        navType: 'scroll' | 'link';
+        target: string;
+    };
+}
+
+export const navbarTemplate = (config: NavbarConfig = {}): ComponentTemplate => ({
     type: 'Navbar',
     props: {
         logo: {
             type: 'text',
-            text: 'YourBrand',
-            link: '/'
+            text: config.logoText || 'YourBrand',
+            link: config.logoLink || '/'
         },
-        menuItems: [
+        menuItems: config.menuItems || [
             { id: 'menu-1', label: 'Features', navType: 'scroll', target: '#features' },
             { id: 'menu-2', label: 'Pricing', navType: 'scroll', target: '#pricing' },
             { id: 'menu-3', label: 'About', navType: 'link', target: '/about' }
         ],
-        primaryButton: {
+        primaryButton: config.primaryButton || {
             enabled: true,
             text: 'Get Started',
             navType: 'link',
             target: '/signup'
         },
-        secondaryButton: {
+        secondaryButton: config.secondaryButton || {
             enabled: false,
             text: 'Learn More',
             navType: 'scroll',
@@ -37,3 +60,4 @@ export const navbarTemplate = (): ComponentTemplate => ({
         backgroundColor: 'var(--background)'
     }
 });
+

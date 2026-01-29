@@ -10,6 +10,7 @@ import { createComparisonCard } from '../builders/homepageBuilders';
 import { createFooterColumn2 } from '../builders/sectionBuilders';
 import { heroTemplate } from '../sections/heroTemplate';
 import { logoCloudTemplate } from '../sections/logoCloudTemplate';
+import { navbarTemplate } from '../sections/navbarTemplate';
 import {
     valuePropsSectionTemplate,
     byoeSectionTemplate,
@@ -28,33 +29,22 @@ export const frontbaseHomepageTemplate = (): ComponentTemplate => ({
         minHeight: '100vh'
     },
     children: [
-        // === NAVBAR ===
-        {
-            type: 'Navbar',
-            props: {
-                logo: {
-                    type: 'text',
-                    text: 'Frontbase',
-                    link: '/'
-                },
-                menuItems: [
-                    { id: 'menu-features', label: 'Features', navType: 'scroll', target: '#features' },
-                    { id: 'menu-integrations', label: 'Integrations', navType: 'scroll', target: '#integrations' },
-                    { id: 'menu-architecture', label: 'Architecture', navType: 'scroll', target: '#architecture' }
-                ],
-                primaryButton: {
-                    enabled: true,
-                    text: 'Join Private Alpha',
-                    navType: 'link',
-                    target: '/alpha'
-                }
-            },
-            styles: {
-                padding: '16px 48px',
-                borderBottom: '1px solid var(--border)',
-                backgroundColor: 'var(--background)'
+        // === NAVBAR === (using navbarTemplate with Frontbase config)
+        navbarTemplate({
+            logoText: 'Frontbase',
+            logoLink: '/',
+            menuItems: [
+                { id: 'menu-features', label: 'Features', navType: 'scroll', target: '#features' },
+                { id: 'menu-integrations', label: 'Integrations', navType: 'scroll', target: '#integrations' },
+                { id: 'menu-architecture', label: 'Architecture', navType: 'scroll', target: '#architecture' }
+            ],
+            primaryButton: {
+                enabled: true,
+                text: 'Join Private Alpha',
+                navType: 'link',
+                target: '/alpha'
             }
-        },
+        }),
         // === HERO SECTION ===
         heroTemplate(),
         // === TRUST BAR (Powered By) ===

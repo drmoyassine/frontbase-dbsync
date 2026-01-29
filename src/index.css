@@ -152,3 +152,95 @@ All colors MUST be HSL.
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
+
+/* Feature Section Swipe Mode (mobile carousel) */
+@container (max-width: 640px) {
+  .fb-container .fb-grid.swipe-mode {
+    display: flex !important;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0;
+    gap: 1rem !important;
+    /* Hide scrollbar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .fb-container .fb-grid.swipe-mode::-webkit-scrollbar {
+    display: none;
+  }
+
+  .fb-container .fb-grid.swipe-mode>* {
+    flex-shrink: 0;
+    width: 100%;
+    min-width: 100%;
+    scroll-snap-align: start;
+  }
+}
+
+/* Tablet: show 2 cards */
+@container (min-width: 641px) and (max-width: 900px) {
+  .fb-container .fb-grid.swipe-mode {
+    display: flex !important;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    gap: 1rem !important;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .fb-container .fb-grid.swipe-mode::-webkit-scrollbar {
+    display: none;
+  }
+
+  .fb-container .fb-grid.swipe-mode>* {
+    flex-shrink: 0;
+    width: calc(50% - 0.5rem);
+    min-width: calc(50% - 0.5rem);
+    scroll-snap-align: start;
+  }
+}
+
+/* Carousel navigation arrows */
+.fb-carousel-nav {
+  display: none;
+}
+
+@container (max-width: 900px) {
+  .fb-carousel-nav {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  .fb-carousel-nav button {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 9999px;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--background));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .fb-carousel-nav button:hover {
+    background: hsl(var(--muted));
+  }
+
+  .fb-carousel-nav button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}

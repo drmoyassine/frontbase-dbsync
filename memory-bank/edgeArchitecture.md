@@ -5,6 +5,9 @@
 ## Overview
 
 The Edge Engine enables SSR pages and workflow automation in Frontbase. It uses a **split architecture** with FastAPI handling design-time operations and Hono (Edge) handling runtime execution.
+ 
+ > [!IMPORTANT]
+ > **Edge Self-Sufficiency Rule**: Once published, the Edge Engine runs **independently** without calling the FastAPI backend. It relies 100% on its local database (SQLite/Turso) and Redis for configuration and content. There are NO runtime API calls from Edge/Hono to the Backend/FastAPI (port 8000).
 
 ## Architecture Diagram
 
@@ -66,8 +69,8 @@ The Edge Engine enables SSR pages and workflow automation in Frontbase. It uses 
 
 | Database     | Location                       | Services         | Contents                                 |
 |--------------|--------------------------------|------------------|------------------------------------------|
-| `unified.db` | `fastapi-backend/unified.db`   | FastAPI, DB-Sync | Pages, Projects, Datasources, Drafts     |
-| `edge.db`    | `services/edge/data/edge.db`   | Hono Edge Engine | Published Pages, Workflows, Executions   |
+| `unified.db` | `DATABASE_URL` (Env) | FastAPI, DB-Sync | Pages, Projects, Datasources, Drafts (PostgreSQL/SQLite) |
+| `edge.db`    | `services/edge/data/edge.db`   | Hono Edge Engine | Published Pages, Workflows, Executions (SQLite/Turso) |
 
 **Why separate?**
 
@@ -81,7 +84,7 @@ The Edge Engine enables SSR pages and workflow automation in Frontbase. It uses 
 
 - **Port**: 8000
 - **Purpose**: Builder API, draft management, publishing
-- **Database**: `unified.db` (SQLite, async via aiosqlite)
+- **Database**: PostgreSQL (Prod) or SQLite (Dev) via `DATABASE_URL`
 - **Key Routes**:
   - `POST /api/actions/drafts` - Create workflow draft
   - `PATCH /api/actions/drafts/{id}` - Update draft
@@ -169,7 +172,7 @@ npm run db:push
 
 | Variable       | Default                  | Description      |
 |----------------|--------------------------|------------------|
-| `DATABASE_URL` | `sqlite:///./unified.db` | Main database    |
+| `DATABASE_URL` | `sqlite:///./unified.db` | Main database (Postgres or SQLite) |
 | `EDGE_URL`     | `http://localhost:3002`  | Edge endpoint    |
 | `SECRET_KEY`   | (required)               | JWT signing key  |
 

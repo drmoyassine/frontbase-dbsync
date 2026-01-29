@@ -116,6 +116,8 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
             const pageIndex = pages.findIndex(p => p.id === currentPageId);
             if (pageIndex === -1) return state;
 
+
+
             const page = { ...pages[pageIndex] };
 
             if (page.layoutData?.content) {

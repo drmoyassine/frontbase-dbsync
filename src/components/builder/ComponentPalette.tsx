@@ -4,7 +4,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useBuilderStore } from '@/stores/builder';
-import { getSectionTemplate, expandTemplate } from './templates/sectionTemplates';
+import { getDefaultProps } from '@/lib/componentDefaults';
+import { getSectionTemplate, expandTemplate } from './templates';
 import {
   Search,
   MousePointer,
@@ -49,6 +50,7 @@ const componentCategories = {
       { name: 'Link', icon: Globe, description: 'Navigation link', section: 'basic' },
       { name: 'Image', icon: Image, description: 'Image display', section: 'basic' },
       { name: 'Icon', icon: Star, description: 'Icon/emoji display', section: 'basic' },
+      { name: 'Badge', icon: Star, description: 'Status badge with optional icon', section: 'basic' },
 
       // Layout separator
       { name: '_separator_layout', icon: Layout, description: 'Layout Components', section: 'separator' },
@@ -83,7 +85,6 @@ const componentCategories = {
       { name: 'DataTable', icon: Table, description: 'Advanced data table', section: 'data' },
       { name: 'KPICard', icon: BarChart, description: 'KPI display card', section: 'data' },
       { name: 'Chart', icon: BarChart, description: 'Data visualization', section: 'data' },
-      { name: 'Badge', icon: MousePointer, description: 'Status badge', section: 'data' },
       { name: 'Progress', icon: BarChart, description: 'Progress indicator', section: 'data' },
       { name: 'Avatar', icon: MousePointer, description: 'User avatar', section: 'data' },
     ]
@@ -157,11 +158,12 @@ const DraggableComponentItem: React.FC<{ component: any }> = ({ component }) => 
       }
 
       // Fallback for non-template components
+      // Fallback for non-template components
       if (!newComponent) {
         newComponent = {
           id: `${Date.now()}-${Math.random()}`,
           type: component.name,
-          props: {},
+          props: getDefaultProps(component.name),
           styles: {},
           children: []
         };

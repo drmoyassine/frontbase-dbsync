@@ -1,7 +1,7 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { RendererProps } from './types';
+import { RendererProps } from '../types';
 import { useBuilderStore } from '@/stores/builder';
 
 interface NavbarProps {

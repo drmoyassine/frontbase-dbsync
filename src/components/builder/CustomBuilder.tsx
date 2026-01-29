@@ -21,7 +21,8 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 import { toast } from 'sonner';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { getSectionTemplate, expandTemplate } from './templates/sectionTemplates';
+import { getSectionTemplate, expandTemplate } from './templates';
+import { getDefaultProps } from '@/lib/componentDefaults';
 import './builder.css';
 
 export const CustomBuilder: React.FC = () => {
@@ -152,9 +153,9 @@ export const CustomBuilder: React.FC = () => {
       // Fallback for non-template components
       if (!newComponent) {
         newComponent = {
-          id: `${Date.now()} -${Math.random()} `,
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           type: activeData.type,
-          props: {},
+          props: getDefaultProps(activeData.type),
           styles: {},
           children: []
         };
@@ -192,7 +193,7 @@ export const CustomBuilder: React.FC = () => {
         newComponent = {
           id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           type: activeData.type,
-          props: {},
+          props: getDefaultProps(activeData.type),
           styles: {},
           children: []
         };
@@ -248,7 +249,7 @@ export const CustomBuilder: React.FC = () => {
         newComponent = {
           id: `${Date.now()} -${Math.random()} `,
           type: activeData.type,
-          props: {},
+          props: getDefaultProps(activeData.type),
           styles: {},
           children: []
         };

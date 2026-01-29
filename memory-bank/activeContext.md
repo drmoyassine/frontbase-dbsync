@@ -24,7 +24,13 @@ This file tracks the project's current status, including recent changes, current
 - **COMPLETED**: Modularized `DataTable.tsx` into `datatable/` directory
 - **COMPLETED**: Fixed Nginx routing issue for builder data fetching
 - **COMPLETED**: Implemented simultaneous search & filtering
-- **STATUS**: Storage API fully expanded (Bucket CRUD, Move, Copy implemented) and Verified. Core components stable.
+- **STATUS**: Storage API fully expanded and Verified. Core components stable.
+
+**📄 DOCUMENTATION & STABILIZATION**
+
+- **COMPLETED**: PostgreSQL Migration (Dual Driver Support)
+- **COMPLETED**: Redis Unification (UI-driven, HTTP/TCP fallback)
+- **IN PROGRESS**: Comprehensive Documentation Update (Memory Bank + Repo Docs)
 
 **🔄 MIGRATION & API CONSOLIDATION COMPLETE**
 
@@ -36,12 +42,19 @@ This file tracks the project's current status, including recent changes, current
 
 ### Current Environment Status
 
-- **FastAPI Backend (Port 8000)**: ✅ Primary - Unified API & DB-Sync
+- **FastAPI Backend (Port 8000)**: ✅ Primary - PostgreSQL (Prod) / SQLite (Dev)
 - **Express.js Backend (Port 3001)**: ⚠️ Legacy - Archived in `Dockerfile.legacy`
 - **Frontend (Port 5173)**: ✅ Active - Vite dev server or Nginx (Prod)
 - **Builder**: ✅ **REVAMPED** - 17-phase UI/UX improvements complete
 
 ## Recent Changes
+
+**2026-01-28 - 🐘 POSTGRESQL & REDIS UNIFICATION (Phase 7)**
+
+- **DATABASE**: Implemented Dual-Driver Strategy (`asyncpg` for App, `psycopg2` for Alembic)
+- **REDIS**: Implemented UI-driven configuration with HTTP (Edge) and TCP (Backend) fallback
+- **SCHEMA**: Fixed Pydantic datetime validation for PostgreSQL compatibility
+- **DOCS**: Created `database_patterns.md` and updated `documentation_refresh_plan.md`
 
 **2026-01-15 - 🔧 DATATABLE REFACTOR**
 

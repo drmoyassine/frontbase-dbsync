@@ -55,17 +55,6 @@ export const FormProperties: React.FC<FormPropertiesProps> = ({
                         </SelectContent>
                     </Select>
                 </div>
-                <div className="space-y-2 pt-2 border-t">
-                    <Label>Data Binding</Label>
-                    <Button
-                        variant="outline"
-                        onClick={onDataBindingClick}
-                        className="w-full justify-start"
-                    >
-                        <Database className="mr-2 h-4 w-4" />
-                        {hasBinding ? 'Edit Data Binding' : 'Configure Data Binding'}
-                    </Button>
-                </div>
             </>
         );
     }
@@ -99,17 +88,6 @@ export const FormProperties: React.FC<FormPropertiesProps> = ({
                         onChange={(e) => updateComponentProp('rows', parseInt(e.target.value))}
                     />
                 </div>
-                <div className="space-y-2 pt-2 border-t">
-                    <Label>Data Binding</Label>
-                    <Button
-                        variant="outline"
-                        onClick={onDataBindingClick}
-                        className="w-full justify-start"
-                    >
-                        <Database className="mr-2 h-4 w-4" />
-                        {hasBinding ? 'Edit Data Binding' : 'Configure Data Binding'}
-                    </Button>
-                </div>
             </>
         );
     }
@@ -135,17 +113,6 @@ export const FormProperties: React.FC<FormPropertiesProps> = ({
                         rows={4}
                     />
                 </div>
-                <div className="space-y-2 pt-2 border-t">
-                    <Label>Data Binding</Label>
-                    <Button
-                        variant="outline"
-                        onClick={onDataBindingClick}
-                        className="w-full justify-start"
-                    >
-                        <Database className="mr-2 h-4 w-4" />
-                        {hasBinding ? 'Edit Data Binding' : 'Configure Data Binding'}
-                    </Button>
-                </div>
             </>
         );
     }
@@ -161,17 +128,6 @@ export const FormProperties: React.FC<FormPropertiesProps> = ({
                         value={props.label || ''}
                         onChange={(e) => updateComponentProp('label', e.target.value)}
                     />
-                </div>
-                <div className="space-y-2 pt-2 border-t">
-                    <Label>Data Binding</Label>
-                    <Button
-                        variant="outline"
-                        onClick={onDataBindingClick}
-                        className="w-full justify-start"
-                    >
-                        <Database className="mr-2 h-4 w-4" />
-                        {hasBinding ? 'Edit Data Binding' : 'Configure Data Binding'}
-                    </Button>
                 </div>
             </>
         );

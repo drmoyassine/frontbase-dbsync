@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Database } from 'lucide-react';
+import { IconPicker } from './IconPicker';
 
 interface DisplayPropertiesProps {
     type: string;
@@ -62,17 +63,86 @@ export const DisplayProperties: React.FC<DisplayPropertiesProps> = ({
                         </SelectContent>
                     </Select>
                 </div>
-                <div className="space-y-2 pt-2 border-t">
-                    <Label>Data Binding</Label>
-                    <Button
-                        variant="outline"
-                        onClick={onDataBindingClick}
-                        className="w-full justify-start"
-                    >
-                        <Database className="mr-2 h-4 w-4" />
-                        {hasBinding ? 'Edit Data Binding' : 'Configure Data Binding'}
-                    </Button>
+                <div className="space-y-2">
+                    <Label htmlFor="badge-icon">Icon (Optional)</Label>
+                    <IconPicker
+                        value={props.icon || ''}
+                        onChange={(value) => updateComponentProp('icon', value)}
+                    />
                 </div>
+                {props.icon && (
+                    <div className="space-y-2">
+                        <Label htmlFor="badge-icon-position">Icon Position</Label>
+                        <Select value={props.iconPosition || 'left'} onValueChange={(value) => updateComponentProp('iconPosition', value)}>
+                            <SelectTrigger>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="left">Left</SelectItem>
+                                <SelectItem value="right">Right</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
+                <div className="space-y-2">
+                    <Label htmlFor="badge-bg-color">Background Color</Label>
+                    <div className="flex gap-2">
+                        <Input
+                            id="badge-bg-color"
+                            type="color"
+                            value={props.backgroundColor || '#000000'}
+                            onChange={(e) => updateComponentProp('backgroundColor', e.target.value)}
+                            className="w-20 h-9 p-1 cursor-pointer"
+                        />
+                        <Input
+                            type="text"
+                            value={props.backgroundColor || ''}
+                            onChange={(e) => updateComponentProp('backgroundColor', e.target.value)}
+                            placeholder="CSS color"
+                            className="flex-1"
+                        />
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="badge-text-color">Text Color</Label>
+                    <div className="flex gap-2">
+                        <Input
+                            id="badge-text-color"
+                            type="color"
+                            value={props.textColor || '#000000'}
+                            onChange={(e) => updateComponentProp('textColor', e.target.value)}
+                            className="w-20 h-9 p-1 cursor-pointer"
+                        />
+                        <Input
+                            type="text"
+                            value={props.textColor || ''}
+                            onChange={(e) => updateComponentProp('textColor', e.target.value)}
+                            placeholder="CSS color"
+                            className="flex-1"
+                        />
+                    </div>
+                </div>
+                {props.icon && (
+                    <div className="space-y-2">
+                        <Label htmlFor="badge-icon-color">Icon Color</Label>
+                        <div className="flex gap-2">
+                            <Input
+                                id="badge-icon-color"
+                                type="color"
+                                value={props.iconColor || '#000000'}
+                                onChange={(e) => updateComponentProp('iconColor', e.target.value)}
+                                className="w-20 h-9 p-1 cursor-pointer"
+                            />
+                            <Input
+                                type="text"
+                                value={props.iconColor || ''}
+                                onChange={(e) => updateComponentProp('iconColor', e.target.value)}
+                                placeholder="CSS color"
+                                className="flex-1"
+                            />
+                        </div>
+                    </div>
+                )}
             </>
         );
     }
@@ -91,17 +161,6 @@ export const DisplayProperties: React.FC<DisplayPropertiesProps> = ({
                         value={props.value || 50}
                         onChange={(e) => updateComponentProp('value', parseInt(e.target.value))}
                     />
-                </div>
-                <div className="space-y-2 pt-2 border-t">
-                    <Label>Data Binding</Label>
-                    <Button
-                        variant="outline"
-                        onClick={onDataBindingClick}
-                        className="w-full justify-start"
-                    >
-                        <Database className="mr-2 h-4 w-4" />
-                        {hasBinding ? 'Edit Data Binding' : 'Configure Data Binding'}
-                    </Button>
                 </div>
             </>
         );
@@ -123,17 +182,6 @@ export const DisplayProperties: React.FC<DisplayPropertiesProps> = ({
                             <SelectItem value="pie">Pie Chart</SelectItem>
                         </SelectContent>
                     </Select>
-                </div>
-                <div className="space-y-2">
-                    <Label>Data Binding</Label>
-                    <Button
-                        variant="outline"
-                        onClick={onDataBindingClick}
-                        className="w-full justify-start"
-                    >
-                        <Database className="mr-2 h-4 w-4" />
-                        {hasBinding ? 'Edit Data Binding' : 'Configure Data Binding'}
-                    </Button>
                 </div>
             </div>
         );
@@ -157,16 +205,97 @@ export const DisplayProperties: React.FC<DisplayPropertiesProps> = ({
                         </SelectContent>
                     </Select>
                 </div>
+            </div>
+        );
+    }
+
+    // Card Component
+    if (type === 'Card') {
+        return (
+            <div className="space-y-4">
                 <div className="space-y-2">
-                    <Label>Data Binding</Label>
-                    <Button
-                        variant="outline"
-                        onClick={onDataBindingClick}
-                        className="w-full justify-start"
-                    >
-                        <Database className="mr-2 h-4 w-4" />
-                        {hasBinding ? 'Edit Data Binding' : 'Configure Data Binding'}
-                    </Button>
+                    <Label htmlFor="card-title">Title</Label>
+                    <Input
+                        id="card-title"
+                        value={props.title || ''}
+                        onChange={(e) => updateComponentProp('title', e.target.value)}
+                        placeholder="Card Title"
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="card-desc">Description</Label>
+                    <Textarea
+                        id="card-desc"
+                        value={props.description || ''}
+                        onChange={(e) => updateComponentProp('description', e.target.value)}
+                        placeholder="Card description..."
+                        rows={2}
+                    />
+                </div>
+
+                <div className="space-y-2 pt-2 border-t">
+                    <Label className="text-xs font-semibold uppercase text-muted-foreground">Icon</Label>
+                    <div className="space-y-2">
+                        <Label htmlFor="card-icon">Icon Name</Label>
+                        <IconPicker
+                            value={props.icon}
+                            onChange={(val) => updateComponentProp('icon', val)}
+                        />
+                    </div>
+                    {props.icon && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Size</Label>
+                                <Select value={props.iconSize || 'md'} onValueChange={(v) => updateComponentProp('iconSize', v)}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="sm">Small</SelectItem>
+                                        <SelectItem value="md">Medium</SelectItem>
+                                        <SelectItem value="lg">Large</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Color</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        type="color"
+                                        value={props.iconColor || '#000000'}
+                                        onChange={(e) => updateComponentProp('iconColor', e.target.value)}
+                                        className="w-8 h-8 p-1 px-1"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="space-y-2 pt-2 border-t">
+                    <Label className="text-xs font-semibold uppercase text-muted-foreground">Alignment</Label>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>Icon Align</Label>
+                            <Select value={props.iconAlignment || 'center'} onValueChange={(v) => updateComponentProp('iconAlignment', v)}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="left">Left</SelectItem>
+                                    <SelectItem value="center">Center</SelectItem>
+                                    <SelectItem value="right">Right</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Text Align</Label>
+                            <Select value={props.textAlignment || 'center'} onValueChange={(v) => updateComponentProp('textAlignment', v)}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="left">Left</SelectItem>
+                                    <SelectItem value="center">Center</SelectItem>
+                                    <SelectItem value="right">Right</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
                 </div>
             </div>
         );

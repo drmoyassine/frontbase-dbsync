@@ -48,7 +48,7 @@ graph TD
 | Service | Purpose | Redis Usage |
 |---------|---------|-------------|
 | **Edge Engine** | SSR pages, public runtime | ✅ Active caching via `cached<T>()` |
-| **FastAPI Backend** | Admin UI, config storage | ⚠️ Test Connection only (future: schema/API cache) |
+| **FastAPI Backend** | Admin UI, config storage | ✅ **Active Config Provider** (Strict TCP) |
 
 ---
 
@@ -66,6 +66,7 @@ graph TD
 | Local Dev (uvicorn standalone) | Windows host | `http://localhost:8079` |
 | Local Dev (docker compose) | Docker network | `http://redis-http:80` |
 | VPS / Cloud | Docker network | `http://redis-http:80` |
+| **Backend Note** | Python Redis client | **MUST use TCP** (e.g. `redis://redis:6379`) or local fallback. **Cannot** use Upstash HTTP API. |
 | Production Edge | Internet | `https://...upstash.io` |
 
 ### Pre-seeded Defaults (Docker)

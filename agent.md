@@ -1,7 +1,7 @@
 # Frontbase Builder - Agent Documentation
 
 ## Overview
-Frontbase is a visual database builder and admin panel for Supabase. It enables users to create web pages through a drag-and-drop interface with automatic data binding.
+Frontbase is an open-source, edge-native platform enabling teams to deploy AI-powered apps and edge services with no-code.
 
 ## Architecture
 
@@ -9,9 +9,11 @@ Frontbase is a visual database builder and admin panel for Supabase. It enables 
 - **Frontend**: React 18 + TypeScript + Vite
 - **UI Framework**: Shadcn UI + Tailwind CSS
 - **State Management**: Zustand + TanStack Query (React Query)
-- **Drag & Drop**: React DND
-- **Backend**: FastAPI (Python) + SQLite
-- **Database Integration**: Supabase (via PostgREST)
+- **Caching**: Redis / Upstash (Edge-compatible)
+- **Drag & Drop**: @dnd-kit (Unified DnD engine)
+- **Backend**: FastAPI (Python) + PostgreSQL (Production) / SQLite (Development)
+- **Edge Engine**: Hono (SSR & Workflows)
+- **Data Sources**: Multi-Source (Supabase, PostgreSQL, REST APIs)
 
 ### Directory Structure
 
@@ -20,6 +22,12 @@ src/                  # React Frontend
 ├── components/       # UI components
 ├── hooks/            # Data fetching & logic
 ├── modules/          # Feature-based modules (e.g., dbsync)
+├── services/         # Shared services
+└── ...
+
+services/edge/        # Hono Edge Engine (SSR + Workflows)
+├── src/db/           # Drizzle Schema (SQLite/Turso)
+├── src/routes/       # Runtime Routes
 └── ...
 
 fastapi-backend/      # Unified Backend
@@ -49,7 +57,13 @@ Dockerfile.legacy     # Legacy image definition
 - Manages local state (filters, pagination, sorting)
 - Returns: `{ data, count, loading, error, schema, refetch, ... }`
 
-### 2. Component System
+### 2. Edge Self-Sufficiency
+- **Concept**: The Edge Engine is a standalone runtime.
+- **Rule**: Once published, Edge **NEVER** communicates with the FastAPI Builder.
+- **Dependency**: Relies 100% on its own database (SQLite/Turso) and Redis.
+- **Benefit**: Zero runtime coupling, faster edge performance, higher availability.
+
+### 3. Component System
 
 **Component Types**:
 - **Basic**: Button, Text, Heading, Card, Badge, Image, Alert, etc.
@@ -70,7 +84,7 @@ Dockerfile.legacy     # Legacy image definition
 }
 ```
 
-### 3. Visual CSS Styling System
+### 4. Visual CSS Styling System
 
 **Architecture**: Metadata-driven preset CSS properties engine
 
@@ -100,7 +114,7 @@ Dockerfile.legacy     # Legacy image definition
 
 **Visual Toggle Groups**: Properties like flexDirection and alignItems use visual toggle groups instead of dropdowns for better UX.
 
-### 4. Container Styles (Page-Level Styling)
+### 5. Container Styles (Page-Level Styling)
 
 **Storage Strategy**: Zero-migration nested JSON approach
 
@@ -115,7 +129,7 @@ Dockerfile.legacy     # Legacy image definition
 - `BuilderCanvas.tsx`: Applies styles via `getContainerCSS()`
 - `StylingPanel.tsx`: UI for editing page styles
 
-### 5. Responsive Builder
+### 6. Responsive Builder
 
 **Viewport Auto-Switching**:
 | Screen Width | Canvas Viewport | Use Case |
@@ -140,7 +154,7 @@ useEffect(() => {
 
 **Mobile UI**: Collapsible sidebars with drawer pattern for touch-friendly editing.
 
-### 3. State Management
+### 7. State Management
 
 #### Zustand Stores
 - **Builder Store** (`stores/builder.ts`): Page builder state (sliced architecture)
@@ -152,7 +166,7 @@ useEffect(() => {
 - Automatic caching and background updates
 - `keepPreviousData` for smooth pagination
 
-### 4. Data Flow
+### 8. Data Flow
 
 ```
 Component → useSimpleData() → useTableData() → databaseApi → FastAPI → Supabase
@@ -160,7 +174,7 @@ Component → useSimpleData() → useTableData() → databaseApi → FastAPI →
                             React Query Cache
 ```
 
-### 5. Foreign Key Handling
+### 9. Foreign Key Handling
 
 FKs are automatically detected and joined:
 1. `useGlobalSchema()` fetches FK relationships from `frontbase_get_schema_info` RPC
@@ -234,9 +248,9 @@ cd fastapi-backend
 python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Terminal 2 - Actions Engine (Hono)**:
+**Terminal 2 - Edge Engine (Hono)**:
 ```bash
-cd services/actions
+cd services/edge
 npm run dev
 # Runs on http://localhost:3002
 # Swagger UI: http://localhost:3002/docs

@@ -1,10 +1,18 @@
 // Shared default props for different component types
 export function getDefaultProps(componentType: string): Record<string, any> {
+  console.log('[getDefaultProps] Requesting defaults for:', componentType);
   const defaults: Record<string, any> = {
     Button: { text: 'Button', variant: 'default', size: 'default' },
     Text: { text: 'Sample text content', size: 'base' },
     Heading: { text: 'Heading', level: '2' },
-    Card: { title: 'Card Title', description: 'Card description', content: 'Card content' },
+    Card: {
+      icon: 'Zap',
+      title: 'Feature Title',
+      description: 'Feature description goes here.',
+      iconSize: 'md',
+      iconAlignment: 'center',
+      textAlignment: 'center'
+    },
     Input: { placeholder: 'Enter text...', type: 'text' },
     Textarea: { placeholder: 'Enter text...', rows: 3 },
     Select: { placeholder: 'Select an option', options: ['Option 1', 'Option 2', 'Option 3'] },

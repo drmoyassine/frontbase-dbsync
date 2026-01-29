@@ -1,21 +1,25 @@
 # Frontbase
 
-A visual database builder and admin panel for Supabase, built with React, TypeScript, and FastAPI.
+Frontbase is an open-source, edge-native platform enabling teams to deploy AI-powered apps and edge services with no-code.
 
 ## Tech Stack
 
 - **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui
-- **Backend**: FastAPI (Python), SQLAlchemy
-- **Database**: SQLite (local config), Supabase (user data)
+- **Backend**: FastAPI (Python), SQLAlchemy, Alembic
+- **Database**: PostgreSQL (Production) / SQLite (Development)
+- **Edge Engine**: Hono (SSR & Workflows) - Self-sufficient at runtime
+- **Data Sources**: Multi-Source (Supabase, PostgreSQL, REST APIs)
+- **Caching**: Redis / Upstash
 - **State Management**: Zustand, TanStack Query
 
 ## Quick Start
-
-### Prerequisites
-
-- Node.js 18+ and npm
-- Python 3.11+
-- A Supabase project (for database features)
+ 
+ ### Architecture: Design vs. Runtime
+ 
+ > [!IMPORTANT]
+ > **Edge Self-Sufficiency**: The Edge Engine (Hono) is designed to run **independently** of the builder (FastAPI). Once a site is published, the Edge Engine relies solely on its own database (SQLite/Turso) and Redis. It **does NOT** make runtime calls to the backend API.
+ 
+ ### Prerequisites
 
 ### Development Setup
 
@@ -107,11 +111,16 @@ Open http://localhost:5173 in your browser.
 ```bash
 # Build and run
 docker-compose up -d
-
-# Or build manually
-docker build -t frontbase .
-docker run -p 8000:8000 -v ./data:/app/data frontbase
 ```
+
+This starts:
+- **FastAPI Backend** (Port 8000)
+- **Frontend** (Port 5173/80)
+- **Edge Engine** (Port 3002)
+- **Redis** (Port 6379)
+- **PostgreSQL** (Port 5432) - *via docker-compose.postgres.yml*
+
+See `memory-bank/database_patterns.md` for detailed production database guidelines.
 
 ### Manual Deployment
 

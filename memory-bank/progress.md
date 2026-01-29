@@ -66,6 +66,15 @@
 - **Tailwind Migration**: VariablePicker converted from ~100 line inline `<style>` block to Tailwind classes
 - **Key Files**: `src/components/dashboard/settings/hooks/`, `src/components/dashboard/settings/shared/`
 
+### Phase 7: PostgreSQL & Redis Unification ✅ (2026-01-28)
+
+- **Database Compatibility**: Implemented patterns for dual SQLite/PostgreSQL support
+- **Driver Strategy**: Configured `asyncpg` for runtime and `psycopg2` for migrations
+- **Redis Reliability**: Added HTTP/TCP fallback logic to prevent backend crashes on Edge-only config
+- **Schema Fixes**: Resolved Pydantic validation issues with Postgres timestamps
+- **Documentation**: Created `database_patterns.md`
+- **Key Files**: `alembic/env.py`, `app/services/sync/redis_client.py`, `app/models/schemas.py`
+
 ### 1. FastAPI Primary Backend ✅
 
 - **Migration**: Completed full migration from Express.js to FastAPI

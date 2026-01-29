@@ -21,7 +21,7 @@ npm start
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `3002` | Server port |
-| `DATABASE_URL` | `file:./data/edge.db` | SQLite/LibSQL connection string |
+| `DATABASE_URL` | `file:./data/actions.db` | Connection string for SQLite (local) or Turso (Edge) |
 | `FASTAPI_URL` | `http://localhost:8000` | FastAPI backend URL |
 | `PUBLIC_URL` | - | Public URL for generating preview links |
 | `SUPABASE_JWT_SECRET` | - | Supabase JWT secret for user auth |
@@ -55,3 +55,9 @@ npm run db:migrate
 # Open Drizzle Studio
 npm run db:studio
 ```
+
+## Database Strategy
+- **Development**: Uses local SQLite (`file:./data/actions.db`)
+- **Edge Production**: Uses Turso/LibSQL (`libsql://...`)
+- **Note**: Does NOT connect to the backend PostgreSQL.
+

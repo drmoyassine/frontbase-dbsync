@@ -39,17 +39,6 @@ export const MediaProperties: React.FC<MediaPropertiesProps> = ({
                         onChange={(e) => updateComponentProp('alt', e.target.value)}
                     />
                 </div>
-                <div className="space-y-2 pt-2 border-t">
-                    <Label>Data Binding</Label>
-                    <Button
-                        variant="outline"
-                        onClick={onDataBindingClick}
-                        className="w-full justify-start"
-                    >
-                        <Database className="mr-2 h-4 w-4" />
-                        {hasBinding ? 'Edit Data Binding' : 'Configure Data Binding'}
-                    </Button>
-                </div>
             </>
         );
     }
@@ -74,17 +63,6 @@ export const MediaProperties: React.FC<MediaPropertiesProps> = ({
                         onChange={(e) => updateComponentProp('fallback', e.target.value)}
                         maxLength={2}
                     />
-                </div>
-                <div className="space-y-2 pt-2 border-t">
-                    <Label>Data Binding</Label>
-                    <Button
-                        variant="outline"
-                        onClick={onDataBindingClick}
-                        className="w-full justify-start"
-                    >
-                        <Database className="mr-2 h-4 w-4" />
-                        {hasBinding ? 'Edit Data Binding' : 'Configure Data Binding'}
-                    </Button>
                 </div>
             </>
         );

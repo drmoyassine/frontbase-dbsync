@@ -49,17 +49,6 @@ export const TypographyProperties: React.FC<TypographyPropertiesProps> = ({
                         </SelectContent>
                     </Select>
                 </div>
-                <div className="space-y-2 pt-2 border-t">
-                    <Label>Data Binding</Label>
-                    <Button
-                        variant="outline"
-                        onClick={onDataBindingClick}
-                        className="w-full justify-start"
-                    >
-                        <Database className="mr-2 h-4 w-4" />
-                        {hasBinding ? 'Edit Data Binding' : 'Configure Data Binding'}
-                    </Button>
-                </div>
             </>
         );
     }
@@ -76,17 +65,6 @@ export const TypographyProperties: React.FC<TypographyPropertiesProps> = ({
                         onChange={(e) => updateComponentProp('text', e.target.value)}
                         rows={4}
                     />
-                </div>
-                <div className="space-y-2 pt-2 border-t">
-                    <Label>Data Binding</Label>
-                    <Button
-                        variant="outline"
-                        onClick={onDataBindingClick}
-                        className="w-full justify-start"
-                    >
-                        <Database className="mr-2 h-4 w-4" />
-                        {hasBinding ? 'Edit Data Binding' : 'Configure Data Binding'}
-                    </Button>
                 </div>
             </>
         );
@@ -123,14 +101,6 @@ export const TypographyProperties: React.FC<TypographyPropertiesProps> = ({
                             <SelectItem value="_blank">New Tab</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Button
-                        variant="outline"
-                        onClick={onDataBindingClick}
-                        className="w-full justify-start"
-                    >
-                        <Database className="mr-2 h-4 w-4" />
-                        {hasBinding ? 'Edit Data Binding' : 'Configure Data Binding'}
-                    </Button>
                 </div>
             </>
         );

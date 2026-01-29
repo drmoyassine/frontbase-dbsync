@@ -12,6 +12,15 @@ This file documents recurring patterns and standards used in the project.
 - **Databases**: Separate `unified.db` (drafts) and `actions.db` (published)
 - **See**: `memory-bank/actionsArchitecture.md` for full documentation
 
+### Edge Isolation Pattern (Edge Self-Sufficiency)
+- **Rule**: Design-Time vs. Runtime Separation
+- **Principle**: The Edge Engine (Hono) runs **independently** of the Backend (FastAPI).
+- **Constraint**: Once published, Edge **NEVER** calls back to port 8000.
+- **Data Flow**:
+  1. **Push**: FastAPI pushes configuration/content to Edge DB/Redis.
+  2. **Sync**: Edge pulls from Redis/DB on startup (optional).
+  3. **Runtime**: Edge serves requests using ONLY local resources (SQLite/Turso + Redis).
+
 ## Builder UI/UX Patterns (NEW)
 
 ### Visual CSS Styling Engine
@@ -169,14 +178,12 @@ Component → useSimpleData() → useTableData() → databaseApi → FastAPI →
 - **Middleware**: `TrailingSlashMiddleware` normalizes paths (adds slash if missing)
 
 ### Unified Database Pattern
-- **Pattern**: Single SQLite file for all services
-- **Database File**: `unified.db` in `fastapi-backend/` root
-- **Services Using It**:
-  - Main App (`app/database/config.py`) - sync driver `sqlite:///`
-  - Sync Service (`app/services/sync/config.py`) - async driver `sqlite+aiosqlite:///`
-- **Configuration**: Both read `DATABASE_URL` from environment
-- **Docker**: Uses `./data/unified.db` with volume mount
-- **CRITICAL**: Never create separate database files - all data must go to unified.db
+- **Concept**: Single Logical Database (Polymorphic)
+- **Implementation**:
+  - **Development**: SQLite (`sqlite+aiosqlite:///`)
+  - **Production**: PostgreSQL (`postgresql+asyncpg://`)
+- **Compatibility**: Logic is dialect-aware (see `memory-bank/database_patterns.md`)
+- **Constraint**: Edge uses its own SQLite/Turso instance, decoupled from the main DB.
 
 ## Performance Patterns
 

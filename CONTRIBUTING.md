@@ -146,6 +146,25 @@ async def my_endpoint(request: MyRequest):
 }
 ```
 
+## Database Changes (Alembic)
+
+> [!IMPORTANT]
+> **Never edit database schema manually.** Always use Alembic migrations.
+
+### Workflow
+1. **Modify Models**: Update `app/models/models.py`
+2. **Generate Migration**:
+   ```bash
+   cd fastapi-backend
+   alembic revision --autogenerate -m "describe_your_change"
+   ```
+3. **Review**: Check `alembic/versions/` for correctness (auto-gen can be imperfect)
+4. **Apply**:
+   ```bash
+   alembic upgrade head
+   ```
+5. **Commit**: Add both the model change and the migration file.
+
 ## Testing
 
 ### Manual Testing Checklist

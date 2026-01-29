@@ -191,6 +191,20 @@ const ContainerComponent: React.FC<{
   // Use ComponentRenderer for Container to apply styles properly
   // NOTE: We use Fragment (not a div) to avoid adding an intermediate wrapper
   // that would override the Container's flex/grid layout
+
+  // Check if this is a Card with content (Feature Card mode)
+  // If so, we SHOULD NOT show the placeholder, but passing empty children is fine
+  // because CardRenderer handles empty children by showing the feature content
+  const isFeatureCard = component.type === 'Card' && (
+    component.props?.title ||
+    component.props?.description ||
+    component.props?.icon
+  );
+
+  const showPlaceholder = !isPreviewMode && !isFeatureCard;
+
+
+
   const containerChildren = component.children?.length > 0 ? (
     <>
       {component.children.map((child: any, index: number) => (
@@ -211,11 +225,11 @@ const ContainerComponent: React.FC<{
       ))}
     </>
   ) : (
-    !isPreviewMode && (
+    showPlaceholder ? (
       <div className="text-center py-8">
         <p className="text-muted-foreground">Drop components here</p>
       </div>
-    )
+    ) : null
   );
 
   return (

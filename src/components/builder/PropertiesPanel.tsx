@@ -27,6 +27,9 @@ import { VariableInput } from './VariableInput';
 import { ArrayEditor } from './ArrayEditor';
 import { IconPicker } from './properties/IconPicker';
 import { ColorPicker } from '@/components/builder/style-controls/ColorPicker';
+import { LogoCloudProperties } from './properties/LogoCloudProperties';
+import { FeatureSectionProperties } from './properties/FeatureSectionProperties';
+import { DisplayProperties } from './properties/DisplayProperties';
 
 // Helper to find component recursively
 const findComponent = (components: any[], id: string): any => {
@@ -108,23 +111,6 @@ export const PropertiesPanel = () => {
     updateComponentProp('binding', binding);
   };
 
-  const renderDataBindingButton = () => {
-    const binding = getComponentBinding(selectedComponentId);
-    return (
-      <div className="space-y-2 pt-2 border-t">
-        <Label>Data Binding</Label>
-        <Button
-          variant="outline"
-          onClick={() => setShowDataBinding(true)}
-          className="w-full justify-start"
-        >
-          <Database className="mr-2 h-4 w-4" />
-          {binding ? 'Edit Data Binding' : 'Configure Data Binding'}
-        </Button>
-      </div>
-    );
-  };
-
   const renderPropertyFields = () => {
     const { type, props, styles = {} } = selectedComponent;
 
@@ -134,6 +120,24 @@ export const PropertiesPanel = () => {
           <div className="text-sm text-muted-foreground p-4 text-center border border-dashed rounded-md">
             Use the Styling Panel (palette icon) to customize layout, spacing, and background.
           </div>
+        );
+
+      case 'LogoCloud':
+        return (
+          <LogoCloudProperties
+            componentId={selectedComponentId}
+            props={props}
+            updateComponentProp={updateComponentProp}
+          />
+        );
+
+      case 'FeatureSection':
+        return (
+          <FeatureSectionProperties
+            componentId={selectedComponentId}
+            props={props}
+            updateComponentProp={updateComponentProp}
+          />
         );
 
       case 'Navbar':
@@ -490,7 +494,6 @@ export const PropertiesPanel = () => {
                 </SelectContent>
               </Select>
             </div>
-            {renderDataBindingButton()}
           </>
         );
 
@@ -506,7 +509,6 @@ export const PropertiesPanel = () => {
                 placeholder="Enter text or type @ for variables"
               />
             </div>
-            {renderDataBindingButton()}
           </>
         );
 
@@ -646,7 +648,6 @@ export const PropertiesPanel = () => {
                 </SelectContent>
               </Select>
             </div>
-            {renderDataBindingButton()}
           </>
         );
 
@@ -678,7 +679,6 @@ export const PropertiesPanel = () => {
                 onChange={(e) => updateComponentProp('rows', parseInt(e.target.value))}
               />
             </div>
-            {renderDataBindingButton()}
           </>
         );
 
@@ -702,7 +702,6 @@ export const PropertiesPanel = () => {
                 rows={4}
               />
             </div>
-            {renderDataBindingButton()}
           </>
         );
 
@@ -718,7 +717,6 @@ export const PropertiesPanel = () => {
                 onChange={(e) => updateComponentProp('label', e.target.value)}
               />
             </div>
-            {renderDataBindingButton()}
           </>
         );
 
@@ -760,7 +758,86 @@ export const PropertiesPanel = () => {
                 </SelectContent>
               </Select>
             </div>
-            {renderDataBindingButton()}
+            <div className="space-y-2">
+              <Label htmlFor="badge-icon">Icon (Optional)</Label>
+              <IconPicker
+                value={props.icon || ''}
+                onChange={(value) => updateComponentProp('icon', value)}
+              />
+            </div>
+            {props.icon && (
+              <div className="space-y-2">
+                <Label htmlFor="badge-icon-position">Icon Position</Label>
+                <Select value={props.iconPosition || 'left'} onValueChange={(value) => updateComponentProp('iconPosition', value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="left">Left</SelectItem>
+                    <SelectItem value="right">Right</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="badge-bg-color">Background Color</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="badge-bg-color"
+                  type="color"
+                  value={props.backgroundColor || '#000000'}
+                  onChange={(e) => updateComponentProp('backgroundColor', e.target.value)}
+                  className="w-20 h-9 p-1 cursor-pointer"
+                />
+                <Input
+                  type="text"
+                  value={props.backgroundColor || ''}
+                  onChange={(e) => updateComponentProp('backgroundColor', e.target.value)}
+                  placeholder="CSS color"
+                  className="flex-1"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="badge-text-color">Text Color</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="badge-text-color"
+                  type="color"
+                  value={props.textColor || '#000000'}
+                  onChange={(e) => updateComponentProp('textColor', e.target.value)}
+                  className="w-20 h-9 p-1 cursor-pointer"
+                />
+                <Input
+                  type="text"
+                  value={props.textColor || ''}
+                  onChange={(e) => updateComponentProp('textColor', e.target.value)}
+                  placeholder="CSS color"
+                  className="flex-1"
+                />
+              </div>
+            </div>
+            {props.icon && (
+              <div className="space-y-2">
+                <Label htmlFor="badge-icon-color">Icon Color</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="badge-icon-color"
+                    type="color"
+                    value={props.iconColor || '#000000'}
+                    onChange={(e) => updateComponentProp('iconColor', e.target.value)}
+                    className="w-20 h-9 p-1 cursor-pointer"
+                  />
+                  <Input
+                    type="text"
+                    value={props.iconColor || ''}
+                    onChange={(e) => updateComponentProp('iconColor', e.target.value)}
+                    placeholder="CSS color"
+                    className="flex-1"
+                  />
+                </div>
+              </div>
+            )}
           </>
         );
 
@@ -784,7 +861,6 @@ export const PropertiesPanel = () => {
                 maxLength={2}
               />
             </div>
-            {renderDataBindingButton()}
           </>
         );
 
@@ -802,7 +878,6 @@ export const PropertiesPanel = () => {
                 onChange={(e) => updateComponentProp('value', parseInt(e.target.value))}
               />
             </div>
-            {renderDataBindingButton()}
           </>
         );
 
@@ -825,7 +900,6 @@ export const PropertiesPanel = () => {
                 onChange={(e) => updateComponentProp('alt', e.target.value)}
               />
             </div>
-            {renderDataBindingButton()}
           </>
         );
 
@@ -971,6 +1045,24 @@ export const PropertiesPanel = () => {
       // These are now templates that expand into primitive components.
       // Each child component uses its own property panel (Container, Heading, Text, etc.)
       // No custom property panels needed here anymore.
+
+
+      // Components handled by DisplayProperties
+      case 'Card':
+      case 'Alert':
+      case 'Badge':
+      case 'Progress':
+      case 'Chart':
+      case 'Grid':
+        return (
+          <DisplayProperties
+            type={type}
+            props={props}
+            updateComponentProp={updateComponentProp}
+            onDataBindingClick={() => setShowDataBinding(true)}
+            hasBinding={!!props.binding}
+          />
+        );
 
       default:
         return (

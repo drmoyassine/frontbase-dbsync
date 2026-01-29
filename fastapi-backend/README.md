@@ -27,7 +27,7 @@ This is the primary backend for Frontbase - a visual database builder and admin 
    ```
 5. **Initialize Database**:
    ```bash
-   python init_db.py
+   alembic upgrade head
    ```
 
 #### Manual Installation
@@ -35,7 +35,7 @@ If the setup scripts don't work, you can install the dependencies manually:
 
 ```bash
 pip install -r requirements.txt
-python init_db.py
+alembic upgrade head
 ```
 
 ### Running the Backend
@@ -64,8 +64,10 @@ python test_endpoints.py
 - FastAPI: Web framework for building APIs
 - Uvicorn: ASGI server for running FastAPI
 - Pydantic: Data validation using Python type annotations
-- SQLAlchemy: SQL toolkit and Object-Relational Mapping (ORM) library
-- aiosqlite: Async SQLite driver for SQLAlchemy
+- SQLAlchemy: SQL toolkit and ORM (Async/Sync)
+- aiosqlite: Async SQLite driver
+- asyncpg: Async PostgreSQL driver (Production)
+- psycopg2-binary: Sync PostgreSQL driver (Migrations) for SQLAlchemy
 - passlib: Password hashing library
 - python-multipart: For form data handling
 - python-jose: For JWT authentication (future implementation)

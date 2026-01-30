@@ -206,11 +206,18 @@ async def update_page_layout(page_id: str, request: dict, db: Session = Depends(
 
 
 @router.delete("/{page_id}/")
-async def delete_page(page_id: str, db: Session = Depends(get_db)):
-    """Soft delete a page - matches Express: { success, message }"""
+async def delete_page(page_id: str):
+    """Soft delete a page - matches Express: { success, message }.
+    Optimized: Releases DB connection before Edge unpublish call.
+    """
+    from ...database.config import SessionLocal
+    
+    # 1. DB OPERATIONS
+    db = SessionLocal()
     try:
         page = db.query(Page).filter(Page.id == page_id).first()
         if not page:
+            db.close()
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Page not found"
@@ -229,8 +236,19 @@ async def delete_page(page_id: str, db: Session = Depends(get_db)):
             page.is_homepage = False
         
         db.commit()
-        
-        # Unpublish from edge SSR service
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.close()
+        return {
+            "success": False,
+            "error": str(e)
+        }
+    finally:
+        db.close()  # RELEASE CONNECTION BEFORE EDGE CALL
+
+    # 2. EDGE UNPUBLISH (No DB Connection Held)
+    try:
         await unpublish_from_edge(original_slug)
         
         # If was homepage, also clear the homepage route
@@ -242,8 +260,6 @@ async def delete_page(page_id: str, db: Session = Depends(get_db)):
             "success": True,
             "message": "Page moved to trash successfully"
         }
-    except HTTPException:
-        raise
     except Exception as e:
         return {
             "success": False,
@@ -292,30 +308,51 @@ async def restore_page(page_id: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/{page_id}/permanent/")
-async def permanent_delete_page(page_id: str, db: Session = Depends(get_db)):
-    """Permanently delete a page - matches Express: { success, message }"""
+async def permanent_delete_page(page_id: str):
+    """Permanently delete a page - matches Express: { success, message }.
+    Optimized: Releases DB connection before Edge unpublish call.
+    """
+    from ...database.config import SessionLocal
+    
+    # 1. DB OPERATIONS
+    db = SessionLocal()
     try:
         page = db.query(Page).filter(Page.id == page_id).first()
         if not page:
+            db.close()
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Page not found"
             )
         
-        # Unpublish from edge SSR service (handles -deleted- suffix)
-        await unpublish_from_edge(page.slug)
+        # Store slug for unpublish (handles -deleted- suffix)
+        page_slug = page.slug
         
         db.delete(page)
         db.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.close()
+        return {
+            "success": False,
+            "error": str(e)
+        }
+    finally:
+        db.close()  # RELEASE CONNECTION BEFORE EDGE CALL
+
+    # 2. EDGE UNPUBLISH (No DB Connection Held)
+    try:
+        await unpublish_from_edge(page_slug)
         
         return {
             "success": True,
             "message": "Page permanently deleted"
         }
-    except HTTPException:
-        raise
     except Exception as e:
+        # Don't fail the already-committed delete
+        print(f"[PermanentDelete] Edge unpublish failed (non-fatal): {e}")
         return {
-            "success": False,
-            "error": str(e)
+            "success": True,
+            "message": "Page permanently deleted (edge sync may have failed)"
         }

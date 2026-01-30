@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from ..database.utils import get_db, get_project, update_project
+from ..database.config import SessionLocal
 from ..models.schemas import ProjectUpdateRequest, ProjectResponse, SuccessResponse
 import os
 import uuid
 from pathlib import Path
+import httpx
 
 router = APIRouter(prefix="/api/project", tags=["project"])
 
@@ -39,31 +41,48 @@ async def get_project_endpoint(db: Session = Depends(get_db)):
     return project
 
 @router.put("/", response_model=ProjectResponse, response_model_by_alias=True)
-async def update_project_endpoint(request: ProjectUpdateRequest, db: Session = Depends(get_db)):
-    """Update project settings and sync to Edge for SSR self-sufficiency"""
-    import httpx
-    
-    project = update_project(db, request.dict(exclude_unset=True))
-    
-    # Sync settings to Edge engine (fire-and-forget, non-blocking)
+async def update_project_endpoint(request: ProjectUpdateRequest):
+    """Update project settings and sync to Edge for SSR self-sufficiency.
+    Optimized: Releases DB connection before Edge sync HTTP call.
+    """
+    # 1. DB OPERATIONS
+    db = SessionLocal()
+    try:
+        project = update_project(db, request.dict(exclude_unset=True))
+        # Detach the data we need for the response and Edge sync
+        project_data = {
+            "favicon_url": project.favicon_url,
+            "logo_url": getattr(project, 'logo_url', None),
+            "name": project.name,
+            "description": project.description,
+            "app_url": project.app_url,
+        }
+        # Convert ORM model to dict for response BEFORE closing session
+        from ..models.schemas import ProjectResponse
+        response_data = ProjectResponse.from_orm(project)
+        db.commit()
+    finally:
+        db.close()  # RELEASE CONNECTION BEFORE EDGE SYNC
+
+    # 2. EDGE SYNC (No DB Connection Held)
     edge_url = os.getenv("EDGE_URL", "http://edge:3002")
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             await client.post(
                 f"{edge_url}/api/import/settings",
                 json={
-                    "faviconUrl": project.favicon_url,
-                    "logoUrl": getattr(project, 'logo_url', None),
-                    "siteName": project.name,
-                    "siteDescription": project.description,
-                    "appUrl": project.app_url,
+                    "faviconUrl": project_data["favicon_url"],
+                    "logoUrl": project_data["logo_url"],
+                    "siteName": project_data["name"],
+                    "siteDescription": project_data["description"],
+                    "appUrl": project_data["app_url"],
                 }
             )
     except Exception as e:
         # Non-fatal: Edge sync failure shouldn't block project save
         print(f"[Project] Edge sync failed (non-fatal): {e}")
     
-    return project
+    return response_data
 
 @router.post("/assets/upload/")
 async def upload_branding_asset(

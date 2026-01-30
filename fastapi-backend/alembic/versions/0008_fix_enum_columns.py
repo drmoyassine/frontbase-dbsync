@@ -25,6 +25,40 @@ def table_exists(inspector, table_name: str) -> bool:
     return table_name in inspector.get_table_names()
 
 
+def column_exists(inspector, table_name: str, column_name: str) -> bool:
+    """Check if a column exists in a table."""
+    if not table_exists(inspector, table_name):
+        return False
+    columns = {col['name'] for col in inspector.get_columns(table_name)}
+    return column_name in columns
+
+
+def safe_alter_column_to_varchar(conn, table_name: str, column_name: str, length: int, inspector) -> None:
+    """Safely alter a column to VARCHAR if it exists and is an enum type."""
+    if not column_exists(inspector, table_name, column_name):
+        print(f"Skipping {table_name}.{column_name}: column does not exist")
+        return
+    
+    # Check if the column is already VARCHAR/TEXT
+    columns = inspector.get_columns(table_name)
+    col_info = next((c for c in columns if c['name'] == column_name), None)
+    if col_info:
+        col_type = str(col_info['type']).upper()
+        if 'VARCHAR' in col_type or 'TEXT' in col_type or 'CHARACTER' in col_type:
+            print(f"Skipping {table_name}.{column_name}: already VARCHAR/TEXT type")
+            return
+    
+    try:
+        conn.execute(text(f"""
+            ALTER TABLE {table_name} 
+            ALTER COLUMN {column_name} TYPE VARCHAR({length}) 
+            USING {column_name}::text
+        """))
+        print(f"Converted {table_name}.{column_name} to VARCHAR({length})")
+    except Exception as e:
+        print(f"Note: Could not alter {table_name}.{column_name}: {e}")
+
+
 def upgrade() -> None:
     """Convert enum columns to VARCHAR for PostgreSQL compatibility."""
     conn = op.get_bind()
@@ -33,63 +67,32 @@ def upgrade() -> None:
     
     # SQLite already stores enums as strings, so no changes needed
     if dialect == 'sqlite':
+        print("SQLite detected - no enum conversion needed")
         return
     
-    # PostgreSQL: Convert enum columns to VARCHAR
-    # This handles the case where tables were created with native enum types
+    print("PostgreSQL detected - checking enum columns...")
     
     # 1. Fix datasources.type column
-    if table_exists(inspector, 'datasources'):
-        try:
-            op.execute(text("""
-                ALTER TABLE datasources 
-                ALTER COLUMN type TYPE VARCHAR(50) 
-                USING type::text
-            """))
-        except Exception as e:
-            # Column might already be VARCHAR if created fresh
-            print(f"Note: datasources.type may already be VARCHAR: {e}")
+    safe_alter_column_to_varchar(conn, 'datasources', 'type', 50, inspector)
     
     # 2. Fix sync_jobs.status column
-    if table_exists(inspector, 'sync_jobs'):
-        try:
-            op.execute(text("""
-                ALTER TABLE sync_jobs 
-                ALTER COLUMN status TYPE VARCHAR(30) 
-                USING status::text
-            """))
-        except Exception as e:
-            print(f"Note: sync_jobs.status may already be VARCHAR: {e}")
+    safe_alter_column_to_varchar(conn, 'sync_jobs', 'status', 30, inspector)
     
-    # 3. Fix conflicts.status column
-    if table_exists(inspector, 'conflicts'):
-        try:
-            op.execute(text("""
-                ALTER TABLE conflicts 
-                ALTER COLUMN status TYPE VARCHAR(30) 
-                USING status::text
-            """))
-        except Exception as e:
-            print(f"Note: conflicts.status may already be VARCHAR: {e}")
+    # 3. Fix conflicts.status column (may not exist in all schemas)
+    safe_alter_column_to_varchar(conn, 'conflicts', 'status', 30, inspector)
     
     # 4. Fix sync_configs.conflict_strategy column
-    if table_exists(inspector, 'sync_configs'):
-        try:
-            op.execute(text("""
-                ALTER TABLE sync_configs 
-                ALTER COLUMN conflict_strategy TYPE VARCHAR(30) 
-                USING conflict_strategy::text
-            """))
-        except Exception as e:
-            print(f"Note: sync_configs.conflict_strategy may already be VARCHAR: {e}")
+    safe_alter_column_to_varchar(conn, 'sync_configs', 'conflict_strategy', 30, inspector)
     
     # Drop any orphaned enum types that may have been created
     enum_types = ['datasourcetype', 'jobstatus', 'conflictstatus', 'conflictstrategy']
     for enum_type in enum_types:
         try:
-            op.execute(text(f"DROP TYPE IF EXISTS {enum_type}"))
+            conn.execute(text(f"DROP TYPE IF EXISTS {enum_type}"))
         except Exception:
             pass  # Type may not exist
+    
+    print("Enum column migration complete")
 
 
 def downgrade() -> None:

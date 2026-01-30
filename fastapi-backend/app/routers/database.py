@@ -8,10 +8,13 @@ import httpx
 import json
 from typing import Optional, List, Dict, Any
 
+from ..database.config import get_db, SessionLocal
+
 router = APIRouter(prefix="/api/database", tags=["database"])
 
-async def get_project_context(db: Session, mode: str = "builder"):
-    """Get project context (Supabase URL and Auth Key)
+
+def get_project_context_sync(db: Session, mode: str = "builder"):
+    """Get project context SYNCHRONOUSLY (for use with manual SessionLocal).
     
     For builder mode: Uses service role key if available, falls back to anon key
     For other modes: Uses anon key
@@ -62,6 +65,13 @@ async def get_project_context(db: Session, mode: str = "builder"):
         "auth_key": auth_key,
         "auth_method": auth_method
     }
+
+
+# Keep async version for backward compatibility (should be deprecated later)
+async def get_project_context(db: Session, mode: str = "builder"):
+    """Get project context (Supabase URL and Auth Key) - DEPRECATED: Use get_project_context_sync with manual SessionLocal."""
+    return get_project_context_sync(db, mode)
+
 
 @router.get("/connections/", response_model=DatabaseConnectionResponse)
 async def get_connections(db: Session = Depends(get_db)):
@@ -172,12 +182,26 @@ async def get_table_data(
     orderDirection: Optional[str] = "asc",
     mode: str = "builder",
     select: str = "*",
-    db: Session = Depends(get_db)
 ):
-    """Get table data with pagination and filtering"""
+    """Get table data with pagination and filtering.
+    Optimized: Releases DB connection before external API calls to prevent pool exhaustion.
+    """
+    # 1. FETCH CREDENTIALS (Fast DB Interaction)
+    db = SessionLocal()
     try:
-        ctx = await get_project_context(db, mode)
-        
+        ctx = get_project_context_sync(db, mode)
+    except HTTPException:
+        db.close()
+        raise
+    except Exception as e:
+        db.close()
+        print(f"Error getting project settings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()  # RELEASE CONNECTION BEFORE EXTERNAL CALLS
+
+    # 2. HEAVY IO (No DB Connection Held)
+    try:
         # Build query URL like Express does
         query_url = f"{ctx['url']}/rest/v1/{table_name}?select={select}"
         query_url += f"&limit={limit}&offset={offset}"
@@ -270,13 +294,21 @@ async def get_table_data(
 
 
 @router.post("/distinct-values/")
-async def get_distinct_values(request: dict, db: Session = Depends(get_db)):
-    """Get distinct values for a column"""
+async def get_distinct_values(request: dict):
+    """Get distinct values for a column.
+    Optimized: Releases DB connection before external API calls.
+    """
+    # 1. FETCH CREDENTIALS
+    db = SessionLocal()
     try:
-        ctx = await get_project_context(db, "builder")
+        ctx = get_project_context_sync(db, "builder")
         table_name = request.get("tableName")
         column = request.get("column")
-        
+    finally:
+        db.close()  # RELEASE CONNECTION
+
+    # 2. HEAVY IO
+    try:
         async with httpx.AsyncClient() as client:
             # We'll try the dedicated RPC first
             response = await client.post(
@@ -327,13 +359,21 @@ async def get_distinct_values(request: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/advanced-query/")
-async def advanced_query(request: dict, db: Session = Depends(get_db)):
-    """Execute advanced query"""
+async def advanced_query(request: dict):
+    """Execute advanced query.
+    Optimized: Releases DB connection before external API calls.
+    """
+    # 1. FETCH CREDENTIALS
+    db = SessionLocal()
     try:
-        ctx = await get_project_context(db, "builder")
+        ctx = get_project_context_sync(db, "builder")
         rpc_name = request.get("rpcName")
         params = request.get("params", {})
-        
+    finally:
+        db.close()  # RELEASE CONNECTION
+
+    # 2. HEAVY IO
+    try:
         # Determine if we are calling a real RPC or a mock for schema
         if rpc_name == "frontbase_get_schema_info":
              # We can try to fetch the real schema info if the function exists in Supabase
@@ -421,11 +461,19 @@ async def get_manual_schema_info(ctx):
     }
 
 @router.get("/supabase-tables/")
-async def get_supabase_tables(db: Session = Depends(get_db)):
-    """Get database tables"""
+async def get_supabase_tables():
+    """Get database tables.
+    Optimized: Releases DB connection before external API calls.
+    """
+    # 1. FETCH CREDENTIALS
+    db = SessionLocal()
     try:
-        ctx = await get_project_context(db, "builder")
-        
+        ctx = get_project_context_sync(db, "builder")
+    finally:
+        db.close()  # RELEASE CONNECTION
+
+    # 2. HEAVY IO
+    try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{ctx['url']}/rest/v1/",
@@ -468,16 +516,24 @@ async def get_supabase_tables(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/tables/")
-async def get_tables(db: Session = Depends(get_db)):
+async def get_tables():
     """Get database tables (aliased to supabase-tables)"""
-    return await get_supabase_tables(db)
+    return await get_supabase_tables()
 
 @router.get("/table-schema/{table_name}/")
-async def get_table_schema(table_name: str, db: Session = Depends(get_db)):
-    """Get table schema with foreign key information"""
+async def get_table_schema(table_name: str):
+    """Get table schema with foreign key information.
+    Optimized: Releases DB connection before external API calls.
+    """
+    # 1. FETCH CREDENTIALS
+    db = SessionLocal()
     try:
-        ctx = await get_project_context(db, "builder")
-        
+        ctx = get_project_context_sync(db, "builder")
+    finally:
+        db.close()  # RELEASE CONNECTION
+
+    # 2. HEAVY IO
+    try:
         # 1. Get column definitions from OpenAPI spec
         async with httpx.AsyncClient() as client:
             response = await client.get(

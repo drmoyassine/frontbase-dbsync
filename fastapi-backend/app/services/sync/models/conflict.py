@@ -55,7 +55,7 @@ class Conflict(Base):
     
     # Resolution
     status: Mapped[ConflictStatus] = mapped_column(
-        SQLEnum(ConflictStatus),
+        SQLEnum(ConflictStatus, native_enum=False, length=30),
         default=ConflictStatus.PENDING
     )
     resolved_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON

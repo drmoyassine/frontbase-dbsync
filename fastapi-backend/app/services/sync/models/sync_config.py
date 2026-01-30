@@ -68,7 +68,7 @@ class SyncConfig(Base):
     
     # Conflict resolution
     conflict_strategy: Mapped[ConflictStrategy] = mapped_column(
-        SQLEnum(ConflictStrategy),
+        SQLEnum(ConflictStrategy, native_enum=False, length=30),
         default=ConflictStrategy.SOURCE_WINS
     )
     webhook_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)

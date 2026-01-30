@@ -35,7 +35,7 @@ class Datasource(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     type: Mapped[DatasourceType] = mapped_column(
-        SQLEnum(DatasourceType), 
+        SQLEnum(DatasourceType, native_enum=False, length=50), 
         nullable=False
     )
     

@@ -39,7 +39,7 @@ class SyncJob(Base):
     
     # Job status
     status: Mapped[JobStatus] = mapped_column(
-        SQLEnum(JobStatus),
+        SQLEnum(JobStatus, native_enum=False, length=30),
         default=JobStatus.PENDING
     )
     

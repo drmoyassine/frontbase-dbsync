@@ -120,6 +120,15 @@ function renderNewFormat(
     const logoLink = logo.link || '/';
     let logoHtml: string;
 
+    // DEBUG: Log logo props to trace rendering path
+    console.log('[Navbar SSR] Logo props:', {
+        type: logo.type,
+        showIcon: logo.showIcon,
+        useProjectLogo: (logo as any).useProjectLogo,
+        imageUrl: logo.imageUrl ? logo.imageUrl.substring(0, 50) + '...' : 'NOT SET',
+        text: logo.text,
+    });
+
     if (logo.type === 'image' && logo.imageUrl) {
         // Use renderImage primitive
         logoHtml = renderImage(`${id}-logo-img`, {

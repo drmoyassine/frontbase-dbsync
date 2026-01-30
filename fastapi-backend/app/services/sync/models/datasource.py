@@ -65,12 +65,12 @@ class Datasource(Base):
     
     created_at: Mapped[datetime] = mapped_column(
         DateTime, 
-        default=lambda: datetime.now(timezone.utc)
+        default=datetime.utcnow
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, 
-        default=lambda: datetime.now(timezone.utc), 
-        onupdate=lambda: datetime.now(timezone.utc)
+        default=datetime.utcnow, 
+        onupdate=datetime.utcnow
     )
     
     # Relationships

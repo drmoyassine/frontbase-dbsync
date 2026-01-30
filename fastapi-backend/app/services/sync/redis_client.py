@@ -1,18 +1,25 @@
 """
 Redis client for caching - uses user-configured Redis URL from ProjectSettings.
+Supports both TCP (redis://) and HTTP (Upstash-compatible) connections.
 """
 
 import json
 import logging
 from typing import Any, Optional
 import redis.asyncio as redis
+import httpx
 
 logger = logging.getLogger(__name__)
 
-# Global client instance
+# Global client instance (TCP only)
 _redis_client: Optional[redis.Redis] = None
 _current_url: Optional[str] = None
 _settings_cache: Optional[dict] = None
+
+
+def _is_http_redis(url: str) -> bool:
+    """Check if the Redis URL is HTTP-based (Upstash/SRH style)."""
+    return url.startswith("http://") or url.startswith("https://")
 
 
 async def load_settings_from_db():
@@ -72,7 +79,7 @@ def invalidate_settings_cache():
 
 async def get_redis_client(redis_url: Optional[str] = None) -> Optional[redis.Redis]:
     """
-    Get or create Redis client.
+    Get or create TCP Redis client. For HTTP Redis, use cache_get/cache_set directly.
     """
     global _redis_client, _current_url
     
@@ -84,11 +91,10 @@ async def get_redis_client(redis_url: Optional[str] = None) -> Optional[redis.Re
         settings_cache = await get_configured_redis_settings()
         if settings_cache and settings_cache.get("enabled"):
             url = settings_cache.get("url")
-            
-    if url and (url.startswith("http://") or url.startswith("https://")):
-        logger.warning(f"Backend cannot use HTTP Redis URL ({url}). Falling back to environment default (TCP).")
-        # Reset url to force fallback to env settings
-        url = None
+    
+    # HTTP URLs can't use TCP client - return None (caller should use HTTP functions)
+    if url and _is_http_redis(url):
+        return None
 
     # Fallback to env settings
     if not url:
@@ -116,8 +122,68 @@ async def get_redis_client(redis_url: Optional[str] = None) -> Optional[redis.Re
         return None
 
 
+# =============================================================================
+# HTTP Redis Functions (Upstash/SRH compatible)
+# =============================================================================
+
+async def _http_redis_get(url: str, token: str, key: str) -> Optional[str]:
+    """GET a key from HTTP Redis (Upstash-compatible)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                f"{url.rstrip('/')}/",
+                headers={"Authorization": f"Bearer {token}"},
+                json=["GET", key]
+            )
+            if response.status_code == 200:
+                data = response.json()
+                # Handle both single-result and pipeline format
+                result = data.get("result") if isinstance(data, dict) else data[0].get("result") if isinstance(data, list) else None
+                return result
+    except Exception as e:
+        logger.warning(f"HTTP Redis GET failed for {key}: {e}")
+    return None
+
+
+async def _http_redis_set(url: str, token: str, key: str, value: str, ttl: int) -> bool:
+    """SET a key in HTTP Redis (Upstash-compatible) with TTL."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                f"{url.rstrip('/')}/",
+                headers={"Authorization": f"Bearer {token}"},
+                json=["SETEX", key, str(ttl), value]
+            )
+            if response.status_code == 200:
+                return True
+    except Exception as e:
+        logger.warning(f"HTTP Redis SET failed for {key}: {e}")
+    return False
+
+
+# =============================================================================
+# Unified Cache Interface
+# =============================================================================
+
 async def cache_get(redis_url: str, key: str) -> Optional[Any]:
-    """Get value from Redis cache. Returns None if not found or Redis unavailable."""
+    """Get value from Redis cache. Supports both TCP and HTTP Redis."""
+    settings = await get_configured_redis_settings()
+    
+    # Check if HTTP Redis
+    if redis_url and _is_http_redis(redis_url):
+        token = settings.get("token") if settings else None
+        if not token:
+            logger.warning(f"HTTP Redis configured but no token available")
+            return None
+        raw_value = await _http_redis_get(redis_url, token, key)
+        if raw_value:
+            try:
+                return json.loads(raw_value)
+            except json.JSONDecodeError:
+                return raw_value  # Return as-is if not JSON
+        return None
+    
+    # TCP Redis
     client = await get_redis_client(redis_url)
     if not client:
         return None
@@ -131,13 +197,25 @@ async def cache_get(redis_url: str, key: str) -> Optional[Any]:
 
 
 async def cache_set(redis_url: str, key: str, value: Any, ttl: int = 300) -> bool:
-    """Set value in Redis cache with TTL. Returns False if Redis unavailable."""
+    """Set value in Redis cache with TTL. Supports both TCP and HTTP Redis."""
+    json_value = json.dumps(value, default=str)
+    settings = await get_configured_redis_settings()
+    
+    # Check if HTTP Redis
+    if redis_url and _is_http_redis(redis_url):
+        token = settings.get("token") if settings else None
+        if not token:
+            logger.warning(f"HTTP Redis configured but no token available")
+            return False
+        return await _http_redis_set(redis_url, token, key, json_value, ttl)
+    
+    # TCP Redis
     client = await get_redis_client(redis_url)
     if not client:
         return False
     
     try:
-        await client.setex(key, ttl, json.dumps(value, default=str))
+        await client.setex(key, ttl, json_value)
         return True
     except Exception as e:
         logger.warning(f"Redis SET failed for {key}: {e}")

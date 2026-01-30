@@ -326,6 +326,32 @@ alembic upgrade head
 - **Diagnostics**: Check logs for specific missing columns.
 - **Fix**: Create a new migration that *conditionally* adds the missing elements. Do NOT edit old migrations (breaks history).
 
+### Performance Engineering
+
+**1. Connection Pool Management (QueuePool)**
+- **Critical Rule**: NEVER hold a Database Session open during slow I/O operations (external API calls, S3 uploads).
+- **Pattern**: "Release-Before-IO". Explicitly close the DB session before awaiting async IO, then re-open a new session if needed.
+    ```python
+    # ❌ BAD: Holds connection during slow request
+    async def publish(db: Session = Depends(get_db)):
+        data = await fetch_slow_data() # DB connection sits idle but checked out!
+
+    # ✅ GOOD: Release early
+    async def publish():
+        db = SessionLocal()
+        # ... fetch DB data ...
+        db.close() # RELEASE CONNECTION
+        
+        data = await fetch_slow_data() # Pool is free for other users
+    ```
+
+**2. Multi-Tier Icon Caching**
+- **Architecture**: L1 (Memory) → L2 (Redis) → L3 (CDN).
+- **L1 (Memory)**: Global Python Dict. Instant access (0ms), cleared on restart.
+- **L2 (Redis)**: Shared across instances, persists across restarts (30-day TTL).
+- **L3 (CDN)**: Fallback source (Lucide Unpkg).
+- **Fallback**: System degrades gracefully. If Redis is down, it uses Memory+CDN automatically.
+
 ## Troubleshooting
 
 ### Common Issues

@@ -33,8 +33,8 @@ class ProjectSettings(Base):
     # Metadata
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, 
-        default=lambda: datetime.now(timezone.utc), 
-        onupdate=lambda: datetime.now(timezone.utc)
+        default=datetime.utcnow, 
+        onupdate=datetime.utcnow
     )
     
     def __repr__(self) -> str:

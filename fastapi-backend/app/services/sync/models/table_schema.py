@@ -39,7 +39,7 @@ class TableSchemaCache(Base):
     # Timestamp when schema was fetched
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime, 
-        default=lambda: datetime.now(timezone.utc)
+        default=datetime.utcnow
     )
     
     # Unique constraint: one schema per datasource+table

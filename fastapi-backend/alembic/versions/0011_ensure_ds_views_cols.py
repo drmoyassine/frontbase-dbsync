@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy.engine.reflection import Inspector
 
 # revision identifiers, used by Alembic.
-revision: str = '0011_ensure_datasource_views_columns'
+revision: str = '0011_ensure_ds_views_cols'
 down_revision: Union[str, Sequence[str], None] = '0010_sync_migration_state'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

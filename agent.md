@@ -352,6 +352,12 @@ alembic upgrade head
 - **L3 (CDN)**: Fallback source (Lucide Unpkg).
 - **Fallback**: System degrades gracefully. If Redis is down, it uses Memory+CDN automatically.
 
+**3. Refactored Endpoints (Release-Before-IO Applied)**
+- `database.py`: `get_table_data`, `get_distinct_values`, `advanced_query`, `get_supabase_tables`, `get_tables`, `get_table_schema`
+- `project.py`: `update_project_endpoint`
+- `crud.py`: `delete_page`, `permanent_delete_page`
+- `publish.py`: `publish_page`, `convert_to_publish_schema`
+
 ## Troubleshooting
 
 ### Common Issues

@@ -230,36 +230,22 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 
 ---
 
-## Sprint 5: UI Components (MVP)
+## ✅ Sprint 5: UI Components & Modular Refactoring (COMPLETE)
 
-**Goal:** Add essential UI components for data visualization and landing pages.
-**Risk:** Low
-**Estimated Effort:** 2-3 days
+**Goal:** Add essential UI components and refactor builder for modularity.
+**Risk:** Medium
+**Estimated Effort:** Completed (Phase 8 of Project)
 
-### Sprint 5 Tasks
+### Sprint 5 Achievements
 
-- [ ] **Charts Component**
-  - [ ] Integrate charting library (Chart.js or Recharts)
-  - [ ] Create `ChartRenderer` for SSR pages
-  - [ ] Support chart types: Bar, Line, Pie, Area
-  - [ ] Add data binding to chart props
-- [ ] **Landing Page Components** (if time permits)
-  - [ ] Hero section with gradient backgrounds
-  - [ ] Feature grid with icons
-  - [ ] Testimonial carousel
-  - [ ] Pricing table
-  - [ ] CTA sections
-- [ ] **Component Polish**
-  - [ ] Improve existing component styling
-  - [ ] Add animation/transitions
-  - [ ] Mobile responsiveness audit
-
-### Sprint 5 Acceptance Criteria
-
-- [ ] Charts render with data from Supabase
-- [ ] Charts are interactive (hover, click events)
-- [ ] Landing page components drag-and-drop ready
-- [ ] All components work in SSR and client modes
+- **Modular Architecture**: Decoupled monolithic files into `renderers/`, `templates/`, `properties/`.
+- **New Components**:
+  - **Charts**: `ChartRenderer`, `ChartProperties` (replaces planned client-side chart).
+  - **Landing Sections**: Hero, Features, Pricing, LogoCloud, Navbar, Footer.
+  - **Data Components**: `Grid`, `KPICard`, `DataTable`.
+- **Styling**: Implemented Visual Styling Panel (metadata-driven CSS).
+- **Polish**: Mobile responsiveness, container styles, icon support.
+- **Reference**: See `progress.md` Phase 8 for full details.
 
 ---
 
@@ -371,6 +357,17 @@ The following items are **NOT in MVP** but planned for future releases:
 - **Current state**: Storage admin calls Hono directly (works but architecturally inconsistent)
 - **When:** Before production or when bundle size matters
 
+### Future Sprint: Storage Provider Selector
+
+- **Goal:** Allow users to select which connected storage provider to use for asset uploads.
+- **Use Case:** User has multiple Supabase projects connected, or wants to use different storage for different purposes.
+- **Features:**
+  - Dropdown in Settings to select default storage provider
+  - Per-upload override option
+  - Multi-provider support (Supabase, S3, R2, etc.)
+- **Current MVP:** Auto-detect first Supabase datasource for `frontbase_assets` bucket
+- **When:** When multi-datasource support is common or users request flexibility
+
 ### Future Sprint: GDPR Compliance Enhancements
 
 - **Goal:** Full GDPR compliance for visitor tracking and privacy features.
@@ -413,12 +410,12 @@ The following items are **NOT in MVP** but planned for future releases:
 | 3      | SSR Pages               | 1.5-2d  | ✅ Complete  |
 | 3.5    | Stability               | 2-3d    | ✅ Complete  |
 | 4      | Storage & Cache         | 2-3d    | ✅ Complete  |
-| 5      | UI Components           | 2-3d    | Pending      |
+| 5      | UI Components + Refactor| 2-3d    | ✅ Complete  |
 | 6      | Automation + Deploy     | 3-4d    | Pending      |
 
-**Completed:** Sprints 0, 1, 2, 2+, 3, 3.5, 4
-**Next:** Sprint 5 (UI Components)
-**Remaining MVP:** ~5-7 days
+**Completed:** Sprints 0, 1, 2, 2+, 3, 3.5, 4, 5
+**Next:** Sprint 6 (Automation + Deploy)
+**Remaining MVP:** ~3-4 days
 
 ---
 

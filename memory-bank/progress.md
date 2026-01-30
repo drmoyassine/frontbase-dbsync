@@ -75,6 +75,15 @@
 - **Documentation**: Created `database_patterns.md`
 - **Key Files**: `alembic/env.py`, `app/services/sync/redis_client.py`, `app/models/schemas.py`
 
+### Phase 8: Modular Builder Refactoring ✅ (2026-01-29)
+
+- **Architecture**: Adopted "One File Per Component" and Registry patterns
+- **Renderers**: Decentralized `BasicRenderers` et al. into `src/components/builder/renderers/` (35+ files)
+- **Properties**: Decentralized `PropertiesPanel.tsx` monolithic switch (1140 lines) into `properties/basic/` and `properties/landing/` (~300 lines, 74% reduction)
+- **Templates**: Decentralized `sectionTemplates.ts` into `templates/sections/` and `templates/pages/`
+- **Foundation**: Created `styling/styleProcessor.ts` and `registry/componentRegistry.tsx`
+- **Key Files**: `src/components/builder/renderers/`, `src/components/builder/properties/`
+
 ### 1. FastAPI Primary Backend ✅
 
 - **Migration**: Completed full migration from Express.js to FastAPI

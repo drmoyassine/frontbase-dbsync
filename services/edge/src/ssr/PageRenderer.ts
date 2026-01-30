@@ -53,7 +53,7 @@ const LAYOUT_COMPONENTS = new Set([
 
 // Landing page section components
 const LANDING_COMPONENTS = new Set([
-    'Hero', 'Features', 'Pricing', 'CTA', 'Navbar', 'FAQ', 'LogoCloud', 'Footer'
+    'Hero', 'Features', 'FeatureSection', 'Pricing', 'CTA', 'Navbar', 'FAQ', 'LogoCloud', 'Footer'
 ]);
 
 /**
@@ -191,6 +191,7 @@ function renderLandingComponent(
         case 'Hero':
             return landing.renderHero(id, props as any, stylesData as any);
         case 'Features':
+        case 'FeatureSection':
             return landing.renderFeatures(id, props as any, stylesData as any);
         case 'Pricing':
             return landing.renderPricing(id, props as any, stylesData as any);

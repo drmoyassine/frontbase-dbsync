@@ -5,6 +5,8 @@
  * These components show loading state on SSR and hydrate with React Query for data fetching.
  */
 
+import { renderIcon as renderIconPrimitive } from './static';
+
 /**
  * Escape HTML special characters for safe rendering.
  */
@@ -315,14 +317,27 @@ function renderChart(id: string, props: Record<string, unknown>, propsJson: stri
 
 function renderDataCard(id: string, props: Record<string, unknown>, childrenHtml: string, propsJson: string): string {
     const title = escapeHtml(String(props.title || ''));
-    const subtitle = escapeHtml(String(props.subtitle || ''));
+    const subtitle = escapeHtml(String(props.subtitle || props.description || ''));
     const image = props.image as string || props.imageUrl as string || '';
+    const icon = props.icon as string || '';
+    const iconSvg = props.iconSvg as string || '';
+    const iconSize = props.iconSize as string || 'md';
+    const iconAlignment = props.iconAlignment as string || 'center';
+    const textAlignment = props.textAlignment as string || 'center';
 
-    const style = `border:1px solid #e5e7eb;border-radius:0.5rem;overflow:hidden`;
+    const style = `border:1px solid #e5e7eb;border-radius:0.5rem;overflow:hidden;text-align:${textAlignment}`;
     const attrs = getCommonAttributes(id, 'fb-datacard', props, style, 'datacard', propsJson);
 
     // Check if we have children content - if so, don't show skeleton placeholders
     const hasChildren = childrenHtml && childrenHtml.trim().length > 0;
+
+    // Render icon using the shared primitive from static.ts
+    const iconAlignStyle = iconAlignment === 'center' ? 'margin:0 auto 0.75rem auto;' : iconAlignment === 'right' ? 'margin-left:auto;margin-bottom:0.75rem;' : 'margin-bottom:0.75rem;';
+    const iconHtml = (icon || iconSvg) ? `
+        <div style="${iconAlignStyle}">
+            ${renderIconPrimitive(`${id}-icon`, { icon, iconSvg, size: iconSize, color: 'hsl(var(--primary))' })}
+        </div>
+    ` : '';
 
     // Only show skeleton placeholders when there's no title/subtitle AND no children
     const titleHtml = title
@@ -338,12 +353,15 @@ function renderDataCard(id: string, props: Record<string, unknown>, childrenHtml
             <img src="${escapeHtml(image)}" alt="" style="width:100%;height:100%;object-fit:cover" loading="lazy" />
         </div>` : ''}
         <div class="fb-datacard-content" style="padding:1rem">
+            ${iconHtml}
             ${titleHtml}
             ${subtitleHtml}
             ${childrenHtml}
         </div>
     </div>`;
 }
+
+
 
 function renderRepeater(id: string, props: Record<string, unknown>, childrenHtml: string, propsJson: string): string {
     const columns = (props.columns as number) || 1;

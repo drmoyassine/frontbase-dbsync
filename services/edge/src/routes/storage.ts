@@ -301,6 +301,7 @@ storageRoute.openapi(uploadRoute, async (c) => {
 
         const path = customPath || `uploads/${Date.now()}-${file.name}`;
         const bucket = formData.get('bucket') as string | null;
+        console.log('[Storage Upload] bucket from formData:', bucket, 'path:', path);
         const storage = createStorage(config);
 
         const result = await storage.upload(path, file, {
@@ -619,6 +620,14 @@ const getBucketRoute = createRoute({
                 },
             },
         },
+        404: {
+            description: 'Bucket not found',
+            content: {
+                'application/json': {
+                    schema: StorageErrorSchema,
+                },
+            },
+        },
         500: {
             description: 'Internal server error',
             content: {
@@ -643,10 +652,12 @@ storageRoute.openapi(getBucketRoute, async (c) => {
         const bucket = await storage.getBucket(id);
         return c.json({ success: true, bucket }, 200);
     } catch (error) {
-        return c.json({
-            success: false,
-            error: error instanceof Error ? error.message : 'Get bucket failed',
-        }, 500);
+        const errorMessage = error instanceof Error ? error.message : 'Get bucket failed';
+        // Return 404 if bucket not found
+        if (errorMessage.includes('not found') || errorMessage.includes('does not exist')) {
+            return c.json({ success: false, error: 'Bucket not found' }, 404);
+        }
+        return c.json({ success: false, error: errorMessage }, 500);
     }
 });
 

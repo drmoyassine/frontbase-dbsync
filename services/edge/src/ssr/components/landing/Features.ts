@@ -2,24 +2,37 @@
  * Features Section Component
  * 
  * Grid of feature cards with icons, titles, and descriptions.
+ * Uses Card component for DRY Lego-style composition.
  */
 
 import { escapeHtml } from '../lib/utils.js';
 import type { StylesData } from '../lib/styles.js';
 import { stylesDataToCSS } from '../lib/styles.js';
+import { renderDataComponent } from '../data.js';
 
 export interface FeatureItem {
-    icon: string;       // Emoji, lucide icon name, or image URL
+    id?: string;
+    icon: string;
+    iconSvg?: string;  // Pre-rendered SVG from publish pipeline (CDN fetch)
     title: string;
     description: string;
     link?: string;
+    cardBackground?: string;
 }
 
 export interface FeaturesProps {
     title?: string;
     subtitle?: string;
-    features: FeatureItem[];
-    columns?: 2 | 3 | 4;
+    features?: FeatureItem[];
+    columns?: 2 | 3 | 4 | number;
+    headerAlignment?: 'left' | 'center' | 'right';
+    iconAlignment?: 'left' | 'center' | 'right';
+    textAlignment?: 'left' | 'center' | 'right';
+    iconSize?: 'sm' | 'md' | 'lg';
+    iconColor?: string;
+    textColor?: string;
+    cardBackground?: string;
+    sectionBackground?: string;
     hideOnMobile?: boolean;
     hideOnDesktop?: boolean;
 }
@@ -30,78 +43,83 @@ export function renderFeatures(
     stylesData?: StylesData
 ): string {
     const columns = props.columns || 3;
+    const headerAlignment = props.headerAlignment || 'center';
+    const iconAlignment = props.iconAlignment || 'center';
+    const textAlignment = props.textAlignment || 'center';
+    const iconSize = props.iconSize || 'md';
+    const iconColor = props.iconColor || 'hsl(var(--primary))';
+    const cardBackground = props.cardBackground || 'hsl(var(--card))';
+    const sectionBackground = props.sectionBackground || 'hsl(var(--background))';
 
     // Build classes
     const sectionClasses = [
         'fb-features',
-        'py-12',
-        'sm:py-16',
-        'lg:py-24',
+        'py-16',
+        'px-6',
+        'md:px-12',
         props.hideOnMobile ? 'hidden md:block' : '',
         props.hideOnDesktop ? 'md:hidden' : '',
     ].filter(Boolean).join(' ');
 
     const gridClasses = [
         'grid',
-        'grid-cols-1', // Explicitly 1 column on mobile
+        'grid-cols-1',
         'gap-6',
-        'sm:gap-8',
-        columns === 2 ? 'sm:grid-cols-2' : '',
-        columns === 3 ? 'sm:grid-cols-2 lg:grid-cols-3' : '',
-        columns === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : '',
+        'md:gap-8',
+        columns === 2 ? 'md:grid-cols-2' : '',
+        columns === 3 ? 'md:grid-cols-2 lg:grid-cols-3' : '',
+        columns >= 4 ? 'md:grid-cols-2 lg:grid-cols-4' : '',
     ].filter(Boolean).join(' ');
 
     const inlineStyles = stylesData ? stylesDataToCSS(stylesData) : '';
 
     // Build header
     const headerHtml = (props.title || props.subtitle) ? `
-        <div class="mb-12 sm:mb-16 lg:mb-24 space-y-4">
-            ${props.title ? `<h2 class="text-2xl sm:text-3xl lg:text-4xl font-semibold">${escapeHtml(props.title)}</h2>` : ''}
-            ${props.subtitle ? `<p class="text-lg sm:text-xl text-muted-foreground">${escapeHtml(props.subtitle)}</p>` : ''}
+        <div class="mb-12" style="text-align: ${headerAlignment};">
+            ${props.title ? `<h2 class="text-3xl md:text-4xl font-bold mb-3">${escapeHtml(props.title)}</h2>` : ''}
+            ${props.subtitle ? `<p class="text-lg text-muted-foreground">${escapeHtml(props.subtitle)}</p>` : ''}
         </div>
     ` : '';
 
-    // Build feature cards
-    const featuresHtml = (props.features || []).map(feature => {
-        const isEmoji = feature.icon?.length <= 4 && !/^[a-zA-Z0-9\/]/.test(feature.icon);
-        const isUrl = feature.icon?.startsWith('http') || feature.icon?.startsWith('/');
+    // Build feature cards using DRY Card component
+    const featuresHtml = (props.features || []).map((feature, index) => {
+        const featureId = feature.id || `${id}-feature-${index}`;
 
-        let iconHtml = '';
-        if (isEmoji) {
-            iconHtml = `<span class="text-3xl mb-4 block">${feature.icon}</span>`;
-        } else if (isUrl) {
-            iconHtml = `<img src="${escapeHtml(feature.icon)}" alt="" class="w-10 h-10 mb-4" />`;
-        } else {
-            // Assume lucide icon name - render placeholder
-            iconHtml = `<div class="w-10 h-10 mb-4 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                <span class="text-xl">✦</span>
-            </div>`;
-        }
+        // Prepare props for Card component
+        const cardProps = {
+            title: feature.title,
+            description: feature.description,
+            icon: feature.icon,
+            iconSvg: feature.iconSvg,
+            iconSize: iconSize,
+            iconColor: iconColor,
+            iconAlignment: iconAlignment,
+            textAlignment: textAlignment,
+            // Card styling - use feature-specific or section default
+            style: {
+                values: {
+                    backgroundColor: feature.cardBackground || cardBackground,
+                    padding: '1.5rem',
+                    borderRadius: '0.75rem',
+                }
+            }
+        };
 
-        const cardContent = `
-            ${iconHtml}
-            <h3 class="text-lg font-semibold mb-2">${escapeHtml(feature.title)}</h3>
-            <p class="text-muted-foreground">${escapeHtml(feature.description)}</p>
-        `;
-
+        // Wrap in link if provided
         if (feature.link) {
             return `
-                <a href="${escapeHtml(feature.link)}" class="block p-6 rounded-xl border bg-card hover:border-primary transition-colors">
-                    ${cardContent}
+                <a href="${escapeHtml(feature.link)}" class="block transition-all duration-300 hover:shadow-lg">
+                    ${renderDataComponent('Card', featureId, cardProps, '')}
                 </a>
             `;
         }
 
-        return `
-            <div class="p-6 rounded-xl border bg-card">
-                ${cardContent}
-            </div>
-        `;
+        return renderDataComponent('Card', featureId, cardProps, '');
     }).join('');
 
     return `
-        <section id="${id}" class="${sectionClasses}" style="${inlineStyles}">
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+        <section id="${id}" class="${sectionClasses}" style="background-color: ${sectionBackground}; ${inlineStyles}">
+            <div class="fb-container">
                 ${headerHtml}
                 <div class="${gridClasses}">
                     ${featuresHtml}
@@ -110,3 +128,4 @@ export function renderFeatures(
         </section>
     `.trim();
 }
+

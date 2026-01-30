@@ -1,79 +1,143 @@
 /**
  * Logo Cloud Component
  * 
- * Display partner/client logos in a row.
+ * Supports uniform or individual scaling of logos.
+ * Now supports 'scale' property per logo.
  */
-
 import { escapeHtml } from '../lib/utils.js';
 import type { StylesData } from '../lib/styles.js';
 import { stylesDataToCSS } from '../lib/styles.js';
 
 export interface LogoItem {
-    src: string;
-    alt: string;
-    href?: string;
+    id?: string;
+    type: 'image' | 'text';
+    value: string;
+    url?: string;
+    name?: string;
+    scale?: number;
 }
 
 export interface LogoCloudProps {
     title?: string;
     subtitle?: string;
-    logos: LogoItem[];
+    logos?: LogoItem[];
+    displayMode?: 'static' | 'marquee';
+    logoSize?: 'sm' | 'md' | 'lg' | number;
+    speed?: number;
+    pauseOnHover?: boolean;
     grayscale?: boolean;
-    hideOnMobile?: boolean;
-    hideOnDesktop?: boolean;
 }
+
+const SIZE_MAP: Record<string, { height: string; fontSize: string }> = {
+    sm: { height: '24px', fontSize: '14px' },
+    md: { height: '32px', fontSize: '18px' },
+    lg: { height: '48px', fontSize: '24px' },
+};
 
 export function renderLogoCloud(
     id: string,
     props: LogoCloudProps,
     stylesData?: StylesData
 ): string {
-    const sectionClasses = [
-        'fb-logo-cloud',
-        'py-12',
-        'sm:py-16',
-        'lg:py-24',
-        'bg-muted/50',
-        props.hideOnMobile ? 'hidden md:block' : '',
-        props.hideOnDesktop ? 'md:hidden' : '',
-    ].filter(Boolean).join(' ');
+    const logos = props.logos || [];
+    const displayMode = props.displayMode || 'static';
+    const speed = props.speed || 20;
+    const pauseOnHover = props.pauseOnHover !== false;
+    const grayscale = props.grayscale !== false;
 
-    const imageClasses = [
-        'h-8',
-        'sm:h-10',
-        'object-contain',
-        props.grayscale ? 'grayscale hover:grayscale-0 transition-all' : '',
-    ].filter(Boolean).join(' ');
+    // Size Logic
+    const logoSize = props.logoSize || 'md';
+    const mappedSize = typeof logoSize === 'string' ? SIZE_MAP[logoSize] : undefined;
+    const baseHeight = mappedSize ? mappedSize.height : `${logoSize}px`;
+    const baseFontSize = mappedSize ? mappedSize.fontSize : `${Math.max(14, Number(logoSize) * 0.5)}px`;
+    const basePx = parseInt(baseHeight, 10) || 32;
+    const baseFontSizePx = parseInt(baseFontSize, 10) || 18;
 
+    // Build section classes
+    const sectionClasses = ['fb-logo-cloud', 'py-12', 'px-6'].join(' ');
+
+    // Build inline styles from stylesData
     const inlineStyles = stylesData ? stylesDataToCSS(stylesData) : '';
 
-    // Build header
-    const headerHtml = (props.title || props.subtitle) ? `
-        <div class="text-center mb-12 sm:mb-16">
-            ${props.title ? `<h2 class="text-2xl sm:text-3xl lg:text-4xl font-semibold mb-4">${escapeHtml(props.title)}</h2>` : ''}
-            ${props.subtitle ? `<p class="text-lg sm:text-xl text-muted-foreground">${escapeHtml(props.subtitle)}</p>` : ''}
-        </div>
+    const headerHtml = props.title ? `
+        <p class="text-center text-muted-foreground text-sm mb-8">
+            ${escapeHtml(props.title)}
+        </p>
     ` : '';
 
-    // Build logos
-    const logosHtml = (props.logos || []).map(logo => {
-        const imgHtml = `<img src="${escapeHtml(logo.src)}" alt="${escapeHtml(logo.alt)}" class="${imageClasses}" />`;
+    const renderItem = (logo: LogoItem, idx: number) => {
+        const scale = logo.scale || 1;
+        const currentHeight = `${basePx * scale}px`;
+        const currentFontSize = `${baseFontSizePx * scale}px`;
 
-        if (logo.href) {
-            return `<a href="${escapeHtml(logo.href)}" class="flex items-center justify-center">${imgHtml}</a>`;
+        let content = '';
+        if (logo.type === 'image') {
+            const grayscaleClass = grayscale ? 'grayscale hover:grayscale-0 opacity-60 hover:opacity-100' : '';
+            const altText = escapeHtml(logo.name || logo.value || `Logo ${idx + 1}`);
+            content = `<img 
+                src="${escapeHtml(logo.value)}" 
+                alt="${altText}" 
+                class="object-contain transition-all duration-300 ${grayscaleClass}"
+                style="height: ${currentHeight}; width: auto;"
+            />`;
+        } else {
+            const grayscaleClass = grayscale ? 'opacity-60 hover:opacity-100' : '';
+            content = `<span 
+                class="font-semibold whitespace-nowrap transition-all duration-300 ${grayscaleClass}"
+                style="font-size: ${currentFontSize};"
+            >
+                ${escapeHtml(logo.value)}
+            </span>`;
         }
 
-        return `<div class="flex items-center justify-center">${imgHtml}</div>`;
-    }).join('');
+        if (logo.url) {
+            return `<a 
+                href="${escapeHtml(logo.url)}" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                class="flex items-center justify-center hover:scale-105 transition-transform"
+            >
+                ${content}
+            </a>`;
+        }
+
+        return `<div class="flex items-center justify-center">
+            ${content}
+        </div>`;
+    };
+
+    const logosHtml = logos.map((logo, idx) => renderItem(logo, idx)).join('');
+
+    // Static Grid
+    if (displayMode === 'static') {
+        return `
+            <section id="${id}" class="${sectionClasses}" style="${inlineStyles}">
+                ${headerHtml}
+                <div class="flex flex-wrap justify-center items-center gap-8 md:gap-12 text-center">
+                    ${logosHtml}
+                </div>
+            </section>
+        `.trim();
+    }
+
+    // Marquee Mode
+    const duplicatedLogosHtml = [...logos, ...logos].map((logo, idx) => `
+        <div class="logo-marquee-item px-6 md:px-8">
+            ${renderItem(logo, idx)}
+        </div>
+    `).join('');
+
+    const pauseClass = pauseOnHover ? 'logo-marquee-pause-on-hover' : '';
 
     return `
-        <section id="${id}" class="${sectionClasses}" style="${inlineStyles}">
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-                ${headerHtml}
-                <div class="rounded-xl bg-card border p-8 sm:p-12 shadow-sm">
-                    <div class="flex flex-wrap items-center justify-center gap-8 sm:gap-12 lg:gap-16">
-                        ${logosHtml}
-                    </div>
+        <section id="${id}" class="${sectionClasses} overflow-hidden" style="${inlineStyles}">
+            ${headerHtml}
+            <div class="logo-marquee-container ${pauseClass}">
+                <div 
+                    class="logo-marquee-track" 
+                    style="--marquee-speed: ${speed}s; --logo-count: ${logos.length};"
+                >
+                    ${duplicatedLogosHtml}
                 </div>
             </div>
         </section>

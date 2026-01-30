@@ -31,6 +31,8 @@ interface LogoItem {
     type: 'image' | 'text';
     value: string;
     url?: string;
+    name?: string;
+    scale?: number;
 }
 
 interface LogoCloudPropertiesPanelProps {
@@ -157,11 +159,45 @@ export const LogoCloudProperties: React.FC<LogoCloudPropertiesPanelProps> = ({
                                         <Type className="w-4 h-4" />
                                     )}
                                     <span className="truncate max-w-[150px]">
-                                        {logo.value || `Logo ${index + 1}`}
+                                        {logo.name || logo.value || `Logo ${index + 1}`}
                                     </span>
                                 </div>
                             </AccordionTrigger>
                             <AccordionContent className="space-y-3 pt-2">
+                                {/* Brand Name (Internal Identifier) */}
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Brand Name (for identification)</Label>
+                                    <Input
+                                        className="h-8"
+                                        value={logo.name || ''}
+                                        onChange={(e) => updateLogo(index, { name: e.target.value })}
+                                        placeholder="e.g. Supabase"
+                                    />
+                                </div>
+
+                                {/* Size Scale */}
+                                <div className="space-y-2 pb-2">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="text-xs">Size Scale ({logo.scale || 1}x)</Label>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 text-xs px-2"
+                                            onClick={() => updateLogo(index, { scale: 1 })}
+                                        >
+                                            Reset
+                                        </Button>
+                                    </div>
+                                    <Slider
+                                        value={[logo.scale || 1]}
+                                        onValueChange={([value]) => updateLogo(index, { scale: value })}
+                                        min={0.5}
+                                        max={2.0}
+                                        step={0.1}
+                                        className="py-1"
+                                    />
+                                </div>
+
                                 {/* Type Toggle */}
                                 <div className="space-y-1">
                                     <Label className="text-xs">Type</Label>
@@ -184,7 +220,7 @@ export const LogoCloudProperties: React.FC<LogoCloudPropertiesPanelProps> = ({
                                 {/* Value */}
                                 <div className="space-y-1">
                                     <Label className="text-xs">
-                                        {logo.type === 'image' ? 'Image URL' : 'Brand Name'}
+                                        {logo.type === 'image' ? 'Image URL' : 'Brand text'}
                                     </Label>
                                     <Input
                                         className="h-8"
@@ -209,7 +245,7 @@ export const LogoCloudProperties: React.FC<LogoCloudPropertiesPanelProps> = ({
                                 <Button
                                     size="sm"
                                     variant="destructive"
-                                    className="w-full"
+                                    className="w-full mt-2"
                                     onClick={() => removeLogo(index)}
                                 >
                                     <Trash2 className="w-4 h-4 mr-1" /> Remove

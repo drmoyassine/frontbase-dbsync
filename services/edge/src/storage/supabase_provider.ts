@@ -90,7 +90,7 @@ export class SupabaseStorage implements IStorageProvider {
 
     return {
       path: data.path,
-      publicUrl: this.getPublicUrl(data.path),
+      publicUrl: this.getPublicUrl(data.path, targetBucket),
     };
   }
 

@@ -18,3 +18,9 @@ export function getFileIcon(name: string) {
     if (['pdf', 'doc', 'docx', 'txt', 'md'].includes(ext)) return FileText;
     return File;
 }
+
+/** Check if file is an image type that can be previewed */
+export function isImageFile(name: string): boolean {
+    const ext = name.split('.').pop()?.toLowerCase() || '';
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'ico'].includes(ext);
+}

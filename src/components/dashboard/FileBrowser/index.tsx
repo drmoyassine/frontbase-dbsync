@@ -40,9 +40,23 @@ import { useStorageMutations } from './hooks/useStorageMutations';
 // Types
 interface FileBrowserProps {
     onNavigationChange?: (isBrowsing: boolean) => void;
+    /** When true, clicking a file calls onFileSelect instead of opening */
+    selectMode?: boolean;
+    /** Callback when a file is selected (selectMode must be true) */
+    onFileSelect?: (url: string, file: StorageFile) => void;
+    /** Auto-navigate to this bucket on mount */
+    initialBucket?: string;
+    /** Hide bucket list and only show files */
+    hideBucketList?: boolean;
 }
 
-export function FileBrowser({ onNavigationChange }: FileBrowserProps = {}) {
+export function FileBrowser({
+    onNavigationChange,
+    selectMode = false,
+    onFileSelect,
+    initialBucket,
+    hideBucketList = false,
+}: FileBrowserProps = {}) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -71,6 +85,13 @@ export function FileBrowser({ onNavigationChange }: FileBrowserProps = {}) {
     React.useEffect(() => {
         onNavigationChange?.(!!currentBucket);
     }, [currentBucket, onNavigationChange]);
+
+    // Auto-navigate to initial bucket if specified
+    React.useEffect(() => {
+        if (initialBucket && !currentBucket) {
+            setCurrentBucket(initialBucket);
+        }
+    }, [initialBucket]);
 
     // Use refactored mutations hook
     const mutations = useStorageMutations({
@@ -154,7 +175,13 @@ export function FileBrowser({ onNavigationChange }: FileBrowserProps = {}) {
             try {
                 if (!currentBucket) throw new Error('No bucket selected');
                 const url = await getSignedUrl(path, currentBucket);
-                window.open(url, '_blank');
+
+                // In selectMode, call onFileSelect instead of opening
+                if (selectMode && onFileSelect) {
+                    onFileSelect(url, file);
+                } else {
+                    window.open(url, '_blank');
+                }
             } catch (e) {
                 toast({ title: 'Open Failed', description: 'Failed to open file.', variant: 'destructive' });
             }

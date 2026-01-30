@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Database } from 'lucide-react';
 import { IconPicker } from './IconPicker';
+import { VariableInput } from '../VariableInput';
 
 interface DisplayPropertiesProps {
     type: string;
@@ -214,22 +215,20 @@ export const DisplayProperties: React.FC<DisplayPropertiesProps> = ({
         return (
             <div className="space-y-4">
                 <div className="space-y-2">
-                    <Label htmlFor="card-title">Title</Label>
-                    <Input
-                        id="card-title"
+                    <Label htmlFor="card-title">Title <span className="text-muted-foreground text-xs">(@ for variables)</span></Label>
+                    <VariableInput
                         value={props.title || ''}
-                        onChange={(e) => updateComponentProp('title', e.target.value)}
-                        placeholder="Card Title"
+                        onChange={(value) => updateComponentProp('title', value)}
+                        placeholder="Card title or type @ for variables"
                     />
                 </div>
                 <div className="space-y-2">
-                    <Label htmlFor="card-desc">Description</Label>
-                    <Textarea
-                        id="card-desc"
+                    <Label htmlFor="card-desc">Description <span className="text-muted-foreground text-xs">(@ for variables)</span></Label>
+                    <VariableInput
                         value={props.description || ''}
-                        onChange={(e) => updateComponentProp('description', e.target.value)}
-                        placeholder="Card description..."
-                        rows={2}
+                        onChange={(value) => updateComponentProp('description', value)}
+                        placeholder="Card description or type @ for variables"
+                        multiline
                     />
                 </div>
 

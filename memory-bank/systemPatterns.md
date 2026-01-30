@@ -108,10 +108,19 @@ Component → useSimpleData() → useTableData() → databaseApi → FastAPI →
 - **Location**: `src/services/api-contracts.ts`
 - **Usage**: All API calls validate responses against schemas
 
-### Component Architecture
-- **Pattern**: Specialized renderer delegation
-- **Implementation**: ComponentRenderer → BasicRenderers, FormRenderers, etc.
-- **Benefits**: Maintainability, extensibility
+### Builder Modular Architecture (2026-01-29)
+- **Pattern**: "One File Per Component" Decentralization
+- **Principle**: Vertical Slicing
+- **Structure**:
+  - `renderers/`: Visual rendering (35+ files)
+  - `properties/`: Config panels (17+ files)
+  - `templates/`: JSON generators (12+ files)
+- **Registry Pattern**:
+  - `componentRegistry.tsx` (Renderers): Central map of component `type` -> `React Component`
+  - `PropertiesPanel.tsx` (Properties): Switches `selectedComponent.type` -> `Property Component`
+  - `templates/index.ts` (Templates): Map of `templateName` -> `Template Function`
+- **Barrel Exports**: Every directory uses `index.ts` to expose clean public API
+- **Benefits**: Elimination of monoliths, isolated testing, parallel development
 
 ### Zustand Store Pattern
 - **Pattern**: Centralized state with persist middleware

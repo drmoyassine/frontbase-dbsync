@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>testing</title>
+    <meta name="description" content="A new page created with Frontbase">
+    
+    <meta name="generator" content="Frontbase">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="https://uwzosvzynnpbxpnwqgkm.supabase.co/storage/v1/object/sign/frontbase_assets/favicon/1769731959938_logo%20icon.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8xZTZjOGYwYi0yZmFhLTQ4YTUtYThiZS00Y2I5NzhmNTM5ZGUiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJmcm9udGJhc2VfYXNzZXRzL2Zhdmljb24vMTc2OTczMTk1OTkzOF9sb2dvIGljb24ucG5nIiwiaWF0IjoxNzY5NzMyODI1LCJleHAiOjE3Njk3MzY0MjV9.reQviSmvIjd-gEk54rOcDWcists7jvXkbRWxkXlq6QQ">
+    <link rel="apple-touch-icon" href="https://uwzosvzynnpbxpnwqgkm.supabase.co/storage/v1/object/sign/frontbase_assets/favicon/1769731959938_logo%20icon.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8xZTZjOGYwYi0yZmFhLTQ4YTUtYThiZS00Y2I5NzhmNTM5ZGUiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJmcm9udGJhc2VfYXNzZXRzL2Zhdmljb24vMTc2OTczMTk1OTkzOF9sb2dvIGljb24ucG5nIiwiaWF0IjoxNzY5NzMyODI1LCJleHAiOjE3Njk3MzY0MjV9.reQviSmvIjd-gEk54rOcDWcists7jvXkbRWxkXlq6QQ">
+    
+    <!-- Prefetch hydration bundles -->
+    <link rel="modulepreload" href="/static/hydrate.js">
+    <link rel="modulepreload" href="/static/react/hydrate.js">
+
+    <!-- Client-Side Visitor Context Enhancement -->
+    <script>
+    (function() {
+        if (sessionStorage.getItem('visitor-enhanced')) return;
+        
+        // Configuration from advancedVariables
+        const adv = {"ip":{"collect":false,"expose":false},"browser":{"collect":true,"expose":true},"os":{"collect":true,"expose":true},"language":{"collect":true,"expose":true},"viewport":{"collect":true,"expose":true},"themePreference":{"collect":true,"expose":true},"connectionType":{"collect":true,"expose":false},"referrer":{"collect":true,"expose":true},"isBot":{"collect":true,"expose":true}};
+        const data = {};
+
+        // Timezone as UTC offset (+3, -5.5)
+        if (adv.timezone?.collect !== false) {
+            const offset = -new Date().getTimezoneOffset() / 60;
+            data.tz = (offset >= 0 ? '+' : '') + offset;
+        }
+
+        // Viewport only
+        if (adv.viewport?.collect !== false) {
+            data.vp = innerWidth + 'x' + innerHeight;
+        }
+
+        // Theme preference
+        if (adv.themePreference?.collect !== false) {
+            data.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+
+        // Connection type
+        if (adv.connectionType?.collect !== false && navigator.connection) {
+            data.conn = navigator.connection.effectiveType;
+        }
+
+        if (Object.keys(data).length > 0) {
+            document.cookie = "visitor-enhanced=" + encodeURIComponent(JSON.stringify(data)) + "; path=/; max-age=31536000; SameSite=Lax";
+            sessionStorage.setItem('visitor-enhanced', '1');
+        }
+    })();
+    </script>
+    
+    <!-- Tailwind CSS (for builder previews) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              border: "hsl(var(--border))",
+              input: "hsl(var(--input))",
+              ring: "hsl(var(--ring))",
+              background: "hsl(var(--background))",
+              foreground: "hsl(var(--foreground))",
+              primary: {
+                DEFAULT: "hsl(var(--primary))",
+                foreground: "hsl(var(--primary-foreground))",
+              },
+              secondary: {
+                DEFAULT: "hsl(var(--secondary))",
+                foreground: "hsl(var(--secondary-foreground))",
+              },
+              destructive: {
+                DEFAULT: "hsl(var(--destructive))",
+                foreground: "hsl(var(--destructive-foreground))",
+              },
+              muted: {
+                DEFAULT: "hsl(var(--muted))",
+                foreground: "hsl(var(--muted-foreground))",
+              },
+              accent: {
+                DEFAULT: "hsl(var(--accent))",
+                foreground: "hsl(var(--accent-foreground))",
+              },
+              popover: {
+                DEFAULT: "hsl(var(--popover))",
+                foreground: "hsl(var(--popover-foreground))",
+              },
+              card: {
+                DEFAULT: "hsl(var(--card))",
+                foreground: "hsl(var(--card-foreground))",
+              },
+            },
+          },
+        },
+      }
+    </script>
+    
+    <!-- Base styles -->
+    <style>
+        :root {
+            --background: 0 0% 100%;
+            --foreground: 222.2 84% 4.9%;
+            --muted: 210 40% 96.1%;
+            --muted-foreground: 215.4 16.3% 46.9%;
+            --popover: 0 0% 100%;
+            --popover-foreground: 222.2 84% 4.9%;
+            --card: 0 0% 100%;
+            --card-foreground: 222.2 84% 4.9%;
+            --border: 214.3 31.8% 91.4%;
+            --input: 214.3 31.8% 91.4%;
+            --primary: 222.2 47.4% 11.2%;
+            --primary-foreground: 210 40% 98%;
+            --secondary: 210 40% 96.1%;
+            --secondary-foreground: 222.2 47.4% 11.2%;
+            --accent: 210 40% 96.1%;
+            --accent-foreground: 222.2 47.4% 11.2%;
+            --destructive: 0 84.2% 60.2%;
+            --destructive-foreground: 210 40% 98%;
+            --ring: 222.2 84% 4.9%;
+            --radius: 0.5rem;
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }
+        /* Page container - defaults to flex-column like builder */
+        .fb-page { min-height: 100vh; display: flex; flex-direction: column; padding: 2rem; gap: 1rem; }
+        /* Ensure buttons display as inline-flex but with vertical margins when in column layout */
+        .fb-button { display: inline-flex; align-items: center; justify-content: center; }
+        /* Headings with proper sizing to match shadcn */
+        .fb-heading { margin: 0; }
+        .fb-heading-1 { font-size: 2.25rem; font-weight: 700; }
+        .fb-heading-2 { font-size: 1.875rem; font-weight: 600; }
+        .fb-heading-3 { font-size: 1.5rem; font-weight: 600; }
+        .fb-loading { opacity: 0.7; pointer-events: none; }
+        .fb-skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: skeleton 1.5s infinite; }
+        @keyframes skeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    </style>
+</head>
+<body>
+    <div id="root"><div class="fb-page " style=""><span id="1769733600701-8jp1kk6tv" class="fb-badge fb-badge-default" style="background:#e5e5e5;color:#333;font-size:0.75rem;padding:0.15rem 0.4rem;border-radius:9999px;display:inline-flex;align-items:center;gap:0.25rem"><span class="fb-badge-icon" style="display:inline-flex;margin-right:0.25rem"><!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-award"
+  xmlns="http://www.w3.org/2000/svg"
+  width="1em"
+  height="1em"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526" />
+  <circle cx="12" cy="8" r="6" />
+</svg>
+</span>Badge</span><div id="1769733481042-ysszg0p4k" class="fb-layout container" style="margin:0 auto;width:100%;display:flex;flex-direction:column;gap:0;padding:0;min-height:100vh"><section id="1769737150123-hvewy1lnf" class="fb-features py-16 px-6 md:px-12" style="background-color: hsl(var(--background)); ">
+            <div class="fb-container">
+                
+        <div class="mb-12" style="text-align: center;">
+            <h2 class="text-3xl md:text-4xl font-bold mb-3">Features</h2>
+            
+        </div>
+    
+                <div class="grid grid-cols-1 gap-6 md:gap-8 md:grid-cols-2 lg:grid-cols-3">
+                    
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 44px; height: 44px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-zap"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="24"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Lightning Fast</h3>
+            <p class="text-muted-foreground">Optimized for speed and performance</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 44px; height: 44px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-shield"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="24"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Secure by Default</h3>
+            <p class="text-muted-foreground">Enterprise-grade security built-in</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 44px; height: 44px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-smartphone"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="24"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <rect width="24" height="24" x="5" y="2" rx="2" ry="2" />
+  <path d="M12 18h.01" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Mobile Ready</h3>
+            <p class="text-muted-foreground">Responsive design that works everywhere</p>
+        
+            </div>
+        
+                </div>
+            </div>
+        </section><header id="1769733481042-kle4ilemm" class="fb-navbar bg-background border-b" style="padding: 16px 24px; border-bottom: 1px solid var(--border); background-color: var(--background)">
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between py-4">
+                    <!-- Logo -->
+                    <a href="/" class="flex items-center gap-2">
+                        <img src="https://uwzosvzynnpbxpnwqgkm.supabase.co/storage/v1/object/sign/frontbase_assets/favicon/1769731959938_logo%20icon.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8xZTZjOGYwYi0yZmFhLTQ4YTUtYThiZS00Y2I5NzhmNTM5ZGUiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJmcm9udGJhc2VfYXNzZXRzL2Zhdmljb24vMTc2OTczMTk1OTkzOF9sb2dvIGljb24ucG5nIiwiaWF0IjoxNzY5NzMyODI1LCJleHAiOjE3Njk3MzY0MjV9.reQviSmvIjd-gEk54rOcDWcists7jvXkbRWxkXlq6QQ" alt="Logo" class="h-6 w-6 object-contain" /><span class="text-xl font-bold">Frontbase</span>
+                    </a>
+                    
+                    <!-- Desktop Navigation + CTA Buttons grouped together -->
+                    <div class="hidden md:flex items-center gap-8">
+                        <nav class="flex items-center gap-6">
+                            
+            <a href="#features" data-scroll-to="#features" 
+               class="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                Features
+            </a>
+        
+            <a href="#integrations" data-scroll-to="#integrations" 
+               class="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                Integrations
+            </a>
+        
+            <a href="#architecture" data-scroll-to="#architecture" 
+               class="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                Architecture
+            </a>
+        
+                        </nav>
+                        <div class="flex items-center gap-3">
+                            
+                            
+            <a href="/alpha" 
+               class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
+                Join Private Alpha
+            </a>
+        
+                        </div>
+                    </div>
+                    
+                    <!-- Mobile: Dark Mode Toggle + Menu Button -->
+                    <div class="md:hidden flex items-center gap-2">
+                        
+                        <button type="button" class="p-2 rounded-lg hover:bg-accent" data-fb-mobile-menu-toggle>
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Mobile Menu (hidden by default) -->
+                <div class="md:hidden hidden pb-4" data-fb-mobile-menu>
+                    <nav class="flex flex-col gap-1">
+                        
+            <a href="#features" data-scroll-to="#features"
+               class="block py-2 text-muted-foreground hover:text-foreground transition-colors">
+                Features
+            </a>
+        
+            <a href="#integrations" data-scroll-to="#integrations"
+               class="block py-2 text-muted-foreground hover:text-foreground transition-colors">
+                Integrations
+            </a>
+        
+            <a href="#architecture" data-scroll-to="#architecture"
+               class="block py-2 text-muted-foreground hover:text-foreground transition-colors">
+                Architecture
+            </a>
+        
+                    </nav>
+                    <div class="flex flex-col gap-2 mt-4 pt-4 border-t">
+                        
+            <a href="/alpha" 
+               class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
+                Join Private Alpha
+            </a>
+        
+                    </div>
+                </div>
+            </div>
+        </header><div id="1769733481042-6terlqjox" class="fb-layout container" style="margin:0 auto;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:48px 24px;min-height:400px;gap:24px"><span id="1769736420852-vofkchsz4" class="fb-icon" style="width:2rem;height:2rem;font-size:1.5rem;display:inline-flex;align-items:center;justify-content:center;color:currentColor"><!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-rocket"
+  xmlns="http://www.w3.org/2000/svg"
+  width="100%"
+  height="100%"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="100%"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+  <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+  <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+  <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+</svg>
+</span><div id="1769736530216-9ymutrppu" class="fb-datacard" style="border:1px solid #e5e7eb;border-radius:0.5rem;overflow:hidden" data-fb-hydrate="datacard" data-fb-props="{&quot;icon&quot;:&quot;Zap&quot;,&quot;title&quot;:&quot;Feature Title&quot;,&quot;description&quot;:&quot;Feature description goes here.&quot;,&quot;iconSize&quot;:&quot;md&quot;,&quot;iconAlignment&quot;:&quot;center&quot;,&quot;textAlignment&quot;:&quot;center&quot;,&quot;iconSvg&quot;:&quot;\u003c!-- @license lucide-static v0.563.0 - ISC --\u003e\n\u003csvg\n  class=\&quot;lucide lucide-zap\&quot;\n  xmlns=\&quot;http://www.w3.org/2000/svg\&quot;\n  width=\&quot;1em\&quot;\n  height=\&quot;1em\&quot;\n  viewBox=\&quot;0 0 24 24\&quot;\n  fill=\&quot;none\&quot;\n  stroke=\&quot;currentColor\&quot;\n  stroke-width=\&quot;2\&quot;\n  stroke-linecap=\&quot;round\&quot;\n  stroke-linejoin=\&quot;round\&quot;\n\u003e\n  \u003cpath d=\&quot;M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z\&quot; /\u003e\n\u003c/svg\u003e\n&quot;,&quot;style&quot;:{}}" >
+        
+        <div class="fb-datacard-content" style="padding:1rem">
+            <h4 style="margin:0 0 0.25rem 0;font-weight:600">Feature Title</h4>
+            <div class="fb-skeleton" style="height:0.875rem;width:80%">&nbsp;</div>
+            
+        </div>
+    </div><span id="1769733481042-opdcfh201" class="fb-badge fb-badge-secondary" style="background:#e5e5e5;color:#333;font-size:0.75rem;padding:0.15rem 0.4rem;border-radius:9999px;display:inline-flex;align-items:center;gap:0.25rem"><span class="fb-badge-icon" style="display:inline-flex;margin-right:0.25rem"><!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-rocket"
+  xmlns="http://www.w3.org/2000/svg"
+  width="1em"
+  height="1em"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+  <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+  <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+  <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+</svg>
+</span>Now in Private Alpha</span><h1 id="1769733481042-q8yd3i0fn" class="fb-heading fb-heading-1" style="text-align:inherit;color:inherit;font-size:48px;font-weight:700">Build Edge Apps and Microservices Visually</h1><span id="1769733481042-hwm8595cp" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;color:var(--muted-foreground);max-width:600px">WordPress was built for 2006. Frontbase is built for 2026.</span><div id="1769733481042-p7g6nl68h" class="fb-layout row fb-row flex flex-col md:flex-row" style="width:100%;min-height:50px;justify-content:center;align-items:center;gap:16px;padding:0;border-width:0;min-height:auto;margin-top:16px"><button id="1769733481042-wairybqx0" class="fb-button fb-button-default" style="background:hsl(var(--primary));color:hsl(var(--primary-foreground));border:none;padding:0.625rem 1.25rem;font-size:1.125rem;border-radius:0.375rem;cursor:pointer;font-weight:500;transition:all 0.15s;width:fit-content;" data-fb-hydrate="button" data-fb-props="{&quot;text&quot;:&quot;Get Started&quot;,&quot;variant&quot;:&quot;default&quot;,&quot;size&quot;:&quot;lg&quot;,&quot;style&quot;:{}}" >
+        
+        Get Started
+    </button><button id="1769733481042-o0p3g2e48" class="fb-button fb-button-outline" style="background:transparent;color:hsl(var(--foreground));border:1px solid hsl(var(--border));padding:0.625rem 1.25rem;font-size:1.125rem;border-radius:0.375rem;cursor:pointer;font-weight:500;transition:all 0.15s;width:fit-content;" data-fb-hydrate="button" data-fb-props="{&quot;text&quot;:&quot;Learn More&quot;,&quot;variant&quot;:&quot;outline&quot;,&quot;size&quot;:&quot;lg&quot;,&quot;style&quot;:{}}" >
+        
+        Learn More
+    </button></div></div><section id="1769733481042-ugfhpceqj" class="fb-logo-cloud py-12 px-6" style="background-color: var(--muted)">
+                
+        <p class="text-center text-muted-foreground text-sm mb-8">
+            Powered by the modern stack you already love
+        </p>
+    
+                <div class="flex flex-wrap justify-center items-center gap-8 md:gap-12 text-center">
+                    <a 
+                href="https://supabase.com" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                class="flex items-center justify-center hover:scale-105 transition-transform"
+            >
+                <span 
+                class="font-semibold whitespace-nowrap transition-all duration-300 opacity-60 hover:opacity-100"
+                style="font-size: 18px;"
+            >
+                Supabase
+            </span>
+            </a><a 
+                href="https://cloudflare.com" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                class="flex items-center justify-center hover:scale-105 transition-transform"
+            >
+                <span 
+                class="font-semibold whitespace-nowrap transition-all duration-300 opacity-60 hover:opacity-100"
+                style="font-size: 18px;"
+            >
+                Cloudflare
+            </span>
+            </a><a 
+                href="https://vercel.com" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                class="flex items-center justify-center hover:scale-105 transition-transform"
+            >
+                <span 
+                class="font-semibold whitespace-nowrap transition-all duration-300 opacity-60 hover:opacity-100"
+                style="font-size: 18px;"
+            >
+                Vercel
+            </span>
+            </a><a 
+                href="https://fastapi.tiangolo.com" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                class="flex items-center justify-center hover:scale-105 transition-transform"
+            >
+                <span 
+                class="font-semibold whitespace-nowrap transition-all duration-300 opacity-60 hover:opacity-100"
+                style="font-size: 18px;"
+            >
+                FastAPI
+            </span>
+            </a><a 
+                href="https://react.dev" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                class="flex items-center justify-center hover:scale-105 transition-transform"
+            >
+                <span 
+                class="font-semibold whitespace-nowrap transition-all duration-300 opacity-60 hover:opacity-100"
+                style="font-size: 18px;"
+            >
+                React 19
+            </span>
+            </a><a 
+                href="https://hono.dev" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                class="flex items-center justify-center hover:scale-105 transition-transform"
+            >
+                <span 
+                class="font-semibold whitespace-nowrap transition-all duration-300 opacity-60 hover:opacity-100"
+                style="font-size: 18px;"
+            >
+                Hono
+            </span>
+            </a>
+                </div>
+            </section><section id="1769733481042-qi140tl6k" class="fb-features py-16 px-6 md:px-12" style="background-color: var(--background); ">
+            <div class="fb-container">
+                
+        <div class="mb-12" style="text-align: center;">
+            <h2 class="text-3xl md:text-4xl font-bold mb-3">Why Frontbase?</h2>
+            
+        </div>
+    
+                <div class="grid grid-cols-1 gap-6 md:gap-8 md:grid-cols-2 lg:grid-cols-4">
+                    
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 56px; height: 56px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-zap"
+  xmlns="http://www.w3.org/2000/svg"
+  width="32"
+  height="32"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="32"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Edge-Native SSR</h3>
+            <p class="text-muted-foreground">Sub-50ms globally. Hono-powered. Deploy to Cloudflare, Vercel, or Supabase Edge.</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 56px; height: 56px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-plug"
+  xmlns="http://www.w3.org/2000/svg"
+  width="32"
+  height="32"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="32"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12 22v-5" />
+  <path d="M15 8V2" />
+  <path d="M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1z" />
+  <path d="M9 8V2" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">BYOE</h3>
+            <p class="text-muted-foreground">Bring Your Own Everything. Your databases, auth, storage, cache. We orchestrate.</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 56px; height: 56px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-package"
+  xmlns="http://www.w3.org/2000/svg"
+  width="32"
+  height="32"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="32"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" />
+  <path d="M12 22V12" />
+  <polyline points="3.29 7 12 12 20.71 7" />
+  <path d="m7.5 4.27 9 5.15" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">No-Code → Real Code</h3>
+            <p class="text-muted-foreground">Visual builder exports clean React 19 &amp; Python. Zero lock-in. Eject anytime.</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 56px; height: 56px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-bot"
+  xmlns="http://www.w3.org/2000/svg"
+  width="32"
+  height="32"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="32"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12 8V4H8" />
+  <rect width="32" height="32" x="4" y="8" rx="2" />
+  <path d="M2 14h2" />
+  <path d="M20 14h2" />
+  <path d="M15 13v2" />
+  <path d="M9 13v2" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">AI-Ready</h3>
+            <p class="text-muted-foreground">Python native backend. FastAPI + Pydantic. Ready for LangChain and AI agents.</p>
+        
+            </div>
+        
+                </div>
+            </div>
+        </section><section id="1769733481042-1c0fr9tm2" class="fb-features py-16 px-6 md:px-12" style="background-color: var(--muted); ">
+            <div class="fb-container">
+                
+        <div class="mb-12" style="text-align: center;">
+            <h2 class="text-3xl md:text-4xl font-bold mb-3">Bring Your Own Everything</h2>
+            <p class="text-lg text-muted-foreground">Don&#039;t rip and replace. Connect what you already use.</p>
+        </div>
+    
+                <div class="grid grid-cols-1 gap-6 md:gap-8 md:grid-cols-2 lg:grid-cols-4">
+                    
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 44px; height: 44px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-database"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="24"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <ellipse cx="12" cy="5" rx="9" ry="3" />
+  <path d="M3 5V19A9 3 0 0 0 21 19V5" />
+  <path d="M3 12A9 3 0 0 0 21 12" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Databases</h3>
+            <p class="text-muted-foreground">Supabase, PlanetScale, Neon, MySQL, PostgreSQL, SQLite</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 44px; height: 44px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-lock"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="24"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <rect width="24" height="24" x="3" y="11" rx="2" ry="2" />
+  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Auth</h3>
+            <p class="text-muted-foreground">Supabase Auth, JWT Providers</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 44px; height: 44px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-folder-open"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="24"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Storage</h3>
+            <p class="text-muted-foreground">Supabase Storage, S3-compatible</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 44px; height: 44px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-zap"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="24"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Cache</h3>
+            <p class="text-muted-foreground">Upstash Redis, Self-hosted Redis</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 44px; height: 44px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-rocket"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="24"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+  <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+  <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+  <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Deploy</h3>
+            <p class="text-muted-foreground">Cloudflare, Vercel, Supabase Edge, Docker</p>
+        
+            </div>
+        
+                </div>
+            </div>
+        </section><section id="1769733481042-g125gqcik" class="fb-features py-16 px-6 md:px-12" style="background-color: var(--background); ">
+            <div class="fb-container">
+                
+        <div class="mb-12" style="text-align: center;">
+            <h2 class="text-3xl md:text-4xl font-bold mb-3">Everything You Need</h2>
+            <p class="text-lg text-muted-foreground">A complete platform for building production apps</p>
+        </div>
+    
+                <div class="grid grid-cols-1 gap-6 md:gap-8 md:grid-cols-2 lg:grid-cols-3">
+                    
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 56px; height: 56px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-palette"
+  xmlns="http://www.w3.org/2000/svg"
+  width="32"
+  height="32"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="32"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z" />
+  <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+  <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+  <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+  <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Visual Builder</h3>
+            <p class="text-muted-foreground">40+ components. Drag-and-drop. Real-time preview. Responsive design tools.</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 56px; height: 56px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-zap"
+  xmlns="http://www.w3.org/2000/svg"
+  width="32"
+  height="32"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="32"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Visual Automations</h3>
+            <p class="text-muted-foreground">ReactFlow workflows. Trigger on data changes. API integrations. Webhooks.</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 56px; height: 56px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-shield"
+  xmlns="http://www.w3.org/2000/svg"
+  width="32"
+  height="32"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="32"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Visual RLS Policies</h3>
+            <p class="text-muted-foreground">Design Supabase row-level security without writing SQL.</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 56px; height: 56px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-database"
+  xmlns="http://www.w3.org/2000/svg"
+  width="32"
+  height="32"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="32"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <ellipse cx="12" cy="5" rx="9" ry="3" />
+  <path d="M3 5V19A9 3 0 0 0 21 19V5" />
+  <path d="M3 12A9 3 0 0 0 21 12" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Database Management</h3>
+            <p class="text-muted-foreground">Schema visualization. CRUD operations. Query builder. FK detection.</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 56px; height: 56px; color: hsl(var(--primary)); margin: 0 auto;">
+                <span class="text-xl">✦</span>
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Data Components</h3>
+            <p class="text-muted-foreground">DataTable, Charts (Line/Bar/Pie), Forms, Cards. All data-bound.</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 56px; height: 56px; color: hsl(var(--primary)); margin: 0 auto;">
+                <!-- @license lucide-static v0.563.0 - ISC -->
+<svg
+  class="lucide lucide-search"
+  xmlns="http://www.w3.org/2000/svg"
+  width="32"
+  height="32"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="32"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="m21 21-4.34-4.34" />
+  <circle cx="11" cy="11" r="8" />
+</svg>
+
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">SSR &amp; SEO</h3>
+            <p class="text-muted-foreground">Per-page SEO. Open Graph cards. Sitemaps. Canonical URLs.</p>
+        
+            </div>
+        
+                </div>
+            </div>
+        </section><section id="1769733481042-5qqd8iedt" class="fb-features py-16 px-6 md:px-12" style="background-color: var(--muted); ">
+            <div class="fb-container">
+                
+        <div class="mb-12" style="text-align: center;">
+            <h2 class="text-3xl md:text-4xl font-bold mb-3">Modern Tech Stack</h2>
+            
+        </div>
+    
+                <div class="grid grid-cols-1 gap-6 md:gap-8 md:grid-cols-2 lg:grid-cols-3">
+                    
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 36px; height: 36px; color: hsl(var(--primary)); margin: 0 auto;">
+                <span class="text-3xl"></span>
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Frontend</h3>
+            <p class="text-muted-foreground">React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui, Zustand, TanStack Query</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 36px; height: 36px; color: hsl(var(--primary)); margin: 0 auto;">
+                <span class="text-3xl"></span>
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Edge Engine</h3>
+            <p class="text-muted-foreground">Hono 4.6, React 19 SSR, Drizzle ORM, LiquidJS, Tailwind CSS 4, Zod</p>
+        
+            </div>
+        
+            <div class="p-6 rounded-xl border text-center" style="background-color: hsl(var(--card));">
+                
+            
+            <div class="flex items-center justify-center mb-4 rounded-lg" style="width: 36px; height: 36px; color: hsl(var(--primary)); margin: 0 auto;">
+                <span class="text-3xl"></span>
+            </div>
+        
+            <h3 class="text-lg font-semibold mb-2">Backend</h3>
+            <p class="text-muted-foreground">FastAPI, SQLAlchemy, Alembic, Pydantic, Python 3.11+</p>
+        
+            </div>
+        
+                </div>
+            </div>
+        </section><div id="1769733481042-2lkhdyi8o" class="fb-layout container" style="margin:0 auto;width:100%;display:flex;flex-direction:column;padding:80px 48px;gap:48px;background-color:var(--background)"><div id="1769733481042-1n9ey87nl" class="fb-layout container" style="margin:0 auto;width:100%;text-align:center;display:flex;flex-direction:column;gap:12px"><h2 id="1769733481042-6jct6w1nh" class="fb-heading fb-heading-2" style="text-align:inherit;color:inherit;font-size:40px;font-weight:700">WordPress was built for 2005</h2><span id="1769733481042-dr3sk26pq" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;font-size:24px;font-weight:600;color:var(--primary)">Frontbase is built for 2025</span></div><div id="1769733481042-iava82bbp" class="fb-layout container" style="margin:0 auto;width:100%;display:grid;grid-template-columns:repeat(2, 1fr);gap:48px;max-width:900px;margin:0 auto"><div id="1769733481042-0pjbr6wdp" class="fb-datacard" style="border:1px solid #e5e7eb;border-radius:0.5rem;overflow:hidden;padding:32px" data-fb-hydrate="datacard" data-fb-props="{&quot;style&quot;:{&quot;activeProperties&quot;:[&quot;padding&quot;],&quot;values&quot;:{&quot;padding&quot;:&quot;32px&quot;},&quot;stylingMode&quot;:&quot;visual&quot;}}" >
+        
+        <div class="fb-datacard-content" style="padding:1rem">
+            
+            
+            <div id="1769733481042-a5pmtxodf" class="fb-layout container" style="margin:0 auto;width:100%;display:flex;flex-direction:column;gap:16px"><h3 id="1769733481042-qt6zye0dk" class="fb-heading fb-heading-3" style="text-align:inherit;color:inherit;font-size:24px;font-weight:700">WordPress</h3><span id="1769733481042-tnyym9ibj" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;color:var(--muted-foreground);font-size:14px">• PHP Monolith</span><span id="1769733481042-s4ehbeuzb" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;color:var(--muted-foreground);font-size:14px">• Slow, requires hosting</span><span id="1769733481042-w8xok5mlh" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;color:var(--muted-foreground);font-size:14px">• MySQL only</span><span id="1769733481042-lktm7045u" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;color:var(--muted-foreground);font-size:14px">• Plugin-dependent AI</span><span id="1769733481042-f5gq5x2kx" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;color:var(--muted-foreground);font-size:14px">• Theme lock-in</span><span id="1769733481042-dygfd6v22" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;color:var(--muted-foreground);font-size:14px">• jQuery, legacy</span></div>
+        </div>
+    </div><div id="1769733481042-0yqrklt89" class="fb-datacard" style="border:1px solid #e5e7eb;border-radius:0.5rem;overflow:hidden;padding:32px;border:2px solid var(--primary);background-color:var(--primary)" data-fb-hydrate="datacard" data-fb-props="{&quot;style&quot;:{&quot;activeProperties&quot;:[&quot;padding&quot;,&quot;border&quot;,&quot;backgroundColor&quot;],&quot;values&quot;:{&quot;padding&quot;:&quot;32px&quot;,&quot;border&quot;:&quot;2px solid var(--primary)&quot;,&quot;backgroundColor&quot;:&quot;var(--primary)&quot;},&quot;stylingMode&quot;:&quot;visual&quot;}}" >
+        
+        <div class="fb-datacard-content" style="padding:1rem">
+            
+            
+            <div id="1769733481042-2wpgyrgx4" class="fb-layout container" style="margin:0 auto;width:100%;display:flex;flex-direction:column;gap:16px"><h3 id="1769733481042-9hpam6vz5" class="fb-heading fb-heading-3" style="text-align:inherit;color:inherit;font-size:24px;font-weight:700;color:var(--primary-foreground)">Frontbase</h3><span id="1769733481042-ve2t11t1c" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;color:var(--primary-foreground);font-size:14px">• Edge-native serverless</span><span id="1769733481042-bvps40p4i" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;color:var(--primary-foreground);font-size:14px">• Sub-50ms global</span><span id="1769733481042-njoobcsua" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;color:var(--primary-foreground);font-size:14px">• Any SQL database</span><span id="1769733481042-j1955x0a6" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;color:var(--primary-foreground);font-size:14px">• Native Python AI</span><span id="1769733481042-ixe0odmiu" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;color:var(--primary-foreground);font-size:14px">• Clean React/TypeScript</span><span id="1769733481042-qkdit4t78" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;color:var(--primary-foreground);font-size:14px">• React 19, Hono, Tailwind 4</span></div>
+        </div>
+    </div></div></div><div id="1769733481042-kpve3ueum" class="fb-layout container" style="margin:0 auto;width:100%;display:flex;flex-direction:column;align-items:center;padding:80px 48px;gap:24px;background-color:var(--primary);text-align:center"><h2 id="1769733481042-k92g5leu0" class="fb-heading fb-heading-2" style="text-align:inherit;color:inherit;font-size:40px;font-weight:700;color:var(--primary-foreground)">Ready to build on the edge?</h2><span id="1769733481042-fqur4dzcp" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;color:var(--primary-foreground);opacity:0.9;font-size:18px">Join the Private Alpha and start building today.</span><div id="1769733481042-m24miztf4" class="fb-layout row fb-row flex flex-col md:flex-row" style="width:100%;min-height:50px;justify-content:center;align-items:center;gap:16px;margin-top:16px;padding:0;border-width:0;min-height:auto"><button id="1769733481042-jv1cprj8n" class="fb-button fb-button-secondary" style="background:hsl(var(--secondary));color:hsl(var(--secondary-foreground));border:none;padding:0.5rem 1rem;font-size:1rem;border-radius:0.375rem;cursor:pointer;font-weight:500;transition:all 0.15s;width:fit-content;;padding:12px 32px;font-size:16px" data-fb-hydrate="button" data-fb-props="{&quot;text&quot;:&quot;Join Private Alpha&quot;,&quot;variant&quot;:&quot;secondary&quot;,&quot;style&quot;:{&quot;activeProperties&quot;:[&quot;padding&quot;,&quot;fontSize&quot;],&quot;values&quot;:{&quot;padding&quot;:&quot;12px 32px&quot;,&quot;fontSize&quot;:&quot;16px&quot;},&quot;stylingMode&quot;:&quot;visual&quot;}}" >
+        
+        Join Private Alpha
+    </button><button id="1769733481042-mwygxfh4v" class="fb-button fb-button-outline" style="background:transparent;color:hsl(var(--foreground));border:1px solid hsl(var(--border));padding:0.5rem 1rem;font-size:1rem;border-radius:0.375rem;cursor:pointer;font-weight:500;transition:all 0.15s;width:fit-content;;padding:12px 32px;font-size:16px;border-color:var(--primary-foreground);color:var(--primary-foreground)" data-fb-hydrate="button" data-fb-props="{&quot;text&quot;:&quot;Star on GitHub&quot;,&quot;variant&quot;:&quot;outline&quot;,&quot;style&quot;:{&quot;activeProperties&quot;:[&quot;padding&quot;,&quot;fontSize&quot;,&quot;borderColor&quot;,&quot;color&quot;],&quot;values&quot;:{&quot;padding&quot;:&quot;12px 32px&quot;,&quot;fontSize&quot;:&quot;16px&quot;,&quot;borderColor&quot;:&quot;var(--primary-foreground)&quot;,&quot;color&quot;:&quot;var(--primary-foreground)&quot;},&quot;stylingMode&quot;:&quot;visual&quot;}}" >
+        
+        Star on GitHub
+    </button></div></div><div id="1769733481042-odhvjhxvh" class="fb-layout container" style="margin:0 auto;width:100%;display:flex;flex-direction:column;padding:48px;gap:32px;background-color:var(--background);border-top:1px solid var(--border)"><div id="1769733481042-f2t6ilzcm" class="fb-layout container" style="margin:0 auto;width:100%;display:grid;grid-template-columns:repeat(4, 1fr);gap:48px"><div id="1769733481042-t4mmtqu17" class="fb-layout container" style="margin:0 auto;width:100%;display:flex;flex-direction:column;gap:12px"><span id="1769733481042-7r3l4jnz6" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;font-weight:600;font-size:14px">Frontbase</span><a id="1769733481042-1j5snwwyz" class="fb-link" style="color:#3b82f6;text-decoration:underline;cursor:pointer;color:var(--muted-foreground);font-size:14px" data-fb-hydrate="link" data-fb-props="{&quot;text&quot;:&quot;Open Source&quot;,&quot;href&quot;:&quot;#open-source&quot;,&quot;style&quot;:{&quot;activeProperties&quot;:[&quot;color&quot;,&quot;fontSize&quot;],&quot;values&quot;:{&quot;color&quot;:&quot;var(--muted-foreground)&quot;,&quot;fontSize&quot;:&quot;14px&quot;},&quot;stylingMode&quot;:&quot;visual&quot;}}" href="#open-source" target="_self">Open Source</a><a id="1769733481042-9av07relm" class="fb-link" style="color:#3b82f6;text-decoration:underline;cursor:pointer;color:var(--muted-foreground);font-size:14px" data-fb-hydrate="link" data-fb-props="{&quot;text&quot;:&quot;MIT License&quot;,&quot;href&quot;:&quot;#mit-license&quot;,&quot;style&quot;:{&quot;activeProperties&quot;:[&quot;color&quot;,&quot;fontSize&quot;],&quot;values&quot;:{&quot;color&quot;:&quot;var(--muted-foreground)&quot;,&quot;fontSize&quot;:&quot;14px&quot;},&quot;stylingMode&quot;:&quot;visual&quot;}}" href="#mit-license" target="_self">MIT License</a></div><div id="1769733481042-ce7itaw1b" class="fb-layout container" style="margin:0 auto;width:100%;display:flex;flex-direction:column;gap:12px"><span id="1769733481042-bdlpze4ns" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;font-weight:600;font-size:14px">Product</span><a id="1769733481042-5qcdnmfwh" class="fb-link" style="color:#3b82f6;text-decoration:underline;cursor:pointer;color:var(--muted-foreground);font-size:14px" data-fb-hydrate="link" data-fb-props="{&quot;text&quot;:&quot;Features&quot;,&quot;href&quot;:&quot;#features&quot;,&quot;style&quot;:{&quot;activeProperties&quot;:[&quot;color&quot;,&quot;fontSize&quot;],&quot;values&quot;:{&quot;color&quot;:&quot;var(--muted-foreground)&quot;,&quot;fontSize&quot;:&quot;14px&quot;},&quot;stylingMode&quot;:&quot;visual&quot;}}" href="#features" target="_self">Features</a><a id="1769733481042-zmytkm5ru" class="fb-link" style="color:#3b82f6;text-decoration:underline;cursor:pointer;color:var(--muted-foreground);font-size:14px" data-fb-hydrate="link" data-fb-props="{&quot;text&quot;:&quot;Pricing&quot;,&quot;href&quot;:&quot;#pricing&quot;,&quot;style&quot;:{&quot;activeProperties&quot;:[&quot;color&quot;,&quot;fontSize&quot;],&quot;values&quot;:{&quot;color&quot;:&quot;var(--muted-foreground)&quot;,&quot;fontSize&quot;:&quot;14px&quot;},&quot;stylingMode&quot;:&quot;visual&quot;}}" href="#pricing" target="_self">Pricing</a><a id="1769733481042-spo5jf8l6" class="fb-link" style="color:#3b82f6;text-decoration:underline;cursor:pointer;color:var(--muted-foreground);font-size:14px" data-fb-hydrate="link" data-fb-props="{&quot;text&quot;:&quot;Changelog&quot;,&quot;href&quot;:&quot;#changelog&quot;,&quot;style&quot;:{&quot;activeProperties&quot;:[&quot;color&quot;,&quot;fontSize&quot;],&quot;values&quot;:{&quot;color&quot;:&quot;var(--muted-foreground)&quot;,&quot;fontSize&quot;:&quot;14px&quot;},&quot;stylingMode&quot;:&quot;visual&quot;}}" href="#changelog" target="_self">Changelog</a></div><div id="1769733481042-yz1od3gah" class="fb-layout container" style="margin:0 auto;width:100%;display:flex;flex-direction:column;gap:12px"><span id="1769733481042-40gb6sc0l" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;font-weight:600;font-size:14px">Resources</span><a id="1769733481042-d4sv2h2ka" class="fb-link" style="color:#3b82f6;text-decoration:underline;cursor:pointer;color:var(--muted-foreground);font-size:14px" data-fb-hydrate="link" data-fb-props="{&quot;text&quot;:&quot;Documentation&quot;,&quot;href&quot;:&quot;#documentation&quot;,&quot;style&quot;:{&quot;activeProperties&quot;:[&quot;color&quot;,&quot;fontSize&quot;],&quot;values&quot;:{&quot;color&quot;:&quot;var(--muted-foreground)&quot;,&quot;fontSize&quot;:&quot;14px&quot;},&quot;stylingMode&quot;:&quot;visual&quot;}}" href="#documentation" target="_self">Documentation</a><a id="1769733481042-9twgtejrn" class="fb-link" style="color:#3b82f6;text-decoration:underline;cursor:pointer;color:var(--muted-foreground);font-size:14px" data-fb-hydrate="link" data-fb-props="{&quot;text&quot;:&quot;GitHub&quot;,&quot;href&quot;:&quot;#github&quot;,&quot;style&quot;:{&quot;activeProperties&quot;:[&quot;color&quot;,&quot;fontSize&quot;],&quot;values&quot;:{&quot;color&quot;:&quot;var(--muted-foreground)&quot;,&quot;fontSize&quot;:&quot;14px&quot;},&quot;stylingMode&quot;:&quot;visual&quot;}}" href="#github" target="_self">GitHub</a><a id="1769733481042-bfictwxre" class="fb-link" style="color:#3b82f6;text-decoration:underline;cursor:pointer;color:var(--muted-foreground);font-size:14px" data-fb-hydrate="link" data-fb-props="{&quot;text&quot;:&quot;Discord&quot;,&quot;href&quot;:&quot;#discord&quot;,&quot;style&quot;:{&quot;activeProperties&quot;:[&quot;color&quot;,&quot;fontSize&quot;],&quot;values&quot;:{&quot;color&quot;:&quot;var(--muted-foreground)&quot;,&quot;fontSize&quot;:&quot;14px&quot;},&quot;stylingMode&quot;:&quot;visual&quot;}}" href="#discord" target="_self">Discord</a></div><div id="1769733481042-3fw7bg9gz" class="fb-layout container" style="margin:0 auto;width:100%;display:flex;flex-direction:column;gap:12px"><span id="1769733481042-3kxv5ylim" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;font-weight:600;font-size:14px">Legal</span><a id="1769733481042-qsvfxqn7n" class="fb-link" style="color:#3b82f6;text-decoration:underline;cursor:pointer;color:var(--muted-foreground);font-size:14px" data-fb-hydrate="link" data-fb-props="{&quot;text&quot;:&quot;Privacy Policy&quot;,&quot;href&quot;:&quot;#privacy-policy&quot;,&quot;style&quot;:{&quot;activeProperties&quot;:[&quot;color&quot;,&quot;fontSize&quot;],&quot;values&quot;:{&quot;color&quot;:&quot;var(--muted-foreground)&quot;,&quot;fontSize&quot;:&quot;14px&quot;},&quot;stylingMode&quot;:&quot;visual&quot;}}" href="#privacy-policy" target="_self">Privacy Policy</a><a id="1769733481042-wvsi8he84" class="fb-link" style="color:#3b82f6;text-decoration:underline;cursor:pointer;color:var(--muted-foreground);font-size:14px" data-fb-hydrate="link" data-fb-props="{&quot;text&quot;:&quot;Terms of Service&quot;,&quot;href&quot;:&quot;#terms-of-service&quot;,&quot;style&quot;:{&quot;activeProperties&quot;:[&quot;color&quot;,&quot;fontSize&quot;],&quot;values&quot;:{&quot;color&quot;:&quot;var(--muted-foreground)&quot;,&quot;fontSize&quot;:&quot;14px&quot;},&quot;stylingMode&quot;:&quot;visual&quot;}}" href="#terms-of-service" target="_self">Terms of Service</a></div></div><div data-fb-component="Separator" data-fb-id="1769733481042-m2tjq4vzu" class="fb-unknown"></div><span id="1769733481042-91rg33ofy" class="fb-text fb-text-base" style="font-size:var(--fb-text-base, 1rem);font-weight:normal;color:inherit;text-align:inherit;text-align:center;color:var(--muted-foreground);font-size:14px">© 2025 Frontbase. Built with ❤️ for the edge.</span></div></div></div></div>
+    
+    <!-- Initial state for hydration -->
+    <script>
+        window.__INITIAL_STATE__ = {"pageVariables":{},"sessionVariables":{},"cookies":{}};
+        window.__PAGE_DATA__ = {"id":"66efdbdc-2356-40fd-84e8-b784bc1d9cac","slug":"testing","layoutData":{"content":[{"id":"1769733600701-8jp1kk6tv","type":"Badge","props":{"text":"Badge","variant":"default","icon":"Award","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-award\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526\" />\n  <circle cx=\"12\" cy=\"8\" r=\"6\" />\n</svg>\n"},"styles":{},"children":[]},{"id":"1769733481042-ysszg0p4k","type":"Container","props":{},"styles":{"activeProperties":["display","flexDirection","gap","padding","minHeight"],"values":{"display":"flex","flexDirection":"column","gap":"0","padding":"0","minHeight":"100vh"},"stylingMode":"visual"},"children":[{"id":"1769737150123-hvewy1lnf","type":"FeatureSection","props":{"title":"Features","subtitle":"","headerAlignment":"center","columns":3,"iconSize":"md","iconAlignment":"center","textAlignment":"center","iconColor":"hsl(var(--primary))","textColor":"hsl(var(--muted-foreground))","cardBackground":"hsl(var(--card))","sectionBackground":"hsl(var(--background))","enableSwipeOnMobile":false,"features":[{"id":"f1","icon":"Zap","title":"Lightning Fast","description":"Optimized for speed and performance","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-zap\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z\" />\n</svg>\n"},{"id":"f2","icon":"Shield","title":"Secure by Default","description":"Enterprise-grade security built-in","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-shield\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z\" />\n</svg>\n"},{"id":"f3","icon":"Smartphone","title":"Mobile Ready","description":"Responsive design that works everywhere","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-smartphone\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <rect width=\"14\" height=\"20\" x=\"5\" y=\"2\" rx=\"2\" ry=\"2\" />\n  <path d=\"M12 18h.01\" />\n</svg>\n"}]},"styles":{},"children":[]},{"id":"1769733481042-kle4ilemm","type":"Navbar","props":{"logo":{"type":"text","text":"Frontbase","link":"/","showIcon":true},"menuItems":[{"id":"menu-features","label":"Features","navType":"scroll","target":"#features"},{"id":"menu-integrations","label":"Integrations","navType":"scroll","target":"#integrations"},{"id":"menu-architecture","label":"Architecture","navType":"scroll","target":"#architecture"}],"primaryButton":{"enabled":true,"text":"Join Private Alpha","navType":"link","target":"/alpha"},"secondaryButton":{"enabled":false,"text":"Learn More","navType":"scroll","target":"#features"}},"styles":{"activeProperties":["padding","borderBottom","backgroundColor"],"values":{"padding":"16px 24px","borderBottom":"1px solid var(--border)","backgroundColor":"var(--background)"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-6terlqjox","type":"Container","props":{},"styles":{"activeProperties":["display","flexDirection","alignItems","justifyContent","textAlign","padding","minHeight","gap"],"values":{"display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center","textAlign":"center","padding":"48px 24px","minHeight":"400px","gap":"24px"},"stylingMode":"visual"},"children":[{"id":"1769736420852-vofkchsz4","type":"Icon","props":{"icon":"Rocket","size":"md","color":"currentColor","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-rocket\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z\" />\n  <path d=\"m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z\" />\n  <path d=\"M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0\" />\n  <path d=\"M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5\" />\n</svg>\n"},"styles":{},"children":[]},{"id":"1769736530216-9ymutrppu","type":"Card","props":{"icon":"Zap","title":"Feature Title","description":"Feature description goes here.","iconSize":"md","iconAlignment":"center","textAlignment":"center","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-zap\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z\" />\n</svg>\n"},"styles":{},"children":[]},{"id":"1769733481042-opdcfh201","type":"Badge","props":{"text":"Now in Private Alpha","variant":"secondary","icon":"Rocket","iconPosition":"left","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-rocket\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z\" />\n  <path d=\"m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z\" />\n  <path d=\"M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0\" />\n  <path d=\"M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5\" />\n</svg>\n"},"styles":{},"children":[]},{"id":"1769733481042-q8yd3i0fn","type":"Heading","props":{"text":"Build Edge Apps and Microservices Visually","level":"h1"},"styles":{"activeProperties":["fontSize","fontWeight"],"values":{"fontSize":"48px","fontWeight":"700"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-hwm8595cp","type":"Text","props":{"text":"WordPress was built for 2006. Frontbase is built for 2026."},"styles":{"activeProperties":["color","maxWidth"],"values":{"color":"var(--muted-foreground)","maxWidth":"600px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-p7g6nl68h","type":"Row","props":{},"styles":{"activeProperties":["justifyContent","alignItems","gap","padding","borderWidth","minHeight","marginTop"],"values":{"justifyContent":"center","alignItems":"center","gap":"16px","padding":"0","borderWidth":"0","minHeight":"auto","marginTop":"16px"},"stylingMode":"visual"},"children":[{"id":"1769733481042-wairybqx0","type":"Button","props":{"text":"Get Started","variant":"default","size":"lg"},"styles":{},"children":[]},{"id":"1769733481042-o0p3g2e48","type":"Button","props":{"text":"Learn More","variant":"outline","size":"lg"},"styles":{},"children":[]}]}]},{"id":"1769733481042-ugfhpceqj","type":"LogoCloud","props":{"title":"Powered by the modern stack you already love","displayMode":"static","logoSize":"md","grayscale":true,"logos":[{"id":"supabase","type":"text","value":"Supabase","url":"https://supabase.com"},{"id":"cloudflare","type":"text","value":"Cloudflare","url":"https://cloudflare.com"},{"id":"vercel","type":"text","value":"Vercel","url":"https://vercel.com"},{"id":"fastapi","type":"text","value":"FastAPI","url":"https://fastapi.tiangolo.com"},{"id":"react","type":"text","value":"React 19","url":"https://react.dev"},{"id":"hono","type":"text","value":"Hono","url":"https://hono.dev"}]},"styles":{"activeProperties":["backgroundColor"],"values":{"backgroundColor":"var(--muted)"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-qi140tl6k","type":"FeatureSection","props":{"title":"Why Frontbase?","subtitle":"","headerAlignment":"center","columns":4,"iconSize":"lg","iconAlignment":"center","textAlignment":"center","iconColor":"hsl(var(--primary))","textColor":"hsl(var(--muted-foreground))","cardBackground":"hsl(var(--card))","sectionBackground":"var(--background)","enableSwipeOnMobile":false,"features":[{"id":"vp1","icon":"Zap","title":"Edge-Native SSR","description":"Sub-50ms globally. Hono-powered. Deploy to Cloudflare, Vercel, or Supabase Edge.","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-zap\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z\" />\n</svg>\n"},{"id":"vp2","icon":"Plug","title":"BYOE","description":"Bring Your Own Everything. Your databases, auth, storage, cache. We orchestrate.","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-plug\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M12 22v-5\" />\n  <path d=\"M15 8V2\" />\n  <path d=\"M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1z\" />\n  <path d=\"M9 8V2\" />\n</svg>\n"},{"id":"vp3","icon":"Package","title":"No-Code → Real Code","description":"Visual builder exports clean React 19 & Python. Zero lock-in. Eject anytime.","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-package\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z\" />\n  <path d=\"M12 22V12\" />\n  <polyline points=\"3.29 7 12 12 20.71 7\" />\n  <path d=\"m7.5 4.27 9 5.15\" />\n</svg>\n"},{"id":"vp4","icon":"Bot","title":"AI-Ready","description":"Python native backend. FastAPI + Pydantic. Ready for LangChain and AI agents.","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-bot\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M12 8V4H8\" />\n  <rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\" />\n  <path d=\"M2 14h2\" />\n  <path d=\"M20 14h2\" />\n  <path d=\"M15 13v2\" />\n  <path d=\"M9 13v2\" />\n</svg>\n"}]},"styles":{},"children":[]},{"id":"1769733481042-1c0fr9tm2","type":"FeatureSection","props":{"title":"Bring Your Own Everything","subtitle":"Don't rip and replace. Connect what you already use.","headerAlignment":"center","columns":5,"iconSize":"md","iconAlignment":"center","textAlignment":"center","iconColor":"hsl(var(--primary))","textColor":"hsl(var(--muted-foreground))","cardBackground":"hsl(var(--card))","sectionBackground":"var(--muted)","enableSwipeOnMobile":false,"features":[{"id":"byoe1","icon":"Database","title":"Databases","description":"Supabase, PlanetScale, Neon, MySQL, PostgreSQL, SQLite","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-database\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\" />\n  <path d=\"M3 5V19A9 3 0 0 0 21 19V5\" />\n  <path d=\"M3 12A9 3 0 0 0 21 12\" />\n</svg>\n"},{"id":"byoe2","icon":"Lock","title":"Auth","description":"Supabase Auth, JWT Providers","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-lock\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <rect width=\"18\" height=\"11\" x=\"3\" y=\"11\" rx=\"2\" ry=\"2\" />\n  <path d=\"M7 11V7a5 5 0 0 1 10 0v4\" />\n</svg>\n"},{"id":"byoe3","icon":"FolderOpen","title":"Storage","description":"Supabase Storage, S3-compatible","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-folder-open\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2\" />\n</svg>\n"},{"id":"byoe4","icon":"Zap","title":"Cache","description":"Upstash Redis, Self-hosted Redis","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-zap\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z\" />\n</svg>\n"},{"id":"byoe5","icon":"Rocket","title":"Deploy","description":"Cloudflare, Vercel, Supabase Edge, Docker","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-rocket\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z\" />\n  <path d=\"m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z\" />\n  <path d=\"M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0\" />\n  <path d=\"M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5\" />\n</svg>\n"}]},"styles":{},"children":[]},{"id":"1769733481042-g125gqcik","type":"FeatureSection","props":{"title":"Everything You Need","subtitle":"A complete platform for building production apps","headerAlignment":"center","columns":3,"iconSize":"lg","iconAlignment":"center","textAlignment":"center","iconColor":"hsl(var(--primary))","textColor":"hsl(var(--muted-foreground))","cardBackground":"hsl(var(--card))","sectionBackground":"var(--background)","enableSwipeOnMobile":false,"features":[{"id":"fg1","icon":"Palette","title":"Visual Builder","description":"40+ components. Drag-and-drop. Real-time preview. Responsive design tools.","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-palette\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z\" />\n  <circle cx=\"13.5\" cy=\"6.5\" r=\".5\" fill=\"currentColor\" />\n  <circle cx=\"17.5\" cy=\"10.5\" r=\".5\" fill=\"currentColor\" />\n  <circle cx=\"6.5\" cy=\"12.5\" r=\".5\" fill=\"currentColor\" />\n  <circle cx=\"8.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\" />\n</svg>\n"},{"id":"fg2","icon":"Zap","title":"Visual Automations","description":"ReactFlow workflows. Trigger on data changes. API integrations. Webhooks.","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-zap\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z\" />\n</svg>\n"},{"id":"fg3","icon":"Shield","title":"Visual RLS Policies","description":"Design Supabase row-level security without writing SQL.","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-shield\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z\" />\n</svg>\n"},{"id":"fg4","icon":"Database","title":"Database Management","description":"Schema visualization. CRUD operations. Query builder. FK detection.","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-database\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\" />\n  <path d=\"M3 5V19A9 3 0 0 0 21 19V5\" />\n  <path d=\"M3 12A9 3 0 0 0 21 12\" />\n</svg>\n"},{"id":"fg5","icon":"BarChart3","title":"Data Components","description":"DataTable, Charts (Line/Bar/Pie), Forms, Cards. All data-bound."},{"id":"fg6","icon":"Search","title":"SSR & SEO","description":"Per-page SEO. Open Graph cards. Sitemaps. Canonical URLs.","iconSvg":"<!-- @license lucide-static v0.563.0 - ISC -->\n<svg\n  class=\"lucide lucide-search\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"1em\"\n  height=\"1em\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m21 21-4.34-4.34\" />\n  <circle cx=\"11\" cy=\"11\" r=\"8\" />\n</svg>\n"}]},"styles":{},"children":[]},{"id":"1769733481042-5qqd8iedt","type":"FeatureSection","props":{"title":"Modern Tech Stack","subtitle":"","headerAlignment":"center","columns":3,"iconSize":"sm","iconAlignment":"center","textAlignment":"center","iconColor":"hsl(var(--primary))","textColor":"hsl(var(--muted-foreground))","cardBackground":"hsl(var(--card))","sectionBackground":"var(--muted)","enableSwipeOnMobile":false,"features":[{"id":"ts1","icon":"","title":"Frontend","description":"React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui, Zustand, TanStack Query"},{"id":"ts2","icon":"","title":"Edge Engine","description":"Hono 4.6, React 19 SSR, Drizzle ORM, LiquidJS, Tailwind CSS 4, Zod"},{"id":"ts3","icon":"","title":"Backend","description":"FastAPI, SQLAlchemy, Alembic, Pydantic, Python 3.11+"}]},"styles":{},"children":[]},{"id":"1769733481042-2lkhdyi8o","type":"Container","props":{},"styles":{"activeProperties":["display","flexDirection","padding","gap","backgroundColor"],"values":{"display":"flex","flexDirection":"column","padding":"80px 48px","gap":"48px","backgroundColor":"var(--background)"},"stylingMode":"visual"},"children":[{"id":"1769733481042-1n9ey87nl","type":"Container","props":{},"styles":{"activeProperties":["textAlign","display","flexDirection","gap"],"values":{"textAlign":"center","display":"flex","flexDirection":"column","gap":"12px"},"stylingMode":"visual"},"children":[{"id":"1769733481042-6jct6w1nh","type":"Heading","props":{"text":"WordPress was built for 2005","level":"h2"},"styles":{"activeProperties":["fontSize","fontWeight"],"values":{"fontSize":"40px","fontWeight":"700"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-dr3sk26pq","type":"Text","props":{"text":"Frontbase is built for 2025"},"styles":{"activeProperties":["fontSize","fontWeight","color"],"values":{"fontSize":"24px","fontWeight":"600","color":"var(--primary)"},"stylingMode":"visual"},"children":[]}]},{"id":"1769733481042-iava82bbp","type":"Container","props":{},"styles":{"activeProperties":["display","gridTemplateColumns","gap","maxWidth","margin"],"values":{"display":"grid","gridTemplateColumns":"repeat(2, 1fr)","gap":"48px","maxWidth":"900px","margin":"0 auto"},"stylingMode":"visual"},"children":[{"id":"1769733481042-0pjbr6wdp","type":"Card","props":{},"styles":{"activeProperties":["padding"],"values":{"padding":"32px"},"stylingMode":"visual"},"children":[{"id":"1769733481042-a5pmtxodf","type":"Container","props":{},"styles":{"activeProperties":["display","flexDirection","gap"],"values":{"display":"flex","flexDirection":"column","gap":"16px"},"stylingMode":"visual"},"children":[{"id":"1769733481042-qt6zye0dk","type":"Heading","props":{"text":"WordPress","level":"h3"},"styles":{"activeProperties":["fontSize","fontWeight"],"values":{"fontSize":"24px","fontWeight":"700"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-tnyym9ibj","type":"Text","props":{"text":"• PHP Monolith"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-s4ehbeuzb","type":"Text","props":{"text":"• Slow, requires hosting"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-w8xok5mlh","type":"Text","props":{"text":"• MySQL only"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-lktm7045u","type":"Text","props":{"text":"• Plugin-dependent AI"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-f5gq5x2kx","type":"Text","props":{"text":"• Theme lock-in"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-dygfd6v22","type":"Text","props":{"text":"• jQuery, legacy"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]}]}]},{"id":"1769733481042-0yqrklt89","type":"Card","props":{},"styles":{"activeProperties":["padding","border","backgroundColor"],"values":{"padding":"32px","border":"2px solid var(--primary)","backgroundColor":"var(--primary)"},"stylingMode":"visual"},"children":[{"id":"1769733481042-2wpgyrgx4","type":"Container","props":{},"styles":{"activeProperties":["display","flexDirection","gap"],"values":{"display":"flex","flexDirection":"column","gap":"16px"},"stylingMode":"visual"},"children":[{"id":"1769733481042-9hpam6vz5","type":"Heading","props":{"text":"Frontbase","level":"h3"},"styles":{"activeProperties":["fontSize","fontWeight","color"],"values":{"fontSize":"24px","fontWeight":"700","color":"var(--primary-foreground)"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-ve2t11t1c","type":"Text","props":{"text":"• Edge-native serverless"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--primary-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-bvps40p4i","type":"Text","props":{"text":"• Sub-50ms global"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--primary-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-njoobcsua","type":"Text","props":{"text":"• Any SQL database"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--primary-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-j1955x0a6","type":"Text","props":{"text":"• Native Python AI"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--primary-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-ixe0odmiu","type":"Text","props":{"text":"• Clean React/TypeScript"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--primary-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-qkdit4t78","type":"Text","props":{"text":"• React 19, Hono, Tailwind 4"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--primary-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]}]}]}]}]},{"id":"1769733481042-kpve3ueum","type":"Container","props":{},"styles":{"activeProperties":["display","flexDirection","alignItems","padding","gap","backgroundColor","textAlign"],"values":{"display":"flex","flexDirection":"column","alignItems":"center","padding":"80px 48px","gap":"24px","backgroundColor":"var(--primary)","textAlign":"center"},"stylingMode":"visual"},"children":[{"id":"1769733481042-k92g5leu0","type":"Heading","props":{"text":"Ready to build on the edge?","level":"h2"},"styles":{"activeProperties":["fontSize","fontWeight","color"],"values":{"fontSize":"40px","fontWeight":"700","color":"var(--primary-foreground)"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-fqur4dzcp","type":"Text","props":{"text":"Join the Private Alpha and start building today."},"styles":{"activeProperties":["color","opacity","fontSize"],"values":{"color":"var(--primary-foreground)","opacity":"0.9","fontSize":"18px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-m24miztf4","type":"Row","props":{},"styles":{"activeProperties":["justifyContent","alignItems","gap","marginTop","padding","borderWidth","minHeight"],"values":{"justifyContent":"center","alignItems":"center","gap":"16px","marginTop":"16px","padding":"0","borderWidth":"0","minHeight":"auto"},"stylingMode":"visual"},"children":[{"id":"1769733481042-jv1cprj8n","type":"Button","props":{"text":"Join Private Alpha","variant":"secondary"},"styles":{"activeProperties":["padding","fontSize"],"values":{"padding":"12px 32px","fontSize":"16px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-mwygxfh4v","type":"Button","props":{"text":"Star on GitHub","variant":"outline"},"styles":{"activeProperties":["padding","fontSize","borderColor","color"],"values":{"padding":"12px 32px","fontSize":"16px","borderColor":"var(--primary-foreground)","color":"var(--primary-foreground)"},"stylingMode":"visual"},"children":[]}]}]},{"id":"1769733481042-odhvjhxvh","type":"Container","props":{},"styles":{"activeProperties":["display","flexDirection","padding","gap","backgroundColor","borderTop"],"values":{"display":"flex","flexDirection":"column","padding":"48px","gap":"32px","backgroundColor":"var(--background)","borderTop":"1px solid var(--border)"},"stylingMode":"visual"},"children":[{"id":"1769733481042-f2t6ilzcm","type":"Container","props":{},"styles":{"activeProperties":["display","gridTemplateColumns","gap"],"values":{"display":"grid","gridTemplateColumns":"repeat(4, 1fr)","gap":"48px"},"stylingMode":"visual"},"children":[{"id":"1769733481042-t4mmtqu17","type":"Container","props":{},"styles":{"activeProperties":["display","flexDirection","gap"],"values":{"display":"flex","flexDirection":"column","gap":"12px"},"stylingMode":"visual"},"children":[{"id":"1769733481042-7r3l4jnz6","type":"Text","props":{"text":"Frontbase"},"styles":{"activeProperties":["fontWeight","fontSize"],"values":{"fontWeight":"600","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-1j5snwwyz","type":"Link","props":{"text":"Open Source","href":"#open-source"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-9av07relm","type":"Link","props":{"text":"MIT License","href":"#mit-license"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]}]},{"id":"1769733481042-ce7itaw1b","type":"Container","props":{},"styles":{"activeProperties":["display","flexDirection","gap"],"values":{"display":"flex","flexDirection":"column","gap":"12px"},"stylingMode":"visual"},"children":[{"id":"1769733481042-bdlpze4ns","type":"Text","props":{"text":"Product"},"styles":{"activeProperties":["fontWeight","fontSize"],"values":{"fontWeight":"600","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-5qcdnmfwh","type":"Link","props":{"text":"Features","href":"#features"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-zmytkm5ru","type":"Link","props":{"text":"Pricing","href":"#pricing"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-spo5jf8l6","type":"Link","props":{"text":"Changelog","href":"#changelog"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]}]},{"id":"1769733481042-yz1od3gah","type":"Container","props":{},"styles":{"activeProperties":["display","flexDirection","gap"],"values":{"display":"flex","flexDirection":"column","gap":"12px"},"stylingMode":"visual"},"children":[{"id":"1769733481042-40gb6sc0l","type":"Text","props":{"text":"Resources"},"styles":{"activeProperties":["fontWeight","fontSize"],"values":{"fontWeight":"600","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-d4sv2h2ka","type":"Link","props":{"text":"Documentation","href":"#documentation"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-9twgtejrn","type":"Link","props":{"text":"GitHub","href":"#github"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-bfictwxre","type":"Link","props":{"text":"Discord","href":"#discord"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]}]},{"id":"1769733481042-3fw7bg9gz","type":"Container","props":{},"styles":{"activeProperties":["display","flexDirection","gap"],"values":{"display":"flex","flexDirection":"column","gap":"12px"},"stylingMode":"visual"},"children":[{"id":"1769733481042-3kxv5ylim","type":"Text","props":{"text":"Legal"},"styles":{"activeProperties":["fontWeight","fontSize"],"values":{"fontWeight":"600","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-qsvfxqn7n","type":"Link","props":{"text":"Privacy Policy","href":"#privacy-policy"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]},{"id":"1769733481042-wvsi8he84","type":"Link","props":{"text":"Terms of Service","href":"#terms-of-service"},"styles":{"activeProperties":["color","fontSize"],"values":{"color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]}]}]},{"id":"1769733481042-m2tjq4vzu","type":"Separator","props":{},"styles":{},"children":[]},{"id":"1769733481042-91rg33ofy","type":"Text","props":{"text":"© 2025 Frontbase. Built with ❤️ for the edge."},"styles":{"activeProperties":["textAlign","color","fontSize"],"values":{"textAlign":"center","color":"var(--muted-foreground)","fontSize":"14px"},"stylingMode":"visual"},"children":[]}]}]}],"root":{}}};
+    </script>
+    
+    <!-- Hydration bundle (vanilla JS for simple components) -->
+    <script type="module" src="/static/hydrate.js"></script>
+    
+    <!-- React hydration bundle (DataTable, Charts, Forms) -->
+    <script type="module" src="/static/react/hydrate.js"></script>
+</body>
+</html>

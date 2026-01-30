@@ -3,7 +3,7 @@
  * 
  * Edge-sufficient component for displaying partner/client logos.
  * Supports static grid and animated marquee modes.
- * Pure CSS animations - no JavaScript timers or API calls.
+ * Features individual logo scaling and brand identification.
  */
 
 import React from 'react';
@@ -13,11 +13,12 @@ import { RendererProps } from '../types';
 interface LogoItem {
     id: string;
     type: 'image' | 'text';
-    value: string; // URL for image, text for brand name
-    url?: string;  // Optional click target
+    value: string;
+    url?: string;
+    name?: string; // Brand Name for identification/alt text
+    scale?: number; // Individual scale factor
 }
 
-// Size mappings
 const SIZE_MAP = {
     sm: { height: '24px', fontSize: '14px' },
     md: { height: '32px', fontSize: '18px' },
@@ -40,22 +41,33 @@ export const LogoCloudRenderer: React.FC<RendererProps> = ({
         grayscale = true,
     } = effectiveProps;
 
-    // Determine size values
-    const sizeValues = typeof logoSize === 'string' && SIZE_MAP[logoSize as keyof typeof SIZE_MAP]
+    // Determine base size
+    const baseSize = typeof logoSize === 'string' && SIZE_MAP[logoSize as keyof typeof SIZE_MAP]
         ? SIZE_MAP[logoSize as keyof typeof SIZE_MAP]
-        : { height: `${logoSize}px`, fontSize: `${Math.max(14, Number(logoSize) * 0.5)}px` };
+        : {
+            height: `${logoSize}px`,
+            fontSize: `${Math.max(14, Number(logoSize) * 0.5)}px`
+        };
+
+    // Parse numeric base values
+    const basePx = parseInt(baseSize.height, 10) || 32;
+    const baseFontSizePx = parseInt(baseSize.fontSize, 10) || 18;
 
     // Render a single logo item
     const renderLogoItem = (logo: LogoItem, index: number) => {
+        const scale = logo.scale || 1;
+        const currentHeight = `${basePx * scale}px`;
+        const currentFontSize = `${baseFontSizePx * scale}px`;
+
         const content = logo.type === 'image' ? (
             <img
                 src={logo.value}
-                alt={`Logo ${index + 1}`}
+                alt={logo.name || logo.value || `Logo ${index + 1}`}
                 className={cn(
                     'object-contain transition-all duration-300',
                     grayscale && 'grayscale hover:grayscale-0 opacity-60 hover:opacity-100'
                 )}
-                style={{ height: sizeValues.height, width: 'auto' }}
+                style={{ height: currentHeight, width: 'auto' }}
             />
         ) : (
             <span
@@ -63,7 +75,7 @@ export const LogoCloudRenderer: React.FC<RendererProps> = ({
                     'font-semibold whitespace-nowrap transition-all duration-300',
                     grayscale && 'opacity-60 hover:opacity-100'
                 )}
-                style={{ fontSize: sizeValues.fontSize }}
+                style={{ fontSize: currentFontSize }}
             >
                 {logo.value}
             </span>
@@ -90,7 +102,6 @@ export const LogoCloudRenderer: React.FC<RendererProps> = ({
         );
     };
 
-    // Static mode: simple flex grid
     if (displayMode === 'static') {
         return (
             <div className={cn('py-12 px-6', combinedClassName)} style={inlineStyles}>
@@ -99,15 +110,13 @@ export const LogoCloudRenderer: React.FC<RendererProps> = ({
                         {createEditableText(title, 'title', '')}
                     </p>
                 )}
-                <div className="flex flex-wrap justify-center items-center gap-8 md:gap-12">
+                <div className="flex flex-wrap justify-center items-center gap-8 md:gap-12 text-center">
                     {(logos as LogoItem[]).map(renderLogoItem)}
                 </div>
             </div>
         );
     }
 
-    // Marquee mode: CSS-only infinite scroll animation
-    // Duplicate logos for seamless loop
     const duplicatedLogos = [...logos, ...logos] as LogoItem[];
 
     return (

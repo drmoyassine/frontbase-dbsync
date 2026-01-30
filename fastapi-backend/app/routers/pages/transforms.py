@@ -3,6 +3,9 @@ Pure transformation functions for component conversion.
 No side effects, returns new objects.
 """
 from typing import Dict, List, Callable, Any
+import httpx
+import asyncio
+import re
 
 
 def normalize_binding_location(component: Dict) -> Dict:
@@ -137,3 +140,158 @@ def find_datasource(datasources: List[Dict], datasource_id: str = None) -> Dict:
     # Fallback to first datasource
     ds = datasources[0]
     return ds.model_dump(by_alias=True) if hasattr(ds, 'model_dump') else ds
+
+# =============================================================================
+# Icon Pre-rendering via Lucide CDN
+# =============================================================================
+
+# CDN URL for Lucide icons (unpkg serves lucide-static package)
+LUCIDE_CDN_BASE = "https://unpkg.com/lucide-static@latest/icons"
+
+
+def pascal_to_kebab(name: str) -> str:
+    """Convert PascalCase to kebab-case (e.g., 'ChevronRight' -> 'chevron-right', 'BarChart3' -> 'bar-chart-3')"""
+    # Insert hyphen before uppercase letters and digits (not at start)
+    result = re.sub(r'(?<!^)(?=[A-Z])', '-', name)  # Before uppercase
+    result = re.sub(r'(?<=[a-zA-Z])(?=[0-9])', '-', result)  # Before digits after letters
+    return result.lower()
+
+
+async def fetch_icon_svg(icon_name: str, client: httpx.AsyncClient) -> tuple[str, str | None]:
+    """
+    Fetch a single icon SVG from the Lucide CDN.
+    
+    Args:
+        icon_name: PascalCase icon name (e.g., 'ChevronRight')
+        client: Shared httpx async client
+        
+    Returns:
+        Tuple of (icon_name, svg_content or None if failed)
+    """
+    kebab_name = pascal_to_kebab(icon_name)
+    url = f"{LUCIDE_CDN_BASE}/{kebab_name}.svg"
+    
+    try:
+        response = await client.get(url, timeout=5.0)
+        if response.status_code == 200:
+            svg_content = response.text
+            # Modify SVG for inline use: set reasonable size
+            svg_content = svg_content.replace('width="24"', 'width="1em"')
+            svg_content = svg_content.replace('height="24"', 'height="1em"')
+            print(f"[icon_fetch] ✅ Fetched '{icon_name}' from CDN")
+            return (icon_name, svg_content)
+        else:
+            print(f"[icon_fetch] ⚠️ Icon '{icon_name}' not found (HTTP {response.status_code})")
+            return (icon_name, None)
+    except Exception as e:
+        print(f"[icon_fetch] ❌ Failed to fetch '{icon_name}': {e}")
+        return (icon_name, None)
+
+
+async def fetch_icons_batch(icon_names: set[str]) -> dict[str, str]:
+    """
+    Fetch multiple icons in parallel from CDN.
+    
+    Args:
+        icon_names: Set of PascalCase icon names
+        
+    Returns:
+        Dict mapping icon_name -> svg_content (only successful fetches)
+    """
+    if not icon_names:
+        return {}
+    
+    print(f"[icon_fetch] Fetching {len(icon_names)} icons from CDN...")
+    
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        tasks = [fetch_icon_svg(name, client) for name in icon_names]
+        results = await asyncio.gather(*tasks)
+    
+    # Filter out failed fetches
+    icon_map = {name: svg for name, svg in results if svg is not None}
+    print(f"[icon_fetch] Successfully fetched {len(icon_map)}/{len(icon_names)} icons")
+    
+    return icon_map
+
+
+def collect_icons_from_component(component: Dict, icons: set[str]) -> None:
+    """
+    Recursively collect all icon names from a component tree.
+    Modifies 'icons' set in-place.
+    
+    Handles:
+    - props.icon (standard components)
+    - props.features[].icon (Features section)
+    """
+    props = component.get('props', {})
+    if isinstance(props, dict):
+        # Standard icon prop
+        icon = props.get('icon')
+        if icon and isinstance(icon, str):
+            icons.add(icon)
+        
+        # Features section: props.features[].icon
+        features = props.get('features', [])
+        if isinstance(features, list):
+            for feature in features:
+                if isinstance(feature, dict):
+                    feature_icon = feature.get('icon')
+                    if feature_icon and isinstance(feature_icon, str):
+                        icons.add(feature_icon)
+    
+    # Recurse into children
+    children = component.get('children', [])
+    if children:
+        for child in children:
+            collect_icons_from_component(child, icons)
+
+
+
+def inject_icon_svg(component: Dict, icon_map: dict[str, str]) -> Dict:
+    """
+    Inject pre-fetched iconSvg into component props.
+    Recursively processes children.
+    
+    Handles:
+    - props.iconSvg (standard components)
+    - props.features[].iconSvg (Features section)
+    
+    Returns new component dict.
+    """
+    result = dict(component)
+    props = result.get('props', {})
+    
+    if isinstance(props, dict):
+        new_props = dict(props)
+        
+        # Standard icon prop
+        icon_name = props.get('icon')
+        if icon_name and icon_name in icon_map:
+            new_props['iconSvg'] = icon_map[icon_name]
+        
+        # Features section: props.features[].icon -> iconSvg
+        features = props.get('features', [])
+        if isinstance(features, list) and features:
+            new_features = []
+            for feature in features:
+                if isinstance(feature, dict):
+                    feature_icon = feature.get('icon')
+                    if feature_icon and feature_icon in icon_map:
+                        new_features.append({**feature, 'iconSvg': icon_map[feature_icon]})
+                    else:
+                        new_features.append(feature)
+                else:
+                    new_features.append(feature)
+            new_props['features'] = new_features
+        
+        result['props'] = new_props
+    
+    # Recurse into children
+    if 'children' in result and result['children']:
+        result['children'] = [
+            inject_icon_svg(child, icon_map) 
+            for child in result['children']
+        ]
+    
+    return result
+

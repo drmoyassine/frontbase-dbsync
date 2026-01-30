@@ -1,5 +1,34 @@
 # Decision Log
 
+## [2026-01-29] Modular Builder Refactoring - "One File Per X" Architecture
+
+**Context**: The Builder codebase had become monolithic, particularly `PropertiesPanel.tsx` (>1000 lines) and `BasicRenderers.tsx` (handling all basic components). This made maintenance, extension, and testing difficult.
+
+**Decisions Made**:
+
+1.  **Decentralized Architecture ("Vertical Slicing")**:
+    - Split components into three distinct modules:
+        - `renderers/`: Visual logic (e.g., `ButtonRenderer.tsx`).
+        - `properties/`: Configuration panels (e.g., `ButtonProperties.tsx`).
+        - `templates/`: JSON structure generators (e.g., `buttonTemplate.ts`).
+    - Adopted a "One File Per Component" rule.
+
+2.  **Registry Pattern**:
+    - Replaced monolithic imports with `componentRegistry.tsx` (Renderers) and `templates/index.ts` (Templates).
+    - `PropertiesPanel` uses a `switch` statement that delegates to specific property files (acting as an orchestrator, not a logic handler).
+
+3.  **Visual Styling Panel Standardization**:
+    - Moved all styling logic to `styling/styleProcessor.ts`.
+    - Components use `generateStyles` to apply metadata-driven CSS.
+
+**Impact**:
+- `PropertiesPanel.tsx` reduced from 1,140 to 299 lines (74% reduction).
+- `BasicRenderers.tsx` split into 12 individually maintainable files.
+- New `developmentPatterns.md` guide created to standardize future development.
+- Zero TypeScript errors after refactor.
+
+---
+
 ## [2026-01-06] RLS Single Policy Builder - Validation Logic Fix
 
 **Context**: User reported that the "Create Policy" button was disabled in the single policy builder even when the form appeared valid.

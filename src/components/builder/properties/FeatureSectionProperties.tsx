@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/accordion';
 import { Plus, Trash2, Grip } from 'lucide-react';
 import { IconPicker } from './IconPicker';
+import { VariableInput } from '../VariableInput';
 
 interface FeatureItem {
     id: string;
@@ -249,23 +250,22 @@ export const FeatureSectionProperties: React.FC<FeatureSectionPropertiesProps> =
 
                                 {/* Title */}
                                 <div className="space-y-1">
-                                    <Label className="text-xs">Title</Label>
-                                    <Input
-                                        className="h-8"
+                                    <Label className="text-xs">Title <span className="text-muted-foreground">(@ for variables)</span></Label>
+                                    <VariableInput
                                         value={feature.title}
-                                        onChange={(e) => updateFeature(index, { title: e.target.value })}
-                                        placeholder="Feature title"
+                                        onChange={(value) => updateFeature(index, { title: value })}
+                                        placeholder="Feature title or type @ for variables"
                                     />
                                 </div>
 
                                 {/* Description */}
                                 <div className="space-y-1">
-                                    <Label className="text-xs">Description</Label>
-                                    <Input
-                                        className="h-8"
+                                    <Label className="text-xs">Description <span className="text-muted-foreground">(@ for variables)</span></Label>
+                                    <VariableInput
                                         value={feature.description}
-                                        onChange={(e) => updateFeature(index, { description: e.target.value })}
-                                        placeholder="Feature description"
+                                        onChange={(value) => updateFeature(index, { description: value })}
+                                        placeholder="Feature description or type @ for variables"
+                                        multiline
                                     />
                                 </div>
 

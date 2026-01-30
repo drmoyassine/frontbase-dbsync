@@ -231,27 +231,53 @@ function renderBadge(id: string, props: Record<string, unknown>): string {
     const variant = props.variant as string || 'default';
     const size = props.size as string || 'sm';
 
-    // Color mapping for variants
-    const variantStyles: Record<string, string> = {
-        default: 'background:#e5e5e5;color:#333',
-        primary: 'background:#3b82f6;color:#fff',
-        success: 'background:#22c55e;color:#fff',
-        warning: 'background:#f59e0b;color:#fff',
-        error: 'background:#ef4444;color:#fff',
-        info: 'background:#0ea5e9;color:#fff',
+    // Get pre-rendered icon SVG from publish
+    const iconSvg = props.iconSvg as string || '';
+    const iconPosition = props.iconPosition as string || 'left';
+
+    // Custom colors from Builder (take precedence over variant)
+    const backgroundColor = props.backgroundColor as string || '';
+    const textColor = props.textColor as string || '';
+    const iconColor = props.iconColor as string || '';
+
+    // Color mapping for variants (fallback if no custom colors)
+    const variantStyles: Record<string, { bg: string; text: string }> = {
+        default: { bg: '#18181b', text: '#fafafa' },  // Dark style matching Builder
+        secondary: { bg: '#f4f4f5', text: '#18181b' },
+        destructive: { bg: '#ef4444', text: '#fff' },
+        outline: { bg: 'transparent', text: '#18181b' },
+        primary: { bg: '#3b82f6', text: '#fff' },
+        success: { bg: '#22c55e', text: '#fff' },
+        warning: { bg: '#f59e0b', text: '#fff' },
+        error: { bg: '#ef4444', text: '#fff' },
+        info: { bg: '#0ea5e9', text: '#fff' },
     };
+
+    const variantConfig = variantStyles[variant] || variantStyles.default;
+    const bgColor = backgroundColor || variantConfig.bg;
+    const txtColor = textColor || variantConfig.text;
+    const icnColor = iconColor || txtColor;
 
     const sizeStyles: Record<string, string> = {
-        xs: 'font-size:0.65rem;padding:0.1rem 0.3rem',
-        sm: 'font-size:0.75rem;padding:0.15rem 0.4rem',
-        md: 'font-size:0.875rem;padding:0.2rem 0.5rem',
-        lg: 'font-size:1rem;padding:0.25rem 0.6rem',
+        xs: 'font-size:0.65rem;padding:0.1rem 0.5rem',
+        sm: 'font-size:0.75rem;padding:0.25rem 0.625rem',
+        md: 'font-size:0.875rem;padding:0.375rem 0.75rem',
+        lg: 'font-size:1rem;padding:0.5rem 1rem',
     };
 
-    const style = `${variantStyles[variant] || variantStyles.default};${sizeStyles[size] || sizeStyles.sm};border-radius:9999px;display:inline-flex;align-items:center`;
-    const attrs = getCommonAttributes(id, `fb-badge fb-badge-${variant}`, props, style);
+    const outlineStyles = variant === 'outline' ? `border:1px solid ${txtColor};` : '';
 
-    return `<span ${attrs}>${content}</span>`;
+    // Build style directly - don't use getCommonAttributes which may add width from props.style
+    const baseClass = `fb-badge fb-badge-${variant}`;
+    const className = props.className ? `${baseClass} ${props.className}` : baseClass;
+    const style = `background:${bgColor};color:${txtColor};${sizeStyles[size] || sizeStyles.sm};border-radius:9999px;display:inline-flex;align-items:center;gap:0.375rem;font-weight:500;width:fit-content;${outlineStyles}`;
+
+    // Build content with icon (apply icon color)
+    const iconStyle = `display:inline-flex;color:${icnColor}`;
+    const leftIcon = iconSvg && iconPosition === 'left' ? `<span class="fb-badge-icon" style="${iconStyle}">${iconSvg}</span>` : '';
+    const rightIcon = iconSvg && iconPosition === 'right' ? `<span class="fb-badge-icon" style="${iconStyle}">${iconSvg}</span>` : '';
+
+    return `<span id="${id}" class="${className}" style="${style}">${leftIcon}${content}${rightIcon}</span>`;
 }
 
 function renderDivider(id: string, props: Record<string, unknown>): string {
@@ -285,6 +311,7 @@ function renderIcon(id: string, props: Record<string, unknown>): string {
     const icon = (props.icon || props.name || '⭐') as string;
     const size = props.size as string || 'md';
     const color = props.color as string || 'currentColor';
+    const iconSvg = props.iconSvg as string | undefined;
 
     // Size mapping
     const sizeStyles: Record<string, string> = {
@@ -297,9 +324,20 @@ function renderIcon(id: string, props: Record<string, unknown>): string {
 
     const sizeStyle = sizeStyles[size] || sizeStyles.md;
 
-    // Check if it's an emoji (short string with no URL characters)
+    // Priority 1: Use pre-rendered SVG from publish pipeline (CDN fetch)
+    if (iconSvg) {
+        const style = `${sizeStyle};display:inline-flex;align-items:center;justify-content:center;color:${color}`;
+        const attrs = getCommonAttributes(id, 'fb-icon', props, style);
+        // Apply size to SVG - replace only standalone width/height, not stroke-width
+        const sizedSvg = iconSvg
+            .replace(/(\s)width="[^"]*"/g, `$1width="100%"`)
+            .replace(/(\s)height="[^"]*"/g, `$1height="100%"`);
+        return `<span ${attrs}>${sizedSvg}</span>`;
+    }
+
+    // Priority 2: Check if it's an emoji (short string with no URL characters)
     const isEmoji = icon.length <= 4 && !/^[a-zA-Z0-9\/]/.test(icon);
-    // Check if it's an image URL
+    // Priority 3: Check if it's an image URL
     const isUrl = icon.startsWith('http') || icon.startsWith('/');
 
     if (isUrl) {
@@ -313,6 +351,7 @@ function renderIcon(id: string, props: Record<string, unknown>): string {
     const attrs = getCommonAttributes(id, 'fb-icon', props, style);
     return `<span ${attrs}>${escapeHtml(icon)}</span>`;
 }
+
 
 function renderAvatar(id: string, props: Record<string, unknown>): string {
     const src = props.src as string || props.image as string;
@@ -365,3 +404,17 @@ function renderMarkdown(id: string, props: Record<string, unknown>): string {
         <pre style="white-space:pre-wrap;font-family:inherit">${escapeHtml(content)}</pre>
     </div>`;
 }
+
+// =============================================================================
+// Exports for DRY cross-module composition
+// =============================================================================
+export {
+    escapeHtml,
+    getCommonAttributes,
+    renderIcon,
+    renderHeading,
+    renderText,
+    renderParagraph,
+    renderImage,
+    renderBadge,
+};

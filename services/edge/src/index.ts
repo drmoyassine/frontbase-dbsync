@@ -149,6 +149,8 @@ app.route('/api/cache', cacheRoute); // Sprint 4: Cache
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicPath = path.resolve(__dirname, '../public');
+
+// Static file serving (Edge's own files only)
 app.use('/static/*', serveStatic({
     root: publicPath,
     rewriteRequestPath: (p) => p.replace(/^\/static/, '')

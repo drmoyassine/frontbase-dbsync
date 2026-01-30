@@ -60,6 +60,8 @@ export const getPropertyComponent = (
         case 'Progress':
         case 'Chart':
         case 'Grid':
+        case 'Card':
+        case 'DataCard':
             return <DisplayProperties {...componentProps} />;
 
         case 'DataTable':

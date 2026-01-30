@@ -53,6 +53,12 @@ python -m uvicorn main:app --port 8000 --reload
 - **Single responsibility** - one component/hook/utility per file
 - **Colocate related files** - keep renderers, hooks, and types together
 
+### 🏗️ Modular Structure (New 2026-01-29)
+- **`src/components/builder/renderers/`**: Visual logic (one file per component)
+- **`src/components/builder/properties/`**: Configuration panels
+- **`src/components/builder/templates/`**: JSON structure generators
+- **`src/components/builder/registry/`**: Central component registration
+
 ### Naming Conventions
 - **Components**: PascalCase (`ComponentRenderer.tsx`)
 - **Hooks**: camelCase with `use` prefix (`useSimpleData.ts`)
@@ -218,7 +224,12 @@ export function useMyData(tableName: string) {
 
 ### Adding a New Builder Component
 
-See `/add-component` workflow in `.agent/workflows/`.
+See `memory-bank/developmentPatterns.md`.
+
+This guide covers:
+- Adding Renderers (`src/components/builder/renderers/`)
+- Adding Properties Panels (`src/components/builder/properties/`)
+- Registering Components (`src/components/builder/registry/`)
 
 ## Troubleshooting
 

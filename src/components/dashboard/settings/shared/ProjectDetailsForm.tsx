@@ -2,124 +2,71 @@
  * ProjectDetailsForm
  * 
  * Form component for project-level settings.
- * Used in Dashboard SettingsPanel General tab.
+ * Uses AssetUploader for hybrid favicon upload (Supabase storage or URL fallback).
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Globe, Loader2, Upload, X, Image as ImageIcon } from 'lucide-react';
+import { Globe, Loader2 } from 'lucide-react';
 import { useBuilderStore } from '@/stores/builder';
 import { toast } from 'sonner';
+import { AssetUploader } from '@/components/shared/AssetUploader';
 
 interface ProjectDetailsFormProps {
     /** Whether to wrap in a Card component */
     withCard?: boolean;
 }
 
-const MAX_FAVICON_SIZE = 256 * 1024; // 256KB
-const ALLOWED_FAVICON_TYPES = ['image/png', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/ico'];
-
 export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps) {
     const { project, updateProjectInDatabase, isLoading } = useBuilderStore();
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [formData, setFormData] = useState({
         name: '',
         appUrl: '',
         faviconUrl: '',
+        logoUrl: '',
         description: '',
     });
-    const [faviconPreview, setFaviconPreview] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
-    const [isUploading, setIsUploading] = useState(false);
 
-    // Sync form with project data
+    // Sync form with project data - only on mount or project ID change
     useEffect(() => {
         if (project) {
             setFormData({
                 name: project.name || '',
                 appUrl: project.appUrl || '',
                 faviconUrl: project.faviconUrl || '',
+                logoUrl: project.logoUrl || '',
                 description: project.description || '',
             });
-            if (project.faviconUrl) {
-                setFaviconPreview(project.faviconUrl);
-            }
         }
-    }, [project]);
+    }, [project?.id]); // Only sync on project ID change, not every project update
 
-    const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+    // Handle favicon URL changes from AssetUploader
+    const handleFaviconChange = async (url: string) => {
+        setFormData(prev => ({ ...prev, faviconUrl: url }));
 
-        // Validate file type
-        if (!ALLOWED_FAVICON_TYPES.includes(file.type) && !file.name.endsWith('.ico')) {
-            toast.error('Invalid file type. Use PNG or ICO files.');
-            return;
-        }
-
-        // Validate file size
-        if (file.size > MAX_FAVICON_SIZE) {
-            toast.error('Favicon too large. Maximum size is 256KB.');
-            return;
-        }
-
-
-        setIsUploading(true);
+        // Auto-save to database - pass empty string to clear, not undefined
         try {
-            // Create FormData for upload - use backend assets endpoint (not user storage)
-            const uploadData = new FormData();
-            uploadData.append('file', file);
-            uploadData.append('asset_type', 'favicon');
-
-            const response = await fetch('/api/project/assets/upload/', {
-                method: 'POST',
-                body: uploadData,
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Upload response error:', errorText);
-                throw new Error('Upload failed');
-            }
-
-            const result = await response.json();
-            console.log('Upload result:', result);
-            const faviconUrl = result.url || result.publicUrl;
-
-            if (!faviconUrl) {
-                console.error('No URL in upload response:', result);
-                throw new Error('Upload succeeded but no URL returned');
-            }
-
-            setFormData(prev => ({ ...prev, faviconUrl }));
-            setFaviconPreview(faviconUrl);
-
-            // Auto-save to database after successful upload
-            try {
-                await updateProjectInDatabase({ faviconUrl });
-                toast.success('Favicon uploaded and saved successfully');
-            } catch (saveError) {
-                console.error('Failed to save favicon to database:', saveError);
-                toast.success('Favicon uploaded. Click "Save Changes" to persist.');
-            }
+            await updateProjectInDatabase({ faviconUrl: url });
         } catch (error) {
-            console.error('Favicon upload error:', error);
-            toast.error('Failed to upload favicon');
-        } finally {
-            setIsUploading(false);
+            console.error('Failed to save favicon:', error);
         }
     };
 
-    const handleRemoveFavicon = () => {
-        setFormData(prev => ({ ...prev, faviconUrl: '' }));
-        setFaviconPreview(null);
-        if (fileInputRef.current) {
-            fileInputRef.current.value = '';
+    // Handle logo URL changes from AssetUploader
+    const handleLogoChange = async (url: string) => {
+        setFormData(prev => ({ ...prev, logoUrl: url }));
+
+        // Auto-save to database
+        try {
+            await updateProjectInDatabase({ logoUrl: url });
+        } catch (error) {
+            console.error('Failed to save logo:', error);
         }
     };
 
@@ -130,6 +77,7 @@ export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps
                 name: formData.name,
                 appUrl: formData.appUrl || undefined,
                 faviconUrl: formData.faviconUrl || undefined,
+                logoUrl: formData.logoUrl || undefined,
                 description: formData.description || undefined,
             });
             toast.success('Project settings saved');
@@ -164,58 +112,26 @@ export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps
                 </p>
             </div>
 
-            {/* Favicon Upload */}
-            <div className="space-y-2">
-                <Label>Favicon</Label>
-                <div className="flex items-center gap-4">
-                    {faviconPreview ? (
-                        <div className="relative">
-                            <img
-                                src={faviconPreview}
-                                alt="Favicon preview"
-                                className="w-12 h-12 rounded border border-border object-contain bg-muted"
-                            />
-                            <button
-                                type="button"
-                                onClick={handleRemoveFavicon}
-                                className="absolute -top-2 -right-2 p-0.5 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                                <X className="h-3 w-3" />
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="w-12 h-12 rounded border border-dashed border-border flex items-center justify-center bg-muted/50">
-                            <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                        </div>
-                    )}
-                    <div className="flex-1">
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".png,.ico,image/png,image/x-icon"
-                            onChange={handleFaviconUpload}
-                            className="hidden"
-                            id="favicon-upload"
-                        />
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={isUploading}
-                        >
-                            {isUploading ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                                <Upload className="mr-2 h-4 w-4" />
-                            )}
-                            Upload Favicon
-                        </Button>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            PNG or ICO, max 256KB. Default: Frontbase logo.
-                        </p>
-                    </div>
-                </div>
+            {/* Favicon & Logo Uploads */}
+            <div className="grid grid-cols-2 gap-6">
+                <AssetUploader
+                    value={formData.faviconUrl}
+                    onChange={handleFaviconChange}
+                    assetType="favicon"
+                    accept=".png,.ico,image/png,image/x-icon"
+                    maxSize={256 * 1024}
+                    label="Favicon"
+                    helpText="PNG or ICO, max 256KB. Used in browser tabs."
+                />
+                <AssetUploader
+                    value={formData.logoUrl}
+                    onChange={handleLogoChange}
+                    assetType="logo"
+                    accept="image/*"
+                    maxSize={1024 * 1024}
+                    label="Logo"
+                    helpText="PNG, SVG or JPG, max 1MB. Used for branding."
+                />
             </div>
 
             <div className="space-y-2">

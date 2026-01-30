@@ -14,7 +14,10 @@ from .transforms import (
     normalize_binding_location,
     map_styles_schema,
     process_component_children,
-    find_datasource
+    find_datasource,
+    collect_icons_from_component,
+    fetch_icons_batch,
+    inject_icon_svg
 )
 from .enrichment import enrich_binding_with_data_request, remove_nulls
 from app.services.data_request import compute_data_request
@@ -24,7 +27,7 @@ from app.schemas.publish import (
 )
 from app.services.sync.models.datasource import Datasource, DatasourceType
 from ...models.models import Page
-from ...database.utils import get_db
+from ...database.utils import get_db, get_project
 
 
 router = APIRouter()
@@ -113,13 +116,15 @@ def convert_component(c: dict, datasources_list: list = None) -> dict:
         lambda child: convert_component(child, datasources)
     )
     
+    # Note: Icon pre-rendering is done in convert_to_publish_schema (async step)
+    
     # Step 5: Remove all null values from component (Zod .optional() rejects null)
     result = remove_nulls(result)
     
     return result
 
 
-def convert_to_publish_schema(page: Page, db: Session) -> PublishPageRequest:
+async def convert_to_publish_schema(page: Page, db: Session) -> PublishPageRequest:
     """Convert Page model to PublishPageRequest schema"""
     # Parse layout_data
     layout_data = page.layout_data
@@ -135,6 +140,21 @@ def convert_to_publish_schema(page: Page, db: Session) -> PublishPageRequest:
     # Convert components with stylesData → styles mapping AND compute dataRequest
     raw_content = layout_data.get("content", [])
     converted_content = [convert_component(c, datasources) for c in raw_content]
+    
+    # ==== ICON PRE-RENDERING ====
+    # Step 1: Collect all icon names from the page
+    all_icons: set[str] = set()
+    for component in converted_content:
+        collect_icons_from_component(component, all_icons)
+    
+    # Step 2: Fetch icons from CDN (parallel async)
+    if all_icons:
+        print(f"[publish] Collecting icons for page: {all_icons}")
+        icon_map = await fetch_icons_batch(all_icons)
+        
+        # Step 3: Inject iconSvg into components
+        converted_content = [inject_icon_svg(c, icon_map) for c in converted_content]
+    # ============================
     
     # Build PageLayout
     page_layout = PageLayout(
@@ -188,8 +208,8 @@ async def publish_page(page_id: str, db: Session = Depends(get_db)):
                 detail=f"Page not found: {page_id}"
             )
         
-        # Convert to publish schema (includes datasources from DB)
-        publish_data = convert_to_publish_schema(page, db)
+        # Convert to publish schema (includes datasources from DB and icon fetching)
+        publish_data = await convert_to_publish_schema(page, db)
 
         # Build payload for Edge Engine
         payload = ImportPagePayload(
@@ -220,6 +240,28 @@ async def publish_page(page_id: str, db: Session = Depends(get_db)):
                 # Update page to mark as public
                 page.is_public = True
                 db.commit()
+                
+                # Sync project settings to Edge (favicon, branding)
+                # This ensures navbar logo and other branding works in SSR
+                try:
+                    project = get_project(db)
+                    if project:
+                        settings_url = f"{edge_url}/api/import/settings"
+                        await client.post(
+                            settings_url,
+                            json={
+                                "faviconUrl": project.favicon_url,
+                                "logoUrl": getattr(project, 'logo_url', None),
+                                "siteName": project.name,
+                                "siteDescription": project.description,
+                                "appUrl": project.app_url,
+                            },
+                            timeout=5.0
+                        )
+                        print(f"[Publish] Synced project settings to Edge")
+                except Exception as settings_err:
+                    # Non-fatal: don't fail publish if settings sync fails
+                    print(f"[Publish] Settings sync failed (non-fatal): {settings_err}")
                 
                 return {
                     "success": True,

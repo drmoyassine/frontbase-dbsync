@@ -2,12 +2,13 @@
  * Navbar Component
  * 
  * Navigation bar with configurable logo, menu items, and CTA buttons.
- * Supports scroll-to-section and link navigation types.
+ * Uses DRY primitives from static.ts for Lego-style composition.
  */
 
 import { escapeHtml } from '../lib/utils.js';
 import type { StylesData } from '../lib/styles.js';
 import { stylesDataToCSS } from '../lib/styles.js';
+import { renderImage, renderText } from '../static.js';
 
 export interface NavMenuItem {
     id: string;
@@ -59,6 +60,25 @@ export interface NavbarProps {
     showDarkModeToggle?: boolean;
 }
 
+// Helper to render CTA-style links (DRY for both primary and secondary buttons)
+function renderCtaLink(
+    id: string,
+    text: string,
+    target: string,
+    navType: 'scroll' | 'link',
+    variant: 'primary' | 'secondary'
+): string {
+    const scrollAttr = navType === 'scroll' ? `data-scroll-to="${escapeHtml(target)}"` : '';
+    const variantClasses = variant === 'primary'
+        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+        : 'border border-border hover:bg-accent';
+
+    return `<a id="${id}" href="${escapeHtml(target)}" ${scrollAttr}
+       class="inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${variantClasses}">
+        ${escapeHtml(text)}
+    </a>`;
+}
+
 export function renderNavbar(
     id: string,
     props: NavbarProps,
@@ -96,17 +116,41 @@ function renderNewFormat(
     const primaryButton = props.primaryButton;
     const secondaryButton = props.secondaryButton;
 
-    // Logo HTML - support icon alongside text when showIcon is enabled
+    // Logo HTML using DRY primitives
     const logoLink = logo.link || '/';
     let logoHtml: string;
 
     if (logo.type === 'image' && logo.imageUrl) {
-        logoHtml = `<img src="${escapeHtml(logo.imageUrl)}" alt="Logo" class="h-8 w-auto" />`;
+        // Use renderImage primitive
+        logoHtml = renderImage(`${id}-logo-img`, {
+            src: logo.imageUrl,
+            alt: 'Logo',
+            height: '2rem',
+            width: 'auto',
+            objectFit: 'contain',
+        });
     } else if (logo.showIcon && logo.imageUrl) {
-        // Show icon alongside brand name text
-        logoHtml = `<img src="${escapeHtml(logo.imageUrl)}" alt="Logo" class="h-6 w-6 object-contain" /><span class="text-xl font-bold">${escapeHtml(logo.text || 'YourBrand')}</span>`;
+        // Icon + text combo using primitives
+        const iconImg = renderImage(`${id}-logo-icon`, {
+            src: logo.imageUrl,
+            alt: 'Logo',
+            height: '1.5rem',
+            width: '1.5rem',
+            objectFit: 'contain',
+        });
+        const brandText = renderText(`${id}-logo-text`, {
+            text: logo.text || 'YourBrand',
+            size: 'xl',
+            weight: 'bold',
+        });
+        logoHtml = `${iconImg}${brandText}`;
     } else {
-        logoHtml = `<span class="text-xl font-bold">${escapeHtml(logo.text || 'YourBrand')}</span>`;
+        // Text-only logo using renderText primitive
+        logoHtml = renderText(`${id}-logo-text`, {
+            text: logo.text || 'YourBrand',
+            size: 'xl',
+            weight: 'bold',
+        });
     }
 
     // Menu items HTML with scroll support
@@ -157,27 +201,23 @@ function renderNewFormat(
     ` : '';
 
     if (secondaryButton?.enabled) {
-        const scrollAttr = secondaryButton.navType === 'scroll'
-            ? `data-scroll-to="${escapeHtml(secondaryButton.target || '')}"`
-            : '';
-        buttonsHtml += `
-            <a href="${escapeHtml(secondaryButton.target || '#')}" ${scrollAttr}
-               class="inline-flex items-center justify-center px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-accent transition-colors">
-                ${escapeHtml(secondaryButton.text || 'Learn More')}
-            </a>
-        `;
+        buttonsHtml += renderCtaLink(
+            `${id}-secondary-btn`,
+            secondaryButton.text || 'Learn More',
+            secondaryButton.target || '#',
+            secondaryButton.navType || 'link',
+            'secondary'
+        );
     }
 
     if (primaryButton?.enabled !== false) {
-        const scrollAttr = primaryButton?.navType === 'scroll'
-            ? `data-scroll-to="${escapeHtml(primaryButton.target || '')}"`
-            : '';
-        buttonsHtml += `
-            <a href="${escapeHtml(primaryButton?.target || '#')}" ${scrollAttr}
-               class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
-                ${escapeHtml(primaryButton?.text || 'Get Started')}
-            </a>
-        `;
+        buttonsHtml += renderCtaLink(
+            `${id}-primary-btn`,
+            primaryButton?.text || 'Get Started',
+            primaryButton?.target || '#',
+            primaryButton?.navType || 'link',
+            'primary'
+        );
     }
 
     return `
@@ -253,10 +293,12 @@ function renderLegacyFormat(
     headerClasses: string,
     inlineStyles: string
 ): string {
-    // Logo
-    const logoHtml = props.logoText
-        ? `<span class="text-xl font-bold">${escapeHtml(props.logoText)}</span>`
-        : `<span class="text-xl font-bold">Logo</span>`;
+    // Logo using DRY primitive
+    const logoHtml = renderText(`${id}-logo`, {
+        text: props.logoText || 'Logo',
+        size: 'xl',
+        weight: 'bold',
+    });
 
     // Desktop links
     const desktopLinksHtml = (props.links || []).map(link => `
@@ -272,12 +314,9 @@ function renderLegacyFormat(
         </a>
     `).join('');
 
-    // CTA button
+    // CTA button using DRY helper
     const ctaHtml = props.ctaText
-        ? `<a href="${escapeHtml(props.ctaLink || '#')}" 
-             class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
-             ${escapeHtml(props.ctaText)}
-           </a>`
+        ? renderCtaLink(`${id}-cta`, props.ctaText, props.ctaLink || '#', 'link', 'primary')
         : '';
 
     return `

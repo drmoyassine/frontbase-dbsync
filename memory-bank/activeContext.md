@@ -26,6 +26,12 @@ This file tracks the project's current status, including recent changes, current
 - **COMPLETED**: Implemented simultaneous search & filtering
 - **STATUS**: Storage API fully expanded and Verified. Core components stable.
 
+**🏗️ MODULAR BUILDER REFACTORING (Phase 8)**
+- **COMPLETED**: Components (`renderers/`), Properties (`properties/`), Templates (`templates/`)
+- **COMPLETED**: Registry Pattern implementation
+- **COMPLETED**: Visual Styling Panel integration
+- **STATUS**: Refactoring complete. Documentation and final verification in progress.
+
 **📄 DOCUMENTATION & STABILIZATION**
 
 - **COMPLETED**: PostgreSQL Migration (Dual Driver Support)
@@ -45,9 +51,17 @@ This file tracks the project's current status, including recent changes, current
 - **FastAPI Backend (Port 8000)**: ✅ Primary - PostgreSQL (Prod) / SQLite (Dev)
 - **Express.js Backend (Port 3001)**: ⚠️ Legacy - Archived in `Dockerfile.legacy`
 - **Frontend (Port 5173)**: ✅ Active - Vite dev server or Nginx (Prod)
-- **Builder**: ✅ **REVAMPED** - 17-phase UI/UX improvements complete
+- **Builder**: ✅ **MODULARIZED** - Phase 8 Refactoring Complete (One Component Per File)
 
 ## Recent Changes
+
+**2026-01-29 - 🏗️ MODULAR BUILDER REFACTORING (Phase 8)**
+
+- **ARCHITECTURE**: Decoupled monolithic files into "One File Per X" structure (Renderers, Templates, Properties)
+- **CODE REDUCTION**: `PropertiesPanel.tsx` (1140 → 299 lines), `sectionTemplates.ts` (split into 12 files)
+- **REGISTRY**: Implemented explicit component registry for type safety
+- **STYLING**: Centralized style processing logic in `styleProcessor.ts`
+- **DOCS**: Created `developmentPatterns.md` guide
 
 **2026-01-28 - 🐘 POSTGRESQL & REDIS UNIFICATION (Phase 7)**
 

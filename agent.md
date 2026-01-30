@@ -309,6 +309,23 @@ alembic upgrade head
 - Always provide `server_default` when adding NOT NULL columns to populated tables
 - Name all constraints explicitly (no `None` constraint names)
 
+### PostgreSQL Production Best Practices
+**1. Robust Migrations (Idempotency)**
+- **Problem**: SQLite is permissive (allows missing columns often), but Postgres is strict (`UndefinedColumnError`).
+- **Solution**: Use "Repair Migrations" when schema drift occurs.
+- **Pattern**: Use raw SQL with `IF NOT EXISTS` to ensure state without failing if already applied.
+    ```python
+    def upgrade():
+        # Use autocommit_block for safe DDL (prevents transaction aborts on failure)
+        with op.get_context().autocommit_block():
+            op.execute("ALTER TABLE my_table ADD COLUMN IF NOT EXISTS my_col TEXT;")
+    ```
+
+**2. Handling Schema Drift**
+- If a migration fails on VPS but works locally, checking `alembic_version` isn't enough.
+- **Diagnostics**: Check logs for specific missing columns.
+- **Fix**: Create a new migration that *conditionally* adds the missing elements. Do NOT edit old migrations (breaks history).
+
 ## Troubleshooting
 
 ### Common Issues

@@ -124,7 +124,9 @@ def convert_component(c: dict, datasources_list: list = None) -> dict:
     return result
 
 
-async def convert_to_publish_schema(page: Page, db: Session) -> PublishPageRequest:
+from ...database.config import SessionLocal
+
+async def convert_to_publish_schema(page: Page, datasources: list) -> PublishPageRequest:
     """Convert Page model to PublishPageRequest schema"""
     # Parse layout_data
     layout_data = page.layout_data
@@ -134,8 +136,7 @@ async def convert_to_publish_schema(page: Page, db: Session) -> PublishPageReque
         except:
             layout_data = {"content": [], "root": {}}
     
-    # Get datasources FIRST so we can compute dataRequest during component conversion
-    datasources = get_datasources_for_publish(db)
+    # Datasources are passed in now (pre-fetched)
     
     # Convert components with stylesData → styles mapping AND compute dataRequest
     raw_content = layout_data.get("content", [])
@@ -190,13 +191,17 @@ async def convert_to_publish_schema(page: Page, db: Session) -> PublishPageReque
 
 
 @router.post("/{page_id}/publish/")
-async def publish_page(page_id: str, db: Session = Depends(get_db)):
+async def publish_page(page_id: str):
     """
     Publish a page to Edge Engine.
     Gathers page data and sends to Edge /api/import endpoint.
+    Crucial: Manages DB session manually to release connection during heavy IO (icon fetch/SSR).
     """
+    # 1. FETCH DATA (Fast DB Interaction)
+    db = SessionLocal()
+    page = None
+    datasources = []
     try:
-        # Get the page
         page = db.query(Page).filter(
             Page.id == page_id,
             Page.deleted_at == None
@@ -208,8 +213,23 @@ async def publish_page(page_id: str, db: Session = Depends(get_db)):
                 detail=f"Page not found: {page_id}"
             )
         
-        # Convert to publish schema (includes datasources from DB and icon fetching)
-        publish_data = await convert_to_publish_schema(page, db)
+        # Force load attributes before detaching
+        _ = page.layout_data
+        _ = page.seo_data
+        
+        # Get datasources
+        datasources = get_datasources_for_publish(db)
+        
+        # Expunge page to keep it usable after session close
+        db.expunge(page)
+        
+    finally:
+        db.close() # RELEASE DB CONNECTION NOW
+    
+    try:
+        # 2. HEAVY IO (No DB Connection)
+        # Convert to publish schema (includes icon fetching from CDN)
+        publish_data = await convert_to_publish_schema(page, datasources)
 
         # Build payload for Edge Engine
         payload = ImportPagePayload(
@@ -237,31 +257,48 @@ async def publish_page(page_id: str, db: Session = Depends(get_db)):
             if response.status_code == 200:
                 result = response.json()
                 
-                # Update page to mark as public
-                page.is_public = True
-                db.commit()
-                
-                # Sync project settings to Edge (favicon, branding)
-                # This ensures navbar logo and other branding works in SSR
+                # 3. UPDATE DB (New fast session)
+                update_db = SessionLocal()
                 try:
-                    project = get_project(db)
+                    # Re-fetch page to update (safest way) OR use update query
+                    page_to_update = update_db.query(Page).filter(Page.id == page_id).first()
+                    if page_to_update:
+                        page_to_update.is_public = True
+                        update_db.commit()
+                    
+                    # Sync project settings
+                    project = get_project(update_db)
                     if project:
                         settings_url = f"{edge_url}/api/import/settings"
+                        # Fire and forget settings sync? Or wait? 
+                        # We wait, but since we have a new session, it's fine.
+                        # Note: We are INSIDE the IO block again (client post), but 
+                        # we are holding a DB connection now. Typically this request is fast.
+                        # But to be safer, we could gather data then close, then post.
+                        # Settings payload:
+                        settings_payload = {
+                            "faviconUrl": project.favicon_url,
+                            "logoUrl": getattr(project, 'logo_url', None),
+                            "siteName": project.name,
+                            "siteDescription": project.description,
+                            "appUrl": project.app_url,
+                        }
+                        
+                        # We can close DB before the request
+                        update_db.close()
+                        
                         await client.post(
                             settings_url,
-                            json={
-                                "faviconUrl": project.favicon_url,
-                                "logoUrl": getattr(project, 'logo_url', None),
-                                "siteName": project.name,
-                                "siteDescription": project.description,
-                                "appUrl": project.app_url,
-                            },
+                            json=settings_payload,
                             timeout=5.0
                         )
                         print(f"[Publish] Synced project settings to Edge")
+                    else:
+                         update_db.close()
+                         
                 except Exception as settings_err:
-                    # Non-fatal: don't fail publish if settings sync fails
                     print(f"[Publish] Settings sync failed (non-fatal): {settings_err}")
+                    update_db.close()
                 
                 return {
                     "success": True,

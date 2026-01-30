@@ -157,17 +157,42 @@ def pascal_to_kebab(name: str) -> str:
     return result.lower()
 
 
+from ...services.sync.redis_client import cache_get, cache_set, get_configured_redis_settings
+
+# Global In-Memory Cache for Icons (First Level)
+_ICON_CACHE: Dict[str, str] = {}
+_ICON_CACHE_LOCK = asyncio.Lock()
+
+
 async def fetch_icon_svg(icon_name: str, client: httpx.AsyncClient) -> tuple[str, str | None]:
     """
-    Fetch a single icon SVG from the Lucide CDN.
+    Fetch a single icon SVG with Multi-Level Caching (L1: Memory, L2: Redis, L3: CDN).
     
     Args:
-        icon_name: PascalCase icon name (e.g., 'ChevronRight')
+        icon_name: PascalCase icon name
         client: Shared httpx async client
         
     Returns:
-        Tuple of (icon_name, svg_content or None if failed)
+        Tuple of (icon_name, svg_content or None)
     """
+    # L1: Memory Cache
+    if icon_name in _ICON_CACHE:
+        return (icon_name, _ICON_CACHE[icon_name])
+
+    # L2: Redis Cache
+    redis_settings = await get_configured_redis_settings()
+    redis_url = redis_settings.get("url") if redis_settings and redis_settings.get("enabled") else None
+    
+    if redis_url:
+        cache_key = f"icon:svg:{icon_name}"
+        cached_svg = await cache_get(redis_url, cache_key)
+        if cached_svg:
+            # Populate L1 and return
+            async with _ICON_CACHE_LOCK:
+                _ICON_CACHE[icon_name] = cached_svg
+            return (icon_name, cached_svg)
+
+    # L3: CDN Fetch
     kebab_name = pascal_to_kebab(icon_name)
     url = f"{LUCIDE_CDN_BASE}/{kebab_name}.svg"
     
@@ -175,9 +200,19 @@ async def fetch_icon_svg(icon_name: str, client: httpx.AsyncClient) -> tuple[str
         response = await client.get(url, timeout=5.0)
         if response.status_code == 200:
             svg_content = response.text
-            # Modify SVG for inline use: set reasonable size
+            # Modify SVG for inline use
             svg_content = svg_content.replace('width="24"', 'width="1em"')
             svg_content = svg_content.replace('height="24"', 'height="1em"')
+            
+            # Update L1 Cache
+            async with _ICON_CACHE_LOCK:
+                _ICON_CACHE[icon_name] = svg_content
+            
+            # Update L2 Redis Cache (Background task would be better, but await is fast enough)
+            if redis_url:
+                # Cache for 30 days (icons don't change often)
+                await cache_set(redis_url, cache_key, svg_content, ttl=2592000)
+                
             print(f"[icon_fetch] ✅ Fetched '{icon_name}' from CDN")
             return (icon_name, svg_content)
         else:
@@ -190,28 +225,39 @@ async def fetch_icon_svg(icon_name: str, client: httpx.AsyncClient) -> tuple[str
 
 async def fetch_icons_batch(icon_names: set[str]) -> dict[str, str]:
     """
-    Fetch multiple icons in parallel from CDN.
-    
-    Args:
-        icon_names: Set of PascalCase icon names
-        
-    Returns:
-        Dict mapping icon_name -> svg_content (only successful fetches)
+    Fetch multiple icons in parallel from CDN, utilizing L1/L2 cache.
     """
     if not icon_names:
         return {}
     
-    print(f"[icon_fetch] Fetching {len(icon_names)} icons from CDN...")
+    # 1. Check L1 Memory Cache first
+    missing_from_l1 = [name for name in icon_names if name not in _ICON_CACHE]
     
+    if not missing_from_l1:
+        print(f"[icon_fetch] All {len(icon_names)} icons found in L1 memory cache.")
+        return {name: _ICON_CACHE[name] for name in icon_names}
+
+    # 2. Check L2 Redis & Fetch L3 CDN for what remains
+    # We do this logic inside fetch_icon_svg per item for simplicity, 
+    # but could optimize to bulk-get from Redis if client supported it.
+    
+    print(f"[icon_fetch] Resolving {len(missing_from_l1)} icons (Redis/CDN)...")
     async with httpx.AsyncClient(follow_redirects=True) as client:
-        tasks = [fetch_icon_svg(name, client) for name in icon_names]
+        tasks = [fetch_icon_svg(name, client) for name in missing_from_l1]
         results = await asyncio.gather(*tasks)
     
-    # Filter out failed fetches
-    icon_map = {name: svg for name, svg in results if svg is not None}
-    print(f"[icon_fetch] Successfully fetched {len(icon_map)}/{len(icon_names)} icons")
-    
-    return icon_map
+    # Construct final result
+    final_map = {}
+    for name, svg in results:
+        if svg:
+            final_map[name] = svg
+            
+    # Add already cached items
+    for name in icon_names:
+        if name in _ICON_CACHE:
+            final_map[name] = _ICON_CACHE[name]
+            
+    return final_map
 
 
 def collect_icons_from_component(component: Dict, icons: set[str]) -> None:

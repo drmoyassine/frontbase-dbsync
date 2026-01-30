@@ -397,6 +397,17 @@ The following items are **NOT in MVP** but planned for future releases:
 - **When:** Before launching in EU markets or handling EU user data
 
 
+### Future Sprint: Conditional Service Deployment
+
+- **Goal:** Optimize local development resource usage by only starting necessary containers.
+- **Issue:** Currently `docker-compose.yml` starts PostgreSQL even when `DATABASE_URL` is set to SQLite.
+- **Implementation:**
+  - Use Docker Compose `profiles` to conditionally start services
+  - Create convenience scripts (`npm run dev:sqlite`, `npm run dev:postgres`)
+  - Update `docker-compose.yml` to assign `postgres` service to a profile
+- **When:** Post-MVP or during a "DevEx" sprint
+
+
 ---
 
 ## Sprint Summary

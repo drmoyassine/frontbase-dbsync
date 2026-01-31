@@ -346,6 +346,23 @@ export const NavbarProperties: React.FC<NavbarPropertiesProps> = ({
                     />
                 </div>
             </div>
+
+            {/* Sticky Navigation Section */}
+            <div className="space-y-3 pt-4 border-t">
+                <Label className="text-sm font-medium">Behavior</Label>
+                <div className="flex items-center justify-between space-y-0 rounded-md border p-3 bg-muted/30">
+                    <div className="space-y-0.5">
+                        <Label className="text-xs font-medium">Sticky Navigation</Label>
+                        <p className="text-xs text-muted-foreground">
+                            Keep navbar fixed at top when scrolling
+                        </p>
+                    </div>
+                    <Switch
+                        checked={props.sticky === true}
+                        onCheckedChange={(checked) => updateComponentProp('sticky', checked)}
+                    />
+                </div>
+            </div>
         </>
     );
 };

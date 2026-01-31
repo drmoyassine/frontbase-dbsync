@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Target } from 'lucide-react';
+import { useBuilderStore } from '@/stores/builder';
 
 interface NavbarPropertiesProps {
     componentId: string;
@@ -17,6 +18,27 @@ interface NavbarPropertiesProps {
     updateComponentProp: (key: string, value: any) => void;
     project?: { faviconUrl?: string } | null;
 }
+
+// Helper component for selecting scroll targets visually
+const SelectTargetButton: React.FC<{ onSelect: (componentId: string) => void }> = ({ onSelect }) => {
+    const { enterScrollTargetMode } = useBuilderStore();
+
+    return (
+        <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            title="Click to select target on canvas"
+            onClick={() => {
+                enterScrollTargetMode((componentId) => {
+                    onSelect(componentId);
+                });
+            }}
+        >
+            <Target className="h-4 w-4" />
+        </Button>
+    );
+};
 
 export const NavbarProperties: React.FC<NavbarPropertiesProps> = ({
     componentId,
@@ -202,6 +224,15 @@ export const NavbarProperties: React.FC<NavbarPropertiesProps> = ({
                                     placeholder={item.navType === 'scroll' ? '#section-id' : '/page-url'}
                                     className="h-8 flex-1"
                                 />
+                                {item.navType === 'scroll' && (
+                                    <SelectTargetButton
+                                        onSelect={(componentId) => {
+                                            const newItems = [...(props.menuItems || [])];
+                                            newItems[index] = { ...item, target: `#${componentId}` };
+                                            updateComponentProp('menuItems', newItems);
+                                        }}
+                                    />
+                                )}
                             </div>
                         </div>
                     ))}

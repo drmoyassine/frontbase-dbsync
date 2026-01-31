@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { getDefaultProps } from '@/lib/componentDefaults';
 import { stylesToCSS } from '@/lib/styles/converters';
 import type { StylesData } from '@/types/builder';
+import { Target, X } from 'lucide-react';
 
 interface BuilderCanvasProps {
   page: Page;
@@ -21,7 +22,10 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
     currentViewport,
     zoomLevel,
     showDeviceFrame,
-    showGrid
+    showGrid,
+    scrollTargetSelectionMode,
+    scrollTargetCallback,
+    exitScrollTargetMode
   } = useBuilderStore();
 
   const components = page.layoutData?.content || [];
@@ -37,8 +41,30 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
     disabled: hasComponents
   });
 
+  // Helper to find component by ID recursively
+  const findComponentById = (components: any[], id: string): any => {
+    for (const comp of components) {
+      if (comp.id === id) return comp;
+      if (comp.children) {
+        const found = findComponentById(comp.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
   const handleComponentClick = (componentId: string, event: React.MouseEvent) => {
     event.stopPropagation();
+
+    // Handle scroll target selection mode
+    if (scrollTargetSelectionMode && scrollTargetCallback) {
+      const component = findComponentById(components, componentId);
+      const componentType = component?.type || 'Section';
+      scrollTargetCallback(componentId, componentType);
+      exitScrollTargetMode();
+      return;
+    }
+
     if (!isPreviewMode) {
       setSelectedComponentId(selectedComponentId === componentId ? null : componentId);
     }
@@ -190,15 +216,41 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
 
   return (
     <div
-      className="h-full p-8 bg-muted/30 transition-colors relative overflow-y-auto overflow-x-hidden"
+      className={cn(
+        "h-full p-8 bg-muted/30 transition-colors relative overflow-y-auto overflow-x-hidden",
+        scrollTargetSelectionMode && "ring-2 ring-primary ring-inset"
+      )}
       style={{ minHeight: '100%' }}
       onClick={(e) => {
+        // Cancel selection mode if clicking outside components
+        if (scrollTargetSelectionMode && e.target === e.currentTarget) {
+          exitScrollTargetMode();
+          return;
+        }
         // Only deselect if clicking on outer wrapper, not canvas content
         if (e.target === e.currentTarget && !isPreviewMode) {
           setSelectedComponentId(null);
         }
       }}
     >
+      {/* Scroll Target Selection Mode Banner */}
+      {scrollTargetSelectionMode && (
+        <div className="absolute top-0 left-0 right-0 z-50 bg-primary text-primary-foreground px-4 py-2 flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-2">
+            <Target className="w-4 h-4" />
+            <span className="text-sm font-medium">Click on a section to set as scroll target</span>
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              exitScrollTargetMode();
+            }}
+            className="p-1 hover:bg-primary-foreground/20 rounded"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       {/* Device Frame / Viewport Container */}
       <div
         className={cn(

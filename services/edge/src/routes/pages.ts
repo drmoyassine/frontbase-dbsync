@@ -289,8 +289,30 @@ function generateHtmlDocument(
             --ring: 222.2 84% 4.9%;
             --radius: 0.5rem;
         }
+        .dark {
+            --background: 224 71% 4%;
+            --foreground: 213 31% 91%;
+            --muted: 223 47% 11%;
+            --muted-foreground: 215 20% 65%;
+            --popover: 224 71% 4%;
+            --popover-foreground: 213 31% 91%;
+            --card: 224 71% 4%;
+            --card-foreground: 213 31% 91%;
+            --border: 216 34% 17%;
+            --input: 216 34% 17%;
+            --primary: 210 40% 98%;
+            --primary-foreground: 222 47% 11%;
+            --secondary: 222 47% 11%;
+            --secondary-foreground: 210 40% 98%;
+            --accent: 216 34% 17%;
+            --accent-foreground: 210 40% 98%;
+            --destructive: 0 63% 31%;
+            --destructive-foreground: 210 40% 98%;
+            --ring: 216 34% 17%;
+        }
         *, *::before, *::after { box-sizing: border-box; }
-        body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }
+        html { background-color: hsl(var(--background)); color: hsl(var(--foreground)); }
+        body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; background-color: hsl(var(--background)); color: hsl(var(--foreground)); }
         .fb-page { min-height: 100vh; display: flex; flex-direction: column; padding: 2rem; gap: 1rem; }
         .fb-button { display: inline-flex; align-items: center; justify-content: center; }
         .fb-heading { margin: 0; }
@@ -307,10 +329,17 @@ function generateHtmlDocument(
         .logo-marquee-item { flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
         .logo-marquee-mobile-only .logo-marquee-track { animation: none; flex-wrap: wrap; justify-content: center; gap: 2rem; width: 100%; }
         .logo-marquee-mobile-only .logo-marquee-container { mask-image: none; -webkit-mask-image: none; }
+        /* Hide duplicate logos on desktop (duplicates are for seamless marquee on mobile) */
+        .logo-marquee-mobile-only .logo-marquee-item.logo-duplicate { display: none; }
         @media (max-width: 640px) {
             .logo-marquee-mobile-only .logo-marquee-track { animation: marquee-scroll var(--marquee-speed, 20s) linear infinite; flex-wrap: nowrap; justify-content: flex-start; gap: 0; width: max-content; }
             .logo-marquee-mobile-only .logo-marquee-container { mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
+            /* Show all logos (including duplicates) on mobile for seamless marquee */
+            .logo-marquee-mobile-only .logo-marquee-item.logo-duplicate { display: flex; }
         }
+        /* Dark mode: invert raster images in Navbar and LogoCloud */
+        .dark .fb-navbar img:not(.no-invert),
+        .dark .fb-logo-cloud img:not(.no-invert) { filter: invert(1) brightness(1.1); }
         `}
     </style>
 </head>

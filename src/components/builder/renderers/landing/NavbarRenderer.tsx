@@ -73,16 +73,23 @@ export const NavbarRenderer: React.FC<RendererProps> = ({
         'fb-navbar w-full transition-all duration-200'
     );
 
+    // Default aesthetic styles (can be overridden by Styles Panel)
+    const defaultStyles: React.CSSProperties = {
+        padding: '16px 24px',
+        borderBottom: '1px solid var(--border)',
+        backgroundColor: 'var(--background)',
+    };
+
+    // Structural styles + defaults + user overrides
     const navStyles: React.CSSProperties = {
         display: 'flex',
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: '16px 24px',
-        borderBottom: '1px solid var(--border)',
-        backgroundColor: 'var(--background)',
         width: '100%',
         flexWrap: 'wrap',
+        // Apply defaults first, then user styles override them
+        ...defaultStyles,
         ...(inlineStyles || {})
     };
 

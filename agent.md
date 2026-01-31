@@ -103,6 +103,7 @@ The Edge Engine has no knowledge of:
 | Hardcoding CSS in Edge instead of using cssBundle | Causes builder/SSR parity drift |
 | **Modifying SQLAlchemy models without Alembic migration** | **Causes production schema drift** |
 | **Editing deployed Alembic migrations** | **Create a NEW migration instead** |
+| **Hardcoded aesthetic styles in Builder renderers** | **Use `stylesData.values` defaults instead** |
 
 ---
 

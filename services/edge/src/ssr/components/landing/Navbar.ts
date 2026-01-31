@@ -9,6 +9,7 @@ import { escapeHtml } from '../lib/utils.js';
 import type { StylesData } from '../lib/styles.js';
 import { stylesDataToCSS } from '../lib/styles.js';
 import { renderImage, renderText } from '../static.js';
+import { renderAdaptiveImage, isSvgUrl } from '../../lib/svg-adapter.js';
 
 export interface NavMenuItem {
     id: string;

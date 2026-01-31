@@ -121,11 +121,20 @@ export function renderLogoCloud(
     }
 
     // Marquee Mode (also used for marqueeOnMobile)
-    const duplicatedLogosHtml = [...logos, ...logos].map((logo, idx) => `
+    // First set: original logos, second set: duplicates (for seamless scrolling)
+    const originalLogosHtml = logos.map((logo, idx) => `
         <div class="logo-marquee-item px-6 md:px-8">
             ${renderItem(logo, idx)}
         </div>
     `).join('');
+
+    const duplicateLogosHtml = logos.map((logo, idx) => `
+        <div class="logo-marquee-item logo-duplicate px-6 md:px-8">
+            ${renderItem(logo, idx)}
+        </div>
+    `).join('');
+
+    const duplicatedLogosHtml = originalLogosHtml + duplicateLogosHtml;
 
     const pauseClass = pauseOnHover ? 'logo-marquee-pause-on-hover' : '';
     const mobileOnlyClass = displayMode === 'marqueeOnMobile' ? 'logo-marquee-mobile-only' : '';

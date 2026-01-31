@@ -118,7 +118,6 @@ export const LogoCloudRenderer: React.FC<RendererProps> = ({
     }
 
     // Marquee mode (also used for marqueeOnMobile)
-    const duplicatedLogos = [...logos, ...logos] as LogoItem[];
     const mobileOnlyClass = displayMode === 'marqueeOnMobile' ? 'logo-marquee-mobile-only' : '';
 
     return (
@@ -144,8 +143,15 @@ export const LogoCloudRenderer: React.FC<RendererProps> = ({
                         '--logo-count': logos.length,
                     } as React.CSSProperties}
                 >
-                    {duplicatedLogos.map((logo, idx) => (
-                        <div key={`${logo.id || idx}-${idx}`} className="logo-marquee-item px-6 md:px-8">
+                    {/* Original logos */}
+                    {(logos as LogoItem[]).map((logo, idx) => (
+                        <div key={`${logo.id || idx}`} className="logo-marquee-item px-6 md:px-8">
+                            {renderLogoItem(logo, idx)}
+                        </div>
+                    ))}
+                    {/* Duplicate logos for seamless marquee (hidden on desktop for marqueeOnMobile) */}
+                    {(logos as LogoItem[]).map((logo, idx) => (
+                        <div key={`${logo.id || idx}-dup`} className="logo-marquee-item logo-duplicate px-6 md:px-8">
                             {renderLogoItem(logo, idx)}
                         </div>
                     ))}

@@ -193,17 +193,6 @@ export const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
     onChange(e.target.value);
   };
 
-  // Reference for hidden span to measure text width
-  const measureRef = useRef<HTMLSpanElement>(null);
-  const [inputWidth, setInputWidth] = useState<number | undefined>(undefined);
-
-  // Measure text width whenever text changes
-  useEffect(() => {
-    if (measureRef.current) {
-      // Add some padding for cursor and breathing room
-      setInputWidth(measureRef.current.offsetWidth + 8);
-    }
-  }, [text]);
 
   const baseClasses = cn(
     'border-none outline-none bg-transparent resize-none',
@@ -249,8 +238,9 @@ export const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
         fontWeight: 'inherit',
         lineHeight: 'inherit',
         color: 'inherit',
-        width: inputWidth ? `${inputWidth}px` : 'auto',
-        minWidth: inputWidth ? `${inputWidth}px` : 'auto',
+        // Use 100% width - let parent container control sizing
+        width: '100%',
+        minWidth: '100%',
       }}
       placeholder={placeholder}
     />
@@ -258,22 +248,6 @@ export const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
 
   return (
     <>
-      {/* Hidden span to measure text width */}
-      <span
-        ref={measureRef}
-        style={{
-          ...style,
-          position: 'absolute',
-          visibility: 'hidden',
-          whiteSpace: 'pre',
-          fontFamily: 'inherit',
-          fontSize: 'inherit',
-          fontWeight: 'inherit',
-          lineHeight: 'inherit',
-        }}
-      >
-        {text || placeholder || ' '}
-      </span>
       {inputElement}
       {showPicker && (
         <VariablePicker

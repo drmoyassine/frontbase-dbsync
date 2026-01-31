@@ -51,6 +51,7 @@ export function renderFooter(
     const footerClasses = [
         'fb-footer',
         'border-t',
+        'w-full', 'max-w-full', 'overflow-x-hidden',
         props.hideOnMobile ? 'hidden md:block' : '',
         props.hideOnDesktop ? 'md:hidden' : '',
     ].filter(Boolean).join(' ');
@@ -104,7 +105,7 @@ export function renderFooter(
                     </div>
                     
                     <!-- Link Columns -->
-                    <div class="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:flex lg:gap-12">
+                    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:flex lg:gap-12">
                         ${columnsHtml}
                     </div>
                 </div>

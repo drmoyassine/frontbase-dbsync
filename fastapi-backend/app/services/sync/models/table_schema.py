@@ -37,9 +37,10 @@ class TableSchemaCache(Base):
     foreign_keys: Mapped[List[Dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     
     # Timestamp when schema was fetched
+    # Note: Use naive datetime for PostgreSQL TIMESTAMP WITHOUT TIME ZONE columns
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime, 
-        default=lambda: datetime.now(timezone.utc)
+        default=datetime.utcnow
     )
     
     # Unique constraint: one schema per datasource+table

@@ -63,14 +63,15 @@ class Datasource(Base):
     last_tested_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_test_success: Mapped[Optional[bool]] = mapped_column(nullable=True)
     
+    # Note: Use naive datetime for PostgreSQL TIMESTAMP WITHOUT TIME ZONE columns
     created_at: Mapped[datetime] = mapped_column(
         DateTime, 
-        default=lambda: datetime.now(timezone.utc)
+        default=datetime.utcnow
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, 
-        default=lambda: datetime.now(timezone.utc), 
-        onupdate=lambda: datetime.now(timezone.utc)
+        default=datetime.utcnow, 
+        onupdate=datetime.utcnow
     )
     
     # Relationships

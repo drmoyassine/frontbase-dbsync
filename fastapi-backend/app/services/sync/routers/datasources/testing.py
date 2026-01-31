@@ -62,7 +62,7 @@ async def test_datasource(
         tables = await adapter.get_tables()
         await adapter.disconnect()
         
-        datasource.last_tested_at = datetime.now(timezone.utc)
+        datasource.last_tested_at = datetime.utcnow()  # Naive for PostgreSQL TIMESTAMP WITHOUT TIME ZONE
         datasource.last_test_success = True
         await db.commit()
         
@@ -73,7 +73,7 @@ async def test_datasource(
         )
     except Exception as e:
         logger.error(f"Error testing datasource {datasource_id}: {str(e)}", exc_info=True)
-        datasource.last_tested_at = datetime.now(timezone.utc)
+        datasource.last_tested_at = datetime.utcnow()  # Naive for PostgreSQL TIMESTAMP WITHOUT TIME ZONE
         datasource.last_test_success = False
         await db.commit()
         

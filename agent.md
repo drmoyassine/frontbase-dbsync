@@ -1,380 +1,464 @@
-# Frontbase Builder - Agent Documentation
+# Frontbase Builder — Agent Protocol
 
-## Overview
-Frontbase is an open-source, edge-native platform enabling teams to deploy AI-powered apps and edge services with no-code.
+> **Authority Level**: This document defines non-negotiable architectural rules and patterns. It takes precedence over all other documentation including memory-bank files. Changes to core invariants require updating this file first.
 
-## Architecture
+> [!CAUTION]
+> ⚠️ **Violations of this protocol are considered architectural defects, not stylistic issues.**
 
-### Tech Stack
-- **Frontend**: React 18 + TypeScript + Vite
-- **UI Framework**: Shadcn UI + Tailwind CSS
-- **State Management**: Zustand + TanStack Query (React Query)
-- **Caching**: Redis / Upstash (Edge-compatible)
-- **Drag & Drop**: @dnd-kit (Unified DnD engine)
-- **Backend**: FastAPI (Python) + PostgreSQL (Production) / SQLite (Development)
-- **Edge Engine**: Hono (SSR & Workflows)
-- **Data Sources**: Multi-Source (Supabase, PostgreSQL, REST APIs)
+---
 
-### Directory Structure
+## Agent Fallback Rules (When Unsure)
+
+If an agent is uncertain about an implementation decision:
+
+1. Prefer **backward compatibility** over new features
+2. Prefer **additive schema changes** over modifications
+3. Prefer **publish-time computation** over runtime logic
+4. Prefer **existing patterns** over introducing new abstractions
+5. Prefer **explicit code** over clever or dynamic behavior
+
+When still uncertain:
+→ **Stop and request clarification** rather than guessing.
+
+---
+
+## 1. Overview
+
+Frontbase is an open-source, edge-native platform for deploying AI-powered apps and edge services with no-code. The system consists of three main components:
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| **Frontend** | React 18, Vite, Tailwind, Zustand | Visual page builder & admin dashboard |
+| **Backend** | FastAPI, SQLAlchemy, Alembic | API, design-time operations, publishing |
+| **Edge Engine** | Hono, Drizzle ORM | Runtime SSR, workflows, self-sufficient |
+
+---
+
+## 2. Core Architectural Invariants
+
+### 2.1 Edge Runtime Self-Sufficiency (HARD RULE)
+
+> [!CAUTION]
+> **The Edge Engine MUST run independently after publication.** It relies ONLY on its local database (SQLite/Turso) and Redis. It does NOT call back to FastAPI at runtime.
+
+**The published page bundle is treated as an immutable runtime artifact.**
+Runtime code may interpret it, but must not reshape or enrich it.
 
 ```
-src/                  # React Frontend
-├── components/       # UI components
-├── hooks/            # Data fetching & logic
-├── modules/          # Feature-based modules (e.g., dbsync)
-├── services/         # Shared services
-└── ...
-
-services/edge/        # Hono Edge Engine (SSR + Workflows)
-├── src/db/           # Drizzle Schema (SQLite/Turso)
-├── src/routes/       # Runtime Routes
-└── ...
-
-fastapi-backend/      # Unified Backend
-├── app/              # API and Services
-├── Dockerfile        # Production API image
-└── ...
-
-Dockerfile.frontend   # Production Frontend image
-nginx.conf            # Production routing
-docker-compose.yml    # Main production orchestration
-docker-compose.legacy.yml # Legacy (Express) setup
-Dockerfile.legacy     # Legacy image definition
+┌─────────────────────────────────────────────────────────────┐
+│                    DESIGN TIME (Builder)                     │
+│  React ←→ FastAPI ←→ PostgreSQL/SQLite                      │
+│                           ↓ Publish                          │
+└───────────────────────────┼─────────────────────────────────┘
+                            ↓
+┌───────────────────────────┼─────────────────────────────────┐
+│                    RUNTIME (Edge)                            │
+│  Browser ←→ Hono ←→ SQLite/Turso + Redis                    │
+│             (NO calls to FastAPI!)                           │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Key Concepts
+**Implication**: All data needed at runtime MUST be pre-computed at publish time and stored in the published page bundle.
 
-### 1. Data Layer (React Query)
+### 2.2 Backward Compatibility of Published Pages
 
-**Primary Hooks** (`src/hooks/useDatabase.ts`):
-- `useGlobalSchema()` - Fetches FK relationships (1hr cache)
-- `useTables()` - Fetches table list (5min cache)
-- `useTableSchema(tableName)` - Fetches columns (10min cache)
-- `useTableData(tableName, params)` - Fetches data with auto FK joins
+- Published pages MUST continue to render correctly after codebase updates
+- Schema changes to published data require migration paths
+- Never break the `/api/import` contract without versioning
 
-**Consumer Hook** (`src/hooks/data/useSimpleData.ts`):
-- Wraps React Query hooks for component use
-- Manages local state (filters, pagination, sorting)
-- Returns: `{ data, count, loading, error, schema, refetch, ... }`
+### 2.3 Dual Database Compatibility
 
-### 2. Edge Self-Sufficiency
-- **Concept**: The Edge Engine is a standalone runtime.
-- **Rule**: Once published, Edge **NEVER** communicates with the FastAPI Builder.
-- **Dependency**: Relies 100% on its own database (SQLite/Turso) and Redis.
-- **Benefit**: Zero runtime coupling, faster edge performance, higher availability.
+| Environment | Database | Driver |
+|-------------|----------|--------|
+| Development | SQLite | `aiosqlite` (async) |
+| Production | PostgreSQL | `asyncpg` (async) |
+| Migrations | Both | Sync drivers via Alembic |
 
-### 3. Component System
+**Rule**: All SQL operations must work on both dialects. Use `render_as_batch=True` for SQLite ALTER TABLE compatibility.
 
-**Component Types**:
-- **Basic**: Button, Text, Heading, Card, Badge, Image, Alert, etc.
-- **Form**: Input, Textarea, Select, Checkbox, Switch
-- **Layout**: Container, Tabs, Accordion, Breadcrumb
-- **Data**: DataTable, KPICard, Chart, Grid (data-bound)
+### 2.4 Zero Runtime Coupling
 
-**Component Structure**:
+The Edge Engine has no knowledge of:
+- FastAPI internal APIs
+- Builder-specific component logic
+- Supabase SDK (uses pre-computed `DataRequest` instead)
+
+---
+
+## 3. Forbidden Actions
+
+> [!WARNING]
+> These actions will break the system's architecture. Never do them.
+
+| ❌ Forbidden | Reason |
+|--------------|--------|
+| Edge calling FastAPI at runtime | Violates Edge Self-Sufficiency |
+| Publishing secrets to Edge | Security risk |
+| Using `CURRENT_TIMESTAMP` in migrations | Not portable (use `func.now()` or dialect check) |
+| Holding DB connection during slow I/O | Causes QueuePool exhaustion |
+| Using `native_enum=True` for PostgreSQL | Creates migration issues |
+| Changing Pydantic schema without updating Zod | Breaks API contract |
+| Adding required fields to published page schema | Breaks backward compatibility |
+
+---
+
+## 4. Required Patterns
+
+### 4.1 Frontend State Management
+
+| State Type | Technology | Purpose |
+|------------|------------|---------|
+| Server State | TanStack Query | API data with caching |
+| UI State | Zustand | Builder, canvas, panels |
+| Form State | React Hook Form | User input handling |
+
+**React Query Pattern**:
 ```typescript
-{
-  id: string;
-  type: string;
-  props: Record<string, any>;
-  styles?: ComponentStyles;
-  responsiveStyles?: ResponsiveStyles;
-  className?: string;
-  children?: Component[];
-}
+const { data, isLoading } = useQuery({
+  queryKey: ['pages', pageId],
+  queryFn: () => api.getPage(pageId),
+  staleTime: 5 * 60 * 1000, // 5 min cache
+});
 ```
 
-### 4. Visual CSS Styling System
+### 4.2 Component System (Builder)
 
-**Architecture**: Metadata-driven preset CSS properties engine
-
-**Key Files**:
-- `src/lib/styles/defaults.ts` - Default page styles (`getDefaultPageStyles()`)
-- `src/lib/styles/configs.ts` - CSS property configurations
-- `src/lib/styles/types.ts` - StylesData and related types
-- `src/lib/styles/converters.ts` - CSS value converters
-- `src/components/styles/PropertyControl.tsx` - Dynamic property controls
-
-**StylesData Format**:
-```typescript
-{
-  activeProperties: string[];   // Which properties are enabled
-  values: Record<string, any>;  // Property values
-  stylingMode: 'visual' | 'css' // Current styling mode
-}
+**One File Per Component**:
+```
+src/components/builder/renderers/
+├── basic/          # Text, Heading, Button, etc.
+├── layout/         # Container, Row, Column, Grid
+├── data/           # DataTable, Chart
+└── landing/        # Hero, Features, Pricing
 ```
 
-**CSS Property Categories**:
-- **Layout**: flexDirection, justifyContent, alignItems, flexWrap
-- **Spacing**: padding, margin, gap
-- **Sizing**: width, height, minWidth, maxWidth
-- **Typography**: fontSize, fontWeight, color, textAlign
-- **Background**: backgroundColor, gradient
-- **Visual Effects**: borderRadius, opacity, boxShadow
-
-**Visual Toggle Groups**: Properties like flexDirection and alignItems use visual toggle groups instead of dropdowns for better UX.
-
-### 5. Container Styles (Page-Level Styling)
-
-**Storage Strategy**: Zero-migration nested JSON approach
-
-**Data Flow**:
-1. In-memory: `page.containerStyles` (top-level for convenience)
-2. Database: `page.layoutData.root.containerStyles` (nested in JSON)
-3. On save: Serialize to `layoutData.root`
-4. On load: Extract to top-level `containerStyles`
-
-**Key Implementation**:
-- `createPageSlice.ts`: Handles serialization/deserialization
-- `BuilderCanvas.tsx`: Applies styles via `getContainerCSS()`
-- `StylingPanel.tsx`: UI for editing page styles
-
-### 6. Responsive Builder
-
-**Viewport Auto-Switching**:
-| Screen Width | Canvas Viewport | Use Case |
-|--------------|-----------------|----------|
-| < 768px | Mobile (375x812) | Phone users |
-| 768-1024px | Tablet (768x1024) | iPad users |
-| > 1024px | Desktop (1200x1400) | Desktop users |
-
-**Implementation** (`CustomBuilder.tsx`):
+**Central Registry**: `src/components/builder/registry/componentRegistry.tsx`
 ```typescript
-useEffect(() => {
-  const checkMobile = () => {
-    const width = window.innerWidth;
-    setIsMobile(width < 1024);
-    if (width < 768) setCurrentViewport('mobile');
-    else if (width < 1024) setCurrentViewport('tablet');
-    else setCurrentViewport('desktop');
-  };
+const COMPONENT_REGISTRY: Record<string, ComponentType<any>> = {
+  Text: TextRenderer,
+  Button: ButtonRenderer,
   // ...
-}, [setCurrentViewport]);
+};
 ```
 
-**Mobile UI**: Collapsible sidebars with drawer pattern for touch-friendly editing.
-
-### 7. State Management
-
-#### Zustand Stores
-- **Builder Store** (`stores/builder.ts`): Page builder state (sliced architecture)
-- **Dashboard Store** (`stores/dashboard.ts`): Dashboard and settings
-- **Data Binding Store** (`stores/data-binding-simple.ts`): Legacy data management
-
-#### React Query (TanStack Query)
-- Server state management for database operations
-- Automatic caching and background updates
-- `keepPreviousData` for smooth pagination
-
-### 8. Data Flow
-
-```
-Component → useSimpleData() → useTableData() → databaseApi → FastAPI → Supabase
-                                    ↓
-                            React Query Cache
-```
-
-### 9. Foreign Key Handling
-
-FKs are automatically detected and joined:
-1. `useGlobalSchema()` fetches FK relationships from `frontbase_get_schema_info` RPC
-2. `useTableData()` constructs PostgREST select: `*,providers(*),categories(*)`
-3. Related data is embedded in response as nested objects
-
-## API Structure
-
-### FastAPI Routes (`fastapi-backend/app/routers/`)
-
-#### `/api/database`
-- `GET /connections` - Get database connections
-- `POST /connect-supabase` - Connect to Supabase
-- `GET /tables` - List tables
-- `GET /table-schema/:tableName` - Get table schema
-- `GET /table-data/:tableName` - Get table data
-- `POST /advanced-query` - RPC calls
-
-#### `/api/pages`
-- `GET /` - List pages
-- `POST /` - Create page
-- `PUT /:id` - Update page
-- `DELETE /:id` - Delete page
-
-#### `/api/auth`
-- `POST /login` - User login
-- `POST /logout` - User logout
-- `GET /me` - Get current user
-
-## Common Patterns
-
-### 1. Adding a New Data Hook
-
-Create in `src/hooks/useDatabase.ts`:
+**Lego-Style Composition**: Renderers MUST recursively delegate children:
 ```typescript
-export function useMyData(options) {
-  return useQuery({
-    queryKey: ['myData', options],
-    queryFn: async () => {
-      const response = await databaseApi.myEndpoint(options);
-      return response.data;
-    },
-    staleTime: 5000,
-  });
-}
+// Builder (React)
+{component.children?.map(child => (
+  <ComponentRenderer key={child.id} component={child} />
+))}
+
+// SSR (Hono)
+const childrenHtml = children.map(c => renderComponent(c)).join('');
 ```
 
-### 2. Adding a New API Endpoint
+### 4.3 Data Layer
 
-Add route in `fastapi-backend/app/routers/`:
+**Automatic FK Joins**: `useDatabase.ts` automatically resolves foreign key relationships in data binding.
+
+**Release-Before-IO Pattern** (prevents connection pool exhaustion):
 ```python
-@router.get("/my-endpoint")
-async def my_endpoint(request: Request, db: Session = Depends(get_db)):
-    try:
-        # Implementation
-        return {"success": True, "data": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# 1. Fetch data quickly
+db = SessionLocal()
+try:
+    page = db.query(Page).filter(Page.id == page_id).first()
+    db.expunge(page)  # Detach from session
+finally:
+    db.close()  # RELEASE CONNECTION
+
+# 2. Slow I/O without holding connection
+async with httpx.AsyncClient() as client:
+    await client.post(edge_url, json=payload)  # Now safe!
 ```
 
-## Development Workflow
+### 4.4 Styling System
 
-### Running Locally
+**Visual CSS Engine**: Metadata-driven styling from `src/lib/styles/configs.ts`
+- Preset properties (colors, spacing, typography)
+- Responsive breakpoints (mobile/tablet/desktop)
+- `stylesData` in Builder → `styles` after publish
 
-**Terminal 1 - Backend (FastAPI)**:
+> [!IMPORTANT]
+> `stylesData` is a builder-only structure and **MUST NOT appear in Edge runtime**.
+
+### 4.5 Publish Pipeline
+
+| Step | Function | Description |
+|------|----------|-------------|
+| 1 | `normalize_binding_location()` | Move `props.binding` → `component.binding` |
+| 2 | `map_styles_schema()` | Convert `stylesData` → `styles` |
+| 3 | `enrich_binding_with_data_request()` | Pre-compute HTTP request spec |
+| 4 | `collect_icons_from_component()` | Gather all icon names |
+| 5 | `fetch_icons_batch()` | Pre-render SVGs from CDN |
+| 6 | `inject_icon_svg()` | Embed `iconSvg` in props |
+| 7 | `remove_nulls()` | Clean for Zod validation |
+
+**Icon Caching (L1/L2/L3)**:
+- L1: In-memory `_ICON_CACHE` (instant)
+- L2: Redis with 30-day TTL
+- L3: CDN fetch (`unpkg.com/lucide-static`)
+
+### 4.6 Variable Scopes (LiquidJS Templating)
+
+| Scope | Description | Example |
+|-------|-------------|---------|
+| `page` | Page-level variables | `{{ page.title }}` |
+| `session` | Supabase session | `{{ session.user.email }}` |
+| `cookies` | Browser cookies | `{{ cookies.theme }}` |
+| `visitor` | Client context | `{{ visitor.country }}` |
+| `query` | URL parameters | `{{ query.utm_source }}` |
+
+---
+
+## 5. API Contract (Pydantic ↔ Zod)
+
+### 5.1 Mirrored Schema Files
+
+| FastAPI | Edge | 
+|---------|------|
+| `fastapi-backend/app/schemas/publish.py` | `services/edge/src/schemas/publish.ts` |
+
+Both files explicitly state: *"These mirror the [Zod/Pydantic] schemas in [Hono/FastAPI]"*
+
+### 5.2 Key Schemas
+
+| Schema | Purpose |
+|--------|---------|
+| `PublishPageRequest` / `PublishPageSchema` | Page bundle to Edge |
+| `DataRequest` / `DataRequestSchema` | Pre-computed HTTP fetch |
+| `ComponentBinding` / `ComponentBindingSchema` | Data bindings |
+| `PageComponent` / `PageComponentSchema` | Recursive component tree |
+
+### 5.3 Contract Rules
+
+| Rule | Description |
+|------|-------------|
+| **Mirror Changes** | Any Pydantic change MUST update Zod |
+| **Use Aliases** | `Field(..., alias="camelCase")` for JSON compatibility |
+| **Nullish Matching** | Zod `.nullish()` = Pydantic `Optional[...] = None` |
+| **No Secrets** | Only `anonKey` and `secretEnvVar` name published |
+
+### 5.4 OpenAPI Specification
+
+- Edge uses `@hono/zod-openapi` with OpenAPI 3.1.0
+- API docs: `GET /api/openapi.json`
+- Swagger UI: `GET /api/docs`
+
+---
+
+## 6. Database Migrations (Alembic)
+
+### 6.1 Single Migration System
+
+Alembic is the ONLY migration system. Located in `fastapi-backend/alembic/versions/`.
+
+> [!NOTE]
+> Migrations are written assuming SQLAlchemy models may be async, but **Alembic operations are always synchronous**. Never use `await` inside migration files.
+
+### 6.2 Auto-Deployment
+
 ```bash
+# docker_entrypoint.sh runs on container start
+alembic upgrade head
+```
+
+### 6.3 Dialect-Agnostic Rules
+
+```python
+def upgrade():
+    conn = op.get_bind()
+    dialect = conn.dialect.name  # 'sqlite' or 'postgresql'
+    now_func = "datetime('now')" if dialect == 'sqlite' else "NOW()"
+```
+
+| Rule | SQLite | PostgreSQL |
+|------|--------|------------|
+| DateTime | `datetime('now')` | `NOW()` |
+| Boolean | Python `True`/`False` | Same |
+| Enum | `native_enum=False` | Avoids type issues |
+| ALTER TABLE | `render_as_batch=True` | Direct OK |
+
+### 6.4 Best Practices
+
+1. Check table existence before CREATE
+2. Include both `upgrade()` and `downgrade()`
+3. Never edit deployed migrations
+4. Test locally before deploying
+
+---
+
+## 7. Performance & Reliability
+
+### 7.1 Database Pool Management
+
+**Problem**: Holding connections during slow I/O exhausts the pool.
+**Solution**: Release-Before-IO pattern (see Section 4.3).
+
+### 7.2 Redis Caching
+
+**Strategy**: HTTP-First Unified via `@upstash/redis`
+
+| Cache Layer | Location | TTL |
+|-------------|----------|-----|
+| React Query | Browser | 5 min (stale) |
+| Edge Redis | L2 | 60s (data), 30d (icons) |
+
+### 7.3 Icon Pre-rendering
+
+Icons are fetched at publish time, NOT at Edge runtime. This eliminates CDN latency for page renders.
+
+---
+
+## 8. Tech Stack
+
+### Frontend
+- React 18, TypeScript, Vite
+- Tailwind CSS, shadcn/ui
+- Zustand, TanStack Query
+- @dnd-kit (drag & drop)
+
+### Backend
+- FastAPI, Python 3.11+
+- SQLAlchemy (async), Alembic
+- Pydantic v2
+
+### Edge Engine
+- Hono (OpenAPI)
+- Drizzle ORM, SQLite/Turso
+- LiquidJS (templating)
+- @upstash/redis (HTTP)
+
+---
+
+## 9. Directory Structure
+
+```
+frontbase/
+├── src/                          # React frontend
+│   ├── components/
+│   │   ├── builder/              # Page builder
+│   │   │   ├── registry/         # Component registry
+│   │   │   ├── renderers/        # Component renderers
+│   │   │   └── panels/           # Properties, layers, etc.
+│   │   └── dashboard/            # Admin UI
+│   ├── hooks/                    # React Query hooks
+│   ├── stores/                   # Zustand stores
+│   └── lib/styles/               # Visual CSS engine
+├── fastapi-backend/              # Python backend
+│   ├── app/
+│   │   ├── routers/              # API routes
+│   │   ├── schemas/              # Pydantic schemas
+│   │   ├── models/               # SQLAlchemy models
+│   │   └── services/             # Business logic
+│   └── alembic/                  # Database migrations
+├── services/edge/                # Hono Edge Engine
+│   └── src/
+│       ├── routes/               # API handlers
+│       ├── schemas/              # Zod schemas
+│       ├── ssr/                  # SSR rendering
+│       ├── cache/                # Redis module
+│       └── storage/              # File storage
+└── memory-bank/                  # Project documentation
+```
+
+---
+
+## 10. API Routes
+
+### FastAPI Backend (`:8000`)
+| Route | Purpose |
+|-------|---------|
+| `POST /api/auth/login` | Authentication |
+| `GET /api/pages` | List pages |
+| `POST /api/pages/{id}/publish/` | Publish to Edge |
+| `GET /api/database/tables` | List tables |
+| `GET /api/project` | Project settings |
+
+### Edge Engine (`:3002`)
+| Route | Purpose |
+|-------|---------|
+| `GET /api/health` | Health check |
+| `POST /api/import` | Receive published page |
+| `POST /api/data/execute` | Execute DataRequest |
+| `GET /{slug}` | Render SSR page |
+| `GET /api/docs` | Swagger UI |
+
+---
+
+## 11. Development Workflow
+
+### Local Development
+
+```bash
+# Terminal 1: Backend
 cd fastapi-backend
-# Ensure you have activated your venv!
-# Windows: .\venv\Scripts\activate
-# Mac/Linux: source venv/bin/activate
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
+.\venv\Scripts\activate
+python -m uvicorn main:app --reload --port 8000
 
-**Terminal 2 - Edge Engine (Hono)**:
-```bash
+# Terminal 2: Frontend
+npm run dev
+
+# Terminal 3: Edge (optional)
 cd services/edge
 npm run dev
-# Runs on http://localhost:3002
-# Swagger UI: http://localhost:3002/docs
 ```
 
-**Terminal 3 - Frontend (Vite)**:
+### Docker (Production)
+
 ```bash
-npm run dev
-# Runs on http://localhost:5173
+docker-compose up -d
 ```
 
-> **Note**: Actions Engine is optional for basic development but required for testing workflows.
-> See `memory-bank/actionsArchitecture.md` for full architecture details.
+---
 
-### Running with Docker (Production)
+## 12. Documentation Discipline
 
-**Direct Deployment (VPS)**:
-```bash
-# Start unified environment (FastAPI + Frontend + Redis)
-docker-compose up -d --build
-```
+### Authority Hierarchy
 
-**Legacy/Reference Environment**:
-```bash
-# Start legacy setup (Express)
-docker-compose -f docker-compose.legacy.yml up -d --build
-```
+1. **agent.md** — Non-negotiable rules (this file)
+2. **memory-bank/*.md** — Implementation patterns and details
+3. **Code comments & README** — Local implementation context
 
-### Database Migrations (Alembic)
+### Maintenance Rules
 
-**Automatic Deployment**: Migrations run automatically on container start via `docker_entrypoint.sh`. No manual intervention needed on VPS.
+| Action | Update Required |
+|--------|-----------------|
+| New invariant discovered | This file + memory-bank/decisionLog.md |
+| Pattern changed | memory-bank/systemPatterns.md |
+| Schema changed | Both Pydantic AND Zod files |
+| Feature completed | memory-bank/progress.md |
 
-**Local Development Workflow**:
-```bash
-cd fastapi-backend
+### Memory Bank Files
 
-# 1. After changing models.py, generate a migration:
-alembic revision --autogenerate -m "Add xyz column"
+| File | Purpose | Update Trigger |
+|------|---------|----------------|
+| `activeContext.md` | Current session state | Every session |
+| `progress.md` | Feature completion log | Per feature |
+| `systemPatterns.md` | Recurring code patterns | Pattern changes |
+| `decisionLog.md` | Architectural decisions | Major decisions |
+| `database_patterns.md` | SQLite/PostgreSQL patterns | DB changes |
+| `edgeArchitecture.md` | Edge Engine details | Edge changes |
+| `redisArchitecture.md` | Redis strategy | Cache changes |
+| `sprints.md` | Sprint planning | Sprint updates |
 
-# 2. Review the generated script in alembic/versions/
-# WARNING: Auto-generate can be aggressive - always review!
+---
 
-# 3. Test locally:
-alembic upgrade head
+## 13. References
 
-# 4. Commit and push - VPS will apply automatically on deploy
-```
+For detailed implementation patterns, see:
 
-**Key Files**:
-- `alembic/env.py` - Alembic configuration (uses SYNC_DATABASE_URL)
-- `alembic/versions/` - Migration scripts
-- `docker_entrypoint.sh` - Runs `alembic upgrade head` before app start
+| Topic | File |
+|-------|------|
+| System Patterns | `memory-bank/systemPatterns.md` |
+| Edge Architecture | `memory-bank/edgeArchitecture.md` |
+| Database Patterns | `memory-bank/database_patterns.md` |
+| Redis Architecture | `memory-bank/redisArchitecture.md` |
+| Development Patterns | `memory-bank/developmentPatterns.md` |
+| LiquidJS Templating | `memory-bank/liquidjs_templating_guide.md` |
+| Alembic Migrations | `fastapi-backend/MIGRATIONS.md` |
+| Storage Providers | `services/edge/src/storage/README.md` |
+| Redis Cache Module | `services/edge/src/cache/README.md` |
 
-**SQLite Gotchas**:
-- Use `render_as_batch=True` in env.py for ALTER TABLE support
-- Always provide `server_default` when adding NOT NULL columns to populated tables
-- Name all constraints explicitly (no `None` constraint names)
+---
 
-### PostgreSQL Production Best Practices
-**1. Robust Migrations (Idempotency)**
-- **Problem**: SQLite is permissive (allows missing columns often), but Postgres is strict (`UndefinedColumnError`).
-- **Solution**: Use "Repair Migrations" when schema drift occurs.
-- **Pattern**: Use raw SQL with `IF NOT EXISTS` to ensure state without failing if already applied.
-    ```python
-    def upgrade():
-        # Use autocommit_block for safe DDL (prevents transaction aborts on failure)
-        with op.get_context().autocommit_block():
-            op.execute("ALTER TABLE my_table ADD COLUMN IF NOT EXISTS my_col TEXT;")
-    ```
-
-**2. Handling Schema Drift**
-- If a migration fails on VPS but works locally, checking `alembic_version` isn't enough.
-- **Diagnostics**: Check logs for specific missing columns.
-- **Fix**: Create a new migration that *conditionally* adds the missing elements. Do NOT edit old migrations (breaks history).
-
-### Performance Engineering
-
-**1. Connection Pool Management (QueuePool)**
-- **Critical Rule**: NEVER hold a Database Session open during slow I/O operations (external API calls, S3 uploads).
-- **Pattern**: "Release-Before-IO". Explicitly close the DB session before awaiting async IO, then re-open a new session if needed.
-    ```python
-    # ❌ BAD: Holds connection during slow request
-    async def publish(db: Session = Depends(get_db)):
-        data = await fetch_slow_data() # DB connection sits idle but checked out!
-
-    # ✅ GOOD: Release early
-    async def publish():
-        db = SessionLocal()
-        # ... fetch DB data ...
-        db.close() # RELEASE CONNECTION
-        
-        data = await fetch_slow_data() # Pool is free for other users
-    ```
-
-**2. Multi-Tier Icon Caching**
-- **Architecture**: L1 (Memory) → L2 (Redis) → L3 (CDN).
-- **L1 (Memory)**: Global Python Dict. Instant access (0ms), cleared on restart.
-- **L2 (Redis)**: Shared across instances, persists across restarts (30-day TTL).
-- **L3 (CDN)**: Fallback source (Lucide Unpkg).
-- **Fallback**: System degrades gracefully. If Redis is down, it uses Memory+CDN automatically.
-
-**3. Refactored Endpoints (Release-Before-IO Applied)**
-- `database.py`: `get_table_data`, `get_distinct_values`, `advanced_query`, `get_supabase_tables`, `get_tables`, `get_table_schema`
-- `project.py`: `update_project_endpoint`
-- `crud.py`: `delete_page`, `permanent_delete_page`
-- `publish.py`: `publish_page`, `convert_to_publish_schema`
-
-## Troubleshooting
-
-### Common Issues
-- **FK columns show dashes**: Run `supabase_setup.sql` in Supabase
-- **Data not loading**: Check Supabase connection in Settings
-- **Build errors**: Clear `node_modules/.vite` cache
-- **RLS config errors**: Ensure `columnMapping` uses `authUserIdColumn` (not `authIdColumn`)
-
-### Debugging
-- React Query DevTools: Shows cache state
-- Browser Network tab: Verify API calls
-- FastAPI `/docs`: Interactive API documentation
-
-## Future Enhancements
-
-Documented in `memory-bank/progress.md`:
-- User-configurable FK display columns
-- Optimized column fetching
-- Multi-level relation support
-- Undo/redo for builder actions
+*Last Updated: 2026-01-31*

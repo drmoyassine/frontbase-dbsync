@@ -150,32 +150,41 @@ async function renderComponent(
         ? (await Promise.all(children.map(child => renderComponent(child, context, depth + 1)))).join('')
         : '';
 
+    // Build responsive CSS for viewport-specific style overrides (font-size, colors, etc.)
+    const responsiveCSS = component.styles ? buildResponsiveCSS(id, component.styles) : '';
+    // Build visibility CSS for hidden viewports
+    const visibilityCSS = buildVisibilityCSS(id, component.visibility);
+    // Combine CSS - prepend to component HTML
+    const combinedCSS = responsiveCSS + visibilityCSS;
+
     switch (classification) {
         case 'static':
-            return renderStaticComponent(type, id, resolvedProps, childrenHtml);
+            return combinedCSS + renderStaticComponent(type, id, resolvedProps, childrenHtml);
 
         case 'interactive':
-            return renderInteractiveComponent(type, id, resolvedProps, childrenHtml);
+            return combinedCSS + renderInteractiveComponent(type, id, resolvedProps, childrenHtml);
 
         case 'data':
             // Merge binding into props so renderDataComponent can access it
             if (binding) {
                 resolvedProps.binding = binding;
             }
-            return renderDataComponent(type, id, resolvedProps, childrenHtml);
+            return combinedCSS + renderDataComponent(type, id, resolvedProps, childrenHtml);
 
         case 'layout':
-            // Render layout components with proper styles and visibility
+            // Render layout components with proper styles and visibility (has its own CSS handling)
             return renderLayoutComponent(type, id, resolvedProps, component.styles || {}, childrenHtml, component.visibility);
 
         case 'landing':
             // Render landing page section components
-            return renderLandingComponent(type, id, resolvedProps, component.styles);
+            return combinedCSS + renderLandingComponent(type, id, resolvedProps, component.styles);
 
         default:
             // Unknown component - render as a generic div with data attribute
-            return `<div data-fb-component="${type}" data-fb-id="${id}" class="fb-unknown">${childrenHtml}</div>`;
+            return combinedCSS + `<div data-fb-component="${type}" data-fb-id="${id}" class="fb-unknown">${childrenHtml}</div>`;
     }
+
+
 }
 
 /**

@@ -4,3 +4,4 @@
  */
 
 export { NavbarProperties } from './NavbarProperties';
+export { FooterProperties } from './FooterProperties';

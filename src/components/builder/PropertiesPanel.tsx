@@ -40,7 +40,7 @@ import {
 } from './properties/basic';
 
 // Landing Components
-import { NavbarProperties } from './properties/landing';
+import { NavbarProperties, FooterProperties } from './properties/landing';
 
 // Section Components
 import { LogoCloudProperties } from './properties/LogoCloudProperties';
@@ -144,6 +144,9 @@ export const PropertiesPanel = () => {
 
       case 'Navbar':
         return <NavbarProperties componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} project={project} />;
+
+      case 'Footer':
+        return <FooterProperties componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} project={project} />;
 
       // === TYPOGRAPHY ===
       case 'Heading':

@@ -56,6 +56,7 @@ export const COMPONENT_REGISTRY: Record<string, React.FC<any>> = {
     Navbar: LandingRenderers.NavbarRenderer,
     LogoCloud: LandingRenderers.LogoCloudRenderer,
     FeatureSection: LandingRenderers.FeatureSectionRenderer,
+    Footer: LandingRenderers.FooterRenderer,
 
     // Data Components
     DataTable: DataRenderers.DataTableRenderer,

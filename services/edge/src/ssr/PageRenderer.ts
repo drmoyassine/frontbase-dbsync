@@ -419,7 +419,12 @@ function buildInlineStyles(props: Record<string, unknown>, styles: Record<string
 
         // Auto-append px to numeric values for length properties
         let cssValue = String(value);
-        const unitlessProps = ['opacity', 'z-index', 'flex-grow', 'flex-shrink', 'order', 'line-height', 'font-weight', 'flex'];
+        const unitlessProps = [
+            'opacity', 'z-index', 'flex', 'flex-grow', 'flex-shrink', 'order',
+            'line-height', 'font-weight',
+            'grid-column', 'grid-row', 'grid-area', 'grid-column-start', 'grid-column-end',
+            'grid-row-start', 'grid-row-end', 'column-count', 'fill-opacity', 'stroke-opacity'
+        ];
         if (/^-?\d+(\.\d+)?$/.test(cssValue) && !unitlessProps.includes(cssKey)) {
             cssValue += 'px';
         }
@@ -501,7 +506,12 @@ function buildResponsiveCSS(componentId: string, styles: Record<string, any>): s
 
             // Auto-append px to numeric values for length properties
             let cssValue = String(value);
-            const unitlessProps = ['opacity', 'z-index', 'flex-grow', 'flex-shrink', 'order', 'line-height', 'font-weight', 'flex'];
+            const unitlessProps = [
+                'opacity', 'z-index', 'flex', 'flex-grow', 'flex-shrink', 'order',
+                'line-height', 'font-weight',
+                'grid-column', 'grid-row', 'grid-area', 'grid-column-start', 'grid-column-end',
+                'grid-row-start', 'grid-row-end', 'column-count', 'fill-opacity', 'stroke-opacity'
+            ];
             if (/^-?\d+(\.\d+)?$/.test(cssValue) && !unitlessProps.includes(cssKey)) {
                 cssValue += 'px';
             }

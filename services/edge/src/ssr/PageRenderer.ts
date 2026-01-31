@@ -416,7 +416,15 @@ function buildInlineStyles(props: Record<string, unknown>, styles: Record<string
         if (typeof value === 'object') continue;
 
         const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-        cssProps[cssKey] = String(value);
+
+        // Auto-append px to numeric values for length properties
+        let cssValue = String(value);
+        const unitlessProps = ['opacity', 'z-index', 'flex-grow', 'flex-shrink', 'order', 'line-height', 'font-weight', 'flex'];
+        if (/^-?\d+(\.\d+)?$/.test(cssValue) && !unitlessProps.includes(cssKey)) {
+            cssValue += 'px';
+        }
+
+        cssProps[cssKey] = cssValue;
     }
 
     return Object.entries(cssProps)
@@ -490,7 +498,15 @@ function buildResponsiveCSS(componentId: string, styles: Record<string, any>): s
             if (typeof value === 'object') continue;
 
             const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-            props.push(`${cssKey}:${withImp(value)}`);
+
+            // Auto-append px to numeric values for length properties
+            let cssValue = String(value);
+            const unitlessProps = ['opacity', 'z-index', 'flex-grow', 'flex-shrink', 'order', 'line-height', 'font-weight', 'flex'];
+            if (/^-?\d+(\.\d+)?$/.test(cssValue) && !unitlessProps.includes(cssKey)) {
+                cssValue += 'px';
+            }
+
+            props.push(`${cssKey}:${withImp(cssValue)}`);
         }
         return props.join(';');
     };

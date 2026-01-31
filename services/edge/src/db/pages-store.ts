@@ -27,6 +27,9 @@ export const publishedPages = sqliteTable('published_pages', {
     seoData: text('seo_data'),
     datasources: text('datasources'),
 
+    // CSS Bundle (tree-shaken CSS from FastAPI publish)
+    cssBundle: text('css_bundle'),
+
     // Versioning
     version: integer('version').notNull().default(1),
     publishedAt: text('published_at').notNull(),
@@ -77,6 +80,7 @@ export async function initPagesDb() {
             layout_data TEXT NOT NULL,
             seo_data TEXT,
             datasources TEXT,
+            css_bundle TEXT,
             version INTEGER NOT NULL DEFAULT 1,
             published_at TEXT NOT NULL,
             is_public INTEGER NOT NULL DEFAULT 1,
@@ -85,6 +89,14 @@ export async function initPagesDb() {
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    // Migration: Add css_bundle column if it doesn't exist
+    try {
+        await database.run(sql`ALTER TABLE published_pages ADD COLUMN css_bundle TEXT`);
+        console.log('📄 Added css_bundle column to published_pages');
+    } catch (e) {
+        // Column already exists, ignore
+    }
 
     console.log('📄 Published pages database initialized');
 }
@@ -110,6 +122,7 @@ export async function upsertPublishedPage(page: PublishPage): Promise<{ success:
         layoutData: JSON.stringify(page.layoutData),
         seoData: page.seoData ? JSON.stringify(page.seoData) : null,
         datasources: page.datasources ? JSON.stringify(page.datasources) : null,
+        cssBundle: page.cssBundle || null,
         version: page.version,
         publishedAt: page.publishedAt,
         isPublic: page.isPublic,
@@ -163,6 +176,7 @@ export async function getPublishedPageBySlug(slug: string): Promise<PublishPage 
         layoutData: JSON.parse(record.layoutData) as PageLayout,
         seoData: record.seoData ? JSON.parse(record.seoData) as SeoData : undefined,
         datasources: record.datasources ? JSON.parse(record.datasources) as DatasourceConfig[] : undefined,
+        cssBundle: record.cssBundle || undefined,
         version: record.version,
         publishedAt: record.publishedAt,
         isPublic: record.isPublic,
@@ -192,6 +206,7 @@ export async function getHomepage(): Promise<PublishPage | null> {
         layoutData: JSON.parse(record.layoutData) as PageLayout,
         seoData: record.seoData ? JSON.parse(record.seoData) as SeoData : undefined,
         datasources: record.datasources ? JSON.parse(record.datasources) as DatasourceConfig[] : undefined,
+        cssBundle: record.cssBundle || undefined,
         version: record.version,
         publishedAt: record.publishedAt,
         isPublic: record.isPublic,

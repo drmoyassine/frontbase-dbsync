@@ -38,6 +38,7 @@ interface PageData {
     isHomepage: boolean;
     layoutData: PageLayoutData;
     datasources?: Record<string, unknown>[];
+    cssBundle?: string;  // Tree-shaken CSS from FastAPI publish
 }
 
 // Response schemas
@@ -262,8 +263,10 @@ function generateHtmlDocument(
       }
     </script>
     
-    <!-- Base styles -->
+    <!-- Base styles (from CSS Bundle or fallback) -->
     <style>
+        ${page.cssBundle || `
+        /* FALLBACK CSS - Used when cssBundle is not available (legacy pages) */
         :root {
             --background: 0 0% 100%;
             --foreground: 222.2 84% 4.9%;
@@ -288,11 +291,8 @@ function generateHtmlDocument(
         }
         *, *::before, *::after { box-sizing: border-box; }
         body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }
-        /* Page container - defaults to flex-column like builder */
         .fb-page { min-height: 100vh; display: flex; flex-direction: column; padding: 2rem; gap: 1rem; }
-        /* Ensure buttons display as inline-flex but with vertical margins when in column layout */
         .fb-button { display: inline-flex; align-items: center; justify-content: center; }
-        /* Headings with proper sizing to match shadcn */
         .fb-heading { margin: 0; }
         .fb-heading-1 { font-size: 2.25rem; font-weight: 700; }
         .fb-heading-2 { font-size: 1.875rem; font-weight: 600; }
@@ -300,20 +300,18 @@ function generateHtmlDocument(
         .fb-loading { opacity: 0.7; pointer-events: none; }
         .fb-skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: skeleton 1.5s infinite; }
         @keyframes skeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-        
-        /* Logo Cloud Marquee Animation */
         @keyframes marquee-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
         .logo-marquee-container { overflow: hidden; width: 100%; mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
         .logo-marquee-track { display: flex; width: max-content; animation: marquee-scroll var(--marquee-speed, 20s) linear infinite; }
         .logo-marquee-pause-on-hover:hover .logo-marquee-track { animation-play-state: paused; }
         .logo-marquee-item { flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-        /* Marquee on mobile only */
         .logo-marquee-mobile-only .logo-marquee-track { animation: none; flex-wrap: wrap; justify-content: center; gap: 2rem; width: 100%; }
         .logo-marquee-mobile-only .logo-marquee-container { mask-image: none; -webkit-mask-image: none; }
         @media (max-width: 640px) {
             .logo-marquee-mobile-only .logo-marquee-track { animation: marquee-scroll var(--marquee-speed, 20s) linear infinite; flex-wrap: nowrap; justify-content: flex-start; gap: 0; width: max-content; }
             .logo-marquee-mobile-only .logo-marquee-container { mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
         }
+        `}
     </style>
 </head>
 <body>

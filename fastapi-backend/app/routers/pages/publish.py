@@ -157,6 +157,13 @@ async def convert_to_publish_schema(page: Page, datasources: list) -> PublishPag
         converted_content = [inject_icon_svg(c, icon_map) for c in converted_content]
     # ============================
     
+    # ==== CSS BUNDLING ====
+    # Tree-shake CSS: only include styles for components used on this page
+    from app.services.css_bundler import bundle_css_for_page_minified
+    css_bundle = await bundle_css_for_page_minified(converted_content)
+    print(f"[publish] CSS bundle generated: {len(css_bundle)} bytes")
+    # ======================
+    
     # Build PageLayout
     page_layout = PageLayout(
         content=[PageComponent(**c) for c in converted_content],
@@ -183,6 +190,7 @@ async def convert_to_publish_schema(page: Page, datasources: list) -> PublishPag
         layoutData=page_layout,
         seoData=seo_data,
         datasources=datasources if datasources else None,
+        cssBundle=css_bundle,  # Tree-shaken CSS for this page
         version=1,  # TODO: Increment on re-publish
         publishedAt=datetime.utcnow().isoformat() + "Z",
         isPublic=page.is_public,

@@ -201,6 +201,9 @@ class PublishPageRequest(BaseModel):
     # Datasources (non-sensitive config only)
     datasources: Optional[List[DatasourceConfig]] = None
     
+    # CSS Bundle (tree-shaken, component-specific CSS)
+    css_bundle: Optional[str] = Field(None, alias="cssBundle")
+    
     # Versioning
     version: int = 1
     published_at: str = Field(..., alias="publishedAt")

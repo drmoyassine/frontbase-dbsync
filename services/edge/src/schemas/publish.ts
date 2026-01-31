@@ -209,6 +209,9 @@ export const PublishPageSchema = z.object({
     // Datasources (non-sensitive config only)
     datasources: z.array(DatasourceConfigSchema).nullable().optional(),
 
+    // CSS Bundle (tree-shaken, component-specific CSS from FastAPI)
+    cssBundle: z.string().nullable().optional(),
+
     // Versioning
     version: z.number().int().min(1),
     publishedAt: z.string().datetime(),

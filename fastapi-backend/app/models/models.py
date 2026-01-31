@@ -48,6 +48,7 @@ class Project(Base):
     description = Column(Text)
     app_url = Column(String)  # Public URL for publish/preview
     favicon_url = Column(String)  # Custom favicon URL (uploaded to storage)
+    logo_url = Column(String)  # Custom logo URL (uploaded to storage)
     supabase_url = Column(String)
     supabase_anon_key = Column(String)
     supabase_service_key_encrypted = Column(String)

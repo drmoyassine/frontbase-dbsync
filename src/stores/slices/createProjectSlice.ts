@@ -19,6 +19,7 @@ function transformProjectData(apiProject: any): ProjectConfig {
         ...apiProject,
         appUrl: apiProject.app_url || apiProject.appUrl,
         faviconUrl: apiProject.favicon_url || apiProject.faviconUrl,
+        logoUrl: apiProject.logo_url || apiProject.logoUrl,
         supabaseUrl: apiProject.supabase_url || apiProject.supabaseUrl,
         supabaseAnonKey: apiProject.supabase_anon_key || apiProject.supabaseAnonKey,
         usersConfig: apiProject.users_config || apiProject.usersConfig,

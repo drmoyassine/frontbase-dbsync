@@ -33,24 +33,28 @@ export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps
     });
     const [isSaving, setIsSaving] = useState(false);
 
-    // Sync form with project data - only on mount or project ID change
+    // Track which fields have been modified by user to prevent race conditions
+    const userModifiedFieldsRef = React.useRef<Set<string>>(new Set());
+
+    // Sync form with project data - sync when project changes, but preserve user edits
     useEffect(() => {
         if (project) {
-            setFormData({
-                name: project.name || '',
-                appUrl: project.appUrl || '',
-                faviconUrl: project.faviconUrl || '',
-                logoUrl: project.logoUrl || '',
-                description: project.description || '',
-            });
+            setFormData(prev => ({
+                // Only update fields that haven't been modified by the user
+                name: userModifiedFieldsRef.current.has('name') ? prev.name : (project.name || ''),
+                appUrl: userModifiedFieldsRef.current.has('appUrl') ? prev.appUrl : (project.appUrl || ''),
+                faviconUrl: project.faviconUrl || '', // Always sync favicon (auto-saved)
+                logoUrl: project.logoUrl || '', // Always sync logo (auto-saved)
+                description: userModifiedFieldsRef.current.has('description') ? prev.description : (project.description || ''),
+            }));
         }
-    }, [project?.id]); // Only sync on project ID change, not every project update
+    }, [project]); // Sync on any project update
 
-    // Handle favicon URL changes from AssetUploader
+    // Handle favicon URL changes from AssetUploader (auto-saved, no user tracking needed)
     const handleFaviconChange = async (url: string) => {
         setFormData(prev => ({ ...prev, faviconUrl: url }));
 
-        // Auto-save to database - pass empty string to clear, not undefined
+        // Auto-save to database
         try {
             await updateProjectInDatabase({ faviconUrl: url });
         } catch (error) {
@@ -58,7 +62,7 @@ export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps
         }
     };
 
-    // Handle logo URL changes from AssetUploader
+    // Handle logo URL changes from AssetUploader (auto-saved, no user tracking needed)
     const handleLogoChange = async (url: string) => {
         setFormData(prev => ({ ...prev, logoUrl: url }));
 
@@ -70,17 +74,25 @@ export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps
         }
     };
 
+    // Handle text field changes with user modification tracking
+    const handleFieldChange = (field: string, value: string) => {
+        userModifiedFieldsRef.current.add(field);
+        setFormData(prev => ({ ...prev, [field]: value }));
+    };
+
     const handleSave = async () => {
         setIsSaving(true);
         try {
+            // Only save the text fields - favicon and logo are auto-saved
+            // This prevents accidentally overwriting them with stale state
             await updateProjectInDatabase({
                 name: formData.name,
                 appUrl: formData.appUrl || undefined,
-                faviconUrl: formData.faviconUrl || undefined,
-                logoUrl: formData.logoUrl || undefined,
                 description: formData.description || undefined,
             });
             toast.success('Project settings saved');
+            // Clear user modification tracking after successful save
+            userModifiedFieldsRef.current.clear();
         } catch (error) {
             toast.error('Failed to save project settings');
         } finally {
@@ -96,7 +108,7 @@ export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps
                     id="project-name"
                     placeholder="My Website"
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(e) => handleFieldChange('name', e.target.value)}
                 />
             </div>
             <div className="space-y-2">
@@ -105,7 +117,7 @@ export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps
                     id="app-url"
                     placeholder="https://mysite.com"
                     value={formData.appUrl}
-                    onChange={(e) => setFormData({ ...formData, appUrl: e.target.value })}
+                    onChange={(e) => handleFieldChange('appUrl', e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
                     Public URL for publish/preview. Leave empty to auto-detect.
@@ -141,7 +153,7 @@ export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps
                     placeholder="A description of your project..."
                     rows={2}
                     value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    onChange={(e) => handleFieldChange('description', e.target.value)}
                 />
             </div>
             <div className="pt-2">

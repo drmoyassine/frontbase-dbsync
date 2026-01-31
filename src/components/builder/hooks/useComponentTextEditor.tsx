@@ -21,14 +21,17 @@ export const useComponentTextEditor = (componentId: string | undefined) => {
     const createEditableText = (text: string, textProperty: string, className: string, style: React.CSSProperties = {}) => {
         if (isEditing) {
             return (
-                <InlineTextEditor
-                    value={text}
-                    onChange={(newText) => handleTextEdit(textProperty, newText)}
-                    onSave={handleTextEditEnd}
-                    onCancel={handleTextEditEnd}
-                    className={className}
-                    style={style}
-                />
+                // Wrapper with position:relative for the hidden measuring span inside InlineTextEditor
+                <span className="inline-block" style={{ position: 'relative' }}>
+                    <InlineTextEditor
+                        value={text}
+                        onChange={(newText) => handleTextEdit(textProperty, newText)}
+                        onSave={handleTextEditEnd}
+                        onCancel={handleTextEditEnd}
+                        className={className}
+                        style={style}
+                    />
+                </span>
             );
         }
 

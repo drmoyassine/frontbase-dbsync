@@ -109,7 +109,14 @@ export const FooterRenderer: React.FC<RendererProps> = ({
 
                     {/* Link Columns */}
                     {columns.length > 0 && (
-                        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:flex lg:gap-12">
+                        <div className={cn(
+                            "grid gap-6 sm:grid-cols-2 md:grid-cols-3 lg:flex lg:gap-12",
+                            {
+                                "grid-cols-1": !effectiveProps.mobileColumns || effectiveProps.mobileColumns === 1,
+                                "grid-cols-2": effectiveProps.mobileColumns === 2,
+                                "grid-cols-3": effectiveProps.mobileColumns === 3,
+                            }
+                        )}>
                             {columns.map((column: FooterColumn, colIndex: number) => (
                                 <div key={column.id || colIndex}>
                                     <h4 className="font-semibold mb-4">{column.title}</h4>

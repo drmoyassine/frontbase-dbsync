@@ -193,6 +193,8 @@ class SchemaService:
         
         Aggregates foreign_keys from all cached table schemas.
         """
+        import json
+        
         result = await db.execute(
             select(TableSchemaCache).where(
                 TableSchemaCache.datasource_id == datasource_id
@@ -203,7 +205,20 @@ class SchemaService:
         relationships = []
         for cached in cached_list:
             table_name = cached.table_name
-            for fk in (cached.foreign_keys or []):
+            
+            # Defensive: handle foreign_keys as string (legacy) or list
+            fk_data = cached.foreign_keys or []
+            if isinstance(fk_data, str):
+                try:
+                    fk_data = json.loads(fk_data)
+                except (json.JSONDecodeError, TypeError):
+                    fk_data = []
+            
+            for fk in fk_data:
+                # Skip if fk is not a dict (shouldn't happen, but defensive)
+                if not isinstance(fk, dict):
+                    continue
+                    
                 # Normalize FK format
                 constrained_cols = fk.get("constrained_columns", [])
                 referred_cols = fk.get("referred_columns", [])

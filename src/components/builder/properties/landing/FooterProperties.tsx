@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Trash2, Plus, GripVertical, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface FooterPropertiesProps {
     componentId: string;
@@ -160,6 +161,27 @@ export const FooterProperties: React.FC<FooterPropertiesProps> = ({
                         placeholder="A short description of your company"
                         rows={3}
                     />
+                </div>
+            </div>
+
+            {/* Layout Section */}
+            <div className="space-y-3 py-4 border-b border-2 border-red-500 bg-red-50">
+                <Label className="text-sm font-medium text-red-600">Layout (DEBUG MODE)</Label>
+                <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Mobile Columns</Label>
+                    <Select
+                        value={String(props.mobileColumns || 1)}
+                        onValueChange={(value) => updateComponentProp('mobileColumns', parseInt(value))}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select columns" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="1">1 Column (Stacked)</SelectItem>
+                            <SelectItem value="2">2 Columns</SelectItem>
+                            <SelectItem value="3">3 Columns</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
             </div>
 

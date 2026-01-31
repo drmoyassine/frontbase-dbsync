@@ -107,12 +107,41 @@ class ComponentBinding(BaseModel):
 # Page Component (Recursive)
 # =============================================================================
 
+class VisibilitySettings(BaseModel):
+    """Per-viewport visibility settings for responsive hiding"""
+    mobile: bool = True
+    tablet: bool = True
+    desktop: bool = True
+
+
+class ViewportOverrides(BaseModel):
+    """Style overrides per viewport (for responsive styling)"""
+    mobile: Optional[Dict[str, Any]] = None
+    tablet: Optional[Dict[str, Any]] = None
+    
+    class Config:
+        extra = "allow"  # Allow additional viewport names if needed
+
+
+class StylesData(BaseModel):
+    """Component styling data with viewport support"""
+    values: Optional[Dict[str, Any]] = None
+    activeProperties: Optional[List[str]] = None
+    stylingMode: Optional[str] = "visual"
+    viewportOverrides: Optional[ViewportOverrides] = None
+    
+    class Config:
+        extra = "allow"
+
+
 class PageComponent(BaseModel):
     """Recursive page component structure"""
     id: str
     type: str
     props: Optional[Dict[str, Any]] = None
-    styles: Optional[Dict[str, Any]] = None
+    styles: Optional[Dict[str, Any]] = None  # Legacy: direct styles
+    stylesData: Optional[StylesData] = None  # New: structured styles with overrides
+    visibility: Optional[VisibilitySettings] = None  # Per-viewport visibility
     children: Optional[List["PageComponent"]] = None
     binding: Optional[ComponentBinding] = None
     

@@ -1,0 +1,2462 @@
+{
+  "PageComponent": {
+    "$defs": {
+      "ColumnOverride": {
+        "description": "Column-specific overrides",
+        "properties": {
+          "visible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Visible"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Label"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Width"
+          },
+          "sortable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sortable"
+          },
+          "filterable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filterable"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Type"
+          }
+        },
+        "title": "ColumnOverride",
+        "type": "object"
+      },
+      "ComponentBinding": {
+        "description": "Data binding for data-driven components",
+        "properties": {
+          "componentId": {
+            "title": "Componentid",
+            "type": "string"
+          },
+          "datasourceId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Datasourceid"
+          },
+          "tableName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tablename"
+          },
+          "columns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Columns"
+          },
+          "columnOrder": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Columnorder"
+          },
+          "columnOverrides": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/ColumnOverride"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Columnoverrides"
+          },
+          "frontendFilters": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Frontendfilters"
+          },
+          "sorting": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sorting"
+          },
+          "pagination": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Pagination"
+          },
+          "filtering": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filtering"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filters"
+          },
+          "primaryKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Primarykey"
+          },
+          "foreignKeys": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/$defs/ForeignKey"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Foreignkeys"
+          },
+          "dataRequest": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DataRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "componentId"
+        ],
+        "title": "ComponentBinding",
+        "type": "object"
+      },
+      "DataRequest": {
+        "description": "Pre-computed HTTP request spec for data fetching.\nComputed at publish time so Hono doesn't need adapter logic.",
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "method": {
+            "default": "GET",
+            "title": "Method",
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Headers",
+            "type": "object"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body"
+          },
+          "resultPath": {
+            "default": "",
+            "title": "Resultpath",
+            "type": "string"
+          },
+          "flattenRelations": {
+            "default": true,
+            "title": "Flattenrelations",
+            "type": "boolean"
+          },
+          "queryConfig": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Queryconfig"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "DataRequest",
+        "type": "object"
+      },
+      "ForeignKey": {
+        "description": "Foreign key reference",
+        "properties": {
+          "column": {
+            "title": "Column",
+            "type": "string"
+          },
+          "referencedTable": {
+            "title": "Referencedtable",
+            "type": "string"
+          },
+          "referencedColumn": {
+            "title": "Referencedcolumn",
+            "type": "string"
+          }
+        },
+        "required": [
+          "column",
+          "referencedTable",
+          "referencedColumn"
+        ],
+        "title": "ForeignKey",
+        "type": "object"
+      },
+      "PageComponent": {
+        "description": "Recursive page component structure",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "props": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Props"
+          },
+          "styles": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Styles"
+          },
+          "stylesData": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/StylesData"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/VisibilitySettings"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "children": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/$defs/PageComponent"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Children"
+          },
+          "binding": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ComponentBinding"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "id",
+          "type"
+        ],
+        "title": "PageComponent",
+        "type": "object"
+      },
+      "StylesData": {
+        "additionalProperties": true,
+        "description": "Component styling data with viewport support",
+        "properties": {
+          "values": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Values"
+          },
+          "activeProperties": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Activeproperties"
+          },
+          "stylingMode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "visual",
+            "title": "Stylingmode"
+          },
+          "viewportOverrides": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ViewportOverrides"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "title": "StylesData",
+        "type": "object"
+      },
+      "ViewportOverrides": {
+        "additionalProperties": true,
+        "description": "Style overrides per viewport (for responsive styling)",
+        "properties": {
+          "mobile": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mobile"
+          },
+          "tablet": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tablet"
+          }
+        },
+        "title": "ViewportOverrides",
+        "type": "object"
+      },
+      "VisibilitySettings": {
+        "description": "Per-viewport visibility settings for responsive hiding",
+        "properties": {
+          "mobile": {
+            "default": true,
+            "title": "Mobile",
+            "type": "boolean"
+          },
+          "tablet": {
+            "default": true,
+            "title": "Tablet",
+            "type": "boolean"
+          },
+          "desktop": {
+            "default": true,
+            "title": "Desktop",
+            "type": "boolean"
+          }
+        },
+        "title": "VisibilitySettings",
+        "type": "object"
+      }
+    },
+    "allOf": [
+      {
+        "$ref": "#/$defs/PageComponent"
+      }
+    ]
+  },
+  "VisibilitySettings": {
+    "description": "Per-viewport visibility settings for responsive hiding",
+    "properties": {
+      "mobile": {
+        "default": true,
+        "title": "Mobile",
+        "type": "boolean"
+      },
+      "tablet": {
+        "default": true,
+        "title": "Tablet",
+        "type": "boolean"
+      },
+      "desktop": {
+        "default": true,
+        "title": "Desktop",
+        "type": "boolean"
+      }
+    },
+    "title": "VisibilitySettings",
+    "type": "object"
+  },
+  "ViewportOverrides": {
+    "additionalProperties": true,
+    "description": "Style overrides per viewport (for responsive styling)",
+    "properties": {
+      "mobile": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Mobile"
+      },
+      "tablet": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Tablet"
+      }
+    },
+    "title": "ViewportOverrides",
+    "type": "object"
+  },
+  "StylesData": {
+    "$defs": {
+      "ViewportOverrides": {
+        "additionalProperties": true,
+        "description": "Style overrides per viewport (for responsive styling)",
+        "properties": {
+          "mobile": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mobile"
+          },
+          "tablet": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tablet"
+          }
+        },
+        "title": "ViewportOverrides",
+        "type": "object"
+      }
+    },
+    "additionalProperties": true,
+    "description": "Component styling data with viewport support",
+    "properties": {
+      "values": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Values"
+      },
+      "activeProperties": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Activeproperties"
+      },
+      "stylingMode": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": "visual",
+        "title": "Stylingmode"
+      },
+      "viewportOverrides": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ViewportOverrides"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "title": "StylesData",
+    "type": "object"
+  },
+  "ComponentBinding": {
+    "$defs": {
+      "ColumnOverride": {
+        "description": "Column-specific overrides",
+        "properties": {
+          "visible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Visible"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Label"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Width"
+          },
+          "sortable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sortable"
+          },
+          "filterable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filterable"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Type"
+          }
+        },
+        "title": "ColumnOverride",
+        "type": "object"
+      },
+      "DataRequest": {
+        "description": "Pre-computed HTTP request spec for data fetching.\nComputed at publish time so Hono doesn't need adapter logic.",
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "method": {
+            "default": "GET",
+            "title": "Method",
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Headers",
+            "type": "object"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body"
+          },
+          "resultPath": {
+            "default": "",
+            "title": "Resultpath",
+            "type": "string"
+          },
+          "flattenRelations": {
+            "default": true,
+            "title": "Flattenrelations",
+            "type": "boolean"
+          },
+          "queryConfig": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Queryconfig"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "DataRequest",
+        "type": "object"
+      },
+      "ForeignKey": {
+        "description": "Foreign key reference",
+        "properties": {
+          "column": {
+            "title": "Column",
+            "type": "string"
+          },
+          "referencedTable": {
+            "title": "Referencedtable",
+            "type": "string"
+          },
+          "referencedColumn": {
+            "title": "Referencedcolumn",
+            "type": "string"
+          }
+        },
+        "required": [
+          "column",
+          "referencedTable",
+          "referencedColumn"
+        ],
+        "title": "ForeignKey",
+        "type": "object"
+      }
+    },
+    "description": "Data binding for data-driven components",
+    "properties": {
+      "componentId": {
+        "title": "Componentid",
+        "type": "string"
+      },
+      "datasourceId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Datasourceid"
+      },
+      "tableName": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Tablename"
+      },
+      "columns": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Columns"
+      },
+      "columnOrder": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Columnorder"
+      },
+      "columnOverrides": {
+        "anyOf": [
+          {
+            "additionalProperties": {
+              "$ref": "#/$defs/ColumnOverride"
+            },
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Columnoverrides"
+      },
+      "frontendFilters": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Frontendfilters"
+      },
+      "sorting": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Sorting"
+      },
+      "pagination": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Pagination"
+      },
+      "filtering": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Filtering"
+      },
+      "filters": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Filters"
+      },
+      "primaryKey": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Primarykey"
+      },
+      "foreignKeys": {
+        "anyOf": [
+          {
+            "items": {
+              "$ref": "#/$defs/ForeignKey"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Foreignkeys"
+      },
+      "dataRequest": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DataRequest"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "componentId"
+    ],
+    "title": "ComponentBinding",
+    "type": "object"
+  },
+  "PublishPageRequest": {
+    "$defs": {
+      "ColumnOverride": {
+        "description": "Column-specific overrides",
+        "properties": {
+          "visible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Visible"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Label"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Width"
+          },
+          "sortable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sortable"
+          },
+          "filterable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filterable"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Type"
+          }
+        },
+        "title": "ColumnOverride",
+        "type": "object"
+      },
+      "ComponentBinding": {
+        "description": "Data binding for data-driven components",
+        "properties": {
+          "componentId": {
+            "title": "Componentid",
+            "type": "string"
+          },
+          "datasourceId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Datasourceid"
+          },
+          "tableName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tablename"
+          },
+          "columns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Columns"
+          },
+          "columnOrder": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Columnorder"
+          },
+          "columnOverrides": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/ColumnOverride"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Columnoverrides"
+          },
+          "frontendFilters": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Frontendfilters"
+          },
+          "sorting": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sorting"
+          },
+          "pagination": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Pagination"
+          },
+          "filtering": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filtering"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filters"
+          },
+          "primaryKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Primarykey"
+          },
+          "foreignKeys": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/$defs/ForeignKey"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Foreignkeys"
+          },
+          "dataRequest": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DataRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "componentId"
+        ],
+        "title": "ComponentBinding",
+        "type": "object"
+      },
+      "DataRequest": {
+        "description": "Pre-computed HTTP request spec for data fetching.\nComputed at publish time so Hono doesn't need adapter logic.",
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "method": {
+            "default": "GET",
+            "title": "Method",
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Headers",
+            "type": "object"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body"
+          },
+          "resultPath": {
+            "default": "",
+            "title": "Resultpath",
+            "type": "string"
+          },
+          "flattenRelations": {
+            "default": true,
+            "title": "Flattenrelations",
+            "type": "boolean"
+          },
+          "queryConfig": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Queryconfig"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "DataRequest",
+        "type": "object"
+      },
+      "DatasourceConfig": {
+        "description": "Datasource configuration (non-sensitive parts only)",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/$defs/DatasourceType"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "anonKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Anonkey"
+          },
+          "secretEnvVar": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Secretenvvar"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "name"
+        ],
+        "title": "DatasourceConfig",
+        "type": "object"
+      },
+      "DatasourceType": {
+        "enum": [
+          "supabase",
+          "neon",
+          "planetscale",
+          "turso",
+          "postgres",
+          "mysql",
+          "sqlite"
+        ],
+        "title": "DatasourceType",
+        "type": "string"
+      },
+      "ForeignKey": {
+        "description": "Foreign key reference",
+        "properties": {
+          "column": {
+            "title": "Column",
+            "type": "string"
+          },
+          "referencedTable": {
+            "title": "Referencedtable",
+            "type": "string"
+          },
+          "referencedColumn": {
+            "title": "Referencedcolumn",
+            "type": "string"
+          }
+        },
+        "required": [
+          "column",
+          "referencedTable",
+          "referencedColumn"
+        ],
+        "title": "ForeignKey",
+        "type": "object"
+      },
+      "PageComponent": {
+        "description": "Recursive page component structure",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "props": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Props"
+          },
+          "styles": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Styles"
+          },
+          "stylesData": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/StylesData"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/VisibilitySettings"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "children": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/$defs/PageComponent"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Children"
+          },
+          "binding": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ComponentBinding"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "id",
+          "type"
+        ],
+        "title": "PageComponent",
+        "type": "object"
+      },
+      "PageLayout": {
+        "description": "Page layout structure",
+        "properties": {
+          "content": {
+            "items": {
+              "$ref": "#/$defs/PageComponent"
+            },
+            "title": "Content",
+            "type": "array"
+          },
+          "root": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Root"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "PageLayout",
+        "type": "object"
+      },
+      "SeoData": {
+        "description": "SEO metadata",
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "keywords": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Keywords"
+          },
+          "ogImage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ogimage"
+          },
+          "canonical": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Canonical"
+          }
+        },
+        "title": "SeoData",
+        "type": "object"
+      },
+      "StylesData": {
+        "additionalProperties": true,
+        "description": "Component styling data with viewport support",
+        "properties": {
+          "values": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Values"
+          },
+          "activeProperties": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Activeproperties"
+          },
+          "stylingMode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "visual",
+            "title": "Stylingmode"
+          },
+          "viewportOverrides": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ViewportOverrides"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "title": "StylesData",
+        "type": "object"
+      },
+      "ViewportOverrides": {
+        "additionalProperties": true,
+        "description": "Style overrides per viewport (for responsive styling)",
+        "properties": {
+          "mobile": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mobile"
+          },
+          "tablet": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tablet"
+          }
+        },
+        "title": "ViewportOverrides",
+        "type": "object"
+      },
+      "VisibilitySettings": {
+        "description": "Per-viewport visibility settings for responsive hiding",
+        "properties": {
+          "mobile": {
+            "default": true,
+            "title": "Mobile",
+            "type": "boolean"
+          },
+          "tablet": {
+            "default": true,
+            "title": "Tablet",
+            "type": "boolean"
+          },
+          "desktop": {
+            "default": true,
+            "title": "Desktop",
+            "type": "boolean"
+          }
+        },
+        "title": "VisibilitySettings",
+        "type": "object"
+      }
+    },
+    "description": "Page bundle to publish to Hono",
+    "properties": {
+      "id": {
+        "title": "Id",
+        "type": "string"
+      },
+      "slug": {
+        "title": "Slug",
+        "type": "string"
+      },
+      "name": {
+        "title": "Name",
+        "type": "string"
+      },
+      "title": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Title"
+      },
+      "description": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Description"
+      },
+      "layoutData": {
+        "$ref": "#/$defs/PageLayout"
+      },
+      "seoData": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SeoData"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "datasources": {
+        "anyOf": [
+          {
+            "items": {
+              "$ref": "#/$defs/DatasourceConfig"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Datasources"
+      },
+      "version": {
+        "default": 1,
+        "title": "Version",
+        "type": "integer"
+      },
+      "publishedAt": {
+        "title": "Publishedat",
+        "type": "string"
+      },
+      "isPublic": {
+        "default": true,
+        "title": "Ispublic",
+        "type": "boolean"
+      },
+      "isHomepage": {
+        "default": false,
+        "title": "Ishomepage",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "id",
+      "slug",
+      "name",
+      "layoutData",
+      "publishedAt"
+    ],
+    "title": "PublishPageRequest",
+    "type": "object"
+  },
+  "PageLayout": {
+    "$defs": {
+      "ColumnOverride": {
+        "description": "Column-specific overrides",
+        "properties": {
+          "visible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Visible"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Label"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Width"
+          },
+          "sortable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sortable"
+          },
+          "filterable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filterable"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Type"
+          }
+        },
+        "title": "ColumnOverride",
+        "type": "object"
+      },
+      "ComponentBinding": {
+        "description": "Data binding for data-driven components",
+        "properties": {
+          "componentId": {
+            "title": "Componentid",
+            "type": "string"
+          },
+          "datasourceId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Datasourceid"
+          },
+          "tableName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tablename"
+          },
+          "columns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Columns"
+          },
+          "columnOrder": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Columnorder"
+          },
+          "columnOverrides": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/ColumnOverride"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Columnoverrides"
+          },
+          "frontendFilters": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Frontendfilters"
+          },
+          "sorting": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sorting"
+          },
+          "pagination": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Pagination"
+          },
+          "filtering": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filtering"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filters"
+          },
+          "primaryKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Primarykey"
+          },
+          "foreignKeys": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/$defs/ForeignKey"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Foreignkeys"
+          },
+          "dataRequest": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DataRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "componentId"
+        ],
+        "title": "ComponentBinding",
+        "type": "object"
+      },
+      "DataRequest": {
+        "description": "Pre-computed HTTP request spec for data fetching.\nComputed at publish time so Hono doesn't need adapter logic.",
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "method": {
+            "default": "GET",
+            "title": "Method",
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Headers",
+            "type": "object"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body"
+          },
+          "resultPath": {
+            "default": "",
+            "title": "Resultpath",
+            "type": "string"
+          },
+          "flattenRelations": {
+            "default": true,
+            "title": "Flattenrelations",
+            "type": "boolean"
+          },
+          "queryConfig": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Queryconfig"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "DataRequest",
+        "type": "object"
+      },
+      "ForeignKey": {
+        "description": "Foreign key reference",
+        "properties": {
+          "column": {
+            "title": "Column",
+            "type": "string"
+          },
+          "referencedTable": {
+            "title": "Referencedtable",
+            "type": "string"
+          },
+          "referencedColumn": {
+            "title": "Referencedcolumn",
+            "type": "string"
+          }
+        },
+        "required": [
+          "column",
+          "referencedTable",
+          "referencedColumn"
+        ],
+        "title": "ForeignKey",
+        "type": "object"
+      },
+      "PageComponent": {
+        "description": "Recursive page component structure",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "props": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Props"
+          },
+          "styles": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Styles"
+          },
+          "stylesData": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/StylesData"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/VisibilitySettings"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "children": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/$defs/PageComponent"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Children"
+          },
+          "binding": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ComponentBinding"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "id",
+          "type"
+        ],
+        "title": "PageComponent",
+        "type": "object"
+      },
+      "StylesData": {
+        "additionalProperties": true,
+        "description": "Component styling data with viewport support",
+        "properties": {
+          "values": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Values"
+          },
+          "activeProperties": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Activeproperties"
+          },
+          "stylingMode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "visual",
+            "title": "Stylingmode"
+          },
+          "viewportOverrides": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ViewportOverrides"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "title": "StylesData",
+        "type": "object"
+      },
+      "ViewportOverrides": {
+        "additionalProperties": true,
+        "description": "Style overrides per viewport (for responsive styling)",
+        "properties": {
+          "mobile": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mobile"
+          },
+          "tablet": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tablet"
+          }
+        },
+        "title": "ViewportOverrides",
+        "type": "object"
+      },
+      "VisibilitySettings": {
+        "description": "Per-viewport visibility settings for responsive hiding",
+        "properties": {
+          "mobile": {
+            "default": true,
+            "title": "Mobile",
+            "type": "boolean"
+          },
+          "tablet": {
+            "default": true,
+            "title": "Tablet",
+            "type": "boolean"
+          },
+          "desktop": {
+            "default": true,
+            "title": "Desktop",
+            "type": "boolean"
+          }
+        },
+        "title": "VisibilitySettings",
+        "type": "object"
+      }
+    },
+    "description": "Page layout structure",
+    "properties": {
+      "content": {
+        "items": {
+          "$ref": "#/$defs/PageComponent"
+        },
+        "title": "Content",
+        "type": "array"
+      },
+      "root": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Root"
+      }
+    },
+    "required": [
+      "content"
+    ],
+    "title": "PageLayout",
+    "type": "object"
+  }
+}

@@ -109,6 +109,34 @@ export type ComponentBinding = z.infer<typeof ComponentBindingSchema>;
 // Page Component (Recursive)
 // =============================================================================
 
+// Visibility settings for responsive hiding
+export const VisibilitySettingsSchema = z.object({
+    mobile: z.boolean().default(true),
+    tablet: z.boolean().default(true),
+    desktop: z.boolean().default(true),
+});
+
+export type VisibilitySettings = z.infer<typeof VisibilitySettingsSchema>;
+
+// Viewport-specific style overrides
+export const ViewportOverridesSchema = z.object({
+    mobile: z.record(z.string(), z.any()).nullable().optional(),
+    tablet: z.record(z.string(), z.any()).nullable().optional(),
+}).passthrough(); // Allow additional viewport names
+
+export type ViewportOverrides = z.infer<typeof ViewportOverridesSchema>;
+
+// Structured styles data with viewport support
+export const StylesDataSchema = z.object({
+    values: z.record(z.string(), z.any()).nullable().optional(),
+    activeProperties: z.array(z.string()).nullable().optional(),
+    stylingMode: z.string().default("visual"),
+    viewportOverrides: ViewportOverridesSchema.nullable().optional(),
+}).passthrough();
+
+export type StylesData = z.infer<typeof StylesDataSchema>;
+
+// Legacy styles (direct CSS properties)
 export const ComponentStylesSchema = z.record(z.string(), z.any()).nullable().optional();
 
 export const PageComponentSchema: z.ZodType<PageComponent, z.ZodTypeDef, unknown> = z.lazy(() =>
@@ -116,13 +144,9 @@ export const PageComponentSchema: z.ZodType<PageComponent, z.ZodTypeDef, unknown
         id: z.string(),
         type: z.string(), // ComponentTypeSchema is too strict for flexibility
         props: z.record(z.string(), z.unknown()).nullable().optional(),
-        styles: ComponentStylesSchema,
-        stylesData: ComponentStylesSchema, // Builder uses this name with viewportOverrides
-        visibility: z.object({
-            mobile: z.boolean().optional(),
-            tablet: z.boolean().optional(),
-            desktop: z.boolean().optional(),
-        }).nullable().optional(),
+        styles: ComponentStylesSchema, // Legacy: direct styles
+        stylesData: StylesDataSchema.nullable().optional(), // New: structured styles with overrides
+        visibility: VisibilitySettingsSchema.nullable().optional(), // Per-viewport visibility
         children: z.array(PageComponentSchema).nullable().optional(),
         binding: ComponentBindingSchema.nullable().optional(),
     })
@@ -132,9 +156,9 @@ export interface PageComponent {
     id: string;
     type: string;
     props?: Record<string, unknown> | null;
-    styles?: Record<string, any> | null;
-    stylesData?: Record<string, any> | null; // Builder uses this with viewportOverrides
-    visibility?: { mobile?: boolean; tablet?: boolean; desktop?: boolean; } | null;
+    styles?: Record<string, any> | null; // Legacy: direct styles
+    stylesData?: StylesData | null; // New: structured styles with overrides
+    visibility?: VisibilitySettings | null; // Per-viewport visibility
     children?: PageComponent[] | null;
     binding?: ComponentBinding | null;
 }

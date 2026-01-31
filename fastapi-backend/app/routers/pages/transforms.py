@@ -40,6 +40,7 @@ def map_styles_schema(component: Dict) -> Dict:
     """
     Maps stylesData → styles for SSR compatibility.
     MERGES template defaults (styles) with user edits (stylesData.values).
+    PRESERVES viewportOverrides for responsive styling.
     Returns new component dict.
     
     Args:
@@ -63,7 +64,7 @@ def map_styles_schema(component: Dict) -> Dict:
     if 'stylesData' in result:
         styles_data = result['stylesData']
         
-        # Handle new format: { activeProperties: [...], values: {...}, stylingMode: '...' }
+        # Handle new format: { activeProperties: [...], values: {...}, stylingMode: '...', viewportOverrides: {...} }
         if isinstance(styles_data, dict) and 'values' in styles_data:
             user_styles = styles_data.get('values', {})
         else:
@@ -73,20 +74,26 @@ def map_styles_schema(component: Dict) -> Dict:
         merged_styles = {**base_styles, **user_styles}
         
         # Store as the new format for SSR compatibility
+        # CRITICAL: Preserve viewportOverrides for responsive styling!
         result['styles'] = {
             'activeProperties': styles_data.get('activeProperties', list(merged_styles.keys())),
             'values': merged_styles,
-            'stylingMode': styles_data.get('stylingMode', 'visual')
+            'stylingMode': styles_data.get('stylingMode', 'visual'),
+            'viewportOverrides': styles_data.get('viewportOverrides'),  # PRESERVE THIS!
         }
         
-        del result['stylesData']
+        # Keep stylesData as well for backward compatibility with Edge
+        # (Edge reads from both styles and stylesData)
+        result['stylesData'] = result['styles']
+        
     elif base_styles:
         # No stylesData but has existing styles - ensure consistent format
         if not isinstance(existing_styles, dict) or 'values' not in existing_styles:
             result['styles'] = {
                 'activeProperties': list(base_styles.keys()),
                 'values': base_styles,
-                'stylingMode': 'visual'
+                'stylingMode': 'visual',
+                'viewportOverrides': None,
             }
     
     return result

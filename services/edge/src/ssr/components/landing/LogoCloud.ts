@@ -21,7 +21,7 @@ export interface LogoCloudProps {
     title?: string;
     subtitle?: string;
     logos?: LogoItem[];
-    displayMode?: 'static' | 'marquee';
+    displayMode?: 'static' | 'marquee' | 'marqueeOnMobile';
     logoSize?: 'sm' | 'md' | 'lg' | number;
     speed?: number;
     pauseOnHover?: boolean;
@@ -120,7 +120,7 @@ export function renderLogoCloud(
         `.trim();
     }
 
-    // Marquee Mode
+    // Marquee Mode (also used for marqueeOnMobile)
     const duplicatedLogosHtml = [...logos, ...logos].map((logo, idx) => `
         <div class="logo-marquee-item px-6 md:px-8">
             ${renderItem(logo, idx)}
@@ -128,9 +128,10 @@ export function renderLogoCloud(
     `).join('');
 
     const pauseClass = pauseOnHover ? 'logo-marquee-pause-on-hover' : '';
+    const mobileOnlyClass = displayMode === 'marqueeOnMobile' ? 'logo-marquee-mobile-only' : '';
 
     return `
-        <section id="${id}" class="${sectionClasses} overflow-hidden" style="${inlineStyles}">
+        <section id="${id}" class="${sectionClasses} overflow-hidden ${mobileOnlyClass}" style="${inlineStyles}">
             ${headerHtml}
             <div class="logo-marquee-container ${pauseClass}">
                 <div 

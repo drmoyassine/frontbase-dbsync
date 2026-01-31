@@ -300,6 +300,20 @@ function generateHtmlDocument(
         .fb-loading { opacity: 0.7; pointer-events: none; }
         .fb-skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: skeleton 1.5s infinite; }
         @keyframes skeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        
+        /* Logo Cloud Marquee Animation */
+        @keyframes marquee-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .logo-marquee-container { overflow: hidden; width: 100%; mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
+        .logo-marquee-track { display: flex; width: max-content; animation: marquee-scroll var(--marquee-speed, 20s) linear infinite; }
+        .logo-marquee-pause-on-hover:hover .logo-marquee-track { animation-play-state: paused; }
+        .logo-marquee-item { flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        /* Marquee on mobile only */
+        .logo-marquee-mobile-only .logo-marquee-track { animation: none; flex-wrap: wrap; justify-content: center; gap: 2rem; width: 100%; }
+        .logo-marquee-mobile-only .logo-marquee-container { mask-image: none; -webkit-mask-image: none; }
+        @media (max-width: 640px) {
+            .logo-marquee-mobile-only .logo-marquee-track { animation: marquee-scroll var(--marquee-speed, 20s) linear infinite; flex-wrap: nowrap; justify-content: flex-start; gap: 0; width: max-content; }
+            .logo-marquee-mobile-only .logo-marquee-container { mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
+        }
     </style>
 </head>
 <body>

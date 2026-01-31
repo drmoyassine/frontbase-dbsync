@@ -84,6 +84,7 @@ export const LogoCloudProperties: React.FC<LogoCloudPropertiesPanelProps> = ({
                     <SelectContent>
                         <SelectItem value="static">Static Grid</SelectItem>
                         <SelectItem value="marquee">Animated Marquee</SelectItem>
+                        <SelectItem value="marqueeOnMobile">Marquee on Mobile Only</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
@@ -107,7 +108,7 @@ export const LogoCloudProperties: React.FC<LogoCloudPropertiesPanelProps> = ({
             </div>
 
             {/* Marquee Options */}
-            {props.displayMode === 'marquee' && (
+            {(props.displayMode === 'marquee' || props.displayMode === 'marqueeOnMobile') && (
                 <>
                     <div className="space-y-2">
                         <Label>Animation Speed: {props.speed || 20}s</Label>

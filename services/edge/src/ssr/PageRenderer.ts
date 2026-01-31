@@ -20,6 +20,7 @@ export interface PageComponent {
     type: string;
     props?: Record<string, unknown>;
     styles?: Record<string, any>;
+    stylesData?: Record<string, any>; // Builder stores viewportOverrides here
     binding?: Record<string, any>;
     visibility?: { mobile: boolean; tablet: boolean; desktop: boolean; };
     children?: PageComponent[];
@@ -151,7 +152,9 @@ async function renderComponent(
         : '';
 
     // Build responsive CSS for viewport-specific style overrides (font-size, colors, etc.)
-    const responsiveCSS = component.styles ? buildResponsiveCSS(id, component.styles) : '';
+    // Check both styles and stylesData (builder uses stylesData with viewportOverrides)
+    const stylesForCSS = component.stylesData || component.styles;
+    const responsiveCSS = stylesForCSS ? buildResponsiveCSS(id, stylesForCSS) : '';
     // Build visibility CSS for hidden viewports
     const visibilityCSS = buildVisibilityCSS(id, component.visibility);
     // Combine CSS - prepend to component HTML

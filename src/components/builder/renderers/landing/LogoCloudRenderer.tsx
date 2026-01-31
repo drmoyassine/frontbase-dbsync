@@ -117,11 +117,13 @@ export const LogoCloudRenderer: React.FC<RendererProps> = ({
         );
     }
 
+    // Marquee mode (also used for marqueeOnMobile)
     const duplicatedLogos = [...logos, ...logos] as LogoItem[];
+    const mobileOnlyClass = displayMode === 'marqueeOnMobile' ? 'logo-marquee-mobile-only' : '';
 
     return (
         <div
-            className={cn('py-12 px-6 overflow-hidden', combinedClassName)}
+            className={cn('py-12 px-6 overflow-hidden', mobileOnlyClass, combinedClassName)}
             style={inlineStyles}
         >
             {title && (

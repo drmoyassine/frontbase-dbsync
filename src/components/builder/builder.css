@@ -32,7 +32,8 @@
 /* Canvas */
 .builder-canvas {
   flex: 1;
-  min-width: 0; /* Prevent flex overflow */
+  min-width: 0;
+  /* Prevent flex overflow */
   overflow: auto;
   background: hsl(var(--muted) / 0.3);
   order: 2;
@@ -204,6 +205,7 @@
   0% {
     transform: translateX(0);
   }
+
   100% {
     transform: translateX(-50%);
   }
@@ -212,20 +214,16 @@
 .logo-marquee-container {
   overflow: hidden;
   width: 100%;
-  mask-image: linear-gradient(
-    to right,
-    transparent,
-    black 10%,
-    black 90%,
-    transparent
-  );
-  -webkit-mask-image: linear-gradient(
-    to right,
-    transparent,
-    black 10%,
-    black 90%,
-    transparent
-  );
+  mask-image: linear-gradient(to right,
+      transparent,
+      black 10%,
+      black 90%,
+      transparent);
+  -webkit-mask-image: linear-gradient(to right,
+      transparent,
+      black 10%,
+      black 90%,
+      transparent);
 }
 
 .logo-marquee-track {
@@ -243,4 +241,41 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Marquee on mobile only - static grid on desktop/tablet */
+.logo-marquee-mobile-only .logo-marquee-track {
+  animation: none;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2rem;
+  width: 100%;
+}
+
+.logo-marquee-mobile-only .logo-marquee-container {
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+
+@media (max-width: 640px) {
+  .logo-marquee-mobile-only .logo-marquee-track {
+    animation: marquee-scroll var(--marquee-speed, 20s) linear infinite;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 0;
+    width: max-content;
+  }
+
+  .logo-marquee-mobile-only .logo-marquee-container {
+    mask-image: linear-gradient(to right,
+        transparent,
+        black 10%,
+        black 90%,
+        transparent);
+    -webkit-mask-image: linear-gradient(to right,
+        transparent,
+        black 10%,
+        black 90%,
+        transparent);
+  }
 }

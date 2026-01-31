@@ -117,6 +117,12 @@ export const PageComponentSchema: z.ZodType<PageComponent, z.ZodTypeDef, unknown
         type: z.string(), // ComponentTypeSchema is too strict for flexibility
         props: z.record(z.string(), z.unknown()).nullable().optional(),
         styles: ComponentStylesSchema,
+        stylesData: ComponentStylesSchema, // Builder uses this name with viewportOverrides
+        visibility: z.object({
+            mobile: z.boolean().optional(),
+            tablet: z.boolean().optional(),
+            desktop: z.boolean().optional(),
+        }).nullable().optional(),
         children: z.array(PageComponentSchema).nullable().optional(),
         binding: ComponentBindingSchema.nullable().optional(),
     })
@@ -127,6 +133,8 @@ export interface PageComponent {
     type: string;
     props?: Record<string, unknown> | null;
     styles?: Record<string, any> | null;
+    stylesData?: Record<string, any> | null; // Builder uses this with viewportOverrides
+    visibility?: { mobile?: boolean; tablet?: boolean; desktop?: boolean; } | null;
     children?: PageComponent[] | null;
     binding?: ComponentBinding | null;
 }

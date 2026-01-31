@@ -102,10 +102,12 @@ if (typeof window !== 'undefined') {
         document.addEventListener('DOMContentLoaded', () => {
             hydrateReactComponents();
             initMobileMenuToggle();
+            initSmoothScroll();
         });
     } else {
         hydrateReactComponents();
         initMobileMenuToggle();
+        initSmoothScroll();
     }
 }
 
@@ -143,6 +145,56 @@ function initMobileMenuToggle() {
     });
 
     console.log(`📱 Mobile menu toggle initialized for ${toggleButtons.length} navbar(s)`);
+}
+
+// Initialize smooth scrolling for data-scroll-to links
+function initSmoothScroll() {
+    const scrollLinks = document.querySelectorAll('[data-scroll-to]');
+
+    scrollLinks.forEach(link => {
+        // Clone to replace existing listeners if any (to prevent duplicates) or just add new
+        // Actually, just adding event listener is safer as we don't want to break other listeners
+        // But we need to ensure we don't add multiple times if init runs twice
+
+        link.addEventListener('click', (e) => {
+            const targetId = link.getAttribute('data-scroll-to');
+            if (!targetId) return;
+
+            // Handle # prefix if present or missing
+            const selector = targetId.startsWith('#') ? targetId : '#' + targetId;
+            const target = document.querySelector(selector);
+
+            if (target) {
+                e.preventDefault();
+
+                // Close mobile menu if open (finding closest menu container)
+                const mobileMenu = document.querySelector('[data-fb-mobile-menu]');
+                if (mobileMenu && !mobileMenu.classList.contains('hidden')) {
+                    mobileMenu.classList.add('hidden');
+
+                    // Reset hamburger icon if possible
+                    const toggleBtn = document.querySelector('[data-fb-mobile-menu-toggle]');
+                    if (toggleBtn) {
+                        toggleBtn.innerHTML = `
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                            </svg>
+                        `;
+                    }
+                }
+
+                target.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+
+                // Update URL hash without jumping
+                history.pushState(null, '', selector);
+            }
+        });
+    });
+
+    console.log(`✨ Smooth scroll initialized for ${scrollLinks.length} links`);
 }
 
 // Expose for debugging

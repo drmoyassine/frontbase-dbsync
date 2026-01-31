@@ -40,6 +40,7 @@ interface NavbarProps {
         variant?: string;
     };
     showDarkModeToggle?: boolean;
+    scale?: number; // Global scale factor (0.8 - 1.5)
 }
 
 export const NavbarRenderer: React.FC<RendererProps> = ({
@@ -68,14 +69,18 @@ export const NavbarRenderer: React.FC<RendererProps> = ({
         ? project.faviconUrl
         : logo.imageUrl;
 
+    // Global scale factor (default 1)
+    const scale = props.scale || 1;
+
     const navClassName = cn(
         combinedClassName,
         'fb-navbar w-full transition-all duration-200'
     );
 
     // Default aesthetic styles (can be overridden by Styles Panel)
+    // Apply scale to padding
     const defaultStyles: React.CSSProperties = {
-        padding: '16px 24px',
+        padding: `${16 * scale}px ${24 * scale}px`,
         borderBottom: '1px solid var(--border)',
         backgroundColor: 'var(--background)',
     };
@@ -116,7 +121,7 @@ export const NavbarRenderer: React.FC<RendererProps> = ({
                     <img
                         src={logoImageUrl}
                         alt="Logo"
-                        className="h-8 w-auto"
+                        style={{ height: `${32 * scale}px`, width: 'auto' }}
                     />
                 ) : (
                     <>
@@ -125,10 +130,11 @@ export const NavbarRenderer: React.FC<RendererProps> = ({
                             <img
                                 src={project.faviconUrl}
                                 alt="Logo"
-                                className="h-6 w-6 object-contain"
+                                className="object-contain"
+                                style={{ height: `${24 * scale}px`, width: `${24 * scale}px` }}
                             />
                         )}
-                        <span className="text-xl font-bold">
+                        <span style={{ fontSize: `${20 * scale}px`, fontWeight: 700 }}>
                             {logo.text || 'YourBrand'}
                         </span>
                     </>
@@ -136,10 +142,10 @@ export const NavbarRenderer: React.FC<RendererProps> = ({
             </a>
 
             {/* Desktop: Menu Items + Buttons Container (uses container query CSS) */}
-            <div className="fb-nav-desktop items-center gap-8">
+            <div className="fb-nav-desktop items-center" style={{ gap: `${32 * scale}px` }}>
                 {/* Menu Items */}
                 {menuItems.length > 0 && (
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center" style={{ gap: `${24 * scale}px` }}>
                         {menuItems.map((item) => (
                             <a
                                 key={item.id}
@@ -148,7 +154,8 @@ export const NavbarRenderer: React.FC<RendererProps> = ({
                                     e.preventDefault();
                                     handleNavClick(item.navType, item.target);
                                 }}
-                                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                                className="font-medium text-muted-foreground hover:text-foreground transition-colors"
+                                style={{ fontSize: `${14 * scale}px` }}
                             >
                                 {item.label}
                             </a>
@@ -157,15 +164,16 @@ export const NavbarRenderer: React.FC<RendererProps> = ({
                 )}
 
                 {/* CTA Buttons */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center" style={{ gap: `${12 * scale}px` }}>
                     {/* Dark Mode Toggle (preview only) */}
                     {props.showDarkModeToggle && (
                         <button
                             type="button"
-                            className="p-2 rounded-lg hover:bg-accent transition-colors"
+                            className="rounded-lg hover:bg-accent transition-colors"
+                            style={{ padding: `${8 * scale}px` }}
                             title="Dark mode toggle (preview)"
                         >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg style={{ width: `${20 * scale}px`, height: `${20 * scale}px` }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                             </svg>
                         </button>

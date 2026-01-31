@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trash2, Target } from 'lucide-react';
 import { useBuilderStore } from '@/stores/builder';
@@ -48,6 +49,37 @@ export const NavbarProperties: React.FC<NavbarPropertiesProps> = ({
 }) => {
     return (
         <>
+            {/* Appearance Section */}
+            <div className="space-y-3 pb-4 border-b">
+                <Label className="text-sm font-medium">Appearance</Label>
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">
+                            Global Scale ({props.scale || 1}x)
+                        </Label>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-xs px-2"
+                            onClick={() => updateComponentProp('scale', 1)}
+                        >
+                            Reset
+                        </Button>
+                    </div>
+                    <Slider
+                        value={[props.scale || 1]}
+                        onValueChange={([value]) => updateComponentProp('scale', value)}
+                        min={0.8}
+                        max={1.5}
+                        step={0.05}
+                        className="py-1"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        Scales logo, text, padding, and buttons
+                    </p>
+                </div>
+            </div>
+
             {/* Logo Section */}
             <div className="space-y-3 pb-4 border-b">
                 <Label className="text-sm font-medium">Logo</Label>

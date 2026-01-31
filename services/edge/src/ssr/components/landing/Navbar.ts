@@ -59,6 +59,8 @@ export interface NavbarProps {
     hideOnDesktop?: boolean;
     // Dark mode toggle
     showDarkModeToggle?: boolean;
+    // Global scale factor (0.8 - 1.5)
+    scale?: number;
 }
 
 // Helper to render CTA-style links (DRY for both primary and secondary buttons)
@@ -117,7 +119,10 @@ function renderNewFormat(
     const primaryButton = props.primaryButton;
     const secondaryButton = props.secondaryButton;
 
-    // Logo HTML using DRY primitives
+    // Global scale factor (default 1)
+    const scale = props.scale || 1;
+
+    // Logo HTML using DRY primitives with scale applied
     const logoLink = logo.link || '/';
     let logoHtml: string;
 
@@ -128,48 +133,48 @@ function renderNewFormat(
         useProjectLogo: (logo as any).useProjectLogo,
         imageUrl: logo.imageUrl ? logo.imageUrl.substring(0, 50) + '...' : 'NOT SET',
         text: logo.text,
+        scale,
     });
 
+    // Apply scale to sizes
+    const logoHeight = `${2 * scale}rem`;
+    const iconSize = `${1.5 * scale}rem`;
+    const logoFontSize = `${1.25 * scale}rem`;
+
     if (logo.type === 'image' && logo.imageUrl) {
-        // Use renderImage primitive
+        // Use renderImage primitive with scaled size
         logoHtml = renderImage(`${id}-logo-img`, {
             src: logo.imageUrl,
             alt: 'Logo',
-            height: '2rem',
+            height: logoHeight,
             width: 'auto',
             objectFit: 'contain',
         });
     } else if (logo.showIcon && logo.imageUrl) {
-        // Icon + text combo using primitives
+        // Icon + text combo using primitives with scaled sizes
         const iconImg = renderImage(`${id}-logo-icon`, {
             src: logo.imageUrl,
             alt: 'Logo',
-            height: '1.5rem',
-            width: '1.5rem',
+            height: iconSize,
+            width: iconSize,
             objectFit: 'contain',
         });
-        const brandText = renderText(`${id}-logo-text`, {
-            text: logo.text || 'YourBrand',
-            size: 'xl',
-            weight: 'bold',
-        });
+        const brandText = `<span id="${id}-logo-text" style="font-size: ${logoFontSize}; font-weight: 700;">${escapeHtml(logo.text || 'YourBrand')}</span>`;
         logoHtml = `${iconImg}${brandText}`;
     } else {
-        // Text-only logo using renderText primitive
-        logoHtml = renderText(`${id}-logo-text`, {
-            text: logo.text || 'YourBrand',
-            size: 'xl',
-            weight: 'bold',
-        });
+        // Text-only logo with scaled font size
+        logoHtml = `<span id="${id}-logo-text" style="font-size: ${logoFontSize}; font-weight: 700;">${escapeHtml(logo.text || 'YourBrand')}</span>`;
     }
 
-    // Menu items HTML with scroll support
+    // Menu items HTML with scroll support (apply scale to font size)
+    const menuFontSize = `${0.875 * scale}rem`; // 14px base
     const menuItemsHtml = menuItems.map(item => {
         const href = item.navType === 'scroll' ? item.target : item.target;
         const scrollAttr = item.navType === 'scroll' ? `data-scroll-to="${escapeHtml(item.target)}"` : '';
         return `
             <a href="${escapeHtml(href)}" ${scrollAttr} 
-               class="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+               class="font-medium text-muted-foreground hover:text-foreground transition-colors"
+               style="font-size: ${menuFontSize};">
                 ${escapeHtml(item.label)}
             </a>
         `;
@@ -230,26 +235,32 @@ function renderNewFormat(
         );
     }
 
+    // Computed scaled gap values
+    const navPadding = `${1 * scale}rem`; // py-4 = 1rem
+    const navGap = `${2 * scale}rem`; // gap-8 = 2rem
+    const menuGap = `${1.5 * scale}rem`; // gap-6 = 1.5rem
+    const buttonGap = `${0.75 * scale}rem`; // gap-3 = 0.75rem
+
     return `
         <header id="${id}" class="${headerClasses}" style="${inlineStyles}">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex items-center justify-between py-4">
+                <div class="flex items-center justify-between" style="padding: ${navPadding} 0;">
                     <!-- Logo -->
                     <a href="${escapeHtml(logoLink)}" class="flex items-center gap-2">
                         ${logoHtml}
                     </a>
                     
                     <!-- Desktop Navigation + CTA Buttons grouped together -->
-                    <div class="hidden md:flex items-center gap-8">
-                        <nav class="flex items-center gap-6">
+                    <div class="hidden md:flex items-center" style="gap: ${navGap};">
+                        <nav class="flex items-center" style="gap: ${menuGap};">
                             ${menuItemsHtml}
                         </nav>
-                        <div class="flex items-center gap-3">
+                        <div class="flex items-center" style="gap: ${buttonGap};">
                             ${darkModeToggleHtml}
                             ${buttonsHtml}
                         </div>
                     </div>
-                    
+
                     <!-- Mobile: Dark Mode Toggle + Menu Button -->
                     <div class="md:hidden flex items-center gap-2">
                         ${darkModeToggleHtml}
@@ -260,7 +271,7 @@ function renderNewFormat(
                         </button>
                     </div>
                 </div>
-                
+
                 <!-- Mobile Menu (hidden by default) -->
                 <div class="md:hidden hidden pb-4" data-fb-mobile-menu>
                     <nav class="flex flex-col gap-1">
@@ -293,7 +304,8 @@ function renderNewFormat(
                 }
             })();
         </script>
-        ` : ''}
+        ` : ''
+        }
     `.trim();
 }
 
@@ -304,7 +316,7 @@ function renderLegacyFormat(
     inlineStyles: string
 ): string {
     // Logo using DRY primitive
-    const logoHtml = renderText(`${id}-logo`, {
+    const logoHtml = renderText(`${id} -logo`, {
         text: props.logoText || 'Logo',
         size: 'xl',
         weight: 'bold',
@@ -312,57 +324,57 @@ function renderLegacyFormat(
 
     // Desktop links
     const desktopLinksHtml = (props.links || []).map(link => `
-        <a href="${escapeHtml(link.href)}" class="text-muted-foreground hover:text-foreground transition-colors">
+        < a href = "${escapeHtml(link.href)}" class="text-muted-foreground hover:text-foreground transition-colors" >
             ${escapeHtml(link.text)}
-        </a>
-    `).join('');
+    </a>
+        `).join('');
 
     // Mobile menu links
     const mobileLinksHtml = (props.links || []).map(link => `
-        <a href="${escapeHtml(link.href)}" class="block py-2 text-muted-foreground hover:text-foreground transition-colors">
+        < a href = "${escapeHtml(link.href)}" class="block py-2 text-muted-foreground hover:text-foreground transition-colors" >
             ${escapeHtml(link.text)}
-        </a>
-    `).join('');
+    </a>
+        `).join('');
 
     // CTA button using DRY helper
     const ctaHtml = props.ctaText
-        ? renderCtaLink(`${id}-cta`, props.ctaText, props.ctaLink || '#', 'link', 'primary')
+        ? renderCtaLink(`${id} -cta`, props.ctaText, props.ctaLink || '#', 'link', 'primary')
         : '';
 
     return `
-        <header id="${id}" class="${headerClasses}" style="${inlineStyles}">
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex items-center justify-between py-4">
-                    <!-- Logo -->
-                    <a href="/" class="flex items-center">
-                        ${logoHtml}
-                    </a>
-                    
-                    <!-- Desktop Navigation -->
-                    <nav class="hidden md:flex items-center gap-8">
-                        ${desktopLinksHtml}
-                    </nav>
-                    
-                    <!-- CTA + Mobile Menu -->
-                    <div class="flex items-center gap-4">
-                        ${ctaHtml}
-                        
-                        <!-- Mobile Menu Button -->
-                        <button type="button" class="md:hidden p-2 rounded-lg hover:bg-accent" data-fb-mobile-menu-toggle>
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-                            </svg>
-                        </button>
+        < header id = "${id}" class="${headerClasses}" style = "${inlineStyles}" >
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8" >
+                <div class="flex items-center justify-between py-4" >
+                    <!--Logo -->
+                        <a href="/" class="flex items-center" >
+                            ${logoHtml}
+    </a>
+
+        < !--Desktop Navigation-- >
+            <nav class="hidden md:flex items-center gap-8" >
+                ${desktopLinksHtml}
+    </nav>
+
+        < !--CTA + Mobile Menu-- >
+            <div class="flex items-center gap-4" >
+                ${ctaHtml}
+
+    <!--Mobile Menu Button-- >
+        <button type="button" class="md:hidden p-2 rounded-lg hover:bg-accent" data - fb - mobile - menu - toggle >
+            <svg class="w-6 h-6" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24" >
+                <path stroke - linecap="round" stroke - linejoin="round" stroke - width="2" d = "M4 6h16M4 12h16M4 18h16" > </path>
+                    </svg>
+                    </button>
                     </div>
-                </div>
-                
-                <!-- Mobile Menu (hidden by default) -->
-                <div class="md:hidden hidden pb-4" data-fb-mobile-menu>
-                    <nav class="flex flex-col gap-1">
-                        ${mobileLinksHtml}
-                    </nav>
-                </div>
-            </div>
+                    </div>
+
+                    < !--Mobile Menu(hidden by default )-- >
+                        <div class="md:hidden hidden pb-4" data - fb - mobile - menu >
+                            <nav class="flex flex-col gap-1" >
+                                ${mobileLinksHtml}
+    </nav>
+        </div>
+        </div>
         </header>
-    `.trim();
+            `.trim();
 }

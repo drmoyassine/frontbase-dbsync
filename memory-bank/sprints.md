@@ -368,6 +368,28 @@ The following items are **NOT in MVP** but planned for future releases:
 - **Current MVP:** Auto-detect first Supabase datasource for `frontbase_assets` bucket
 - **When:** When multi-datasource support is common or users request flexibility
 
+### Future Sprint: PWA Support for Published Apps
+
+- **Goal:** Enable Progressive Web App capabilities for apps/pages built with Frontbase.
+- **Use Case:** Published sites become installable, load faster, and feel more app-like.
+- **Features:**
+  - **Per-Project Setting:** Toggle in Project Settings: `☐ Enable PWA`
+  - **Dynamic Manifest:** Generate `manifest.json` using project name, favicon, theme colors
+  - **Service Worker:** Smart caching strategy:
+    - Cache-first for static assets (CSS, JS, images)
+    - Network-first for API data
+    - App shell caching for instant loads
+  - **Install Prompt:** "Add to Home Screen" prompt for visitors
+  - **Offline Support:** Landing pages work offline, app shell loads for data-driven apps
+- **Implementation:**
+  - Edge Engine generates `manifest.json` per project
+  - Configurable service worker served from `/sw.js`
+  - Settings UI for theme color, display mode (standalone/fullscreen)
+- **Estimate:** 6-9 hours
+- **Risk:** Medium (caching complexity, service worker debugging)
+- **Default:** OFF by default, easy to enable
+- **When:** V2 feature, nice-to-have for professional feel
+
 ### Future Sprint: GDPR Compliance Enhancements
 
 - **Goal:** Full GDPR compliance for visitor tracking and privacy features.

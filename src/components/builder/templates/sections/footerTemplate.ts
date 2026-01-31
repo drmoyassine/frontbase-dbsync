@@ -1,36 +1,59 @@
 /**
  * Footer Template
- * Professional 4-column footer with brand info, links, and copyright
- * Extracted from Frontbase homepage - the superior design
+ * Professional footer with structured data for columns, socials, and copyright
+ * Uses dedicated Footer component type (not composed from Containers)
  */
 
 import { ComponentTemplate } from '../types';
-import { createFooterColumn2 } from '../builders/sectionBuilders';
 
 export const footerTemplate = (): ComponentTemplate => ({
-    type: 'Container',
-    props: {},
-    styles: {
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '48px',
-        gap: '32px',
-        backgroundColor: 'var(--background)',
-        borderTop: '1px solid var(--border)'
+    type: 'Footer',
+    props: {
+        logoText: 'Frontbase',
+        description: 'The open-source platform for building modern web applications at the edge.',
+        columns: [
+            {
+                id: 'col-product',
+                title: 'Product',
+                links: [
+                    { id: 'link-features', text: 'Features', href: '#features' },
+                    { id: 'link-pricing', text: 'Pricing', href: '/pricing' },
+                    { id: 'link-changelog', text: 'Changelog', href: '/changelog' }
+                ]
+            },
+            {
+                id: 'col-resources',
+                title: 'Resources',
+                links: [
+                    { id: 'link-docs', text: 'Documentation', href: '/docs' },
+                    { id: 'link-github', text: 'GitHub', href: 'https://github.com' },
+                    { id: 'link-discord', text: 'Discord', href: 'https://discord.com' }
+                ]
+            },
+            {
+                id: 'col-company',
+                title: 'Company',
+                links: [
+                    { id: 'link-about', text: 'About', href: '/about' },
+                    { id: 'link-blog', text: 'Blog', href: '/blog' },
+                    { id: 'link-careers', text: 'Careers', href: '/careers' }
+                ]
+            },
+            {
+                id: 'col-legal',
+                title: 'Legal',
+                links: [
+                    { id: 'link-privacy', text: 'Privacy Policy', href: '/privacy' },
+                    { id: 'link-terms', text: 'Terms of Service', href: '/terms' }
+                ]
+            }
+        ],
+        socials: [
+            { id: 'social-twitter', icon: 'twitter', href: 'https://twitter.com' },
+            { id: 'social-github', icon: 'github', href: 'https://github.com' },
+            { id: 'social-linkedin', icon: 'linkedin', href: 'https://linkedin.com' }
+        ],
+        copyright: '© {{year}} Frontbase. Built with ❤️ for the edge.'
     },
-    children: [
-        {
-            type: 'Container',
-            props: {},
-            styles: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '48px' },
-            children: [
-                createFooterColumn2('Frontbase', ['Open Source', 'MIT License']),
-                createFooterColumn2('Product', ['Features', 'Pricing', 'Changelog']),
-                createFooterColumn2('Resources', ['Documentation', 'GitHub', 'Discord']),
-                createFooterColumn2('Legal', ['Privacy Policy', 'Terms of Service'])
-            ]
-        },
-        { type: 'Separator', props: {} },
-        { type: 'Text', props: { text: '© 2025 Frontbase. Built with ❤️ for the edge.' }, styles: { textAlign: 'center', color: 'var(--muted-foreground)', fontSize: '14px' } }
-    ]
+    styles: {}
 });

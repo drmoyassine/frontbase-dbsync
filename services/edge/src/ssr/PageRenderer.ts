@@ -499,7 +499,7 @@ function buildResponsiveCSS(componentId: string, styles: Record<string, any>): s
     if (viewportOverrides.tablet && Object.keys(viewportOverrides.tablet).length > 0) {
         const tabletCSS = valuesToCSS(viewportOverrides.tablet);
         if (tabletCSS) {
-            cssRules.push(`@media(max-width:1024px){#${componentId}{${tabletCSS}}}`);
+            cssRules.push(`@media(max-width:1024px){[id="${componentId}"]{${tabletCSS}}}`);
         }
     }
 
@@ -507,7 +507,7 @@ function buildResponsiveCSS(componentId: string, styles: Record<string, any>): s
     if (viewportOverrides.mobile && Object.keys(viewportOverrides.mobile).length > 0) {
         const mobileCSS = valuesToCSS(viewportOverrides.mobile);
         if (mobileCSS) {
-            cssRules.push(`@media(max-width:640px){#${componentId}{${mobileCSS}}}`);
+            cssRules.push(`@media(max-width:640px){[id="${componentId}"]{${mobileCSS}}}`);
         }
     }
 
@@ -536,17 +536,17 @@ function buildVisibilityCSS(componentId: string, visibility: any): string {
 
     // Desktop hidden (min-width: 1025px)
     if (!desktop) {
-        cssRules.push(`@media(min-width:1025px){#${componentId}{display:none!important}}`);
+        cssRules.push(`@media(min-width:1025px){[id="${componentId}"]{display:none!important}}`);
     }
 
     // Tablet hidden (641px - 1024px)
     if (!tablet) {
-        cssRules.push(`@media(min-width:641px) and (max-width:1024px){#${componentId}{display:none!important}}`);
+        cssRules.push(`@media(min-width:641px) and (max-width:1024px){[id="${componentId}"]{display:none!important}}`);
     }
 
     // Mobile hidden (max-width: 640px)
     if (!mobile) {
-        cssRules.push(`@media(max-width:640px){#${componentId}{display:none!important}}`);
+        cssRules.push(`@media(max-width:640px){[id="${componentId}"]{display:none!important}}`);
     }
 
     if (cssRules.length === 0) return '';

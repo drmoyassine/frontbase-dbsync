@@ -99,6 +99,8 @@ The Edge Engine has no knowledge of:
 | Using `native_enum=True` for PostgreSQL | Creates migration issues |
 | Changing Pydantic schema without updating Zod | Breaks API contract |
 | Adding required fields to published page schema | Breaks backward compatibility |
+| Dropping `viewportOverrides` during publish transform | Breaks responsive styling |
+| Hardcoding CSS in Edge instead of using cssBundle | Causes builder/SSR parity drift |
 
 ---
 
@@ -178,20 +180,52 @@ async with httpx.AsyncClient() as client:
 - Responsive breakpoints (mobile/tablet/desktop)
 - `stylesData` in Builder → `styles` after publish
 
+**Visibility Settings**:
+```typescript
+visibility: {
+  mobile: boolean,   // Show on mobile?
+  tablet: boolean,   // Show on tablet?
+  desktop: boolean   // Show on desktop?
+}
+```
+
+**Viewport Overrides** (in `stylesData`):
+```typescript
+stylesData: {
+  values: { fontSize: '16px', color: '#000' },  // Base (desktop)
+  viewportOverrides: {
+    mobile: { fontSize: '14px' },               // Mobile override
+    tablet: { fontSize: '15px' }                // Tablet override
+  }
+}
+```
+
+**CSS Bundling**:
+- CSS Registry: `app/services/css_registry.py` defines all component CSS
+- Tree-shaking: Only CSS for used components is bundled
+- Bundle stored in `cssBundle` field of published page
+- Edge uses `page.cssBundle` with fallback for legacy pages
+
 > [!IMPORTANT]
-> `stylesData` is a builder-only structure and **MUST NOT appear in Edge runtime**.
+> `stylesData` is a builder-only structure. After publish, it is transformed to `styles` with `viewportOverrides` preserved.
 
 ### 4.5 Publish Pipeline
 
 | Step | Function | Description |
 |------|----------|-------------|
 | 1 | `normalize_binding_location()` | Move `props.binding` → `component.binding` |
-| 2 | `map_styles_schema()` | Convert `stylesData` → `styles` |
+| 2 | `map_styles_schema()` | Convert `stylesData` → `styles` (preserving `viewportOverrides`) |
 | 3 | `enrich_binding_with_data_request()` | Pre-compute HTTP request spec |
 | 4 | `collect_icons_from_component()` | Gather all icon names |
 | 5 | `fetch_icons_batch()` | Pre-render SVGs from CDN |
 | 6 | `inject_icon_svg()` | Embed `iconSvg` in props |
-| 7 | `remove_nulls()` | Clean for Zod validation |
+| 7 | `bundle_css_for_page_minified()` | Tree-shake CSS, generate bundle |
+| 8 | `remove_nulls()` | Clean for Zod validation |
+
+**CSS Bundling (Tree-Shaken)**:
+- CSS Registry: `app/services/css_registry.py` (single source of truth)
+- CSS Bundler: `app/services/css_bundler.py` (multi-tier caching)
+- Caching: L1 Memory → L2 Redis (24h TTL) → L3 Generate from registry
 
 **Icon Caching (L1/L2/L3)**:
 - L1: In-memory `_ICON_CACHE` (instant)
@@ -237,8 +271,17 @@ Both files explicitly state: *"These mirror the [Zod/Pydantic] schemas in [Hono/
 | **Use Aliases** | `Field(..., alias="camelCase")` for JSON compatibility |
 | **Nullish Matching** | Zod `.nullish()` = Pydantic `Optional[...] = None` |
 | **No Secrets** | Only `anonKey` and `secretEnvVar` name published |
+| **Validate Contracts** | Run `validate_contract.py` before releases |
 
-### 5.4 OpenAPI Specification
+### 5.4 Contract Validation Scripts
+
+| File | Purpose |
+|------|---------|
+| `fastapi-backend/scripts/validate_contract.py` | Validate Pydantic schemas have required fields |
+| `services/edge/scripts/validate-contract.ts` | Validate Zod schemas match Pydantic |
+| `fastapi-backend/contracts/publish-contract.json` | JSON Schema snapshot for comparison |
+
+### 5.5 OpenAPI Specification
 
 - Edge uses `@hono/zod-openapi` with OpenAPI 3.1.0
 - API docs: `GET /api/openapi.json`

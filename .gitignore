@@ -6,25 +6,10 @@ node_modules/
 .pnp.js
 
 # Python
-venv*/
-.venv*/
-venv_sync/
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Legacy Express Server (to be removed after migration verification)
-server/
-
-# Debug/Testing Components (keep locally, don't push)
-src/components/debug/
-src/tests/
 venv/
 .venv/
+venv*/
+.venv*/
 __pycache__/
 *.py[cod]
 *$py.class
@@ -36,10 +21,9 @@ pip-delete-this-directory.txt
 # =============================================================================
 # Build Outputs
 # =============================================================================
-# dist/ - now tracked for VPS deployment
+# dist/ - tracked for VPS deployment (not ignored)
 dist-ssr/
 build/
-*.local
 
 # =============================================================================
 # Environment & Secrets (CRITICAL)
@@ -52,14 +36,13 @@ build/
 encryption_key.txt
 
 # =============================================================================
-# Database Files (User-Specific Data)
+# Database Files
 # =============================================================================
 *.db
 *.db-shm
 *.db-wal
 *.sqlite
 *.sqlite3
-server/data/
 
 # =============================================================================
 # Logs
@@ -84,25 +67,40 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# =============================================================================
+# OS Generated
+# =============================================================================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
 # =============================================================================
 # Debug & Test Artifacts
 # =============================================================================
+src/components/debug/
+src/tests/
 debug-backend-connection.cjs
 reproduce-crash.cjs
 session-cleanup-tool.cjs
 *.test.db
 temp_*.db
+
+# Images (allow in public and assets)
 *.png
 *.jpg
 !public/**/*.png
 !public/**/*.jpg
 !src/assets/**/*.png
 !src/assets/**/*.jpg
+!dist/**/*.png
+!dist/**/*.jpg
 
-# Temporary debugging/testing scripts (created during troubleshooting)
+# Temporary debugging scripts
 test_*.py
 verify_*.py
 diagnose_*.py
@@ -120,22 +118,16 @@ check_*.py
 *.tmp
 
 # =============================================================================
-# Lock Files (Keep package-lock.json, exclude bun)
+# Lock Files
 # =============================================================================
 bun.lockb
 
 # =============================================================================
-# Agent Artifacts (Dev Tools - keep memory-bank for documentation)
+# Legacy (can be removed when fully migrated)
 # =============================================================================
-.agent/
+server/
 
 # =============================================================================
-# OS Generated
+# Agent/Dev Tools
 # =============================================================================
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+.agent/

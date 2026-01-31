@@ -101,6 +101,7 @@ The Edge Engine has no knowledge of:
 | Adding required fields to published page schema | Breaks backward compatibility |
 | Dropping `viewportOverrides` during publish transform | Breaks responsive styling |
 | Hardcoding CSS in Edge instead of using cssBundle | Causes builder/SSR parity drift |
+| **Modifying SQLAlchemy models without Alembic migration** | **Causes production schema drift** |
 
 ---
 
@@ -321,7 +322,26 @@ def upgrade():
 | Enum | `native_enum=False` | Avoids type issues |
 | ALTER TABLE | `render_as_batch=True` | Direct OK |
 
-### 6.4 Best Practices
+### 6.4 Mandatory Migration Rule
+
+> [!CAUTION]
+> **EVERY SQLAlchemy model change MUST have a corresponding Alembic migration.**
+
+Whenever you:
+- Add a column to a model → Create migration with `op.add_column()`
+- Remove a column → Create migration with `op.drop_column()`
+- Rename a table/column → Create migration with `op.rename_table()` or `op.alter_column()`
+- Change column type/constraints → Create migration with `op.alter_column()`
+
+**The migration MUST be created in the same commit as the model change.** Do not wait for deployment errors to create migrations.
+
+Example workflow:
+1. Modify `models.py` (e.g., add `logo_url` column)
+2. Immediately create `alembic/versions/XXXX_add_logo_url.py`
+3. Test locally with `alembic upgrade head`
+4. Commit both files together
+
+### 6.5 Best Practices
 
 1. Check table existence before CREATE
 2. Include both `upgrade()` and `downgrade()`

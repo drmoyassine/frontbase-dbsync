@@ -32,6 +32,7 @@ export interface FooterProps {
     copyright?: string;
     hideOnMobile?: boolean;
     hideOnDesktop?: boolean;
+    mobileColumns?: 1 | 2 | 3;
 }
 
 const socialIcons: Record<string, string> = {
@@ -93,6 +94,15 @@ export function renderFooter(
     const year = new Date().getFullYear();
     const copyrightText = props.copyright || `© ${year} All rights reserved.`;
 
+    // SAFELIST PATTERN: Explicit class mapping to prevent Tailwind CSS purging
+    // Dynamic classes like `grid-cols-${var}` are invisible to Tailwind's build
+    const mobileColsClass: Record<number, string> = {
+        1: 'grid-cols-1',
+        2: 'grid-cols-2',
+        3: 'grid-cols-3',
+    };
+    const gridColsClass = mobileColsClass[props.mobileColumns || 1] || 'grid-cols-1';
+
     return `
         <footer id="${id}" class="${footerClasses}" style="${inlineStyles}">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
@@ -105,7 +115,7 @@ export function renderFooter(
                     </div>
                     
                     <!-- Link Columns -->
-                    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:flex lg:gap-12">
+                    <div class="grid ${gridColsClass} gap-6 sm:grid-cols-2 md:grid-cols-3 lg:flex lg:gap-12">
                         ${columnsHtml}
                     </div>
                 </div>

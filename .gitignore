@@ -36,7 +36,7 @@ pip-delete-this-directory.txt
 # =============================================================================
 # Build Outputs
 # =============================================================================
-dist/
+# dist/ - now tracked for VPS deployment
 dist-ssr/
 build/
 *.local

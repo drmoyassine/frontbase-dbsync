@@ -138,6 +138,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
         <ContainerComponent
           component={component}
           pageId={pageId}
+          onSelect={onSelect}
         />
       ) : (
         <ComponentRenderer
@@ -174,7 +175,8 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
 const ContainerComponent: React.FC<{
   component: any;
   pageId: string;
-}> = ({ component, pageId }) => {
+  onSelect: (componentId: string, event: React.MouseEvent) => void;
+}> = ({ component, pageId, onSelect }) => {
   const { selectedComponentId, setSelectedComponentId, isPreviewMode } = useBuilderStore();
 
   // Make container a dropzone
@@ -215,12 +217,7 @@ const ContainerComponent: React.FC<{
           pageId={pageId}
           parentId={component.id}
           isSelected={selectedComponentId === child.id}
-          onSelect={(componentId, event) => {
-            event.stopPropagation();
-            if (!isPreviewMode) {
-              setSelectedComponentId(selectedComponentId === componentId ? null : componentId);
-            }
-          }}
+          onSelect={onSelect}
         />
       ))}
     </>

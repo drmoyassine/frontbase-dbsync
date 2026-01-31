@@ -102,6 +102,7 @@ The Edge Engine has no knowledge of:
 | Dropping `viewportOverrides` during publish transform | Breaks responsive styling |
 | Hardcoding CSS in Edge instead of using cssBundle | Causes builder/SSR parity drift |
 | **Modifying SQLAlchemy models without Alembic migration** | **Causes production schema drift** |
+| **Editing deployed Alembic migrations** | **Create a NEW migration instead** |
 
 ---
 

@@ -1,4 +1,4 @@
-"""Add missing logo_url and fetched_at columns
+"""Add missing logo_url and fetched_at columns, fix schema_data constraint
 
 Revision ID: 0014_add_logo_fetched_at
 Revises: 0013_ensure_table_exists
@@ -7,6 +7,9 @@ Create Date: 2026-02-01
 Adds:
 - project.logo_url (TEXT) - Custom logo URL for branding
 - table_schema_cache.fetched_at (TIMESTAMP) - When schema was fetched
+- table_schema_cache.columns (JSON) - Cached column definitions
+- table_schema_cache.foreign_keys (JSON) - Cached FK relationships
+- Makes table_schema_cache.schema_data NULLABLE (legacy column)
 """
 from alembic import op
 import sqlalchemy as sa
@@ -44,8 +47,9 @@ def upgrade():
         if 'logo_url' not in columns:
             op.add_column('project', sa.Column('logo_url', sa.String(), nullable=True))
     
-    # Add fetched_at to table_schema_cache if not exists
+    # Fix table_schema_cache: add missing columns and make schema_data nullable
     if dialect == 'postgresql':
+        # Add fetched_at if not exists
         op.execute("""
             DO $$ 
             BEGIN 
@@ -57,14 +61,52 @@ def upgrade():
                 END IF;
             END $$;
         """)
+        
+        # Add columns if not exists
+        op.execute("""
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'table_schema_cache' AND column_name = 'columns'
+                ) THEN 
+                    ALTER TABLE table_schema_cache ADD COLUMN columns JSON;
+                END IF;
+            END $$;
+        """)
+        
+        # Add foreign_keys if not exists
+        op.execute("""
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'table_schema_cache' AND column_name = 'foreign_keys'
+                ) THEN 
+                    ALTER TABLE table_schema_cache ADD COLUMN foreign_keys JSON DEFAULT '[]';
+                END IF;
+            END $$;
+        """)
+        
+        # Make schema_data nullable (legacy column, now optional)
+        op.execute("""
+            ALTER TABLE table_schema_cache ALTER COLUMN schema_data DROP NOT NULL;
+        """)
     else:
-        # SQLite - check if column exists first
+        # SQLite - check if columns exist first
         result = conn.execute(sa.text("PRAGMA table_info(table_schema_cache)"))
         columns = [row[1] for row in result.fetchall()]
+        
         if 'fetched_at' not in columns:
             op.add_column('table_schema_cache', sa.Column('fetched_at', sa.DateTime(), nullable=True))
+        if 'columns' not in columns:
+            op.add_column('table_schema_cache', sa.Column('columns', sa.JSON(), nullable=True))
+        if 'foreign_keys' not in columns:
+            op.add_column('table_schema_cache', sa.Column('foreign_keys', sa.JSON(), nullable=True))
+        # SQLite doesn't support ALTER COLUMN, but columns are already nullable by default
 
 
 def downgrade():
     # Note: Dropping columns is risky in production - leaving as no-op
     pass
+

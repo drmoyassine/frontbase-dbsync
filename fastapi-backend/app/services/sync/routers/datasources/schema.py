@@ -70,8 +70,25 @@ async def get_table_schema(
         )
         cached = cache_result.scalar_one_or_none()
         if cached:
+            import json
             logger.debug(f"Schema cache hit for {datasource_id}/{table}")
-            return TableSchema(columns=cached.columns, foreign_keys=cached.foreign_keys or [])
+            
+            # Defensive: handle columns/foreign_keys as string (legacy) or list
+            columns = cached.columns or []
+            if isinstance(columns, str):
+                try:
+                    columns = json.loads(columns)
+                except (json.JSONDecodeError, TypeError):
+                    columns = []
+            
+            fk_data = cached.foreign_keys or []
+            if isinstance(fk_data, str):
+                try:
+                    fk_data = json.loads(fk_data)
+                except (json.JSONDecodeError, TypeError):
+                    fk_data = []
+            
+            return TableSchema(columns=columns, foreign_keys=fk_data)
     
     # No cache or refresh requested - fetch from source
     try:

@@ -447,16 +447,19 @@ function buildResponsiveCSS(componentId: string, styles: Record<string, any>): s
         for (const [key, value] of Object.entries(values)) {
             if (value === undefined || value === null || value === '') continue;
 
+            // Helper to append !important
+            const withImp = (val: string | number) => `${val} !important`;
+
             // Handle special 'size' object
             if (key === 'size' && typeof value === 'object') {
                 const sizeObj = value as any;
                 if (sizeObj.width !== undefined && sizeObj.width !== 'auto') {
                     const widthUnit = sizeObj.widthUnit || 'px';
-                    props.push(`width:${sizeObj.width}${widthUnit}`);
+                    props.push(`width:${withImp(sizeObj.width + widthUnit)}`);
                 }
                 if (sizeObj.height !== undefined && sizeObj.height !== 'auto') {
                     const heightUnit = sizeObj.heightUnit || 'px';
-                    props.push(`height:${sizeObj.height}${heightUnit}`);
+                    props.push(`height:${withImp(sizeObj.height + heightUnit)}`);
                 }
                 continue;
             }
@@ -464,21 +467,21 @@ function buildResponsiveCSS(componentId: string, styles: Record<string, any>): s
             // Handle padding/margin objects
             if ((key === 'padding' || key === 'margin') && typeof value === 'object') {
                 const boxObj = value as any;
-                if (boxObj.top !== undefined) props.push(`${key}-top:${boxObj.top}px`);
-                if (boxObj.right !== undefined) props.push(`${key}-right:${boxObj.right}px`);
-                if (boxObj.bottom !== undefined) props.push(`${key}-bottom:${boxObj.bottom}px`);
-                if (boxObj.left !== undefined) props.push(`${key}-left:${boxObj.left}px`);
+                if (boxObj.top !== undefined) props.push(`${key}-top:${withImp(boxObj.top + 'px')}`);
+                if (boxObj.right !== undefined) props.push(`${key}-right:${withImp(boxObj.right + 'px')}`);
+                if (boxObj.bottom !== undefined) props.push(`${key}-bottom:${withImp(boxObj.bottom + 'px')}`);
+                if (boxObj.left !== undefined) props.push(`${key}-left:${withImp(boxObj.left + 'px')}`);
                 continue;
             }
 
             // Handle horizontalAlign
             if (key === 'horizontalAlign' && typeof value === 'string') {
                 if (value === 'center') {
-                    props.push('margin-left:auto', 'margin-right:auto');
+                    props.push(`margin-left:${withImp('auto')}`, `margin-right:${withImp('auto')}`);
                 } else if (value === 'right') {
-                    props.push('margin-left:auto', 'margin-right:0');
+                    props.push(`margin-left:${withImp('auto')}`, `margin-right:${withImp(0)}`);
                 } else {
-                    props.push('margin-left:0', 'margin-right:auto');
+                    props.push(`margin-left:${withImp(0)}`, `margin-right:${withImp('auto')}`);
                 }
                 continue;
             }
@@ -487,7 +490,7 @@ function buildResponsiveCSS(componentId: string, styles: Record<string, any>): s
             if (typeof value === 'object') continue;
 
             const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-            props.push(`${cssKey}:${value}`);
+            props.push(`${cssKey}:${withImp(value)}`);
         }
         return props.join(';');
     };

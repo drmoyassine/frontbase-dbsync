@@ -23,14 +23,14 @@ interface FeatureItem {
     cardBackground?: string; // Override section-level
 }
 
-// Dropzone component for between cards
+// Dropzone component - absolute positioned on left edge of card
 const CardDropzone: React.FC<{
     sectionId: string;
     position: number;
-    isOver?: boolean;
-}> = ({ sectionId, position, isOver }) => {
-    const { setNodeRef, isOver: isDropOver } = useDroppable({
-        id: `dropzone-${sectionId}-${position}`,
+    side: 'left' | 'right';
+}> = ({ sectionId, position, side }) => {
+    const { setNodeRef, isOver } = useDroppable({
+        id: `dropzone-${sectionId}-${position}-${side}`,
         data: {
             type: 'card-dropzone',
             sectionId,
@@ -38,22 +38,22 @@ const CardDropzone: React.FC<{
         }
     });
 
-    const showActive = isOver || isDropOver;
-
     return (
         <div
             ref={setNodeRef}
             className={cn(
-                "h-full min-h-[100px] w-2 mx-[-4px] z-10 transition-all duration-200 rounded",
-                showActive
-                    ? "bg-blue-500 w-1 opacity-100"
-                    : "bg-transparent hover:bg-blue-300/50"
+                "absolute top-0 bottom-0 w-3 z-20 transition-all duration-200",
+                side === 'left' ? "left-0 -translate-x-1/2" : "right-0 translate-x-1/2",
+                isOver
+                    ? "bg-blue-500 opacity-100"
+                    : "bg-blue-400/30 opacity-0 hover:opacity-100"
             )}
+            style={{ borderRadius: '4px' }}
         />
     );
 };
 
-// Draggable card wrapper
+// Draggable card wrapper with integrated dropzones
 const DraggableCard: React.FC<{
     feature: FeatureItem;
     index: number;
@@ -61,8 +61,10 @@ const DraggableCard: React.FC<{
     cardProps: any;
     bgColor: string;
     isSelected: boolean;
+    isFirst: boolean;
+    isLast: boolean;
     onClick: (e: React.MouseEvent) => void;
-}> = ({ feature, index, sectionId, cardProps, bgColor, isSelected, onClick }) => {
+}> = ({ feature, index, sectionId, cardProps, bgColor, isSelected, isFirst, isLast, onClick }) => {
     const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
         id: `card-${sectionId}-${feature.id}`,
         data: {
@@ -83,31 +85,37 @@ const DraggableCard: React.FC<{
             ref={setNodeRef}
             style={style}
             className={cn(
-                "relative cursor-pointer rounded-lg transition-all duration-200",
+                "relative cursor-pointer rounded-lg transition-all duration-200 group",
                 isSelected && "ring-2 ring-blue-500 ring-offset-2",
                 isDragging && "opacity-50 scale-95"
             )}
             onClick={onClick}
         >
+            {/* Left dropzone */}
+            <CardDropzone sectionId={sectionId} position={index} side="left" />
+
+            {/* Right dropzone (only on last card) */}
+            {isLast && (
+                <CardDropzone sectionId={sectionId} position={index + 1} side="right" />
+            )}
+
             {/* Drag handle */}
             <div
                 {...attributes}
                 {...listeners}
-                className="absolute top-2 left-2 z-20 p-1 rounded bg-white/80 dark:bg-gray-800/80 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
+                className="absolute top-2 left-2 z-30 p-1 rounded bg-white/80 dark:bg-gray-800/80 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing shadow-sm"
                 onClick={(e) => e.stopPropagation()}
             >
                 <GripVertical className="w-4 h-4 text-gray-500" />
             </div>
 
-            <div className="group">
-                <CardRenderer
-                    effectiveProps={cardProps}
-                    combinedClassName="transition-all duration-300 hover:shadow-lg h-full w-full"
-                    inlineStyles={{ backgroundColor: bgColor }}
-                    children={null}
-                    createEditableText={() => null}
-                />
-            </div>
+            <CardRenderer
+                effectiveProps={cardProps}
+                combinedClassName="transition-all duration-300 hover:shadow-lg h-full w-full"
+                inlineStyles={{ backgroundColor: bgColor }}
+                children={null}
+                createEditableText={() => null}
+            />
 
             {isSelected && (
                 <div className="absolute top-1 right-1 bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded z-10">
@@ -221,6 +229,8 @@ export const FeatureSectionRenderer: React.FC<RendererProps> = ({
                     cardProps={cardProps}
                     bgColor={bgColor}
                     isSelected={isCardSelected}
+                    isFirst={index === 0}
+                    isLast={index === featureList.length - 1}
                     onClick={(e) => handleCardClick(e, index)}
                 />
             );

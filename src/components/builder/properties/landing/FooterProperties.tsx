@@ -33,7 +33,7 @@ interface FooterColumn {
 
 interface SocialLink {
     id: string;
-    icon: 'facebook' | 'twitter' | 'instagram' | 'linkedin' | 'youtube' | 'github';
+    icon: 'facebook' | 'twitter' | 'instagram' | 'linkedin' | 'youtube' | 'github' | 'discord' | 'tiktok' | 'reddit' | 'threads' | 'twitch' | 'pinterest' | 'snapchat';
     href: string;
 }
 
@@ -44,6 +44,13 @@ const SOCIAL_OPTIONS = [
     { value: 'linkedin', label: 'LinkedIn' },
     { value: 'youtube', label: 'YouTube' },
     { value: 'github', label: 'GitHub' },
+    { value: 'discord', label: 'Discord' },
+    { value: 'tiktok', label: 'TikTok' },
+    { value: 'reddit', label: 'Reddit' },
+    { value: 'threads', label: 'Threads' },
+    { value: 'twitch', label: 'Twitch' },
+    { value: 'pinterest', label: 'Pinterest' },
+    { value: 'snapchat', label: 'Snapchat' },
 ] as const;
 
 export const FooterProperties: React.FC<FooterPropertiesProps> = ({

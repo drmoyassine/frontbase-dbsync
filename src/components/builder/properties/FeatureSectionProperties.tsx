@@ -23,7 +23,7 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Plus, Trash2, Grip } from 'lucide-react';
+import { Plus, Trash2, Grip, Copy } from 'lucide-react';
 import { IconPicker } from './IconPicker';
 import { VariableInput } from '../VariableInput';
 
@@ -67,6 +67,18 @@ export const FeatureSectionProperties: React.FC<FeatureSectionPropertiesProps> =
 
     const removeFeature = (index: number) => {
         updateComponentProp('features', features.filter((_, i) => i !== index));
+    };
+
+    const duplicateFeature = (index: number) => {
+        const featureToCopy = features[index];
+        const duplicate: FeatureItem = {
+            ...featureToCopy,
+            id: `feature-${Date.now()}`,
+            title: `${featureToCopy.title} (Copy)`,
+        };
+        const newFeatures = [...features];
+        newFeatures.splice(index + 1, 0, duplicate);
+        updateComponentProp('features', newFeatures);
     };
 
     return (
@@ -280,15 +292,25 @@ export const FeatureSectionProperties: React.FC<FeatureSectionPropertiesProps> =
                                     />
                                 </div>
 
-                                {/* Remove */}
-                                <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    className="w-full"
-                                    onClick={() => removeFeature(index)}
-                                >
-                                    <Trash2 className="w-4 h-4 mr-1" /> Remove
-                                </Button>
+                                {/* Duplicate & Remove */}
+                                <div className="flex gap-2">
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="flex-1"
+                                        onClick={() => duplicateFeature(index)}
+                                    >
+                                        <Copy className="w-4 h-4 mr-1" /> Duplicate
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        className="flex-1"
+                                        onClick={() => removeFeature(index)}
+                                    >
+                                        <Trash2 className="w-4 h-4 mr-1" /> Remove
+                                    </Button>
+                                </div>
                             </AccordionContent>
                         </AccordionItem>
                     ))}

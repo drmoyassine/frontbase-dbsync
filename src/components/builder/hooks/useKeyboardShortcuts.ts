@@ -6,6 +6,7 @@ interface KeyboardShortcutsOptions {
     onUndo?: () => void;
     onRedo?: () => void;
     onDeleteRequest?: () => void;
+    onCardDeleteRequest?: () => void;  // For card-level deletion
 }
 
 export const useKeyboardShortcuts = (options: KeyboardShortcutsOptions = {}) => {
@@ -17,7 +18,40 @@ export const useKeyboardShortcuts = (options: KeyboardShortcutsOptions = {}) => 
         pasteComponent,
         copiedComponent,
         isPreviewMode,
+        // Card-level state
+        selectedCardIndex,
+        copiedCard,
+        copyCard,
+        pasteCard,
+        deleteCard,
+        pages,
+        currentPageId,
     } = useBuilderStore();
+
+    // Get the selected card's data for copy operation
+    const getSelectedCardData = () => {
+        if (selectedCardIndex === null || !selectedComponentId || !currentPageId) return null;
+
+        const page = pages.find(p => p.id === currentPageId);
+        if (!page?.layoutData?.content) return null;
+
+        const findComponent = (components: any[], id: string): any => {
+            for (const comp of components) {
+                if (comp.id === id) return comp;
+                if (comp.children) {
+                    const found = findComponent(comp.children, id);
+                    if (found) return found;
+                }
+            }
+            return null;
+        };
+
+        const component = findComponent(page.layoutData.content, selectedComponentId);
+        if (component?.type === 'FeatureSection' && component.props?.features?.[selectedCardIndex]) {
+            return component.props.features[selectedCardIndex];
+        }
+        return null;
+    };
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -31,17 +65,31 @@ export const useKeyboardShortcuts = (options: KeyboardShortcutsOptions = {}) => 
             // Allow some shortcuts even when typing
             const isModifierKey = event.ctrlKey || event.metaKey;
 
+            // Check if a card is selected
+            const hasCardSelected = selectedCardIndex !== null && selectedComponentId;
+
             // Delete - Del or Backspace (only when not typing)
-            if ((event.key === 'Delete' || event.key === 'Backspace') && !isTyping && selectedComponentId) {
-                event.preventDefault();
-                // Use callback to trigger confirmation dialog instead of direct deletion
-                if (options.onDeleteRequest) {
-                    options.onDeleteRequest();
-                } else {
-                    // Fallback to direct deletion if no callback provided
-                    removeComponent(selectedComponentId);
+            if ((event.key === 'Delete' || event.key === 'Backspace') && !isTyping) {
+                // If a card is selected, delete the card
+                if (hasCardSelected) {
+                    event.preventDefault();
+                    if (options.onCardDeleteRequest) {
+                        options.onCardDeleteRequest();
+                    } else {
+                        deleteCard();
+                    }
+                    return;
                 }
-                return;
+                // Otherwise, delete the component
+                if (selectedComponentId) {
+                    event.preventDefault();
+                    if (options.onDeleteRequest) {
+                        options.onDeleteRequest();
+                    } else {
+                        removeComponent(selectedComponentId);
+                    }
+                    return;
+                }
             }
 
             // Only handle modifier shortcuts from here
@@ -62,17 +110,38 @@ export const useKeyboardShortcuts = (options: KeyboardShortcutsOptions = {}) => 
             }
 
             // Ctrl/Cmd + C - Copy (only when not typing)
-            if ((event.key === 'c' || event.key === 'C') && !isTyping && selectedComponentId) {
-                event.preventDefault();
-                copyComponent(selectedComponentId);
-                return;
+            if ((event.key === 'c' || event.key === 'C') && !isTyping) {
+                // If a card is selected, copy the card
+                if (hasCardSelected) {
+                    event.preventDefault();
+                    const cardData = getSelectedCardData();
+                    if (cardData) {
+                        copyCard(cardData);
+                    }
+                    return;
+                }
+                // Otherwise, copy the component
+                if (selectedComponentId) {
+                    event.preventDefault();
+                    copyComponent(selectedComponentId);
+                    return;
+                }
             }
 
             // Ctrl/Cmd + V - Paste (only when not typing)
-            if ((event.key === 'v' || event.key === 'V') && !isTyping && copiedComponent) {
-                event.preventDefault();
-                pasteComponent();
-                return;
+            if ((event.key === 'v' || event.key === 'V') && !isTyping) {
+                // If we have a copied card and a FeatureSection is selected, paste the card
+                if (copiedCard && selectedComponentId) {
+                    event.preventDefault();
+                    pasteCard();
+                    return;
+                }
+                // Otherwise, paste the component
+                if (copiedComponent) {
+                    event.preventDefault();
+                    pasteComponent();
+                    return;
+                }
             }
 
             // Ctrl/Cmd + Z - Undo
@@ -114,6 +183,13 @@ export const useKeyboardShortcuts = (options: KeyboardShortcutsOptions = {}) => 
         pasteComponent,
         copiedComponent,
         isPreviewMode,
+        selectedCardIndex,
+        copiedCard,
+        copyCard,
+        pasteCard,
+        deleteCard,
+        pages,
+        currentPageId,
         options
     ]);
 };

@@ -15,10 +15,20 @@ export interface BuilderSlice {
     copiedComponent: ComponentData | null;
     focusedField: { componentId: string; fieldName: string } | null;
 
+    // Card-level selection (for FeatureSections, etc.)
+    selectedCardIndex: number | null;
+    copiedCard: any | null;  // The copied card data
+
     setSelectedComponentId: (id: string | null) => void;
     setDraggedComponentId: (componentId: string | null) => void;
     setEditingComponentId: (id: string | null) => void;
     setFocusedField: (field: { componentId: string; fieldName: string } | null) => void;
+
+    // Card-level actions
+    setSelectedCardIndex: (index: number | null) => void;
+    copyCard: (cardData: any) => void;
+    pasteCard: () => void;
+    deleteCard: () => void;
 
     moveComponent: (pageId: string, componentId: string | null, component: ComponentData, targetIndex: number, parentId?: string, sourceParentId?: string) => void;
     updateComponentText: (componentId: string, textProperty: string, text: string) => void;
@@ -36,11 +46,120 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
     editingComponentId: null,
     copiedComponent: null,
     focusedField: null,
+    selectedCardIndex: null,
+    copiedCard: null,
 
-    setSelectedComponentId: (id) => set({ selectedComponentId: id }),
+    setSelectedComponentId: (id) => set({ selectedComponentId: id, selectedCardIndex: null }),
     setDraggedComponentId: (id) => set({ draggedComponentId: id }),
     setEditingComponentId: (id) => set({ editingComponentId: id }),
     setFocusedField: (field) => set({ focusedField: field }),
+    setSelectedCardIndex: (index) => set({ selectedCardIndex: index }),
+
+    copyCard: (cardData) => {
+        set({ copiedCard: JSON.parse(JSON.stringify(cardData)) });
+        toast({
+            title: "Card copied",
+            description: "Press Ctrl/Cmd+V to paste into another section"
+        });
+    },
+
+    pasteCard: () => {
+        const { copiedCard, selectedComponentId, currentPageId, pages } = get();
+        if (!copiedCard || !selectedComponentId || !currentPageId) return;
+
+        const pageIndex = pages.findIndex(p => p.id === currentPageId);
+        if (pageIndex === -1) return;
+
+        // Find the selected component and check if it's a FeatureSection
+        const findComponent = (components: ComponentData[], id: string): ComponentData | null => {
+            for (const comp of components) {
+                if (comp.id === id) return comp;
+                if (comp.children) {
+                    const found = findComponent(comp.children, id);
+                    if (found) return found;
+                }
+            }
+            return null;
+        };
+
+        const page = pages[pageIndex];
+        const component = findComponent(page.layoutData?.content || [], selectedComponentId);
+
+        if (component && component.type === 'FeatureSection') {
+            const features = component.props?.features || [];
+            const newCard = {
+                ...copiedCard,
+                id: `feature-${Date.now()}`,
+            };
+
+            set((state) => {
+                const newPages = [...state.pages];
+                const newContent = JSON.parse(JSON.stringify(newPages[pageIndex].layoutData?.content || []));
+
+                const updateFeatures = (components: ComponentData[]): boolean => {
+                    for (const comp of components) {
+                        if (comp.id === selectedComponentId) {
+                            comp.props = comp.props || {};
+                            comp.props.features = [...(comp.props.features || []), newCard];
+                            return true;
+                        }
+                        if (comp.children && updateFeatures(comp.children)) return true;
+                    }
+                    return false;
+                };
+
+                updateFeatures(newContent);
+                newPages[pageIndex] = {
+                    ...newPages[pageIndex],
+                    layoutData: { ...newPages[pageIndex].layoutData, content: newContent }
+                };
+
+                return { ...state, pages: newPages, hasUnsavedChanges: true };
+            });
+
+            toast({
+                title: "Card pasted",
+                description: "Card added to the selected section"
+            });
+        }
+    },
+
+    deleteCard: () => {
+        const { selectedComponentId, selectedCardIndex, currentPageId, pages } = get();
+        if (selectedCardIndex === null || !selectedComponentId || !currentPageId) return;
+
+        const pageIndex = pages.findIndex(p => p.id === currentPageId);
+        if (pageIndex === -1) return;
+
+        set((state) => {
+            const newPages = [...state.pages];
+            const newContent = JSON.parse(JSON.stringify(newPages[pageIndex].layoutData?.content || []));
+
+            const updateFeatures = (components: ComponentData[]): boolean => {
+                for (const comp of components) {
+                    if (comp.id === selectedComponentId && comp.props?.features) {
+                        comp.props.features = comp.props.features.filter((_: any, i: number) => i !== selectedCardIndex);
+                        return true;
+                    }
+                    if (comp.children && updateFeatures(comp.children)) return true;
+                }
+                return false;
+            };
+
+            updateFeatures(newContent);
+            newPages[pageIndex] = {
+                ...newPages[pageIndex],
+                layoutData: { ...newPages[pageIndex].layoutData, content: newContent }
+            };
+
+            return { ...state, pages: newPages, selectedCardIndex: null, hasUnsavedChanges: true };
+        });
+
+        toast({
+            title: "Card deleted",
+            description: "Card removed from section"
+        });
+    },
 
     moveComponent: (pageId, componentId, component, targetIndex, parentId, sourceParentId) => {
         set((state) => {

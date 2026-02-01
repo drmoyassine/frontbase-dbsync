@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { RendererProps } from '../types';
 import { CardRenderer } from '../basic/CardRenderer';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useBuilderStore } from '@/stores/builder';
 
 interface FeatureItem {
     id: string;
@@ -24,7 +25,8 @@ export const FeatureSectionRenderer: React.FC<RendererProps> = ({
     effectiveProps,
     combinedClassName,
     inlineStyles,
-    createEditableText
+    createEditableText,
+    componentId
 }) => {
     const {
         title = 'Features',
@@ -43,6 +45,18 @@ export const FeatureSectionRenderer: React.FC<RendererProps> = ({
     } = effectiveProps;
 
     const scrollRef = useRef<HTMLDivElement>(null);
+
+    // Get store state for card selection
+    const {
+        selectedComponentId,
+        selectedCardIndex,
+        setSelectedCardIndex,
+        setSelectedComponentId,
+        copyCard,
+    } = useBuilderStore();
+
+    // Check if this section is selected and which card
+    const isThisSectionSelected = selectedComponentId === componentId;
 
     // Calculate grid gap based on columns
     const gridGap = columns >= 5 ? '16px' : columns >= 4 ? '24px' : '32px';
@@ -68,9 +82,25 @@ export const FeatureSectionRenderer: React.FC<RendererProps> = ({
         }
     };
 
+    // Handle card click - select this card
+    const handleCardClick = (e: React.MouseEvent, index: number, feature: FeatureItem) => {
+        e.stopPropagation();
+        // Select the section if not already selected
+        if (selectedComponentId !== componentId) {
+            setSelectedComponentId(componentId || null);
+        }
+        // Toggle card selection
+        if (isThisSectionSelected && selectedCardIndex === index) {
+            setSelectedCardIndex(null);  // Deselect if clicking same card
+        } else {
+            setSelectedCardIndex(index);
+        }
+    };
+
     // Render a single feature card using Card component
     const renderFeatureCard = (feature: FeatureItem, index: number) => {
         const bgColor = feature.cardBackground || cardBackground;
+        const isCardSelected = isThisSectionSelected && selectedCardIndex === index;
 
         // Build props for Card component
         const cardProps = {
@@ -84,14 +114,27 @@ export const FeatureSectionRenderer: React.FC<RendererProps> = ({
         };
 
         return (
-            <CardRenderer
+            <div
                 key={feature.id || index}
-                effectiveProps={cardProps}
-                combinedClassName="transition-all duration-300 hover:shadow-lg h-full w-full"
-                inlineStyles={{ backgroundColor: bgColor }}
-                children={null}
-                createEditableText={() => null}
-            />
+                className={cn(
+                    "relative cursor-pointer rounded-lg transition-all duration-200",
+                    isCardSelected && "ring-2 ring-blue-500 ring-offset-2"
+                )}
+                onClick={(e) => handleCardClick(e, index, feature)}
+            >
+                <CardRenderer
+                    effectiveProps={cardProps}
+                    combinedClassName="transition-all duration-300 hover:shadow-lg h-full w-full"
+                    inlineStyles={{ backgroundColor: bgColor }}
+                    children={null}
+                    createEditableText={() => null}
+                />
+                {isCardSelected && (
+                    <div className="absolute top-1 right-1 bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded">
+                        {index + 1}
+                    </div>
+                )}
+            </div>
         );
     };
 

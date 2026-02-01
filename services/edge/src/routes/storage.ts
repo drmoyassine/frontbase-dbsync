@@ -1047,6 +1047,10 @@ storageRoute.openapi(getSignedUrlRoute, async (c) => {
     const storage = createStorage(config);
     const targetBucket = bucket || config.bucket;
 
+    if (!targetBucket) {
+        return c.json({ success: false, error: 'Bucket is required' }, 400);
+    }
+
     try {
         // Check if bucket is public - if so, return permanent public URL
         const bucketInfo = await storage.getBucket(targetBucket);

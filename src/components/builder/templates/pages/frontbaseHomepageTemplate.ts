@@ -80,7 +80,7 @@ export const frontbaseHomepageTemplate = (): ComponentTemplate => ({
                 {
                     type: 'Container',
                     props: {},
-                    styles: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '48px', maxWidth: '900px', margin: '0 auto' },
+                    styles: { display: 'flex', flexWrap: 'wrap', gap: '48px', justifyContent: 'center', maxWidth: '900px', margin: '0 auto' },
                     children: [
                         createComparisonCard('WordPress', ['PHP Monolith', 'Slow, requires hosting', 'MySQL only', 'Plugin-dependent AI', 'Theme lock-in', 'jQuery, legacy'], false),
                         createComparisonCard('Frontbase', ['Edge-native serverless', 'Sub-50ms global', 'Any SQL database', 'Native Python AI', 'Clean React/TypeScript', 'React 19, Hono, Tailwind 4'], true)

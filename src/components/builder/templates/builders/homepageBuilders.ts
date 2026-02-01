@@ -90,6 +90,8 @@ export function createComparisonCard(title: string, items: string[], isHighlight
         props: {},
         styles: {
             padding: '32px',
+            flex: '1 1 350px',
+            maxWidth: '420px',
             border: isHighlighted ? '2px solid var(--primary)' : undefined,
             backgroundColor: isHighlighted ? 'var(--primary)' : undefined
         },

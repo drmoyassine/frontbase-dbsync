@@ -234,6 +234,9 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
         const pageIndex = pages.findIndex(p => p.id === currentPageId);
         if (pageIndex === -1) return;
 
+        const page = pages[pageIndex];
+        const content = page.layoutData?.content || [];
+
         // Generate new ID for pasted component
         const generateNewId = () => `comp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -247,16 +250,60 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
 
         const newComponent = cloneWithNewIds(copiedComponent);
 
+        // Find the selected component and its parent to paste into the same container
+        const findComponentWithParent = (
+            components: ComponentData[],
+            id: string,
+            parent: ComponentData | null = null
+        ): { component: ComponentData; parent: ComponentData | null; index: number } | null => {
+            for (let i = 0; i < components.length; i++) {
+                const comp = components[i];
+                if (comp.id === id) return { component: comp, parent, index: i };
+                if (comp.children) {
+                    const found = findComponentWithParent(comp.children, id, comp);
+                    if (found) return found;
+                }
+            }
+            return null;
+        };
+
         set((state) => {
             const newPages = [...state.pages];
-            const page = { ...newPages[pageIndex] };
-            const content = [...(page.layoutData?.content || [])];
+            const newPage = { ...newPages[pageIndex] };
+            const newContent = JSON.parse(JSON.stringify(newPage.layoutData?.content || []));
 
-            // Paste after selected component or at end
-            content.push(newComponent);
+            // If there's a selected component, try to paste into its parent container
+            if (selectedComponentId) {
+                const result = findComponentWithParent(newContent, selectedComponentId);
+                if (result && result.parent) {
+                    // Find parent in new structure and add after selected component
+                    const findAndInsert = (components: ComponentData[]): boolean => {
+                        for (const comp of components) {
+                            if (comp.id === result.parent!.id && comp.children) {
+                                comp.children.splice(result.index + 1, 0, newComponent);
+                                return true;
+                            }
+                            if (comp.children && findAndInsert(comp.children)) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    };
+                    findAndInsert(newContent);
+                } else if (result) {
+                    // Selected component is at root level, insert after it
+                    newContent.splice(result.index + 1, 0, newComponent);
+                } else {
+                    // No selection found, add to end
+                    newContent.push(newComponent);
+                }
+            } else {
+                // No selection, add at root level
+                newContent.push(newComponent);
+            }
 
-            page.layoutData = { ...page.layoutData, content };
-            newPages[pageIndex] = page;
+            newPage.layoutData = { ...newPage.layoutData, content: newContent };
+            newPages[pageIndex] = newPage;
 
             return {
                 ...state,

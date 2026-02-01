@@ -23,10 +23,27 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Plus, Trash2, Grip, Copy } from 'lucide-react';
+import { Plus, Trash2, Grip, Copy, GripVertical } from 'lucide-react';
 import { IconPicker } from './IconPicker';
 import { VariableInput } from '../VariableInput';
 import { useBuilderStore } from '@/stores/builder';
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent,
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface FeatureItem {
     id: string;
@@ -41,6 +58,113 @@ interface FeatureSectionPropertiesProps {
     props: Record<string, any>;
     updateComponentProp: (key: string, value: any) => void;
 }
+
+// Sortable Feature Item component
+const SortableFeatureItem: React.FC<{
+    feature: FeatureItem;
+    index: number;
+    updateFeature: (index: number, updates: Partial<FeatureItem>) => void;
+    duplicateFeature: (index: number) => void;
+    removeFeature: (index: number) => void;
+    cardBackground?: string;
+}> = ({ feature, index, updateFeature, duplicateFeature, removeFeature, cardBackground }) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id: feature.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+    };
+
+    return (
+        <AccordionItem ref={setNodeRef} style={style} value={feature.id}>
+            <AccordionTrigger className="text-sm py-2">
+                <div className="flex items-center gap-2">
+                    <div
+                        {...attributes}
+                        {...listeners}
+                        className="cursor-grab active:cursor-grabbing p-1 hover:bg-muted rounded"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <GripVertical className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                    <span className="truncate max-w-[150px]">
+                        {feature.title || `Feature ${index + 1}`}
+                    </span>
+                </div>
+            </AccordionTrigger>
+            <AccordionContent className="space-y-3 pt-2">
+                {/* Icon Picker */}
+                <div className="space-y-1">
+                    <Label className="text-xs">Icon</Label>
+                    <IconPicker
+                        value={feature.icon}
+                        onChange={(icon) => updateFeature(index, { icon })}
+                    />
+                </div>
+
+                {/* Title */}
+                <div className="space-y-1">
+                    <Label className="text-xs">Title <span className="text-muted-foreground">(@ for variables)</span></Label>
+                    <VariableInput
+                        value={feature.title}
+                        onChange={(value) => updateFeature(index, { title: value })}
+                        placeholder="Feature title or type @ for variables"
+                    />
+                </div>
+
+                {/* Description */}
+                <div className="space-y-1">
+                    <Label className="text-xs">Description <span className="text-muted-foreground">(@ for variables)</span></Label>
+                    <VariableInput
+                        value={feature.description}
+                        onChange={(value) => updateFeature(index, { description: value })}
+                        placeholder="Feature description or type @ for variables"
+                        multiline
+                    />
+                </div>
+
+                {/* Card Background Override */}
+                <div className="space-y-1">
+                    <Label className="text-xs">Card Background (Override)</Label>
+                    <Input
+                        type="color"
+                        value={feature.cardBackground || cardBackground || '#ffffff'}
+                        onChange={(e) => updateFeature(index, { cardBackground: e.target.value })}
+                        className="h-8 w-full"
+                    />
+                </div>
+
+                {/* Duplicate & Remove */}
+                <div className="flex gap-2">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => duplicateFeature(index)}
+                    >
+                        <Copy className="w-4 h-4 mr-1" /> Duplicate
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="destructive"
+                        className="flex-1"
+                        onClick={() => removeFeature(index)}
+                    >
+                        <Trash2 className="w-4 h-4 mr-1" /> Remove
+                    </Button>
+                </div>
+            </AccordionContent>
+        </AccordionItem>
+    );
+};
 
 export const FeatureSectionProperties: React.FC<FeatureSectionPropertiesProps> = ({
     componentId,
@@ -92,6 +216,25 @@ export const FeatureSectionProperties: React.FC<FeatureSectionPropertiesProps> =
         const newFeatures = [...features];
         newFeatures.splice(index + 1, 0, duplicate);
         updateComponentProp('features', newFeatures);
+    };
+
+    // DnD sensors for properties panel reordering
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: { distance: 5 },
+        }),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (over && active.id !== over.id) {
+            const oldIndex = features.findIndex(f => f.id === active.id);
+            const newIndex = features.findIndex(f => f.id === over.id);
+            updateComponentProp('features', arrayMove(features, oldIndex, newIndex));
+        }
     };
 
     return (
@@ -252,87 +395,35 @@ export const FeatureSectionProperties: React.FC<FeatureSectionPropertiesProps> =
                     </Button>
                 </div>
 
-                <Accordion
-                    type="multiple"
-                    className="w-full"
-                    value={expandedItems}
-                    onValueChange={setExpandedItems}
+                <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
                 >
-                    {features.map((feature, index) => (
-                        <AccordionItem key={feature.id} value={feature.id}>
-                            <AccordionTrigger className="text-sm py-2">
-                                <div className="flex items-center gap-2">
-                                    <Grip className="w-4 h-4 text-muted-foreground" />
-                                    <span className="truncate max-w-[150px]">
-                                        {feature.title || `Feature ${index + 1}`}
-                                    </span>
-                                </div>
-                            </AccordionTrigger>
-                            <AccordionContent className="space-y-3 pt-2">
-                                {/* Icon Picker */}
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Icon</Label>
-                                    <IconPicker
-                                        value={feature.icon}
-                                        onChange={(icon) => updateFeature(index, { icon })}
-                                    />
-                                </div>
-
-                                {/* Title */}
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Title <span className="text-muted-foreground">(@ for variables)</span></Label>
-                                    <VariableInput
-                                        value={feature.title}
-                                        onChange={(value) => updateFeature(index, { title: value })}
-                                        placeholder="Feature title or type @ for variables"
-                                    />
-                                </div>
-
-                                {/* Description */}
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Description <span className="text-muted-foreground">(@ for variables)</span></Label>
-                                    <VariableInput
-                                        value={feature.description}
-                                        onChange={(value) => updateFeature(index, { description: value })}
-                                        placeholder="Feature description or type @ for variables"
-                                        multiline
-                                    />
-                                </div>
-
-                                {/* Card Background Override */}
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Card Background (Override)</Label>
-                                    <Input
-                                        type="color"
-                                        value={feature.cardBackground || props.cardBackground || '#ffffff'}
-                                        onChange={(e) => updateFeature(index, { cardBackground: e.target.value })}
-                                        className="h-8 w-full"
-                                    />
-                                </div>
-
-                                {/* Duplicate & Remove */}
-                                <div className="flex gap-2">
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="flex-1"
-                                        onClick={() => duplicateFeature(index)}
-                                    >
-                                        <Copy className="w-4 h-4 mr-1" /> Duplicate
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="destructive"
-                                        className="flex-1"
-                                        onClick={() => removeFeature(index)}
-                                    >
-                                        <Trash2 className="w-4 h-4 mr-1" /> Remove
-                                    </Button>
-                                </div>
-                            </AccordionContent>
-                        </AccordionItem>
-                    ))}
-                </Accordion>
+                    <SortableContext
+                        items={features.map(f => f.id)}
+                        strategy={verticalListSortingStrategy}
+                    >
+                        <Accordion
+                            type="multiple"
+                            className="w-full"
+                            value={expandedItems}
+                            onValueChange={setExpandedItems}
+                        >
+                            {features.map((feature, index) => (
+                                <SortableFeatureItem
+                                    key={feature.id}
+                                    feature={feature}
+                                    index={index}
+                                    updateFeature={updateFeature}
+                                    duplicateFeature={duplicateFeature}
+                                    removeFeature={removeFeature}
+                                    cardBackground={props.cardBackground}
+                                />
+                            ))}
+                        </Accordion>
+                    </SortableContext>
+                </DndContext>
 
                 {features.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-4">

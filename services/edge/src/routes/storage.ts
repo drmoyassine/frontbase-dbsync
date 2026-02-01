@@ -1045,10 +1045,21 @@ storageRoute.openapi(getSignedUrlRoute, async (c) => {
     }
 
     const storage = createStorage(config);
+    const targetBucket = bucket || config.bucket;
 
     try {
+        // Check if bucket is public - if so, return permanent public URL
+        const bucketInfo = await storage.getBucket(targetBucket);
+
+        if (bucketInfo.public) {
+            // Public bucket: return permanent public URL (never expires)
+            const publicUrl = storage.getPublicUrl(path, targetBucket);
+            return c.json({ success: true, signedUrl: publicUrl, path, isPublic: true }, 200);
+        }
+
+        // Private bucket: return signed URL with expiration
         const signedUrl = await storage.createSignedUrl(path, expiresIn, bucket);
-        return c.json({ success: true, signedUrl, path }, 200);
+        return c.json({ success: true, signedUrl, path, isPublic: false }, 200);
     } catch (error) {
         return c.json({
             success: false,

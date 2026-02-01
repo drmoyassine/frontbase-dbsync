@@ -5,7 +5,7 @@
  * Allows editing features, grid layout, alignment, and colors.
  */
 
-import React from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ import {
 import { Plus, Trash2, Grip, Copy } from 'lucide-react';
 import { IconPicker } from './IconPicker';
 import { VariableInput } from '../VariableInput';
+import { useBuilderStore } from '@/stores/builder';
 
 interface FeatureItem {
     id: string;
@@ -47,6 +48,18 @@ export const FeatureSectionProperties: React.FC<FeatureSectionPropertiesProps> =
     updateComponentProp
 }) => {
     const features: FeatureItem[] = props.features || [];
+    const { selectedCardIndex, selectedComponentId } = useBuilderStore();
+
+    // Track which accordion items are expanded
+    const [expandedItems, setExpandedItems] = useState<string[]>([]);
+
+    // Auto-expand when a card is selected on the canvas
+    useEffect(() => {
+        if (selectedCardIndex !== null && selectedComponentId === componentId && features[selectedCardIndex]) {
+            const featureId = features[selectedCardIndex].id;
+            setExpandedItems(prev => prev.includes(featureId) ? prev : [...prev, featureId]);
+        }
+    }, [selectedCardIndex, selectedComponentId, componentId, features]);
 
     const addFeature = () => {
         const newFeature: FeatureItem = {
@@ -239,7 +252,12 @@ export const FeatureSectionProperties: React.FC<FeatureSectionPropertiesProps> =
                     </Button>
                 </div>
 
-                <Accordion type="multiple" className="w-full">
+                <Accordion
+                    type="multiple"
+                    className="w-full"
+                    value={expandedItems}
+                    onValueChange={setExpandedItems}
+                >
                     {features.map((feature, index) => (
                         <AccordionItem key={feature.id} value={feature.id}>
                             <AccordionTrigger className="text-sm py-2">

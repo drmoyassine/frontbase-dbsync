@@ -3,15 +3,17 @@
  * 
  * Edge-sufficient component for displaying feature cards in a configurable grid.
  * Uses the Card component for each feature item (proper composition).
- * Pure CSS styling - no JavaScript computations or API calls at runtime.
+ * Supports drag-and-drop reordering of cards within and across sections.
  */
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { RendererProps } from '../types';
 import { CardRenderer } from '../basic/CardRenderer';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, GripVertical } from 'lucide-react';
 import { useBuilderStore } from '@/stores/builder';
+import { useDraggable, useDroppable } from '@dnd-kit/core';
+import * as LucideIcons from 'lucide-react';
 
 interface FeatureItem {
     id: string;
@@ -20,6 +22,101 @@ interface FeatureItem {
     description: string;
     cardBackground?: string; // Override section-level
 }
+
+// Dropzone component for between cards
+const CardDropzone: React.FC<{
+    sectionId: string;
+    position: number;
+    isOver?: boolean;
+}> = ({ sectionId, position, isOver }) => {
+    const { setNodeRef, isOver: isDropOver } = useDroppable({
+        id: `dropzone-${sectionId}-${position}`,
+        data: {
+            type: 'card-dropzone',
+            sectionId,
+            position,
+        }
+    });
+
+    const showActive = isOver || isDropOver;
+
+    return (
+        <div
+            ref={setNodeRef}
+            className={cn(
+                "h-full min-h-[100px] w-2 mx-[-4px] z-10 transition-all duration-200 rounded",
+                showActive
+                    ? "bg-blue-500 w-1 opacity-100"
+                    : "bg-transparent hover:bg-blue-300/50"
+            )}
+        />
+    );
+};
+
+// Draggable card wrapper
+const DraggableCard: React.FC<{
+    feature: FeatureItem;
+    index: number;
+    sectionId: string;
+    cardProps: any;
+    bgColor: string;
+    isSelected: boolean;
+    onClick: (e: React.MouseEvent) => void;
+}> = ({ feature, index, sectionId, cardProps, bgColor, isSelected, onClick }) => {
+    const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
+        id: `card-${sectionId}-${feature.id}`,
+        data: {
+            type: 'feature-card',
+            sectionId,
+            cardIndex: index,
+            card: feature,
+        }
+    });
+
+    const style = transform ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        zIndex: 1000,
+    } : undefined;
+
+    return (
+        <div
+            ref={setNodeRef}
+            style={style}
+            className={cn(
+                "relative cursor-pointer rounded-lg transition-all duration-200",
+                isSelected && "ring-2 ring-blue-500 ring-offset-2",
+                isDragging && "opacity-50 scale-95"
+            )}
+            onClick={onClick}
+        >
+            {/* Drag handle */}
+            <div
+                {...attributes}
+                {...listeners}
+                className="absolute top-2 left-2 z-20 p-1 rounded bg-white/80 dark:bg-gray-800/80 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <GripVertical className="w-4 h-4 text-gray-500" />
+            </div>
+
+            <div className="group">
+                <CardRenderer
+                    effectiveProps={cardProps}
+                    combinedClassName="transition-all duration-300 hover:shadow-lg h-full w-full"
+                    inlineStyles={{ backgroundColor: bgColor }}
+                    children={null}
+                    createEditableText={() => null}
+                />
+            </div>
+
+            {isSelected && (
+                <div className="absolute top-1 right-1 bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded z-10">
+                    {index + 1}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export const FeatureSectionRenderer: React.FC<RendererProps> = ({
     effectiveProps,
@@ -52,7 +149,6 @@ export const FeatureSectionRenderer: React.FC<RendererProps> = ({
         selectedCardIndex,
         setSelectedCardIndex,
         setSelectedComponentId,
-        copyCard,
     } = useBuilderStore();
 
     // Check if this section is selected and which card
@@ -83,7 +179,7 @@ export const FeatureSectionRenderer: React.FC<RendererProps> = ({
     };
 
     // Handle card click - select this card
-    const handleCardClick = (e: React.MouseEvent, index: number, feature: FeatureItem) => {
+    const handleCardClick = (e: React.MouseEvent, index: number) => {
         e.stopPropagation();
         // Select the section if not already selected
         if (selectedComponentId !== componentId) {
@@ -97,46 +193,50 @@ export const FeatureSectionRenderer: React.FC<RendererProps> = ({
         }
     };
 
-    // Render a single feature card using Card component
-    const renderFeatureCard = (feature: FeatureItem, index: number) => {
-        const bgColor = feature.cardBackground || cardBackground;
-        const isCardSelected = isThisSectionSelected && selectedCardIndex === index;
+    // Render cards with dropzones
+    const renderCardsWithDropzones = () => {
+        const items: React.ReactNode[] = [];
+        const featureList = features as FeatureItem[];
 
-        // Build props for Card component
-        const cardProps = {
-            icon: feature.icon,
-            title: feature.title,
-            description: feature.description,
-            iconSize,
-            iconColor,
-            iconAlignment,
-            textAlignment,
-        };
+        featureList.forEach((feature, index) => {
+            const bgColor = feature.cardBackground || cardBackground;
+            const isCardSelected = isThisSectionSelected && selectedCardIndex === index;
 
-        return (
-            <div
-                key={feature.id || index}
-                className={cn(
-                    "relative cursor-pointer rounded-lg transition-all duration-200",
-                    isCardSelected && "ring-2 ring-blue-500 ring-offset-2"
-                )}
-                onClick={(e) => handleCardClick(e, index, feature)}
-            >
-                <CardRenderer
-                    effectiveProps={cardProps}
-                    combinedClassName="transition-all duration-300 hover:shadow-lg h-full w-full"
-                    inlineStyles={{ backgroundColor: bgColor }}
-                    children={null}
-                    createEditableText={() => null}
+            const cardProps = {
+                icon: feature.icon,
+                title: feature.title,
+                description: feature.description,
+                iconSize,
+                iconColor,
+                iconAlignment,
+                textAlignment,
+            };
+
+            items.push(
+                <DraggableCard
+                    key={feature.id || `card-${index}`}
+                    feature={feature}
+                    index={index}
+                    sectionId={componentId || ''}
+                    cardProps={cardProps}
+                    bgColor={bgColor}
+                    isSelected={isCardSelected}
+                    onClick={(e) => handleCardClick(e, index)}
                 />
-                {isCardSelected && (
-                    <div className="absolute top-1 right-1 bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded">
-                        {index + 1}
-                    </div>
-                )}
-            </div>
-        );
+            );
+        });
+
+        return items;
     };
+
+    // Droppable area for the entire section
+    const { setNodeRef: setSectionDropRef, isOver: isSectionOver } = useDroppable({
+        id: `section-drop-${componentId}`,
+        data: {
+            type: 'feature-section',
+            sectionId: componentId,
+        }
+    });
 
     return (
         <section
@@ -170,10 +270,14 @@ export const FeatureSectionRenderer: React.FC<RendererProps> = ({
             {/* Features Grid - using Card components */}
             <div className="fb-container">
                 <div
-                    ref={scrollRef}
+                    ref={(el) => {
+                        scrollRef.current = el;
+                        setSectionDropRef(el);
+                    }}
                     className={cn(
-                        "fb-grid grid",
-                        enableSwipeOnMobile && "swipe-mode"
+                        "fb-grid grid transition-all",
+                        enableSwipeOnMobile && "swipe-mode",
+                        isSectionOver && "ring-2 ring-blue-400 ring-dashed rounded-lg"
                     )}
                     data-cols={columns}
                     style={{
@@ -181,7 +285,7 @@ export const FeatureSectionRenderer: React.FC<RendererProps> = ({
                         gap: gridGap,
                     }}
                 >
-                    {(features as FeatureItem[]).map(renderFeatureCard)}
+                    {renderCardsWithDropzones()}
                 </div>
 
                 {/* Carousel Navigation Arrows */}
@@ -207,8 +311,14 @@ export const FeatureSectionRenderer: React.FC<RendererProps> = ({
 
             {/* Empty state for builder */}
             {(!features || features.length === 0) && (
-                <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
-                    <p>Add features using the properties panel</p>
+                <div
+                    ref={setSectionDropRef}
+                    className={cn(
+                        "text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg transition-colors",
+                        isSectionOver && "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                    )}
+                >
+                    <p>Add features using the properties panel or drag a card here</p>
                 </div>
             )}
         </section>

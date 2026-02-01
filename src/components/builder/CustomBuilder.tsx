@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getSectionTemplate, expandTemplate } from './templates';
 import { getDefaultProps } from '@/lib/componentDefaults';
+import * as LucideIcons from 'lucide-react';
 import './builder.css';
 
 export const CustomBuilder: React.FC = () => {
@@ -37,6 +38,7 @@ export const CustomBuilder: React.FC = () => {
     moveComponent,
     currentViewport,
     setCurrentViewport,
+    updateComponent,
   } = useBuilderStore();
 
   // Keyboard shortcuts integration
@@ -260,6 +262,52 @@ export const CustomBuilder: React.FC = () => {
         setSelectedComponentId(newComponent.id);
       }
     }
+
+    // Handle FEATURE CARD drops (dragging cards between sections)
+    if (activeData?.type === 'feature-card') {
+      const sourceSectionId = activeData.sectionId;
+      const sourceCardIndex = activeData.cardIndex;
+      const cardData = activeData.card;
+
+      // Check if dropped on a feature-section or its drop area
+      if (overData?.type === 'feature-section') {
+        const targetSectionId = overData.sectionId;
+
+        // Find source and target sections
+        const currentPage = pages.find(p => p.id === currentPageId);
+        if (!currentPage?.layoutData?.content) return;
+
+        const findComponent = (components: any[], id: string): any => {
+          for (const comp of components) {
+            if (comp.id === id) return comp;
+            if (comp.children) {
+              const found = findComponent(comp.children, id);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
+
+        const sourceSection = findComponent(currentPage.layoutData.content, sourceSectionId);
+        const targetSection = findComponent(currentPage.layoutData.content, targetSectionId);
+
+        if (sourceSection && targetSection) {
+          // Remove from source
+          const newSourceFeatures = [...(sourceSection.props?.features || [])];
+          newSourceFeatures.splice(sourceCardIndex, 1);
+          updateComponent(sourceSectionId, { features: newSourceFeatures });
+
+          // Add to target
+          const newTargetFeatures = [...(targetSection.props?.features || []), {
+            ...cardData,
+            id: `feature-${Date.now()}` // New ID for the moved card
+          }];
+          updateComponent(targetSectionId, { features: newTargetFeatures });
+
+          toast.success('Card moved to section');
+        }
+      }
+    }
   };
 
   // Keyboard event handling
@@ -466,16 +514,40 @@ export const CustomBuilder: React.FC = () => {
       {/* CRITICAL: dropAnimation={null} prevents snap-back! */}
       <DragOverlay dropAnimation={null}>
         {activeItem ? (
-          <div className="bg-white dark:bg-gray-800 shadow-2xl rounded-lg p-3 border-2 border-primary-500 opacity-90">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-                <span className="text-xs font-bold text-primary-600 dark:text-primary-400">
-                  {activeItem.type?.charAt(0) || 'C'}
+          activeItem.type === 'feature-card' && activeItem.card ? (
+            // Card-like preview for feature cards
+            <div className="bg-white dark:bg-gray-800 shadow-2xl rounded-lg p-4 border-2 border-blue-500 opacity-95 min-w-[180px]">
+              <div className="flex flex-col items-center gap-2 text-center">
+                {/* Icon */}
+                {(() => {
+                  const IconComponent = (LucideIcons as any)[activeItem.card.icon];
+                  return IconComponent ? (
+                    <IconComponent className="w-8 h-8 text-primary" />
+                  ) : (
+                    <div className="w-8 h-8 rounded bg-primary-100 dark:bg-primary-900/30" />
+                  );
+                })()}
+                {/* Title */}
+                <span className="font-bold text-sm">{activeItem.card.title || 'Feature Card'}</span>
+                {/* Description preview */}
+                <span className="text-xs text-muted-foreground line-clamp-2">
+                  {activeItem.card.description?.slice(0, 50) || ''}
                 </span>
               </div>
-              <span className="font-bold text-sm">{activeItem.type || 'Component'}</span>
             </div>
-          </div>
+          ) : (
+            // Default component preview
+            <div className="bg-white dark:bg-gray-800 shadow-2xl rounded-lg p-3 border-2 border-primary-500 opacity-90">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+                  <span className="text-xs font-bold text-primary-600 dark:text-primary-400">
+                    {activeItem.type?.charAt(0) || 'C'}
+                  </span>
+                </div>
+                <span className="font-bold text-sm">{activeItem.type || 'Component'}</span>
+              </div>
+            </div>
+          )
         ) : null}
       </DragOverlay>
     </DndContext>

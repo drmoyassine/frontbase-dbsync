@@ -50,7 +50,7 @@ export function renderCTA(
         : '';
 
     return `
-        <section id="${id}" class="${sectionClasses}" style="${combinedStyles}">
+        <section id="${props.anchor || id}" class="${sectionClasses}" style="${combinedStyles}">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="rounded-2xl bg-card border p-8 sm:p-12 lg:p-16 shadow-lg">
                     <div class="flex flex-col lg:flex-row items-center justify-between gap-8">

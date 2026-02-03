@@ -107,7 +107,7 @@ export function renderPricing(
             'lg:grid-cols-4';
 
     return `
-        <section id="${id}" class="${sectionClasses}" style="${inlineStyles}">
+        <section id="${props.anchor || id}" class="${sectionClasses}" style="${inlineStyles}">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 ${headerHtml}
                 <div class="grid grid-cols-1 gap-6 sm:gap-8 sm:grid-cols-2 ${gridCols} max-w-6xl mx-auto">

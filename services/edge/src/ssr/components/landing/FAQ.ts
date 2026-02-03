@@ -63,7 +63,7 @@ export function renderFAQ(
     `).join('');
 
     return `
-        <section id="${id}" class="${sectionClasses}" style="${inlineStyles}">
+        <section id="${props.anchor || id}" class="${sectionClasses}" style="${inlineStyles}">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 ${headerHtml}
                 <div class="max-w-3xl mx-auto" data-fb-accordion>

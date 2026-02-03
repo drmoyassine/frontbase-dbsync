@@ -187,7 +187,7 @@ export function renderHero(
         : '';
 
     return `
-        <section id="${id}" class="${sectionClasses}" style="${combinedStyles}">
+        <section id="${(props as any).anchor || id}" class="${sectionClasses}" style="${combinedStyles}">
             <div class="${contentClasses}">
                 ${badgeHtml}
                 ${titleHtml}

@@ -35,6 +35,8 @@ export interface FeaturesProps {
     sectionBackground?: string;
     hideOnMobile?: boolean;
     hideOnDesktop?: boolean;
+    /** Custom anchor slug for the section (e.g., "features" for #features URL) */
+    anchor?: string;
 }
 
 export function renderFeatures(
@@ -118,7 +120,7 @@ export function renderFeatures(
     }).join('');
 
     return `
-        <section id="${id}" class="${sectionClasses}" style="background-color: ${sectionBackground}; ${inlineStyles}">
+        <section id="${props.anchor || id}" class="${sectionClasses}" style="background-color: ${sectionBackground}; ${inlineStyles}">
             <div class="fb-container">
                 ${headerHtml}
                 <div class="${gridClasses}">

@@ -111,7 +111,7 @@ export function renderLogoCloud(
     // Static Grid
     if (displayMode === 'static') {
         return `
-            <section id="${id}" class="${sectionClasses}" style="${inlineStyles}">
+            <section id="${props.anchor || id}" class="${sectionClasses}" style="${inlineStyles}">
                 ${headerHtml}
                 <div class="flex flex-wrap justify-center items-center gap-8 md:gap-12 text-center">
                     ${logosHtml}
@@ -140,7 +140,7 @@ export function renderLogoCloud(
     const mobileOnlyClass = displayMode === 'marqueeOnMobile' ? 'logo-marquee-mobile-only' : '';
 
     return `
-        <section id="${id}" class="${sectionClasses} overflow-hidden ${mobileOnlyClass}" style="${inlineStyles}">
+        <section id="${props.anchor || id}" class="${sectionClasses} overflow-hidden ${mobileOnlyClass}" style="${inlineStyles}">
             ${headerHtml}
             <div class="logo-marquee-container ${pauseClass}">
                 <div 

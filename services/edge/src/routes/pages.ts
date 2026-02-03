@@ -5,6 +5,9 @@
  * Route: /p/:slug
  */
 
+// Cache-busting version - update this when hydration scripts change
+const HYDRATE_VERSION = '20260204a';
+
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { html } from 'hono/html';
 import { getCookie } from 'hono/cookie';
@@ -177,8 +180,8 @@ function generateHtmlDocument(
     <link rel="apple-touch-icon" href="${faviconUrl}">
     
     <!-- Prefetch hydration bundles -->
-    <link rel="modulepreload" href="/static/hydrate.js">
-    <link rel="modulepreload" href="/static/react/hydrate.js">
+    <link rel="modulepreload" href="/static/hydrate.js?v=${HYDRATE_VERSION}">
+    <link rel="modulepreload" href="/static/react/hydrate.js?v=${HYDRATE_VERSION}">
 
     <!-- Client-Side Visitor Context Enhancement -->
     <script>
@@ -358,10 +361,10 @@ function generateHtmlDocument(
     </script>
     
     <!-- Hydration bundle (vanilla JS for simple components) -->
-    <script type="module" src="/static/hydrate.js"></script>
+    <script type="module" src="/static/hydrate.js?v=${HYDRATE_VERSION}"></script>
     
     <!-- React hydration bundle (DataTable, Charts, Forms) -->
-    <script type="module" src="/static/react/hydrate.js"></script>
+    <script type="module" src="/static/react/hydrate.js?v=${HYDRATE_VERSION}"></script>
 </body>
 </html>`;
 }

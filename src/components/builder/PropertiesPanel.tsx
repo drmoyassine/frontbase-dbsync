@@ -280,6 +280,26 @@ export const PropertiesPanel = () => {
             />
           </div>
 
+          {/* Section Anchor for landing components */}
+          {['Hero', 'Features', 'FeatureSection', 'Pricing', 'FAQ', 'CTA', 'LogoCloud'].includes(selectedComponent.type) && (
+            <div className="space-y-2">
+              <Label htmlFor="section-anchor" className="text-sm font-medium">
+                Section Anchor <span className="text-muted-foreground text-xs">(URL slug)</span>
+              </Label>
+              <input
+                id="section-anchor"
+                type="text"
+                value={selectedComponent.props.anchor || ''}
+                onChange={(e) => updateComponentProp('anchor', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                placeholder="e.g., pricing, features, faq"
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <p className="text-xs text-muted-foreground">
+                Creates URL like #pricing when scrolling to this section
+              </p>
+            </div>
+          )}
+
           {renderPropertyFields()}
         </div>
       </div>

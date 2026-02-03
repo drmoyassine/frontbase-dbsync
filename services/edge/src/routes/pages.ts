@@ -348,8 +348,8 @@ function generateHtmlDocument(
     
     <!-- Initial state for hydration -->
     <script>
-        window.__INITIAL_STATE__ = ${JSON.stringify(initialState)};
-        window.__PAGE_DATA__ = ${JSON.stringify({
+        window.__INITIAL_STATE__ = ${safeJsonStringify(initialState)};
+        window.__PAGE_DATA__ = ${safeJsonStringify({
         id: page.id,
         slug: page.slug,
         layoutData: page.layoutData,  // Include for hydration access to bindings with dataRequest
@@ -364,6 +364,16 @@ function generateHtmlDocument(
     <script type="module" src="/static/react/hydrate.js"></script>
 </body>
 </html>`;
+}
+
+/**
+ * Safely stringify JSON for embedding in <script> tags.
+ * Escapes </script> sequences to prevent user content from breaking the page.
+ */
+function safeJsonStringify(obj: unknown): string {
+    return JSON.stringify(obj)
+        .replace(/<\/script>/gi, '<\\/script>')
+        .replace(/<!--/g, '<\\!--');
 }
 
 // Escape HTML special characters

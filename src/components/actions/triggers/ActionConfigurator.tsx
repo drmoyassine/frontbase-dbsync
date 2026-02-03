@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { Play, Plus, Settings2, Trash2, X, Hash, ExternalLink, MousePointer, Workflow, Layers } from 'lucide-react';
+import { Play, Plus, Settings2, Trash2, X, Hash, ExternalLink, MousePointer, Workflow, Layers, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,13 +20,14 @@ import { WorkflowEditor } from '@/components/actions/editor/WorkflowEditor';
 import { SelectTargetButton } from '@/components/builder/shared/SelectTargetButton';
 
 // Action types for the hybrid configurator
-export type ActionType = 'scrollToSection' | 'openPage' | 'openModal' | 'runWorkflow';
+export type ActionType = 'scrollToSection' | 'openPage' | 'openModal' | 'runWorkflow' | 'showTooltip';
 
 export interface ActionConfig {
     sectionId?: string;      // For scrollToSection: e.g., "#features"
     pageUrl?: string;        // For openPage: e.g., "/pricing" or external URL
     openInNewTab?: boolean;  // For openPage: whether to open in new tab
     modalId?: string;        // For openModal (future)
+    tooltipMessage?: string; // For showTooltip: tooltip text (supports @ variables)
 }
 
 export interface ActionBinding {
@@ -89,6 +90,11 @@ const actionTypeInfo: Record<ActionType, { label: string; icon: React.ReactNode;
         label: 'Run Workflow',
         icon: <Workflow className="w-4 h-4" />,
         description: 'Execute a custom automation workflow'
+    },
+    showTooltip: {
+        label: 'Show Tooltip',
+        icon: <MessageSquare className="w-4 h-4" />,
+        description: 'Display a tooltip message on hover'
     }
 };
 
@@ -103,6 +109,10 @@ function getBindingDisplayText(binding: ActionBinding): string {
             return 'Modal (coming soon)';
         case 'runWorkflow':
             return binding.workflowName || (binding.workflowId ? 'Workflow configured' : 'Not configured');
+        case 'showTooltip':
+            return binding.config?.tooltipMessage
+                ? `"${binding.config.tooltipMessage.substring(0, 30)}${binding.config.tooltipMessage.length > 30 ? '...' : ''}"`
+                : 'Tooltip (not configured)';
         default:
             return 'Not configured';
     }

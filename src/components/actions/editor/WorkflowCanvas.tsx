@@ -22,7 +22,11 @@ import { cn } from '@/lib/utils';
 
 // Register custom node types
 const nodeTypes = {
+    // Triggers - all trigger variants use TriggerNode
     trigger: TriggerNode,
+    webhook_trigger: TriggerNode,
+    schedule_trigger: TriggerNode,
+    // Core actions
     action: ActionNode,
     condition: ConditionNode,
     // Map specific action types to the generic ActionNode
@@ -132,18 +136,25 @@ export function WorkflowCanvas({ className }: WorkflowCanvasProps) {
 // Helper functions for default node configuration
 function getNodeLabel(type: string): string {
     const labels: Record<string, string> = {
-        trigger: 'Trigger',
+        // Triggers
+        trigger: 'Manual Trigger',
+        webhook_trigger: 'Webhook',
+        schedule_trigger: 'Schedule',
+        // Core
         action: 'Action',
         condition: 'Condition',
+        // Actions
         http_request: 'HTTP Request',
         transform: 'Transform',
         log: 'Console Log',
+        // Integrations
         database: 'Database Query',
+        // Interface
         toast: 'Show Toast',
         redirect: 'Redirect',
         refresh: 'Refresh Page',
     };
-    return labels[type] || 'Node';
+    return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function getDefaultInputs(type: string): Array<{ name: string; type: string; value?: any }> {

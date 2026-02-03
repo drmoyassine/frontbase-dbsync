@@ -10,8 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, Target } from 'lucide-react';
-import { useBuilderStore } from '@/stores/builder';
+import { Trash2 } from 'lucide-react';
+import { SelectTargetButton } from '@/components/builder/shared/SelectTargetButton';
 
 interface NavbarPropertiesProps {
     componentId: string;
@@ -19,94 +19,6 @@ interface NavbarPropertiesProps {
     updateComponentProp: (key: string, value: any) => void;
     project?: { faviconUrl?: string } | null;
 }
-
-// Helper component for selecting scroll targets visually with anchor prompt
-const SelectTargetButton: React.FC<{ onSelect: (componentId: string) => void }> = ({ onSelect }) => {
-    const { enterScrollTargetMode, updateComponent } = useBuilderStore();
-    const [showAnchorDialog, setShowAnchorDialog] = React.useState(false);
-    const [selectedTargetId, setSelectedTargetId] = React.useState<string | null>(null);
-    const [anchorValue, setAnchorValue] = React.useState('');
-
-    const handleTargetSelected = (componentId: string) => {
-        setSelectedTargetId(componentId);
-        setAnchorValue('');
-        setShowAnchorDialog(true);
-    };
-
-    const handleAnchorSave = () => {
-        if (selectedTargetId) {
-            // Save anchor to target element's props
-            if (anchorValue.trim()) {
-                updateComponent(selectedTargetId, { anchor: anchorValue.toLowerCase().replace(/[^a-z0-9-]/g, '') });
-            }
-            // Pass the component ID (or anchor) to parent
-            onSelect(anchorValue.trim() || selectedTargetId);
-        }
-        setShowAnchorDialog(false);
-        setSelectedTargetId(null);
-        setAnchorValue('');
-    };
-
-    const handleSkipAnchor = () => {
-        if (selectedTargetId) {
-            onSelect(selectedTargetId);
-        }
-        setShowAnchorDialog(false);
-        setSelectedTargetId(null);
-        setAnchorValue('');
-    };
-
-    return (
-        <>
-            <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 shrink-0"
-                title="Click to select target on canvas"
-                onClick={() => {
-                    enterScrollTargetMode(handleTargetSelected);
-                }}
-            >
-                <Target className="h-4 w-4" />
-            </Button>
-
-            {/* Anchor Prompt Dialog */}
-            {showAnchorDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                    <div className="bg-background border rounded-lg shadow-lg p-6 w-80 space-y-4">
-                        <div>
-                            <h3 className="font-semibold text-foreground">Set Section Anchor</h3>
-                            <p className="text-sm text-muted-foreground">
-                                Enter a custom URL slug for this section (optional)
-                            </p>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="anchor-input" className="text-sm">Anchor Slug</Label>
-                            <Input
-                                id="anchor-input"
-                                value={anchorValue}
-                                onChange={(e) => setAnchorValue(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                                placeholder="e.g., pricing, features, about"
-                                autoFocus
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                URL will show: #{anchorValue || 'component-id'}
-                            </p>
-                        </div>
-                        <div className="flex gap-2 justify-end">
-                            <Button variant="ghost" size="sm" onClick={handleSkipAnchor}>
-                                Skip
-                            </Button>
-                            <Button size="sm" onClick={handleAnchorSave}>
-                                Save
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </>
-    );
-};
 
 export const NavbarProperties: React.FC<NavbarPropertiesProps> = ({
     componentId,

@@ -5,8 +5,8 @@
  * Supports quick actions (scroll, navigate) and full workflow automation.
  */
 
-import React, { useState, useRef } from 'react';
-import { Play, Plus, Settings2, Trash2, X, Hash, ExternalLink, MousePointer, Workflow, Layers, Target } from 'lucide-react';
+import React, { useState } from 'react';
+import { Play, Plus, Settings2, Trash2, X, Hash, ExternalLink, MousePointer, Workflow, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -15,9 +15,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useWorkflowDrafts, useActionsStore } from '@/stores/actions';
-import { useBuilderStore } from '@/stores/builder';
 import { cn } from '@/lib/utils';
 import { WorkflowEditor } from '@/components/actions/editor/WorkflowEditor';
+import { SelectTargetButton } from '@/components/builder/shared/SelectTargetButton';
 
 // Action types for the hybrid configurator
 export type ActionType = 'scrollToSection' | 'openPage' | 'openModal' | 'runWorkflow';
@@ -120,15 +120,6 @@ export function ActionConfigurator({
     const [editingBinding, setEditingBinding] = useState<ActionBinding | null>(null);
     const [showEditor, setShowEditor] = useState(false);
     const { currentDraftId, draftName } = useActionsStore();
-    const { enterScrollTargetMode, updateComponent } = useBuilderStore();
-
-    // Anchor prompt dialog state
-    const [showAnchorPrompt, setShowAnchorPrompt] = useState(false);
-    const [pendingTargetId, setPendingTargetId] = useState<string | null>(null);
-    const [anchorInput, setAnchorInput] = useState('');
-
-    // Store pending binding while picker is active
-    const pendingBindingRef = useRef<ActionBinding | null>(null);
 
     const { data: draftsData } = useWorkflowDrafts();
     const workflows = draftsData?.drafts || [];
@@ -211,27 +202,11 @@ export function ActionConfigurator({
                                 onChange={(e) => updateConfig({ sectionId: `#${e.target.value.replace(/^#/, '')}` })}
                                 className="flex-1"
                             />
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                title="Pick element from canvas"
-                                onClick={() => {
-                                    // Save current state and close modal
-                                    pendingBindingRef.current = { ...editingBinding };
-                                    setIsOpen(false);
-
-                                    // Start scroll target selection mode
-                                    enterScrollTargetMode((selectedComponentId, _componentType) => {
-                                        // Show anchor prompt dialog
-                                        setPendingTargetId(selectedComponentId);
-                                        setAnchorInput('');
-                                        setShowAnchorPrompt(true);
-                                    });
+                            <SelectTargetButton
+                                onSelect={(sectionId) => {
+                                    updateConfig({ sectionId: `#${sectionId}` });
                                 }}
-                            >
-                                <Target className="w-4 h-4" />
-                            </Button>
+                            />
                         </div>
                         <p className="text-xs text-muted-foreground">
                             Enter section ID or click the target icon to select from canvas
@@ -507,73 +482,6 @@ export function ActionConfigurator({
                         initialTriggerType="manual"
                         initialTriggerLabel={editingBinding?.trigger}
                     />
-                </div>
-            )}
-
-            {/* Anchor Prompt Dialog - appears after target selection */}
-            {showAnchorPrompt && (
-                <div className="fixed inset-0 z-[101] flex items-center justify-center bg-black/50">
-                    <div className="bg-background border rounded-lg shadow-lg p-6 w-80 space-y-4">
-                        <div>
-                            <h3 className="font-semibold text-foreground">Set Section Anchor</h3>
-                            <p className="text-sm text-muted-foreground">
-                                Enter a custom URL slug for this section (optional)
-                            </p>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="anchor-input" className="text-sm">Anchor Slug</Label>
-                            <Input
-                                id="anchor-input"
-                                value={anchorInput}
-                                onChange={(e) => setAnchorInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                                placeholder="e.g., pricing, features, about"
-                                autoFocus
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                URL will show: #{anchorInput || pendingTargetId}
-                            </p>
-                        </div>
-                        <div className="flex gap-2 justify-end">
-                            <Button variant="ghost" size="sm" onClick={() => {
-                                // Skip - use component ID directly
-                                if (pendingBindingRef.current && pendingTargetId) {
-                                    pendingBindingRef.current.config = {
-                                        ...pendingBindingRef.current.config,
-                                        sectionId: `#${pendingTargetId}`
-                                    };
-                                    setEditingBinding(pendingBindingRef.current);
-                                    pendingBindingRef.current = null;
-                                }
-                                setShowAnchorPrompt(false);
-                                setPendingTargetId(null);
-                                setAnchorInput('');
-                                setIsOpen(true);
-                            }}>
-                                Skip
-                            </Button>
-                            <Button size="sm" onClick={() => {
-                                // Save anchor to target element and use it
-                                if (pendingTargetId && anchorInput.trim()) {
-                                    updateComponent(pendingTargetId, { anchor: anchorInput.trim() });
-                                }
-                                if (pendingBindingRef.current && pendingTargetId) {
-                                    const finalId = anchorInput.trim() || pendingTargetId;
-                                    pendingBindingRef.current.config = {
-                                        ...pendingBindingRef.current.config,
-                                        sectionId: `#${finalId}`
-                                    };
-                                    setEditingBinding(pendingBindingRef.current);
-                                    pendingBindingRef.current = null;
-                                }
-                                setShowAnchorPrompt(false);
-                                setPendingTargetId(null);
-                                setAnchorInput('');
-                                setIsOpen(true);
-                            }}>
-                                Save
-                            </Button>
-                        </div>
-                    </div>
                 </div>
             )}
         </div>

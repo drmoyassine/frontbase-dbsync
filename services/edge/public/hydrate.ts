@@ -473,6 +473,9 @@ function hydrateApp() {
     // Initialize navigation for data-navigate-to elements  
     initNavigation();
 
+    // Initialize action bindings (show tooltips on hover, etc.)
+    initActionBindings();
+
     console.log('✅ Hydration complete');
 }
 
@@ -536,6 +539,105 @@ function initNavigation() {
     });
 
     console.log(`🔗 Navigation initialized for ${navButtons.length} buttons`);
+}
+
+// Initialize action bindings (tooltips on hover, etc.)
+function initActionBindings() {
+    // Find all elements with data-fb-props that might have actionBindings
+    const hydrateElements = document.querySelectorAll('[data-fb-props]');
+    let tooltipCount = 0;
+
+    hydrateElements.forEach((element) => {
+        const propsStr = element.getAttribute('data-fb-props');
+        if (!propsStr) return;
+
+        let props: Record<string, unknown>;
+        try {
+            props = JSON.parse(propsStr);
+        } catch (e) {
+            return;
+        }
+
+        const actionBindings = props.actionBindings as Array<{
+            trigger: string;
+            actionType: string;
+            config?: { tooltipMessage?: string };
+        }> | undefined;
+
+        if (!actionBindings || !Array.isArray(actionBindings)) return;
+
+        // Find onHover + showTooltip bindings
+        const hoverTooltips = actionBindings.filter(
+            b => b.trigger === 'onHover' && b.actionType === 'showTooltip' && b.config?.tooltipMessage
+        );
+
+        if (hoverTooltips.length === 0) return;
+
+        const htmlElement = element as HTMLElement;
+        let tooltipEl: HTMLElement | null = null;
+
+        // Create tooltip on mouseenter
+        htmlElement.addEventListener('mouseenter', (e) => {
+            const binding = hoverTooltips[0]; // Use first tooltip binding
+            let message = binding.config?.tooltipMessage || '';
+
+            // Interpolate @ variables from variableStore
+            if (variableStore && message.includes('@')) {
+                message = message.replace(/@(\w+(?:\.\w+)*)/g, (_match, varPath: string) => {
+                    const value = variableStore.resolveVariable(varPath);
+                    return value !== undefined ? String(value) : `@${varPath}`;
+                });
+            }
+
+            // Create tooltip element
+            tooltipEl = document.createElement('div');
+            tooltipEl.className = 'fb-action-tooltip';
+            tooltipEl.textContent = message;
+            tooltipEl.style.cssText = `
+                position: fixed;
+                background: rgba(0, 0, 0, 0.85);
+                color: white;
+                padding: 6px 12px;
+                border-radius: 6px;
+                font-size: 13px;
+                z-index: 10000;
+                pointer-events: none;
+                max-width: 300px;
+                word-wrap: break-word;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            `;
+
+            document.body.appendChild(tooltipEl);
+
+            // Position tooltip above the element
+            const rect = htmlElement.getBoundingClientRect();
+            const tooltipRect = tooltipEl.getBoundingClientRect();
+            tooltipEl.style.left = `${rect.left + (rect.width - tooltipRect.width) / 2}px`;
+            tooltipEl.style.top = `${rect.top - tooltipRect.height - 8}px`;
+
+            // Adjust if off-screen
+            if (parseFloat(tooltipEl.style.top) < 0) {
+                tooltipEl.style.top = `${rect.bottom + 8}px`;
+            }
+        });
+
+        // Remove tooltip on mouseleave
+        htmlElement.addEventListener('mouseleave', () => {
+            if (tooltipEl) {
+                tooltipEl.remove();
+                tooltipEl = null;
+            }
+        });
+
+        tooltipCount++;
+    });
+
+    console.log(`💬 Action bindings initialized for ${tooltipCount} tooltip elements`);
+}
+
+// Helper to get nested value from object
+function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
+    return path.split('.').reduce((acc: any, key) => acc?.[key], obj);
 }
 
 // Run hydration when DOM is ready

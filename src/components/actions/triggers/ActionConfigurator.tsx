@@ -18,6 +18,7 @@ import { useWorkflowDrafts, useActionsStore } from '@/stores/actions';
 import { cn } from '@/lib/utils';
 import { WorkflowEditor } from '@/components/actions/editor/WorkflowEditor';
 import { SelectTargetButton } from '@/components/builder/shared/SelectTargetButton';
+import { VariableInput } from '@/components/builder/VariableInput';
 
 // Action types for the hybrid configurator
 export type ActionType = 'scrollToSection' | 'openPage' | 'openModal' | 'runWorkflow' | 'showTooltip';
@@ -299,6 +300,21 @@ export function ActionConfigurator({
                                 {editingBinding.workflowId ? <Settings2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                             </Button>
                         </div>
+                    </div>
+                );
+
+            case 'showTooltip':
+                return (
+                    <div className="space-y-2">
+                        <Label>Tooltip Message</Label>
+                        <VariableInput
+                            value={editingBinding.config?.tooltipMessage || ''}
+                            onChange={(value) => updateConfig({ tooltipMessage: value })}
+                            placeholder="Enter tooltip text (use @ for variables)"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Type @ to insert dynamic variables like visitor info
+                        </p>
                     </div>
                 );
 

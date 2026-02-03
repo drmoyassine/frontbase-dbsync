@@ -42,7 +42,7 @@ const nodeTypes: NodeTypeConfig[] = [
 
     // Actions
     {
-        type: 'action',
+        type: 'http_request',
         label: 'HTTP Request',
         description: 'Make an HTTP request',
         icon: <Send className="w-4 h-4" />,

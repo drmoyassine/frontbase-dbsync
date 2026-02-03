@@ -8,7 +8,7 @@
 
 import { hydrateRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createClientStore, VariableStore } from '../../src/ssr/store';
+import { createClientStore, VariableStore } from '../src/ssr/store';
 
 // Global state
 let queryClient: QueryClient;
@@ -458,6 +458,7 @@ function hydrateApp() {
             console.warn('Failed to parse props for element:', element);
         }
 
+
         const handler = hydrateHandlers[hydrateType.toLowerCase()];
         if (handler) {
             handler(element as HTMLElement, props);
@@ -466,7 +467,75 @@ function hydrateApp() {
         }
     });
 
+    // Initialize smooth scrolling for data-scroll-to elements
+    initSmoothScroll();
+
+    // Initialize navigation for data-navigate-to elements  
+    initNavigation();
+
     console.log('✅ Hydration complete');
+}
+
+// Initialize smooth scrolling for data-scroll-to links
+function initSmoothScroll() {
+    const scrollLinks = document.querySelectorAll('[data-scroll-to]');
+
+    scrollLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            const targetId = link.getAttribute('data-scroll-to');
+            if (!targetId) return;
+
+            // Handle # prefix if present or missing
+            const selector = targetId.startsWith('#') ? targetId : '#' + targetId;
+            const target = document.querySelector(selector);
+
+            if (target) {
+                e.preventDefault();
+
+                // Close mobile menu if open
+                const mobileMenu = document.querySelector('[data-fb-mobile-menu]');
+                if (mobileMenu && !mobileMenu.classList.contains('hidden')) {
+                    mobileMenu.classList.add('hidden');
+                }
+
+                target.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+
+                // Update URL hash without jumping
+                history.pushState(null, '', selector);
+            } else {
+                console.warn('[SmoothScroll] Target not found:', selector);
+            }
+        });
+    });
+
+    console.log(`✨ Smooth scroll initialized for ${scrollLinks.length} links`);
+}
+
+// Initialize navigation for data-navigate-to buttons
+function initNavigation() {
+    const navButtons = document.querySelectorAll('[data-navigate-to]');
+
+    navButtons.forEach(button => {
+        button.addEventListener('click', (e) => {
+            const url = button.getAttribute('data-navigate-to');
+            if (!url) return;
+
+            e.preventDefault();
+
+            const openInNewTab = button.getAttribute('data-navigate-new-tab') === 'true';
+
+            if (openInNewTab) {
+                window.open(url, '_blank', 'noopener,noreferrer');
+            } else {
+                window.location.href = url;
+            }
+        });
+    });
+
+    console.log(`🔗 Navigation initialized for ${navButtons.length} buttons`);
 }
 
 // Run hydration when DOM is ready
@@ -477,3 +546,4 @@ if (document.readyState === 'loading') {
 }
 
 export { hydrateApp, queryClient, variableStore };
+

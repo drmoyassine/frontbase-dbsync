@@ -154,22 +154,20 @@ function initSmoothScroll() {
     const scrollLinks = document.querySelectorAll('[data-scroll-to]');
 
     scrollLinks.forEach(link => {
-        // Clone to replace existing listeners if any (to prevent duplicates) or just add new
-        // Actually, just adding event listener is safer as we don't want to break other listeners
-        // But we need to ensure we don't add multiple times if init runs twice
-
         link.addEventListener('click', (e) => {
             const targetId = link.getAttribute('data-scroll-to');
             if (!targetId) return;
 
-            // Handle # prefix if present or missing
-            const selector = targetId.startsWith('#') ? targetId : '#' + targetId;
-            const target = document.querySelector(selector);
+            // Remove # prefix if present for getElementById
+            const cleanId = targetId.startsWith('#') ? targetId.slice(1) : targetId;
+
+            // Use getElementById to avoid CSS selector issues with numeric IDs
+            const target = document.getElementById(cleanId);
 
             if (target) {
                 e.preventDefault();
 
-                // Close mobile menu if open (finding closest menu container)
+                // Close mobile menu if open
                 const mobileMenu = document.querySelector('[data-fb-mobile-menu]');
                 if (mobileMenu && !mobileMenu.classList.contains('hidden')) {
                     mobileMenu.classList.add('hidden');
@@ -191,7 +189,9 @@ function initSmoothScroll() {
                 });
 
                 // Update URL hash without jumping
-                history.pushState(null, '', selector);
+                history.pushState(null, '', '#' + cleanId);
+            } else {
+                console.warn('[SmoothScroll] Target not found:', cleanId);
             }
         });
     });

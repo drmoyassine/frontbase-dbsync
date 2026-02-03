@@ -3,6 +3,7 @@ import { useBuilderStore } from '@/stores/builder';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Trash2 } from 'lucide-react';
 import {
   AlertDialog,
@@ -18,6 +19,7 @@ import { DataBindingModal } from './data-binding/DataBindingModal';
 import { DataTablePropertiesPanel } from '@/components/builder/data-table/DataTablePropertiesPanel';
 import { FormPropertiesPanel } from './form/FormPropertiesPanel';
 import { VariableInput } from './VariableInput';
+import { ActionConfigurator, ActionBinding } from '@/components/actions';
 
 // Basic Components
 import {
@@ -270,18 +272,35 @@ export const PropertiesPanel = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="component-title" className="text-sm font-medium">Component Title <span className="text-muted-foreground text-xs">(@ for variables)</span></Label>
-            <VariableInput
-              value={selectedComponent.props.title || ''}
-              onChange={(value) => updateComponentProp('title', value)}
-              placeholder="Enter component title"
-            />
-          </div>
+        <Tabs defaultValue="general" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-4">
+            <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="actions">Actions</TabsTrigger>
+          </TabsList>
 
-          {renderPropertyFields()}
-        </div>
+          <TabsContent value="general" className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="component-title" className="text-sm font-medium">Component Title <span className="text-muted-foreground text-xs">(@ for variables)</span></Label>
+              <VariableInput
+                value={selectedComponent.props.title || ''}
+                onChange={(value) => updateComponentProp('title', value)}
+                placeholder="Enter component title"
+              />
+            </div>
+
+            {renderPropertyFields()}
+          </TabsContent>
+
+          <TabsContent value="actions" className="space-y-4">
+            <ActionConfigurator
+              componentId={selectedComponentId || ''}
+              componentType={selectedComponent.type}
+              bindings={selectedComponent.props.actionBindings || []}
+              onBindingsChange={(bindings: ActionBinding[]) => updateComponentProp('actionBindings', bindings)}
+              availableTriggers={['onClick', 'onHover']}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
 
       <DeleteConfirmationDialog

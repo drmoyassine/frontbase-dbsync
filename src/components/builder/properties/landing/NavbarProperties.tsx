@@ -334,6 +334,16 @@ export const NavbarProperties: React.FC<NavbarPropertiesProps> = ({
                                     placeholder={props.primaryButton?.navType === 'scroll' ? '#section-id' : '/page-url'}
                                     className="h-8 flex-1"
                                 />
+                                {props.primaryButton?.navType === 'scroll' && (
+                                    <SelectTargetButton
+                                        onSelect={(componentId) => {
+                                            updateComponentProp('primaryButton', {
+                                                ...props.primaryButton,
+                                                target: `#${componentId}`
+                                            });
+                                        }}
+                                    />
+                                )}
                             </div>
                         </>
                     )}
@@ -387,6 +397,16 @@ export const NavbarProperties: React.FC<NavbarPropertiesProps> = ({
                                     placeholder={props.secondaryButton?.navType === 'scroll' ? '#section-id' : '/page-url'}
                                     className="h-8 flex-1"
                                 />
+                                {props.secondaryButton?.navType === 'scroll' && (
+                                    <SelectTargetButton
+                                        onSelect={(componentId) => {
+                                            updateComponentProp('secondaryButton', {
+                                                ...props.secondaryButton,
+                                                target: `#${componentId}`
+                                            });
+                                        }}
+                                    />
+                                )}
                             </div>
                         </>
                     )}

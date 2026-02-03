@@ -20,14 +20,28 @@ export interface HeroBadgeConfig {
     variant?: string;
 }
 
+
+export interface ActionBinding {
+    trigger: string;
+    actionType: 'scrollToSection' | 'openPage' | 'openModal' | 'runWorkflow';
+    config?: {
+        sectionId?: string;
+        pageUrl?: string;
+        openInNewTab?: boolean;
+        modalId?: string;
+    };
+}
+
 export interface HeroProps {
     title: string;
     subtitle?: string;
     badge?: string | HeroBadgeConfig;
     ctaText?: string;
     ctaLink?: string;
+    ctaActionBindings?: ActionBinding[]; // Support action bindings on primary CTA
     secondaryCtaText?: string;
     secondaryCtaLink?: string;
+    secondaryCtaActionBindings?: ActionBinding[]; // Support action bindings on secondary CTA
     backgroundImage?: string;
     backgroundGradient?: string;
     alignment?: 'left' | 'center' | 'right';
@@ -128,20 +142,45 @@ export function renderHero(
         })}</div>`
         : '';
 
-    // CTA buttons (kept as styled links - Button is interactive component)
-    const primaryCtaHtml = props.ctaText
-        ? `<a href="${escapeHtml(props.ctaLink || '#')}" 
-             class="inline-flex items-center justify-center px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors">
-             ${escapeHtml(props.ctaText)}
-           </a>`
-        : '';
+    // CTA buttons - support both href and actionBindings
+    const renderCtaButton = (text: string | undefined, link: string | undefined, actionBindings: ActionBinding[] | undefined, isPrimary: boolean): string => {
+        if (!text) return '';
 
-    const secondaryCtaHtml = props.secondaryCtaText
-        ? `<a href="${escapeHtml(props.secondaryCtaLink || '#')}" 
-             class="inline-flex items-center justify-center px-6 py-3 rounded-lg border border-input bg-background hover:bg-accent hover:text-accent-foreground font-medium transition-colors">
-             ${escapeHtml(props.secondaryCtaText)}
-           </a>`
-        : '';
+        const baseClasses = isPrimary
+            ? 'inline-flex items-center justify-center px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors'
+            : 'inline-flex items-center justify-center px-6 py-3 rounded-lg border border-input bg-background hover:bg-accent hover:text-accent-foreground font-medium transition-colors';
+
+        // Check for action bindings
+        const onClickAction = actionBindings?.find(b => b.trigger === 'onClick');
+
+        if (onClickAction?.actionType === 'scrollToSection' && onClickAction.config?.sectionId) {
+            // Render as button with data-scroll-to
+            return `<button data-scroll-to="${escapeHtml(onClickAction.config.sectionId)}" 
+                     class="${baseClasses}">
+                     ${escapeHtml(text)}
+                   </button>`;
+        }
+
+        if (onClickAction?.actionType === 'openPage' && onClickAction.config?.pageUrl) {
+            // Render as link with proper target
+            const target = onClickAction.config.openInNewTab ? '_blank' : '_self';
+            const rel = onClickAction.config.openInNewTab ? 'noopener noreferrer' : '';
+            return `<a href="${escapeHtml(onClickAction.config.pageUrl)}" 
+                     target="${target}" ${rel ? `rel="${rel}"` : ''}
+                     class="${baseClasses}">
+                     ${escapeHtml(text)}
+                   </a>`;
+        }
+
+        // Fallback to ctaLink
+        return `<a href="${escapeHtml(link || '#')}" 
+                 class="${baseClasses}">
+                 ${escapeHtml(text)}
+               </a>`;
+    };
+
+    const primaryCtaHtml = renderCtaButton(props.ctaText, props.ctaLink, props.ctaActionBindings || (props as any).actionBindings, true);
+    const secondaryCtaHtml = renderCtaButton(props.secondaryCtaText, props.secondaryCtaLink, props.secondaryCtaActionBindings, false);
 
     const ctaContainerHtml = (props.ctaText || props.secondaryCtaText)
         ? `<div class="${ctaContainerClasses}">${primaryCtaHtml}${secondaryCtaHtml}</div>`

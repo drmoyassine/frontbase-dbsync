@@ -314,7 +314,77 @@
             }
         });
 
+        // Initialize smooth scrolling for data-scroll-to elements
+        initSmoothScroll();
+
+        // Initialize navigation for data-navigate-to elements
+        initNavigation();
+
         console.log('✅ Hydration complete');
+    }
+
+    // Initialize smooth scrolling for data-scroll-to links
+    function initSmoothScroll() {
+        const scrollLinks = document.querySelectorAll('[data-scroll-to]');
+
+        scrollLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                const targetId = link.getAttribute('data-scroll-to');
+                if (!targetId) return;
+
+                // Remove # prefix if present for getElementById
+                const cleanId = targetId.startsWith('#') ? targetId.slice(1) : targetId;
+
+                // Use getElementById to avoid CSS selector issues with numeric IDs
+                const target = document.getElementById(cleanId);
+
+                if (target) {
+                    e.preventDefault();
+
+                    // Close mobile menu if open
+                    const mobileMenu = document.querySelector('[data-fb-mobile-menu]');
+                    if (mobileMenu && !mobileMenu.classList.contains('hidden')) {
+                        mobileMenu.classList.add('hidden');
+                    }
+
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+
+                    // Update URL hash without jumping
+                    history.pushState(null, '', '#' + cleanId);
+                } else {
+                    console.warn('[SmoothScroll] Target not found:', cleanId);
+                }
+            });
+        });
+
+        console.log(`✨ Smooth scroll initialized for ${scrollLinks.length} links`);
+    }
+
+    // Initialize navigation for data-navigate-to buttons
+    function initNavigation() {
+        const navButtons = document.querySelectorAll('[data-navigate-to]');
+
+        navButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                const url = button.getAttribute('data-navigate-to');
+                if (!url) return;
+
+                e.preventDefault();
+
+                const openInNewTab = button.getAttribute('data-navigate-new-tab') === 'true';
+
+                if (openInNewTab) {
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                } else {
+                    window.location.href = url;
+                }
+            });
+        });
+
+        console.log(`🔗 Navigation initialized for ${navButtons.length} buttons`);
     }
 
     // Run hydration

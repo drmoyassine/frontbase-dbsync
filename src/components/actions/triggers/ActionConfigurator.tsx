@@ -120,7 +120,12 @@ export function ActionConfigurator({
     const [editingBinding, setEditingBinding] = useState<ActionBinding | null>(null);
     const [showEditor, setShowEditor] = useState(false);
     const { currentDraftId, draftName } = useActionsStore();
-    const { enterScrollTargetMode } = useBuilderStore();
+    const { enterScrollTargetMode, updateComponent } = useBuilderStore();
+
+    // Anchor prompt dialog state
+    const [showAnchorPrompt, setShowAnchorPrompt] = useState(false);
+    const [pendingTargetId, setPendingTargetId] = useState<string | null>(null);
+    const [anchorInput, setAnchorInput] = useState('');
 
     // Store pending binding while picker is active
     const pendingBindingRef = useRef<ActionBinding | null>(null);
@@ -217,17 +222,11 @@ export function ActionConfigurator({
                                     setIsOpen(false);
 
                                     // Start scroll target selection mode
-                                    enterScrollTargetMode((componentId, _componentType) => {
-                                        // Called when user clicks an element
-                                        if (pendingBindingRef.current) {
-                                            pendingBindingRef.current.config = {
-                                                ...pendingBindingRef.current.config,
-                                                sectionId: `#${componentId}`
-                                            };
-                                            setEditingBinding(pendingBindingRef.current);
-                                            pendingBindingRef.current = null;
-                                        }
-                                        setIsOpen(true);
+                                    enterScrollTargetMode((selectedComponentId, _componentType) => {
+                                        // Show anchor prompt dialog
+                                        setPendingTargetId(selectedComponentId);
+                                        setAnchorInput('');
+                                        setShowAnchorPrompt(true);
                                     });
                                 }}
                             >
@@ -508,6 +507,73 @@ export function ActionConfigurator({
                         initialTriggerType="manual"
                         initialTriggerLabel={editingBinding?.trigger}
                     />
+                </div>
+            )}
+
+            {/* Anchor Prompt Dialog - appears after target selection */}
+            {showAnchorPrompt && (
+                <div className="fixed inset-0 z-[101] flex items-center justify-center bg-black/50">
+                    <div className="bg-background border rounded-lg shadow-lg p-6 w-80 space-y-4">
+                        <div>
+                            <h3 className="font-semibold text-foreground">Set Section Anchor</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Enter a custom URL slug for this section (optional)
+                            </p>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="anchor-input" className="text-sm">Anchor Slug</Label>
+                            <Input
+                                id="anchor-input"
+                                value={anchorInput}
+                                onChange={(e) => setAnchorInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                                placeholder="e.g., pricing, features, about"
+                                autoFocus
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                URL will show: #{anchorInput || pendingTargetId}
+                            </p>
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                            <Button variant="ghost" size="sm" onClick={() => {
+                                // Skip - use component ID directly
+                                if (pendingBindingRef.current && pendingTargetId) {
+                                    pendingBindingRef.current.config = {
+                                        ...pendingBindingRef.current.config,
+                                        sectionId: `#${pendingTargetId}`
+                                    };
+                                    setEditingBinding(pendingBindingRef.current);
+                                    pendingBindingRef.current = null;
+                                }
+                                setShowAnchorPrompt(false);
+                                setPendingTargetId(null);
+                                setAnchorInput('');
+                                setIsOpen(true);
+                            }}>
+                                Skip
+                            </Button>
+                            <Button size="sm" onClick={() => {
+                                // Save anchor to target element and use it
+                                if (pendingTargetId && anchorInput.trim()) {
+                                    updateComponent(pendingTargetId, { anchor: anchorInput.trim() });
+                                }
+                                if (pendingBindingRef.current && pendingTargetId) {
+                                    const finalId = anchorInput.trim() || pendingTargetId;
+                                    pendingBindingRef.current.config = {
+                                        ...pendingBindingRef.current.config,
+                                        sectionId: `#${finalId}`
+                                    };
+                                    setEditingBinding(pendingBindingRef.current);
+                                    pendingBindingRef.current = null;
+                                }
+                                setShowAnchorPrompt(false);
+                                setPendingTargetId(null);
+                                setAnchorInput('');
+                                setIsOpen(true);
+                            }}>
+                                Save
+                            </Button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

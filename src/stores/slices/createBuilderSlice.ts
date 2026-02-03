@@ -19,6 +19,12 @@ export interface BuilderSlice {
     selectedCardIndex: number | null;
     copiedCard: any | null;  // The copied card data
 
+    // Element picker mode for visual selection (e.g., scroll-to-section target)
+    elementPickerMode: {
+        active: boolean;
+        callback: ((elementId: string) => void) | null;
+    } | null;
+
     setSelectedComponentId: (id: string | null) => void;
     setDraggedComponentId: (componentId: string | null) => void;
     setEditingComponentId: (id: string | null) => void;
@@ -29,6 +35,10 @@ export interface BuilderSlice {
     copyCard: (cardData: any) => void;
     pasteCard: () => void;
     deleteCard: () => void;
+
+    // Element picker actions
+    startElementPicker: (callback: (elementId: string) => void) => void;
+    cancelElementPicker: () => void;
 
     moveComponent: (pageId: string, componentId: string | null, component: ComponentData, targetIndex: number, parentId?: string, sourceParentId?: string) => void;
     updateComponentText: (componentId: string, textProperty: string, text: string) => void;
@@ -48,12 +58,19 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
     focusedField: null,
     selectedCardIndex: null,
     copiedCard: null,
+    elementPickerMode: null,
 
     setSelectedComponentId: (id) => set({ selectedComponentId: id, selectedCardIndex: null }),
     setDraggedComponentId: (id) => set({ draggedComponentId: id }),
     setEditingComponentId: (id) => set({ editingComponentId: id }),
     setFocusedField: (field) => set({ focusedField: field }),
     setSelectedCardIndex: (index) => set({ selectedCardIndex: index }),
+
+    // Element picker mode
+    startElementPicker: (callback) => set({
+        elementPickerMode: { active: true, callback }
+    }),
+    cancelElementPicker: () => set({ elementPickerMode: null }),
 
     copyCard: (cardData) => {
         set({ copiedCard: JSON.parse(JSON.stringify(cardData)) });

@@ -62,6 +62,7 @@ export const getPropertyComponent = (
         case 'Grid':
         case 'Card':
         case 'DataCard':
+        case 'Embed':
             return <DisplayProperties {...componentProps} />;
 
         case 'DataTable':

@@ -182,6 +182,21 @@ function renderButton(id: string, props: Record<string, unknown>, propsJson: str
     const fullWidth = props.fullWidth as boolean || false;
     const loading = props.loading as boolean || false;
 
+    // Handle action bindings for onClick
+    interface ActionBinding {
+        trigger: string;
+        actionType: 'scrollToSection' | 'openPage' | 'openModal' | 'runWorkflow';
+        config?: {
+            sectionId?: string;
+            pageUrl?: string;
+            openInNewTab?: boolean;
+            modalId?: string;
+        };
+        workflowId?: string | null;
+    }
+    const actionBindings = (props.actionBindings as ActionBinding[]) || [];
+    const onClickAction = actionBindings.find(b => b.trigger === 'onClick');
+
     // Variant styles - matching shadcn/ui button variants
     // Uses CSS variables defined in the SSR HTML head
     const variantStyles: Record<string, string> = {
@@ -205,10 +220,32 @@ function renderButton(id: string, props: Record<string, unknown>, propsJson: str
 
     const style = `${variantStyles[variant] || variantStyles.default};${sizeStyles[size] || sizeStyles.md};border-radius:0.375rem;cursor:pointer;font-weight:500;transition:all 0.15s;${fullWidth ? 'width:100%' : 'width:fit-content'};${disabled ? 'opacity:0.5;cursor:not-allowed' : ''}`;
 
+    // Build action-specific attributes
+    let actionAttrs = '';
+
+    if (onClickAction) {
+        switch (onClickAction.actionType) {
+            case 'scrollToSection':
+                if (onClickAction.config?.sectionId) {
+                    actionAttrs = `data-scroll-to="${escapeHtml(onClickAction.config.sectionId)}"`;
+                }
+                break;
+            case 'openPage':
+                if (onClickAction.config?.pageUrl) {
+                    const url = escapeHtml(onClickAction.config.pageUrl);
+                    const newTab = onClickAction.config.openInNewTab;
+                    // Use data attributes for client-side handling
+                    actionAttrs = `data-navigate-to="${url}"${newTab ? ' data-navigate-new-tab="true"' : ''}`;
+                }
+                break;
+            // openModal and runWorkflow require client-side hydration
+        }
+    }
+
     // Note: We use getCommonAttributes to handle className and extra styles
     const attrs = getCommonAttributes(id, `fb-button fb-button-${variant}`, props, style, 'button', propsJson);
 
-    return `<button ${attrs} ${disabled ? 'disabled' : ''}>
+    return `<button ${attrs} ${actionAttrs} ${disabled ? 'disabled' : ''}>
         ${loading ? '<span class="fb-spinner" style="margin-right:0.5rem">⏳</span>' : ''}
         ${label}
     </button>`;

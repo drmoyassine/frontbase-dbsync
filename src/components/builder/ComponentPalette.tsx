@@ -32,7 +32,8 @@ import {
   Minus,
   PanelTop,
   ChevronDown,
-  Star
+  Star,
+  Code
 } from 'lucide-react';
 
 const componentCategories = {
@@ -51,6 +52,7 @@ const componentCategories = {
       { name: 'Image', icon: Image, description: 'Image display', section: 'basic' },
       { name: 'Icon', icon: Star, description: 'Icon/emoji display', section: 'basic' },
       { name: 'Badge', icon: Star, description: 'Status badge with optional icon', section: 'basic' },
+      { name: 'Embed', icon: Code, description: 'Embed iframe or script', section: 'basic' },
 
       // Layout separator
       { name: '_separator_layout', icon: Layout, description: 'Layout Components', section: 'separator' },

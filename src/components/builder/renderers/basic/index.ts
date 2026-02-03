@@ -11,3 +11,4 @@ export { AvatarRenderer } from './AvatarRenderer';
 export { ProgressRenderer } from './ProgressRenderer';
 export { LinkRenderer } from './LinkRenderer';
 export { IconRenderer } from './IconRenderer';
+export { EmbedRenderer } from './EmbedRenderer';

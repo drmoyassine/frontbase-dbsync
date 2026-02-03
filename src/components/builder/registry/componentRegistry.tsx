@@ -36,6 +36,7 @@ export const COMPONENT_REGISTRY: Record<string, React.FC<any>> = {
     Progress: BasicRenderers.ProgressRenderer,
     Link: BasicRenderers.LinkRenderer,
     Icon: BasicRenderers.IconRenderer,
+    Embed: BasicRenderers.EmbedRenderer,
 
     // Form Components
     Input: FormRenderers.InputRenderer,

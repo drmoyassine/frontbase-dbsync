@@ -157,6 +157,9 @@ export function renderStaticComponent(
         case 'MarkdownContent':
             return renderMarkdown(id, props);
 
+        case 'Embed':
+            return renderEmbed(id, props);
+
         default:
             // Fallback for unknown static components
             return `<div ${getCommonAttributes(id, 'fb-unknown', props)} data-fb-type="${type}">${childrenHtml}</div>`;
@@ -403,6 +406,50 @@ function renderMarkdown(id: string, props: Record<string, unknown>): string {
     return `<div ${attrs} data-fb-hydrate="markdown">
         <pre style="white-space:pre-wrap;font-family:inherit">${escapeHtml(content)}</pre>
     </div>`;
+}
+
+function renderEmbed(id: string, props: Record<string, unknown>): string {
+    const embedType = props.embedType as string || 'iframe';
+    const width = props.width as string || '100%';
+    const height = props.height as string || '400px';
+    const title = escapeHtml(String(props.title || 'Embedded content'));
+    const loading = props.loading as string || 'lazy';
+
+    const containerStyle = `width:${width};height:${height};min-height:100px`;
+
+    if (embedType === 'iframe') {
+        const src = props.src as string || '';
+        const sandbox = escapeHtml(String(props.sandbox || 'allow-scripts allow-same-origin allow-forms'));
+
+        if (!src) {
+            const attrs = getCommonAttributes(id, 'fb-embed fb-embed-placeholder', props, `${containerStyle};display:flex;align-items:center;justify-content:center;background:#f5f5f5;border:2px dashed #ccc;border-radius:8px`);
+            return `<div ${attrs}><span style="color:#999">Iframe URL not set</span></div>`;
+        }
+
+        const attrs = getCommonAttributes(id, 'fb-embed fb-embed-iframe', props, containerStyle);
+        return `<div ${attrs}>
+            <iframe 
+                src="${escapeHtml(src)}" 
+                title="${title}" 
+                width="100%" 
+                height="100%" 
+                style="border:none;border-radius:8px" 
+                loading="${loading}" 
+                sandbox="${sandbox}"
+            ></iframe>
+        </div>`;
+    }
+
+    // Script embed - render the raw HTML (user trusts this content)
+    const html = props.html as string || '';
+    if (!html) {
+        const attrs = getCommonAttributes(id, 'fb-embed fb-embed-placeholder', props, `${containerStyle};display:flex;align-items:center;justify-content:center;background:#fffbeb;border:2px dashed #f59e0b;border-radius:8px`);
+        return `<div ${attrs}><span style="color:#92400e">Script embed code not set</span></div>`;
+    }
+
+    const attrs = getCommonAttributes(id, 'fb-embed fb-embed-script', props, containerStyle);
+    // Render raw HTML - we trust user-provided embed codes
+    return `<div ${attrs}>${html}</div>`;
 }
 
 // =============================================================================

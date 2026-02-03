@@ -103,11 +103,13 @@ if (typeof window !== 'undefined') {
             hydrateReactComponents();
             initMobileMenuToggle();
             initSmoothScroll();
+            initNavigation();
         });
     } else {
         hydrateReactComponents();
         initMobileMenuToggle();
         initSmoothScroll();
+        initNavigation();
     }
 }
 
@@ -195,6 +197,30 @@ function initSmoothScroll() {
     });
 
     console.log(`✨ Smooth scroll initialized for ${scrollLinks.length} links`);
+}
+
+// Initialize navigation for data-navigate-to buttons
+function initNavigation() {
+    const navButtons = document.querySelectorAll('[data-navigate-to]');
+
+    navButtons.forEach(button => {
+        button.addEventListener('click', (e) => {
+            const url = button.getAttribute('data-navigate-to');
+            if (!url) return;
+
+            e.preventDefault();
+
+            const openInNewTab = button.getAttribute('data-navigate-new-tab') === 'true';
+
+            if (openInNewTab) {
+                window.open(url, '_blank', 'noopener,noreferrer');
+            } else {
+                window.location.href = url;
+            }
+        });
+    });
+
+    console.log(`🔗 Navigation initialized for ${navButtons.length} buttons`);
 }
 
 // Expose for debugging

@@ -224,6 +224,7 @@ export const PropertiesPanel = () => {
 
       // === DISPLAY PROPERTIES (fallback for some types) ===
       case 'Card':
+      case 'Embed':
         return <DisplayProperties type={type} props={props} updateComponentProp={updateComponentProp} onDataBindingClick={onDataBindingClick} hasBinding={!!props.binding} />;
 
       default:

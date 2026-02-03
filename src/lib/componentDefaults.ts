@@ -48,7 +48,8 @@ export function getDefaultProps(componentType: string): Record<string, any> {
     DataTable: { binding: null },
     KPICard: { binding: null },
     Chart: { binding: null, chartType: 'bar' },
-    Grid: { binding: null, columns: 3 }
+    Grid: { binding: null, columns: 3 },
+    Embed: { embedType: 'iframe', width: '100%', height: '400px', title: 'Embedded content', sandbox: 'allow-scripts allow-same-origin allow-forms', loading: 'lazy' }
   };
 
   return defaults[componentType] || {};

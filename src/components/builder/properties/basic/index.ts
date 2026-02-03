@@ -26,6 +26,7 @@ export { ToggleProperties } from './ToggleProperties';
 export { BadgeProperties } from './BadgeProperties';
 export { AlertProperties } from './AlertProperties';
 export { ProgressProperties } from './ProgressProperties';
+export { EmbedProperties } from './EmbedProperties';
 
 // Data
 export { ChartProperties } from './ChartProperties';

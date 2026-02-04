@@ -337,7 +337,11 @@ export function ActionConfigurator({
                         <Label>Trigger Event</Label>
                         <Select
                             value={editingBinding.trigger}
-                            onValueChange={(v) => updateLocalBinding({ trigger: v })}
+                            onValueChange={(v) => {
+                                // Auto-set appropriate action type based on trigger
+                                const defaultAction = v === 'onHover' ? 'showTooltip' : 'scrollToSection';
+                                updateLocalBinding({ trigger: v, actionType: defaultAction as ActionType });
+                            }}
                         >
                             <SelectTrigger>
                                 <SelectValue />

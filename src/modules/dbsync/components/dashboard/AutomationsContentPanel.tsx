@@ -1,18 +1,65 @@
+import { useState, useMemo } from 'react';
 import { useWorkflowDrafts } from '@/stores/actions';
 import { formatDistanceToNow } from 'date-fns';
-import { Workflow, Play, GitBranch, Edit, CheckCircle, Clock } from 'lucide-react';
+import { Zap, Play, FileEdit, Edit, GitBranch, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useNavigate } from 'react-router-dom';
+
+const ITEMS_PER_PAGE = 10;
 
 export function AutomationsContentPanel() {
     const navigate = useNavigate();
+    const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
+    const [triggerFilter, setTriggerFilter] = useState<string>('all');
+    const [currentPage, setCurrentPage] = useState(1);
 
-    const { data, isLoading } = useWorkflowDrafts();
-    const drafts = data?.drafts || [];
+    const { data: workflowData, isLoading } = useWorkflowDrafts();
+    const workflows = workflowData?.drafts || [];
 
-    const publishedCount = drafts.filter(d => d.is_published).length;
-    const draftCount = drafts.filter(d => !d.is_published).length;
+    // Get unique trigger types for filter
+    const availableTriggers = useMemo(() => {
+        const triggers = [...new Set(workflows.map(w => w.trigger_type))];
+        return triggers.filter(Boolean);
+    }, [workflows]);
+
+    // Filter and search logic
+    const filteredWorkflows = useMemo(() => {
+        return workflows.filter(wf => {
+            // Search filter
+            const matchesSearch = searchQuery === '' ||
+                wf.name?.toLowerCase().includes(searchQuery.toLowerCase());
+
+            // Status filter
+            const matchesStatus = statusFilter === 'all' ||
+                (statusFilter === 'published' && wf.is_published) ||
+                (statusFilter === 'draft' && !wf.is_published);
+
+            // Trigger filter
+            const matchesTrigger = triggerFilter === 'all' || wf.trigger_type === triggerFilter;
+
+            return matchesSearch && matchesStatus && matchesTrigger;
+        });
+    }, [workflows, searchQuery, statusFilter, triggerFilter]);
+
+    // Pagination
+    const totalPages = Math.ceil(filteredWorkflows.length / ITEMS_PER_PAGE);
+    const paginatedWorkflows = useMemo(() => {
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        return filteredWorkflows.slice(start, start + ITEMS_PER_PAGE);
+    }, [filteredWorkflows, currentPage]);
+
+    // Reset to page 1 when filters change
+    const handleFilterChange = (setter: (value: any) => void, value: any) => {
+        setter(value);
+        setCurrentPage(1);
+    };
+
+    const publishedCount = workflows.filter(w => w.is_published).length;
+    const draftCount = workflows.filter(w => !w.is_published).length;
 
     if (isLoading) {
         return (
@@ -30,7 +77,7 @@ export function AutomationsContentPanel() {
                 <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                            <Play className="w-5 h-5 text-green-600 dark:text-green-400" />
                         </div>
                         <div>
                             <p className="text-2xl font-bold">{publishedCount}</p>
@@ -41,7 +88,7 @@ export function AutomationsContentPanel() {
                 <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-                            <Clock className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+                            <FileEdit className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
                         </div>
                         <div>
                             <p className="text-2xl font-bold">{draftCount}</p>
@@ -52,10 +99,10 @@ export function AutomationsContentPanel() {
                 <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                            <Workflow className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                            <Zap className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                         </div>
                         <div>
-                            <p className="text-2xl font-bold">{drafts.length}</p>
+                            <p className="text-2xl font-bold">{workflows.length}</p>
                             <p className="text-sm text-gray-500 dark:text-gray-400">Total Workflows</p>
                         </div>
                     </div>
@@ -64,11 +111,46 @@ export function AutomationsContentPanel() {
 
             {/* Automations Table */}
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <h3 className="font-semibold">Automations</h3>
-                    <Button size="sm" onClick={() => navigate('/actions')}>
-                        Manage Automations
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                        {/* Search */}
+                        <div className="relative flex-1 sm:flex-initial">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <Input
+                                placeholder="Search automations..."
+                                value={searchQuery}
+                                onChange={(e) => handleFilterChange(setSearchQuery, e.target.value)}
+                                className="pl-9 w-full sm:w-48"
+                            />
+                        </div>
+                        {/* Status Filter */}
+                        <Select value={statusFilter} onValueChange={(v: any) => handleFilterChange(setStatusFilter, v)}>
+                            <SelectTrigger className="w-32">
+                                <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Status</SelectItem>
+                                <SelectItem value="published">Published</SelectItem>
+                                <SelectItem value="draft">Draft</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        {/* Trigger Filter */}
+                        <Select value={triggerFilter} onValueChange={(v) => handleFilterChange(setTriggerFilter, v)}>
+                            <SelectTrigger className="w-32">
+                                <SelectValue placeholder="Trigger" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Triggers</SelectItem>
+                                {availableTriggers.map(trigger => (
+                                    <SelectItem key={trigger} value={trigger} className="capitalize">{trigger}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Button size="sm" onClick={() => navigate('/actions')}>
+                            Manage Automations
+                        </Button>
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full">
@@ -83,72 +165,98 @@ export function AutomationsContentPanel() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {drafts.slice(0, 10).map((draft) => (
-                                <tr key={draft.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors">
+                            {paginatedWorkflows.map((workflow) => (
+                                <tr key={workflow.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors">
                                     <td className="px-4 py-3 whitespace-nowrap">
                                         <div className="flex items-center gap-2">
-                                            <Workflow className="w-4 h-4 text-gray-400" />
-                                            <span className="font-medium">{draft.name}</span>
+                                            <Zap className="w-4 h-4 text-gray-400" />
+                                            <span className="font-medium">{workflow.name || 'Untitled Workflow'}</span>
                                         </div>
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm">
                                         <Badge variant="outline" className="capitalize">
                                             <GitBranch className="w-3 h-3 mr-1" />
-                                            {draft.trigger_type.replace('_', ' ')}
+                                            {workflow.trigger_type || 'Manual'}
                                         </Badge>
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap">
-                                        {draft.is_published ? (
+                                        {workflow.is_published ? (
                                             <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                                                <CheckCircle className="w-3 h-3 mr-1" />
-                                                v{draft.published_version}
+                                                <Play className="w-3 h-3 mr-1" />
+                                                Published
                                             </Badge>
                                         ) : (
                                             <Badge variant="secondary">
-                                                <Clock className="w-3 h-3 mr-1" />
+                                                <FileEdit className="w-3 h-3 mr-1" />
                                                 Draft
                                             </Badge>
                                         )}
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                                         <span className="flex items-center gap-1">
-                                            <Play className="w-3 h-3" />
-                                            {draft.nodes.length} nodes
+                                            <GitBranch className="w-3 h-3" />
+                                            {workflow.node_count || 0} nodes
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                                        {formatDistanceToNow(new Date(draft.updated_at), { addSuffix: true })}
+                                        {workflow.updated_at
+                                            ? formatDistanceToNow(new Date(workflow.updated_at), { addSuffix: true })
+                                            : '-'}
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-right">
-                                        <div className="flex justify-end gap-1">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8"
-                                                onClick={() => navigate(`/actions?edit=${draft.id}`)}
-                                                title="Edit"
-                                            >
-                                                <Edit className="w-4 h-4" />
-                                            </Button>
-                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8"
+                                            onClick={() => navigate(`/actions/edit/${workflow.id}`)}
+                                            title="Edit"
+                                        >
+                                            <Edit className="w-4 h-4" />
+                                        </Button>
                                     </td>
                                 </tr>
                             ))}
-                            {drafts.length === 0 && (
+                            {paginatedWorkflows.length === 0 && (
                                 <tr>
                                     <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                                        No automations yet. Create your first workflow to get started.
+                                        {searchQuery || statusFilter !== 'all' || triggerFilter !== 'all'
+                                            ? 'No automations match your filters.'
+                                            : 'No automations yet. Create your first workflow to get started.'}
                                     </td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
                 </div>
-                {drafts.length > 10 && (
-                    <div className="p-4 border-t border-gray-200 dark:border-gray-700 text-center">
-                        <Button variant="link" onClick={() => navigate('/actions')}>
-                            View all {drafts.length} automations →
-                        </Button>
+                {/* Pagination */}
+                {totalPages > 1 && (
+                    <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                        <p className="text-sm text-gray-500">
+                            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredWorkflows.length)} of {filteredWorkflows.length} results
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </Button>
+                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                                Page {currentPage} of {totalPages}
+                            </span>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </Button>
+                        </div>
                     </div>
                 )}
             </div>

@@ -14,8 +14,9 @@ export function DataSourcesContentPanel() {
         queryFn: () => datasourcesApi.list().then(r => r.data),
     });
 
-    const connectedCount = datasources?.filter(d => d.status === 'connected').length || 0;
-    const errorCount = datasources?.filter(d => d.status === 'error').length || 0;
+    // is_active means the datasource is enabled, last_test_success means it connected successfully
+    const connectedCount = datasources?.filter(d => d.is_active && d.last_test_success !== false).length || 0;
+    const errorCount = datasources?.filter(d => d.last_test_success === false).length || 0;
 
     if (isLoading) {
         return (
@@ -95,24 +96,29 @@ export function DataSourcesContentPanel() {
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm">
                                         <Badge variant="outline" className="capitalize">
-                                            {ds.db_type || 'postgres'}
+                                            {ds.type || 'postgres'}
                                         </Badge>
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap">
-                                        {ds.status === 'connected' ? (
+                                        {ds.is_active && ds.last_test_success !== false ? (
                                             <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
                                                 <CheckCircle className="w-3 h-3 mr-1" />
-                                                Connected
+                                                Active
                                             </Badge>
-                                        ) : ds.status === 'error' ? (
+                                        ) : ds.last_test_success === false ? (
                                             <Badge variant="destructive">
                                                 <XCircle className="w-3 h-3 mr-1" />
                                                 Error
                                             </Badge>
-                                        ) : (
+                                        ) : !ds.is_active ? (
                                             <Badge variant="secondary">
                                                 <RefreshCw className="w-3 h-3 mr-1" />
-                                                Pending
+                                                Inactive
+                                            </Badge>
+                                        ) : (
+                                            <Badge variant="outline">
+                                                <RefreshCw className="w-3 h-3 mr-1" />
+                                                Not Tested
                                             </Badge>
                                         )}
                                     </td>

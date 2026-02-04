@@ -69,7 +69,7 @@ export function Dashboard() {
         {
             id: 'pages' as const,
             label: 'Pages',
-            value: pages?.filter(p => p.isPublished).length || 0,
+            value: pages?.filter(p => p.isPublic).length || 0,
             icon: FileText,
             color: 'bg-blue-500',
         },

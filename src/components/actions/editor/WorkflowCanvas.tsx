@@ -86,10 +86,9 @@ export function WorkflowCanvas({ className }: WorkflowCanvasProps) {
         const nodeType = event.dataTransfer.getData('application/reactflow');
         if (!nodeType) return;
 
-        const bounds = reactFlowWrapper.current.getBoundingClientRect();
-        const position = reactFlowInstance.project({
-            x: event.clientX - bounds.left,
-            y: event.clientY - bounds.top,
+        const position = reactFlowInstance.screenToFlowPosition({
+            x: event.clientX,
+            y: event.clientY,
         });
 
         // Get label from schema or fallback to formatted type

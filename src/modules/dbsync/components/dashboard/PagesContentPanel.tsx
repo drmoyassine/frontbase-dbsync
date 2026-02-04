@@ -14,8 +14,8 @@ export function PagesContentPanel() {
         queryFn: () => getPages(false),
     });
 
-    const publishedPages = pages?.filter(p => p.isPublished) || [];
-    const draftPages = pages?.filter(p => !p.isPublished) || [];
+    const publishedPages = pages?.filter(p => p.isPublic) || [];
+    const draftPages = pages?.filter(p => !p.isPublic) || [];
 
     if (isLoading) {
         return (
@@ -97,7 +97,7 @@ export function PagesContentPanel() {
                                         /{page.slug || ''}
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap">
-                                        {page.isPublished ? (
+                                        {page.isPublic ? (
                                             <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
                                                 <Globe className="w-3 h-3 mr-1" />
                                                 Live

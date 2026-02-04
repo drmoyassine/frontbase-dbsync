@@ -2,15 +2,65 @@
  * Startup Sync - Proactive Homepage + Redis Settings Sync on Edge Boot
  * 
  * On startup, Edge fetches the homepage and Redis settings from FastAPI and stores locally.
+ * Also ensures the Actions database tables exist (workflows, executions).
  * Includes retry logic to wait for FastAPI to be ready.
  */
 
 import { initPagesDb, upsertPublishedPage, getHomepage } from '../db/pages-store.js';
 import { initRedis } from '../cache/redis.js';
+import { db } from '../db/index.js';
+import { sql } from 'drizzle-orm';
 
 const FASTAPI_URL = process.env.FASTAPI_URL || 'http://localhost:8000';
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 3000; // 3 seconds between retries
+
+/**
+ * Initialize Actions database tables (workflows, executions)
+ * Creates tables if they don't exist - no migration required
+ */
+async function initActionsDb(): Promise<void> {
+    try {
+        // Create workflows table if not exists
+        await db.run(sql`
+            CREATE TABLE IF NOT EXISTS workflows (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                trigger_type TEXT NOT NULL,
+                trigger_config TEXT,
+                nodes TEXT NOT NULL,
+                edges TEXT NOT NULL,
+                version INTEGER NOT NULL DEFAULT 1,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                published_by TEXT
+            )
+        `);
+
+        // Create executions table if not exists
+        await db.run(sql`
+            CREATE TABLE IF NOT EXISTS executions (
+                id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL REFERENCES workflows(id),
+                status TEXT NOT NULL,
+                trigger_type TEXT NOT NULL,
+                trigger_payload TEXT,
+                node_executions TEXT,
+                result TEXT,
+                error TEXT,
+                usage REAL DEFAULT 0,
+                started_at TEXT NOT NULL,
+                ended_at TEXT
+            )
+        `);
+
+        console.log('[Startup Sync] ✅ Actions database tables initialized');
+    } catch (error) {
+        console.error('[Startup Sync] ❌ Failed to initialize Actions database:', error);
+    }
+}
 
 /**
  * Sleep helper
@@ -123,10 +173,11 @@ async function syncHomepageFromFastAPI(): Promise<boolean> {
  * Called once when Edge boots up
  */
 export async function runStartupSync(): Promise<void> {
-    console.log('[Startup Sync] 🚀 Starting homepage + Redis sync...');
+    console.log('[Startup Sync] 🚀 Starting Edge database initialization...');
 
-    // Initialize pages database first
+    // Initialize databases first
     await initPagesDb();
+    await initActionsDb(); // Create workflows/executions tables if not exist
 
     // Sync Redis settings with retries (FastAPI may not be ready yet)
     console.log('[Startup Sync] Syncing Redis settings...');

@@ -134,9 +134,12 @@ class PrivacySettings(BaseModel):
     cookieVariables: CookieVariables = CookieVariables()
 
 
-# File-based settings storage (simple MVP approach)
-# In production, this would be stored in the database (fb_settings table)
-SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "settings.json")
+# File-based settings storage
+# IMPORTANT: Use Docker-persisted volume path (/app/data) NOT ephemeral container path
+# This ensures settings persist across container rebuilds/deployments
+SETTINGS_FILE = "/app/data/settings.json"
+# Legacy path for backwards compatibility (ephemeral, will be migrated)
+LEGACY_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "settings.json")
 
 
 def ensure_data_dir():
@@ -147,11 +150,23 @@ def ensure_data_dir():
 
 
 def load_settings() -> dict:
-    """Load settings from file"""
+    """Load settings from file, with migration from legacy path"""
     try:
+        # First try the new persisted path
         if os.path.exists(SETTINGS_FILE):
             with open(SETTINGS_FILE, "r") as f:
                 return json.load(f)
+        
+        # Check legacy path and migrate if found
+        if os.path.exists(LEGACY_SETTINGS_FILE):
+            print(f"[Settings] Migrating settings from legacy path to persisted volume...")
+            with open(LEGACY_SETTINGS_FILE, "r") as f:
+                settings = json.load(f)
+            # Save to new persisted path
+            save_settings(settings)
+            print(f"[Settings] Migration complete: {SETTINGS_FILE}")
+            return settings
+            
     except Exception as e:
         print(f"Error loading settings: {e}")
     return {}

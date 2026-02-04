@@ -46,6 +46,7 @@ services:
       # Edge Engine URL (internal network)
       - EDGE_URL=http://edge:3002
       - EDGE_SSR_URL=http://edge:3002
+      - EDGE_ENGINE_URL=http://edge:3002
       # Admin Authentication
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}

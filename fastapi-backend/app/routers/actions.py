@@ -28,8 +28,10 @@ from app.schemas.actions import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Actions Engine URL (Hono service)
-ACTIONS_ENGINE_URL = "http://localhost:3002"
+# Edge Engine URL - configurable for production (Docker uses container name 'edge')
+# Defaults to localhost:3002 for local development
+import os
+EDGE_ENGINE_URL = os.getenv("EDGE_ENGINE_URL", "http://localhost:3002")
 
 
 # ============ Draft CRUD ============
@@ -268,12 +270,12 @@ async def test_draft(
     try:
         async with httpx.AsyncClient() as client:
             deploy_response = await client.post(
-                f"{ACTIONS_ENGINE_URL}/deploy",
+                f"{EDGE_ENGINE_URL}/api/deploy",
                 json=deploy_payload,
                 timeout=30.0
             )
             if deploy_response.status_code not in [200, 201]:
-                error_detail = "Failed to deploy workflow to Actions Engine"
+                error_detail = "Failed to deploy workflow to Edge Engine"
                 try:
                     error_json = deploy_response.json()
                     if "message" in error_json:
@@ -285,14 +287,14 @@ async def test_draft(
     except httpx.ConnectError:
         raise HTTPException(
             status_code=503,
-            detail="Actions Engine is not running. Start it with: cd services/actions && npm run dev"
+            detail="Edge Engine is not running. Start it with: cd services/edge && npm run dev"
         )
     
     # Trigger execution
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{ACTIONS_ENGINE_URL}/execute/{draft.id}",
+                f"{EDGE_ENGINE_URL}/api/execute/{draft.id}",
                 json={"parameters": request.parameters or {}},
                 timeout=30.0
             )
@@ -307,7 +309,7 @@ async def test_draft(
                         error_detail = error_json["error"]
                 except Exception:
                     if response.status_code == 404:
-                        error_detail = "Workflow not found in Actions Engine. Try deploying first."
+                        error_detail = "Workflow not found in Edge Engine. Try deploying first."
                 raise HTTPException(
                     status_code=502,  # Use 502 to indicate upstream failure
                     detail=error_detail
@@ -318,7 +320,7 @@ async def test_draft(
     except httpx.ConnectError:
         raise HTTPException(
             status_code=503,
-            detail="Actions Engine connection lost during execution"
+            detail="Edge Engine connection lost during execution"
         )
     
     return TestExecuteResponse(

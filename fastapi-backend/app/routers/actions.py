@@ -192,7 +192,7 @@ async def publish_draft(
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{ACTIONS_ENGINE_URL}/deploy",
+                f"{EDGE_ENGINE_URL}/api/deploy",
                 json=deploy_payload,
                 timeout=30.0
             )
@@ -201,7 +201,7 @@ async def publish_draft(
                 error_detail = response.json() if response.headers.get("content-type", "").startswith("application/json") else response.text
                 raise HTTPException(
                     status_code=response.status_code,
-                    detail=f"Failed to deploy to Actions Engine: {error_detail}"
+                    detail=f"Failed to deploy to Edge service: {error_detail}"
                 )
             
             result_data = response.json()
@@ -209,12 +209,12 @@ async def publish_draft(
     except httpx.ConnectError:
         raise HTTPException(
             status_code=503,
-            detail="Actions Engine is not running. Start it with: cd services/actions && npm run dev"
+            detail="Edge service is not running. Start it with: cd services/edge && npm run dev"
         )
     except httpx.TimeoutException:
         raise HTTPException(
             status_code=504,
-            detail="Actions Engine timeout"
+            detail="Edge service timeout"
         )
     
     # Update draft with published status
@@ -375,7 +375,7 @@ async def get_draft_executions(
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{ACTIONS_ENGINE_URL}/executions/workflow/{draft_id}",
+                f"{EDGE_ENGINE_URL}/api/executions/workflow/{draft_id}",
                 params={"limit": str(limit)},
                 timeout=10.0
             )

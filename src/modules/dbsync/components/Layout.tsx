@@ -14,7 +14,7 @@ import { useState } from 'react'
 
 const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/pages', label: 'Pages', icon: FileText },
+    { path: '/pages', label: 'Builder Studio', icon: FileText },
     { path: '/data-studio', label: 'Data Studio', icon: Database },
     { path: '/actions', label: 'Automations', icon: Workflow },
     { path: '/users', label: 'Users', icon: Users },
@@ -46,7 +46,11 @@ export function Layout() {
                 <div className="h-16 flex items-center justify-between px-6 border-b border-gray-200 dark:border-gray-700">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
-                            <Database className="w-5 h-5 text-white" />
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" />
+                                <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" />
+                                <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" />
+                            </svg>
                         </div>
                         <span className="font-bold text-lg">Frontbase</span>
                     </div>
@@ -65,12 +69,12 @@ export function Layout() {
                             key={item.path}
                             to={item.path}
                             className={({ isActive }) => `
-                flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
-                ${isActive
+                                flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
+                                ${isActive
                                     ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
                                     : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
                                 }
-              `}
+                            `}
                             onClick={() => setSidebarOpen(false)}
                         >
                             <item.icon className="w-5 h-5" />

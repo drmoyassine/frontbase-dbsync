@@ -17,9 +17,9 @@ import { ProjectDetailsForm } from './settings/shared/ProjectDetailsForm';
 
 export const SettingsPanel: React.FC = () => {
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">
           Configure your project settings and integrations
         </p>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { datasourcesApi, Datasource, viewsApi } from '../api'
 import DataPreviewModal from '../components/DataPreviewModal'
@@ -50,6 +50,13 @@ export function Datasources() {
     });
     const queryClient = useQueryClient()
 
+    // Listen for open modal event from parent (DataStudio)
+    useEffect(() => {
+        const handleOpenModal = () => setShowModal(true);
+        window.addEventListener('open-datasource-modal', handleOpenModal);
+        return () => window.removeEventListener('open-datasource-modal', handleOpenModal);
+    }, []);
+
     const { data: datasources, isLoading } = useQuery({
         queryKey: ['datasources'],
         queryFn: () => datasourcesApi.list().then(r => r.data),
@@ -71,20 +78,6 @@ export function Datasources() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold">Datasources</h1>
-                    <p className="text-gray-500 dark:text-gray-400">Manage your database connections</p>
-                </div>
-                <button
-                    onClick={() => setShowModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-                >
-                    <Plus className="w-4 h-4" />
-                    Add Data Source
-                </button>
-            </div>
-
             {isLoading ? (
                 <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
@@ -384,8 +377,8 @@ function DatasourceModal({
                                 value={formData.type}
                                 onChange={(e) => {
                                     const newType = e.target.value as any;
-                                    setFormData({ 
-                                        ...formData, 
+                                    setFormData({
+                                        ...formData,
                                         type: newType,
                                         port: newType === 'mysql' ? 3306 : 5432
                                     });

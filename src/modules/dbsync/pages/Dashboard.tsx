@@ -130,8 +130,8 @@ export function Dashboard() {
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-2xl font-bold">Dashboard</h1>
-                <p className="text-gray-500 dark:text-gray-400">Overview of your project</p>
+                <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+                <p className="text-muted-foreground">Overview of your project</p>
             </div>
 
             {/* Clickable Stats Grid */}

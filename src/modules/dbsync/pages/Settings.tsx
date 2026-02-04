@@ -15,10 +15,10 @@ export default function Settings() {
     const [activeTab, setActiveTab] = React.useState<'general' | 'privacy'>('general');
 
     return (
-        <div className="page-container p-6">
-            <div className="page-header mb-6">
-                <h1 className="text-2xl font-bold">Settings</h1>
-                <p className="text-muted-foreground mt-1">
+        <div className="space-y-6">
+            <div>
+                <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+                <p className="text-muted-foreground">
                     Configure your project settings and integrations
                 </p>
             </div>
@@ -27,8 +27,8 @@ export default function Settings() {
             <div className="flex gap-1 border-b mb-6">
                 <button
                     className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-2 ${activeTab === 'general'
-                            ? 'border-primary text-primary'
-                            : 'border-transparent text-muted-foreground hover:text-foreground'
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
                         }`}
                     onClick={() => setActiveTab('general')}
                 >
@@ -37,8 +37,8 @@ export default function Settings() {
                 </button>
                 <button
                     className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-2 ${activeTab === 'privacy'
-                            ? 'border-primary text-primary'
-                            : 'border-transparent text-muted-foreground hover:text-foreground'
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
                         }`}
                     onClick={() => setActiveTab('privacy')}
                 >

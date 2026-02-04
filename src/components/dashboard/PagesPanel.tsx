@@ -197,10 +197,10 @@ export const PagesPanel: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">{showTrash ? 'Trashed Pages' : 'Pages'}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{showTrash ? 'Trashed Pages' : 'Pages'}</h1>
           <p className="text-muted-foreground">
             {showTrash ? 'Pages will be permanently deleted after 14 days' : 'Manage your website pages and content'}
           </p>

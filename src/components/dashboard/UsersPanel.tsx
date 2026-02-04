@@ -4,7 +4,6 @@ import { UserStatsCards } from './UserStatsCards';
 import { UserManagementTable } from './UserManagementTable';
 import { RLSPoliciesPanel } from './RLSPoliciesPanel';
 import { useUserContactConfig } from '@/hooks/useUserContactConfig';
-import { AddBuilderDialog } from './AddBuilderDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuthFormsList } from './AuthFormsList';
 
@@ -13,14 +12,11 @@ export function UsersPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Users</h2>
-          <p className="text-muted-foreground">
-            Manage your application users and sync their contact data with Supabase auth.
-          </p>
-        </div>
-        <AddBuilderDialog />
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight">Users</h2>
+        <p className="text-muted-foreground">
+          Manage your application users and sync their contact data with Supabase auth.
+        </p>
       </div>
 
       <Tabs defaultValue="users-config" className="w-full space-y-6">

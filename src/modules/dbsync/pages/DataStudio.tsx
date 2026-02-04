@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { Database, RefreshCw, AlertTriangle, History } from 'lucide-react'
+import { Database, RefreshCw, AlertTriangle, History, Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 const tabs = [
     { path: 'datasources', label: 'Datasources', icon: Database },
@@ -9,13 +10,27 @@ const tabs = [
 ]
 
 export function DataStudio() {
+    const location = useLocation();
+    const isOnDatasources = location.pathname.includes('datasources');
+
+    // Dispatch custom event to trigger datasource modal
+    const handleAddDatasource = () => {
+        window.dispatchEvent(new CustomEvent('open-datasource-modal'));
+    };
+
     return (
         <div className="flex flex-col h-full space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Data Studio</h2>
-                    <p className="text-gray-500 dark:text-gray-400">Manage your data sources, synchronizations, and integrity.</p>
+                    <h2 className="text-2xl font-bold tracking-tight">Data Studio</h2>
+                    <p className="text-muted-foreground">Manage your data sources, synchronizations, and integrity.</p>
                 </div>
+                {isOnDatasources && (
+                    <Button onClick={handleAddDatasource}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Data Source
+                    </Button>
+                )}
             </div>
 
             {/* Tabs */}
@@ -52,3 +67,4 @@ export function DataStudio() {
 }
 
 export default DataStudio
+

@@ -86,16 +86,13 @@ export function Layout() {
 
             {/* Main content */}
             <div className="flex-1 flex flex-col min-w-0">
-                {/* Top bar */}
-                <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center px-6">
-                    <button
-                        className="lg:hidden p-2 -ml-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg mr-4"
-                        onClick={() => setSidebarOpen(true)}
-                    >
-                        <Menu className="w-5 h-5" />
-                    </button>
-                    <h1 className="text-xl font-semibold">Frontbase Workspace</h1>
-                </header>
+                {/* Mobile menu button */}
+                <button
+                    className="lg:hidden fixed top-4 left-4 z-30 p-2 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg shadow-md border border-gray-200 dark:border-gray-700"
+                    onClick={() => setSidebarOpen(true)}
+                >
+                    <Menu className="w-5 h-5" />
+                </button>
 
                 {/* Page content */}
                 <main className="flex-1 p-6 overflow-auto">

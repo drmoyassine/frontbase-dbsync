@@ -64,6 +64,17 @@ async def create_draft(
     db: Session = Depends(get_db)
 ):
     """Create a new workflow draft"""
+    # Check for duplicate workflow name
+    existing = db.execute(
+        select(AutomationDraft).where(AutomationDraft.name == draft.name)
+    ).scalar_one_or_none()
+    
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"A workflow with the name '{draft.name}' already exists"
+        )
+    
     def safe_dump(obj):
         if hasattr(obj, 'model_dump'):
             return obj.model_dump()
@@ -119,11 +130,35 @@ async def update_draft(
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
     
-    # Apply updates
+    # Check for duplicate workflow name (if renaming)
     update_data = update.model_dump(exclude_unset=True)
+    if "name" in update_data and update_data["name"] != draft.name:
+        existing = db.execute(
+            select(AutomationDraft).where(
+                AutomationDraft.name == update_data["name"],
+                AutomationDraft.id != draft_id
+            )
+        ).scalar_one_or_none()
+        
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"A workflow with the name '{update_data['name']}' already exists"
+            )
     
+    # Check for duplicate node names within the workflow
     if "nodes" in update_data:
+        node_names = [n.get("name") if isinstance(n, dict) else n.name for n in update_data["nodes"]]
+        seen = set()
+        for name in node_names:
+            if name in seen:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Duplicate node name '{name}' in workflow. Each node must have a unique name."
+                )
+            seen.add(name)
         update_data["nodes"] = [n.model_dump() if hasattr(n, 'model_dump') else n for n in update_data["nodes"]]
+    
     if "edges" in update_data:
         update_data["edges"] = [e.model_dump() if hasattr(e, 'model_dump') else e for e in update_data["edges"]]
     if "trigger_type" in update_data:

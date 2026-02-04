@@ -89,17 +89,48 @@ export const useActionsStore = create<ActionsState>((set, get) => ({
     // Node operations
     setNodes: (nodes) => set({ nodes }),
 
-    addNode: (node) => set((state) => ({
-        nodes: [...state.nodes, node],
-        isDirty: true
-    })),
+    addNode: (node) => set((state) => {
+        // Ensure unique node name
+        const existingNames = new Set(state.nodes.map(n => n.data.label));
+        let label = node.data.label;
+        let counter = 1;
+        const baseName = label.replace(/ \d+$/, ''); // Remove trailing number if exists
 
-    updateNode: (id, data) => set((state) => ({
-        nodes: state.nodes.map(n =>
-            n.id === id ? { ...n, data: { ...n.data, ...data } } : n
-        ),
-        isDirty: true
-    })),
+        while (existingNames.has(label)) {
+            counter++;
+            label = `${baseName} ${counter}`;
+        }
+
+        return {
+            nodes: [...state.nodes, { ...node, data: { ...node.data, label } }],
+            isDirty: true
+        };
+    }),
+
+    updateNode: (id, data) => set((state) => {
+        // If renaming, check for duplicates
+        if (data.label) {
+            const otherNames = state.nodes
+                .filter(n => n.id !== id)
+                .map(n => n.data.label);
+            if (otherNames.includes(data.label)) {
+                // Duplicate name - don't update the label
+                const { label, ...restData } = data;
+                return {
+                    nodes: state.nodes.map(n =>
+                        n.id === id ? { ...n, data: { ...n.data, ...restData } } : n
+                    ),
+                    isDirty: true
+                };
+            }
+        }
+        return {
+            nodes: state.nodes.map(n =>
+                n.id === id ? { ...n, data: { ...n.data, ...data } } : n
+            ),
+            isDirty: true
+        };
+    }),
 
     removeNode: (id) => set((state) => ({
         nodes: state.nodes.filter(n => n.id !== id),

@@ -98,6 +98,16 @@ async function deleteDraft(id: string): Promise<void> {
     if (!response.ok) throw new Error('Failed to delete draft');
 }
 
+async function bulkDeleteDrafts(ids: string[]): Promise<{ deleted: number }> {
+    const response = await fetch(`${API_BASE}/drafts/bulk-delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+    });
+    if (!response.ok) throw new Error('Failed to delete drafts');
+    return response.json();
+}
+
 async function publishDraft(id: string): Promise<{ success: boolean; workflow_id: string; version: number }> {
     const response = await fetch(`${API_BASE}/drafts/${id}/publish`, {
         method: 'POST',
@@ -170,6 +180,17 @@ export function useDeleteDraft() {
 
     return useMutation({
         mutationFn: deleteDraft,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['workflow-drafts'] });
+        },
+    });
+}
+
+export function useBulkDeleteDrafts() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: bulkDeleteDrafts,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['workflow-drafts'] });
         },

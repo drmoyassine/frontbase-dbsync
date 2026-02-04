@@ -156,6 +156,33 @@ async def delete_draft(
     return None
 
 
+class BulkDeleteRequest(BaseModel):
+    ids: List[str]
+
+
+@router.post("/drafts/bulk-delete", status_code=status.HTTP_200_OK)
+async def bulk_delete_drafts(
+    request: BulkDeleteRequest,
+    db: Session = Depends(get_db)
+):
+    """Delete multiple workflow drafts at once"""
+    if not request.ids:
+        return {"deleted": 0}
+    
+    result = db.execute(
+        select(AutomationDraft).where(AutomationDraft.id.in_(request.ids))
+    )
+    drafts = result.scalars().all()
+    
+    deleted_count = 0
+    for draft in drafts:
+        db.delete(draft)
+        deleted_count += 1
+    
+    db.commit()
+    return {"deleted": deleted_count}
+
+
 # ============ Publishing ============
 
 @router.post("/drafts/{draft_id}/publish", response_model=PublishResponse)

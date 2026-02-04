@@ -194,14 +194,21 @@ async function executeDataRequest(
 ): Promise<Record<string, any>> {
     const FASTAPI_URL = process.env.FASTAPI_URL || 'http://localhost:8000';
 
-    // Get node configuration from data property (ReactFlow format)
+    // Get node configuration - check multiple sources
     const nodeData = node.data || {};
-    const nodeInputs = nodeData.inputs || [];
+    const nodeInputs = nodeData.inputs || node.inputs || [];
 
     // Extract config from node inputs array
     const getInputValue = (name: string) => {
-        const input = nodeInputs.find((i: any) => i.name === name);
-        return input?.value ?? inputs[name];
+        // First check in node.data.inputs array format
+        if (Array.isArray(nodeInputs)) {
+            const input = nodeInputs.find((i: any) => i.name === name);
+            if (input?.value !== undefined) return input.value;
+        }
+        // Then check in node.data directly (flat format)
+        if (nodeData[name] !== undefined) return nodeData[name];
+        // Finally check in workflow inputs
+        return inputs[name];
     };
 
     const dataSource = getInputValue('dataSource');
@@ -212,9 +219,7 @@ async function executeDataRequest(
     const limit = getInputValue('limit') || 100;
     const returnData = getInputValue('returnData') !== false;
 
-    console.log(`[Data Request] datasource=${dataSource}, table=${table}, op=${operation}`);
-    console.log(`[Data Request] selectFields:`, selectFields);
-    console.log(`[Data Request] whereConditions:`, whereConditions);
+    console.log(`[Data Request] table=${table}, operation=${operation}`);
 
     if (!table) {
         return {

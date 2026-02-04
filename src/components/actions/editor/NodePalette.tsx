@@ -81,7 +81,7 @@ const nodeTypes: NodeTypeConfig[] = [
         label: 'Data Request',
         description: 'Query or modify data',
         icon: <Database className="w-4 h-4" />,
-        category: 'integrations',
+        category: 'actions',
     },
 
     // Interface

@@ -619,7 +619,7 @@ export const dataRequestSchema: NodeSchema = {
             type: 'select',
             label: 'Data Source',
             required: true,
-            description: 'Select a configured data source',
+            description: 'Select Data Source',
             options: 'datasources', // Dynamic - will be populated from configured data sources
         } as SelectFieldDefinition,
         {

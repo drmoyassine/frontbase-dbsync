@@ -173,7 +173,7 @@ export function PropertiesPane({ className }: PropertiesPaneProps) {
                             dependsOnValue={dependsOnValue}
                             placeholder={
                                 selectField.options === 'datasources'
-                                    ? 'Select a configured data source'
+                                    ? 'Select Data Source'
                                     : selectField.options === 'tables'
                                         ? 'Select a table'
                                         : 'Select...'

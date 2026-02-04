@@ -49,20 +49,34 @@ export const ParameterSchema = z.object({
 
 export const WorkflowNodeSchema = z.object({
     id: z.string(),
-    name: z.string(),
+    // ReactFlow uses 'type' at root level
     type: z.string(),
     position: NodePositionSchema,
-    inputs: z.array(ParameterSchema),
-    outputs: z.array(ParameterSchema),
+    // ReactFlow wraps node data in 'data' object
+    data: z.object({
+        label: z.string().optional(),
+        type: z.string().optional(),
+        inputs: z.array(ParameterSchema).optional(),
+        outputs: z.array(ParameterSchema).optional(),
+    }).passthrough().optional(),
+    // Legacy format: direct properties (for backward compatibility)
+    name: z.string().optional(),
+    inputs: z.array(ParameterSchema).optional(),
+    outputs: z.array(ParameterSchema).optional(),
     error: z.string().optional(),
-}).openapi('WorkflowNode');
+}).passthrough().openapi('WorkflowNode');
 
 export const WorkflowEdgeSchema = z.object({
+    id: z.string().optional(), // ReactFlow adds id
     source: z.string(),
     target: z.string(),
-    sourceOutput: z.string(),
-    targetInput: z.string(),
-}).openapi('WorkflowEdge');
+    // ReactFlow uses sourceHandle/targetHandle
+    sourceHandle: z.string().nullable().optional(),
+    targetHandle: z.string().nullable().optional(),
+    // Legacy format
+    sourceOutput: z.string().optional(),
+    targetInput: z.string().optional(),
+}).passthrough().openapi('WorkflowEdge');
 
 // ============ Workflow ============
 

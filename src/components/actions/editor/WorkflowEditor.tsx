@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { WorkflowCanvas } from './WorkflowCanvas';
 import { NodePalette } from './NodePalette';
 import { PropertiesPane } from './PropertiesPane';
+import { RecordViewer } from './RecordViewer';
 import { useActionsStore } from '@/stores/actions';
 import {
     useWorkflowDraft,
@@ -295,13 +296,13 @@ export function WorkflowEditor({
                     <NodePalette hideTriggers={hideTriggers} />
 
                     {/* Center: Canvas */}
-                    <div className="flex-1 flex flex-col">
-                        <WorkflowCanvas className="flex-1" />
+                    <div className="flex-1 flex flex-col min-w-0">
+                        <WorkflowCanvas className="flex-1 min-h-[300px]" />
 
                         {/* Execution Result Panel */}
                         {executionResult && (
                             <div className={cn(
-                                "border-t p-4 max-h-64 overflow-auto bg-muted/30",
+                                "border-t p-4 max-h-48 overflow-auto bg-muted/30 shrink-0",
                                 executionResult.status === 'completed' && "bg-green-50 dark:bg-green-950/20",
                                 executionResult.status === 'error' && "bg-red-50 dark:bg-red-950/20"
                             )}>
@@ -326,28 +327,41 @@ export function WorkflowEditor({
                                     </div>
                                 )}
 
-                                {executionResult.result && (
-                                    <div className="text-xs">
-                                        <div className="text-muted-foreground mb-1">Result:</div>
-                                        <pre className="bg-background p-2 rounded border overflow-auto max-h-32 text-xs">
-                                            {JSON.stringify(executionResult.result, null, 2)}
-                                        </pre>
-                                    </div>
-                                )}
-
+                                {/* Node Outputs with RecordViewer */}
                                 {executionResult.nodeExecutions && executionResult.nodeExecutions.length > 0 && (
-                                    <div className="text-xs mt-2">
-                                        <div className="text-muted-foreground mb-1">Node Outputs:</div>
-                                        {executionResult.nodeExecutions.filter(n => n.outputs).map(node => (
-                                            <details key={node.nodeId} className="mb-1">
-                                                <summary className="cursor-pointer text-sm">
-                                                    {node.status === 'completed' ? '✅' : node.status === 'error' ? '❌' : '⏳'} Node: {node.nodeId.slice(0, 8)}
-                                                </summary>
-                                                <pre className="bg-background p-2 rounded border overflow-auto max-h-24 text-xs ml-4">
-                                                    {JSON.stringify(node.outputs, null, 2)}
-                                                </pre>
-                                            </details>
-                                        ))}
+                                    <div className="space-y-2">
+                                        {executionResult.nodeExecutions.filter(n => n.outputs).map(node => {
+                                            const outputs = node.outputs as Record<string, unknown>;
+                                            // Check if this node has data array (like data_request)
+                                            const dataArray = outputs?.data as unknown[];
+                                            const hasDataArray = Array.isArray(dataArray) && dataArray.length > 0;
+
+                                            return (
+                                                <details key={node.nodeId} open className="border rounded-md overflow-hidden">
+                                                    <summary className="cursor-pointer px-3 py-2 bg-muted/50 hover:bg-muted flex items-center gap-2 text-sm">
+                                                        {node.status === 'completed' ? '✅' : node.status === 'error' ? '❌' : '⏳'}
+                                                        <span className="font-medium">Node: {node.nodeId.slice(0, 8)}</span>
+                                                        {hasDataArray && (
+                                                            <span className="text-muted-foreground">
+                                                                ({dataArray.length} records)
+                                                            </span>
+                                                        )}
+                                                    </summary>
+                                                    <div className="p-2">
+                                                        {/* If node has data array, show RecordViewer */}
+                                                        {hasDataArray ? (
+                                                            <RecordViewer
+                                                                data={dataArray}
+                                                                title={`${outputs.rowCount || dataArray.length} rows`}
+                                                            />
+                                                        ) : (
+                                                            /* Otherwise show key-value for the outputs object */
+                                                            <RecordViewer data={outputs} />
+                                                        )}
+                                                    </div>
+                                                </details>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>

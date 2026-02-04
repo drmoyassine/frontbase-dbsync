@@ -77,7 +77,10 @@ async function createDraft(input: CreateDraftInput): Promise<WorkflowDraft> {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
     });
-    if (!response.ok) throw new Error('Failed to create draft');
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.detail || 'Failed to create draft');
+    }
     return response.json();
 }
 
@@ -87,7 +90,10 @@ async function updateDraft(id: string, input: UpdateDraftInput): Promise<Workflo
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
     });
-    if (!response.ok) throw new Error('Failed to update draft');
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.detail || 'Failed to update draft');
+    }
     return response.json();
 }
 

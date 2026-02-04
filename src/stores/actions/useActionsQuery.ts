@@ -194,3 +194,39 @@ export function useTestDraft() {
             testDraft(id, parameters),
     });
 }
+
+// Execution result fetching
+async function getExecutionResult(executionId: string): Promise<{
+    id: string;
+    workflowId: string;
+    status: 'started' | 'executing' | 'completed' | 'error';
+    nodeExecutions: Array<{
+        nodeId: string;
+        status: string;
+        outputs?: Record<string, unknown>;
+        error?: string;
+    }>;
+    result?: Record<string, unknown>;
+    error?: string;
+}> {
+    const response = await fetch(`/api/actions/execution/${executionId}`);
+    if (!response.ok) {
+        throw new Error(`Failed to get execution result: ${response.status}`);
+    }
+    return response.json();
+}
+
+export function useExecutionResult(executionId: string | null, options?: { enabled?: boolean }) {
+    return useQuery({
+        queryKey: ['execution-result', executionId],
+        queryFn: () => executionId ? getExecutionResult(executionId) : null,
+        enabled: !!executionId && options?.enabled !== false,
+        refetchInterval: (query) => {
+            // Poll every 500ms while executing, stop when complete
+            const data = query.state.data;
+            if (!data) return 500;
+            if (data.status === 'completed' || data.status === 'error') return false;
+            return 500;
+        },
+    });
+}

@@ -85,22 +85,22 @@ export const WorkflowSchema = z.object({
     name: z.string().min(1).max(255),
     description: z.string().optional(),
     triggerType: TriggerTypeSchema,
-    triggerConfig: z.record(z.any()).optional(),
+    triggerConfig: z.record(z.any()).optional().nullable(),
     nodes: z.array(WorkflowNodeSchema),
     edges: z.array(WorkflowEdgeSchema),
-    version: z.number().int().positive().optional(),
-    isActive: z.boolean().optional(),
+    version: z.number().int().positive().optional().nullable(),
+    isActive: z.boolean().optional().nullable(),
 }).openapi('Workflow');
 
 export const DeployWorkflowSchema = z.object({
     id: z.string().uuid(),
     name: z.string().min(1),
-    description: z.string().optional(),
+    description: z.string().optional().nullable(),
     triggerType: TriggerTypeSchema,
-    triggerConfig: z.record(z.any()).optional(),
+    triggerConfig: z.record(z.any()).optional().nullable(),
     nodes: z.array(WorkflowNodeSchema),
     edges: z.array(WorkflowEdgeSchema),
-    publishedBy: z.string().optional(),
+    publishedBy: z.string().optional().nullable(),
 }).openapi('DeployWorkflow');
 
 // ============ Execution ============

@@ -159,6 +159,9 @@ async function executeNode(
             // Trigger nodes just pass through inputs
             return { ...inputs };
 
+        case 'data_request':
+            return await executeDataRequest(node, inputs);
+
         case 'http_request':
             return await executeHttpRequest(node, inputs);
 
@@ -179,6 +182,112 @@ async function executeNode(
             // Generic pass-through for unknown types
             console.warn(`Unknown node type: ${node.type}`);
             return { ...inputs };
+    }
+}
+
+/**
+ * Data Request Node - Query database via FastAPI proxy
+ */
+async function executeDataRequest(
+    node: WorkflowNode,
+    inputs: Record<string, any>
+): Promise<Record<string, any>> {
+    const FASTAPI_URL = process.env.FASTAPI_URL || 'http://localhost:8000';
+
+    // Get node configuration from data property (ReactFlow format)
+    const nodeData = node.data || {};
+    const nodeInputs = nodeData.inputs || [];
+
+    // Extract config from node inputs array
+    const getInputValue = (name: string) => {
+        const input = nodeInputs.find((i: any) => i.name === name);
+        return input?.value ?? inputs[name];
+    };
+
+    const dataSource = getInputValue('dataSource');
+    const table = getInputValue('table');
+    const operation = getInputValue('operation') || 'select';
+    const selectFields = getInputValue('selectFields') || [];
+    const whereConditions = getInputValue('whereConditions') || [];
+    const limit = getInputValue('limit') || 100;
+    const returnData = getInputValue('returnData') !== false;
+
+    console.log(`[Data Request] datasource=${dataSource}, table=${table}, op=${operation}`);
+    console.log(`[Data Request] selectFields:`, selectFields);
+    console.log(`[Data Request] whereConditions:`, whereConditions);
+
+    if (!table) {
+        return {
+            success: false,
+            error: 'Table is required',
+            data: [],
+            rowCount: 0,
+        };
+    }
+
+    try {
+        // Build select fields
+        let selectParam = '*';
+        if (Array.isArray(selectFields) && selectFields.length > 0) {
+            selectParam = selectFields
+                .map((f: any) => f.key || f.name || f)
+                .filter(Boolean)
+                .join(',') || '*';
+        }
+
+        // Build query URL using existing FastAPI endpoint
+        const queryUrl = new URL(`${FASTAPI_URL}/api/database/table-data/${table}/`);
+        queryUrl.searchParams.set('limit', String(limit));
+        queryUrl.searchParams.set('select', selectParam);
+        queryUrl.searchParams.set('mode', 'builder'); // Use service key for Actions
+
+        // Add WHERE conditions as filters
+        if (Array.isArray(whereConditions) && whereConditions.length > 0) {
+            whereConditions.forEach((condition: any) => {
+                if (condition.key && condition.value !== undefined) {
+                    queryUrl.searchParams.set(`filter_${condition.key}`, String(condition.value));
+                }
+            });
+        }
+
+        console.log(`[Data Request] Fetching: ${queryUrl.toString()}`);
+
+        const response = await fetch(queryUrl.toString(), {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[Data Request] Error: ${response.status} - ${errorText}`);
+            return {
+                success: false,
+                error: `Query failed: ${response.status} - ${errorText}`,
+                data: [],
+                rowCount: 0,
+            };
+        }
+
+        const result = await response.json();
+        const data = returnData ? (result.data || result.rows || []) : [];
+        const total = result.total || data.length;
+
+        console.log(`[Data Request] Success: ${data.length} rows (total: ${total})`);
+
+        return {
+            success: true,
+            data,
+            rowCount: data.length,
+            total,
+        };
+    } catch (error: any) {
+        console.error(`[Data Request] Error:`, error);
+        return {
+            success: false,
+            error: error.message || 'Query execution failed',
+            data: [],
+            rowCount: 0,
+        };
     }
 }
 

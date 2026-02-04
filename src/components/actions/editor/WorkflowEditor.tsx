@@ -4,9 +4,9 @@
  * Combines the canvas, palette, and properties pane into a complete editor.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ReactFlowProvider } from 'reactflow';
-import { Save, Play, Rocket, X, Plus } from 'lucide-react';
+import { Save, Play, Rocket, X, Plus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,7 +20,8 @@ import {
     useCreateDraft,
     useUpdateDraft,
     usePublishDraft,
-    useTestDraft
+    useTestDraft,
+    useExecutionResult
 } from '@/stores/actions';
 import { cn } from '@/lib/utils';
 
@@ -58,6 +59,10 @@ export function WorkflowEditor({
         markClean,
         resetEditor,
     } = useActionsStore();
+
+    // Execution state for test results
+    const [currentExecutionId, setCurrentExecutionId] = useState<string | null>(null);
+    const { data: executionResult, isLoading: isPollingResult } = useExecutionResult(currentExecutionId);
 
     // API hooks
     const { data: draft } = useWorkflowDraft(draftId || currentDraftId);
@@ -155,16 +160,39 @@ export function WorkflowEditor({
             return;
         }
 
+        // Save first if dirty
+        if (isDirty) {
+            await handleSave();
+        }
+
         try {
+            setCurrentExecutionId(null); // Reset previous result
             const result = await testDraft.mutateAsync({ id: currentDraftId });
+            setCurrentExecutionId(result.execution_id);
             toast({
-                title: 'Test Started',
-                description: `Execution ID: ${result.execution_id}`
+                title: 'Test Running',
+                description: 'Executing workflow...'
             });
         } catch (error: any) {
             toast({ title: 'Test Failed', description: error.message, variant: 'destructive' });
         }
     };
+
+    // Show toast when execution completes
+    useEffect(() => {
+        if (executionResult?.status === 'completed') {
+            toast({
+                title: '✅ Test Complete',
+                description: `Workflow finished successfully`,
+            });
+        } else if (executionResult?.status === 'error') {
+            toast({
+                title: '❌ Test Failed',
+                description: executionResult.error || 'Execution error',
+                variant: 'destructive',
+            });
+        }
+    }, [executionResult?.status]);
 
     // Publish handler
     const handlePublish = async () => {
@@ -234,9 +262,18 @@ export function WorkflowEditor({
                             Save
                         </Button>
 
-                        <Button variant="outline" size="sm" onClick={handleTest} disabled={testDraft.isPending}>
-                            <Play className="w-4 h-4 mr-2" />
-                            Test
+                        <Button variant="outline" size="sm" onClick={handleTest} disabled={testDraft.isPending || isPollingResult}>
+                            {isPollingResult ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Running...
+                                </>
+                            ) : (
+                                <>
+                                    <Play className="w-4 h-4 mr-2" />
+                                    Test
+                                </>
+                            )}
                         </Button>
 
                         <Button size="sm" onClick={handlePublish} disabled={publishDraft.isPending}>
@@ -258,7 +295,64 @@ export function WorkflowEditor({
                     <NodePalette hideTriggers={hideTriggers} />
 
                     {/* Center: Canvas */}
-                    <WorkflowCanvas className="flex-1" />
+                    <div className="flex-1 flex flex-col">
+                        <WorkflowCanvas className="flex-1" />
+
+                        {/* Execution Result Panel */}
+                        {executionResult && (
+                            <div className={cn(
+                                "border-t p-4 max-h-64 overflow-auto bg-muted/30",
+                                executionResult.status === 'completed' && "bg-green-50 dark:bg-green-950/20",
+                                executionResult.status === 'error' && "bg-red-50 dark:bg-red-950/20"
+                            )}>
+                                <div className="flex items-center justify-between mb-2">
+                                    <h3 className="text-sm font-semibold">
+                                        {executionResult.status === 'executing' && '⏳ Executing...'}
+                                        {executionResult.status === 'completed' && '✅ Execution Complete'}
+                                        {executionResult.status === 'error' && '❌ Execution Failed'}
+                                    </h3>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setCurrentExecutionId(null)}
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </Button>
+                                </div>
+
+                                {executionResult.error && (
+                                    <div className="text-sm text-red-600 dark:text-red-400 mb-2">
+                                        {executionResult.error}
+                                    </div>
+                                )}
+
+                                {executionResult.result && (
+                                    <div className="text-xs">
+                                        <div className="text-muted-foreground mb-1">Result:</div>
+                                        <pre className="bg-background p-2 rounded border overflow-auto max-h-32 text-xs">
+                                            {JSON.stringify(executionResult.result, null, 2)}
+                                        </pre>
+                                    </div>
+                                )}
+
+                                {executionResult.nodeExecutions && executionResult.nodeExecutions.length > 0 && (
+                                    <div className="text-xs mt-2">
+                                        <div className="text-muted-foreground mb-1">Node Outputs:</div>
+                                        {executionResult.nodeExecutions.filter(n => n.outputs).map(node => (
+                                            <details key={node.nodeId} className="mb-1">
+                                                <summary className="cursor-pointer text-sm">
+                                                    {node.status === 'completed' ? '✅' : node.status === 'error' ? '❌' : '⏳'} Node: {node.nodeId.slice(0, 8)}
+                                                </summary>
+                                                <pre className="bg-background p-2 rounded border overflow-auto max-h-24 text-xs ml-4">
+                                                    {JSON.stringify(node.outputs, null, 2)}
+                                                </pre>
+                                            </details>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
 
                     {/* Right: Properties */}
                     {selectedNodeId && <PropertiesPane />}

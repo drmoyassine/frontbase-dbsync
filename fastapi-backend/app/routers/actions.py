@@ -336,6 +336,33 @@ async def test_draft(
     )
 
 
+# ============ Execution Result ============
+
+@router.get("/execution/{execution_id}")
+async def get_execution_result(execution_id: str):
+    """Get detailed execution result from Edge Engine"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{EDGE_ENGINE_URL}/api/executions/{execution_id}",
+                timeout=10.0
+            )
+            
+            if response.status_code == 404:
+                raise HTTPException(status_code=404, detail="Execution not found")
+            
+            if response.status_code != 200:
+                raise HTTPException(status_code=502, detail="Failed to get execution from Edge Engine")
+            
+            return response.json()
+            
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail="Edge Engine is not running"
+        )
+
+
 # ============ Execution History ============
 
 @router.get("/executions/{draft_id}")

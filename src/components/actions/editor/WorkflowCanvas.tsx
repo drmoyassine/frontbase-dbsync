@@ -93,9 +93,17 @@ export function WorkflowCanvas({ className, nodeExecutions }: WorkflowCanvasProp
         });
     }, [nodes, nodeExecutions]);
 
-    // Style edges based on execution status
+    // Style edges based on execution status and add data counts
     const edgesWithStatus = useMemo(() => {
         if (!nodeExecutions || nodeExecutions.length === 0) return edges;
+
+        // Build a map of node outputs for data counting
+        const nodeOutputsMap = new Map<string, Record<string, unknown>>();
+        nodeExecutions.forEach(exec => {
+            if (exec.outputs) {
+                nodeOutputsMap.set(exec.nodeId, exec.outputs);
+            }
+        });
 
         const completedNodeIds = new Set(
             nodeExecutions.filter(e => e.status === 'completed').map(e => e.nodeId)
@@ -105,12 +113,36 @@ export function WorkflowCanvas({ className, nodeExecutions }: WorkflowCanvasProp
         );
 
         return edges.map(edge => {
+            // Get data count from source node's output
+            let label = '';
+            const sourceOutputs = nodeOutputsMap.get(edge.source);
+            if (sourceOutputs && completedNodeIds.has(edge.source)) {
+                // Check for data array (like from data_request)
+                const dataArray = sourceOutputs.data as unknown[];
+                if (Array.isArray(dataArray)) {
+                    label = `${dataArray.length} rows`;
+                } else if (sourceOutputs.rowCount !== undefined) {
+                    label = `${sourceOutputs.rowCount} rows`;
+                } else if (typeof sourceOutputs === 'object') {
+                    // Count keys for object outputs
+                    const keyCount = Object.keys(sourceOutputs).length;
+                    if (keyCount > 0) {
+                        label = `${keyCount} fields`;
+                    }
+                }
+            }
+
             // Edge is green if source completed successfully
             if (completedNodeIds.has(edge.source)) {
                 return {
                     ...edge,
                     style: { stroke: '#22c55e', strokeWidth: 2 },
                     animated: false,
+                    label,
+                    labelStyle: { fill: '#22c55e', fontWeight: 600, fontSize: 11 },
+                    labelBgStyle: { fill: 'white', fillOpacity: 0.9 },
+                    labelBgPadding: [4, 2] as [number, number],
+                    labelBgBorderRadius: 4,
                 };
             }
             // Edge is red if source had error
@@ -119,6 +151,8 @@ export function WorkflowCanvas({ className, nodeExecutions }: WorkflowCanvasProp
                     ...edge,
                     style: { stroke: '#ef4444', strokeWidth: 2 },
                     animated: false,
+                    label: '❌',
+                    labelStyle: { fontSize: 12 },
                 };
             }
             return edge;

@@ -179,9 +179,8 @@ function generateHtmlDocument(
     <link rel="icon" type="image/png" href="${faviconUrl}">
     <link rel="apple-touch-icon" href="${faviconUrl}">
     
-    <!-- Prefetch hydration bundles -->
+    <!-- Prefetch hydration bundle -->
     <link rel="modulepreload" href="/static/hydrate.js?v=${HYDRATE_VERSION}">
-    <link rel="modulepreload" href="/static/react/hydrate.js?v=${HYDRATE_VERSION}">
 
     <!-- Client-Side Visitor Context Enhancement -->
     <script>
@@ -360,11 +359,8 @@ function generateHtmlDocument(
     })};
     </script>
     
-    <!-- Hydration bundle (vanilla JS for simple components) -->
+    <!-- Hydration bundle (all interactive components) -->
     <script type="module" src="/static/hydrate.js?v=${HYDRATE_VERSION}"></script>
-    
-    <!-- React hydration bundle (DataTable, Charts, Forms) -->
-    <script type="module" src="/static/react/hydrate.js?v=${HYDRATE_VERSION}"></script>
 </body>
 </html>`;
 }

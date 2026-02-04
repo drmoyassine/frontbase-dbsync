@@ -21,7 +21,7 @@ import {
     CodeFieldDefinition,
     KeyValueFieldDefinition,
 } from '@/lib/workflow/nodeSchemas';
-import { SelectField, KeyValueField, CodeField, ExpressionField } from './fields';
+import { SelectField, KeyValueField, CodeField, ExpressionField, ConditionBuilderField } from './fields';
 
 interface PropertiesPaneProps {
     className?: string;
@@ -236,6 +236,18 @@ export function PropertiesPane({ className }: PropertiesPaneProps) {
                         description={field.description}
                         keyPlaceholder={kvField.keyPlaceholder}
                         valuePlaceholder={kvField.valuePlaceholder}
+                    />
+                );
+
+            case 'conditionBuilder':
+                return (
+                    <ConditionBuilderField
+                        key={field.name}
+                        name={field.name}
+                        label={fieldLabel}
+                        value={value || field.default || []}
+                        onChange={(v) => handleFieldChange(field.name, v)}
+                        description={field.description}
                     />
                 );
 

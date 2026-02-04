@@ -433,63 +433,42 @@ export const logSchema: NodeSchema = {
 export const conditionSchema: NodeSchema = {
     type: 'condition',
     label: 'Condition',
-    description: 'If/else branching',
+    description: 'Route data based on conditions',
     category: 'logic',
     inputs: [
         {
-            name: 'mode',
+            name: 'conditions',
+            type: 'conditionBuilder',
+            label: 'Routing Rules',
+            description: 'Add conditions to create output routes. Data flows to the first matching condition, or "else" if none match.',
+            default: [
+                {
+                    id: 'cond-default-1',
+                    name: 'Condition 1',
+                    field: '',
+                    operator: 'equals',
+                    value: '',
+                },
+            ],
+        },
+        {
+            name: 'fallbackBehavior',
             type: 'select',
-            label: 'Mode',
-            default: 'simple',
+            label: 'When No Match',
+            default: 'else',
+            description: 'What to do when no conditions match',
             options: [
-                { value: 'simple', label: 'Simple' },
-                { value: 'expression', label: 'Expression' },
+                { value: 'else', label: 'Route to "else" output' },
+                { value: 'stop', label: 'Stop workflow' },
+                { value: 'error', label: 'Throw error' },
             ],
         } as SelectFieldDefinition,
-        {
-            name: 'field',
-            type: 'string',
-            label: 'Field',
-            placeholder: '{{ $input.data.status }}',
-            showWhen: { mode: 'simple' },
-        },
-        {
-            name: 'operator',
-            type: 'select',
-            label: 'Operator',
-            default: 'equals',
-            showWhen: { mode: 'simple' },
-            options: [
-                { value: 'equals', label: 'Equals' },
-                { value: 'notEquals', label: 'Not Equals' },
-                { value: 'contains', label: 'Contains' },
-                { value: 'notContains', label: 'Not Contains' },
-                { value: 'greaterThan', label: 'Greater Than' },
-                { value: 'lessThan', label: 'Less Than' },
-                { value: 'isEmpty', label: 'Is Empty' },
-                { value: 'isNotEmpty', label: 'Is Not Empty' },
-                { value: 'startsWith', label: 'Starts With' },
-                { value: 'endsWith', label: 'Ends With' },
-            ],
-        } as SelectFieldDefinition,
-        {
-            name: 'value',
-            type: 'string',
-            label: 'Value',
-            placeholder: 'Compare value',
-            showWhen: { mode: 'simple' },
-        },
-        {
-            name: 'expression',
-            type: 'expression',
-            label: 'Expression',
-            placeholder: '{{ $input.data.count > 10 && $input.data.status === "active" }}',
-            showWhen: { mode: 'expression' },
-        },
     ],
+    // Outputs are dynamic based on conditions - this is the default
+    // The actual outputs will be generated from the conditions array
     outputs: [
-        { name: 'true', type: 'any', description: 'Condition is true' },
-        { name: 'false', type: 'any', description: 'Condition is false' },
+        { name: 'Condition 1', type: 'any', description: 'First condition matches' },
+        { name: 'else', type: 'any', description: 'No conditions matched' },
     ],
 };
 

@@ -356,38 +356,163 @@ export const httpRequestSchema: NodeSchema = {
 export const transformSchema: NodeSchema = {
     type: 'transform',
     label: 'Transform',
-    description: 'Transform data',
+    description: 'Manipulate and reshape data',
     category: 'actions',
     inputs: [
         {
-            name: 'mode',
+            name: 'operation',
             type: 'select',
-            label: 'Mode',
-            default: 'expression',
+            label: 'Operation',
+            default: 'setFields',
             options: [
-                { value: 'expression', label: 'Expression' },
-                { value: 'javascript', label: 'JavaScript' },
+                { value: 'setFields', label: 'Set Fields' },
+                { value: 'extractField', label: 'Extract Field' },
+                { value: 'renameFields', label: 'Rename Fields' },
+                { value: 'keepFields', label: 'Keep Only Fields' },
+                { value: 'removeFields', label: 'Remove Fields' },
+                { value: 'filterItems', label: 'Filter Items' },
+                { value: 'sortItems', label: 'Sort Items' },
+                { value: 'limitItems', label: 'Limit Items' },
+                { value: 'customCode', label: 'Custom Code' },
+            ],
+        } as SelectFieldDefinition,
+
+        // Set Fields - add or override fields
+        {
+            name: 'fieldsToSet',
+            type: 'keyValue',
+            label: 'Fields to Set',
+            description: 'Add or update fields with values or expressions',
+            showWhen: { operation: 'setFields' },
+            keyPlaceholder: 'fieldName',
+            valuePlaceholder: '{{ $input.data.value }} or static value',
+        } as KeyValueFieldDefinition,
+
+        // Extract Field - get a specific nested value
+        {
+            name: 'extractPath',
+            type: 'string',
+            label: 'Field Path',
+            placeholder: 'user.profile.name',
+            description: 'Dot notation path to extract (e.g., items[0].id)',
+            showWhen: { operation: 'extractField' },
+        },
+
+        // Rename Fields
+        {
+            name: 'fieldsToRename',
+            type: 'keyValue',
+            label: 'Rename Fields',
+            description: 'Map old field names to new names',
+            showWhen: { operation: 'renameFields' },
+            keyPlaceholder: 'oldFieldName',
+            valuePlaceholder: 'newFieldName',
+        } as KeyValueFieldDefinition,
+
+        // Keep Only Fields
+        {
+            name: 'fieldsToKeep',
+            type: 'string',
+            label: 'Fields to Keep',
+            placeholder: 'id, name, email',
+            description: 'Comma-separated list of fields to keep',
+            showWhen: { operation: 'keepFields' },
+        },
+
+        // Remove Fields
+        {
+            name: 'fieldsToRemove',
+            type: 'string',
+            label: 'Fields to Remove',
+            placeholder: 'password, __internal',
+            description: 'Comma-separated list of fields to remove',
+            showWhen: { operation: 'removeFields' },
+        },
+
+        // Filter Items
+        {
+            name: 'filterField',
+            type: 'string',
+            label: 'Filter Field',
+            placeholder: 'status',
+            showWhen: { operation: 'filterItems' },
+        },
+        {
+            name: 'filterOperator',
+            type: 'select',
+            label: 'Condition',
+            default: 'equals',
+            showWhen: { operation: 'filterItems' },
+            options: [
+                { value: 'equals', label: 'Equals' },
+                { value: 'notEquals', label: 'Not Equals' },
+                { value: 'contains', label: 'Contains' },
+                { value: 'greaterThan', label: 'Greater Than' },
+                { value: 'lessThan', label: 'Less Than' },
+                { value: 'isEmpty', label: 'Is Empty' },
+                { value: 'isNotEmpty', label: 'Is Not Empty' },
             ],
         } as SelectFieldDefinition,
         {
-            name: 'expression',
-            type: 'expression',
-            label: 'Expression',
-            placeholder: '{{ $input.data.field }}',
-            description: 'Use {{ }} to reference data from previous nodes',
-            showWhen: { mode: 'expression' },
+            name: 'filterValue',
+            type: 'string',
+            label: 'Value',
+            placeholder: 'active',
+            showWhen: { operation: 'filterItems' },
         },
+
+        // Sort Items
+        {
+            name: 'sortField',
+            type: 'string',
+            label: 'Sort By Field',
+            placeholder: 'createdAt',
+            showWhen: { operation: 'sortItems' },
+        },
+        {
+            name: 'sortOrder',
+            type: 'select',
+            label: 'Order',
+            default: 'asc',
+            showWhen: { operation: 'sortItems' },
+            options: [
+                { value: 'asc', label: 'Ascending (A-Z, 0-9)' },
+                { value: 'desc', label: 'Descending (Z-A, 9-0)' },
+            ],
+        } as SelectFieldDefinition,
+
+        // Limit Items
+        {
+            name: 'limitCount',
+            type: 'number',
+            label: 'Max Items',
+            default: 10,
+            description: 'Maximum number of items to keep',
+            showWhen: { operation: 'limitItems' },
+        },
+        {
+            name: 'skipCount',
+            type: 'number',
+            label: 'Skip First',
+            default: 0,
+            description: 'Number of items to skip (for pagination)',
+            showWhen: { operation: 'limitItems' },
+        },
+
+        // Custom Code (advanced)
         {
             name: 'code',
             type: 'code',
             label: 'JavaScript Code',
             language: 'javascript',
-            placeholder: 'return items.map(item => ({ ...item, modified: true }));',
-            showWhen: { mode: 'javascript' },
+            placeholder: '// Access input via $input\nreturn $input.data.map(item => ({\n  ...item,\n  processed: true\n}));',
+            description: 'Write custom JavaScript for complex transformations',
+            showWhen: { operation: 'customCode' },
         } as CodeFieldDefinition,
     ],
     outputs: [
-        { name: 'data', type: 'any' },
+        { name: 'data', type: 'any', description: 'Transformed data' },
+        { name: 'count', type: 'number', description: 'Number of items (if array)' },
     ],
 };
 

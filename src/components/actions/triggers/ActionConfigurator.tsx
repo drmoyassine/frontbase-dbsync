@@ -361,17 +361,26 @@ export function ActionConfigurator({
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                {(Object.keys(actionTypeInfo) as ActionType[]).map(type => (
-                                    <SelectItem key={type} value={type} disabled={type === 'openModal'}>
-                                        <div className="flex items-center gap-2">
-                                            {actionTypeInfo[type].icon}
-                                            <span>{actionTypeInfo[type].label}</span>
-                                            {type === 'openModal' && (
-                                                <span className="text-xs bg-muted px-1.5 py-0.5 rounded">Soon</span>
-                                            )}
-                                        </div>
-                                    </SelectItem>
-                                ))}
+                                {(Object.keys(actionTypeInfo) as ActionType[])
+                                    .filter(type => {
+                                        // Filter based on trigger type
+                                        if (editingBinding.trigger === 'onHover') {
+                                            return type === 'showTooltip';
+                                        }
+                                        // onClick triggers can use all except showTooltip
+                                        return type !== 'showTooltip';
+                                    })
+                                    .map(type => (
+                                        <SelectItem key={type} value={type} disabled={type === 'openModal'}>
+                                            <div className="flex items-center gap-2">
+                                                {actionTypeInfo[type].icon}
+                                                <span>{actionTypeInfo[type].label}</span>
+                                                {type === 'openModal' && (
+                                                    <span className="text-xs bg-muted px-1.5 py-0.5 rounded">Soon</span>
+                                                )}
+                                            </div>
+                                        </SelectItem>
+                                    ))}
                             </SelectContent>
                         </Select>
                     </div>

@@ -16,6 +16,7 @@ export type FieldType =
     | 'json'
     | 'code'
     | 'keyValue'
+    | 'columnKeyValue'
     | 'conditionBuilder'
     | 'expression'
     | 'fieldMapping';
@@ -48,11 +49,18 @@ export interface KeyValueFieldDefinition extends BaseFieldDefinition {
     valuePlaceholder?: string;
 }
 
+export interface ColumnKeyValueFieldDefinition extends BaseFieldDefinition {
+    type: 'columnKeyValue';
+    keyPlaceholder?: string;
+    valuePlaceholder?: string;
+}
+
 export type FieldDefinition =
     | BaseFieldDefinition
     | SelectFieldDefinition
     | CodeFieldDefinition
-    | KeyValueFieldDefinition;
+    | KeyValueFieldDefinition
+    | ColumnKeyValueFieldDefinition;
 
 export interface OutputDefinition {
     name: string;
@@ -638,21 +646,21 @@ export const dataRequestSchema: NodeSchema = {
         // Select operation options
         {
             name: 'selectFields',
-            type: 'keyValue',
+            type: 'columnKeyValue',
             label: 'Fields to Select',
             description: 'Leave empty to select all fields (*)',
             showWhen: { operation: 'select' },
             keyPlaceholder: 'Column name',
             valuePlaceholder: 'Alias (optional)',
-        } as KeyValueFieldDefinition,
+        },
         {
             name: 'whereConditions',
-            type: 'keyValue',
+            type: 'columnKeyValue',
             label: 'WHERE Conditions',
             showWhen: { operation: ['select', 'update', 'delete'] },
             keyPlaceholder: 'Column',
             valuePlaceholder: 'Value or {{ expression }}',
-        } as KeyValueFieldDefinition,
+        },
         {
             name: 'orderBy',
             type: 'string',

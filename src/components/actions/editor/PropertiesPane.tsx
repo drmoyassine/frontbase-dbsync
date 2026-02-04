@@ -21,7 +21,7 @@ import {
     CodeFieldDefinition,
     KeyValueFieldDefinition,
 } from '@/lib/workflow/nodeSchemas';
-import { SelectField, DynamicSelectField, KeyValueField, CodeField, ExpressionField, ConditionBuilderField, FieldMappingField } from './fields';
+import { SelectField, DynamicSelectField, KeyValueField, ColumnKeyValueField, CodeField, ExpressionField, ConditionBuilderField, FieldMappingField } from './fields';
 
 interface PropertiesPaneProps {
     className?: string;
@@ -269,6 +269,23 @@ export function PropertiesPane({ className }: PropertiesPaneProps) {
                         description={field.description}
                         keyPlaceholder={kvField.keyPlaceholder}
                         valuePlaceholder={kvField.valuePlaceholder}
+                    />
+                );
+
+            case 'columnKeyValue':
+                const colKvField = field as any; // uses same shape as KeyValueFieldDefinition
+                return (
+                    <ColumnKeyValueField
+                        key={field.name}
+                        name={field.name}
+                        label={fieldLabel}
+                        value={value || []}
+                        onChange={(v) => handleFieldChange(field.name, v)}
+                        description={field.description}
+                        keyPlaceholder={colKvField.keyPlaceholder}
+                        valuePlaceholder={colKvField.valuePlaceholder}
+                        dataSourceId={fieldValues['dataSource']}
+                        tableName={fieldValues['table']}
                     />
                 );
 

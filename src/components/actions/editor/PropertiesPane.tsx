@@ -23,6 +23,7 @@ import {
 } from '@/lib/workflow/nodeSchemas';
 import { SelectField, DynamicSelectField, KeyValueField, ColumnKeyValueField, CodeField, ExpressionField, ConditionBuilderField, FieldMappingField } from './fields';
 import { RecordViewer } from './RecordViewer';
+import { NodeVariableInput } from './NodeVariableInput';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -51,7 +52,7 @@ interface PropertiesPaneProps {
 }
 
 export function PropertiesPane({ className, nodeExecutions, onTestNode, isTestingNode }: PropertiesPaneProps) {
-    const { nodes, selectedNodeId, updateNode, removeNode, selectNode } = useActionsStore();
+    const { nodes, edges, selectedNodeId, updateNode, removeNode, selectNode } = useActionsStore();
 
     const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
@@ -121,18 +122,41 @@ export function PropertiesPane({ className, nodeExecutions, onTestNode, isTestin
         switch (field.type) {
             case 'string':
             case 'password':
+                // Use NodeVariableInput for string fields (except password)
+                if (field.type === 'password') {
+                    return (
+                        <div key={field.name} className="space-y-2">
+                            <Label htmlFor={field.name}>
+                                {fieldLabel}
+                                {field.required && <span className="text-destructive ml-1">*</span>}
+                            </Label>
+                            <Input
+                                id={field.name}
+                                type="password"
+                                value={value || ''}
+                                onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                                placeholder={field.placeholder}
+                            />
+                            {field.description && (
+                                <p className="text-xs text-muted-foreground">{field.description}</p>
+                            )}
+                        </div>
+                    );
+                }
                 return (
                     <div key={field.name} className="space-y-2">
                         <Label htmlFor={field.name}>
                             {fieldLabel}
                             {field.required && <span className="text-destructive ml-1">*</span>}
                         </Label>
-                        <Input
-                            id={field.name}
-                            type={field.type === 'password' ? 'password' : 'text'}
+                        <NodeVariableInput
                             value={value || ''}
-                            onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                            onChange={(v) => handleFieldChange(field.name, v)}
                             placeholder={field.placeholder}
+                            currentNodeId={selectedNode.id}
+                            nodes={nodes}
+                            edges={edges}
+                            nodeExecutions={nodeExecutions}
                         />
                         {field.description && (
                             <p className="text-xs text-muted-foreground">{field.description}</p>

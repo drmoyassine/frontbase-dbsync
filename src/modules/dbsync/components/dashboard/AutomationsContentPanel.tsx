@@ -153,15 +153,15 @@ export function AutomationsContentPanel() {
                     </div>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full">
+                    <table className="w-full table-fixed">
                         <thead className="bg-gray-50 dark:bg-gray-900/50">
                             <tr>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trigger</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nodes</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
-                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[25%]">Name</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[15%]">Trigger</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[15%]">Status</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[12%]">Nodes</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[20%]">Last Updated</th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-[13%]">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -195,7 +195,7 @@ export function AutomationsContentPanel() {
                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                                         <span className="flex items-center gap-1">
                                             <GitBranch className="w-3 h-3" />
-                                            {workflow.node_count || 0} nodes
+                                            {workflow.nodes?.length || 0} nodes
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
@@ -228,37 +228,43 @@ export function AutomationsContentPanel() {
                         </tbody>
                     </table>
                 </div>
-                {/* Pagination */}
-                {totalPages > 1 && (
-                    <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                {/* Pagination - always show space to prevent layout shift */}
+                <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between min-h-[60px]">
+                    {totalPages > 1 ? (
+                        <>
+                            <p className="text-sm text-gray-500">
+                                Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredWorkflows.length)} of {filteredWorkflows.length} results
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    disabled={currentPage === 1}
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </Button>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">
+                                    Page {currentPage} of {totalPages}
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage === totalPages}
+                                >
+                                    <ChevronRight className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        </>
+                    ) : (
                         <p className="text-sm text-gray-500">
-                            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredWorkflows.length)} of {filteredWorkflows.length} results
+                            {filteredWorkflows.length} {filteredWorkflows.length === 1 ? 'result' : 'results'}
                         </p>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                disabled={currentPage === 1}
-                            >
-                                <ChevronLeft className="w-4 h-4" />
-                            </Button>
-                            <span className="text-sm text-gray-600 dark:text-gray-400">
-                                Page {currentPage} of {totalPages}
-                            </span>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                disabled={currentPage === totalPages}
-                            >
-                                <ChevronRight className="w-4 h-4" />
-                            </Button>
-                        </div>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
         </div>
     );

@@ -254,31 +254,39 @@ async def test_draft(
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
     
-    # If not published, publish first (temporary deploy)
-    if not draft.is_published:
-        # Deploy temporarily
-        deploy_payload = {
-            "id": draft.id,
-            "name": f"[TEST] {draft.name}",
-            "description": draft.description,
-            "triggerType": draft.trigger_type,
-            "triggerConfig": draft.trigger_config or {},
-            "nodes": draft.nodes,
-            "edges": draft.edges,
-        }
-        
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.post(
-                    f"{ACTIONS_ENGINE_URL}/deploy",
-                    json=deploy_payload,
-                    timeout=30.0
-                )
-        except httpx.ConnectError:
-            raise HTTPException(
-                status_code=503,
-                detail="Actions Engine is not running"
+    # Always deploy before test (ensures latest version is used)
+    deploy_payload = {
+        "id": draft.id,
+        "name": f"[TEST] {draft.name}",
+        "description": draft.description,
+        "triggerType": draft.trigger_type,
+        "triggerConfig": draft.trigger_config or {},
+        "nodes": draft.nodes,
+        "edges": draft.edges,
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            deploy_response = await client.post(
+                f"{ACTIONS_ENGINE_URL}/deploy",
+                json=deploy_payload,
+                timeout=30.0
             )
+            if deploy_response.status_code not in [200, 201]:
+                error_detail = "Failed to deploy workflow to Actions Engine"
+                try:
+                    error_json = deploy_response.json()
+                    if "message" in error_json:
+                        error_detail = f"Deploy failed: {error_json['message']}"
+                except Exception:
+                    pass
+                raise HTTPException(status_code=502, detail=error_detail)
+                
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail="Actions Engine is not running. Start it with: cd services/actions && npm run dev"
+        )
     
     # Trigger execution
     try:
@@ -290,9 +298,19 @@ async def test_draft(
             )
             
             if response.status_code not in [200, 201]:
+                error_detail = "Workflow execution failed"
+                try:
+                    error_json = response.json()
+                    if "message" in error_json:
+                        error_detail = error_json["message"]
+                    elif "error" in error_json:
+                        error_detail = error_json["error"]
+                except Exception:
+                    if response.status_code == 404:
+                        error_detail = "Workflow not found in Actions Engine. Try deploying first."
                 raise HTTPException(
-                    status_code=response.status_code,
-                    detail="Failed to execute workflow"
+                    status_code=502,  # Use 502 to indicate upstream failure
+                    detail=error_detail
                 )
             
             result_data = response.json()
@@ -300,7 +318,7 @@ async def test_draft(
     except httpx.ConnectError:
         raise HTTPException(
             status_code=503,
-            detail="Actions Engine is not running"
+            detail="Actions Engine connection lost during execution"
         )
     
     return TestExecuteResponse(

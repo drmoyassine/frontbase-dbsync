@@ -143,14 +143,14 @@ export function PagesContentPanel() {
                     </div>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full">
+                    <table className="w-full table-fixed">
                         <thead className="bg-gray-50 dark:bg-gray-900/50">
                             <tr>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Slug</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Modified</th>
-                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[30%]">Title</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[20%]">Slug</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[15%]">Status</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[20%]">Last Modified</th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-[15%]">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -219,37 +219,43 @@ export function PagesContentPanel() {
                         </tbody>
                     </table>
                 </div>
-                {/* Pagination */}
-                {totalPages > 1 && (
-                    <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                {/* Pagination - always show space to prevent layout shift */}
+                <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between min-h-[60px]">
+                    {totalPages > 1 ? (
+                        <>
+                            <p className="text-sm text-gray-500">
+                                Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredPages.length)} of {filteredPages.length} results
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    disabled={currentPage === 1}
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </Button>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">
+                                    Page {currentPage} of {totalPages}
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage === totalPages}
+                                >
+                                    <ChevronRight className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        </>
+                    ) : (
                         <p className="text-sm text-gray-500">
-                            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredPages.length)} of {filteredPages.length} results
+                            {filteredPages.length} {filteredPages.length === 1 ? 'result' : 'results'}
                         </p>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                disabled={currentPage === 1}
-                            >
-                                <ChevronLeft className="w-4 h-4" />
-                            </Button>
-                            <span className="text-sm text-gray-600 dark:text-gray-400">
-                                Page {currentPage} of {totalPages}
-                            </span>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                disabled={currentPage === totalPages}
-                            >
-                                <ChevronRight className="w-4 h-4" />
-                            </Button>
-                        </div>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
         </div>
     );

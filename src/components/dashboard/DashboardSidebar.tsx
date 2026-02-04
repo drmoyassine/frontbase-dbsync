@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/sidebar';
 
 const menuItems = [
-  { title: 'Pages', url: '/pages', icon: FileText },
+  { title: 'Builder Studio', url: '/pages', icon: FileText },
   { title: 'Database', url: '/data-studio', icon: Database },
   { title: 'Users', url: '/users', icon: Users },
   { title: 'Storage', url: '/storage', icon: HardDrive },

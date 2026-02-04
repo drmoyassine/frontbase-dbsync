@@ -278,10 +278,16 @@ async def test_draft(
                 error_detail = "Failed to deploy workflow to Edge Engine"
                 try:
                     error_json = deploy_response.json()
-                    if "message" in error_json:
+                    logger.error(f"Deploy error response: {error_json}")
+                    # Try multiple fields to extract error message
+                    if "details" in error_json:
+                        error_detail = f"Deploy failed: {error_json['details']}"
+                    elif "message" in error_json:
                         error_detail = f"Deploy failed: {error_json['message']}"
-                except Exception:
-                    pass
+                    elif "error" in error_json:
+                        error_detail = f"Deploy failed: {error_json['error']}"
+                except Exception as e:
+                    logger.error(f"Could not parse error response: {e}")
                 raise HTTPException(status_code=502, detail=error_detail)
                 
     except httpx.ConnectError:

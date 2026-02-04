@@ -42,10 +42,10 @@ export const NodePositionSchema = z.object({
 export const ParameterSchema = z.object({
     name: z.string(),
     type: z.string(),
-    value: z.any().optional(),
-    description: z.string().optional(),
-    required: z.boolean().optional(),
-}).openapi('Parameter');
+    value: z.any().optional().nullable(),
+    description: z.string().optional().nullable(),
+    required: z.boolean().optional().nullable(),
+}).passthrough().openapi('Parameter');
 
 export const WorkflowNodeSchema = z.object({
     id: z.string(),
@@ -54,16 +54,16 @@ export const WorkflowNodeSchema = z.object({
     position: NodePositionSchema,
     // ReactFlow wraps node data in 'data' object
     data: z.object({
-        label: z.string().optional(),
-        type: z.string().optional(),
-        inputs: z.array(ParameterSchema).optional(),
-        outputs: z.array(ParameterSchema).optional(),
-    }).passthrough().optional(),
+        label: z.string().optional().nullable(),
+        type: z.string().optional().nullable(),
+        inputs: z.array(ParameterSchema).optional().nullable(),
+        outputs: z.array(ParameterSchema).optional().nullable(),
+    }).passthrough().optional().nullable(),
     // Legacy format: direct properties (for backward compatibility)
-    name: z.string().optional(),
-    inputs: z.array(ParameterSchema).optional(),
-    outputs: z.array(ParameterSchema).optional(),
-    error: z.string().optional(),
+    name: z.string().optional().nullable(),
+    inputs: z.array(ParameterSchema).optional().nullable(),
+    outputs: z.array(ParameterSchema).optional().nullable(),
+    error: z.string().optional().nullable(),
 }).passthrough().openapi('WorkflowNode');
 
 export const WorkflowEdgeSchema = z.object({

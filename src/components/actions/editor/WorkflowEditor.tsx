@@ -179,6 +179,35 @@ export function WorkflowEditor({
         }
     };
 
+    // Test single node handler
+    const [isTestingNode, setIsTestingNode] = useState(false);
+    const handleTestNode = async (nodeId: string) => {
+        if (!currentDraftId) {
+            toast({ title: 'Save first', description: 'Please save the workflow before testing', variant: 'destructive' });
+            return;
+        }
+
+        // Save first if dirty
+        if (isDirty) {
+            await handleSave();
+        }
+
+        try {
+            setIsTestingNode(true);
+            setCurrentExecutionId(null);
+            const result = await testDraft.mutateAsync({ id: currentDraftId });
+            setCurrentExecutionId(result.execution_id);
+            toast({
+                title: 'Testing Node',
+                description: 'Running workflow to test this node...'
+            });
+        } catch (error: any) {
+            toast({ title: 'Test Failed', description: error.message, variant: 'destructive' });
+        } finally {
+            setIsTestingNode(false);
+        }
+    };
+
     // Show toast when execution completes
     useEffect(() => {
         if (executionResult?.status === 'completed') {
@@ -325,7 +354,13 @@ export function WorkflowEditor({
                     </div>
 
                     {/* Right: Properties */}
-                    {selectedNodeId && <PropertiesPane nodeExecutions={executionResult?.nodeExecutions} />}
+                    {selectedNodeId && (
+                        <PropertiesPane
+                            nodeExecutions={executionResult?.nodeExecutions}
+                            onTestNode={handleTestNode}
+                            isTestingNode={isTestingNode}
+                        />
+                    )}
                 </div>
             </div>
         </ReactFlowProvider>

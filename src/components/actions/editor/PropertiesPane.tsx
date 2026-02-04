@@ -4,8 +4,8 @@
  * Renders configuration options for the selected node based on its schema.
  */
 
-import React, { useMemo } from 'react';
-import { X, Trash2 } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { X, Trash2, Play, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,6 +23,17 @@ import {
 } from '@/lib/workflow/nodeSchemas';
 import { SelectField, DynamicSelectField, KeyValueField, ColumnKeyValueField, CodeField, ExpressionField, ConditionBuilderField, FieldMappingField } from './fields';
 import { RecordViewer } from './RecordViewer';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 // Node execution result from workflow test
 interface NodeExecutionResult {
@@ -35,9 +46,11 @@ interface NodeExecutionResult {
 interface PropertiesPaneProps {
     className?: string;
     nodeExecutions?: NodeExecutionResult[];
+    onTestNode?: (nodeId: string) => Promise<void>;
+    isTestingNode?: boolean;
 }
 
-export function PropertiesPane({ className, nodeExecutions }: PropertiesPaneProps) {
+export function PropertiesPane({ className, nodeExecutions, onTestNode, isTestingNode }: PropertiesPaneProps) {
     const { nodes, selectedNodeId, updateNode, removeNode, selectNode } = useActionsStore();
 
     const selectedNode = nodes.find((n) => n.id === selectedNodeId);
@@ -436,16 +449,58 @@ export function PropertiesPane({ className, nodeExecutions }: PropertiesPaneProp
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t">
-                <Button
-                    variant="destructive"
-                    size="sm"
-                    className="w-full"
-                    onClick={handleDelete}
-                >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete Node
-                </Button>
+            <div className="p-4 border-t space-y-2">
+                {/* Test Node Button */}
+                {onTestNode && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => selectedNode && onTestNode(selectedNode.id)}
+                        disabled={isTestingNode}
+                    >
+                        {isTestingNode ? (
+                            <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Testing...
+                            </>
+                        ) : (
+                            <>
+                                <Play className="w-4 h-4 mr-2" />
+                                Test Node
+                            </>
+                        )}
+                    </Button>
+                )}
+
+                {/* Delete Button with Confirmation */}
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            className="w-full"
+                        >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete Node
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Node?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Are you sure you want to delete "{selectedNode.data.label}"?
+                                This action cannot be undone.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                Delete
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             </div>
         </div>
     );

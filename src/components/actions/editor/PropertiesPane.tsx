@@ -1,18 +1,27 @@
 /**
- * PropertiesPane - Node Configuration Sidebar
+ * PropertiesPane - Schema-Driven Node Configuration Sidebar
  * 
- * Shows configuration options for the selected node.
+ * Renders configuration options for the selected node based on its schema.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { X, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useActionsStore } from '@/stores/actions';
 import { cn } from '@/lib/utils';
+import {
+    getNodeSchema,
+    isFieldVisible,
+    FieldDefinition,
+    SelectFieldDefinition,
+    CodeFieldDefinition,
+    KeyValueFieldDefinition,
+} from '@/lib/workflow/nodeSchemas';
+import { SelectField, KeyValueField, CodeField, ExpressionField } from './fields';
 
 interface PropertiesPaneProps {
     className?: string;
@@ -23,9 +32,24 @@ export function PropertiesPane({ className }: PropertiesPaneProps) {
 
     const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
+    // Get schema for the selected node type
+    const schema = useMemo(() => {
+        if (!selectedNode) return null;
+        return getNodeSchema(selectedNode.data.type);
+    }, [selectedNode?.data.type]);
+
+    // Convert inputs array to values object for easier access
+    const fieldValues = useMemo(() => {
+        if (!selectedNode) return {};
+        return selectedNode.data.inputs.reduce((acc, input) => {
+            acc[input.name] = input.value;
+            return acc;
+        }, {} as Record<string, any>);
+    }, [selectedNode?.data.inputs]);
+
     if (!selectedNode) {
         return (
-            <div className={cn('w-72 bg-background border-l p-4', className)}>
+            <div className={cn('w-80 bg-background border-l p-4', className)}>
                 <div className="text-sm text-muted-foreground text-center py-8">
                     Select a node to configure
                 </div>
@@ -33,10 +57,21 @@ export function PropertiesPane({ className }: PropertiesPaneProps) {
         );
     }
 
-    const handleInputChange = (inputName: string, value: any) => {
+    const handleFieldChange = (fieldName: string, value: any) => {
         const updatedInputs = selectedNode.data.inputs.map((input) =>
-            input.name === inputName ? { ...input, value } : input
+            input.name === fieldName ? { ...input, value } : input
         );
+
+        // If field doesn't exist yet, add it
+        if (!updatedInputs.find(i => i.name === fieldName)) {
+            const fieldDef = schema?.inputs.find(i => i.name === fieldName);
+            updatedInputs.push({
+                name: fieldName,
+                type: fieldDef?.type || 'string',
+                value,
+            });
+        }
+
         updateNode(selectedNode.id, { inputs: updatedInputs });
     };
 
@@ -44,13 +79,180 @@ export function PropertiesPane({ className }: PropertiesPaneProps) {
         removeNode(selectedNode.id);
     };
 
+    // Render a field based on its type
+    const renderField = (field: FieldDefinition) => {
+        // Check conditional visibility
+        if (!isFieldVisible(field, fieldValues)) {
+            return null;
+        }
+
+        const value = fieldValues[field.name];
+        const fieldLabel = field.label || field.name;
+
+        switch (field.type) {
+            case 'string':
+            case 'password':
+                return (
+                    <div key={field.name} className="space-y-2">
+                        <Label htmlFor={field.name}>
+                            {fieldLabel}
+                            {field.required && <span className="text-destructive ml-1">*</span>}
+                        </Label>
+                        <Input
+                            id={field.name}
+                            type={field.type === 'password' ? 'password' : 'text'}
+                            value={value || ''}
+                            onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                            placeholder={field.placeholder}
+                        />
+                        {field.description && (
+                            <p className="text-xs text-muted-foreground">{field.description}</p>
+                        )}
+                    </div>
+                );
+
+            case 'number':
+                return (
+                    <div key={field.name} className="space-y-2">
+                        <Label htmlFor={field.name}>
+                            {fieldLabel}
+                            {field.required && <span className="text-destructive ml-1">*</span>}
+                        </Label>
+                        <Input
+                            id={field.name}
+                            type="number"
+                            value={value ?? field.default ?? ''}
+                            onChange={(e) => handleFieldChange(field.name, Number(e.target.value))}
+                            placeholder={field.placeholder}
+                        />
+                        {field.description && (
+                            <p className="text-xs text-muted-foreground">{field.description}</p>
+                        )}
+                    </div>
+                );
+
+            case 'boolean':
+                return (
+                    <div key={field.name} className="flex items-center justify-between py-2">
+                        <div>
+                            <Label htmlFor={field.name}>{fieldLabel}</Label>
+                            {field.description && (
+                                <p className="text-xs text-muted-foreground">{field.description}</p>
+                            )}
+                        </div>
+                        <Switch
+                            id={field.name}
+                            checked={value ?? field.default ?? false}
+                            onCheckedChange={(checked) => handleFieldChange(field.name, checked)}
+                        />
+                    </div>
+                );
+
+            case 'select':
+                const selectField = field as SelectFieldDefinition;
+                const options = Array.isArray(selectField.options)
+                    ? selectField.options
+                    : [];
+                return (
+                    <SelectField
+                        key={field.name}
+                        name={field.name}
+                        label={fieldLabel}
+                        value={value ?? field.default ?? ''}
+                        options={options}
+                        onChange={(v) => handleFieldChange(field.name, v)}
+                        description={field.description}
+                        required={field.required}
+                    />
+                );
+
+            case 'json':
+                return (
+                    <div key={field.name} className="space-y-2">
+                        <Label htmlFor={field.name}>
+                            {fieldLabel}
+                            {field.required && <span className="text-destructive ml-1">*</span>}
+                        </Label>
+                        <Textarea
+                            id={field.name}
+                            value={typeof value === 'object' ? JSON.stringify(value, null, 2) : value || ''}
+                            onChange={(e) => {
+                                try {
+                                    const parsed = JSON.parse(e.target.value);
+                                    handleFieldChange(field.name, parsed);
+                                } catch {
+                                    handleFieldChange(field.name, e.target.value);
+                                }
+                            }}
+                            placeholder={field.placeholder || '{}'}
+                            rows={4}
+                            className="font-mono text-xs"
+                        />
+                        {field.description && (
+                            <p className="text-xs text-muted-foreground">{field.description}</p>
+                        )}
+                    </div>
+                );
+
+            case 'code':
+                const codeField = field as CodeFieldDefinition;
+                return (
+                    <CodeField
+                        key={field.name}
+                        name={field.name}
+                        label={fieldLabel}
+                        value={value || ''}
+                        onChange={(v) => handleFieldChange(field.name, v)}
+                        language={codeField.language}
+                        description={field.description}
+                        placeholder={field.placeholder}
+                        required={field.required}
+                    />
+                );
+
+            case 'expression':
+                return (
+                    <ExpressionField
+                        key={field.name}
+                        name={field.name}
+                        label={fieldLabel}
+                        value={value || ''}
+                        onChange={(v) => handleFieldChange(field.name, v)}
+                        description={field.description}
+                        placeholder={field.placeholder}
+                        required={field.required}
+                    />
+                );
+
+            case 'keyValue':
+                const kvField = field as KeyValueFieldDefinition;
+                return (
+                    <KeyValueField
+                        key={field.name}
+                        name={field.name}
+                        label={fieldLabel}
+                        value={value || []}
+                        onChange={(v) => handleFieldChange(field.name, v)}
+                        description={field.description}
+                        keyPlaceholder={kvField.keyPlaceholder}
+                        valuePlaceholder={kvField.valuePlaceholder}
+                    />
+                );
+
+            default:
+                return null;
+        }
+    };
+
     return (
-        <div className={cn('w-72 bg-background border-l flex flex-col', className)}>
+        <div className={cn('w-80 bg-background border-l flex flex-col', className)}>
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b">
                 <div>
                     <h3 className="font-semibold text-sm">{selectedNode.data.label}</h3>
-                    <p className="text-xs text-muted-foreground">{selectedNode.data.type}</p>
+                    <p className="text-xs text-muted-foreground">
+                        {schema?.description || selectedNode.data.type}
+                    </p>
                 </div>
                 <Button variant="ghost" size="icon" onClick={() => selectNode(null)}>
                     <X className="w-4 h-4" />
@@ -59,7 +261,7 @@ export function PropertiesPane({ className }: PropertiesPaneProps) {
 
             {/* Properties */}
             <div className="flex-1 p-4 space-y-4 overflow-y-auto">
-                {/* Node Label */}
+                {/* Node Label (always shown) */}
                 <div className="space-y-2">
                     <Label htmlFor="node-label">Label</Label>
                     <Input
@@ -69,62 +271,35 @@ export function PropertiesPane({ className }: PropertiesPaneProps) {
                     />
                 </div>
 
-                {/* Dynamic Inputs */}
-                {selectedNode.data.inputs.map((input) => (
+                {/* Schema-driven fields */}
+                {schema?.inputs.map(renderField)}
+
+                {/* Fallback for nodes without schema */}
+                {!schema && selectedNode.data.inputs.map((input) => (
                     <div key={input.name} className="space-y-2">
-                        <Label htmlFor={`input-${input.name}`}>
-                            {input.name}
-                            {input.required && <span className="text-destructive ml-1">*</span>}
-                        </Label>
-
-                        {input.type === 'string' && (
-                            <Input
-                                id={`input-${input.name}`}
-                                value={input.value || ''}
-                                onChange={(e) => handleInputChange(input.name, e.target.value)}
-                                placeholder={input.description}
-                            />
-                        )}
-
-                        {input.type === 'json' && (
-                            <Textarea
-                                id={`input-${input.name}`}
-                                value={typeof input.value === 'object' ? JSON.stringify(input.value, null, 2) : input.value || ''}
-                                onChange={(e) => {
-                                    try {
-                                        const parsed = JSON.parse(e.target.value);
-                                        handleInputChange(input.name, parsed);
-                                    } catch {
-                                        handleInputChange(input.name, e.target.value);
-                                    }
-                                }}
-                                placeholder={input.description || 'JSON value'}
-                                rows={4}
-                                className="font-mono text-xs"
-                            />
-                        )}
-
-                        {input.type === 'select' && (
-                            <Select
-                                value={input.value || ''}
-                                onValueChange={(value) => handleInputChange(input.name, value)}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {/* Add options based on input.options if available */}
-                                    <SelectItem value="option1">Option 1</SelectItem>
-                                    <SelectItem value="option2">Option 2</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        )}
-
-                        {input.description && (
-                            <p className="text-xs text-muted-foreground">{input.description}</p>
-                        )}
+                        <Label htmlFor={`input-${input.name}`}>{input.name}</Label>
+                        <Input
+                            id={`input-${input.name}`}
+                            value={input.value || ''}
+                            onChange={(e) => handleFieldChange(input.name, e.target.value)}
+                        />
                     </div>
                 ))}
+
+                {/* Outputs display (read-only) */}
+                {schema && schema.outputs.length > 0 && (
+                    <div className="pt-4 border-t">
+                        <h4 className="text-xs font-medium text-muted-foreground mb-2">Outputs</h4>
+                        <div className="space-y-1">
+                            {schema.outputs.map((output) => (
+                                <div key={output.name} className="flex justify-between text-xs">
+                                    <span className="font-mono">{output.name}</span>
+                                    <span className="text-muted-foreground">{output.type}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Footer */}

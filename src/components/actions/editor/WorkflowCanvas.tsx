@@ -19,6 +19,11 @@ import { TriggerNode } from '../nodes/TriggerNode';
 import { ActionNode } from '../nodes/ActionNode';
 import { ConditionNode } from '../nodes/ConditionNode';
 import { cn } from '@/lib/utils';
+import {
+    getNodeSchema,
+    getDefaultInputsFromSchema,
+    getDefaultOutputsFromSchema
+} from '@/lib/workflow/nodeSchemas';
 
 // Register custom node types
 const nodeTypes = {
@@ -86,15 +91,19 @@ export function WorkflowCanvas({ className }: WorkflowCanvasProps) {
             y: event.clientY - bounds.top,
         });
 
+        // Get label from schema or fallback to formatted type
+        const schema = getNodeSchema(nodeType);
+        const label = schema?.label || nodeType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
         const newNode = {
             id: `${nodeType}-${Date.now()}`,
             type: nodeType,
             position,
             data: {
-                label: getNodeLabel(nodeType),
+                label,
                 type: nodeType,
-                inputs: getDefaultInputs(nodeType),
-                outputs: getDefaultOutputs(nodeType),
+                inputs: getDefaultInputsFromSchema(nodeType),
+                outputs: getDefaultOutputsFromSchema(nodeType),
             },
         };
 
@@ -133,83 +142,6 @@ export function WorkflowCanvas({ className }: WorkflowCanvasProps) {
     );
 }
 
-// Helper functions for default node configuration
-function getNodeLabel(type: string): string {
-    const labels: Record<string, string> = {
-        // Triggers
-        trigger: 'Manual Trigger',
-        webhook_trigger: 'Webhook',
-        schedule_trigger: 'Schedule',
-        // Core
-        action: 'Action',
-        condition: 'Condition',
-        // Actions
-        http_request: 'HTTP Request',
-        transform: 'Transform',
-        log: 'Console Log',
-        // Integrations
-        database: 'Database Query',
-        // Interface
-        toast: 'Show Toast',
-        redirect: 'Redirect',
-        refresh: 'Refresh Page',
-    };
-    return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function getDefaultInputs(type: string): Array<{ name: string; type: string; value?: any }> {
-    switch (type) {
-        case 'trigger':
-            return [{ name: 'data', type: 'any' }];
-        case 'http_request':
-            return [
-                { name: 'url', type: 'string', value: '' },
-                { name: 'method', type: 'string', value: 'GET' },
-                { name: 'headers', type: 'json', value: {} },
-                { name: 'body', type: 'json', value: null },
-            ];
-        case 'condition':
-            return [
-                { name: 'condition', type: 'string', value: '' },
-                { name: 'data', type: 'any' },
-            ];
-        case 'transform':
-            return [
-                { name: 'expression', type: 'string', value: '' },
-                { name: 'data', type: 'any' },
-            ];
-        case 'toast':
-            return [
-                { name: 'message', type: 'string', value: 'Operation successful' },
-                { name: 'type', type: 'string', value: 'success' }, // success, error, info
-            ];
-        case 'redirect':
-            return [
-                { name: 'url', type: 'string', value: '/' },
-            ];
-        case 'refresh':
-            return [];
-        case 'database':
-            return [
-                { name: 'query', type: 'string', value: 'SELECT * FROM users' },
-            ];
-        default:
-            return [{ name: 'input', type: 'any' }];
-    }
-}
-
-function getDefaultOutputs(type: string): Array<{ name: string; type: string }> {
-    switch (type) {
-        case 'condition':
-            return [
-                { name: 'true', type: 'any' },
-                { name: 'false', type: 'any' },
-            ];
-        default:
-            return [{ name: 'output', type: 'any' }];
-    }
-}
-
 // Wrap with provider for external use
 export function WorkflowCanvasWithProvider(props: WorkflowCanvasProps) {
     return (
@@ -218,3 +150,4 @@ export function WorkflowCanvasWithProvider(props: WorkflowCanvasProps) {
         </ReactFlowProvider>
     );
 }
+

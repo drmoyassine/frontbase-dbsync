@@ -21,7 +21,7 @@ import {
     CodeFieldDefinition,
     KeyValueFieldDefinition,
 } from '@/lib/workflow/nodeSchemas';
-import { SelectField, KeyValueField, CodeField, ExpressionField, ConditionBuilderField, FieldMappingField } from './fields';
+import { SelectField, DynamicSelectField, KeyValueField, CodeField, ExpressionField, ConditionBuilderField, FieldMappingField } from './fields';
 
 interface PropertiesPaneProps {
     className?: string;
@@ -150,6 +150,39 @@ export function PropertiesPane({ className }: PropertiesPaneProps) {
 
             case 'select':
                 const selectField = field as SelectFieldDefinition;
+                const isDynamicOptions = typeof selectField.options === 'string';
+
+                // Handle dynamic options (datasources, tables, etc.)
+                if (isDynamicOptions) {
+                    // Determine dependency for tables (needs selected dataSource)
+                    let dependsOnValue: string | undefined;
+                    if (selectField.options === 'tables') {
+                        dependsOnValue = fieldValues['dataSource'];
+                    }
+
+                    return (
+                        <DynamicSelectField
+                            key={field.name}
+                            name={field.name}
+                            label={fieldLabel}
+                            value={value ?? field.default ?? ''}
+                            options={selectField.options}
+                            onChange={(v) => handleFieldChange(field.name, v)}
+                            description={field.description}
+                            required={field.required}
+                            dependsOnValue={dependsOnValue}
+                            placeholder={
+                                selectField.options === 'datasources'
+                                    ? 'Select a configured data source'
+                                    : selectField.options === 'tables'
+                                        ? 'Select a table'
+                                        : 'Select...'
+                            }
+                        />
+                    );
+                }
+
+                // Static options
                 const options = Array.isArray(selectField.options)
                     ? selectField.options
                     : [];

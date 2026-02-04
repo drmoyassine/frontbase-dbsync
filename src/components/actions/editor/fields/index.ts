@@ -3,6 +3,7 @@
  */
 
 export { SelectField } from './SelectField';
+export { DynamicSelectField } from './DynamicSelectField';
 export { KeyValueField } from './KeyValueField';
 export { CodeField } from './CodeField';
 export { ExpressionField } from './ExpressionField';

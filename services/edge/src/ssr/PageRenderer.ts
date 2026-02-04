@@ -12,6 +12,7 @@ import { renderInteractiveComponent } from './components/interactive.js';
 import { renderDataComponent } from './components/data.js';
 import * as landing from './components/landing/index.js';
 import { liquid } from './lib/liquid.js';
+import { escapeHtml } from './components/lib/utils.js';
 import type { TemplateContext } from './lib/context.js';
 
 // Type definitions
@@ -249,6 +250,12 @@ function renderLayoutComponent(
     // Combine CSS blocks
     const combinedCSS = responsiveCSS + visibilityCSS;
 
+    // Build data-fb-props attribute if actionBindings exist (for hover tooltips, etc.)
+    const actionBindings = props.actionBindings as Array<unknown> | undefined;
+    const propsAttr = actionBindings && actionBindings.length > 0
+        ? ` data-fb-props="${escapeHtml(JSON.stringify({ actionBindings }))}"`
+        : '';
+
     switch (type) {
         case 'Container':
             // Check if this container uses grid layout
@@ -276,28 +283,28 @@ function renderLayoutComponent(
                 // Remove grid-template-columns from inline style since we use Tailwind classes
                 const gridGapStyle = styles.gap ? `gap:${styles.gap};` : '';
 
-                return `${combinedCSS}<div id="${elementId}" class="${className} ${responsiveGridClass}" style="margin:0 auto;width:100%;${gridGapStyle}${inlineStyle.replace(/display:\s*grid[^;]*;?/gi, '').replace(/grid-template-columns[^;]*;?/gi, '')}">${childrenHtml}</div>`;
+                return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className} ${responsiveGridClass}" style="margin:0 auto;width:100%;${gridGapStyle}${inlineStyle.replace(/display:\s*grid[^;]*;?/gi, '').replace(/grid-template-columns[^;]*;?/gi, '')}">${childrenHtml}</div>`;
             }
 
             // Non-grid container
-            return `${combinedCSS}<div id="${elementId}" class="${className}" style="margin:0 auto;width:100%;${inlineStyle}">${childrenHtml}</div>`;
+            return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className}" style="margin:0 auto;width:100%;${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Section':
-            return `${combinedCSS}<section id="${elementId}" class="${className}" style="${inlineStyle}">${childrenHtml}</section>`;
+            return `${combinedCSS}<section id="${elementId}"${propsAttr} class="${className}" style="${inlineStyle}">${childrenHtml}</section>`;
 
         case 'Row':
             // Row: flex on desktop, stack on mobile
-            return `${combinedCSS}<div id="${elementId}" class="${className} fb-row flex flex-col md:flex-row" style="width:100%;min-height:50px;${inlineStyle}">${childrenHtml}</div>`;
+            return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className} fb-row flex flex-col md:flex-row" style="width:100%;min-height:50px;${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Column':
-            return `${combinedCSS}<div id="${elementId}" class="${className} fb-column" style="display:flex;flex-direction:column;min-height:50px;min-width:50px;${inlineStyle}">${childrenHtml}</div>`;
+            return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className} fb-column" style="display:flex;flex-direction:column;min-height:50px;min-width:50px;${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Flex':
             const flexDirection = (styles.flexDirection as string) || (props.direction as string) || 'row';
             const justify = (styles.justifyContent as string) || (props.justify as string) || 'flex-start';
             const align = (styles.alignItems as string) || (props.align as string) || 'stretch';
             const gap = (styles.gap as string) || (props.gap as string) || '0';
-            return `${combinedCSS}<div id="${elementId}" class="${className}" style="display:flex;flex-direction:${flexDirection};justify-content:${justify};align-items:${align};gap:${gap};${inlineStyle}">${childrenHtml}</div>`;
+            return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className}" style="display:flex;flex-direction:${flexDirection};justify-content:${justify};align-items:${align};gap:${gap};${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Grid':
             const columns = (props.columns as number) || 2;
@@ -308,18 +315,18 @@ function renderLayoutComponent(
                 : columns === 3
                     ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
                     : `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${Math.min(columns, 4)}`;
-            return `${combinedCSS}<div id="${elementId}" class="${className} ${gridResponsiveClass}" style="gap:${gridGap};${inlineStyle}">${childrenHtml}</div>`;
+            return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className} ${gridResponsiveClass}" style="gap:${gridGap};${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Stack':
             const stackGap = (styles.gap as string) || (props.gap as string) || '1rem';
-            return `${combinedCSS}<div id="${elementId}" class="${className}" style="display:flex;flex-direction:column;gap:${stackGap};${inlineStyle}">${childrenHtml}</div>`;
+            return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className}" style="display:flex;flex-direction:column;gap:${stackGap};${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Box':
         case 'Paper':
         case 'Panel':
         case 'Group':
         default:
-            return `${combinedCSS}<div id="${elementId}" class="${className}" style="${inlineStyle}">${childrenHtml}</div>`;
+            return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className}" style="${inlineStyle}">${childrenHtml}</div>`;
     }
 }
 

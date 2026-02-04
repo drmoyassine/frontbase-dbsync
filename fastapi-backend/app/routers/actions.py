@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from typing import List, Optional
+from pydantic import BaseModel
 import httpx
 import json
 import logging

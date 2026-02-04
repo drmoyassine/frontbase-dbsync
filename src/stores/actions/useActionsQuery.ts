@@ -195,6 +195,27 @@ export function useTestDraft() {
     });
 }
 
+// Test single node
+async function testNode(draftId: string, nodeId: string, parameters?: Record<string, any>): Promise<{ execution_id: string; status: string; message: string }> {
+    const response = await fetch(`/api/actions/drafts/${draftId}/test-node/${nodeId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parameters }),
+    });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.detail || `Failed to test node: ${response.status}`);
+    }
+    return response.json();
+}
+
+export function useTestNode() {
+    return useMutation({
+        mutationFn: ({ draftId, nodeId, parameters }: { draftId: string; nodeId: string; parameters?: Record<string, any> }) =>
+            testNode(draftId, nodeId, parameters),
+    });
+}
+
 // Execution result fetching
 async function getExecutionResult(executionId: string): Promise<{
     id: string;

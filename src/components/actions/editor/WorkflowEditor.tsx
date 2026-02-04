@@ -22,6 +22,7 @@ import {
     useUpdateDraft,
     usePublishDraft,
     useTestDraft,
+    useTestNode,
     useExecutionResult
 } from '@/stores/actions';
 import { cn } from '@/lib/utils';
@@ -71,6 +72,7 @@ export function WorkflowEditor({
     const updateDraft = useUpdateDraft();
     const publishDraft = usePublishDraft();
     const testDraft = useTestDraft();
+    const testNode = useTestNode();
 
     // Load draft data when available
     useEffect(() => {
@@ -195,11 +197,15 @@ export function WorkflowEditor({
         try {
             setIsTestingNode(true);
             setCurrentExecutionId(null);
-            const result = await testDraft.mutateAsync({ id: currentDraftId });
+            // Execute only the selected node (and its upstream dependencies)
+            const result = await testNode.mutateAsync({
+                draftId: currentDraftId,
+                nodeId
+            });
             setCurrentExecutionId(result.execution_id);
             toast({
                 title: 'Testing Node',
-                description: 'Running workflow to test this node...'
+                description: 'Executing node and its dependencies...'
             });
         } catch (error: any) {
             toast({ title: 'Test Failed', description: error.message, variant: 'destructive' });

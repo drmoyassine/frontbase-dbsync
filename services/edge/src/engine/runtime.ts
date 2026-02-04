@@ -145,6 +145,148 @@ export async function executeWorkflow(
 }
 
 /**
+ * Execute a single node (and its upstream dependencies)
+ * This is for testing individual nodes without running the entire workflow
+ */
+export async function executeSingleNode(
+    executionId: string,
+    workflow: DbWorkflow,
+    targetNodeId: string,
+    inputParameters: Record<string, any>
+): Promise<void> {
+    const nodes: WorkflowNode[] = JSON.parse(workflow.nodes);
+    const edges: WorkflowEdge[] = JSON.parse(workflow.edges);
+
+    const targetNode = nodes.find(n => n.id === targetNodeId);
+    if (!targetNode) {
+        throw new Error(`Node ${targetNodeId} not found in workflow`);
+    }
+
+    const context: ExecutionContext = {
+        executionId,
+        workflowId: workflow.id,
+        parameters: inputParameters,
+        nodeOutputs: {},
+        nodeExecutions: [],
+    };
+
+    try {
+        // Update status to executing
+        await updateExecutionStatus(executionId, 'executing', context.nodeExecutions);
+
+        // Find all upstream nodes needed to execute the target
+        const upstreamNodes = getUpstreamNodes(targetNodeId, nodes, edges);
+        const nodesToExecute = [...upstreamNodes, targetNodeId];
+
+        // Initialize node executions for only the nodes we're running
+        context.nodeExecutions = nodesToExecute.map(nodeId => ({
+            nodeId,
+            status: 'idle' as NodeExecutionStatus,
+        }));
+
+        // Execute nodes in dependency order
+        const executed = new Set<string>();
+        const queue = [...nodesToExecute];
+
+        while (queue.length > 0) {
+            const nodeId = queue.shift()!;
+            if (executed.has(nodeId)) continue;
+
+            const node = nodes.find(n => n.id === nodeId);
+            if (!node) continue;
+
+            // Check dependencies
+            const incomingEdges = edges.filter(e => e.target === nodeId);
+            const dependenciesMet = incomingEdges.every(e =>
+                !nodesToExecute.includes(e.source) || executed.has(e.source)
+            );
+
+            if (!dependenciesMet) {
+                queue.push(nodeId);
+                continue;
+            }
+
+            // Resolve inputs
+            const inputs: Record<string, any> = {};
+            for (const edge of incomingEdges) {
+                const sourceOutputs = context.nodeOutputs[edge.source] || {};
+                inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
+            }
+
+            // Merge workflow parameters for trigger nodes
+            const targetNodeIds = new Set(edges.map(e => e.target));
+            if (!targetNodeIds.has(nodeId)) {
+                Object.assign(inputs, context.parameters);
+            }
+
+            // Execute
+            try {
+                updateNodeStatus(context, nodeId, 'executing');
+                await updateExecutionStatus(executionId, 'executing', context.nodeExecutions);
+
+                const outputs = await executeNode(node, inputs, context);
+
+                context.nodeOutputs[nodeId] = outputs;
+                updateNodeStatus(context, nodeId, 'completed', outputs);
+                executed.add(nodeId);
+            } catch (error: any) {
+                updateNodeStatus(context, nodeId, 'error', undefined, error.message);
+                throw error;
+            }
+        }
+
+        // Result is just the target node's output
+        const result = {
+            [targetNodeId]: context.nodeOutputs[targetNodeId],
+        };
+
+        await db.update(executions)
+            .set({
+                status: 'completed',
+                nodeExecutions: JSON.stringify(context.nodeExecutions),
+                result: JSON.stringify(result),
+                endedAt: new Date().toISOString(),
+            })
+            .where(eq(executions.id, executionId));
+
+    } catch (error: any) {
+        await db.update(executions)
+            .set({
+                status: 'error',
+                nodeExecutions: JSON.stringify(context.nodeExecutions),
+                error: error.message,
+                endedAt: new Date().toISOString(),
+            })
+            .where(eq(executions.id, executionId));
+    }
+}
+
+/**
+ * Get all upstream nodes required to execute a target node
+ */
+function getUpstreamNodes(targetNodeId: string, nodes: WorkflowNode[], edges: WorkflowEdge[]): string[] {
+    const upstream: string[] = [];
+    const visited = new Set<string>();
+    const queue = [targetNodeId];
+
+    while (queue.length > 0) {
+        const nodeId = queue.shift()!;
+        if (visited.has(nodeId)) continue;
+        visited.add(nodeId);
+
+        const incomingEdges = edges.filter(e => e.target === nodeId);
+        for (const edge of incomingEdges) {
+            if (!visited.has(edge.source)) {
+                upstream.push(edge.source);
+                queue.push(edge.source);
+            }
+        }
+    }
+
+    return upstream;
+}
+
+/**
  * Execute a single node based on its type
  */
 async function executeNode(

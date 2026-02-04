@@ -336,6 +336,84 @@ async def test_draft(
     )
 
 
+@router.post("/drafts/{draft_id}/test-node/{node_id}", response_model=TestExecuteResponse)
+async def test_node(
+    draft_id: str,
+    node_id: str,
+    request: TestExecuteRequest = TestExecuteRequest(),
+    db: Session = Depends(get_db)
+):
+    """
+    Test-execute a single node within a workflow draft.
+    
+    This deploys the draft and executes only the specified node
+    (and its upstream dependencies).
+    """
+    result = db.execute(
+        select(AutomationDraft).where(AutomationDraft.id == draft_id)
+    )
+    draft = result.scalar_one_or_none()
+    
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    
+    # Deploy before test (ensures latest version is used)
+    deploy_payload = {
+        "id": draft.id,
+        "name": f"[TEST] {draft.name}",
+        "description": draft.description,
+        "triggerType": draft.trigger_type,
+        "triggerConfig": draft.trigger_config or {},
+        "nodes": draft.nodes,
+        "edges": draft.edges,
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            # Deploy first
+            deploy_response = await client.post(
+                f"{EDGE_ENGINE_URL}/api/deploy",
+                json=deploy_payload,
+                timeout=30.0
+            )
+            if deploy_response.status_code not in [200, 201]:
+                raise HTTPException(
+                    status_code=502,
+                    detail="Failed to deploy workflow for node testing"
+                )
+            
+            # Execute single node
+            response = await client.post(
+                f"{EDGE_ENGINE_URL}/api/execute/{draft.id}/node/{node_id}",
+                json={"parameters": request.parameters or {}},
+                timeout=30.0
+            )
+            
+            if response.status_code not in [200, 201]:
+                error_detail = "Node execution failed"
+                try:
+                    error_json = response.json()
+                    if "message" in error_json:
+                        error_detail = error_json["message"]
+                except Exception:
+                    pass
+                raise HTTPException(status_code=502, detail=error_detail)
+            
+            result_data = response.json()
+            
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail="Edge Engine connection lost during node execution"
+        )
+    
+    return TestExecuteResponse(
+        execution_id=result_data.get("executionId"),
+        status=result_data.get("status", "started"),
+        message=result_data.get("message")
+    )
+
+
 # ============ Execution Result ============
 
 @router.get("/execution/{execution_id}")

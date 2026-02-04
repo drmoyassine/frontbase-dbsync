@@ -293,6 +293,8 @@ export function PropertiesPane({ className }: PropertiesPaneProps) {
                         value={value || []}
                         onChange={(v) => handleFieldChange(field.name, v)}
                         description={field.description}
+                        dataSourceId={fieldValues['dataSource']}
+                        tableName={fieldValues['table']}
                     />
                 );
 

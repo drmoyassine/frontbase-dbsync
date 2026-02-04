@@ -111,7 +111,13 @@ function getCommonAttributes(id: string, baseClass: string, props: Record<string
 
     const finalStyle = [extraStyle, propStyleString].filter(Boolean).join(';');
 
-    return `id="${id}" class="${className}" style="${finalStyle}"`;
+    // Include data-fb-props if actionBindings exist (for hover tooltips, etc.)
+    const actionBindings = props.actionBindings as Array<unknown> | undefined;
+    const propsAttr = actionBindings && actionBindings.length > 0
+        ? ` data-fb-props="${escapeHtml(JSON.stringify({ actionBindings }))}"`
+        : '';
+
+    return `id="${id}" class="${className}" style="${finalStyle}"${propsAttr}`;
 }
 
 /**

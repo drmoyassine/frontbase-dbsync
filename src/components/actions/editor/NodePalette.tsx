@@ -2,11 +2,14 @@
  * NodePalette - Draggable Node Sidebar
  * 
  * Lists available node types that can be dragged onto the canvas.
+ * Supports drag-and-drop AND double-click to add nodes.
  */
 
 import React from 'react';
 import { Zap, GitBranch, Globe, Code, MessageSquare, Database, Timer, Send, Bell, ExternalLink, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useActionsStore } from '@/stores/actions';
+import { getNodeSchema, getDefaultInputsFromSchema, getDefaultOutputsFromSchema } from '@/lib/workflow/nodeSchemas';
 
 interface NodeTypeConfig {
     type: string;
@@ -119,15 +122,41 @@ interface NodePaletteProps {
 }
 
 export function NodePalette({ className, hideTriggers }: NodePaletteProps) {
+    const { nodes, addNode } = useActionsStore();
+
     const onDragStart = (event: React.DragEvent, nodeType: string) => {
         event.dataTransfer.setData('application/reactflow', nodeType);
         event.dataTransfer.effectAllowed = 'move';
     };
 
+    // Double-click to add node at a calculated position
+    const onDoubleClick = (nodeType: string, label: string) => {
+        // Calculate position - offset from existing nodes to avoid stacking
+        const existingCount = nodes.length;
+        const baseX = 300;
+        const baseY = 100;
+        const offsetX = (existingCount % 3) * 250; // 3 columns
+        const offsetY = Math.floor(existingCount / 3) * 150; // rows
+
+        const newNode = {
+            id: `${nodeType}-${Date.now()}`,
+            type: nodeType,
+            position: { x: baseX + offsetX, y: baseY + offsetY },
+            data: {
+                label,
+                type: nodeType,
+                inputs: getDefaultInputsFromSchema(nodeType),
+                outputs: getDefaultOutputsFromSchema(nodeType),
+            },
+        };
+
+        addNode(newNode);
+    };
+
     return (
         <div className={cn('w-64 bg-background border-r p-4 overflow-y-auto', className)}>
             <h3 className="font-semibold text-sm text-muted-foreground mb-4">
-                Drag nodes to canvas
+                Drag or double-click to add
             </h3>
 
             {categories
@@ -143,9 +172,10 @@ export function NodePalette({ className, hideTriggers }: NodePaletteProps) {
                                 .map((node) => (
                                     <div
                                         key={node.type}
-                                        className="flex items-center gap-3 p-2 rounded-md border bg-card cursor-grab hover:border-primary transition-colors"
+                                        className="flex items-center gap-3 p-2 rounded-md border bg-card cursor-grab hover:border-primary transition-colors select-none"
                                         draggable
                                         onDragStart={(e) => onDragStart(e, node.type)}
+                                        onDoubleClick={() => onDoubleClick(node.type, node.label)}
                                     >
                                         <div className="p-1.5 rounded bg-muted">
                                             {node.icon}
@@ -166,3 +196,4 @@ export function NodePalette({ className, hideTriggers }: NodePaletteProps) {
         </div>
     );
 }
+

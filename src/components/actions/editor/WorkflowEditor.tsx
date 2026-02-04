@@ -299,77 +299,33 @@ export function WorkflowEditor({
                     <div className="flex-1 flex flex-col min-w-0">
                         <WorkflowCanvas className="flex-1 min-h-[300px]" />
 
-                        {/* Execution Result Panel */}
+                        {/* Simple Execution Status Bar */}
                         {executionResult && (
                             <div className={cn(
-                                "border-t p-4 max-h-48 overflow-auto bg-muted/30 shrink-0",
+                                "border-t px-4 py-2 flex items-center justify-between text-sm shrink-0",
                                 executionResult.status === 'completed' && "bg-green-50 dark:bg-green-950/20",
-                                executionResult.status === 'error' && "bg-red-50 dark:bg-red-950/20"
+                                executionResult.status === 'error' && "bg-red-50 dark:bg-red-950/20",
+                                executionResult.status === 'executing' && "bg-yellow-50 dark:bg-yellow-950/20"
                             )}>
-                                <div className="flex items-center justify-between mb-2">
-                                    <h3 className="text-sm font-semibold">
-                                        {executionResult.status === 'executing' && '⏳ Executing...'}
-                                        {executionResult.status === 'completed' && '✅ Execution Complete'}
-                                        {executionResult.status === 'error' && '❌ Execution Failed'}
-                                    </h3>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => setCurrentExecutionId(null)}
-                                    >
-                                        <X className="w-4 h-4" />
-                                    </Button>
-                                </div>
-
-                                {executionResult.error && (
-                                    <div className="text-sm text-red-600 dark:text-red-400 mb-2">
-                                        {executionResult.error}
-                                    </div>
-                                )}
-
-                                {/* Node Outputs with RecordViewer */}
-                                {executionResult.nodeExecutions && executionResult.nodeExecutions.length > 0 && (
-                                    <div className="space-y-2">
-                                        {executionResult.nodeExecutions.filter(n => n.outputs).map(node => {
-                                            const outputs = node.outputs as Record<string, unknown>;
-                                            // Check if this node has data array (like data_request)
-                                            const dataArray = outputs?.data as unknown[];
-                                            const hasDataArray = Array.isArray(dataArray) && dataArray.length > 0;
-
-                                            return (
-                                                <details key={node.nodeId} open className="border rounded-md overflow-hidden">
-                                                    <summary className="cursor-pointer px-3 py-2 bg-muted/50 hover:bg-muted flex items-center gap-2 text-sm">
-                                                        {node.status === 'completed' ? '✅' : node.status === 'error' ? '❌' : '⏳'}
-                                                        <span className="font-medium">Node: {node.nodeId.slice(0, 8)}</span>
-                                                        {hasDataArray && (
-                                                            <span className="text-muted-foreground">
-                                                                ({dataArray.length} records)
-                                                            </span>
-                                                        )}
-                                                    </summary>
-                                                    <div className="p-2">
-                                                        {/* If node has data array, show RecordViewer */}
-                                                        {hasDataArray ? (
-                                                            <RecordViewer
-                                                                data={dataArray}
-                                                                title={`${outputs.rowCount || dataArray.length} rows`}
-                                                            />
-                                                        ) : (
-                                                            /* Otherwise show key-value for the outputs object */
-                                                            <RecordViewer data={outputs} />
-                                                        )}
-                                                    </div>
-                                                </details>
-                                            );
-                                        })}
-                                    </div>
-                                )}
+                                <span className="font-medium">
+                                    {executionResult.status === 'executing' && '⏳ Running test...'}
+                                    {executionResult.status === 'completed' && '✅ Test completed successfully'}
+                                    {executionResult.status === 'error' && `❌ Test failed: ${executionResult.error || 'Unknown error'}`}
+                                </span>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setCurrentExecutionId(null)}
+                                    className="h-6 px-2"
+                                >
+                                    <X className="w-3 h-3" />
+                                </Button>
                             </div>
                         )}
                     </div>
 
                     {/* Right: Properties */}
-                    {selectedNodeId && <PropertiesPane />}
+                    {selectedNodeId && <PropertiesPane nodeExecutions={executionResult?.nodeExecutions} />}
                 </div>
             </div>
         </ReactFlowProvider>

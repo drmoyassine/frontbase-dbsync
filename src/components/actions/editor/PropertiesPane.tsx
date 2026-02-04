@@ -22,12 +22,22 @@ import {
     KeyValueFieldDefinition,
 } from '@/lib/workflow/nodeSchemas';
 import { SelectField, DynamicSelectField, KeyValueField, ColumnKeyValueField, CodeField, ExpressionField, ConditionBuilderField, FieldMappingField } from './fields';
+import { RecordViewer } from './RecordViewer';
+
+// Node execution result from workflow test
+interface NodeExecutionResult {
+    nodeId: string;
+    status: string;
+    outputs?: Record<string, unknown>;
+    error?: string;
+}
 
 interface PropertiesPaneProps {
     className?: string;
+    nodeExecutions?: NodeExecutionResult[];
 }
 
-export function PropertiesPane({ className }: PropertiesPaneProps) {
+export function PropertiesPane({ className, nodeExecutions }: PropertiesPaneProps) {
     const { nodes, selectedNodeId, updateNode, removeNode, selectNode } = useActionsStore();
 
     const selectedNode = nodes.find((n) => n.id === selectedNodeId);
@@ -37,6 +47,12 @@ export function PropertiesPane({ className }: PropertiesPaneProps) {
         if (!selectedNode) return null;
         return getNodeSchema(selectedNode.data.type);
     }, [selectedNode?.data.type]);
+
+    // Get execution result for selected node (if available)
+    const nodeExecution = useMemo(() => {
+        if (!selectedNode || !nodeExecutions) return null;
+        return nodeExecutions.find(e => e.nodeId === selectedNode.id);
+    }, [selectedNode?.id, nodeExecutions]);
 
     // Convert inputs array to values object for easier access
     const fieldValues = useMemo(() => {
@@ -362,18 +378,59 @@ export function PropertiesPane({ className }: PropertiesPaneProps) {
                     </div>
                 ))}
 
-                {/* Outputs display (read-only) */}
+                {/* Outputs display - show execution result or schema */}
                 {schema && schema.outputs.length > 0 && (
                     <div className="pt-4 border-t">
-                        <h4 className="text-xs font-medium text-muted-foreground mb-2">Outputs</h4>
-                        <div className="space-y-1">
-                            {schema.outputs.map((output) => (
-                                <div key={output.name} className="flex justify-between text-xs">
-                                    <span className="font-mono">{output.name}</span>
-                                    <span className="text-muted-foreground">{output.type}</span>
-                                </div>
-                            ))}
+                        <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-xs font-medium text-muted-foreground">Outputs</h4>
+                            {nodeExecution && (
+                                <span className={cn(
+                                    "text-xs px-1.5 py-0.5 rounded",
+                                    nodeExecution.status === 'completed' && "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+                                    nodeExecution.status === 'error' && "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+                                    nodeExecution.status === 'executing' && "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                                )}>
+                                    {nodeExecution.status === 'completed' && '✅ Executed'}
+                                    {nodeExecution.status === 'error' && '❌ Error'}
+                                    {nodeExecution.status === 'executing' && '⏳ Running'}
+                                </span>
+                            )}
                         </div>
+
+                        {/* Show actual execution result if available */}
+                        {nodeExecution?.outputs ? (
+                            <div className="space-y-2">
+                                {nodeExecution.error && (
+                                    <div className="text-xs text-red-600 dark:text-red-400 p-2 bg-red-50 dark:bg-red-950/20 rounded">
+                                        {nodeExecution.error}
+                                    </div>
+                                )}
+                                {(() => {
+                                    const outputs = nodeExecution.outputs;
+                                    const dataArray = outputs?.data as unknown[];
+                                    const hasDataArray = Array.isArray(dataArray) && dataArray.length > 0;
+
+                                    return hasDataArray ? (
+                                        <RecordViewer
+                                            data={dataArray}
+                                            title={`${outputs.rowCount || dataArray.length} rows`}
+                                        />
+                                    ) : (
+                                        <RecordViewer data={outputs} />
+                                    );
+                                })()}
+                            </div>
+                        ) : (
+                            /* Show generic schema outputs before execution */
+                            <div className="space-y-1">
+                                {schema.outputs.map((output) => (
+                                    <div key={output.name} className="flex justify-between text-xs">
+                                        <span className="font-mono">{output.name}</span>
+                                        <span className="text-muted-foreground">{output.type}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

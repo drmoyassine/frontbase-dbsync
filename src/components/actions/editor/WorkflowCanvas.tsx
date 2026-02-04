@@ -4,7 +4,7 @@
  * The visual workflow builder canvas using React Flow.
  */
 
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useMemo } from 'react';
 import ReactFlow, {
     Background,
     Controls,
@@ -46,11 +46,20 @@ const nodeTypes = {
     refresh: ActionNode,
 };
 
-interface WorkflowCanvasProps {
-    className?: string;
+// Node execution status type
+interface NodeExecutionResult {
+    nodeId: string;
+    status: string;
+    outputs?: Record<string, unknown>;
+    error?: string;
 }
 
-export function WorkflowCanvas({ className }: WorkflowCanvasProps) {
+interface WorkflowCanvasProps {
+    className?: string;
+    nodeExecutions?: NodeExecutionResult[];
+}
+
+export function WorkflowCanvas({ className, nodeExecutions }: WorkflowCanvasProps) {
     const reactFlowWrapper = useRef<HTMLDivElement>(null);
     const [reactFlowInstance, setReactFlowInstance] = React.useState<ReactFlowInstance | null>(null);
 
@@ -63,6 +72,58 @@ export function WorkflowCanvas({ className }: WorkflowCanvasProps) {
         selectNode,
         addNode,
     } = useActionsStore();
+
+    // Merge execution status into nodes
+    const nodesWithStatus = useMemo(() => {
+        if (!nodeExecutions || nodeExecutions.length === 0) return nodes;
+
+        return nodes.map(node => {
+            const execution = nodeExecutions.find(e => e.nodeId === node.id);
+            if (execution) {
+                return {
+                    ...node,
+                    data: {
+                        ...node.data,
+                        executionStatus: execution.status,
+                        executionError: execution.error,
+                    }
+                };
+            }
+            return node;
+        });
+    }, [nodes, nodeExecutions]);
+
+    // Style edges based on execution status
+    const edgesWithStatus = useMemo(() => {
+        if (!nodeExecutions || nodeExecutions.length === 0) return edges;
+
+        const completedNodeIds = new Set(
+            nodeExecutions.filter(e => e.status === 'completed').map(e => e.nodeId)
+        );
+        const errorNodeIds = new Set(
+            nodeExecutions.filter(e => e.status === 'error').map(e => e.nodeId)
+        );
+
+        return edges.map(edge => {
+            // Edge is green if source completed successfully
+            if (completedNodeIds.has(edge.source)) {
+                return {
+                    ...edge,
+                    style: { stroke: '#22c55e', strokeWidth: 2 },
+                    animated: false,
+                };
+            }
+            // Edge is red if source had error
+            if (errorNodeIds.has(edge.source)) {
+                return {
+                    ...edge,
+                    style: { stroke: '#ef4444', strokeWidth: 2 },
+                    animated: false,
+                };
+            }
+            return edge;
+        });
+    }, [edges, nodeExecutions]);
 
     const onNodeClick = useCallback((_: React.MouseEvent, node: any) => {
         selectNode(node.id);
@@ -113,8 +174,8 @@ export function WorkflowCanvas({ className }: WorkflowCanvasProps) {
     return (
         <div ref={reactFlowWrapper} className={cn('h-full w-full', className)}>
             <ReactFlow
-                nodes={nodes}
-                edges={edges}
+                nodes={nodesWithStatus}
+                edges={edgesWithStatus}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}

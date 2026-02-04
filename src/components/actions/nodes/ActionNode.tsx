@@ -4,7 +4,7 @@
 
 import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { Send, Code, MessageSquare, Database, Bell, ExternalLink, RefreshCw } from 'lucide-react';
+import { Send, Code, MessageSquare, Database, Bell, ExternalLink, RefreshCw, Check, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const iconMap: Record<string, React.ElementType> = {
@@ -59,14 +59,46 @@ export const ActionNode = memo(({ data, selected }: NodeProps) => {
 
     const colors = getColorScheme(data.type);
 
+    // Execution status styling
+    const getStatusStyle = () => {
+        if (data.executionStatus === 'completed') {
+            return 'border-green-500 bg-green-500/10 shadow-green-500/20 shadow-md';
+        }
+        if (data.executionStatus === 'error') {
+            return 'border-red-500 bg-red-500/10 shadow-red-500/20 shadow-md';
+        }
+        if (data.executionStatus === 'executing') {
+            return 'border-yellow-500 bg-yellow-500/10 shadow-yellow-500/20 shadow-md';
+        }
+        return '';
+    };
+
     return (
         <div
             className={cn(
-                'px-4 py-3 rounded-lg border-2 bg-card shadow-sm min-w-[150px]',
+                'px-4 py-3 rounded-lg border-2 bg-card shadow-sm min-w-[150px] relative',
                 colors.border,
-                selected && `ring-2 ${colors.ring} ring-offset-2 ring-offset-background`
+                selected && `ring-2 ${colors.ring} ring-offset-2 ring-offset-background`,
+                getStatusStyle()
             )}
         >
+            {/* Status Badge */}
+            {data.executionStatus === 'completed' && (
+                <div className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shadow-md">
+                    <Check className="w-3 h-3 text-white" />
+                </div>
+            )}
+            {data.executionStatus === 'error' && (
+                <div className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shadow-md">
+                    <X className="w-3 h-3 text-white" />
+                </div>
+            )}
+            {data.executionStatus === 'executing' && (
+                <div className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center shadow-md">
+                    <Loader2 className="w-3 h-3 text-white animate-spin" />
+                </div>
+            )}
+
             <Handle
                 type="target"
                 position={Position.Left}

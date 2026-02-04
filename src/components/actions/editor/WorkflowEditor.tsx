@@ -326,7 +326,7 @@ export function WorkflowEditor({
 
                     {/* Center: Canvas */}
                     <div className="flex-1 flex flex-col min-w-0">
-                        <WorkflowCanvas className="flex-1 min-h-[300px]" />
+                        <WorkflowCanvas className="flex-1 min-h-[300px]" nodeExecutions={executionResult?.nodeExecutions} />
 
                         {/* Simple Execution Status Bar */}
                         {executionResult && (

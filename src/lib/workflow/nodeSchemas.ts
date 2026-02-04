@@ -17,7 +17,8 @@ export type FieldType =
     | 'code'
     | 'keyValue'
     | 'conditionBuilder'
-    | 'expression';
+    | 'expression'
+    | 'fieldMapping';
 
 export interface BaseFieldDefinition {
     name: string;
@@ -474,64 +475,104 @@ export const conditionSchema: NodeSchema = {
 
 // --- INTEGRATIONS ---
 
-export const databaseSchema: NodeSchema = {
-    type: 'database',
-    label: 'Database Query',
-    description: 'Query a database',
+export const dataRequestSchema: NodeSchema = {
+    type: 'data_request',
+    label: 'Data Request',
+    description: 'Query or modify data from a data source',
     category: 'integrations',
     inputs: [
+        {
+            name: 'dataSource',
+            type: 'select',
+            label: 'Data Source',
+            required: true,
+            description: 'Select a configured data source',
+            options: 'datasources', // Dynamic - will be populated from configured data sources
+        } as SelectFieldDefinition,
+        {
+            name: 'table',
+            type: 'select',
+            label: 'Table',
+            required: true,
+            description: 'Select a table from the data source',
+            options: 'tables', // Dynamic - will be populated based on selected data source
+        } as SelectFieldDefinition,
         {
             name: 'operation',
             type: 'select',
             label: 'Operation',
-            default: 'executeQuery',
+            default: 'select',
             options: [
-                { value: 'executeQuery', label: 'Execute Query' },
-                { value: 'insert', label: 'Insert' },
+                { value: 'select', label: 'Select (Read)' },
+                { value: 'insert', label: 'Insert (Create)' },
                 { value: 'update', label: 'Update' },
                 { value: 'delete', label: 'Delete' },
+                { value: 'executeQuery', label: 'Execute Query (SQL)' },
             ],
         } as SelectFieldDefinition,
+        // Select operation options
         {
-            name: 'table',
+            name: 'selectFields',
+            type: 'keyValue',
+            label: 'Fields to Select',
+            description: 'Leave empty to select all fields (*)',
+            showWhen: { operation: 'select' },
+            keyPlaceholder: 'Column name',
+            valuePlaceholder: 'Alias (optional)',
+        } as KeyValueFieldDefinition,
+        {
+            name: 'whereConditions',
+            type: 'keyValue',
+            label: 'WHERE Conditions',
+            showWhen: { operation: ['select', 'update', 'delete'] },
+            keyPlaceholder: 'Column',
+            valuePlaceholder: 'Value or {{ expression }}',
+        } as KeyValueFieldDefinition,
+        {
+            name: 'orderBy',
             type: 'string',
-            label: 'Table',
-            placeholder: 'users',
-            showWhen: { operation: ['insert', 'update', 'delete'] },
+            label: 'Order By',
+            placeholder: 'column_name ASC',
+            showWhen: { operation: 'select' },
         },
+        {
+            name: 'limit',
+            type: 'number',
+            label: 'Limit',
+            placeholder: '100',
+            showWhen: { operation: 'select' },
+        },
+        // Insert/Update field mappings
+        {
+            name: 'fieldMappings',
+            type: 'fieldMapping',
+            label: 'Field Mappings',
+            description: 'Map input data to table columns',
+            showWhen: { operation: ['insert', 'update'] },
+        },
+        // Execute Query (raw SQL)
         {
             name: 'query',
             type: 'code',
             label: 'SQL Query',
             language: 'sql',
             placeholder: 'SELECT * FROM users WHERE id = {{ $input.userId }}',
+            description: 'Raw SQL query (only available if data source supports SQL)',
             showWhen: { operation: 'executeQuery' },
         } as CodeFieldDefinition,
-        {
-            name: 'columns',
-            type: 'keyValue',
-            label: 'Columns',
-            showWhen: { operation: ['insert', 'update'] },
-            keyPlaceholder: 'Column name',
-            valuePlaceholder: 'Value',
-        } as KeyValueFieldDefinition,
-        {
-            name: 'whereClause',
-            type: 'string',
-            label: 'WHERE Clause',
-            placeholder: 'id = {{ $input.userId }}',
-            showWhen: { operation: ['update', 'delete'] },
-        },
+        // Common options
         {
             name: 'returnData',
             type: 'boolean',
-            label: 'Return Data',
+            label: 'Return Result Data',
             default: true,
+            description: 'Include query results in output',
         },
     ],
     outputs: [
-        { name: 'rows', type: 'array', description: 'Query result rows' },
-        { name: 'rowCount', type: 'number', description: 'Number of affected rows' },
+        { name: 'data', type: 'array', description: 'Query result rows' },
+        { name: 'rowCount', type: 'number', description: 'Number of affected/returned rows' },
+        { name: 'success', type: 'boolean', description: 'Operation success status' },
     ],
 };
 
@@ -647,7 +688,7 @@ export const nodeSchemas: Record<string, NodeSchema> = {
     // Logic
     condition: conditionSchema,
     // Integrations
-    database: databaseSchema,
+    data_request: dataRequestSchema,
     // Interface
     toast: toastSchema,
     redirect: redirectSchema,

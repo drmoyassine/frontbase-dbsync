@@ -21,7 +21,7 @@ import {
     CodeFieldDefinition,
     KeyValueFieldDefinition,
 } from '@/lib/workflow/nodeSchemas';
-import { SelectField, KeyValueField, CodeField, ExpressionField, ConditionBuilderField } from './fields';
+import { SelectField, KeyValueField, CodeField, ExpressionField, ConditionBuilderField, FieldMappingField } from './fields';
 
 interface PropertiesPaneProps {
     className?: string;
@@ -246,6 +246,18 @@ export function PropertiesPane({ className }: PropertiesPaneProps) {
                         name={field.name}
                         label={fieldLabel}
                         value={value || field.default || []}
+                        onChange={(v) => handleFieldChange(field.name, v)}
+                        description={field.description}
+                    />
+                );
+
+            case 'fieldMapping':
+                return (
+                    <FieldMappingField
+                        key={field.name}
+                        name={field.name}
+                        label={fieldLabel}
+                        value={value || []}
                         onChange={(v) => handleFieldChange(field.name, v)}
                         description={field.description}
                     />

@@ -74,9 +74,9 @@ const nodeTypes: NodeTypeConfig[] = [
 
     // Integrations
     {
-        type: 'database',
-        label: 'Database Query',
-        description: 'Query a database',
+        type: 'data_request',
+        label: 'Data Request',
+        description: 'Query or modify data',
         icon: <Database className="w-4 h-4" />,
         category: 'integrations',
     },

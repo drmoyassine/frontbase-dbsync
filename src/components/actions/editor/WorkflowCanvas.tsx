@@ -39,6 +39,7 @@ const nodeTypes = {
     transform: ActionNode,
     log: ActionNode,
     database: ActionNode,
+    data_request: ActionNode,
     // Interface Actions
     toast: ActionNode,
     redirect: ActionNode,

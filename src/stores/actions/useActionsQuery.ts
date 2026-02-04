@@ -157,6 +157,27 @@ export function useWorkflowDraft(id: string | null) {
     });
 }
 
+export interface ExecutionStats {
+    workflowId: string;
+    totalRuns: number;
+    successfulRuns: number;
+    failedRuns: number;
+}
+
+async function fetchExecutionStats(): Promise<{ stats: ExecutionStats[] }> {
+    const response = await fetch(`${API_BASE}/execution-stats`);
+    if (!response.ok) return { stats: [] };
+    return response.json();
+}
+
+export function useExecutionStats() {
+    return useQuery({
+        queryKey: ['execution-stats'],
+        queryFn: fetchExecutionStats,
+        staleTime: 30000,
+    });
+}
+
 export function useCreateDraft() {
     const queryClient = useQueryClient();
 

@@ -527,3 +527,21 @@ async def get_draft_executions(
             
     except httpx.ConnectError:
         return {"executions": [], "total": 0, "error": "Actions Engine not available"}
+
+
+@router.get("/execution-stats")
+async def get_execution_stats():
+    """Get execution run counts for all workflows"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{EDGE_ENGINE_URL}/api/executions/stats",
+                timeout=10.0
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            return {"stats": []}
+            
+    except httpx.ConnectError:
+        return {"stats": [], "error": "Actions Engine not available"}

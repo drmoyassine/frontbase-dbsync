@@ -128,4 +128,57 @@ executionsRoute.openapi(listRoute, async (c) => {
     }, 200);
 });
 
+// Get execution stats (counts) for all workflows
+const statsRoute = createRoute({
+    method: 'get',
+    path: '/stats',
+    tags: ['Executions'],
+    summary: 'Get execution counts per workflow',
+    description: 'Returns run counts for each workflow',
+    responses: {
+        200: {
+            description: 'Execution stats',
+            content: {
+                'application/json': {
+                    schema: z.object({
+                        stats: z.array(z.object({
+                            workflowId: z.string(),
+                            totalRuns: z.number(),
+                            successfulRuns: z.number(),
+                            failedRuns: z.number(),
+                        })),
+                    }),
+                },
+            },
+        },
+    },
+});
+
+executionsRoute.openapi(statsRoute, async (c) => {
+    // Get all executions and aggregate by workflowId
+    const allExecutions = await db.select()
+        .from(executions);
+
+    // Aggregate counts per workflow
+    const statsMap = new Map<string, { totalRuns: number; successfulRuns: number; failedRuns: number }>();
+
+    for (const exec of allExecutions) {
+        const current = statsMap.get(exec.workflowId) || { totalRuns: 0, successfulRuns: 0, failedRuns: 0 };
+        current.totalRuns++;
+        if (exec.status === 'completed') {
+            current.successfulRuns++;
+        } else if (exec.status === 'error') {
+            current.failedRuns++;
+        }
+        statsMap.set(exec.workflowId, current);
+    }
+
+    const stats = Array.from(statsMap.entries()).map(([workflowId, counts]) => ({
+        workflowId,
+        ...counts,
+    }));
+
+    return c.json({ stats }, 200);
+});
+
 export { executionsRoute };

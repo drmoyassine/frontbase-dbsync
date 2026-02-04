@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useWorkflowDrafts } from '@/stores/actions';
+import { useWorkflowDrafts, useExecutionStats } from '@/stores/actions';
 import { formatDistanceToNow } from 'date-fns';
 import { Zap, Play, FileEdit, Edit, GitBranch, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,21 @@ export function AutomationsContentPanel() {
     const [currentPage, setCurrentPage] = useState(1);
 
     const { data: workflowData, isLoading } = useWorkflowDrafts();
+    const { data: statsData } = useExecutionStats();
     const workflows = workflowData?.drafts || [];
+
+    // Build a map of workflowId -> run counts
+    const runCountsMap = useMemo(() => {
+        const map = new Map<string, { total: number; successful: number; failed: number }>();
+        for (const stat of statsData?.stats || []) {
+            map.set(stat.workflowId, {
+                total: stat.totalRuns,
+                successful: stat.successfulRuns,
+                failed: stat.failedRuns,
+            });
+        }
+        return map;
+    }, [statsData]);
 
     // Get unique trigger types for filter
     const availableTriggers = useMemo(() => {
@@ -157,10 +171,11 @@ export function AutomationsContentPanel() {
                         <thead className="bg-gray-50 dark:bg-gray-900/50">
                             <tr>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[25%]">Name</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[15%]">Trigger</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[15%]">Status</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[12%]">Nodes</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[20%]">Last Updated</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[12%]">Trigger</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[12%]">Status</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[10%]">Nodes</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[10%]">Runs</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[18%]">Last Updated</th>
                                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-[13%]">Actions</th>
                             </tr>
                         </thead>
@@ -198,6 +213,25 @@ export function AutomationsContentPanel() {
                                             {workflow.nodes?.length || 0} nodes
                                         </span>
                                     </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                        {(() => {
+                                            const stats = runCountsMap.get(workflow.id);
+                                            if (!stats || stats.total === 0) {
+                                                return <span className="text-gray-400">—</span>;
+                                            }
+                                            return (
+                                                <span className="flex items-center gap-1.5">
+                                                    <span className="font-medium">{stats.total}</span>
+                                                    {stats.successful > 0 && (
+                                                        <span className="text-green-600 text-xs">✓{stats.successful}</span>
+                                                    )}
+                                                    {stats.failed > 0 && (
+                                                        <span className="text-red-500 text-xs">✗{stats.failed}</span>
+                                                    )}
+                                                </span>
+                                            );
+                                        })()}
+                                    </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                                         {workflow.updated_at
                                             ? formatDistanceToNow(new Date(workflow.updated_at), { addSuffix: true })
@@ -218,7 +252,7 @@ export function AutomationsContentPanel() {
                             ))}
                             {paginatedWorkflows.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                                         {searchQuery || statusFilter !== 'all' || triggerFilter !== 'all'
                                             ? 'No automations match your filters.'
                                             : 'No automations yet. Create your first workflow to get started.'}

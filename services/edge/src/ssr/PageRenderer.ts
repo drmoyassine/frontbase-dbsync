@@ -184,7 +184,7 @@ async function renderComponent(
 
         default:
             // Unknown component - render as a generic div with data attribute
-            return combinedCSS + `<div data-fb-component="${type}" data-fb-id="${elementId}" class="fb-unknown">${childrenHtml}</div>`;
+            return combinedCSS + `<div data-fb-component="${type}" data-fb-id="${id}" class="fb-unknown">${childrenHtml}</div>`;
     }
 
 
@@ -218,7 +218,7 @@ function renderLandingComponent(
         case 'Footer':
             return landing.renderFooter(id, props as any, stylesData as any);
         default:
-            return `<div data-fb-component="${type}" data-fb-id="${elementId}" class="fb-landing-unknown"></div>`;
+            return `<div data-fb-component="${type}" data-fb-id="${id}" class="fb-landing-unknown"></div>`;
     }
 }
 

@@ -54,8 +54,23 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
                 </div>
             ) : (
                 <>
+                    {/* Enable Toggle (Top Level) */}
+                    <div className="flex items-center justify-between p-4 rounded-lg border bg-card text-card-foreground shadow-sm mb-6">
+                        <div className="space-y-0.5">
+                            <Label>Enable Redis Caching</Label>
+                            <p className="text-xs text-muted-foreground">
+                                When disabled, all data is fetched directly from the source
+                            </p>
+                        </div>
+                        <Switch
+                            checked={redisEnabled}
+                            onCheckedChange={(checked) => { setRedisEnabled(checked); handleChange(); }}
+                            disabled={!redisUrl}
+                        />
+                    </div>
+
                     {/* Provider Selector */}
-                    <div className="space-y-3">
+                    <div className={`space-y-3 transition-opacity ${!redisEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
                         <Label>Redis Provider</Label>
                         <div className="grid grid-cols-2 gap-3">
                             <button
@@ -66,7 +81,7 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
                                     : 'border-muted hover:border-muted-foreground/30'
                                     }`}
                             >
-                                <div className="font-medium">Self-Hosted (Docker)</div>
+                                <div className="font-medium">Local Host (Docker)</div>
                                 <p className="text-xs text-muted-foreground mt-1">
                                     Your bundled Redis instance
                                 </p>
@@ -145,6 +160,11 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
                                     value={redisToken}
                                     onChange={(e) => { setRedisToken(e.target.value); handleChange(); }}
                                 />
+                                {redisType === 'self-hosted' && !redisToken && (
+                                    <p className="text-xs text-amber-600">
+                                        ⚠️ Configure REDIS_TOKEN in your .env file for auto-configuration
+                                    </p>
+                                )}
                             </div>
                         </div>
                     )}
@@ -173,21 +193,9 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
 
                     <Separator />
 
-                    <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                            <Label>Enable Redis Caching</Label>
-                            <p className="text-xs text-muted-foreground">
-                                When disabled, all data is fetched directly from the source
-                            </p>
-                        </div>
-                        <Switch
-                            checked={redisEnabled}
-                            onCheckedChange={(checked) => { setRedisEnabled(checked); handleChange(); }}
-                            disabled={!redisUrl}
-                        />
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+
+                    <div className={`grid grid-cols-2 gap-4 transition-opacity ${!redisEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
                         <div className="space-y-2">
                             <Label htmlFor="ttl-data">Data Cache TTL (seconds)</Label>
                             <Input

@@ -46,12 +46,17 @@ export function useRedisSettings(): UseRedisSettingsReturn {
     const queryClient = useQueryClient();
 
     // State
-    const [redisUrl, setRedisUrl] = useState('');
-    const [redisToken, setRedisToken] = useState('');
+    // We maintain separate config state so switching providers preserves inputs
+    const [localConfig, setLocalConfig] = useState({ url: 'http://redis-http:80', token: '' });
+    const [upstashConfig, setUpstashConfig] = useState({ url: '', token: '' });
+
+    // Active type determines which config we show/edit
     const [redisType, setRedisType] = useState<'upstash' | 'self-hosted'>('upstash');
+
     const [redisEnabled, setRedisEnabled] = useState(false);
     const [cacheTtlData, setCacheTtlData] = useState(60);
     const [cacheTtlCount, setCacheTtlCount] = useState(300);
+
     const [hasChanges, setHasChanges] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -64,12 +69,24 @@ export function useRedisSettings(): UseRedisSettingsReturn {
     // Sync state from server
     useEffect(() => {
         if (settings) {
-            setRedisUrl(settings.redis_url || '');
-            setRedisToken(settings.redis_token || '');
-            setRedisType(settings.redis_type || 'upstash');
+            const type = (settings.redis_type as any) || 'upstash';
+            setRedisType(type);
             setRedisEnabled(settings.redis_enabled);
             setCacheTtlData(settings.cache_ttl_data);
             setCacheTtlCount(settings.cache_ttl_count);
+
+            // Populate the active config from settings
+            if (type === 'self-hosted') {
+                setLocalConfig({
+                    url: settings.redis_url || 'http://redis-http:80',
+                    token: settings.redis_token || ''
+                });
+            } else {
+                setUpstashConfig({
+                    url: settings.redis_url || '',
+                    token: settings.redis_token || ''
+                });
+            }
         }
     }, [settings]);
 
@@ -89,16 +106,51 @@ export function useRedisSettings(): UseRedisSettingsReturn {
         onError: () => setTestResult({ success: false, message: 'Connection test failed' }),
     });
 
+    // Computed Properties (Facade)
+    const redisUrl = redisType === 'self-hosted' ? localConfig.url : upstashConfig.url;
+    const redisToken = redisType === 'self-hosted' ? localConfig.token : upstashConfig.token;
+
+    // Setters (Update specific state based on active type)
+    const setRedisUrl = (url: string) => {
+        if (redisType === 'self-hosted') {
+            setLocalConfig(prev => ({ ...prev, url }));
+        } else {
+            setUpstashConfig(prev => ({ ...prev, url }));
+        }
+        setHasChanges(true);
+        setTestResult(null);
+    };
+
+    const setRedisToken = (token: string) => {
+        if (redisType === 'self-hosted') {
+            setLocalConfig(prev => ({ ...prev, token }));
+        } else {
+            setUpstashConfig(prev => ({ ...prev, token }));
+        }
+        setHasChanges(true);
+        setTestResult(null);
+    };
+
     // Handlers
     const handleChange = () => {
         setHasChanges(true);
         setTestResult(null);
     };
 
+    // Type Switcher (Just changes view, data persists)
+    const handleSetRedisType = (type: 'upstash' | 'self-hosted') => {
+        setRedisType(type);
+        setHasChanges(true);
+    };
+
     const save = () => {
+        // Save ONLY the active configuration
+        const activeUrl = redisType === 'self-hosted' ? localConfig.url : upstashConfig.url;
+        const activeToken = redisType === 'self-hosted' ? localConfig.token : upstashConfig.token;
+
         saveMutation.mutate({
-            redis_url: redisUrl || null,
-            redis_token: redisToken || null,
+            redis_url: activeUrl || null,
+            redis_token: activeToken || null,
             redis_type: redisType,
             redis_enabled: redisEnabled,
             cache_ttl_data: cacheTtlData,
@@ -107,9 +159,12 @@ export function useRedisSettings(): UseRedisSettingsReturn {
     };
 
     const testConnection = () => {
+        const activeUrl = redisType === 'self-hosted' ? localConfig.url : upstashConfig.url;
+        const activeToken = redisType === 'self-hosted' ? localConfig.token : upstashConfig.token;
+
         testMutation.mutate({
-            redis_url: redisUrl,
-            redis_token: redisToken,
+            redis_url: activeUrl,
+            redis_token: activeToken,
             redis_type: redisType,
         });
     };
@@ -126,7 +181,7 @@ export function useRedisSettings(): UseRedisSettingsReturn {
         // Setters
         setRedisUrl,
         setRedisToken,
-        setRedisType,
+        setRedisType: handleSetRedisType, // Use the smart wrapper
         setRedisEnabled,
         setCacheTtlData,
         setCacheTtlCount,

@@ -68,7 +68,8 @@ export function useRedisSettings(): UseRedisSettingsReturn {
 
     // Sync state from server
     useEffect(() => {
-        if (settings) {
+        // Only sync if we don't have unsaved changes to prevent overwriting user input
+        if (settings && !hasChanges) {
             const type = (settings.redis_type as any) || 'upstash';
             setRedisType(type);
             setRedisEnabled(settings.redis_enabled);
@@ -88,7 +89,7 @@ export function useRedisSettings(): UseRedisSettingsReturn {
                 });
             }
         }
-    }, [settings]);
+    }, [settings, hasChanges]);
 
     // Save mutation
     const saveMutation = useMutation({

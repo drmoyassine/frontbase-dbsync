@@ -49,10 +49,25 @@ async def get_redis_settings():
     default_url = "http://redis-http:80" if docker_token else None
     default_token = docker_token if docker_token else None
     
+    # Determine effective type
+    saved_type = redis.get("redis_type")
+    effective_type = saved_type if saved_type else default_type
+
+    # Determine effective values based on type and defaults
+    if effective_type == "self-hosted":
+        # Use saved values if present, otherwise fallback to detected defaults
+        # Note: Empty string in saved config should fall back to default
+        final_url = redis.get("redis_url") or default_url
+        final_token = redis.get("redis_token") or default_token
+    else:
+        # Upstash mode - just use what's saved
+        final_url = redis.get("redis_url")
+        final_token = redis.get("redis_token")
+    
     return RedisSettings(
-        redis_url=redis.get("redis_url", default_url),
-        redis_token=redis.get("redis_token", default_token),
-        redis_type=redis.get("redis_type", default_type),
+        redis_url=final_url,
+        redis_token=final_token,
+        redis_type=effective_type,
         redis_enabled=redis.get("redis_enabled", False),
         cache_ttl_data=redis.get("cache_ttl_data", 60),
         cache_ttl_count=redis.get("cache_ttl_count", 300),

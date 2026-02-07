@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Check, X, RefreshCw, Database, Info } from 'lucide-react';
 import { useRedisSettings } from '../hooks/useRedisSettings';
 
@@ -72,34 +73,24 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
                     {/* Provider Selector */}
                     <div className={`space-y-3 transition-opacity ${!redisEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
                         <Label>Redis Provider</Label>
-                        <div className="grid grid-cols-2 gap-3">
-                            <button
-                                type="button"
-                                onClick={() => { setRedisType('self-hosted'); handleChange(); }}
-                                className={`p-4 rounded-lg border-2 text-left transition-all ${redisType === 'self-hosted'
-                                    ? 'border-primary bg-primary/5'
-                                    : 'border-muted hover:border-muted-foreground/30'
-                                    }`}
-                            >
-                                <div className="font-medium">Local Host (Docker)</div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Your bundled Redis instance
-                                </p>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => { setRedisType('upstash'); handleChange(); }}
-                                className={`p-4 rounded-lg border-2 text-left transition-all ${redisType === 'upstash'
-                                    ? 'border-primary bg-primary/5'
-                                    : 'border-muted hover:border-muted-foreground/30'
-                                    }`}
-                            >
-                                <div className="font-medium">Upstash (Managed)</div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Serverless cloud Redis
-                                </p>
-                            </button>
-                        </div>
+                        <Select
+                            value={redisType}
+                            onValueChange={(val) => { setRedisType(val as 'upstash' | 'self-hosted'); handleChange(); }}
+                            disabled={!redisEnabled}
+                        >
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select provider" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="self-hosted">Local Host (Docker)</SelectItem>
+                                <SelectItem value="upstash">Upstash (Managed)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                            {redisType === 'self-hosted'
+                                ? 'Using your bundled Redis instance via SRH proxy'
+                                : 'Using a managed serverless Redis instance via HTTP'}
+                        </p>
                     </div>
 
                     {/* Upstash Path */}

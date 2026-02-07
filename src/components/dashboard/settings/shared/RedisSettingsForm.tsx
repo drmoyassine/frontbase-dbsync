@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, Check, X, RefreshCw, Database } from 'lucide-react';
+import { Loader2, Check, X, RefreshCw, Database, Info } from 'lucide-react';
 import { useRedisSettings } from '../hooks/useRedisSettings';
 
 interface RedisSettingsFormProps {
@@ -54,10 +54,23 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
                 </div>
             ) : (
                 <>
-                    {/* Two-Path Selector */}
+                    {/* Provider Selector */}
                     <div className="space-y-3">
                         <Label>Redis Provider</Label>
                         <div className="grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => { setRedisType('self-hosted'); handleChange(); }}
+                                className={`p-4 rounded-lg border-2 text-left transition-all ${redisType === 'self-hosted'
+                                    ? 'border-primary bg-primary/5'
+                                    : 'border-muted hover:border-muted-foreground/30'
+                                    }`}
+                            >
+                                <div className="font-medium">Self-Hosted (Docker)</div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Your bundled Redis instance
+                                </p>
+                            </button>
                             <button
                                 type="button"
                                 onClick={() => { setRedisType('upstash'); handleChange(); }}
@@ -68,20 +81,7 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
                             >
                                 <div className="font-medium">Upstash (Managed)</div>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    Serverless Redis with built-in REST API. Zero config.
-                                </p>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => { setRedisType('self-hosted'); handleChange(); }}
-                                className={`p-4 rounded-lg border-2 text-left transition-all ${redisType === 'self-hosted'
-                                    ? 'border-primary bg-primary/5'
-                                    : 'border-muted hover:border-muted-foreground/30'
-                                    }`}
-                            >
-                                <div className="font-medium">Self-Hosted (BYO)</div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Your own Redis with our HTTP proxy.
+                                    Serverless cloud Redis
                                 </p>
                             </button>
                         </div>
@@ -118,28 +118,20 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
                     {/* Self-Hosted Path */}
                     {redisType === 'self-hosted' && (
                         <div className="space-y-4 p-4 rounded-lg bg-muted/30">
-                            <div className="p-3 rounded-md bg-blue-500/10 border border-blue-500/20 text-sm">
-                                <div className="font-medium text-blue-600 dark:text-blue-400 mb-1">
-                                    📦 Deploy serverless-redis-http (SRH)
+                            {redisUrl && redisToken && (
+                                <div className="flex items-start gap-2 p-3 rounded-md bg-blue-500/10 border border-blue-500/20 text-sm">
+                                    <Info className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+                                    <p className="text-muted-foreground text-xs">
+                                        Pre-configured from your Docker setup. Test the connection to verify.
+                                    </p>
                                 </div>
-                                <p className="text-muted-foreground text-xs mb-2">
-                                    SRH is a lightweight proxy that adds REST API to your Redis. Run it as a sidecar:
-                                </p>
-                                <pre className="text-xs bg-black/20 p-2 rounded overflow-x-auto">
-                                    {`docker run -d \\
-  -e SRH_MODE=env \\
-  -e SRH_TOKEN=your_secret_token \\
-  -e SRH_CONNECTION_STRING=redis://your-redis:6379 \\
-  -p 8079:80 \\
-  hiett/serverless-redis-http:latest`}
-                                </pre>
-                            </div>
+                            )}
 
                             <div className="space-y-2">
                                 <Label htmlFor="redis-url">SRH Proxy URL</Label>
                                 <Input
                                     id="redis-url"
-                                    placeholder="http://localhost:8079"
+                                    placeholder="http://redis-http:80"
                                     value={redisUrl}
                                     onChange={(e) => { setRedisUrl(e.target.value); handleChange(); }}
                                 />
@@ -149,7 +141,7 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
                                 <Input
                                     id="redis-token"
                                     type="password"
-                                    placeholder="The SRH_TOKEN you set above"
+                                    placeholder="Your REDIS_TOKEN from .env"
                                     value={redisToken}
                                     onChange={(e) => { setRedisToken(e.target.value); handleChange(); }}
                                 />

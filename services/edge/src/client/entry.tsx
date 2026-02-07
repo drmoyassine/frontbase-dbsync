@@ -33,11 +33,15 @@ function hydrateReactComponents() {
     console.log('🔄 React hydration starting...');
 
     // Find all elements marked for React hydration
-    const elements = document.querySelectorAll('[data-react-component]');
+    const elements = document.querySelectorAll('[data-react-component], [data-fb-hydrate="datatable"]');
 
     elements.forEach((element) => {
-        const componentName = element.getAttribute('data-react-component');
-        const propsAttr = element.getAttribute('data-react-props');
+        // Handle both new data-react-component and legacy data-fb-hydrate
+        const hydrateType = element.getAttribute('data-fb-hydrate');
+        const componentName = element.getAttribute('data-react-component') ||
+            (hydrateType === 'datatable' ? 'DataTable' : null);
+
+        const propsAttr = element.getAttribute('data-react-props') || element.getAttribute('data-fb-props');
 
         if (!componentName) return;
 
@@ -54,7 +58,7 @@ function hydrateReactComponents() {
             // Also try to get binding from __PAGE_DATA__
             const pageData = (window as any).__PAGE_DATA__;
             if (pageData?.layoutData?.content) {
-                const componentId = element.id || element.getAttribute('data-component-id');
+                const componentId = element.id || element.getAttribute('data-component-id') || element.getAttribute('data-fb-id');
                 if (componentId) {
                     const componentDef = findComponentById(pageData.layoutData.content, componentId);
                     // Check binding in root (correct) or props (legacy)

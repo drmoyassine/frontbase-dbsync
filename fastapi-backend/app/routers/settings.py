@@ -35,14 +35,24 @@ class RedisTestResult(BaseModel):
 async def get_redis_settings():
     """
     Get Redis cache settings.
+    
+    When no saved config exists, auto-detects Docker environment:
+    - If REDIS_TOKEN env var is set → defaults to self-hosted with local SRH proxy
+    - Otherwise → defaults to Upstash with empty credentials
     """
     settings = load_settings()
     redis = settings.get("redis", {})
     
+    # Auto-detect Docker defaults for fresh installs
+    docker_token = os.environ.get("REDIS_TOKEN")
+    default_type = "self-hosted" if docker_token else "upstash"
+    default_url = "http://redis-http:80" if docker_token else None
+    default_token = docker_token if docker_token else None
+    
     return RedisSettings(
-        redis_url=redis.get("redis_url"),
-        redis_token=redis.get("redis_token"),
-        redis_type=redis.get("redis_type", "upstash"),
+        redis_url=redis.get("redis_url", default_url),
+        redis_token=redis.get("redis_token", default_token),
+        redis_type=redis.get("redis_type", default_type),
         redis_enabled=redis.get("redis_enabled", False),
         cache_ttl_data=redis.get("cache_ttl_data", 60),
         cache_ttl_count=redis.get("cache_ttl_count", 300),

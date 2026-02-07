@@ -8,7 +8,7 @@
 
 import { hydrateRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createClientStore, VariableStore } from '../src/ssr/store';
+import { createClientStore, VariableStore } from '../ssr/store';
 
 // Global state
 let queryClient: QueryClient;
@@ -378,9 +378,36 @@ async function fetchRecordData(tableName: string, recordId: string): Promise<any
 
 function renderTableData(element: HTMLElement, data: any[], props: Record<string, unknown>) {
     const tbody = element.querySelector('tbody');
+    const thead = element.querySelector('thead');
     if (!tbody) return;
 
-    const columns = props.columns as Array<{ key: string; label: string }> || [];
+    // Extract columns from binding.columnOrder (string[]) or props.columns, or infer from data
+    const binding = props.binding as Record<string, unknown> | undefined;
+    const columnOrder = binding?.columnOrder as string[] | undefined;
+    let columns: Array<{ key: string; label: string }> = [];
+
+    if (columnOrder && columnOrder.length > 0) {
+        // Convert string array to column objects
+        columns = columnOrder.map(col => ({
+            key: col,
+            label: col.replace(/\./g, ' › ').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+        }));
+    } else if (props.columns && Array.isArray(props.columns)) {
+        columns = props.columns as Array<{ key: string; label: string }>;
+    } else if (data.length > 0) {
+        // Infer columns from first data row
+        columns = Object.keys(data[0]).map(key => ({
+            key,
+            label: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+        }));
+    }
+
+    // Update thead with actual column headers
+    if (thead && columns.length > 0) {
+        thead.innerHTML = `<tr>${columns.map(col =>
+            `<th style="padding:0.75rem 1rem;text-align:left;border-bottom:2px solid #e5e7eb;font-weight:600">${col.label}</th>`
+        ).join('')}</tr>`;
+    }
 
     if (data.length === 0) {
         tbody.innerHTML = `<tr><td colspan="${columns.length || 3}" style="text-align:center;padding:2rem;color:#6b7280">No data found</td></tr>`;

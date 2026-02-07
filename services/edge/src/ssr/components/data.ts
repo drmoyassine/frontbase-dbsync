@@ -208,7 +208,7 @@ function renderDataTable(id: string, props: Record<string, unknown>, propsJson: 
         ).join('')}</tr>`;
     }).join('');
 
-    // Use data-react-component for React hydration instead of data-fb-hydrate
+    // Use data-react-component for React hydration (entry.tsx looks for this)
     return `<div id="${id}" class="fb-datatable" data-react-component="DataTable" data-react-props="${escapeHtml(reactPropsJson)}" data-component-id="${id}">
         <div class="fb-datatable-container" style="overflow-x:auto;border:1px solid #e5e7eb;border-radius:0.5rem">
             <table style="width:100%;border-collapse:collapse">

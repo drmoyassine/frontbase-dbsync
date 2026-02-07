@@ -16,13 +16,10 @@ import type { DataTableProps, FilterConfig } from './types';
 import { getCellValue, renderCell, formatHeader } from './utils';
 import { SearchableSelect } from './SearchableSelect';
 import { SearchableMultiSelect } from './SearchableMultiSelect';
+import { useDataTableQuery } from './useDataTableQuery';
 
 export function DataTable({ binding, initialData = [], initialTotal = 0, className }: DataTableProps) {
-    // State
-    const [data, setData] = useState<any[]>(initialData);
-    const [totalCount, setTotalCount] = useState(initialTotal);
-    const [loading, setLoading] = useState(initialData.length === 0);
-    const [error, setError] = useState<string | null>(null);
+    // UI Control State (pagination, sorting, filtering)
     const [currentPage, setCurrentPage] = useState(binding.pagination?.page || 0);
     const [sortColumn, setSortColumn] = useState(binding.sorting?.column || null);
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(binding.sorting?.direction || 'asc');
@@ -33,12 +30,27 @@ export function DataTable({ binding, initialData = [], initialTotal = 0, classNa
     const [filterValues, setFilterValues] = useState<Record<string, any>>({});
     const [fetchedOptions, setFetchedOptions] = useState<Record<string, { label: string; value: string }[]>>({});
 
+    // Pagination config
+    const pageSize = binding.pagination?.pageSize || 20;
+
+    // React Query for data fetching with caching (per AGENTS.md Section 4.1)
+    const { data, total: totalCount, isLoading, error } = useDataTableQuery({
+        binding,
+        page: currentPage,
+        pageSize,
+        sortColumn,
+        sortDirection,
+        search: searchDebounce,
+        filters: filterValues,
+        initialData,
+        initialTotal,
+    });
+    const loading = isLoading;
+
     // Check if filters are enabled
     const filtersEnabled = (binding.frontendFilters && binding.frontendFilters.length > 0) ||
         binding.filtering?.filtersEnabled;
 
-    // Pagination config
-    const pageSize = binding.pagination?.pageSize || 20;
     const paginationEnabled = binding.pagination?.enabled !== false;
 
     // Get columns from binding or auto-detect
@@ -136,159 +148,12 @@ export function DataTable({ binding, initialData = [], initialTotal = 0, classNa
         return `${queryConfig.baseUrl}?${params.toString()}`;
     }, [binding, pageSize, sortColumn, sortDirection, columns, filterValues]);
 
-    // Fetch data from server
-    const fetchData = useCallback(async (page: number, sort?: string, sortDir?: string, search?: string, overrideFilters?: Record<string, any>) => {
-        try {
-            setLoading(true);
-            setError(null);
-
-            const queryConfig = binding.dataRequest?.queryConfig;
-
-            if (queryConfig?.useRpc) {
-                // Use RPC: frontbase_get_rows via /api/data/execute
-                const effectiveSortCol = sort || sortColumn || queryConfig.sortColumn || null;
-                const effectiveSortDir = sortDir || sortDirection || queryConfig.sortDirection || 'asc';
-
-                // Build filters from provided overrideFilters or current filterValues state
-                const effectiveFilterValues = overrideFilters !== undefined ? overrideFilters : filterValues;
-                const filters = Object.entries(effectiveFilterValues).map(([column, value]) => {
-                    const filterConfig = (binding.frontendFilters || queryConfig.frontendFilters || [])
-                        .find((f: any) => f.column === column);
-                    return {
-                        column,
-                        filterType: filterConfig?.filterType || 'text',
-                        value
-                    };
-                }).filter(f => f.value !== undefined && f.value !== null && f.value !== '');
-
-                // If search is active, use frontbase_search_rows instead
-                const rpcName = search ? 'frontbase_search_rows' : 'frontbase_get_rows';
-                const rpcUrl = (binding.dataRequest?.url || '').replace('frontbase_get_rows', rpcName);
-
-                // Build RPC body
-                const rpcBody: any = {
-                    table_name: queryConfig.tableName,
-                    columns: queryConfig.columns,
-                    joins: queryConfig.joins || [],
-                    page: page + 1, // RPC uses 1-based pages
-                    page_size: pageSize
-                };
-
-                if (search) {
-                    // Search mode
-                    rpcBody.search_query = search;
-                    rpcBody.search_cols = (queryConfig.searchColumns?.length || 0) > 0
-                        ? queryConfig.searchColumns
-                        : []; // RPC will auto-detect text columns
-                } else {
-                    // Normal mode with sorting
-                    rpcBody.sort_col = effectiveSortCol;
-                    rpcBody.sort_dir = effectiveSortDir;
-                }
-
-                // Always apply filters
-                rpcBody.filters = filters;
-
-                const response = await fetch('/api/data/execute', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        dataRequest: {
-                            ...binding.dataRequest,
-                            url: rpcUrl,
-                            method: 'POST',
-                            body: rpcBody
-                        }
-                    })
-                });
-
-                const result = await response.json();
-                if (result.success) {
-                    // RPC returns { rows: [...], total: N, page: N }
-                    const rows = result.data?.rows || result.data || [];
-                    setData(rows);
-
-                    // Total from RPC response
-                    const total = result.data?.total ?? result.total ?? rows.length;
-                    setTotalCount(total);
-                } else {
-                    setError(result.error || 'Failed to fetch data');
-                }
-            } else if (queryConfig?.baseUrl) {
-                // Legacy: Direct PostgREST queries (fallback)
-                const url = buildQueryUrl(page, sort, sortDir, search);
-                if (!url) return;
-
-                const response = await fetch('/api/data/execute', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        dataRequest: {
-                            ...binding.dataRequest,
-                            url: url,
-                            headers: {
-                                ...binding.dataRequest?.headers,
-                                'Prefer': 'count=exact'
-                            }
-                        }
-                    })
-                });
-
-                const result = await response.json();
-                if (result.success) {
-                    setData(result.data || []);
-                    if (typeof result.total === 'number') {
-                        setTotalCount(result.total);
-                    }
-                } else {
-                    setError(result.error || 'Failed to fetch data');
-                }
-            } else if (binding.dataRequest?.url) {
-                // Legacy: Use the pre-computed URL
-                const response = await fetch('/api/data/execute', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ dataRequest: binding.dataRequest })
-                });
-                const result = await response.json();
-                if (result.success) {
-                    const rows = result.data?.rows || result.data || [];
-                    setData(rows);
-                    setTotalCount(result.data?.total ?? rows.length);
-                } else {
-                    setError(result.error || 'Failed to fetch data');
-                }
-            } else if (binding.tableName) {
-                // Fallback to simple data API
-                const response = await fetch(`/api/data/${binding.tableName}`);
-                const result = await response.json();
-                if (result.success) {
-                    setData(result.data || []);
-                    setTotalCount(result.data?.length || 0);
-                } else {
-                    setError(result.error || 'Failed to fetch data');
-                }
-            }
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Unknown error');
-        } finally {
-            setLoading(false);
-        }
-    }, [binding, buildQueryUrl, pageSize, sortColumn, sortDirection, filterValues]);
-
-    // Initial fetch
-    React.useEffect(() => {
-        if (initialData.length > 0 || typeof window === 'undefined') return;
-        fetchData(currentPage, sortColumn || undefined, sortDirection, searchDebounce || undefined);
-    }, []);
-
-    // Fetch on page change
+    // Page change handler - useQuery auto-refetches when currentPage changes in query key
     const handlePageChange = useCallback((newPage: number) => {
         setCurrentPage(newPage);
-        fetchData(newPage, sortColumn || undefined, sortDirection, searchDebounce || undefined);
-    }, [fetchData, sortColumn, sortDirection, searchDebounce]);
+    }, []);
 
-    // Handle sort click
+    // Sort handler - useQuery auto-refetches when sortColumn/sortDirection change
     const handleSort = useCallback((column: string) => {
         if (!binding.sorting?.enabled) return;
 
@@ -300,20 +165,18 @@ export function DataTable({ binding, initialData = [], initialTotal = 0, classNa
         setSortColumn(column);
         setSortDirection(newDir);
         setCurrentPage(0);
-        fetchData(0, column, newDir, searchDebounce || undefined);
-    }, [binding.sorting?.enabled, sortColumn, sortDirection, fetchData, searchDebounce]);
+    }, [binding.sorting?.enabled, sortColumn, sortDirection]);
 
-    // Handle search with debounce
+    // Search debounce - useQuery auto-refetches when searchDebounce changes
     React.useEffect(() => {
         const timer = setTimeout(() => {
             if (searchDebounce !== searchQuery) {
                 setSearchDebounce(searchQuery);
                 setCurrentPage(0);
-                fetchData(0, sortColumn || undefined, sortDirection, searchQuery || undefined);
             }
         }, 300);
         return () => clearTimeout(timer);
-    }, [searchQuery]);
+    }, [searchQuery, searchDebounce]);
 
     // Fetch dynamic filter options (with cascading filter + search support)
     React.useEffect(() => {
@@ -466,8 +329,7 @@ export function DataTable({ binding, initialData = [], initialTotal = 0, classNa
                             }
                             setFilterValues(newFilterValues);
                             setCurrentPage(0);
-                            // Pass newFilterValues directly to avoid React state timing bug
-                            fetchData(0, sortColumn || undefined, sortDirection, searchDebounce || undefined, newFilterValues);
+                            // useQuery auto-refetches when filterValues changes in query key
                         };
 
                         return (
@@ -527,8 +389,7 @@ export function DataTable({ binding, initialData = [], initialTotal = 0, classNa
                             onClick={() => {
                                 setFilterValues({});
                                 setCurrentPage(0);
-                                // Pass empty filters directly to avoid React state timing bug
-                                fetchData(0, sortColumn || undefined, sortDirection, searchDebounce || undefined, {});
+                                // useQuery auto-refetches when filterValues changes
                             }}
                             className="self-end px-3 py-1.5 text-xs rounded border border-input hover:bg-muted"
                         >

@@ -25,6 +25,7 @@ export interface PricingProps {
     subtitle?: string;
     plans: PricingPlan[];
     showToggle?: boolean;
+    anchor?: string;
     hideOnMobile?: boolean;
     hideOnDesktop?: boolean;
 }

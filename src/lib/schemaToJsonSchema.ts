@@ -142,15 +142,20 @@ export function schemaToJsonSchema(
             format = undefined;
 
             switch (override.type) {
+                case 'text':
                 case 'string': jsonType = 'string'; break;
                 case 'textarea': jsonType = 'string'; rendererHint = 'textarea'; break;
                 case 'number': jsonType = 'number'; break;
-                case 'boolean': jsonType = 'boolean'; break;
+                case 'boolean':
+                case 'checkbox': jsonType = 'boolean'; break;
                 case 'date': jsonType = 'string'; format = 'date'; break;
+                case 'datetime': jsonType = 'string'; format = 'date-time'; break;
                 case 'email': jsonType = 'string'; format = 'email'; rendererHint = 'email'; break;
                 case 'phone': jsonType = 'string'; rendererHint = 'phone'; break;
+                case 'select':
                 case 'dropdown': jsonType = 'string'; rendererHint = 'dropdown'; break;
                 case 'multiselect': jsonType = 'array'; rendererHint = 'multiselect'; break;
+                case 'image': jsonType = 'string'; rendererHint = 'image'; break;
             }
         }
 

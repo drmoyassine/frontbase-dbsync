@@ -17,6 +17,7 @@ export interface FAQProps {
     title?: string;
     subtitle?: string;
     items: FAQItem[];
+    anchor?: string;
     hideOnMobile?: boolean;
     hideOnDesktop?: boolean;
 }

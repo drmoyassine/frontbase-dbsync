@@ -231,44 +231,58 @@ function renderDataTable(id: string, props: Record<string, unknown>, propsJson: 
 }
 
 function renderForm(id: string, props: Record<string, unknown>, childrenHtml: string, propsJson: string): string {
+    const binding = props.binding as Record<string, unknown> || {};
     const title = escapeHtml(String(props.title || 'Form'));
-    const mode = props.mode as string || 'create'; // create, edit
-    const tableName = props.tableName as string || props.table as string || '';
-    const fields = props.fields as Array<{ name: string; label: string; type: string }> || [];
+    const tableName = (props._tableName as string) || (binding.tableName as string) || props.tableName as string || props.table as string || '';
+    const dataSourceId = (props._dataSourceId as string) || (binding.dataSourceId as string) || props.dataSourceId as string || '';
+    const fieldOverrides = (props._fieldOverrides as Record<string, any>) || (binding.fieldOverrides as Record<string, any>) || props.fieldOverrides as Record<string, any> || {};
+    const fieldOrder = (props._fieldOrder as string[]) || (binding.fieldOrder as string[]) || props.fieldOrder as string[] || [];
+    const columns = (props._columns as any[]) || (binding.columns as any[]) || [];
+    const foreignKeys = (props._foreignKeys as any[]) || (binding.foreignKeys as any[]) || [];
 
-    // Render form fields or skeleton
-    const formFields = fields.length > 0
-        ? fields.map(field => `
-            <div class="fb-form-field" style="margin-bottom:1rem">
-                <label style="display:block;font-weight:500;margin-bottom:0.25rem">${escapeHtml(field.label)}</label>
-                <div class="fb-skeleton" style="height:40px;border-radius:0.375rem">&nbsp;</div>
-            </div>
-        `).join('')
-        : `
-            <div class="fb-form-field" style="margin-bottom:1rem">
-                <div class="fb-skeleton" style="height:16px;width:60px;margin-bottom:0.25rem">&nbsp;</div>
-                <div class="fb-skeleton" style="height:40px;border-radius:0.375rem">&nbsp;</div>
-            </div>
-            <div class="fb-form-field" style="margin-bottom:1rem">
-                <div class="fb-skeleton" style="height:16px;width:80px;margin-bottom:0.25rem">&nbsp;</div>
-                <div class="fb-skeleton" style="height:40px;border-radius:0.375rem">&nbsp;</div>
-            </div>
-        `;
+    // Build react props for hydration — include columns for client-side rendering
+    const reactProps = {
+        binding: {
+            ...binding,
+            columns,
+            foreignKeys,
+            tableName,
+            dataSourceId,
+            fieldOverrides,
+            fieldOrder,
+        },
+        tableName,
+        dataSourceId,
+        fieldOverrides,
+        fieldOrder,
+        title: props.title || '',
+        showCard: props.showCard !== false,
+    };
+    const reactPropsJson = JSON.stringify(reactProps).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 
-    const attrs = getCommonAttributes(id, 'fb-form', props, '', 'form', propsJson, `data-table="${escapeHtml(tableName)}" data-mode="${mode}"`);
-
-    return `<form ${attrs}>
-        ${title ? `<h3 style="margin:0 0 1.5rem 0;font-size:1.125rem;font-weight:600">${title}</h3>` : ''}
-        <div class="fb-form-fields fb-loading">
-            ${formFields}
-            ${childrenHtml}
+    // Generate skeleton fields (shown before React hydrates)
+    const skeletonFields = Array(3).fill(0).map(() => `
+        <div class="fb-form-field" style="margin-bottom:1rem">
+            <div class="fb-skeleton" style="height:16px;width:60px;margin-bottom:0.25rem">&nbsp;</div>
+            <div class="fb-skeleton" style="height:40px;border-radius:0.375rem">&nbsp;</div>
         </div>
-        <div class="fb-form-actions" style="display:flex;gap:0.75rem;margin-top:1.5rem">
-            <button type="submit" class="fb-skeleton" style="padding:0.5rem 1.5rem;border-radius:0.375rem;width:100px">&nbsp;</button>
-            <button type="button" class="fb-skeleton" style="padding:0.5rem 1rem;border-radius:0.375rem;width:80px">&nbsp;</button>
+    `).join('');
+
+    // Use data-react-component for React hydration (entry.tsx picks this up)
+    return `<div id="${id}" class="fb-form" data-react-component="Form" data-react-props="${escapeHtml(reactPropsJson)}" data-component-id="${id}">
+        <div class="fb-form-container" style="border:1px solid #e5e7eb;border-radius:0.5rem;padding:1.5rem">
+            ${title ? `<h3 style="margin:0 0 1.5rem 0;font-size:1.125rem;font-weight:600">${title}</h3>` : ''}
+            <div class="fb-form-fields fb-loading">
+                ${skeletonFields}
+            </div>
+            <div class="fb-form-actions" style="display:flex;gap:0.75rem;margin-top:1.5rem">
+                <button type="submit" class="fb-skeleton" style="padding:0.5rem 1.5rem;border-radius:0.375rem;width:100px">&nbsp;</button>
+                <button type="button" class="fb-skeleton" style="padding:0.5rem 1rem;border-radius:0.375rem;width:80px">&nbsp;</button>
+            </div>
         </div>
-    </form>`;
+    </div>`;
 }
+
 
 function renderInfoList(id: string, props: Record<string, unknown>, propsJson: string): string {
     const title = escapeHtml(String(props.title || ''));

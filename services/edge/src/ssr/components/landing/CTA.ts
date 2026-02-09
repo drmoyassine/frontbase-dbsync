@@ -16,6 +16,7 @@ export interface CTAProps {
     secondaryCtaText?: string;
     secondaryCtaLink?: string;
     background?: string;
+    anchor?: string;
     hideOnMobile?: boolean;
     hideOnDesktop?: boolean;
 }

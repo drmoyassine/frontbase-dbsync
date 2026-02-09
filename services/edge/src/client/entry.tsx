@@ -5,10 +5,11 @@
  * Includes QueryClientProvider for @frontbase/datatable caching.
  */
 
-import { hydrateRoot } from 'react-dom/client';
+import { hydrateRoot, createRoot } from 'react-dom/client';
 import { StrictMode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DataTable } from '../components/datatable';
+import { Form } from '../components/form/Form';
 import './globals.css';
 
 // Create QueryClient with sensible defaults for SSR hydration
@@ -26,6 +27,8 @@ const queryClient = new QueryClient({
 const components: Record<string, React.ComponentType<any>> = {
     DataTable,
     datatable: DataTable, // lowercase alias
+    Form,
+    form: Form, // lowercase alias
 };
 
 // Hydrate all React components
@@ -33,13 +36,13 @@ function hydrateReactComponents() {
     console.log('🔄 React hydration starting...');
 
     // Find all elements marked for React hydration
-    const elements = document.querySelectorAll('[data-react-component], [data-fb-hydrate="datatable"]');
+    const elements = document.querySelectorAll('[data-react-component], [data-fb-hydrate="datatable"], [data-fb-hydrate="form"]');
 
     elements.forEach((element) => {
         // Handle both new data-react-component and legacy data-fb-hydrate
         const hydrateType = element.getAttribute('data-fb-hydrate');
         const componentName = element.getAttribute('data-react-component') ||
-            (hydrateType === 'datatable' ? 'DataTable' : null);
+            (hydrateType === 'datatable' ? 'DataTable' : hydrateType === 'form' ? 'Form' : null);
 
         const propsAttr = element.getAttribute('data-react-props') || element.getAttribute('data-fb-props');
 
@@ -71,15 +74,24 @@ function hydrateReactComponents() {
 
             console.log(`[React Hydrate] Hydrating ${componentName}`, props);
 
-            // Wrap in QueryClientProvider for React Query caching support
-            hydrateRoot(
-                element,
+            const reactTree = (
                 <StrictMode>
                     <QueryClientProvider client={queryClient}>
                         <Component {...props} />
                     </QueryClientProvider>
                 </StrictMode>
             );
+
+            // Form uses createRoot (SSR is a skeleton placeholder, not matching client)
+            // DataTable uses hydrateRoot (SSR matches client render)
+            if (componentName === 'Form' || componentName === 'form') {
+                // Clear SSR skeleton before mounting
+                element.innerHTML = '';
+                const root = createRoot(element);
+                root.render(reactTree);
+            } else {
+                hydrateRoot(element, reactTree);
+            }
         } catch (err) {
             console.error(`[React Hydrate] Failed to hydrate ${componentName}:`, err);
         }

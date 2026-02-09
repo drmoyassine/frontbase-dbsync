@@ -82,11 +82,23 @@ export const DataRequestSchema = z.object({
 export type DataRequest = z.infer<typeof DataRequestSchema>;
 
 export const ComponentBindingSchema = z.object({
-    componentId: z.string(),
+    componentId: z.string().nullish(),
     datasourceId: z.string().nullish(),
     tableName: z.string().nullish(),
-    columns: z.array(z.string()).nullish(),
-    columnOrder: z.array(z.string()).nullish(), // Added for React DataTable support
+    // columns can be string[] (column names) or object[] (enriched schema from publish)
+    columns: z.union([
+        z.array(z.string()),
+        z.array(z.object({
+            name: z.string(),
+            type: z.string(),
+            nullable: z.boolean().optional(),
+            primary_key: z.boolean().optional(),
+            default: z.any().optional(),
+            foreign_key_table: z.string().nullish(),
+            foreign_key_column: z.string().nullish(),
+        }).passthrough())
+    ]).nullish(),
+    columnOrder: z.array(z.string()).nullish(),
     columnOverrides: z.record(z.string(), ColumnOverrideSchema).nullish(),
     filters: z.record(z.string(), z.unknown()).nullish(),
     primaryKey: z.string().nullish(),
@@ -94,14 +106,18 @@ export const ComponentBindingSchema = z.object({
         column: z.string(),
         referencedTable: z.string(),
         referencedColumn: z.string(),
-    })).nullish(),
-    dataRequest: DataRequestSchema.nullish(),  // Pre-computed HTTP request
+    }).passthrough()).nullish(),
+    dataRequest: DataRequestSchema.nullish(),
+    // Form-specific fields
+    fieldOverrides: z.record(z.string(), z.unknown()).nullish(),
+    fieldOrder: z.array(z.string()).nullish(),
+    dataSourceId: z.string().nullish(),  // camelCase alias
     // Dynamic feature configuration (for DataTable server-side features)
     frontendFilters: z.array(z.record(z.string(), z.unknown())).nullish(),
     sorting: z.record(z.string(), z.unknown()).nullish(),
     pagination: z.record(z.string(), z.unknown()).nullish(),
     filtering: z.record(z.string(), z.unknown()).nullish(),
-});
+}).passthrough();
 
 export type ComponentBinding = z.infer<typeof ComponentBindingSchema>;
 

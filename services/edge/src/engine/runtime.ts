@@ -81,7 +81,9 @@ export async function executeWorkflow(
             const inputs: Record<string, any> = {};
             for (const edge of incomingEdges) {
                 const sourceOutputs = context.nodeOutputs[edge.source] || {};
-                inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
+                if (edge.targetInput && edge.sourceOutput) {
+                    inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
+                }
             }
 
             // Merge with workflow parameters for trigger nodes
@@ -210,7 +212,9 @@ export async function executeSingleNode(
             const inputs: Record<string, any> = {};
             for (const edge of incomingEdges) {
                 const sourceOutputs = context.nodeOutputs[edge.source] || {};
-                inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
+                if (edge.targetInput && edge.sourceOutput) {
+                    inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
+                }
             }
 
             // Merge workflow parameters for trigger nodes
@@ -445,10 +449,11 @@ async function executeHttpRequest(
     node: WorkflowNode,
     inputs: Record<string, any>
 ): Promise<Record<string, any>> {
-    const url = inputs.url || node.inputs.find(i => i.name === 'url')?.value;
-    const method = inputs.method || node.inputs.find(i => i.name === 'method')?.value || 'GET';
-    const headers = inputs.headers || node.inputs.find(i => i.name === 'headers')?.value || {};
-    const body = inputs.body || node.inputs.find(i => i.name === 'body')?.value;
+    const nodeInputs = node.inputs || [];
+    const url = inputs.url || nodeInputs.find(i => i.name === 'url')?.value;
+    const method = inputs.method || nodeInputs.find(i => i.name === 'method')?.value || 'GET';
+    const headers = inputs.headers || nodeInputs.find(i => i.name === 'headers')?.value || {};
+    const body = inputs.body || nodeInputs.find(i => i.name === 'body')?.value;
 
     const response = await fetch(url, {
         method,
@@ -472,7 +477,7 @@ function executeTransform(
     node: WorkflowNode,
     inputs: Record<string, any>
 ): Record<string, any> {
-    const expression = node.inputs.find(i => i.name === 'expression')?.value;
+    const expression = (node.inputs || []).find(i => i.name === 'expression')?.value;
 
     if (expression && typeof expression === 'string') {
         try {
@@ -494,7 +499,7 @@ function executeCondition(
     node: WorkflowNode,
     inputs: Record<string, any>
 ): Record<string, any> {
-    const condition = node.inputs.find(i => i.name === 'condition')?.value;
+    const condition = (node.inputs || []).find(i => i.name === 'condition')?.value;
     let result = false;
 
     if (condition && typeof condition === 'string') {

@@ -26,6 +26,7 @@ export interface LogoCloudProps {
     speed?: number;
     pauseOnHover?: boolean;
     grayscale?: boolean;
+    anchor?: string;
 }
 
 const SIZE_MAP: Record<string, { height: string; fontSize: string }> = {

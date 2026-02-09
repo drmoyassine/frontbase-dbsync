@@ -81,11 +81,12 @@ class DataRequest(BaseModel):
 
 class ComponentBinding(BaseModel):
     """Data binding for data-driven components"""
-    component_id: str = Field(..., alias="componentId")
+    component_id: Optional[str] = Field(None, alias="componentId")
     datasource_id: Optional[str] = Field(None, alias="datasourceId")
     table_name: Optional[str] = Field(None, alias="tableName")
-    columns: Optional[List[str]] = None
-    column_order: Optional[List[str]] = Field(None, alias="columnOrder")  # Added for React DataTable support
+    # columns can be List[str] (column names) or List[dict] (enriched schema from publish)
+    columns: Optional[List[Any]] = None
+    column_order: Optional[List[str]] = Field(None, alias="columnOrder")
     column_overrides: Optional[Dict[str, ColumnOverride]] = Field(None, alias="columnOverrides")
     
     # Dynamic feature configuration
@@ -96,11 +97,17 @@ class ComponentBinding(BaseModel):
     
     filters: Optional[Dict[str, Any]] = None
     primary_key: Optional[str] = Field(None, alias="primaryKey")
-    foreign_keys: Optional[List[ForeignKey]] = Field(None, alias="foreignKeys")
-    data_request: Optional[DataRequest] = Field(None, alias="dataRequest")  # Pre-computed HTTP request
+    foreign_keys: Optional[List[Any]] = Field(None, alias="foreignKeys")
+    data_request: Optional[DataRequest] = Field(None, alias="dataRequest")
+    
+    # Form-specific fields (baked at publish time)
+    field_overrides: Optional[Dict[str, Any]] = Field(None, alias="fieldOverrides")
+    field_order: Optional[List[str]] = Field(None, alias="fieldOrder")
+    data_source_id: Optional[str] = Field(None, alias="dataSourceId")
     
     class Config:
         populate_by_name = True
+        extra = "allow"
 
 
 # =============================================================================

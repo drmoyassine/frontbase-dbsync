@@ -104,6 +104,8 @@ The Edge Engine has no knowledge of:
 | **Modifying SQLAlchemy models without Alembic migration** | **Causes production schema drift** |
 | **Editing deployed Alembic migrations** | **Create a NEW migration instead** |
 | **Hardcoded aesthetic styles in Builder renderers** | **Use `stylesData.values` defaults instead** |
+| **Enriching publish data without updating both schemas** | **Pydantic AND Zod must accept the enriched shape** |
+| **Assuming all components store config in `binding`** | **Form/InfoList store in `props`; always check both** |
 
 ---
 
@@ -218,12 +220,16 @@ stylesData: {
 |------|----------|-------------|
 | 1 | `normalize_binding_location()` | Move `props.binding` → `component.binding` |
 | 2 | `map_styles_schema()` | Convert `stylesData` → `styles` (preserving `viewportOverrides`) |
-| 3 | `enrich_binding_with_data_request()` | Pre-compute HTTP request spec |
+| 3a | `enrich_binding_with_data_request()` | Pre-compute HTTP request spec |
+| 3b | Form/InfoList column baking | Bake `columns`, `foreignKeys`, `fieldOverrides`, `fieldOrder` into binding AND `props._columns` (Zod-safe) |
 | 4 | `collect_icons_from_component()` | Gather all icon names |
 | 5 | `fetch_icons_batch()` | Pre-render SVGs from CDN |
 | 6 | `inject_icon_svg()` | Embed `iconSvg` in props |
 | 7 | `bundle_css_for_page_minified()` | Tree-shake CSS, generate bundle |
 | 8 | `remove_nulls()` | Clean for Zod validation |
+
+> [!IMPORTANT]
+> **Step 3b dual-path**: Enriched data is stored in BOTH `component.binding` (for edge components that read binding) AND `component.props._columns` (as a Zod-safe fallback via `z.record`). The `renderForm` SSR function reads `_columns` from props and reconstructs the binding for React hydration.
 
 **CSS Bundling (Tree-Shaken)**:
 - CSS Registry: `app/services/css_registry.py` (single source of truth)
@@ -275,6 +281,8 @@ Both files explicitly state: *"These mirror the [Zod/Pydantic] schemas in [Hono/
 | **Nullish Matching** | Zod `.nullish()` = Pydantic `Optional[...] = None` |
 | **No Secrets** | Only `anonKey` and `secretEnvVar` name published |
 | **Validate Contracts** | Run `validate_contract.py` before releases |
+| **Enrichment Safety** | When baking new data shapes at publish time (e.g., column objects vs column strings), update both `ComponentBinding` (Pydantic) and `ComponentBindingSchema` (Zod) to accept the enriched types. Use `List[Any]` / `z.union()` or `extra="allow"` / `.passthrough()` |
+| **Dual-Path Data** | For data that may be stripped by strict schema validation, also store in `component.props` (which uses `z.record(z.string(), z.unknown())` — passes through both Pydantic and Zod without stripping) |
 
 ### 5.4 Contract Validation Scripts
 
@@ -371,6 +379,29 @@ Example workflow:
 ### 7.3 Icon Pre-rendering
 
 Icons are fetched at publish time, NOT at Edge runtime. This eliminates CDN latency for page renders.
+
+### 7.4 SSR Hydration Strategy
+
+The edge uses two different React mounting strategies depending on the component type:
+
+| Component | Strategy | Reason |
+|-----------|----------|--------|
+| **DataTable** | `hydrateRoot` | SSR output matches client render |
+| **Form** | `createRoot` | SSR is a skeleton placeholder; client renders real fields |
+
+> [!WARNING]
+> **Never use `hydrateRoot` for components whose SSR is intentionally a placeholder/skeleton.** This causes a hydration mismatch error. Use `createRoot` instead — it clears the skeleton children and does a fresh render.
+
+Implemented in `services/edge/src/client/entry.tsx`:
+```typescript
+if (componentName === 'Form' || componentName === 'form') {
+    element.innerHTML = ''; // Clear SSR skeleton
+    const root = createRoot(element);
+    root.render(reactTree);
+} else {
+    hydrateRoot(element, reactTree);
+}
+```
 
 ---
 
@@ -526,4 +557,4 @@ For detailed implementation patterns, see:
 
 ---
 
-*Last Updated: 2026-01-31*
+*Last Updated: 2026-02-10*

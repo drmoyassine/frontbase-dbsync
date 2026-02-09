@@ -260,10 +260,10 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 ### Sprint 6 Tasks
 
 - [ ] **Automation Engine Enhancement**
-  - [ ] Add new Dafthunk node types (HTTP Request, Transform, Condition)
-  - [ ] Implement workflow scheduling (cron-based triggers)
-  - [ ] Add workflow versioning and history
-  - [ ] Create workflow testing/debugging UI
+  - [x] Add new Dafthunk node types (HTTP Request, Transform, Condition)
+  - [ ] Implement workflow scheduling (cron-based triggers) - _Schema supported, runner pending_
+  - [ ] Add workflow versioning and history - _Version increment implemented, history storage pending_
+  - [x] Create workflow testing/debugging UI - _Backend API support added_
 - [ ] **Edge Deployment**
   - [ ] Add `wrangler.toml` for Cloudflare Workers
   - [ ] Create deployment scripts for one-click deploy
@@ -278,7 +278,7 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 
 ### Sprint 6 Acceptance Criteria
 
-- [ ] New automation nodes work in workflow editor
+- [x] New automation nodes work in workflow editor
 - [ ] Workflows can be scheduled with cron triggers
 - [ ] One-click deploy to Cloudflare Workers works
 - [ ] Deployment status visible in Builder UI

@@ -110,6 +110,64 @@ def convert_component(c: dict, datasources_list: list = None) -> dict:
                 if 'columns' in result['binding'] and result['binding']['columns']:
                     result['binding']['columnOrder'] = result['binding']['columns']
 
+    # Step 3b: Bake column schema into Form/InfoList bindings
+    comp_type = result.get('type', '')
+    if comp_type in ('Form', 'InfoList'):
+        # Form/InfoList may store config as top-level props, not inside binding
+        binding = result.get('binding', {})
+        props = result.get('props', {})
+        
+        # Collect tableName and datasource ID from binding OR top-level props
+        table_name = (binding.get('tableName') or binding.get('table_name')
+                      or props.get('tableName') or props.get('table_name') 
+                      or result.get('tableName'))
+        ds_id = (binding.get('datasourceId') or binding.get('datasource_id') 
+                 or binding.get('dataSourceId')
+                 or props.get('datasourceId') or props.get('datasource_id')
+                 or props.get('dataSourceId')
+                 or result.get('dataSourceId'))
+        
+        if table_name and ds_id:
+            from app.services.data_request import get_table_columns, get_table_foreign_keys
+            columns = get_table_columns(ds_id, table_name)
+            foreign_keys = get_table_foreign_keys(ds_id, table_name)
+            
+            # Ensure binding exists at root level
+            if 'binding' not in result:
+                result['binding'] = {}
+            
+            # Bake schema fields into the binding
+            result['binding']['tableName'] = table_name
+            result['binding']['dataSourceId'] = ds_id
+            
+            # Carry over fieldOverrides and fieldOrder from props → binding
+            field_overrides = (binding.get('fieldOverrides') or props.get('fieldOverrides') or {})
+            field_order = (binding.get('fieldOrder') or props.get('fieldOrder') or [])
+            if field_overrides:
+                result['binding']['fieldOverrides'] = field_overrides
+            if field_order:
+                result['binding']['fieldOrder'] = field_order
+            
+            if columns:
+                result['binding']['columns'] = columns
+                print(f"[convert_component] Baked {len(columns)} columns into {comp_type} binding for {table_name}")
+            if foreign_keys:
+                result['binding']['foreignKeys'] = foreign_keys
+                print(f"[convert_component] Baked {len(foreign_keys)} FKs into {comp_type} binding for {table_name}")
+            
+            # ALSO bake into props (z.record passes through Zod without stripping)
+            if 'props' not in result:
+                result['props'] = {}
+            result['props']['_columns'] = columns or []
+            result['props']['_foreignKeys'] = foreign_keys or []
+            result['props']['_tableName'] = table_name
+            result['props']['_dataSourceId'] = ds_id
+            result['props']['_fieldOverrides'] = field_overrides
+            result['props']['_fieldOrder'] = field_order
+            print(f"[convert_component] Also baked columns into {comp_type} props (Zod-safe)")
+        else:
+            print(f"[convert_component] {comp_type} has no tableName({table_name}) or dsId({ds_id}), skipping enrichment")
+
     # Step 4: Process children recursively
     result = process_component_children(
         result,

@@ -25,7 +25,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, MoreHorizontal, Eye, Edit, Copy, Trash2, FileText, RotateCcw, Trash, CheckSquare, Square } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Eye, Edit, Copy, Trash2, FileText, RotateCcw, Trash, CheckSquare, Square, Download } from 'lucide-react';
+import { PageExportEnvelope } from '@/types/page-export';
 import { toast } from 'sonner';
 import { CreatePageDialog } from './CreatePageDialog';
 
@@ -134,6 +135,35 @@ export const PagesPanel: React.FC = () => {
     } catch (error) {
       toast.error('Failed to duplicate page');
     }
+  };
+
+  const handleExportPage = (page: any) => {
+    const envelope: PageExportEnvelope = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      page: {
+        name: page.name,
+        slug: page.slug,
+        title: page.title,
+        description: page.description,
+        keywords: page.keywords,
+        isHomepage: page.isHomepage ?? false,
+        containerStyles: page.containerStyles,
+        layoutData: page.layoutData,
+      },
+    };
+
+    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${page.slug}.frontbase.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast.success('Page exported successfully!');
   };
 
   // Multiselect handlers
@@ -376,6 +406,10 @@ export const PagesPanel: React.FC = () => {
                         <DropdownMenuItem onClick={() => handleDuplicatePage(page)}>
                           <Copy className="mr-2 h-4 w-4" />
                           Duplicate
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleExportPage(page)}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Export
                         </DropdownMenuItem>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>

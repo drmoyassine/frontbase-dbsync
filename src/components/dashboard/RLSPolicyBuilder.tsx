@@ -100,11 +100,11 @@ export function RLSPolicyBuilder({
     const [rawCheck, setRawCheck] = useState(existingExpressions?.check || '');
 
     // Fetch global schema if not already loaded (for FK detection)
+    // Note: fetchGlobalSchema() internally skips if already loaded
     useEffect(() => {
-        if (!globalSchema?.foreign_keys?.length) {
-            fetchGlobalSchema();
-        }
-    }, [globalSchema, fetchGlobalSchema]);
+        fetchGlobalSchema();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Migration: Convert legacy contactTypes/permissionLevels to actor conditions if needed
     useEffect(() => {

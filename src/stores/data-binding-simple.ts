@@ -8,6 +8,11 @@ import { ComponentDataBinding } from '@/hooks/data/useSimpleData';
 // Import dashboard store for connection/table state synchronization
 let getDashboardState: () => any;
 
+// Module-level in-flight promise dedup — prevents concurrent calls from
+// bypassing guards while a previous call is still resolving
+let _initPromise: Promise<void> | null = null;
+let _schemaPromise: Promise<void> | null = null;
+
 interface DataBindingState {
   // Connection status (derived from dashboard store)
   connected: boolean;
@@ -44,7 +49,7 @@ interface DataBindingState {
   initialize: () => void;
   syncConnectionStatus: () => Promise<void>;
   fetchTables: () => Promise<void>;
-  fetchGlobalSchema: () => Promise<void>;
+  fetchGlobalSchema: (force?: boolean) => Promise<void>;
   loadTableSchema: (tableName: string) => Promise<TableSchema | null>;
   queryData: (componentId: string, binding: ComponentDataBinding) => Promise<any>;
   setComponentBinding: (componentId: string, binding: ComponentDataBinding) => void;
@@ -71,20 +76,26 @@ export const useDataBindingStore = create<DataBindingState>()(
       counts: new Map(),
 
       // Initialize by syncing connection status and fetching tables
+      // Uses module-level promise dedup so N concurrent callers share one flight
       initialize: () => {
-        const initializeAsync = async () => {
-          await get().syncConnectionStatus();
-          if (get().connected) {
-            await get().fetchTables();
-          }
-        };
+        if (_initPromise) return; // Already in-flight
 
-        initializeAsync().catch(error => {
-          debug.error('DATA_BINDING', 'Initialization failed:', error);
-        });
+        _initPromise = (async () => {
+          try {
+            await get().syncConnectionStatus();
+            if (get().connected) {
+              await get().fetchTables();
+            }
+          } catch (error) {
+            debug.error('DATA_BINDING', 'Initialization failed:', error);
+          } finally {
+            _initPromise = null;
+          }
+        })();
       },
 
       // Sync only connection status from dashboard store
+      // Skips set() if value hasn't changed (avoids unnecessary subscriber re-renders)
       syncConnectionStatus: async () => {
         try {
           // Use dynamic import to avoid circular dependency
@@ -98,38 +109,56 @@ export const useDataBindingStore = create<DataBindingState>()(
           const connected = dashboardState.connections.supabase?.connected || false;
           const connectionError = connected ? null : 'Not connected to database';
 
-          set({
-            connected,
-            connectionError
-          });
-
-          debug.critical('DATA_BINDING', 'Synced connection status:', { connected });
+          // Only set() if value actually changed — prevents triggering subscriber re-renders
+          const current = get();
+          if (current.connected !== connected || current.connectionError !== connectionError) {
+            set({ connected, connectionError });
+            debug.critical('DATA_BINDING', 'Synced connection status:', { connected });
+          }
         } catch (error) {
           debug.error('DATA_BINDING', 'Failed to sync connection status:', error);
         }
       },
 
-      fetchGlobalSchema: async () => {
-        try {
-          const result = await databaseApi.advancedQuery('frontbase_get_schema_info', {});
-          const schemaData = result.data || result; // Handle {data: {...}} wrapper or direct
-
-          if (result.success && schemaData.tables) {
-            set({
-              globalSchema: {
-                tables: schemaData.tables,
-                foreign_keys: schemaData.foreign_keys || [], // Fallback for manual schema
-                definitions: schemaData.definitions || {}
-              }
-            });
-            console.log('[DATA_BINDING] Global Schema Loaded:', {
-              tables: schemaData.tables.length,
-              fks: (schemaData.foreign_keys || []).length
-            });
-          }
-        } catch (error) {
-          console.error('Failed to fetch global schema:', error);
+      fetchGlobalSchema: async (force = false) => {
+        // Skip if already loaded (prevents infinite re-fetch loops)
+        const current = get().globalSchema;
+        if (!force && current?.tables?.length > 0) {
+          return;
         }
+
+        // In-flight dedup: if a fetch is already running, wait for it
+        if (_schemaPromise) {
+          await _schemaPromise;
+          return;
+        }
+
+        _schemaPromise = (async () => {
+          try {
+            const result = await databaseApi.advancedQuery('frontbase_get_schema_info', {});
+            const schemaData = result.data || result; // Handle {data: {...}} wrapper or direct
+
+            if (result.success && schemaData.tables) {
+              set({
+                globalSchema: {
+                  tables: schemaData.tables,
+                  foreign_keys: schemaData.foreign_keys || [], // Fallback for manual schema
+                  definitions: schemaData.definitions || {}
+                }
+              });
+              console.log('[DATA_BINDING] Global Schema Loaded:', {
+                tables: schemaData.tables.length,
+                fks: (schemaData.foreign_keys || []).length
+              });
+            }
+          } catch (error) {
+            console.error('Failed to fetch global schema:', error);
+          } finally {
+            _schemaPromise = null;
+          }
+        })();
+
+        await _schemaPromise;
       },
 
       // Fetch tables from API (owns this responsibility)

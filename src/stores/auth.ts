@@ -64,6 +64,9 @@ const getApiBase = (): string => {
 
 const API_BASE = getApiBase();
 
+// Module-level dedup for checkAuth — App.tsx and ProtectedRoute.tsx both call it on mount
+let _checkAuthPromise: Promise<void> | null = null;
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -147,21 +150,33 @@ export const useAuthStore = create<AuthState>()(
       },
 
       checkAuth: async () => {
-        set({ isLoading: true });
-        try {
-          const response = await fetch(`${API_BASE}/api/auth/me`, {
-            credentials: 'include',
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            set({ user: data.user, isAuthenticated: true, isLoading: false });
-          } else {
-            set({ user: null, isAuthenticated: false, isLoading: false });
-          }
-        } catch {
-          set({ user: null, isAuthenticated: false, isLoading: false });
+        // Dedup: if a check is already in-flight, wait for it
+        if (_checkAuthPromise) {
+          await _checkAuthPromise;
+          return;
         }
+
+        _checkAuthPromise = (async () => {
+          set({ isLoading: true });
+          try {
+            const response = await fetch(`${API_BASE}/api/auth/me`, {
+              credentials: 'include',
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              set({ user: data.user, isAuthenticated: true, isLoading: false });
+            } else {
+              set({ user: null, isAuthenticated: false, isLoading: false });
+            }
+          } catch {
+            set({ user: null, isAuthenticated: false, isLoading: false });
+          } finally {
+            _checkAuthPromise = null;
+          }
+        })();
+
+        await _checkAuthPromise;
       },
 
       clearError: () => set({ error: null }),

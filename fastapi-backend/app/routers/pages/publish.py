@@ -117,15 +117,18 @@ def convert_component(c: dict, datasources_list: list = None) -> dict:
         binding = result.get('binding', {})
         props = result.get('props', {})
         
-        # Collect tableName and datasource ID from binding OR top-level props
-        table_name = (binding.get('tableName') or binding.get('table_name')
-                      or props.get('tableName') or props.get('table_name') 
-                      or result.get('tableName'))
-        ds_id = (binding.get('datasourceId') or binding.get('datasource_id') 
-                 or binding.get('dataSourceId')
-                 or props.get('datasourceId') or props.get('datasource_id')
-                 or props.get('dataSourceId')
-                 or result.get('dataSourceId'))
+        # Collect tableName and datasource ID — props first (fresh from builder),
+        # then binding (may be stale from previous publish)
+        table_name = (props.get('tableName') or props.get('table_name')
+                      or result.get('tableName')
+                      or binding.get('tableName') or binding.get('table_name'))
+        ds_id = (props.get('dataSourceId') or props.get('datasourceId') 
+                 or props.get('datasource_id')
+                 or result.get('dataSourceId')
+                 or binding.get('dataSourceId') or binding.get('datasourceId') 
+                 or binding.get('datasource_id'))
+        
+        print(f"[convert_component] {comp_type} lookup: props.tableName={props.get('tableName')}, binding.tableName={binding.get('tableName')}, resolved={table_name}")
         
         if table_name and ds_id:
             from app.services.data_request import get_table_columns, get_table_foreign_keys
@@ -152,6 +155,29 @@ def convert_component(c: dict, datasources_list: list = None) -> dict:
                 result['binding']['columns'] = columns
                 print(f"[convert_component] Baked {len(columns)} columns into {comp_type} binding for {table_name}")
             if foreign_keys:
+                # Normalize FK format: get_table_foreign_keys returns
+                # {constrained_columns: [...], referred_table, referred_columns: [...]}
+                # Edge Zod expects {column, referencedTable, referencedColumn}
+                normalized_fks = []
+                for fk in foreign_keys:
+                    if 'constrained_columns' in fk:
+                        # Convert from SQLAlchemy format to edge format
+                        for col, ref_col in zip(
+                            fk.get('constrained_columns', []),
+                            fk.get('referred_columns', [])
+                        ):
+                            normalized_fks.append({
+                                'column': col,
+                                'referencedTable': fk.get('referred_table', ''),
+                                'referencedColumn': ref_col,
+                            })
+                    elif 'column' in fk:
+                        # Already in edge format
+                        normalized_fks.append(fk)
+                    else:
+                        normalized_fks.append(fk)
+                
+                foreign_keys = normalized_fks
                 result['binding']['foreignKeys'] = foreign_keys
                 print(f"[convert_component] Baked {len(foreign_keys)} FKs into {comp_type} binding for {table_name}")
             
@@ -373,6 +399,7 @@ async def publish_page(page_id: str):
                     "version": result.get("version")
                 }
             else:
+                print(f"[Publish] Edge import FAILED: status={response.status_code}, body={response.text[:500]}")
                 return {
                     "success": False,
                     "error": f"Edge import failed: {response.status_code}",

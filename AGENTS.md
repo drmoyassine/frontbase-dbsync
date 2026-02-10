@@ -106,6 +106,10 @@ The Edge Engine has no knowledge of:
 | **Hardcoded aesthetic styles in Builder renderers** | **Use `stylesData.values` defaults instead** |
 | **Enriching publish data without updating both schemas** | **Pydantic AND Zod must accept the enriched shape** |
 | **Assuming all components store config in `binding`** | **Form/InfoList store in `props`; always check both** |
+| **Passing raw SQLAlchemy data to edge without normalization** | **FK format (`constrained_columns`) differs from edge format (`column`/`referencedTable`)** |
+| **Using default `extra='ignore'` (Pydantic) or `z.object()` (Zod) on publish schemas** | **Silently strips enriched fields. Use `extra='allow'` / `.passthrough()` for schemas that carry enriched data** |
+| **Zustand store action called by multiple components without in-flight dedup** | **Causes N×N re-render cascades. Use module-level promise dedup (`let _promise = null`) for any store action that does `set()` and is called from `useEffect` in multiple components** |
+| **Putting Zustand state in `useEffect` deps when it triggers `set()` on that same state** | **Creates infinite loop. Remove from deps array or add early-return guard inside the action** |
 
 ---
 
@@ -127,6 +131,26 @@ const { data, isLoading } = useQuery({
   staleTime: 5 * 60 * 1000, // 5 min cache
 });
 ```
+
+**Store Init Dedup Pattern** (required for any Zustand action called from multiple components):
+```typescript
+// Module-level — outside the store
+let _initPromise: Promise<void> | null = null;
+
+// Inside the store
+initialize: () => {
+  if (_initPromise) return; // Already in-flight
+  _initPromise = (async () => {
+    try {
+      // ... do work, call set() ...
+    } finally {
+      _initPromise = null;
+    }
+  })();
+},
+```
+
+> **Rule**: Any async Zustand action that (a) calls `set()` and (b) is called from `useEffect` in 2+ components **MUST** use this module-level promise dedup pattern. Additionally, `set()` calls should check if the value actually changed before writing (e.g., `if (current.x !== newX) set({x: newX})`), to avoid triggering subscriber re-renders on no-op updates.
 
 ### 4.2 Component System (Builder)
 
@@ -283,6 +307,9 @@ Both files explicitly state: *"These mirror the [Zod/Pydantic] schemas in [Hono/
 | **Validate Contracts** | Run `validate_contract.py` before releases |
 | **Enrichment Safety** | When baking new data shapes at publish time (e.g., column objects vs column strings), update both `ComponentBinding` (Pydantic) and `ComponentBindingSchema` (Zod) to accept the enriched types. Use `List[Any]` / `z.union()` or `extra="allow"` / `.passthrough()` |
 | **Dual-Path Data** | For data that may be stripped by strict schema validation, also store in `component.props` (which uses `z.record(z.string(), z.unknown())` — passes through both Pydantic and Zod without stripping) |
+| **FK Normalization** | SQLAlchemy returns `{constrained_columns, referred_table, referred_columns}`. Edge expects `{column, referencedTable, referencedColumn}`. Always normalize in the publish pipeline before baking. |
+| **Props-First Priority** | On re-publish, `props` (fresh from builder) MUST take priority over `binding` (stale from previous publish). Never let stale binding data shadow the user's latest selections. |
+| **Loud Validation** | Always log validation errors on the publish boundary. Use `extra='allow'` (Pydantic) / `.passthrough()` (Zod) on schemas carrying enriched data. When using `safeParse()`, always log `result.error.issues` on failure. |
 
 ### 5.4 Contract Validation Scripts
 

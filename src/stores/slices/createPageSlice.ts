@@ -5,6 +5,10 @@ import { BuilderState } from '../builder';
 import { toast } from '@/hooks/use-toast';
 import { getPages, createPage as createPageApi, updatePage as updatePageApi, deletePage as deletePageApi, permanentDeletePage as permanentDeletePageApi } from '../../services/pages-api';
 
+// Module-level in-flight dedup — prevents concurrent callers from
+// triggering redundant page loads (App.tsx + BuilderPage.tsx + PagesPanel.tsx)
+let _loadPagesPromise: Promise<void> | null = null;
+
 export interface PageSlice {
     pages: Page[];
     currentPageId: string | null;
@@ -267,51 +271,68 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
     },
 
     loadPagesFromDatabase: async (includeDeleted = false) => {
-        const { setLoading } = get();
-        setLoading(true);
-        try {
-            const pagesRaw = await getPages(includeDeleted);
+        // Skip if pages already loaded (handles sequential callers like BuilderPage after App.tsx)
+        if (!includeDeleted && get().isInitialized && get().pages.length > 0) {
+            return;
+        }
 
-            // Deserialize containerStyles from layoutData.root to top-level
-            const pages = (pagesRaw || []).map((page: any) => {
-                const layoutData = page.layoutData ?? page.layout_data ?? { content: [], root: {} };
+        // In-flight dedup: concurrent callers share one promise
+        if (!includeDeleted && _loadPagesPromise) {
+            await _loadPagesPromise;
+            return;
+        }
 
-                // Extract containerStyles from layoutData.root
-                const containerStyles = layoutData?.root?.containerStyles;
+        const doLoad = async () => {
+            const { setLoading } = get();
+            setLoading(true);
+            try {
+                const pagesRaw = await getPages(includeDeleted);
 
-                console.log('📥 [Store] Loading page:', {
-                    id: page.id,
-                    name: page.name,
-                    hasContainerStylesInRoot: !!containerStyles
+                // Deserialize containerStyles from layoutData.root to top-level
+                const pages = (pagesRaw || []).map((page: any) => {
+                    const layoutData = page.layoutData ?? page.layout_data ?? { content: [], root: {} };
+
+                    // Extract containerStyles from layoutData.root
+                    const containerStyles = layoutData?.root?.containerStyles;
+
+                    return {
+                        ...page,
+                        isPublic: page.isPublic ?? page.is_public ?? false,
+                        isHomepage: page.isHomepage ?? page.is_homepage ?? false,
+                        layoutData,
+                        containerStyles, // Expose at top level for easy access
+                        createdAt: page.createdAt ?? page.created_at ?? new Date().toISOString(),
+                        updatedAt: page.updatedAt ?? page.updated_at ?? new Date().toISOString(),
+                        deletedAt: page.deletedAt ?? page.deleted_at ?? null
+                    };
+                }) as Page[];
+
+                console.log('📥 [Store] Loaded pages:', { count: pages.length, names: pages.map(p => p.name) });
+
+                set({
+                    pages: pages || [],
+                    hasUnsavedChanges: false,
+                    isInitialized: true
                 });
+            } catch (error: any) {
+                console.error('Failed to load pages:', error);
+                toast({
+                    title: "Error loading pages",
+                    description: error.response?.data?.message || error.message || "Failed to load pages from database",
+                    variant: "destructive"
+                });
+                set({ isInitialized: true });
+            } finally {
+                setLoading(false);
+                _loadPagesPromise = null;
+            }
+        };
 
-                return {
-                    ...page,
-                    isPublic: page.isPublic ?? page.is_public ?? false,
-                    isHomepage: page.isHomepage ?? page.is_homepage ?? false,
-                    layoutData,
-                    containerStyles, // Expose at top level for easy access
-                    createdAt: page.createdAt ?? page.created_at ?? new Date().toISOString(),
-                    updatedAt: page.updatedAt ?? page.updated_at ?? new Date().toISOString(),
-                    deletedAt: page.deletedAt ?? page.deleted_at ?? null
-                };
-            }) as Page[];
-
-            set({
-                pages: pages || [],
-                hasUnsavedChanges: false,
-                isInitialized: true
-            });
-        } catch (error: any) {
-            console.error('Failed to load pages:', error);
-            toast({
-                title: "Error loading pages",
-                description: error.response?.data?.message || error.message || "Failed to load pages from database",
-                variant: "destructive"
-            });
-            set({ isInitialized: true });
-        } finally {
-            setLoading(false);
+        if (!includeDeleted) {
+            _loadPagesPromise = doLoad();
+            await _loadPagesPromise;
+        } else {
+            await doLoad();
         }
     },
 

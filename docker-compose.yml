@@ -6,9 +6,9 @@ version: '3.8'
 #
 # USAGE:
 #   SQLite (default):  docker-compose up -d
-#   PostgreSQL:        DATABASE=postgres docker-compose up -d
+#   PostgreSQL:        docker-compose --profile postgres up -d
 #
-# Or set DATABASE=sqlite or DATABASE=postgres in your .env file
+# Or set DATABASE=postgres in your .env file and use the postgres profile
 #
 # ==============================================================================
 
@@ -16,7 +16,6 @@ services:
   # PostgreSQL Database (only starts when DATABASE=postgres)
   postgres:
     image: postgres:16-alpine
-    # Always starts - minimal overhead if using SQLite (just idles)
     environment:
       POSTGRES_USER: frontbase
       POSTGRES_PASSWORD: ${DB_PASSWORD:-frontbase-dev-password}
@@ -31,6 +30,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    # Only start if DATABASE=postgres profile is active
+    profiles:
+      - postgres
 
   backend:
     build:
@@ -59,6 +61,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]

@@ -15,8 +15,8 @@ services:
     build:
       context: ./fastapi-backend
       dockerfile: Dockerfile
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
+    expose:
+      - "8000"
     environment:
       # Database: SQLite by default
       - DATABASE_URL=${DATABASE_URL:-sqlite+aiosqlite:////app/data/frontbase.db}
@@ -41,7 +41,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 60s
+      start_period: 120s
 
   edge:
     build:
@@ -87,8 +87,8 @@ services:
       args:
         # Empty = use relative URLs (recommended for production)
         VITE_API_URL: ""
-    ports:
-      - "8080:80"
+    expose:
+      - "80"
     depends_on:
       - backend
       - edge
@@ -122,10 +122,12 @@ services:
       SRH_MODE: env
       SRH_TOKEN: ${REDIS_TOKEN:-dev_token_change_in_prod}
       SRH_CONNECTION_STRING: "redis://redis:6379"
-    ports:
-      # Exposed externally for Cloudflare/Vercel Edge
-      # URL: https://your-vps.com:8079, Token: REDIS_TOKEN
-      - "${REDIS_HTTP_PORT:-8079}:80"
+    expose:
+      - "80"
+    # To expose redis-http on a host port (for external Cloudflare/Vercel Edge access),
+    # set REDIS_HTTP_PORT in .env (e.g., REDIS_HTTP_PORT=8079) and uncomment:
+    # ports:
+    #   - "${REDIS_HTTP_PORT}:80"
     depends_on:
       redis:
         condition: service_healthy

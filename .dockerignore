@@ -75,8 +75,9 @@ temp/
 !postcss.config.js
 !components.json
 !index.html
+!nginx.conf
 !src/**
 !public/**
 !dist/**
-!fastapi-backend/**
-!services/**
+# NOTE: fastapi-backend/ and services/ are NOT re-included here.
+# They have their own Dockerfiles with separate build contexts.

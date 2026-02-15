@@ -26,8 +26,17 @@ def upgrade() -> None:
     dialect = conn.dialect.name
     
     if dialect == 'postgresql':
+        # Check if datasources table exists (FK target) — on fresh deploys it doesn't yet
+        inspector = sa.inspect(conn)
+        if 'datasources' not in inspector.get_table_names():
+            print("datasources table does not exist yet - skipping (will be created by SQLAlchemy)")
+            return
+        if 'datasource_views' in inspector.get_table_names():
+            print("datasource_views table already exists - skipping")
+            return
+
         create_table_sql = """
-        CREATE TABLE IF NOT EXISTS datasource_views (
+        CREATE TABLE datasource_views (
             id VARCHAR(36) PRIMARY KEY,
             name VARCHAR(255) NOT NULL UNIQUE,
             description TEXT,
@@ -45,11 +54,14 @@ def upgrade() -> None:
         );
         """
         op.execute(sa.text(create_table_sql))
-        print("Ensured table 'datasource_views' exists (PostgreSQL)")
+        print("Created table 'datasource_views' (PostgreSQL)")
         
     else:
-        # Check if table exists for SQLite
+        # Check if tables exist for SQLite
         inspector = sa.inspect(conn)
+        if 'datasources' not in inspector.get_table_names():
+            print("datasources table does not exist yet - skipping (will be created by SQLAlchemy)")
+            return
         if 'datasource_views' not in inspector.get_table_names():
             op.create_table('datasource_views',
                 sa.Column('id', sa.String(36), primary_key=True),

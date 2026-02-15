@@ -60,7 +60,34 @@ EDGE_PORT=$((3002 + $TENANT_ID))
 FRONTEND_PORT=$((8080 + $TENANT_ID))
 ```
 
-### 3. Multi-Tenant Deployment Template
+#### Option C: Smart Port Allocation (Recommended for Multi-Tenant)
+
+Automatically scan for available ports and deploy with automatic retry logic:
+
+```bash
+#!/bin/bash
+# deploy_tenant.sh
+./scripts/deploy_tenant.sh tenant1
+```
+
+The script will:
+1. Scan for available ports in configurable ranges
+2. Allocate unique ports for each service
+3. Retry deployment if ports are already in use
+4. Generate secure passwords automatically
+
+### 3. Port Ranges
+
+Each service type has a configurable port range:
+
+| Service | Port Range | Default Ports |
+|---------|------------|---------------|
+| Backend | 8000-8999 | 8000+ |
+| Edge Engine | 3002-3999 | 3002+ |
+| Frontend | 8080-8999 | 8080+ |
+| Redis HTTP | 8079-8999 | 8079+ |
+
+### 4. Multi-Tenant Deployment Template
 
 ```bash
 # Tenant 1
@@ -281,16 +308,92 @@ docker-compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yml down -v
 
 ## Usage Examples
 
-### Deploy Tenant 1
+### Deploy Tenant 1 (Smart Port Allocation)
 
 ```bash
-./deploy_tenant.sh 1 tenant1
+./scripts/deploy_tenant.sh tenant1
 ```
 
-### Deploy Tenant 2
+**Output:**
+```
+========================================
+  Port Scanner for Multi-Tenant
+========================================
+
+Scanning for available backend port in range 8000-8999...
+✓ Available port found: 8001
+Scanning for available edge port in range 3002-3999...
+✓ Available port found: 3003
+Scanning for available frontend port in range 8080-8999...
+✓ Available port found: 8081
+Scanning for available redis-http port in range 8079-8999...
+✓ Available port found: 8080
+
+========================================
+  Port Allocation Summary
+========================================
+
+BACKEND: 8001
+EDGE: 3003
+FRONTEND: 8081
+REDIS HTTP: 8080
+
+========================================
+  Frontbase Tenant Deployment
+========================================
+
+Tenant Name:    tenant1
+Project Name:   tenant1_frontbase
+Max Retries:    3
+
+Scanning for available ports...
+
+========================================
+  Port Allocation Summary
+========================================
+
+Backend:      8001
+Edge Engine:  3003
+Frontend:     8081
+Redis HTTP:   8080
+
+========================================
+  ✓ Deployment Successful!
+========================================
+
+Access URLs:
+  Frontend:  http://localhost:8081
+  Backend:   http://localhost:8001
+  Edge:      http://localhost:3003
+```
+
+### Deploy Tenant 2 (Different Name)
 
 ```bash
-./deploy_tenant.sh 2 tenant2
+./scripts/deploy_tenant.sh tenant2
+```
+
+**Note:** No TENANT_ID needed! The script automatically finds available ports.
+
+### Deploy with Custom Options
+
+```bash
+# Custom database type
+./scripts/deploy_tenant.sh mytenant --database postgres
+
+# Custom password
+./scripts/deploy_tenant.sh mytenant --db-password mysecret
+
+# Custom max retries
+./scripts/deploy_tenant.sh mytenant --max-retries 5
+```
+
+### Deploy with Existing Port
+
+```bash
+# If ports are already in use, the script will retry automatically
+./scripts/deploy_tenant.sh mytenant
+# It will scan again and find the next available ports
 ```
 
 ### List All Tenants
@@ -342,6 +445,65 @@ server {
 }
 ```
 
+## Smart Port Allocation
+
+### How It Works
+
+The smart port allocation system automatically scans for available ports and deploys with retry logic:
+
+1. **Port Scanning**: Each service scans its configured port range for availability
+2. **Automatic Retry**: If ports are in use, the script retries up to `--max-retries` times
+3. **Secure Passwords**: Auto-generates strong passwords for databases and Redis tokens
+4. **Environment Files**: Creates isolated `.env.{tenant_name}` files for each deployment
+
+### Port Ranges
+
+| Service | Port Range | Description |
+|---------|------------|-------------|
+| Backend | 8000-8999 | API server |
+| Edge Engine | 3002-3999 | SSR & workflows |
+| Frontend | 8080-8999 | Nginx web server |
+| Redis HTTP | 8079-8999 | Upstash-compatible proxy |
+
+### Retry Logic
+
+If a port is already in use, the script:
+1. Scans for the next available port in the range
+2. Retries deployment with the new ports
+3. Continues until successful or max retries reached
+
+### Example: Port Conflict Resolution
+
+```bash
+# Scenario: Port 8080 is already in use
+./scripts/deploy_tenant.sh tenant1
+
+# Output:
+# Scanning for available redis-http port in range 8079-8999...
+# ✓ Available port found: 8081  <-- Uses 8081 instead of 8080
+# ...
+# ✓ Deployment Successful!
+```
+
+### Customization
+
+**Modify port ranges** in `scripts/deploy_tenant.sh`:
+
+```bash
+PORT_RANGES=(
+    ["backend"]="8000:8999"
+    ["edge"]="3002:3999"
+    ["frontend"]="8080:8999"
+    ["redis-http"]="8079:8999"
+)
+```
+
+**Increase retry attempts**:
+
+```bash
+./scripts/deploy_tenant.sh tenant1 --max-retries 10
+```
+
 ## Security Considerations
 
 1. **Database Isolation**: Each tenant gets unique database and volumes
@@ -374,11 +536,29 @@ docker-compose -p tenant1_frontbase -f docker-compose.yml restart
 
 ### Port Already Allocated
 
-```bash
-# Find process using port
-lsof -i :8001
+The smart deployment script handles this automatically:
 
+```bash
+# Old way (manual)
+lsof -i :8001
 # Kill process or use different port
+
+# New way (automatic)
+./scripts/deploy_tenant.sh tenant1
+# Script finds next available port automatically
+```
+
+### Deployment Fails After Max Retries
+
+```bash
+# Check what's using the ports
+netstat -an | grep LISTEN
+
+# Clean up existing tenants
+./scripts/cleanup_tenant.sh tenant1
+
+# Redeploy
+./scripts/deploy_tenant.sh tenant1
 ```
 
 ### Check All Running Projects
@@ -404,3 +584,5 @@ docker volume rm tenant1_frontbase_backend_data
 3. **Service Mesh**: For advanced traffic management and security
 4. **Load Balancing**: For distributing traffic across multiple instances
 5. **Auto-scaling**: Based on tenant request metrics
+6. **Port Reservation API**: REST API to reserve/allocate ports before deployment
+7. **Port Management Dashboard**: Web UI for managing tenant deployments

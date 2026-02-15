@@ -1,37 +1,16 @@
 version: '3.8'
 
 # ==============================================================================
-# FRONTBASE DOCKER COMPOSE
+# FRONTBASE DOCKER COMPOSE — SQLite (default)
 # ==============================================================================
 #
 # USAGE:
-#   SQLite (default):  docker-compose up -d
-#   PostgreSQL:        DATABASE=postgres docker-compose up -d
-#
-# Or set DATABASE=sqlite or DATABASE=postgres in your .env file
+#   SQLite (default):     docker-compose up -d
+#   PostgreSQL:           docker-compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
 #
 # ==============================================================================
 
 services:
-  # PostgreSQL Database (only starts when DATABASE=postgres)
-  postgres:
-    image: postgres:16-alpine
-    # Always starts - minimal overhead if using SQLite (just idles)
-    environment:
-      POSTGRES_USER: frontbase
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-frontbase-dev-password}
-      POSTGRES_DB: frontbase
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - frontbase
-    restart: unless-stopped
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U frontbase" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   backend:
     build:
       context: ./fastapi-backend
@@ -39,7 +18,7 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     environment:
-      # Database: set DATABASE=sqlite or DATABASE=postgres in .env
+      # Database: SQLite by default
       - DATABASE_URL=${DATABASE_URL:-sqlite+aiosqlite:////app/data/frontbase.db}
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
@@ -56,9 +35,6 @@ services:
       - backend_data:/app/data
     networks:
       - frontbase
-    depends_on:
-      postgres:
-        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
@@ -162,9 +138,6 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
   backend_data:
   edge_data:
   redis_data:
-
-

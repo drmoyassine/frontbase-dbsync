@@ -1,21 +1,38 @@
 # ==============================================================================
 # PostgreSQL Override for docker-compose
 # ==============================================================================
-# Usage: DATABASE=postgres docker-compose up -d
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
 #
-# This file is auto-included when using the postgres profile.
+# This file adds a PostgreSQL service and overrides the backend to use it.
 # ==============================================================================
 
 version: '3.8'
 
 services:
   postgres:
-    profiles: [] # Always start when this override is used
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: frontbase
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-frontbase-dev-password}
+      POSTGRES_DB: frontbase
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - frontbase
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U frontbase" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     environment:
-      # PostgreSQL connection - using psycopg2 (sync driver for Alembic migrations)
+      # PostgreSQL connection (overrides SQLite default from base compose)
       - DATABASE_URL=postgresql+psycopg2://frontbase:${DB_PASSWORD:-frontbase-dev-password}@postgres:5432/frontbase
     depends_on:
       postgres:
         condition: service_healthy
+
+volumes:
+  postgres_data:

@@ -8,12 +8,23 @@ version: '3.8'
 #   SQLite (default):  docker-compose up -d
 #   PostgreSQL:        docker-compose --profile postgres up -d
 #
-# Or set DATABASE=postgres in your .env file and use the postgres profile
+# Multi-Tenant Usage:
+#   docker-compose -p <project_name> -f docker-compose.yml up -d
+#   Example: docker-compose -p tenant1_frontbase -f docker-compose.yml up -d
+#
+# Environment Variables:
+#   BACKEND_PORT     - Backend API port (default: 8000)
+#   EDGE_PORT        - Edge Engine port (default: 3002)
+#   FRONTEND_PORT    - Frontend port (default: 8080)
+#   REDIS_HTTP_PORT  - Redis HTTP proxy port (default: 8079)
+#   DATABASE_URL     - Database connection URL
+#   DB_PASSWORD      - Database password
+#   REDIS_TOKEN      - Redis HTTP token
 #
 # ==============================================================================
 
 services:
-  # PostgreSQL Database (only starts when DATABASE=postgres)
+  # PostgreSQL Database (only starts when DATABASE=postgres profile is active)
   postgres:
     image: postgres:16-alpine
     environment:
@@ -41,14 +52,17 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     environment:
-      # Database: set DATABASE=sqlite or DATABASE=postgres in .env
+      # Database configuration
       - DATABASE_URL=${DATABASE_URL:-sqlite+aiosqlite:////app/data/frontbase.db}
+      # Security
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
-      # Edge Engine URL (internal network)
-      - EDGE_URL=http://edge:3002
-      - EDGE_SSR_URL=http://edge:3002
-      - EDGE_ENGINE_URL=http://edge:3002
+      # Port configuration (for internal service discovery)
+      - BACKEND_PORT=${BACKEND_PORT:-8000}
+      # Edge Engine URLs (internal Docker network)
+      - EDGE_URL=http://edge:${EDGE_PORT:-3002}
+      - EDGE_SSR_URL=http://edge:${EDGE_PORT:-3002}
+      - EDGE_ENGINE_URL=http://edge:${EDGE_PORT:-3002}
       # Admin Authentication
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
@@ -75,10 +89,10 @@ services:
       context: ./services/edge
       dockerfile: Dockerfile
     expose:
-      - "3002"
+      - "${EDGE_PORT:-3002}"
     environment:
       - NODE_ENV=production
-      - PORT=3002
+      - PORT=${EDGE_PORT:-3002}
       # Database for edge storage (SQLite)
       - SQLITE_PATH=/app/data/edge.db
       - DATABASE_URL=file:/app/data/edge.db
@@ -102,7 +116,7 @@ services:
       - frontbase
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/api/health" ]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${EDGE_PORT:-3002}/api/health" ]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -112,10 +126,10 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        # Empty = use relative URLs (recommended for production)
-        VITE_API_URL: ""
+        # API URL for frontend (use backend port for same-instance access)
+        - VITE_API_URL=http://localhost:${BACKEND_PORT:-8000}
     ports:
-      - "8080:80"
+      - "${FRONTEND_PORT:-8080}:80"
     depends_on:
       - backend
       - edge
@@ -169,5 +183,3 @@ volumes:
   backend_data:
   edge_data:
   redis_data:
-
-

@@ -24,6 +24,14 @@ def upgrade():
     dialect = conn.dialect.name
     
     if dialect == 'postgresql':
+        # Check if table exists first (fresh deploys)
+        result = conn.execute(sa.text(
+            "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'table_schema_cache'"
+        ))
+        if not result.fetchone():
+            print("table_schema_cache does not exist yet - skipping")
+            return
+
         # Make last_updated nullable (legacy column not in new model)
         # Use IF EXISTS check to handle case where column doesn't exist
         op.execute("""

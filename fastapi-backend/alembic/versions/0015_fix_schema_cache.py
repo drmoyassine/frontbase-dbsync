@@ -26,6 +26,14 @@ def upgrade():
     dialect = conn.dialect.name
     
     if dialect == 'postgresql':
+        # Check if table exists first (fresh deploys)
+        result = conn.execute(sa.text(
+            "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'table_schema_cache'"
+        ))
+        if not result.fetchone():
+            print("table_schema_cache does not exist yet - skipping")
+            return
+
         # Add columns if not exists
         op.execute("""
             DO $$ 
@@ -58,7 +66,12 @@ def upgrade():
             ALTER TABLE table_schema_cache ALTER COLUMN schema_data DROP NOT NULL;
         """)
     else:
-        # SQLite - check if columns exist first
+        # SQLite - check if table exists first
+        inspector = sa.inspect(conn)
+        if 'table_schema_cache' not in inspector.get_table_names():
+            print("table_schema_cache does not exist yet - skipping")
+            return
+
         result = conn.execute(sa.text("PRAGMA table_info(table_schema_cache)"))
         columns = [row[1] for row in result.fetchall()]
         

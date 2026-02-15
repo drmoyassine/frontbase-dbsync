@@ -29,26 +29,41 @@ def upgrade():
     
     # Add logo_url to project table if not exists
     if dialect == 'postgresql':
-        op.execute("""
-            DO $$ 
-            BEGIN 
-                IF NOT EXISTS (
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name = 'project' AND column_name = 'logo_url'
-                ) THEN 
-                    ALTER TABLE project ADD COLUMN logo_url TEXT;
-                END IF;
-            END $$;
-        """)
+        # Check if table exists first (fresh deploys)
+        result = conn.execute(sa.text(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'project'"
+        ))
+        if result.fetchone():
+            op.execute("""
+                DO $$ 
+                BEGIN 
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name = 'project' AND column_name = 'logo_url'
+                    ) THEN 
+                        ALTER TABLE project ADD COLUMN logo_url TEXT;
+                    END IF;
+                END $$;
+            """)
     else:
-        # SQLite - check if column exists first
-        result = conn.execute(sa.text("PRAGMA table_info(project)"))
-        columns = [row[1] for row in result.fetchall()]
-        if 'logo_url' not in columns:
-            op.add_column('project', sa.Column('logo_url', sa.String(), nullable=True))
+        # SQLite - check if table and column exist first
+        inspector = sa.inspect(conn)
+        if 'project' in inspector.get_table_names():
+            result = conn.execute(sa.text("PRAGMA table_info(project)"))
+            columns = [row[1] for row in result.fetchall()]
+            if 'logo_url' not in columns:
+                op.add_column('project', sa.Column('logo_url', sa.String(), nullable=True))
     
     # Fix table_schema_cache: add missing columns and make schema_data nullable
+    # Check if table exists first (fresh deploys won't have it yet)
     if dialect == 'postgresql':
+        result = conn.execute(sa.text(
+            "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'table_schema_cache'"
+        ))
+        if not result.fetchone():
+            print("table_schema_cache does not exist yet - skipping (will be created by model init)")
+            return
+
         # Add fetched_at if not exists
         op.execute("""
             DO $$ 
@@ -93,7 +108,12 @@ def upgrade():
             ALTER TABLE table_schema_cache ALTER COLUMN schema_data DROP NOT NULL;
         """)
     else:
-        # SQLite - check if columns exist first
+        # SQLite - check if table exists first
+        inspector = sa.inspect(conn)
+        if 'table_schema_cache' not in inspector.get_table_names():
+            print("table_schema_cache does not exist yet - skipping (will be created by model init)")
+            return
+
         result = conn.execute(sa.text("PRAGMA table_info(table_schema_cache)"))
         columns = [row[1] for row in result.fetchall()]
         

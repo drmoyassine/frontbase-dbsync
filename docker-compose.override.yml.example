@@ -1,0 +1,38 @@
+# ==============================================================================
+# Docker Compose Override for Easypanel
+# ==============================================================================
+#
+# This file is used by Easypanel to override docker-compose.yml settings.
+# It automatically finds available ports for each service.
+#
+# To use on your VPS:
+#   1. Copy this file to docker-compose.override.yml
+#   2. Save and redeploy in Easypanel
+#
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  backend:
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - BACKEND_PORT=${BACKEND_PORT:-8000}
+
+  edge:
+    expose:
+      - "${EDGE_PORT:-3002}"
+    environment:
+      - EDGE_PORT=${EDGE_PORT:-3002}
+      - PORT=${EDGE_PORT:-3002}
+
+  frontend:
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    environment:
+      - FRONTEND_PORT=${FRONTEND_PORT:-8080}
+
+  redis-http:
+    ports:
+      - "${REDIS_HTTP_PORT:-8079}:80"

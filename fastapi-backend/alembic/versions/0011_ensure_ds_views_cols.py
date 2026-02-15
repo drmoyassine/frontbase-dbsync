@@ -26,6 +26,12 @@ def upgrade() -> None:
     dialect = conn.dialect.name
     
     if dialect == 'postgresql':
+        # Check if table exists first (fresh deploys won't have it yet)
+        inspector = Inspector.from_engine(conn)
+        if 'datasource_views' not in inspector.get_table_names():
+            print("datasource_views table does not exist yet - skipping (will be created by later migration)")
+            return
+
         # Use raw SQL with standard CAST syntax to avoid SQLAlchemy binding issues with '::'
         sql_statements = [
             "ALTER TABLE datasource_views ADD COLUMN IF NOT EXISTS description TEXT;",
@@ -51,8 +57,12 @@ def upgrade() -> None:
                     pass
 
     else:
-        # For SQLite... (keep existing logic)
+        # For SQLite... check table exists first (fresh deploys won't have it yet)
         inspector = Inspector.from_engine(conn)
+        if 'datasource_views' not in inspector.get_table_names():
+            print("datasource_views table does not exist yet - skipping (will be created by later migration)")
+            return
+
         columns = {col['name'] for col in inspector.get_columns('datasource_views')}
         
         cols_to_add = [

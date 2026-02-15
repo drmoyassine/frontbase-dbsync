@@ -3,13 +3,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Database configuration - Use FastAPI's own unified database
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./unified.db")
+# Database configuration — auto-construct URL from DATABASE env var
+DATABASE = os.getenv("DATABASE", "sqlite")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "frontbase-dev-password")
 
-# Convert async drivers to sync drivers for Alembic migrations
-# - SQLite: sqlite+aiosqlite -> sqlite
-# - PostgreSQL: postgresql+asyncpg -> postgresql+psycopg2
-SYNC_DATABASE_URL = DATABASE_URL.replace("sqlite+aiosqlite", "sqlite").replace("postgresql+asyncpg", "postgresql+psycopg2")
+if DATABASE == "postgresql":
+    SYNC_DATABASE_URL = f"postgresql+psycopg2://frontbase:{DB_PASSWORD}@postgres:5432/frontbase"
+else:
+    # Auto-detect Docker (/app/data volume) vs local dev (current dir)
+    data_dir = "/app/data" if os.path.isdir("/app/data") else "."
+    SYNC_DATABASE_URL = f"sqlite:///{data_dir}/frontbase.db"
 
 # Determine if using SQLite (needs different engine config)
 is_sqlite = SYNC_DATABASE_URL.startswith("sqlite")

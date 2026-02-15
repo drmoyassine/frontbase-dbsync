@@ -1,12 +1,14 @@
 version: '3.8'
 
 # ==============================================================================
-# FRONTBASE DOCKER COMPOSE — SQLite (default)
+# FRONTBASE DOCKER COMPOSE
 # ==============================================================================
 #
-# USAGE:
-#   SQLite (default):     docker-compose up -d
-#   PostgreSQL:           docker-compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+# Set DATABASE in .env:
+#   DATABASE=sqlite       (default — uses SQLite, no extra containers)
+#   DATABASE=postgresql   (spins up a PostgreSQL container automatically)
+#
+# Then just run:  docker-compose up -d
 #
 # ==============================================================================
 
@@ -18,8 +20,9 @@ services:
     expose:
       - "8000"
     environment:
-      # Database: SQLite by default
-      - DATABASE_URL=${DATABASE_URL:-sqlite+aiosqlite:////app/data/frontbase.db}
+      # Database selector: "sqlite" (default) or "postgresql"
+      - DATABASE=${DATABASE:-sqlite}
+      - DB_PASSWORD=${DB_PASSWORD:-frontbase-dev-password}
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       # Edge Engine URL (internal network)
@@ -42,6 +45,27 @@ services:
       timeout: 5s
       retries: 5
       start_period: 120s
+
+  # PostgreSQL — only active when DATABASE=postgresql
+  # When DATABASE=sqlite, this container idles with minimal resources
+  postgres:
+    image: postgres:16-alpine
+    entrypoint: [ "sh", "-c", "if [ \"$$DATABASE\" != 'postgresql' ]; then echo '[Frontbase] SQLite mode - PostgreSQL not needed.'; exec tail -f /dev/null; fi; exec docker-entrypoint.sh postgres" ]
+    environment:
+      DATABASE: ${DATABASE:-sqlite}
+      POSTGRES_USER: frontbase
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-frontbase-dev-password}
+      POSTGRES_DB: frontbase
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - frontbase
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "if [ \"$DATABASE\" != 'postgresql' ]; then exit 0; fi; pg_isready -U frontbase" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   edge:
     build:
@@ -141,5 +165,6 @@ networks:
 
 volumes:
   backend_data:
+  postgres_data:
   edge_data:
   redis_data:

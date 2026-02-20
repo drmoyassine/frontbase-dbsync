@@ -45,8 +45,16 @@ def get_project_context_sync(db: Session, mode: str = "builder"):
                     pass
                 
                 if not auth_key:
-                    auth_key = decrypt_data(encrypted_service_key)
-                    auth_method = "service_role"
+                    decrypted = decrypt_data(encrypted_service_key)
+                    # Validate the decrypted result looks like a JWT (3 parts separated by dots)
+                    # decrypt_data silently returns the raw encrypted blob on failure
+                    if decrypted and decrypted.count('.') == 2:
+                        auth_key = decrypted
+                        auth_method = "service_role"
+                    else:
+                        print("Warning: Decrypted service key is not a valid JWT. Falling back to anon key.")
+                        auth_key = anon_key
+                        auth_method = "anon_fallback"
             except Exception as e:
                 print(f"Decryption error: {e}. Falling back to anon key.")
                 auth_key = anon_key

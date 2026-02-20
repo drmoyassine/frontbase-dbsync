@@ -61,7 +61,7 @@ app = FastAPI(
     description="Unified API for Frontbase and DB-Sync functionality",
     version="1.0.0",
     lifespan=lifespan,
-    redirect_slashes=False  # Prevent 307 redirect loops from trailing slashes
+    # redirect_slashes=True (default) normalizes /api/foo/ → /api/foo
 )
 
 # Configure CORS for frontend integration
@@ -113,7 +113,7 @@ class TrailingSlashMiddleware:
     Note: Excludes /api/auth/ routes which don't use trailing slashes.
     """
     # Paths that should NOT have trailing slashes added
-    EXCLUDE_PREFIXES = ["/api/auth", "/api/actions"]
+    EXCLUDE_PREFIXES = ["/api/auth", "/api/actions", "/api/storage"]
     
     def __init__(self, app: ASGIApp):
         self.app = app

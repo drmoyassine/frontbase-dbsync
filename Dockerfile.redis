@@ -1,3 +1,10 @@
-FROM redis:7-alpine
-COPY --from=hiett/serverless-redis-http /app /srh
-CMD redis-server --daemonize yes && /srh/start
+FROM hiett/serverless-redis-http:latest
+
+# Serverless Redis HTTP is based on elixir:1.13-alpine, so we can install redis directly
+# Switch to root to install packages if the base image lowered privileges
+USER root
+
+RUN apk add --no-cache redis
+
+# Start redis-server in the background, then start the SRH proxy in the foreground
+CMD redis-server --daemonize yes && _build/prod/rel/prod/bin/prod start

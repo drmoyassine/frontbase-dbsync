@@ -42,12 +42,6 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str
-    username: Optional[str] = None
-
-
 class UserResponse(BaseModel):
     id: str
     email: str
@@ -145,55 +139,6 @@ async def login(request: LoginRequest, response: Response):
             updated_at=user["updated_at"],
         ),
         message="Login successful",
-    )
-
-
-@router.post("/register", response_model=AuthResponse)
-async def register(request: RegisterRequest, response: Response):
-    """Register a new admin user (disabled in production)"""
-    # Check if registration is allowed
-    if os.getenv("ENVIRONMENT") == "production" and not os.getenv("ALLOW_REGISTRATION"):
-        raise HTTPException(status_code=403, detail="Registration is disabled")
-    
-    # Check if user exists
-    if request.email in ADMIN_USERS:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Create user
-    user_id = f"user-{secrets.token_hex(4)}"
-    now = datetime.utcnow().isoformat() + "Z"
-    
-    ADMIN_USERS[request.email] = {
-        "id": user_id,
-        "email": request.email,
-        "password_hash": hash_password(request.password),
-        "username": request.username,
-        "created_at": now,
-        "updated_at": now,
-    }
-    
-    # Create session
-    token = create_session(user_id, request.email)
-    
-    # Set cookie
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=token,
-        max_age=SESSION_MAX_AGE,
-        httponly=True,
-        samesite="lax",
-        secure=os.getenv("ENVIRONMENT") == "production",
-    )
-    
-    return AuthResponse(
-        user=UserResponse(
-            id=user_id,
-            email=request.email,
-            username=request.username,
-            created_at=now,
-            updated_at=now,
-        ),
-        message="Registration successful",
     )
 
 

@@ -47,7 +47,7 @@ export function useRedisSettings(): UseRedisSettingsReturn {
 
     // State
     // We maintain separate config state so switching providers preserves inputs
-    const [localConfig, setLocalConfig] = useState({ url: 'http://redis-http:80', token: '' });
+    const [localConfig, setLocalConfig] = useState({ url: 'http://redis:80', token: '' });
     const [upstashConfig, setUpstashConfig] = useState({ url: '', token: '' });
 
     // Active type determines which config we show/edit
@@ -79,7 +79,7 @@ export function useRedisSettings(): UseRedisSettingsReturn {
             // Populate the active config from settings
             if (type === 'self-hosted') {
                 setLocalConfig({
-                    url: settings.redis_url || 'http://redis-http:80',
+                    url: settings.redis_url || 'http://redis:80',
                     token: settings.redis_token || ''
                 });
             } else {

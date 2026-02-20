@@ -1,0 +1,3 @@
+FROM redis:7-alpine
+COPY --from=hiett/serverless-redis-http /app /srh
+CMD redis-server --daemonize yes && /srh/start

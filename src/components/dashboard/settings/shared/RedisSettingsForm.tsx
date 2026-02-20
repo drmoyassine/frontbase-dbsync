@@ -137,7 +137,7 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
                                 <Label htmlFor="redis-url">SRH Proxy URL</Label>
                                 <Input
                                     id="redis-url"
-                                    placeholder="http://redis-http:80"
+                                    placeholder="http://redis:80"
                                     value={redisUrl}
                                     onChange={(e) => { setRedisUrl(e.target.value); handleChange(); }}
                                 />

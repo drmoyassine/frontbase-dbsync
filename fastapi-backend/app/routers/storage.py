@@ -12,16 +12,21 @@ router = APIRouter(prefix="/api/storage", tags=["storage"])
 
 def get_storage_headers(ctx, auth_method=None):
     """Generate headers for Supabase Storage API requests"""
-    headers = {
-        'apikey': ctx['anon_key'],
-        'Authorization': f"Bearer {ctx['auth_key']}"
-    }
+    auth_key = ctx.get('auth_key') or ctx['anon_key']
     
-    # If the database context gave us service role key, definitely use it. 
-    # Otherwise use anon, but we probably need to pass the user's JWT if available from frontend?
-    # For admin tasks, the request needs service key if RLS allows it, or we rely on anon key holding rights.
-    if ctx['url'] and ctx.get('auth_key'):
-        pass
+    # For JWT keys (legacy eyJ... format), use Bearer auth
+    # For newer sb_ keys, use apikey header  
+    if auth_key and auth_key.startswith('eyJ'):
+        headers = {
+            'apikey': auth_key,
+            'Authorization': f"Bearer {auth_key}"
+        }
+    else:
+        # Newer Supabase secret keys (sb_secret_...) go in apikey header
+        headers = {
+            'apikey': auth_key,
+            'Authorization': f"Bearer {auth_key}"
+        }
 
     return headers
 

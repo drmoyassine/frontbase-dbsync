@@ -27,6 +27,7 @@ def get_storage_headers(ctx, auth_method=None):
 
 
 @router.get("/buckets")
+@router.get("/buckets/")
 async def list_buckets():
     """List all available storage buckets."""
     db = SessionLocal()
@@ -51,6 +52,7 @@ async def list_buckets():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/buckets")
+@router.post("/buckets/")
 async def create_bucket(request: dict):
     """Creates a new storage bucket in Supabase."""
     db = SessionLocal()
@@ -82,6 +84,7 @@ async def create_bucket(request: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/buckets/{id}")
+@router.get("/buckets/{id}/")
 async def get_bucket(id: str):
     """Retrieves details for a specific storage bucket."""
     db = SessionLocal()
@@ -107,6 +110,7 @@ async def get_bucket(id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/buckets/{id}")
+@router.put("/buckets/{id}/")
 async def update_bucket(id: str, request: dict):
     """Updates settings for an existing storage bucket."""
     db = SessionLocal()
@@ -136,6 +140,7 @@ async def update_bucket(id: str, request: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/buckets/{id}/empty")
+@router.post("/buckets/{id}/empty/")
 async def empty_bucket(id: str):
     """Empties a bucket."""
     db = SessionLocal()
@@ -159,6 +164,7 @@ async def empty_bucket(id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/buckets/{id}")
+@router.delete("/buckets/{id}/")
 async def delete_bucket(id: str):
     """Deletes a storage bucket. The bucket must be empty."""
     db = SessionLocal()
@@ -182,6 +188,7 @@ async def delete_bucket(id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/list")
+@router.get("/list/")
 async def list_files(bucket: str, path: str = "", limit: int = 100, offset: int = 0, search: Optional[str] = None):
     """Lists files and folders in a specified path within a bucket."""
     db = SessionLocal()
@@ -231,6 +238,7 @@ async def list_files(bucket: str, path: str = "", limit: int = 100, offset: int 
 
 
 @router.post("/upload")
+@router.post("/upload/")
 async def upload_file(
     file: UploadFile = File(...),
     bucket: str = Form(...),
@@ -277,6 +285,7 @@ async def upload_file(
 
 
 @router.post("/create-folder")
+@router.post("/create-folder/")
 async def create_folder(request: dict):
     """Creates a folder by uploading a .folder placeholder file."""
     db = SessionLocal()
@@ -315,6 +324,7 @@ async def create_folder(request: dict):
 
 
 @router.delete("/delete")
+@router.delete("/delete/")
 async def delete_files(request: dict):
     """Deletes one or more files from a bucket."""
     db = SessionLocal()
@@ -345,6 +355,7 @@ async def delete_files(request: dict):
 
 
 @router.get("/signed-url")
+@router.get("/signed-url/")
 async def get_signed_url(bucket: str, path: str, expiresIn: int = 3600):
     """Generate a signed URL for temporary download access."""
     db = SessionLocal()
@@ -374,6 +385,7 @@ async def get_signed_url(bucket: str, path: str, expiresIn: int = 3600):
 
 
 @router.post("/move")
+@router.post("/move/")
 async def move_file(request: dict):
     """Move a file or rename."""
     db = SessionLocal()

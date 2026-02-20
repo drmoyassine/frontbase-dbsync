@@ -167,10 +167,3 @@ Supabase PostgREST
 1. Re-deploy in fresh environment to verify no Express dependencies
 2. Test all Supabase features end-to-end
 3. Implement FK enhancement v2 (configurable display columns)
-
-### Future Enhancements (Documented)
-
-- User-configurable FK display columns
-- Optimized fetching (select specific columns, not `*`)
-- Heuristic FK detection fallback
-- Multi-level relation support

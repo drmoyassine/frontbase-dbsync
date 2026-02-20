@@ -741,7 +741,26 @@ export async function renderPage(
         layoutData.content.map(component => renderComponent(component, context))
     )).join('');
 
-    return `<div class="fb-page ${rootClass}" style="${rootStyle}">${contentHtml}</div>`;
+    // Community Edition Badge Injection
+    let badgeHtml = '';
+    const edition = process.env.FRONTBASE_EDITION || 'community';
+    // If it's community edition and no license key is provided, inject the badge
+    if (edition === 'community' && !process.env.FRONTBASE_LICENSE_KEY) {
+        badgeHtml = `
+            <div style="position:fixed;bottom:16px;right:16px;z-index:9999;font-family:system-ui,-apple-system,sans-serif;">
+                <a href="https://frontbase.dev?ref=badge" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:6px;background:white;padding:6px 10px;border-radius:6px;box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);text-decoration:none;color:#374151;font-size:12px;font-weight:500;border:1px solid #e5e7eb;transition:all 0.2s;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>Powered by Frontbase</span>
+                </a>
+            </div>
+        `;
+    }
+
+    return `<div class="fb-page ${rootClass}" style="${rootStyle}">${contentHtml}${badgeHtml}</div>`;
 }
 
 export { renderComponent, resolveProps, classifyComponent };

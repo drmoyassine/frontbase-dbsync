@@ -59,6 +59,67 @@ def generate_bundle_cache_key(components: list) -> str:
 # CSS Bundling with Multi-Tier Cache
 # =============================================================================
 
+import json
+import os
+import subprocess
+import tempfile
+
+async def generate_tailwind_utilities(components: list) -> str:
+    """
+    Pass component JSON to Tailwind CLI to extract used utility classes.
+    """
+    try:
+        # Create a temporary directory
+        with tempfile.TemporaryDirectory() as tmpdir:
+            content_file = os.path.join(tmpdir, "content.json")
+            input_css = os.path.join(tmpdir, "input.css")
+            output_css = os.path.join(tmpdir, "output.css")
+            config_file = os.path.join(tmpdir, "tailwind.config.js")
+            
+            # Write components as JSON (Tailwind's regex will find class names inside it)
+            with open(content_file, "w") as f:
+                json.dump(components, f)
+                
+            # Write input CSS (only utilities, since GLOBAL_CSS has base reset)
+            with open(input_css, "w") as f:
+                f.write("@tailwind components;\\n@tailwind utilities;\\n")
+                
+            # Write a basic tailwind config to avoid preflight overriding global CSS
+            with open(config_file, "w") as f:
+                f.write("module.exports = { corePlugins: { preflight: false }, content: ['./content.json'] };\\n")
+                
+            # Run tailwindcss CLI
+            # The docker container has tailwindcss installed at /usr/local/bin/tailwindcss
+            cmd = [
+                "tailwindcss",
+                "-c", config_file,
+                "-i", input_css,
+                "-o", output_css,
+                "--minify"
+            ]
+            
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=tmpdir
+            )
+            
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                print(f"[css_bundler] Tailwind CLI failed: {stderr.decode()}")
+                return ""
+                
+            # Read output CSS
+            if os.path.exists(output_css):
+                with open(output_css, "r") as f:
+                    return f.read()
+            return ""
+    except Exception as e:
+        print(f"[css_bundler] Error running Tailwind CLI: {str(e)}")
+        return ""
+
 async def bundle_css_for_page(components: list) -> str:
     """
     Bundle all required CSS for a page with tree-shaking and multi-tier caching.
@@ -97,6 +158,11 @@ async def bundle_css_for_page(components: list) -> str:
     # L3: Generate from Registry
     print(f"[css_bundler] Generating CSS bundle for {len(components)} components...")
     css_bundle = bundle_css_for_components(components)
+    
+    # ==== TAILWIND CSS GENERATION ====
+    tailwind_css = await generate_tailwind_utilities(components)
+    if tailwind_css:
+        css_bundle += "\\n/* Tailwind Utilities */\\n" + tailwind_css
     
     # Populate L1 Cache
     async with _CSS_BUNDLE_CACHE_LOCK:

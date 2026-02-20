@@ -10,10 +10,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Users } from 'lucide-react';
 import { RedisSettingsForm } from './settings/shared/RedisSettingsForm';
 import { PrivacySettingsForm } from './settings/shared/PrivacySettingsForm';
 import { ProjectDetailsForm } from './settings/shared/ProjectDetailsForm';
+import { EmailProviderSettingsForm } from './settings/shared/EmailProviderSettingsForm';
+import { AdminInviteForm } from './settings/shared/AdminInviteForm';
 
 export const SettingsPanel: React.FC = () => {
   return (
@@ -26,8 +28,9 @@ export const SettingsPanel: React.FC = () => {
       </div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
+        <TabsList className="grid w-full grid-cols-4 lg:w-[800px]">
           <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="team">Team & Emails</TabsTrigger>
           <TabsTrigger value="cache">Cache & Performance</TabsTrigger>
           <TabsTrigger value="privacy">Privacy & Tracking</TabsTrigger>
         </TabsList>
@@ -49,6 +52,28 @@ export const SettingsPanel: React.FC = () => {
               <Button variant="destructive">
                 Delete Project
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Team & Emails Tab */}
+        <TabsContent value="team" className="space-y-6 mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Team Management
+              </CardTitle>
+              <CardDescription>
+                Invite colleagues to collaborate on this project.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <AdminInviteForm />
+
+              <Separator className="my-6" />
+
+              <EmailProviderSettingsForm />
             </CardContent>
           </Card>
         </TabsContent>

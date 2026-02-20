@@ -1,3 +1,5 @@
-export { RedisSettingsForm } from './RedisSettingsForm';
-export { PrivacySettingsForm } from './PrivacySettingsForm';
-export { ProjectDetailsForm } from './ProjectDetailsForm';
+export * from './RedisSettingsForm';
+export * from './PrivacySettingsForm';
+export * from './ProjectDetailsForm';
+export * from './EmailProviderSettingsForm';
+export * from './AdminInviteForm';

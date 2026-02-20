@@ -165,3 +165,24 @@ export interface PrivacySettings {
     // Advanced variable toggles
     advancedVariables: AdvancedVariables
 }
+
+export interface EmailProviderSettings {
+    provider: 'smtp' | 'resend' | 'mailgun'
+    smtp_host: string | null
+    smtp_port: number | null
+    smtp_user: string | null
+    smtp_password: string | null
+    smtp_secure: boolean
+    from_email: string | null
+    from_name: string | null
+}
+
+export interface AdminInviteRequest {
+    email: string
+    role: 'admin' | 'member'
+}
+
+export interface AdminInviteResponse {
+    success: boolean
+    message: string
+}

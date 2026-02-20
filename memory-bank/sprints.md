@@ -259,176 +259,31 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 
 ### Sprint 6 Tasks
 
-- [ ] **Automation Engine Enhancement**
-  - [x] Add new Dafthunk node types (HTTP Request, Transform, Condition)
-  - [ ] Implement workflow scheduling (cron-based triggers) - _Schema supported, runner pending_
-  - [ ] Add workflow versioning and history - _Version increment implemented, history storage pending_
-  - [x] Create workflow testing/debugging UI - _Backend API support added_
-- [ ] **Edge Deployment**
-  - [ ] Add `wrangler.toml` for Cloudflare Workers
-  - [ ] Create deployment scripts for one-click deploy
-  - [ ] Support deployment targets:
-    - [ ] Cloudflare Workers
-    - [ ] Vercel Edge Functions
-    - [ ] Supabase Edge Functions
-  - [ ] Add deployment status tracking in Builder
-- [ ] **Environment Configuration**
-  - [ ] Secrets management for edge deployments
-  - [ ] Environment variable injection
+#### 1. Automation Engine (Partially Complete)
+- [x] **New Node Types**: `HTTP Request`, `Transform`, `Condition`, `Logic`, `Data Request` implemented in `runtime.ts` and `nodeSchemas.ts`.
+- [ ] **Scheduling**: `schedule_trigger` schema exists, but the cron runner/scheduler implementation is pending.
+- [ ] **History & Versioning**: Version incrementing is implemented in `deploy.ts`, but history retrieval and rollback features are missing.
+- [x] **Testing/Debugging**: Backend API support (`singleNodeRoute`) is implemented for testing individual nodes.
 
-### Sprint 6 Acceptance Criteria
+#### 2. Edge Deployment (Pending)
+- [ ] **Configuration**: `wrangler.toml` for Cloudflare Workers.
+- [ ] **Scripts**: One-click deploy scripts.
+- [ ] **Targets**: Cloudflare Workers, Vercel Edge, Supabase Edge.
+- [ ] **UI Integration**: Deployment status in Builder.
 
-- [x] New automation nodes work in workflow editor
+#### 3. Environment Config (Pending)
+- [ ] Secrets management for edge deployments.
+- [ ] Environment variable injection.
+
+### Sprint 6 Acceptance Criteria (Updated)
+
+- [x] New automation nodes work in workflow editor (Schema & Runtime support verified)
 - [ ] Workflows can be scheduled with cron triggers
 - [ ] One-click deploy to Cloudflare Workers works
 - [ ] Deployment status visible in Builder UI
 - [ ] Secrets are securely managed
 
 ---
-
-## Post-MVP: Future Sprints
-
-The following items are **NOT in MVP** but planned for future releases:
-
-### Future Sprint: Observability
-
-- Axiom/Sentry logging integration
-- OpenTelemetry tracing
-- Performance dashboards
-
-### Future Sprint: Custom WebSockets
-
-- Custom WebSocket implementation (currently use Supabase Realtime)
-- Real-time workflow execution streaming
-
-### Future Sprint: Multi-Database Support
-
-- Neon/PlanetScale drivers
-- Self-hosted Postgres/MySQL support
-
-### Future Sprint: Enterprise Secrets Management (Infisical)
-
-- Self-hosted [Infisical](https://github.com/Infisical/infisical) integration
-- Deploy-time secrets injection (preserves edge self-sufficiency)
-- End-to-end encrypted secrets storage
-- Audit logs and access control
-- Multi-environment sync (dev/staging/prod)
-- Multi-environment sync (dev/staging/prod)
-- **When:** When team collaboration or compliance (SOC2/HIPAA) required
-
-### Future Sprint: Local Data Proxy (Hybrid Edge)
-
-- **Goal:** Connect Edge workers to local/private infrastructure (Redis, SQL) without public IPs.
-- **Tools:** `serverless-redis-http`, `ngrok`, or Cloudflare Tunnels.
-- **Use Case:** Developing locally with "production-like" Edge constraints, or connecting Edge apps to on-premise legacy databases.
-- **Implementation:**
-  - Containerize proxy services (e.g., `srh` for Redis).
-  - Provide easy "dev-mode" docker-compose to spin up proxies side-by-side.
-  - Test suite for Hybrid connectivity.
-
-### Future Sprint: One-Click Integrations
-
-- **Goal:** Simplify connecting third-party services (Upstash, Supabase, Vercel) via OAuth/management APIs.
-- **Features:**
-  - **Upstash:** "Connect with Upstash" button -> Auto-create/select database -> Auto-fill Redis credentials.
-  - **Supabase:** Project selector via Management API.
-  - **Vercel:** Auto-deploy integration.
-- **When:** To improve "Time to Hello World" and onboarding UX.
-
-### Future Sprint: Backend Redis Caching
-
-- **Goal:** Extend Redis caching to FastAPI backend for data source operations.
-- **Use Cases:**
-  - **Schema Discovery**: Cache table/column metadata from user databases (speeds up Table Selector dropdowns)
-  - **External API Caching**: Cache responses from slow APIs (WordPress, Airtable, etc.)
-  - **Rate Limiting**: Protect backend endpoints from abuse
-- **Implementation:**
-  - Wire existing `redis_client.py` helpers (`cache_get`/`cache_set`) into data source routers
-  - Add `@cached` decorator pattern for endpoint handlers
-  - Share TTL configuration from Settings UI
-- **When:** When external API integrations (WordPress, etc.) are added
-
-### Future Sprint: Storage Architecture Refactor
-
-- **Move admin storage APIs to FastAPI** (FileBrowser calls FastAPI, not Hono)
-- **On-demand edge shipping**: Only include storage routes in edge bundle if published pages use storage
-- **Tree-shaking**: Remove unused storage code from edge bundle (~50KB savings)
-- **Follows "Compute on Publish" pattern**: Same as DataTable - admin on FastAPI, runtime on Edge
-- **Current state**: Storage admin calls Hono directly (works but architecturally inconsistent)
-- **When:** Before production or when bundle size matters
-
-### Future Sprint: Storage Provider Selector
-
-- **Goal:** Allow users to select which connected storage provider to use for asset uploads.
-- **Use Case:** User has multiple Supabase projects connected, or wants to use different storage for different purposes.
-- **Features:**
-  - Dropdown in Settings to select default storage provider
-  - Per-upload override option
-  - Multi-provider support (Supabase, S3, R2, etc.)
-- **Current MVP:** Auto-detect first Supabase datasource for `frontbase_assets` bucket
-- **When:** When multi-datasource support is common or users request flexibility
-
-### Future Sprint: PWA Support for Published Apps
-
-- **Goal:** Enable Progressive Web App capabilities for apps/pages built with Frontbase.
-- **Use Case:** Published sites become installable, load faster, and feel more app-like.
-- **Features:**
-  - **Per-Project Setting:** Toggle in Project Settings: `☐ Enable PWA`
-  - **Dynamic Manifest:** Generate `manifest.json` using project name, favicon, theme colors
-  - **Service Worker:** Smart caching strategy:
-    - Cache-first for static assets (CSS, JS, images)
-    - Network-first for API data
-    - App shell caching for instant loads
-  - **Install Prompt:** "Add to Home Screen" prompt for visitors
-  - **Offline Support:** Landing pages work offline, app shell loads for data-driven apps
-- **Implementation:**
-  - Edge Engine generates `manifest.json` per project
-  - Configurable service worker served from `/sw.js`
-  - Settings UI for theme color, display mode (standalone/fullscreen)
-- **Estimate:** 6-9 hours
-- **Risk:** Medium (caching complexity, service worker debugging)
-- **Default:** OFF by default, easy to enable
-- **When:** V2 feature, nice-to-have for professional feel
-
-### Future Sprint: GDPR Compliance Enhancements
-
-- **Goal:** Full GDPR compliance for visitor tracking and privacy features.
-- **Features:**
-  - **Cookie Consent Banner**: UI component that shows before setting tracking cookies
-    - Accept/Reject buttons
-    - Store consent choice in cookie
-    - Only set tracking cookies after explicit consent
-    - Configurable banner text and styling
-  - **IP Anonymization Toggle**: Privacy setting to anonymize IP addresses
-    - Remove last octet (e.g., `192.168.1.123` → `192.168.1.0`)
-    - Apply to `visitor.ip` before storage/logging
-    - Comply with GDPR "privacy by design" principle
-  - **Privacy Policy Template**: Auto-generated privacy policy page
-    - Explains what data is collected (cookies, IP, headers)
-    - Links to GDPR rights (access, deletion, portability)
-    - Customizable per-project branding
-    - Route: `/privacy` (auto-generated)
-  - **Data Retention Controls**: Configure how long visitor data persists
-    - Auto-delete tracking cookies after expiry
-    - Purge visitor logs older than X days
-- **Implementation:**
-  - Create `ConsentBanner.tsx` component (edge-rendered)
-  - Add `anonymizeIPs` to `PrivacySettings` model
-  - Update `context.ts` to check consent before tracking
-  - Generate privacy policy from template engine
-- **When:** Before launching in EU markets or handling EU user data
-
-
-### Future Sprint: Conditional Service Deployment
-
-- **Goal:** Optimize local development resource usage by only starting necessary containers.
-- **Issue:** Currently `docker-compose.yml` starts PostgreSQL even when `DATABASE_URL` is set to SQLite.
-- **Implementation:**
-  - Use Docker Compose `profiles` to conditionally start services
-  - Create convenience scripts (`npm run dev:sqlite`, `npm run dev:postgres`)
-  - Update `docker-compose.yml` to assign `postgres` service to a profile
-- **When:** Post-MVP or during a "DevEx" sprint
-
 
 ---
 

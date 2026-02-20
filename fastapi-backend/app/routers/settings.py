@@ -300,3 +300,145 @@ async def update_general_settings(settings_update: GeneralSettings):
     save_settings(settings)
     
     return settings_update
+
+
+# =============================================================================
+# Telemetry (SaaS Architecture)
+# =============================================================================
+
+class TelemetryData(BaseModel):
+    install_id: str
+    edition: str
+    tier: Optional[str] = None
+    page_count: int
+    automation_count: int
+    data_sources: list[str]
+    storage_providers: list[str]
+    email_providers: list[str]
+
+@router.post("/telemetry")
+async def collect_telemetry(data: TelemetryData):
+    """
+    Collects anonymized telemetry from self-hosted editions.
+    Currently mocked to just log locally.
+    """
+    print(f"[Telemetry] Received stats for install {data.install_id} ({data.edition}): {data.page_count} pages, {data.automation_count} automations")
+    return {"success": True, "message": "Telemetry received"}
+
+
+# =============================================================================
+# License Keys (SaaS Architecture)
+# =============================================================================
+
+class LicenseValidationRequest(BaseModel):
+    license_key: str
+    install_id: str
+    
+class LicenseValidationResponse(BaseModel):
+    valid: bool
+    tier: str
+    features: list[str]
+    message: str
+
+@router.post("/validate-license", response_model=LicenseValidationResponse)
+async def validate_license(data: LicenseValidationRequest):
+    """
+    Validates a license key for Enterprise or Community Free upgrades.
+    Currently mocked to accept any key starting with 'fb_'.
+    """
+    is_valid = data.license_key.startswith("fb_")
+    
+    if is_valid:
+        return LicenseValidationResponse(
+            valid=True,
+            tier="enterprise",
+            features=["supabase", "custom_domains", "telemetry_enabled"],
+            message="License activated"
+        )
+    else:
+        return LicenseValidationResponse(
+            valid=False,
+            tier="community",
+            features=[],
+            message="Invalid license key"
+        )
+
+
+# =============================================================================
+# Email Provider Settings
+# =============================================================================
+
+class EmailProviderSettings(BaseModel):
+    provider: Literal["smtp", "resend", "mailgun"] = "smtp"
+    # SMTP
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = 587
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_secure: bool = True
+    # Global
+    from_email: Optional[str] = None
+    from_name: Optional[str] = None
+
+@router.get("/email", response_model=EmailProviderSettings)
+async def get_email_settings():
+    """Get email provider settings"""
+    settings = load_settings()
+    email_config = settings.get("email_provider", {})
+    return EmailProviderSettings(**email_config)
+
+@router.put("/email", response_model=EmailProviderSettings)
+async def update_email_settings(settings_update: EmailProviderSettings):
+    """Update email provider settings"""
+    settings = load_settings()
+    settings["email_provider"] = settings_update.dict()
+    save_settings(settings)
+    return settings_update
+
+
+# =============================================================================
+# Admin Invites (SaaS Architecture)
+# =============================================================================
+
+class AdminInviteRequest(BaseModel):
+    email: str
+    role: Literal["admin", "member"] = "admin"
+
+class AdminInviteResponse(BaseModel):
+    success: bool
+    message: str
+
+@router.post("/invites", response_model=AdminInviteResponse)
+async def send_admin_invite(request: AdminInviteRequest):
+    """Send an invitation email to a new admin."""
+    # In a real implementation:
+    # 1. Generate invitation token
+    # 2. Store in DB
+    # 3. Send email via configured provider
+    
+    from .auth import ADMIN_USERS, hash_password
+    import secrets
+    from datetime import datetime
+    
+    # Check if already exists
+    if request.email in ADMIN_USERS:
+        return AdminInviteResponse(success=False, message="User already exists")
+    
+    # Mock creating the user immediately with a random password 
+    # (Since there is no /register or set-password flow yet)
+    user_id = f"admin-{secrets.token_hex(4)}"
+    random_pass = secrets.token_urlsafe(12)
+    now = datetime.utcnow().isoformat() + "Z"
+    
+    ADMIN_USERS[request.email] = {
+        "id": user_id,
+        "email": request.email,
+        "password_hash": hash_password(random_pass),
+        "created_at": now,
+        "updated_at": now,
+    }
+    
+    # In production, we would use settings["email_provider"] to send the email
+    print(f"[Email Provider] Sending invite to {request.email} with temporary password: {random_pass}")
+    
+    return AdminInviteResponse(success=True, message=f"Invitation sent to {request.email}")

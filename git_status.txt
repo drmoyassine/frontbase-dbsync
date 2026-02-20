@@ -1,0 +1,29 @@
+ M BACKLOG.md
+ M fastapi-backend/Dockerfile
+ M fastapi-backend/app/routers/settings.py
+ M fastapi-backend/app/services/css_bundler.py
+ M fastapi-backend/main.py
+ D memory-bank/Feb2026-sprints.md
+ M memory-bank/activeContext.md
+ M memory-bank/progress.md
+ M memory-bank/sprints.md
+ M services/edge/src/index.ts
+ M services/edge/src/routes/pages.ts
+ D services/edge/src/routes/storage.ts
+ M services/edge/src/ssr/PageRenderer.ts
+ D services/edge/src/storage/README.md
+ D services/edge/src/storage/index.ts
+ D services/edge/src/storage/supabase_provider.ts
+ D services/edge/src/storage/types.ts
+ M src/components/dashboard/FileBrowser/api.ts
+ M src/components/dashboard/SettingsPanel.tsx
+ M src/components/dashboard/settings/hooks/index.ts
+ M src/components/dashboard/settings/shared/index.ts
+ M src/modules/dbsync/api/settings.ts
+ M src/modules/dbsync/types/index.ts
+?? docker-compose.cloud.yml
+?? fastapi-backend/app/routers/storage.py
+?? git_status.txt
+?? src/components/dashboard/settings/hooks/useEmailSettings.ts
+?? src/components/dashboard/settings/shared/AdminInviteForm.tsx
+?? src/components/dashboard/settings/shared/EmailProviderSettingsForm.tsx

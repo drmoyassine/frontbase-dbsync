@@ -1,0 +1,130 @@
+version: '3.8'
+
+# ==============================================================================
+# FRONTBASE CLOUD DOCKER COMPOSE 
+# ==============================================================================
+#
+# Removes the local Redis instances because the Cloud Edition assumes an
+# external Upstash serverless Redis instance is configured via Settings UI.
+#
+# Usage: docker-compose -f docker-compose.cloud.yml up -d
+#
+# ==============================================================================
+
+services:
+  backend:
+    build:
+      context: ./fastapi-backend
+      dockerfile: Dockerfile
+    expose:
+      - "8000"
+    environment:
+      # Database: derived from COMPOSE_PROFILES (sqlite default, postgresql if profile active)
+      - DATABASE=${COMPOSE_PROFILES:-sqlite}
+      - DB_PASSWORD=${DB_PASSWORD:-frontbase-dev-password}
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      # Edge Engine URL (internal network)
+      - EDGE_URL=http://edge:3002
+      - EDGE_SSR_URL=http://edge:3002
+      - EDGE_ENGINE_URL=http://edge:3002
+      # Admin Authentication
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+    volumes:
+      - backend_data:/app/data
+    networks:
+      - frontbase
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://127.0.0.1:8000/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+
+  # PostgreSQL — only starts when COMPOSE_PROFILES=postgresql
+  postgres:
+    image: postgres:16-alpine
+    profiles: [ "postgresql" ]
+    environment:
+      POSTGRES_USER: frontbase
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-frontbase-dev-password}
+      POSTGRES_DB: frontbase
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - frontbase
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U frontbase" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  edge:
+    build:
+      context: ./services/edge
+      dockerfile: Dockerfile
+    expose:
+      - "3002"
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      # Database for edge storage (SQLite)
+      - SQLITE_PATH=/app/data/edge.db
+      - DATABASE_URL=file:/app/data/edge.db
+      - PAGES_DB_URL=file:/app/data/pages.db
+      # FastAPI backend URL (Docker internal network)
+      - FASTAPI_URL=http://backend:8000
+      # Webhook API keys (comma-separated)
+      - API_KEYS=${API_KEYS:-}
+      # Supabase JWT for end-user auth (optional)
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
+      # Public URL for preview links (set PRIMARY_DOMAIN or leave empty for auto-detect)
+      - PUBLIC_URL=${PRIMARY_DOMAIN:+https://${PRIMARY_DOMAIN}}
+    volumes:
+      - edge_data:/app/data
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - frontbase
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3002/api/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        # Empty = use relative URLs (recommended for production)
+        VITE_API_URL: ""
+    expose:
+      - "80"
+    depends_on:
+      - backend
+      - edge
+    networks:
+      - frontbase
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:80/nginx-health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  frontbase:
+    driver: bridge
+
+volumes:
+  backend_data:
+  postgres_data:
+  edge_data:

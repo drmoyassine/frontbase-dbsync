@@ -30,7 +30,6 @@ import { executionsRoute } from './routes/executions';
 import { pagesRoute } from './routes/pages';
 import { importRoute } from './routes/import';
 import { dataRoute } from './routes/data';
-import { storageRoute } from './routes/storage'; // Sprint 4
 import { cacheRoute } from './routes/cache'; // Sprint 4
 import { runStartupSync } from './startup/sync.js';
 
@@ -136,10 +135,6 @@ app.route('/api/webhook', webhookRoute);
 app.route('/api/executions', executionsRoute);
 app.route('/api/import', importRoute); // Publish contract import endpoint
 app.route('/api/data', dataRoute); // Data API for client hydration
-
-// Sprint 4: Storage with higher body limit for file uploads
-app.use('/api/storage/upload', bodyLimit({ maxSize: 50 * 1024 * 1024 })); // 50MB for uploads
-app.route('/api/storage', storageRoute);
 app.route('/api/cache', cacheRoute); // Sprint 4: Cache
 
 // =============================================================================

@@ -60,8 +60,8 @@ app = FastAPI(
     title="Frontbase-DBSync API",
     description="Unified API for Frontbase and DB-Sync functionality",
     version="1.0.0",
-    lifespan=lifespan
-    # Note: redirect_slashes=True (default) to support trailing slash normalization
+    lifespan=lifespan,
+    redirect_slashes=False  # Prevent 307 redirect loops from trailing slashes
 )
 
 # Configure CORS for frontend integration

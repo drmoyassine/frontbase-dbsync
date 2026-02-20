@@ -15,12 +15,6 @@ export default defineConfig(({ mode }) => {
       host: "::",
       port: 5173,
       proxy: {
-        // Storage API routes -> Edge Engine
-        '/api/storage': {
-          target: 'http://localhost:3002',
-          changeOrigin: true,
-          secure: false,
-        },
         '/api': {
           target: 'http://localhost:8000', // Redirect all API calls to FastAPI
           changeOrigin: true,

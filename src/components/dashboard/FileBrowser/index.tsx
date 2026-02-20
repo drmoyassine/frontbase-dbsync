@@ -120,6 +120,9 @@ export function FileBrowser({
     const { data: buckets, isLoading: bucketsLoading, error: bucketsError, refetch: refetchBuckets } = useQuery({
         queryKey: ['storage-buckets'],
         queryFn: fetchBuckets,
+        retry: 1, // Only retry once on failure (prevents request flooding)
+        staleTime: 30_000, // Cache for 30s
+        refetchOnWindowFocus: false, // Don't refetch on tab switch
     });
 
     const fullPath = currentBucket ? `${currentBucket}/${currentPath}`.replace(/\/$/, '') : '';

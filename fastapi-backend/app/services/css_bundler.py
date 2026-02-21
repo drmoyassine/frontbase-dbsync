@@ -82,11 +82,12 @@ async def generate_tailwind_utilities(components: list) -> str:
             output_css = os.path.join(tmpdir, "output.css")
             
             # 1. Copy Edge SSR renderer source files as scan targets
+            # Check multiple paths: local dev (relative), Docker (copied at build)
             edge_ssr_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "services", "edge", "src", "ssr")
             
-            # Also check Docker path
+            # Docker path: Edge SSR source copied into FastAPI image at build time
             if not os.path.isdir(edge_ssr_dir):
-                edge_ssr_dir = "/app/services/edge/src/ssr"
+                edge_ssr_dir = "/app/edge-ssr-source"
             
             source_files_found = False
             if os.path.isdir(edge_ssr_dir):

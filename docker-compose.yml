@@ -14,8 +14,8 @@ version: '3.8'
 services:
   backend:
     build:
-      context: ./fastapi-backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: fastapi-backend/Dockerfile
     expose:
       - "8000"
     environment:

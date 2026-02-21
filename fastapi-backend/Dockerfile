@@ -17,15 +17,20 @@ RUN curl -sLO https://github.com/tailwindlabs/tailwindcss/releases/latest/downlo
   && chmod +x tailwindcss-linux-x64 \
   && mv tailwindcss-linux-x64 /usr/local/bin/tailwindcss
 
-# Copy requirements first for caching
-COPY requirements.txt .
+# Copy requirements first for caching (build context is monorepo root)
+COPY fastapi-backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application
-COPY . .
+COPY fastapi-backend/ .
+
+# Copy Edge SSR source files for Tailwind CSS class scanning
+# The Tailwind CLI needs to scan these TypeScript renderers to find
+# all CSS class names (bg-primary, text-muted-foreground, flex, etc.)
+COPY services/edge/src/ssr/ /app/edge-ssr-source/
 
 # Copy entrypoint script and make executable
-COPY docker_entrypoint.sh /usr/local/bin/
+COPY fastapi-backend/docker_entrypoint.sh /usr/local/bin/
 RUN dos2unix /usr/local/bin/docker_entrypoint.sh && chmod +x /usr/local/bin/docker_entrypoint.sh
 
 # Create data directory
@@ -44,3 +49,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 
 # Run entrypoint script
 CMD ["docker_entrypoint.sh"]
+

@@ -33,7 +33,7 @@ import { cn } from '@/lib/utils';
 import { Bucket, StorageFile } from './types';
 import { MIME_TYPE_OPTIONS, PAGE_SIZE } from './constants';
 import { formatBytes, getFileIcon } from './utils';
-import { fetchBuckets, fetchFiles, getSignedUrl } from './api';
+import { fetchBuckets, fetchFiles, getSignedUrl, getPublicUrl } from './api';
 import { useFileBrowserState } from './hooks/useFileBrowserState';
 import { useStorageMutations } from './hooks/useStorageMutations';
 
@@ -175,7 +175,14 @@ export function FileBrowser({
             const path = currentPath ? `${currentPath}/${file.name}` : file.name;
             try {
                 if (!currentBucket) throw new Error('No bucket selected');
-                const url = await getSignedUrl(path, currentBucket);
+
+                // Use public URL for public buckets (no Supabase API call needed)
+                const currentBucketData = buckets?.find(b => b.id === currentBucket || b.name === currentBucket);
+                const isPublicBucket = currentBucketData?.public ?? false;
+
+                const url = isPublicBucket
+                    ? await getPublicUrl(path, currentBucket)
+                    : await getSignedUrl(path, currentBucket);
 
                 // In selectMode, call onFileSelect instead of opening
                 if (selectMode && onFileSelect) {
@@ -193,7 +200,14 @@ export function FileBrowser({
         const path = currentPath ? `${currentPath}/${fileName}` : fileName;
         try {
             if (!currentBucket) throw new Error('No bucket selected');
-            const url = await getSignedUrl(path, currentBucket);
+
+            // Use public URL for public buckets
+            const currentBucketData = buckets?.find(b => b.id === currentBucket || b.name === currentBucket);
+            const isPublicBucket = currentBucketData?.public ?? false;
+
+            const url = isPublicBucket
+                ? await getPublicUrl(path, currentBucket)
+                : await getSignedUrl(path, currentBucket);
             await navigator.clipboard.writeText(url);
             toast({ title: 'URL Copied', description: 'The file URL has been copied to your clipboard.' });
         } catch (e) {

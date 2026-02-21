@@ -370,12 +370,34 @@ async def get_signed_url(bucket: str, path: str, expiresIn: int = 3600):
             
         if not response.is_success:
             raise HTTPException(status_code=response.status_code, detail=f"Failed to generate signed URL: {response.text}")
+        
+        # Supabase returns "signedURL" (uppercase) with a relative path — fix both
+        relative_path = response.json().get("signedURL")
+        if relative_path:
+            full_url = f"{ctx['url']}/storage/v1{relative_path}"
+        else:
+            full_url = None
             
-        return {"success": True, "signedUrl": response.json().get("signedUrl")}
+        return {"success": True, "signedUrl": full_url}
     except HTTPException as e:
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/public-url")
+async def get_public_url(bucket: str, path: str):
+    """Get the public URL for a file in a public bucket. No API call needed."""
+    db = SessionLocal()
+    try:
+        ctx = get_project_context_sync(db, "builder")
+    finally:
+        db.close()
+    
+    from urllib.parse import quote
+    safe_path = quote(path, safe="/")
+    public_url = f"{ctx['url']}/storage/v1/object/public/{bucket}/{safe_path}"
+    return {"success": True, "publicUrl": public_url}
 
 
 @router.post("/move")

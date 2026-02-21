@@ -1,5 +1,29 @@
 # Frontbase Backlog
 
+## 🔴 Edge Auth & Private Pages (HIGH PRIORITY)
+
+Infrastructure exists (`auth.ts`, `context.ts`, `@supabase/supabase-js` already in Edge) but is not wired up. Implementation is phased:
+
+### Phase 1: Login/Signup Form Component
+- [ ] **Auth Form component** — New builder component (Login/Signup form) that renders via Edge SSR
+- [ ] **Client-side auth** — Hydrated form calls `supabase.auth.signInWithPassword()` / `signUp()` directly from browser
+- [ ] **Session cookie setting** — After successful auth, store JWT in `httpOnly` cookie via Hono endpoint (not localStorage)
+- [ ] **Redirect after login** — Configurable redirect URL per form instance
+
+### Phase 2: Private Page Enforcement
+- [ ] **Uncomment and implement page gating** — `pages.ts:360` — check `page.isPublic`, redirect unauthenticated users to a configured login page
+- [ ] **Auth middleware in Hono** — Extract and verify JWT from cookie before SSR, populate `context.user`
+- [ ] **Configurable login redirect** — Project-level setting: "When unauthorized, redirect to: [slug]"
+
+### Phase 3: Role-Based Visibility
+- [ ] **Component-level access rules** — Builder property: "Visible to roles: [admin, user, ...]"
+- [ ] **Server-side filtering** — Exclude components from SSR output if user role doesn't match (not CSS `display:none`)
+- [ ] **User-scoped data queries** — Pass user JWT when fetching `record`/`records` context so Supabase RLS filters data
+
+### Phase 4: Admin User Management (Dashboard)
+- [ ] **Users panel** — List, search, invite, delete Supabase auth users from the FastAPI dashboard
+- [ ] **Decision: `supabase-py` vs raw `httpx`** — GoTrue Admin API for user CRUD (invite, list, delete, update roles)
+- [ ] **Contacts sync** — Ensure `contacts` table stays in sync with auth users
 ## Performance
 - [ ] **Replace Tailwind CDN with build-time CSS generation** — Currently SSR pages load `cdn.tailwindcss.com` (~300KB JS) for runtime class compilation. Replace with Tailwind CLI at publish time: scan `layoutData` component classes → generate static CSS → inject as `cssBundle`. Eliminates external dependency, console warning, and ~300KB load per page.
 - [ ] **Backend Redis Caching** — Extend Redis caching to FastAPI backend for data source operations. Cache table/column metadata (Schema Discovery), external API caching, and rate limiting.

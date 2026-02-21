@@ -96,6 +96,17 @@ export async function getSignedUrl(path: string, bucket: string): Promise<string
     return data.signedUrl;
 }
 
+export async function getPublicUrl(path: string, bucket: string): Promise<string> {
+    const params = new URLSearchParams();
+    params.set('path', path);
+    params.set('bucket', bucket);
+
+    const res = await api.get(`/api/storage/public-url?${params.toString()}`);
+    const data = res.data;
+    if (!data.success) throw new Error(data.error || 'Failed to get URL');
+    return data.publicUrl;
+}
+
 export async function uploadFile(
     file: File,
     path?: string,

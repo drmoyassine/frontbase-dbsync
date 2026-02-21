@@ -313,15 +313,23 @@ async def publish_page(page_id: str):
                 detail=f"Page not found: {page_id}"
             )
         
-        # Force load attributes before detaching
+        # Force load ALL attributes before detaching
         _ = page.layout_data
         _ = page.seo_data
+        _ = page.id
+        _ = page.slug
+        _ = page.name
+        _ = page.title
+        _ = page.description
+        _ = page.is_public
+        _ = page.is_homepage
         
-        # Get datasources
-        datasources = get_datasources_for_publish(db)
-        
-        # Expunge page to keep it usable after session close
+        # Expunge page BEFORE datasource query — if the datasources table
+        # doesn't exist, the rollback would expire all loaded objects
         db.expunge(page)
+        
+        # Get datasources (may rollback on missing table — safe now)
+        datasources = get_datasources_for_publish(db)
         
     finally:
         db.close() # RELEASE DB CONNECTION NOW

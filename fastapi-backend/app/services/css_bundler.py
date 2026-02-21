@@ -210,7 +210,7 @@ async def generate_tailwind_utilities(components: list) -> str:
                 
             # Write input CSS — Tailwind v4 syntax with theme config
             with open(input_css, "w") as f:
-                f.write('@import "tailwindcss/utilities";\n')
+                f.write('@import "tailwindcss";\n')
                 f.write('@source "./content";\n\n')
                 # Map CSS variable color names so Tailwind generates
                 # bg-primary, text-muted-foreground, border-border, etc.

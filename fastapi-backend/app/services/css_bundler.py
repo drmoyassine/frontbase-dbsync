@@ -156,10 +156,34 @@ async def generate_tailwind_utilities(components: list) -> str:
             else:
                 print(f"[css_bundler] Scanning Edge SSR source files for Tailwind classes")
                 
-            # Write input CSS — Tailwind v4 syntax
+            # Write input CSS — Tailwind v4 syntax with theme config
             with open(input_css, "w") as f:
                 f.write('@import "tailwindcss/utilities";\n')
-                f.write('@source "./content";\n')
+                f.write('@source "./content";\n\n')
+                # Map CSS variable color names so Tailwind generates
+                # bg-primary, text-muted-foreground, border-border, etc.
+                f.write('@theme {\n')
+                f.write('  --color-background: hsl(var(--background));\n')
+                f.write('  --color-foreground: hsl(var(--foreground));\n')
+                f.write('  --color-primary: hsl(var(--primary));\n')
+                f.write('  --color-primary-foreground: hsl(var(--primary-foreground));\n')
+                f.write('  --color-secondary: hsl(var(--secondary));\n')
+                f.write('  --color-secondary-foreground: hsl(var(--secondary-foreground));\n')
+                f.write('  --color-muted: hsl(var(--muted));\n')
+                f.write('  --color-muted-foreground: hsl(var(--muted-foreground));\n')
+                f.write('  --color-accent: hsl(var(--accent));\n')
+                f.write('  --color-accent-foreground: hsl(var(--accent-foreground));\n')
+                f.write('  --color-destructive: hsl(var(--destructive));\n')
+                f.write('  --color-destructive-foreground: hsl(var(--destructive-foreground));\n')
+                f.write('  --color-card: hsl(var(--card));\n')
+                f.write('  --color-card-foreground: hsl(var(--card-foreground));\n')
+                f.write('  --color-popover: hsl(var(--popover));\n')
+                f.write('  --color-popover-foreground: hsl(var(--popover-foreground));\n')
+                f.write('  --color-border: hsl(var(--border));\n')
+                f.write('  --color-input: hsl(var(--input));\n')
+                f.write('  --color-ring: hsl(var(--ring));\n')
+                f.write('  --radius: var(--radius);\n')
+                f.write('}\n')
                 
             # Run tailwindcss CLI (v4 — no JS config needed)
             cmd = [

@@ -105,50 +105,101 @@ async def generate_tailwind_utilities(components: list) -> str:
                 json.dump(components, f)
             
             if not source_files_found:
-                # Fallback: write a safelist file with all known classes used by renderers
+                # Fallback: write a safelist file with ALL classes used by Edge SSR renderers.
+                # Extracted from: PageRenderer.ts, Navbar.ts, Hero.ts, Features.ts,
+                # Pricing.ts, CTA.ts, FAQ.ts, Footer.ts, LogoCloud.ts
                 safelist = """
+                /* === Custom color utilities (from @theme) === */
+                bg-primary bg-primary/90 bg-background bg-accent bg-card bg-muted bg-secondary
+                bg-primary-foreground bg-destructive
+                text-primary text-primary-foreground text-foreground text-muted-foreground
+                text-accent-foreground text-secondary-foreground text-card-foreground
+                text-destructive text-destructive-foreground
+                border-border border-input border-b border-t border-0 border
+                hover:bg-primary/90 hover:bg-accent hover:bg-secondary/80
+                hover:text-foreground hover:text-primary hover:text-accent-foreground
+                hover:underline hover:opacity-80 hover:opacity-90 hover:shadow-lg
+                dark:block dark:hidden dark:bg-background dark:text-foreground
+
+                /* === Layout === */
                 grid grid-cols-1 grid-cols-2 grid-cols-3 grid-cols-4
                 md:grid-cols-2 md:grid-cols-3 md:grid-cols-4
                 lg:grid-cols-3 lg:grid-cols-4
                 sm:grid-cols-2 sm:grid-cols-3
-                flex flex-col flex-row flex-wrap flex-1
-                md:flex-row
+                flex flex-col flex-row flex-wrap flex-1 shrink-0 grow
+                md:flex-row md:flex
+
+                /* === Alignment === */
                 items-center items-start items-end
                 justify-center justify-between justify-start justify-end
+
+                /* === Spacing === */
                 gap-1 gap-2 gap-3 gap-4 gap-6 gap-8 gap-10 gap-12
+                md:gap-8
                 p-2 p-3 p-4 p-6 p-8 px-2 px-3 px-4 px-6 px-8
                 py-2 py-3 py-4 py-6 py-8 py-10 py-12 py-16 py-20 py-24
-                m-0 m-auto mt-1 mt-2 mt-4 mt-6 mt-8 mb-2 mb-4 mb-6 mb-8
-                mx-auto ml-auto mr-auto
+                sm:px-6 lg:px-8 md:px-12
+                sm:py-16 lg:py-24
+                m-0 m-auto mt-1 mt-2 mt-4 mt-6 mt-8 mt-12 mb-2 mb-3 mb-4 mb-6 mb-8 mb-12
+                mx-auto ml-1 ml-auto mr-auto
+                pt-4 pt-8 pb-4
+
+                /* === Sizing === */
                 w-full w-auto w-5 w-6 w-8 w-10 w-12 w-16 w-24 w-32 w-48
                 h-5 h-6 h-8 h-10 h-12 h-16 h-auto
                 min-h-screen max-w-xs max-w-sm max-w-md max-w-lg max-w-xl max-w-2xl max-w-4xl max-w-6xl max-w-7xl
+
+                /* === Typography === */
                 text-xs text-sm text-base text-lg text-xl text-2xl text-3xl text-4xl text-5xl
+                sm:text-xl sm:text-4xl lg:text-5xl xl:text-6xl md:text-4xl
                 font-normal font-medium font-semibold font-bold font-extrabold
                 text-left text-center text-right
-                leading-tight leading-snug leading-normal leading-relaxed
+                leading-tight leading-snug leading-normal leading-relaxed leading-none
                 tracking-tight tracking-normal tracking-wide
+                whitespace-nowrap break-words truncate
+
+                /* === Generic colors (non-custom) === */
                 text-white text-black text-gray-400 text-gray-500 text-gray-600 text-gray-900
-                bg-white bg-black bg-transparent bg-gray-50 bg-gray-100 bg-gray-900
+                bg-white bg-black bg-transparent bg-gray-50 bg-gray-100 bg-gray-900 bg-green-500/10
+
+                /* === Borders & Radius === */
                 rounded rounded-md rounded-lg rounded-xl rounded-2xl rounded-full
-                border border-0 border-gray-200 border-gray-300
+                border-gray-200 border-gray-300
+
+                /* === Shadows & Effects === */
                 shadow shadow-sm shadow-md shadow-lg shadow-xl
-                overflow-hidden overflow-auto overflow-x-hidden
-                relative absolute fixed inset-0 top-0 bottom-0 left-0 right-0
+
+                /* === Positioning === */
+                relative absolute fixed sticky inset-0 top-0 bottom-0 left-0 right-0 -top-3 left-1/2
                 z-10 z-20 z-50
-                opacity-50 opacity-70 opacity-80 opacity-90
-                transition-all transition-colors duration-150 duration-200 duration-300
-                hover:opacity-80 hover:opacity-90 hover:underline
-                cursor-pointer pointer-events-none select-none
-                truncate whitespace-nowrap break-words
-                list-none list-disc space-y-1 space-y-2 space-y-3 space-y-4
+                -translate-x-1/2
+
+                /* === Overflow & Display === */
+                overflow-hidden overflow-auto overflow-x-hidden
                 hidden block inline-block inline-flex
                 md:hidden md:flex md:block md:inline-flex
                 lg:hidden lg:flex lg:block
+
+                /* === Visibility & Opacity === */
+                opacity-50 opacity-70 opacity-80 opacity-90
+
+                /* === Transitions === */
+                transition-all transition-colors duration-150 duration-200 duration-300
+
+                /* === Interactive === */
+                cursor-pointer pointer-events-none select-none
+
+                /* === Lists & Spacing === */
+                list-none list-disc space-y-1 space-y-2 space-y-3 space-y-4 space-x-4
+
+                /* === Media Objects === */
                 object-cover object-contain
-                no-underline underline decoration-none
-                sr-only not-sr-only
                 aspect-video aspect-square
+
+                /* === Misc === */
+                container
+                underline no-underline
+                sr-only not-sr-only
                 """
                 with open(os.path.join(content_dir, "safelist.txt"), "w") as f:
                     f.write(safelist)

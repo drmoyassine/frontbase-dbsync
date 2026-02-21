@@ -67,6 +67,7 @@ import tempfile
 async def generate_tailwind_utilities(components: list) -> str:
     """
     Pass component JSON to Tailwind CLI to extract used utility classes.
+    Compatible with Tailwind CSS v4+ (uses @import syntax, not @tailwind).
     """
     try:
         # Create a temporary directory
@@ -74,25 +75,19 @@ async def generate_tailwind_utilities(components: list) -> str:
             content_file = os.path.join(tmpdir, "content.json")
             input_css = os.path.join(tmpdir, "input.css")
             output_css = os.path.join(tmpdir, "output.css")
-            config_file = os.path.join(tmpdir, "tailwind.config.js")
             
-            # Write components as JSON (Tailwind's regex will find class names inside it)
+            # Write components as JSON (Tailwind scans this for class names)
             with open(content_file, "w") as f:
                 json.dump(components, f)
                 
-            # Write input CSS (only utilities, since GLOBAL_CSS has base reset)
+            # Write input CSS — Tailwind v4 syntax (no @tailwind directives)
             with open(input_css, "w") as f:
-                f.write("@tailwind components;\\n@tailwind utilities;\\n")
+                f.write('@import "tailwindcss/utilities";\n')
+                f.write('@source "./content.json";\n')
                 
-            # Write a basic tailwind config to avoid preflight overriding global CSS
-            with open(config_file, "w") as f:
-                f.write("module.exports = { corePlugins: { preflight: false }, content: ['./content.json'] };\\n")
-                
-            # Run tailwindcss CLI
-            # The docker container has tailwindcss installed at /usr/local/bin/tailwindcss
+            # Run tailwindcss CLI (v4 — no JS config needed)
             cmd = [
                 "tailwindcss",
-                "-c", config_file,
                 "-i", input_css,
                 "-o", output_css,
                 "--minify"
@@ -162,7 +157,7 @@ async def bundle_css_for_page(components: list) -> str:
     # ==== TAILWIND CSS GENERATION ====
     tailwind_css = await generate_tailwind_utilities(components)
     if tailwind_css:
-        css_bundle += "\\n/* Tailwind Utilities */\\n" + tailwind_css
+        css_bundle += "\n/* Tailwind Utilities */\n" + tailwind_css
     
     # Populate L1 Cache
     async with _CSS_BUNDLE_CACHE_LOCK:

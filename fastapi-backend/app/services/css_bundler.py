@@ -61,157 +61,110 @@ def generate_bundle_cache_key(components: list) -> str:
 
 import json
 import os
+import re
 import subprocess
 import tempfile
 
+def _extract_css_classes_from_source(source_dir: str) -> set:
+    """
+    Extract CSS class names from Edge SSR TypeScript renderer source files.
+    
+    Scans for class="..." and className="..." patterns in template strings
+    and string literals. Also handles conditional class expressions like
+    `props.hideOnDesktop ? 'md:hidden' : ''`.
+    
+    Similar pattern to icon extraction: we parse the source to find
+    exactly what CSS classes are used, then pass them to Tailwind.
+    """
+    classes = set()
+    
+    # Patterns to extract CSS classes from TypeScript source
+    patterns = [
+        # class="..." or className="..." in template literals
+        r'class(?:Name)?=[\"\']([^\"\']+?)[\"\']',
+        r'class(?:Name)?=\\?"([^"]+?)\\"',
+        r'class(?:Name)?=\\"([^\\]+?)\\"',
+        # String literals containing class names (e.g. 'md:hidden', 'flex gap-4')
+        r"'([a-z][a-z0-9:/_-]+(?:\s+[a-z][a-z0-9:/_-]+)*)'",
+    ]
+    
+    if not os.path.isdir(source_dir):
+        return classes
+    
+    for root, dirs, files in os.walk(source_dir):
+        for filename in files:
+            if not (filename.endswith('.ts') or filename.endswith('.tsx')):
+                continue
+            filepath = os.path.join(root, filename)
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                for pattern in patterns:
+                    for match in re.finditer(pattern, content):
+                        class_str = match.group(1)
+                        # Split by whitespace and filter valid class names
+                        for cls in class_str.split():
+                            # Valid Tailwind class: starts with letter or -, 
+                            # contains only valid chars (letters, numbers, colons, slashes, brackets)
+                            cls = cls.strip('",\'`{}$')
+                            if cls and re.match(r'^[a-zA-Z!-][\w:/.[\]-]*$', cls):
+                                classes.add(cls)
+            except Exception as e:
+                print(f"[css_bundler] Warning: Could not read {filepath}: {e}")
+    
+    return classes
+
+
 async def generate_tailwind_utilities(components: list) -> str:
     """
-    Generate Tailwind utility CSS by scanning Edge SSR renderer source files.
+    Generate Tailwind utility CSS using @source inline() with extracted class names.
     
-    The component JSON doesn't contain CSS class names — those are hardcoded
-    in the Edge SSR renderers (PageRenderer.ts, landing/*.ts). We scan those
-    source files so Tailwind can extract all used utility classes.
+    Instead of relying on Tailwind's Oxide scanner to parse TypeScript template
+    literals (which misses responsive variants like md:flex), we:
+    1. Read Edge SSR source files (.ts)
+    2. Extract all CSS class names using regex
+    3. Feed them to Tailwind v4 via @source inline("...")
     
-    Compatible with Tailwind CSS v4+ (@import syntax).
+    This is the CSS equivalent of the icon-fetch pattern: deterministic, 
+    complete, and requires zero manual class maintenance.
+    
+    Compatible with Tailwind CSS v4.2+ (@source inline syntax).
     """
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            content_dir = os.path.join(tmpdir, "content")
-            os.makedirs(content_dir, exist_ok=True)
             input_css = os.path.join(tmpdir, "input.css")
             output_css = os.path.join(tmpdir, "output.css")
             
-            # 1. Copy Edge SSR renderer source files as scan targets
-            # Check multiple paths: local dev (relative), Docker (copied at build)
+            # 1. Find Edge SSR source directory  
             edge_ssr_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "services", "edge", "src", "ssr")
-            
-            # Docker path: Edge SSR source copied into FastAPI image at build time
             if not os.path.isdir(edge_ssr_dir):
                 edge_ssr_dir = "/app/edge-ssr-source"
             
-            source_files_found = False
-            if os.path.isdir(edge_ssr_dir):
-                # Copy renderer files to content dir
-                import shutil
-                for root, dirs, files in os.walk(edge_ssr_dir):
-                    for f in files:
-                        if f.endswith('.ts') or f.endswith('.tsx'):
-                            src = os.path.join(root, f)
-                            dst = os.path.join(content_dir, f)
-                            shutil.copy2(src, dst)
-                            source_files_found = True
+            # 2. Extract all CSS class names from source files
+            extracted_classes = _extract_css_classes_from_source(edge_ssr_dir)
             
-            # Also write component JSON (for any class names in props like className)
-            with open(os.path.join(content_dir, "components.json"), "w") as f:
-                json.dump(components, f)
+            # Also extract class names from component JSON (user-set className props)
+            for component in components:
+                _extract_classes_from_component(component, extracted_classes)
             
-            if not source_files_found:
-                # Fallback: write a safelist file with ALL classes used by Edge SSR renderers.
-                # Extracted from: PageRenderer.ts, Navbar.ts, Hero.ts, Features.ts,
-                # Pricing.ts, CTA.ts, FAQ.ts, Footer.ts, LogoCloud.ts
-                safelist = """
-                /* === Custom color utilities (from @theme) === */
-                bg-primary bg-primary/90 bg-background bg-accent bg-card bg-muted bg-secondary
-                bg-primary-foreground bg-destructive
-                text-primary text-primary-foreground text-foreground text-muted-foreground
-                text-accent-foreground text-secondary-foreground text-card-foreground
-                text-destructive text-destructive-foreground
-                border-border border-input border-b border-t border-0 border
-                hover:bg-primary/90 hover:bg-accent hover:bg-secondary/80
-                hover:text-foreground hover:text-primary hover:text-accent-foreground
-                hover:underline hover:opacity-80 hover:opacity-90 hover:shadow-lg
-                dark:block dark:hidden dark:bg-background dark:text-foreground
-
-                /* === Layout === */
-                grid grid-cols-1 grid-cols-2 grid-cols-3 grid-cols-4
-                md:grid-cols-2 md:grid-cols-3 md:grid-cols-4
-                lg:grid-cols-3 lg:grid-cols-4
-                sm:grid-cols-2 sm:grid-cols-3
-                flex flex-col flex-row flex-wrap flex-1 shrink-0 grow
-                md:flex-row md:flex
-
-                /* === Alignment === */
-                items-center items-start items-end
-                justify-center justify-between justify-start justify-end
-
-                /* === Spacing === */
-                gap-1 gap-2 gap-3 gap-4 gap-6 gap-8 gap-10 gap-12
-                md:gap-8
-                p-2 p-3 p-4 p-6 p-8 px-2 px-3 px-4 px-6 px-8
-                py-2 py-3 py-4 py-6 py-8 py-10 py-12 py-16 py-20 py-24
-                sm:px-6 lg:px-8 md:px-12
-                sm:py-16 lg:py-24
-                m-0 m-auto mt-1 mt-2 mt-4 mt-6 mt-8 mt-12 mb-2 mb-3 mb-4 mb-6 mb-8 mb-12
-                mx-auto ml-1 ml-auto mr-auto
-                pt-4 pt-8 pb-4
-
-                /* === Sizing === */
-                w-full w-auto w-5 w-6 w-8 w-10 w-12 w-16 w-24 w-32 w-48
-                h-5 h-6 h-8 h-10 h-12 h-16 h-auto
-                min-h-screen max-w-xs max-w-sm max-w-md max-w-lg max-w-xl max-w-2xl max-w-4xl max-w-6xl max-w-7xl
-
-                /* === Typography === */
-                text-xs text-sm text-base text-lg text-xl text-2xl text-3xl text-4xl text-5xl
-                sm:text-xl sm:text-4xl lg:text-5xl xl:text-6xl md:text-4xl
-                font-normal font-medium font-semibold font-bold font-extrabold
-                text-left text-center text-right
-                leading-tight leading-snug leading-normal leading-relaxed leading-none
-                tracking-tight tracking-normal tracking-wide
-                whitespace-nowrap break-words truncate
-
-                /* === Generic colors (non-custom) === */
-                text-white text-black text-gray-400 text-gray-500 text-gray-600 text-gray-900
-                bg-white bg-black bg-transparent bg-gray-50 bg-gray-100 bg-gray-900 bg-green-500/10
-
-                /* === Borders & Radius === */
-                rounded rounded-md rounded-lg rounded-xl rounded-2xl rounded-full
-                border-gray-200 border-gray-300
-
-                /* === Shadows & Effects === */
-                shadow shadow-sm shadow-md shadow-lg shadow-xl
-
-                /* === Positioning === */
-                relative absolute fixed sticky inset-0 top-0 bottom-0 left-0 right-0 -top-3 left-1/2
-                z-10 z-20 z-50
-                -translate-x-1/2
-
-                /* === Overflow & Display === */
-                overflow-hidden overflow-auto overflow-x-hidden
-                hidden block inline-block inline-flex
-                md:hidden md:flex md:block md:inline-flex
-                lg:hidden lg:flex lg:block
-
-                /* === Visibility & Opacity === */
-                opacity-50 opacity-70 opacity-80 opacity-90
-
-                /* === Transitions === */
-                transition-all transition-colors duration-150 duration-200 duration-300
-
-                /* === Interactive === */
-                cursor-pointer pointer-events-none select-none
-
-                /* === Lists & Spacing === */
-                list-none list-disc space-y-1 space-y-2 space-y-3 space-y-4 space-x-4
-
-                /* === Media Objects === */
-                object-cover object-contain
-                aspect-video aspect-square
-
-                /* === Misc === */
-                container
-                underline no-underline
-                sr-only not-sr-only
-                """
-                with open(os.path.join(content_dir, "safelist.txt"), "w") as f:
-                    f.write(safelist)
-                print("[css_bundler] Using safelist fallback (Edge source not found)")
+            if extracted_classes:
+                print(f"[css_bundler] Extracted {len(extracted_classes)} unique CSS classes from Edge SSR source")
+                # Log some responsive classes for verification
+                responsive = [c for c in extracted_classes if ':' in c and not c.startswith('--')]
+                if responsive:
+                    print(f"[css_bundler] Responsive classes found: {sorted(responsive)[:20]}")
             else:
-                print(f"[css_bundler] Scanning Edge SSR source files for Tailwind classes")
-                
-            # Write input CSS — Tailwind v4 syntax with theme config
+                print("[css_bundler] Warning: No CSS classes extracted, using safelist fallback")
+
+            # 3. Build @source inline() directive with all extracted classes
+            # Tailwind v4 @source inline() accepts a string of candidate classes
+            classes_str = ' '.join(sorted(extracted_classes))
+            
+            # 4. Write input CSS with @source inline()
             with open(input_css, "w") as f:
                 f.write('@import "tailwindcss";\n')
-                f.write('@source "./content";\n\n')
+                f.write(f'@source inline("{classes_str}");\n\n')
                 # Map CSS variable color names so Tailwind generates
                 # bg-primary, text-muted-foreground, border-border, etc.
                 f.write('@theme {\n')
@@ -237,7 +190,7 @@ async def generate_tailwind_utilities(components: list) -> str:
                 f.write('  --radius: var(--radius);\n')
                 f.write('}\n')
                 
-            # Run tailwindcss CLI (v4 — no JS config needed)
+            # 5. Run tailwindcss CLI (v4 standalone binary)
             cmd = [
                 "tailwindcss",
                 "-i", input_css,
@@ -254,19 +207,44 @@ async def generate_tailwind_utilities(components: list) -> str:
             
             stdout, stderr = await process.communicate()
             
+            # Always log stderr for diagnostics (includes version info)
+            if stderr:
+                stderr_text = stderr.decode().strip()
+                if stderr_text:
+                    print(f"[css_bundler] Tailwind CLI stderr: {stderr_text[:500]}")
+            
             if process.returncode != 0:
-                print(f"[css_bundler] Tailwind CLI failed: {stderr.decode()}")
+                print(f"[css_bundler] Tailwind CLI failed (exit {process.returncode})")
                 return ""
                 
             if os.path.exists(output_css):
                 with open(output_css, "r") as f:
                     result = f.read()
-                print(f"[css_bundler] Tailwind utilities generated: {len(result)} bytes")
+                # Check if responsive variants were generated
+                has_media = '@media' in result
+                print(f"[css_bundler] Tailwind utilities generated: {len(result)} bytes, has @media: {has_media}")
                 return result
             return ""
     except Exception as e:
         print(f"[css_bundler] Error running Tailwind CLI: {str(e)}")
         return ""
+
+
+def _extract_classes_from_component(component: dict, classes: set):
+    """Extract CSS class names from component props (user-set className, etc.)"""
+    if not isinstance(component, dict):
+        return
+    props = component.get('props', {})
+    if isinstance(props, dict):
+        for key, value in props.items():
+            if key.lower() in ('classname', 'class', 'containerclass') and isinstance(value, str):
+                for cls in value.split():
+                    cls = cls.strip()
+                    if cls:
+                        classes.add(cls)
+    # Recurse into children
+    for child in component.get('children', []):
+        _extract_classes_from_component(child, classes)
 
 async def bundle_css_for_page(components: list) -> str:
     """

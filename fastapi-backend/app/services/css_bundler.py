@@ -66,24 +66,100 @@ import tempfile
 
 async def generate_tailwind_utilities(components: list) -> str:
     """
-    Pass component JSON to Tailwind CLI to extract used utility classes.
-    Compatible with Tailwind CSS v4+ (uses @import syntax, not @tailwind).
+    Generate Tailwind utility CSS by scanning Edge SSR renderer source files.
+    
+    The component JSON doesn't contain CSS class names — those are hardcoded
+    in the Edge SSR renderers (PageRenderer.ts, landing/*.ts). We scan those
+    source files so Tailwind can extract all used utility classes.
+    
+    Compatible with Tailwind CSS v4+ (@import syntax).
     """
     try:
-        # Create a temporary directory
         with tempfile.TemporaryDirectory() as tmpdir:
-            content_file = os.path.join(tmpdir, "content.json")
+            content_dir = os.path.join(tmpdir, "content")
+            os.makedirs(content_dir, exist_ok=True)
             input_css = os.path.join(tmpdir, "input.css")
             output_css = os.path.join(tmpdir, "output.css")
             
-            # Write components as JSON (Tailwind scans this for class names)
-            with open(content_file, "w") as f:
+            # 1. Copy Edge SSR renderer source files as scan targets
+            edge_ssr_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "services", "edge", "src", "ssr")
+            
+            # Also check Docker path
+            if not os.path.isdir(edge_ssr_dir):
+                edge_ssr_dir = "/app/services/edge/src/ssr"
+            
+            source_files_found = False
+            if os.path.isdir(edge_ssr_dir):
+                # Copy renderer files to content dir
+                import shutil
+                for root, dirs, files in os.walk(edge_ssr_dir):
+                    for f in files:
+                        if f.endswith('.ts') or f.endswith('.tsx'):
+                            src = os.path.join(root, f)
+                            dst = os.path.join(content_dir, f)
+                            shutil.copy2(src, dst)
+                            source_files_found = True
+            
+            # Also write component JSON (for any class names in props like className)
+            with open(os.path.join(content_dir, "components.json"), "w") as f:
                 json.dump(components, f)
+            
+            if not source_files_found:
+                # Fallback: write a safelist file with all known classes used by renderers
+                safelist = """
+                grid grid-cols-1 grid-cols-2 grid-cols-3 grid-cols-4
+                md:grid-cols-2 md:grid-cols-3 md:grid-cols-4
+                lg:grid-cols-3 lg:grid-cols-4
+                sm:grid-cols-2 sm:grid-cols-3
+                flex flex-col flex-row flex-wrap flex-1
+                md:flex-row
+                items-center items-start items-end
+                justify-center justify-between justify-start justify-end
+                gap-1 gap-2 gap-3 gap-4 gap-6 gap-8 gap-10 gap-12
+                p-2 p-3 p-4 p-6 p-8 px-2 px-3 px-4 px-6 px-8
+                py-2 py-3 py-4 py-6 py-8 py-10 py-12 py-16 py-20 py-24
+                m-0 m-auto mt-1 mt-2 mt-4 mt-6 mt-8 mb-2 mb-4 mb-6 mb-8
+                mx-auto ml-auto mr-auto
+                w-full w-auto w-5 w-6 w-8 w-10 w-12 w-16 w-24 w-32 w-48
+                h-5 h-6 h-8 h-10 h-12 h-16 h-auto
+                min-h-screen max-w-xs max-w-sm max-w-md max-w-lg max-w-xl max-w-2xl max-w-4xl max-w-6xl max-w-7xl
+                text-xs text-sm text-base text-lg text-xl text-2xl text-3xl text-4xl text-5xl
+                font-normal font-medium font-semibold font-bold font-extrabold
+                text-left text-center text-right
+                leading-tight leading-snug leading-normal leading-relaxed
+                tracking-tight tracking-normal tracking-wide
+                text-white text-black text-gray-400 text-gray-500 text-gray-600 text-gray-900
+                bg-white bg-black bg-transparent bg-gray-50 bg-gray-100 bg-gray-900
+                rounded rounded-md rounded-lg rounded-xl rounded-2xl rounded-full
+                border border-0 border-gray-200 border-gray-300
+                shadow shadow-sm shadow-md shadow-lg shadow-xl
+                overflow-hidden overflow-auto overflow-x-hidden
+                relative absolute fixed inset-0 top-0 bottom-0 left-0 right-0
+                z-10 z-20 z-50
+                opacity-50 opacity-70 opacity-80 opacity-90
+                transition-all transition-colors duration-150 duration-200 duration-300
+                hover:opacity-80 hover:opacity-90 hover:underline
+                cursor-pointer pointer-events-none select-none
+                truncate whitespace-nowrap break-words
+                list-none list-disc space-y-1 space-y-2 space-y-3 space-y-4
+                hidden block inline-block inline-flex
+                md:hidden md:flex md:block md:inline-flex
+                lg:hidden lg:flex lg:block
+                object-cover object-contain
+                no-underline underline decoration-none
+                sr-only not-sr-only
+                aspect-video aspect-square
+                """
+                with open(os.path.join(content_dir, "safelist.txt"), "w") as f:
+                    f.write(safelist)
+                print("[css_bundler] Using safelist fallback (Edge source not found)")
+            else:
+                print(f"[css_bundler] Scanning Edge SSR source files for Tailwind classes")
                 
-            # Write input CSS — Tailwind v4 syntax (no @tailwind directives)
+            # Write input CSS — Tailwind v4 syntax
             with open(input_css, "w") as f:
                 f.write('@import "tailwindcss/utilities";\n')
-                f.write('@source "./content.json";\n')
+                f.write('@source "./content";\n')
                 
             # Run tailwindcss CLI (v4 — no JS config needed)
             cmd = [
@@ -106,10 +182,11 @@ async def generate_tailwind_utilities(components: list) -> str:
                 print(f"[css_bundler] Tailwind CLI failed: {stderr.decode()}")
                 return ""
                 
-            # Read output CSS
             if os.path.exists(output_css):
                 with open(output_css, "r") as f:
-                    return f.read()
+                    result = f.read()
+                print(f"[css_bundler] Tailwind utilities generated: {len(result)} bytes")
+                return result
             return ""
     except Exception as e:
         print(f"[css_bundler] Error running Tailwind CLI: {str(e)}")

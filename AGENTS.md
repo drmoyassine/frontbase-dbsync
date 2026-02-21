@@ -110,6 +110,11 @@ The Edge Engine has no knowledge of:
 | **Using default `extra='ignore'` (Pydantic) or `z.object()` (Zod) on publish schemas** | **Silently strips enriched fields. Use `extra='allow'` / `.passthrough()` for schemas that carry enriched data** |
 | **Zustand store action called by multiple components without in-flight dedup** | **Causes N×N re-render cascades. Use module-level promise dedup (`let _promise = null`) for any store action that does `set()` and is called from `useEffect` in multiple components** |
 | **Putting Zustand state in `useEffect` deps when it triggers `set()` on that same state** | **Creates infinite loop. Remove from deps array or add early-return guard inside the action** |
+| **Moving API routes between services without updating proxy rules** | **Must update `vite.config.ts` (dev) AND `nginx.conf` (prod) when a route moves from Edge to FastAPI or vice versa** |
+| **Adding new API route prefixes without checking `TrailingSlashMiddleware`** | **Add the prefix to `EXCLUDE_PREFIXES` in `main.py` or the middleware will cause 307 redirect loops** |
+| **`useQuery` without `retry` and `refetchOnWindowFocus` limits** | **Default React Query settings flood the backend on errors. Always set `retry: 1` and `refetchOnWindowFocus: false` for non-critical queries** |
+| **Assuming Supabase keys are always JWTs (`eyJ...`)** | **Newer Supabase keys use `sb_secret_` prefix. Never validate key format by counting dots** |
+| **`decrypt_data` returning raw encrypted blob on failure without flag** | **Callers must compare output to input to detect silent failures: `if decrypted != encrypted_input`** |
 
 ---
 
@@ -123,14 +128,19 @@ The Edge Engine has no knowledge of:
 | UI State | Zustand | Builder, canvas, panels |
 | Form State | React Hook Form | User input handling |
 
-**React Query Pattern**:
+**React Query Pattern** (mandatory defaults for all new queries):
 ```typescript
 const { data, isLoading } = useQuery({
   queryKey: ['pages', pageId],
   queryFn: () => api.getPage(pageId),
   staleTime: 5 * 60 * 1000, // 5 min cache
+  retry: 1,                  // REQUIRED: prevent request flooding on errors
+  refetchOnWindowFocus: false, // REQUIRED: prevent tab-switch request storms
 });
 ```
+
+> [!CAUTION]
+> **Every `useQuery` MUST have `retry` and `refetchOnWindowFocus` set.** Default React Query settings (3 retries + refetch on focus) will DDoS your own backend when an endpoint returns errors. This freezes the FastAPI terminal and makes `Ctrl+C` unresponsive.
 
 **Store Init Dedup Pattern** (required for any Zustand action called from multiple components):
 ```typescript
@@ -584,4 +594,61 @@ For detailed implementation patterns, see:
 
 ---
 
-*Last Updated: 2026-02-10*
+## 10. API Migration Checklist
+
+> [!IMPORTANT]
+> When moving API routes between services (e.g., Edge → FastAPI), follow this checklist. Writing the new code is ~30% of the work. The other 70% is updating the surrounding infrastructure.
+
+### 10.1 Pre-Implementation Audit
+
+Before writing any code, trace the **full request path** end-to-end:
+
+```
+Browser → Vite Proxy (vite.config.ts) → Target Service → External API
+Browser → Nginx (nginx.conf)           → Target Service → External API
+```
+
+| Step | Check | File(s) |
+|------|-------|---------|
+| 1 | Which proxy rules currently route to the OLD service? | `vite.config.ts`, `nginx.conf` |
+| 2 | Does `TrailingSlashMiddleware` have an exclude list? Does my new prefix need to be in it? | `fastapi-backend/main.py` |
+| 3 | What does the stored auth key actually look like? Query the DB and decrypt it. | `unified.db` → `project` table |
+| 4 | Are there middleware or CORS settings that affect the new routes? | `main.py` |
+| 5 | What does the frontend `useQuery` config look like? Does it have retry limits? | Component files |
+
+### 10.2 Implementation Touchpoints
+
+Every migration must update **all** of these:
+
+| Layer | What to update |
+|-------|----------------|
+| **Backend routes** | New router file with endpoints |
+| **Dev proxy** | `vite.config.ts` — update target for the migrated prefix |
+| **Prod proxy** | `nginx.conf` — update upstream for the migrated prefix |
+| **Middleware excludes** | `TrailingSlashMiddleware.EXCLUDE_PREFIXES` in `main.py` |
+| **Frontend queries** | Add `retry: 1`, `staleTime`, `refetchOnWindowFocus: false` |
+| **Local DB** | Run `alembic upgrade head` and verify columns exist |
+
+### 10.3 Post-Implementation Smoke Tests
+
+Before calling the migration done, run these exact tests:
+
+```bash
+# 1. Direct backend test (no proxy)
+curl http://localhost:8000/api/<new-prefix>/<endpoint>
+# Expect: 200 with real data (NOT a 307 redirect)
+
+# 2. Through Vite proxy (dev)
+curl http://localhost:5173/api/<new-prefix>/<endpoint>
+# Expect: 200 (same as above, proxied)
+
+# 3. Open browser, navigate to the page that uses the endpoint
+# Expect: Data loads, no "Network Error", no "Failed to fetch"
+
+# 4. Kill FastAPI, reload browser page
+# Expect: Clean error message (NOT a terminal freeze)
+```
+
+---
+
+*Last Updated: 2026-02-21*

@@ -34,8 +34,16 @@ router = APIRouter()
 
 
 def get_datasources_for_publish(db: Session) -> list:
-    """Get all active datasources and convert to publish-safe format"""
-    datasources = db.query(Datasource).filter(Datasource.is_active == True).all()
+    """Get all active datasources and convert to publish-safe format.
+    
+    Returns empty list if datasources table doesn't exist (db-sync not configured).
+    """
+    try:
+        datasources = db.query(Datasource).filter(Datasource.is_active == True).all()
+    except Exception:
+        # datasources table may not exist if db-sync hasn't been set up
+        db.rollback()
+        return []
     
     result = []
     for ds in datasources:

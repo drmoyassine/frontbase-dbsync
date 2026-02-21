@@ -106,6 +106,7 @@ async function fetchPage(slug: string): Promise<PageData | null> {
                 isPublic: publishedPage.isPublic,
                 isHomepage: publishedPage.isHomepage,
                 layoutData: publishedPage.layoutData,
+                cssBundle: publishedPage.cssBundle,
                 createdAt: publishedPage.publishedAt,
                 updatedAt: publishedPage.publishedAt,
             } as PageData;
@@ -482,6 +483,7 @@ pagesRoute.get('/', async (c) => {
                 isHomepage: homepage.isHomepage,
                 layoutData: homepage.layoutData as unknown as PageLayoutData,
                 datasources: homepage.datasources as unknown as Record<string, unknown>[] | undefined,
+                cssBundle: homepage.cssBundle || undefined,
             };
 
             // Build page data for template context

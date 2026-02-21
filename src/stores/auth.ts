@@ -42,10 +42,6 @@ interface AuthState {
 const getApiBase = (): string => {
   const envUrl = import.meta.env.VITE_API_URL;
 
-  // Debug logging (remove in production)
-  console.log('[Auth] VITE_API_URL:', envUrl);
-  console.log('[Auth] window.location.origin:', typeof window !== 'undefined' ? window.location.origin : 'N/A');
-
   // If no URL set or empty, use relative paths
   if (!envUrl || envUrl === '') return '';
 

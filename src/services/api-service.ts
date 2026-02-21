@@ -31,6 +31,7 @@ const createApiInstance = () => {
 
   return axios.create({
     baseURL: config.baseUrl,
+    timeout: 10_000, // 10s timeout — prevents request pile-up when backend is unresponsive
     headers: {
       'Content-Type': 'application/json',
     },

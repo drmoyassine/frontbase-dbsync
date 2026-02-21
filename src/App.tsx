@@ -43,6 +43,7 @@ const queryClient = new QueryClient({
     queries: {
       gcTime: 1000 * 60 * 60 * 24, // 24 hours - data kept in localStorage
       refetchOnWindowFocus: false, // Don't refetch when switching browser tabs
+      retry: 1, // Only retry once on failure (prevents terminal flooding)
     },
   },
 });

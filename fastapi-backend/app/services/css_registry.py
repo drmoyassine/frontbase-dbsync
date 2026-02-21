@@ -97,15 +97,49 @@ img, video { max-width: 100%; height: auto; }
 @media (min-width: 640px) {
     .sm\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .sm\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .sm\\:flex { display: flex; }
+    .sm\\:hidden { display: none; }
+    .sm\\:block { display: block; }
+    .sm\\:inline-flex { display: inline-flex; }
+    .sm\\:flex-row { flex-direction: row; }
+    .sm\\:text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+    .sm\\:text-2xl { font-size: 1.5rem; line-height: 2rem; }
+    .sm\\:text-5xl { font-size: 3rem; line-height: 1; }
+    .sm\\:px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
 }
 @media (min-width: 768px) {
     .md\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .md\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .md\\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .md\\:flex { display: flex; }
+    .md\\:hidden { display: none; }
+    .md\\:block { display: block; }
+    .md\\:inline-flex { display: inline-flex; }
+    .md\\:flex-row { flex-direction: row; }
+    .md\\:flex-wrap { flex-wrap: wrap; }
+    .md\\:justify-between { justify-content: space-between; }
+    .md\\:items-center { align-items: center; }
+    .md\\:gap-8 { gap: 2rem; }
+    .md\\:gap-12 { gap: 3rem; }
+    .md\\:text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+    .md\\:text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+    .md\\:text-5xl { font-size: 3rem; line-height: 1; }
+    .md\\:text-6xl { font-size: 3.75rem; line-height: 1; }
+    .md\\:px-8 { padding-left: 2rem; padding-right: 2rem; }
+    .md\\:py-24 { padding-top: 6rem; padding-bottom: 6rem; }
 }
 @media (min-width: 1024px) {
     .lg\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .lg\\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .lg\\:flex { display: flex; }
+    .lg\\:hidden { display: none; }
+    .lg\\:block { display: block; }
+    .lg\\:flex-row { flex-direction: row; }
+    .lg\\:gap-12 { gap: 3rem; }
+    .lg\\:text-6xl { font-size: 3.75rem; line-height: 1; }
+    .lg\\:text-7xl { font-size: 4.5rem; line-height: 1; }
+    .lg\\:px-8 { padding-left: 2rem; padding-right: 2rem; }
+    .lg\\:py-32 { padding-top: 8rem; padding-bottom: 8rem; }
 }
 
 /* Spacing utilities */

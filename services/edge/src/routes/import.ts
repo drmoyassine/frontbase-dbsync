@@ -68,6 +68,7 @@ importRoute.post('/', async (c) => {
         const { page, force } = validationResult.data;
 
         console.log(`[Import] Validated page: ${page.slug} (v${page.version})`);
+        console.log(`[Import] cssBundle present: ${!!page.cssBundle}, length: ${page.cssBundle?.length || 0}`);
 
         // Check if page already exists with same or higher version
         if (!force) {

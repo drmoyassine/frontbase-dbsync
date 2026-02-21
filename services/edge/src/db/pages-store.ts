@@ -144,11 +144,11 @@ export async function upsertPublishedPage(page: PublishPage): Promise<{ success:
             })
             .where(eq(publishedPages.id, page.id));
 
-        console.log(`📝 Updated published page: ${page.slug} (v${page.version})`);
+        console.log(`📝 Updated published page: ${page.slug} (v${page.version}), cssBundle: ${page.cssBundle ? page.cssBundle.length + ' bytes' : 'null'}`);
     } else {
         // Insert new page
         await database.insert(publishedPages).values(record);
-        console.log(`📄 Created published page: ${page.slug} (v${page.version})`);
+        console.log(`📄 Created published page: ${page.slug} (v${page.version}), cssBundle: ${page.cssBundle ? page.cssBundle.length + ' bytes' : 'null'}`);
     }
 
     return { success: true, version: page.version };
@@ -197,7 +197,7 @@ export async function getHomepage(): Promise<PublishPage | null> {
 
     if (!record) return null;
 
-    return {
+    const result = {
         id: record.id,
         slug: record.slug,
         name: record.name,
@@ -212,6 +212,8 @@ export async function getHomepage(): Promise<PublishPage | null> {
         isPublic: record.isPublic,
         isHomepage: record.isHomepage,
     };
+    console.log(`[pages-store] getHomepage: cssBundle present: ${!!result.cssBundle}, length: ${result.cssBundle?.length || 0}, raw column: ${record.cssBundle ? record.cssBundle.length + ' bytes' : 'NULL'}`);
+    return result;
 }
 
 /**

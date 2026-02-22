@@ -195,7 +195,7 @@ class TursoPublishStrategy(BasePublishStrategy):
             return {
                 "success": True,
                 "version": page.get("version", 1),
-                "previewUrl": f"/p/{slug}",
+                "previewUrl": f"/{slug}",
             }
         except Exception as e:
             print(f"[PublishStrategy:turso] ❌ Publish failed: {e}")

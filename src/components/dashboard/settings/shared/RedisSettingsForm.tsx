@@ -48,10 +48,10 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
         isTesting,
         saveSuccess,
         hasLocalRedis,
+        isUpstashConnected,
     } = useRedisSettings();
 
     const isUpstash = redisType === 'upstash';
-    const isUpstashConnected = isUpstash && !!redisUrl && !!redisToken;
 
     const handleUpstashToggle = (enabled: boolean) => {
         if (enabled) {

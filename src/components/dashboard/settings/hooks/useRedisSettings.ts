@@ -43,6 +43,7 @@ export interface UseRedisSettingsReturn {
 
     // Status Flags
     hasLocalRedis: boolean;
+    isUpstashConnected: boolean;
 }
 
 export function useRedisSettings(): UseRedisSettingsReturn {
@@ -207,5 +208,6 @@ export function useRedisSettings(): UseRedisSettingsReturn {
 
         // Status Flags
         hasLocalRedis: !!localConfig.token,
+        isUpstashConnected: redisType === 'upstash' && !!upstashConfig.token && (!hasChanges || testResult?.success === true),
     };
 }

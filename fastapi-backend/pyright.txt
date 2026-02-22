@@ -1,0 +1,5 @@
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\settings.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\settings.py:68:23 - error: "redis" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\settings.py:69:24 - error: "redis" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\settings.py:70:25 - error: "redis" is not defined (reportUndefinedVariable)
+3 errors, 0 warnings, 0 informations

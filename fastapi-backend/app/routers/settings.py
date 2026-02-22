@@ -36,41 +36,38 @@ async def get_redis_settings():
     """
     Get Redis cache settings.
     
-    When no saved config exists, auto-detects Docker environment:
-    - If REDIS_TOKEN env var is set → defaults to self-hosted with local SRH proxy
-    - Otherwise → defaults to Upstash with empty credentials
+    Returns the explicitly configured Upstash instance from UI if present.
+    Otherwise, returns the fallback local Redis configuration (powered by env vars).
     """
     settings = load_settings()
-    redis = settings.get("redis", {})
+    redis_settings = settings.get("redis", {})
     
-    # Auto-detect Docker defaults for fresh installs
-    docker_token = os.environ.get("REDIS_TOKEN")
-    default_type = "self-hosted" if docker_token else "upstash"
-    default_url = "http://redis-http:80" if docker_token else None
-    default_token = docker_token if docker_token else None
+    # 1. Did the user explicitly configure and save an Upstash instance via the UI?
+    saved_type = redis_settings.get("redis_type")
+    saved_url = redis_settings.get("redis_url")
+    saved_token = redis_settings.get("redis_token")
     
-    # Determine effective type
-    saved_type = redis.get("redis_type")
-    effective_type = saved_type if saved_type else default_type
-
-    # Determine effective values based on type and defaults
-    if effective_type == "self-hosted":
-        # Use saved values if present, otherwise fallback to detected defaults
-        # Note: Empty string in saved config should fall back to default
-        final_url = redis.get("redis_url") or default_url
-        final_token = redis.get("redis_token") or default_token
+    is_upstash_configured = saved_type == "upstash" and saved_url and saved_token
+    
+    if is_upstash_configured:
+        # Return explicitly configured Upstash
+        final_url = saved_url
+        final_token = saved_token
+        effective_type = "upstash"
     else:
-        # Upstash mode - just use what's saved
-        final_url = redis.get("redis_url")
-        final_token = redis.get("redis_token")
+        # 2. Fall back to Local Redis (Docker/Env Vars)
+        # We ignore any saved URL/Token from old configs if it wasn't Upstash
+        final_url = "http://redis-http:80"
+        final_token = os.environ.get("REDIS_TOKEN")
+        effective_type = "self-hosted"
     
     return RedisSettings(
         redis_url=final_url,
         redis_token=final_token,
         redis_type=effective_type,
-        redis_enabled=redis.get("redis_enabled", False),
-        cache_ttl_data=redis.get("cache_ttl_data", 60),
-        cache_ttl_count=redis.get("cache_ttl_count", 300),
+        redis_enabled=redis_settings.get("redis_enabled", False),
+        cache_ttl_data=redis_settings.get("cache_ttl_data", 60),
+        cache_ttl_count=redis_settings.get("cache_ttl_count", 300),
     )
 
 

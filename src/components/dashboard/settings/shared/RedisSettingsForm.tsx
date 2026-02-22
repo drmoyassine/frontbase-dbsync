@@ -1,8 +1,11 @@
 /**
  * RedisSettingsForm
  * 
- * Reusable form component for Redis cache configuration.
- * Uses useRedisSettings hook for state management.
+ * Simplified Redis cache configuration.
+ * 
+ * Pattern: Local Redis works by default (from Docker or env var).
+ * Users can optionally connect Upstash to override with a managed cloud instance.
+ * Mirrors the Turso Settings pattern.
  */
 
 import React from 'react';
@@ -12,12 +15,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Check, X, RefreshCw, Database, Info } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, Check, X, RefreshCw, Database, Info, ExternalLink } from 'lucide-react';
 import { useRedisSettings } from '../hooks/useRedisSettings';
 
 interface RedisSettingsFormProps {
-    /** Whether to wrap in a Card component */
     withCard?: boolean;
 }
 
@@ -46,56 +48,71 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
         saveSuccess,
     } = useRedisSettings();
 
-    const content = (
-        <>
-            {isLoading ? (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading settings...
+    // Is this an Upstash override or using local Redis?
+    const isUpstash = redisType === 'upstash';
+
+    // Toggle between local Redis and Upstash
+    const handleUpstashToggle = (enabled: boolean) => {
+        if (enabled) {
+            setRedisType('upstash');
+            setRedisEnabled(true);
+        } else {
+            setRedisType('self-hosted');
+            // Keep redis enabled — it'll use local Redis
+        }
+        handleChange();
+    };
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center p-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
+
+    const formContent = (
+        <div className="space-y-6">
+            {/* Enable/Disable Caching */}
+            <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                    <Label htmlFor="redis-enabled" className="text-base">Enable Caching</Label>
+                    <p className="text-sm text-muted-foreground">
+                        {redisEnabled
+                            ? isUpstash
+                                ? 'Using Upstash Redis (cloud)'
+                                : 'Using local Redis (Docker)'
+                            : 'When disabled, all data is fetched directly from the source'
+                        }
+                    </p>
                 </div>
-            ) : (
+                <Switch
+                    id="redis-enabled"
+                    checked={redisEnabled}
+                    onCheckedChange={(checked) => { setRedisEnabled(checked); handleChange(); }}
+                />
+            </div>
+
+            {redisEnabled && (
                 <>
-                    {/* Enable Toggle (Top Level) */}
-                    <div className="flex items-center justify-between p-4 rounded-lg border bg-card text-card-foreground shadow-sm mb-6">
+                    {/* Upstash Override Toggle */}
+                    <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
-                            <Label>Enable Redis Caching</Label>
-                            <p className="text-xs text-muted-foreground">
-                                When disabled, all data is fetched directly from the source
+                            <Label htmlFor="upstash-toggle" className="text-base">Use Upstash</Label>
+                            <p className="text-sm text-muted-foreground">
+                                Override local Redis with a managed Upstash instance
                             </p>
                         </div>
                         <Switch
-                            checked={redisEnabled}
-                            onCheckedChange={(checked) => { setRedisEnabled(checked); handleChange(); }}
-                            disabled={!redisUrl}
+                            id="upstash-toggle"
+                            checked={isUpstash}
+                            onCheckedChange={handleUpstashToggle}
                         />
                     </div>
 
-                    {/* Provider Selector */}
-                    <div className={`space-y-3 transition-opacity ${!redisEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
-                        <Label>Redis Provider</Label>
-                        <Select
-                            value={redisType}
-                            onValueChange={(val) => { setRedisType(val as 'upstash' | 'self-hosted'); handleChange(); }}
-                            disabled={!redisEnabled}
-                        >
-                            <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select provider" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="self-hosted">Local Host (Docker)</SelectItem>
-                                <SelectItem value="upstash">Upstash (Managed)</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                            {redisType === 'self-hosted'
-                                ? 'Using your bundled Redis instance via SRH proxy'
-                                : 'Using a managed serverless Redis instance via HTTP'}
-                        </p>
-                    </div>
-
-                    {/* Upstash Path */}
-                    {redisType === 'upstash' && (
-                        <div className="space-y-4 p-4 rounded-lg bg-muted/30">
+                    {/* Upstash Credentials (only shown when Upstash is enabled) */}
+                    {isUpstash && (
+                        <>
                             <div className="space-y-2">
                                 <Label htmlFor="redis-url">Upstash REST URL</Label>
                                 <Input
@@ -118,75 +135,35 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
                                     Find these in your Upstash Console → Database → REST API
                                 </p>
                             </div>
-                        </div>
+                        </>
                     )}
 
-                    {/* Self-Hosted Path */}
-                    {redisType === 'self-hosted' && (
-                        <div className="space-y-4 p-4 rounded-lg bg-muted/30">
-                            {redisUrl && redisToken && (
-                                <div className="flex items-start gap-2 p-3 rounded-md bg-blue-500/10 border border-blue-500/20 text-sm">
-                                    <Info className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
-                                    <p className="text-muted-foreground text-xs">
-                                        Pre-configured from your Docker setup. Test the connection to verify.
-                                    </p>
-                                </div>
-                            )}
-
-                            <div className="space-y-2">
-                                <Label htmlFor="redis-url">SRH Proxy URL</Label>
-                                <Input
-                                    id="redis-url"
-                                    placeholder="http://redis:80"
-                                    value={redisUrl}
-                                    onChange={(e) => { setRedisUrl(e.target.value); handleChange(); }}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="redis-token">SRH Token</Label>
-                                <Input
-                                    id="redis-token"
-                                    type="password"
-                                    placeholder="Your REDIS_TOKEN from .env"
-                                    value={redisToken}
-                                    onChange={(e) => { setRedisToken(e.target.value); handleChange(); }}
-                                />
-                                {redisType === 'self-hosted' && !redisToken && (
-                                    <p className="text-xs text-amber-600">
-                                        ⚠️ Configure REDIS_TOKEN in your .env file for auto-configuration
-                                    </p>
-                                )}
-                            </div>
-                        </div>
+                    {/* Local Redis info */}
+                    {!isUpstash && (
+                        <Alert>
+                            <Info className="h-4 w-4" />
+                            <AlertDescription>
+                                Using the bundled Redis from your Docker setup. No additional configuration needed.
+                            </AlertDescription>
+                        </Alert>
                     )}
 
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={testConnection}
-                            disabled={!redisUrl || !redisToken || isTesting}
-                        >
-                            {isTesting ? (
-                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    {/* Test Result */}
+                    {testResult && (
+                        <Alert variant={testResult.success ? 'default' : 'destructive'}>
+                            {testResult.success ? (
+                                <Check className="h-4 w-4" />
                             ) : (
-                                <RefreshCw className="h-4 w-4 mr-2" />
+                                <X className="h-4 w-4" />
                             )}
-                            Test Connection
-                        </Button>
-                        {testResult && (
-                            <div className={`flex items-center gap-1 text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
-                                {testResult.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                                {testResult.message}
-                            </div>
-                        )}
-                    </div>
+                            <AlertDescription>{testResult.message}</AlertDescription>
+                        </Alert>
+                    )}
 
                     <Separator />
 
-
-
-                    <div className={`grid grid-cols-2 gap-4 transition-opacity ${!redisEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                    {/* TTL Settings */}
+                    <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="ttl-data">Data Cache TTL (seconds)</Label>
                             <Input
@@ -194,7 +171,6 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
                                 type="number"
                                 value={cacheTtlData}
                                 onChange={(e) => { setCacheTtlData(parseInt(e.target.value)); handleChange(); }}
-                                disabled={!redisEnabled}
                             />
                             <p className="text-xs text-muted-foreground">How long to cache record data</p>
                         </div>
@@ -205,31 +181,64 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
                                 type="number"
                                 value={cacheTtlCount}
                                 onChange={(e) => { setCacheTtlCount(parseInt(e.target.value)); handleChange(); }}
-                                disabled={!redisEnabled}
                             />
                             <p className="text-xs text-muted-foreground">How long to cache record counts</p>
                         </div>
                     </div>
-
-                    <div className="flex items-center gap-2">
-                        <Button
-                            onClick={save}
-                            disabled={!hasChanges || isSaving}
-                        >
-                            {isSaving ? (
-                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            ) : null}
-                            Save Redis Settings
-                        </Button>
-                        {saveSuccess && (
-                            <span className="text-sm text-green-600 flex items-center gap-1">
-                                <Check className="h-4 w-4" /> Saved
-                            </span>
-                        )}
-                    </div>
                 </>
             )}
-        </>
+
+            {/* Actions */}
+            <div className="flex items-center gap-3">
+                {redisEnabled && (
+                    <Button
+                        variant="outline"
+                        onClick={testConnection}
+                        disabled={isTesting || (!isUpstash ? false : (!redisUrl || !redisToken))}
+                    >
+                        {isTesting ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Testing...
+                            </>
+                        ) : (
+                            <>
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                Test Connection
+                            </>
+                        )}
+                    </Button>
+                )}
+
+                <Button
+                    onClick={save}
+                    disabled={!hasChanges || isSaving}
+                >
+                    {isSaving ? (
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Saving...
+                        </>
+                    ) : saveSuccess ? (
+                        <>
+                            <Check className="mr-2 h-4 w-4" />
+                            Saved
+                        </>
+                    ) : (
+                        'Save Changes'
+                    )}
+                </Button>
+
+                {isUpstash && (
+                    <Button variant="ghost" size="sm" asChild>
+                        <a href="https://upstash.com" target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            Upstash Console
+                        </a>
+                    </Button>
+                )}
+            </div>
+        </div>
     );
 
     if (withCard) {
@@ -244,12 +253,10 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
                         Configure Redis caching to improve data loading performance
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                    {content}
-                </CardContent>
+                <CardContent>{formContent}</CardContent>
             </Card>
         );
     }
 
-    return <div className="space-y-4">{content}</div>;
+    return formContent;
 }

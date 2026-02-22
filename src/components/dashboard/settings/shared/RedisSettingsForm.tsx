@@ -50,6 +50,7 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
     } = useRedisSettings();
 
     const isUpstash = redisType === 'upstash';
+    const isUpstashConnected = isUpstash && !!redisUrl && !!redisToken;
 
     const handleUpstashToggle = (enabled: boolean) => {
         if (enabled) {
@@ -72,15 +73,15 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
 
     const formContent = (
         <div className="space-y-6">
-            {/* Local Redis Status */}
+            {/* Redis Status */}
             <div className="flex items-center gap-3 p-4 rounded-lg border bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900">
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <div className="flex-1">
                     <p className="text-sm font-medium">
-                        {isUpstash ? 'Upstash Redis connected' : 'Local Redis connected'}
+                        {isUpstashConnected ? 'Upstash Redis connected' : 'Local Redis connected'}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                        {isUpstash
+                        {isUpstashConnected
                             ? 'Using managed serverless Redis for edge caching'
                             : 'Bundled Redis instance from your Docker setup'
                         }

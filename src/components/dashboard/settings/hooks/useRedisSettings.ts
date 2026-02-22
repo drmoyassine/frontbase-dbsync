@@ -51,7 +51,7 @@ export function useRedisSettings(): UseRedisSettingsReturn {
     const [upstashConfig, setUpstashConfig] = useState({ url: '', token: '' });
 
     // Active type determines which config we show/edit
-    const [redisType, setRedisType] = useState<'upstash' | 'self-hosted'>('upstash');
+    const [redisType, setRedisType] = useState<'upstash' | 'self-hosted'>('self-hosted');
 
     const [redisEnabled, setRedisEnabled] = useState(false);
     const [cacheTtlData, setCacheTtlData] = useState(60);

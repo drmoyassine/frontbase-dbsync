@@ -71,11 +71,6 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=${EDGE_PORT:-3002}
-      # Storage provider: 'cloud' uses Turso/Upstash (default for cloud compose)
-      - FRONTBASE_DEPLOYMENT_MODE=${FRONTBASE_DEPLOYMENT_MODE:-cloud}
-      # Turso state DB (credentials from Settings UI, passthrough for override)
-      - FRONTBASE_STATE_DB_URL=${TURSO_DB_URL:-}
-      - FRONTBASE_STATE_DB_TOKEN=${TURSO_DB_TOKEN:-}
       # Upstash Redis (credentials from Settings UI, passthrough for override)
       - FRONTBASE_REDIS_URL=${UPSTASH_REDIS_URL:-}
       - FRONTBASE_REDIS_TOKEN=${UPSTASH_REDIS_TOKEN:-}

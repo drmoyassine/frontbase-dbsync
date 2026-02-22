@@ -73,8 +73,6 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=${EDGE_PORT:-3002}
-      # Storage provider: 'local' (SQLite) or 'cloud' (Turso)
-      - FRONTBASE_DEPLOYMENT_MODE=${FRONTBASE_DEPLOYMENT_MODE:-local}
       # Database for edge storage (SQLite)
       - SQLITE_PATH=/app/data/edge.db
       - DATABASE_URL=file:/app/data/edge.db

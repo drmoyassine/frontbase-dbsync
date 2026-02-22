@@ -1,12 +1,13 @@
 /**
- * Startup Sync - Proactive Homepage + Redis Settings Sync on Edge Boot
+ * Startup Sync - Settings + Homepage Sync on Edge Boot
  * 
- * On startup, Edge fetches the homepage and Redis settings from FastAPI and stores locally.
- * Also ensures the Actions database tables exist (workflows, executions).
+ * On startup, Edge syncs settings (Redis, Turso, Supabase JWT) from FastAPI,
+ * optionally upgrades from local SQLite to Turso, and syncs the homepage.
  * Includes retry logic to wait for FastAPI to be ready.
  */
 
 import { stateProvider } from '../storage/index.js';
+import { upgradeToTurso } from '../storage/index.js';
 import { initRedis } from '../cache/redis.js';
 import { db } from '../db/index.js';
 import { sql } from 'drizzle-orm';
@@ -148,6 +149,53 @@ async function syncSupabaseJwtFromFastAPI(): Promise<SyncResult> {
 }
 
 /**
+ * Fetch Turso settings from FastAPI and upgrade state provider if enabled.
+ * This allows Turso to be configured via the Settings UI instead of env vars.
+ * Only upgrades if not already in cloud mode (standalone edge uses env vars).
+ */
+async function syncTursoSettingsFromFastAPI(): Promise<SyncResult> {
+    // Skip if already in cloud mode (standalone edge with env vars)
+    if (process.env.FRONTBASE_DEPLOYMENT_MODE === 'cloud') {
+        console.log('[Startup Sync] ℹ️ Already in cloud mode — Turso sync skipped');
+        return { status: 'success' };
+    }
+
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/settings/turso/`, {
+            headers: { 'Accept': 'application/json' },
+            signal: AbortSignal.timeout(5000),
+        });
+
+        if (!response.ok) {
+            console.warn(`[Startup Sync] Turso settings fetch failed: ${response.status}`);
+            return { status: 'error', retry: response.status >= 500 };
+        }
+
+        const settings = await response.json();
+
+        if (settings.turso_enabled && settings.turso_url && settings.turso_token) {
+            // Set env vars so TursoHttpProvider picks them up
+            process.env.FRONTBASE_STATE_DB_URL = settings.turso_url;
+            process.env.FRONTBASE_STATE_DB_TOKEN = settings.turso_token;
+
+            // Hot-swap from LocalSqlite to Turso
+            await upgradeToTurso();
+            console.log('[Startup Sync] ✅ Turso state provider activated from Settings UI');
+            return { status: 'success' };
+        } else {
+            console.log('[Startup Sync] ℹ️ Turso not enabled in Settings UI — using local SQLite');
+            return { status: 'not-configured' };
+        }
+    } catch (error) {
+        const isConnectionError = (error as any)?.cause?.code === 'ECONNREFUSED';
+        if (!isConnectionError) {
+            console.warn('[Startup Sync] Turso sync failed:', (error as Error).message);
+        }
+        return { status: 'error', retry: true };
+    }
+}
+
+/**
  * Fetch homepage from FastAPI and store in local pages.db
  */
 async function syncHomepageFromFastAPI(): Promise<boolean> {
@@ -215,22 +263,30 @@ export async function runStartupSync(): Promise<void> {
     await stateProvider.init();
     await initActionsDb(); // Create workflows/executions tables if not exist
 
-    // Sync Redis settings with retries (FastAPI may not be ready yet)
+    // Sync all settings from backend with retries (FastAPI may not be ready yet)
     console.log('[Startup Sync] Syncing settings from backend...');
+    let tursoUpgraded = false;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         const redisResult = await syncRedisSettingsFromFastAPI();
         const supabaseResult = await syncSupabaseJwtFromFastAPI();
+        const tursoResult = await syncTursoSettingsFromFastAPI();
+
+        if (tursoResult.status === 'success' && process.env.FRONTBASE_STATE_DB_URL) {
+            tursoUpgraded = true;
+        }
 
         const allDone =
             (redisResult.status === 'success' || redisResult.status === 'not-configured') &&
-            (supabaseResult.status === 'success' || supabaseResult.status === 'not-configured');
+            (supabaseResult.status === 'success' || supabaseResult.status === 'not-configured') &&
+            (tursoResult.status === 'success' || tursoResult.status === 'not-configured');
 
         if (allDone) break;
 
         // At least one had a retryable error
         const needsRetry =
             (redisResult.status === 'error' && redisResult.retry) ||
-            (supabaseResult.status === 'error' && supabaseResult.retry);
+            (supabaseResult.status === 'error' && supabaseResult.retry) ||
+            (tursoResult.status === 'error' && tursoResult.retry);
 
         if (needsRetry && attempt < MAX_RETRIES) {
             console.log(`[Startup Sync] Attempt ${attempt}/${MAX_RETRIES}, retrying in ${RETRY_DELAY_MS / 1000}s...`);

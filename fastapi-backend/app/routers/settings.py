@@ -176,10 +176,15 @@ async def test_turso_connection(settings_update: TursoSettings):
     try:
         import httpx
         
+        # Convert libsql:// URL to https:// for HTTP API
+        http_url = settings_update.turso_url
+        if http_url.startswith("libsql://"):
+            http_url = http_url.replace("libsql://", "https://", 1)
+        
         # Use Turso HTTP API to run a simple SELECT 1
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{settings_update.turso_url}/v2/pipeline",
+                f"{http_url}/v2/pipeline",
                 headers={
                     "Authorization": f"Bearer {settings_update.turso_token}",
                     "Content-Type": "application/json",

@@ -212,27 +212,23 @@ export async function cached<T>(
     fn: () => Promise<T>,
     ttlSeconds: number = 60
 ): Promise<T> {
-    // TEMPORARY BYPASS: Redis is down locally, causing 5s timeout.
-    if (true) {
+    try {
+        const redis = getRedis();
+
+        // Try to get from cache
+        const cachedValue = await redis.get<T>(key);
+        if (cachedValue !== null) {
+            return cachedValue as T;
+        }
+
+        // Execute function and cache result
+        const result = await fn();
+        await redis.setex(key, ttlSeconds, JSON.stringify(result));
+        return result;
+    } catch {
+        // Redis not available — fall through to direct execution
         return fn();
     }
-
-    const redis = getRedis();
-
-    // Try to get from cache
-    const cachedValue = await redis.get<T>(key);
-    if (cachedValue !== null) {
-        return cachedValue as T;
-    }
-
-    // Execute function and cache result
-    const result = await fn();
-    // Use JSON.stringify because our adapters expect string values for set
-    // Note: Upstash adapter's underlying client might auto-serialize, but we unified to string
-    // logic in get<T> to handle parsing.
-    await redis.setex(key, ttlSeconds, JSON.stringify(result));
-
-    return result;
 }
 
 /**

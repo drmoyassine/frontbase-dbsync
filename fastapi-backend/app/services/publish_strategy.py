@@ -117,8 +117,25 @@ class TursoPublishStrategy(BasePublishStrategy):
     def __init__(self):
         self.turso_url = os.getenv("TURSO_DB_URL", "")
         self.turso_token = os.getenv("TURSO_DB_TOKEN", "")
-        self.upstash_url = os.getenv("UPSTASH_REDIS_URL", "")
-        self.upstash_token = os.getenv("UPSTASH_REDIS_TOKEN", "")
+        
+        # Upstash: prefer Settings UI, fallback to env vars
+        self.upstash_url = ""
+        self.upstash_token = ""
+        try:
+            from ..routers.settings import load_settings
+            settings = load_settings()
+            redis_cfg = settings.get("redis", {})
+            if redis_cfg.get("redis_type") == "upstash" and redis_cfg.get("redis_url") and redis_cfg.get("redis_token"):
+                self.upstash_url = redis_cfg["redis_url"]
+                self.upstash_token = redis_cfg["redis_token"]
+                print("[PublishStrategy:turso] Loaded Upstash credentials from Settings UI")
+        except Exception:
+            pass
+        
+        # Fallback to env vars if Settings UI didn't provide them
+        if not self.upstash_url:
+            self.upstash_url = os.getenv("UPSTASH_REDIS_URL", "")
+            self.upstash_token = os.getenv("UPSTASH_REDIS_TOKEN", "")
 
         if not self.turso_url:
             raise ValueError(
@@ -132,6 +149,8 @@ class TursoPublishStrategy(BasePublishStrategy):
             self.http_url = f"https://{self.http_url}"
         
         print(f"[PublishStrategy:turso] Initialized → {self.http_url[:40]}...")
+        if self.upstash_url:
+            print(f"[PublishStrategy:turso] Upstash cache → {self.upstash_url[:40]}...")
 
     async def _execute_sql(self, statements: list[dict]) -> dict:
         """Execute SQL statements via Turso HTTP API (v2 pipeline)."""

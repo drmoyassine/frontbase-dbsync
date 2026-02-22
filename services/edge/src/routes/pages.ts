@@ -92,12 +92,28 @@ const renderPageRoute = createRoute({
 // Note: Storage init is handled by import.ts module load
 
 async function fetchPage(slug: string): Promise<PageData | null> {
-    // First, try to get from local published pages storage
+    const cacheKey = `page:${slug}`;
+
+    // L2: Try Redis cache first (Upstash or local)
+    try {
+        const { getRedis } = await import('../cache/redis.js');
+        const redis = getRedis();
+        const cached = await redis.get<PageData>(cacheKey);
+        if (cached) {
+            console.log(`[SSR] Cache HIT: ${slug}`);
+            return cached;
+        }
+    } catch {
+        // Redis not initialized or unavailable — continue to storage
+    }
+
+    // L3: Try local published pages storage (SQLite/Turso)
+    let page: PageData | null = null;
     try {
         const publishedPage = await stateProvider.getPageBySlug(slug);
         if (publishedPage) {
             console.log(`[SSR] Found published page: ${slug} (v${publishedPage.version})`);
-            return {
+            page = {
                 id: publishedPage.id,
                 name: publishedPage.name,
                 slug: publishedPage.slug,
@@ -116,29 +132,44 @@ async function fetchPage(slug: string): Promise<PageData | null> {
     }
 
     // Fallback to FastAPI for unpublished pages (dev mode only)
-    const apiBase = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
+    if (!page) {
+        const apiBase = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
+        try {
+            const url = `${apiBase}/api/pages/public/${slug}`;
+            console.log(`[SSR] Fallback to FastAPI: ${url}`);
 
-    try {
-        const url = `${apiBase}/api/pages/public/${slug}`;
-        console.log(`[SSR] Fallback to FastAPI: ${url}`);
+            const response = await fetch(url, {
+                headers: { 'Accept': 'application/json' },
+                redirect: 'follow',
+            });
 
-        const response = await fetch(url, {
-            headers: { 'Accept': 'application/json' },
-            redirect: 'follow',
-        });
+            if (!response.ok) {
+                if (response.status === 404) return null;
+                console.error(`Failed to fetch page: ${response.status}`);
+                return null;
+            }
 
-        if (!response.ok) {
-            if (response.status === 404) return null;
-            console.error(`Failed to fetch page: ${response.status}`);
+            const result = await response.json();
+            page = result.success ? result.data : null;
+        } catch (error) {
+            console.error('Error fetching page from FastAPI:', error);
             return null;
         }
-
-        const result = await response.json();
-        return result.success ? result.data : null;
-    } catch (error) {
-        console.error('Error fetching page from FastAPI:', error);
-        return null;
     }
+
+    // Populate L2 cache on miss
+    if (page) {
+        try {
+            const { getRedis } = await import('../cache/redis.js');
+            const redis = getRedis();
+            await redis.setex(cacheKey, 60, JSON.stringify(page));
+            console.log(`[SSR] Cache SET: ${slug} (60s TTL)`);
+        } catch {
+            // Redis not available — no-op
+        }
+    }
+
+    return page;
 }
 
 async function fetchTrackingConfig(): Promise<TrackingConfig> {

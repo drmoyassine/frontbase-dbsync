@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { RefreshCw, Users } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { RedisSettingsForm } from './settings/shared/RedisSettingsForm';
 import { TursoSettingsForm } from './settings/shared/TursoSettingsForm';
 import { PrivacySettingsForm } from './settings/shared/PrivacySettingsForm';
@@ -32,7 +32,7 @@ export const SettingsPanel: React.FC = () => {
         <TabsList className="grid w-full grid-cols-5 lg:w-[900px]">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="team">Team & Emails</TabsTrigger>
-          <TabsTrigger value="cache">Cache & Performance</TabsTrigger>
+          <TabsTrigger value="cache">Edge Caching</TabsTrigger>
           <TabsTrigger value="edge-db">Edge Database</TabsTrigger>
           <TabsTrigger value="privacy">Privacy & Tracking</TabsTrigger>
         </TabsList>
@@ -80,22 +80,9 @@ export const SettingsPanel: React.FC = () => {
           </Card>
         </TabsContent>
 
-        {/* Cache & Performance Tab */}
+        {/* Edge Caching Tab */}
         <TabsContent value="cache" className="space-y-6 mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <RefreshCw className="h-5 w-5" />
-                Redis Cache Configuration
-              </CardTitle>
-              <CardDescription>
-                Configure Redis caching to improve data loading performance
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <RedisSettingsForm />
-            </CardContent>
-          </Card>
+          <RedisSettingsForm withCard />
         </TabsContent>
 
         {/* Edge Database Tab */}

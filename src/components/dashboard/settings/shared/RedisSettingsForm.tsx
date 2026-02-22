@@ -1,11 +1,12 @@
 /**
  * RedisSettingsForm
  * 
- * Simplified Redis cache configuration.
+ * Edge Caching configuration.
  * 
- * Pattern: Local Redis works by default (from Docker or env var).
- * Users can optionally connect Upstash to override with a managed cloud instance.
- * Mirrors the Turso Settings pattern.
+ * Layout:
+ * 1. Local Redis status (read-only, always connected via Docker)
+ * 2. TTL configuration (always editable)
+ * 3. Optional Upstash upgrade section
  */
 
 import React from 'react';
@@ -16,7 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Check, X, RefreshCw, Database, Info, ExternalLink } from 'lucide-react';
+import { Loader2, Check, X, RefreshCw, Zap, Info, ExternalLink, CheckCircle2, Cloud } from 'lucide-react';
 import { useRedisSettings } from '../hooks/useRedisSettings';
 
 interface RedisSettingsFormProps {
@@ -48,17 +49,15 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
         saveSuccess,
     } = useRedisSettings();
 
-    // Is this an Upstash override or using local Redis?
     const isUpstash = redisType === 'upstash';
 
-    // Toggle between local Redis and Upstash
     const handleUpstashToggle = (enabled: boolean) => {
         if (enabled) {
             setRedisType('upstash');
             setRedisEnabled(true);
         } else {
             setRedisType('self-hosted');
-            // Keep redis enabled — it'll use local Redis
+            setRedisEnabled(true); // Keep caching on with local Redis
         }
         handleChange();
     };
@@ -73,143 +72,141 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
 
     const formContent = (
         <div className="space-y-6">
-            {/* Enable/Disable Caching */}
-            <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                    <Label htmlFor="redis-enabled" className="text-base">Enable Caching</Label>
-                    <p className="text-sm text-muted-foreground">
-                        {redisEnabled
-                            ? isUpstash
-                                ? 'Using Upstash Redis (cloud)'
-                                : 'Using local Redis (Docker)'
-                            : 'When disabled, all data is fetched directly from the source'
+            {/* Local Redis Status */}
+            <div className="flex items-center gap-3 p-4 rounded-lg border bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <div className="flex-1">
+                    <p className="text-sm font-medium">
+                        {isUpstash ? 'Upstash Redis connected' : 'Local Redis connected'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                        {isUpstash
+                            ? 'Using managed serverless Redis for edge caching'
+                            : 'Bundled Redis instance from your Docker setup'
                         }
                     </p>
                 </div>
-                <Switch
-                    id="redis-enabled"
-                    checked={redisEnabled}
-                    onCheckedChange={(checked) => { setRedisEnabled(checked); handleChange(); }}
-                />
-            </div>
-
-            {redisEnabled && (
-                <>
-                    {/* Upstash Override Toggle */}
-                    <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                            <Label htmlFor="upstash-toggle" className="text-base">Use Upstash</Label>
-                            <p className="text-sm text-muted-foreground">
-                                Override local Redis with a managed Upstash instance
-                            </p>
-                        </div>
-                        <Switch
-                            id="upstash-toggle"
-                            checked={isUpstash}
-                            onCheckedChange={handleUpstashToggle}
-                        />
-                    </div>
-
-                    {/* Upstash Credentials (only shown when Upstash is enabled) */}
-                    {isUpstash && (
-                        <>
-                            <div className="space-y-2">
-                                <Label htmlFor="redis-url">Upstash REST URL</Label>
-                                <Input
-                                    id="redis-url"
-                                    placeholder="https://your-instance.upstash.io"
-                                    value={redisUrl}
-                                    onChange={(e) => { setRedisUrl(e.target.value); handleChange(); }}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="redis-token">Upstash REST Token</Label>
-                                <Input
-                                    id="redis-token"
-                                    type="password"
-                                    placeholder="AX...your-upstash-token"
-                                    value={redisToken}
-                                    onChange={(e) => { setRedisToken(e.target.value); handleChange(); }}
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    Find these in your Upstash Console → Database → REST API
-                                </p>
-                            </div>
-                        </>
-                    )}
-
-                    {/* Local Redis info */}
-                    {!isUpstash && (
-                        <Alert>
-                            <Info className="h-4 w-4" />
-                            <AlertDescription>
-                                Using the bundled Redis from your Docker setup. No additional configuration needed.
-                            </AlertDescription>
-                        </Alert>
-                    )}
-
-                    {/* Test Result */}
-                    {testResult && (
-                        <Alert variant={testResult.success ? 'default' : 'destructive'}>
-                            {testResult.success ? (
-                                <Check className="h-4 w-4" />
-                            ) : (
-                                <X className="h-4 w-4" />
-                            )}
-                            <AlertDescription>{testResult.message}</AlertDescription>
-                        </Alert>
-                    )}
-
-                    <Separator />
-
-                    {/* TTL Settings */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="ttl-data">Data Cache TTL (seconds)</Label>
-                            <Input
-                                id="ttl-data"
-                                type="number"
-                                value={cacheTtlData}
-                                onChange={(e) => { setCacheTtlData(parseInt(e.target.value)); handleChange(); }}
-                            />
-                            <p className="text-xs text-muted-foreground">How long to cache record data</p>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="ttl-count">Count Cache TTL (seconds)</Label>
-                            <Input
-                                id="ttl-count"
-                                type="number"
-                                value={cacheTtlCount}
-                                onChange={(e) => { setCacheTtlCount(parseInt(e.target.value)); handleChange(); }}
-                            />
-                            <p className="text-xs text-muted-foreground">How long to cache record counts</p>
-                        </div>
-                    </div>
-                </>
-            )}
-
-            {/* Actions */}
-            <div className="flex items-center gap-3">
-                {redisEnabled && (
+                {!isUpstash && (
                     <Button
                         variant="outline"
+                        size="sm"
                         onClick={testConnection}
-                        disabled={isTesting || (!isUpstash ? false : (!redisUrl || !redisToken))}
+                        disabled={isTesting}
                     >
                         {isTesting ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Testing...
-                            </>
+                            <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                            <>
-                                <RefreshCw className="mr-2 h-4 w-4" />
-                                Test Connection
-                            </>
+                            <RefreshCw className="h-4 w-4" />
                         )}
                     </Button>
                 )}
+            </div>
 
+            {/* Test Result */}
+            {testResult && (
+                <Alert variant={testResult.success ? 'default' : 'destructive'}>
+                    {testResult.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                    <AlertDescription>{testResult.message}</AlertDescription>
+                </Alert>
+            )}
+
+            {/* TTL Configuration — always visible */}
+            <div className="space-y-4">
+                <Label className="text-base">Cache TTL</Label>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="ttl-data" className="text-sm font-normal">Data Cache (seconds)</Label>
+                        <Input
+                            id="ttl-data"
+                            type="number"
+                            value={cacheTtlData}
+                            onChange={(e) => { setCacheTtlData(parseInt(e.target.value)); handleChange(); }}
+                        />
+                        <p className="text-xs text-muted-foreground">How long to cache record data</p>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="ttl-count" className="text-sm font-normal">Count Cache (seconds)</Label>
+                        <Input
+                            id="ttl-count"
+                            type="number"
+                            value={cacheTtlCount}
+                            onChange={(e) => { setCacheTtlCount(parseInt(e.target.value)); handleChange(); }}
+                        />
+                        <p className="text-xs text-muted-foreground">How long to cache record counts</p>
+                    </div>
+                </div>
+            </div>
+
+            <Separator />
+
+            {/* Upstash Upgrade Section */}
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <Cloud className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                            <Label htmlFor="upstash-toggle" className="text-base">Connect Upstash</Label>
+                            <p className="text-sm text-muted-foreground">
+                                Serverless Redis for globally distributed edge caching
+                            </p>
+                        </div>
+                    </div>
+                    <Switch
+                        id="upstash-toggle"
+                        checked={isUpstash}
+                        onCheckedChange={handleUpstashToggle}
+                    />
+                </div>
+
+                {isUpstash && (
+                    <div className="space-y-4 p-4 rounded-lg bg-muted/30">
+                        <div className="space-y-2">
+                            <Label htmlFor="redis-url">Upstash REST URL</Label>
+                            <Input
+                                id="redis-url"
+                                placeholder="https://your-instance.upstash.io"
+                                value={redisUrl}
+                                onChange={(e) => { setRedisUrl(e.target.value); handleChange(); }}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="redis-token">Upstash REST Token</Label>
+                            <Input
+                                id="redis-token"
+                                type="password"
+                                placeholder="AX...your-upstash-token"
+                                value={redisToken}
+                                onChange={(e) => { setRedisToken(e.target.value); handleChange(); }}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Find these in your Upstash Console → Database → REST API
+                            </p>
+                        </div>
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={testConnection}
+                            disabled={isTesting || !redisUrl || !redisToken}
+                        >
+                            {isTesting ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Testing...
+                                </>
+                            ) : (
+                                <>
+                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                    Test Connection
+                                </>
+                            )}
+                        </Button>
+                    </div>
+                )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-3">
                 <Button
                     onClick={save}
                     disabled={!hasChanges || isSaving}
@@ -246,11 +243,11 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <Database className="h-5 w-5" />
-                        Redis Cache Configuration
+                        <Zap className="h-5 w-5" />
+                        Edge Caching
                     </CardTitle>
                     <CardDescription>
-                        Configure Redis caching to improve data loading performance
+                        Redis-powered caching for fast data loading across your pages
                     </CardDescription>
                 </CardHeader>
                 <CardContent>{formContent}</CardContent>

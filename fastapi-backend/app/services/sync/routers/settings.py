@@ -45,23 +45,30 @@ class RedisTestResult(BaseModel):
 
 
 @router.get("/redis/", response_model=RedisSettingsResponse)
-async def get_redis_settings(db: AsyncSession = Depends(get_db)):
-    """Get current Redis settings."""
-    result = await db.execute(select(ProjectSettings).limit(1))
-    settings = result.scalar_one_or_none()
-    
-    if not settings:
-        # Return defaults
+async def get_redis_settings():
+    """Get current Redis settings — delegates to main app's settings.json."""
+    import os
+    try:
+        from app.routers.settings import load_settings
+        settings = load_settings()
+        redis_cfg = settings.get("redis", {})
+        
+        saved_type = redis_cfg.get("redis_type")
+        saved_url = redis_cfg.get("redis_url")
+        saved_token = redis_cfg.get("redis_token")
+        
+        is_upstash = saved_type == "upstash" and saved_url and saved_token
+        
+        return RedisSettingsResponse(
+            redis_url=saved_url if is_upstash else "http://redis-http:80",
+            redis_token=saved_token if is_upstash else os.environ.get("REDIS_TOKEN"),
+            redis_type="upstash" if is_upstash else "self-hosted",
+            redis_enabled=redis_cfg.get("redis_enabled", False),
+            cache_ttl_data=redis_cfg.get("cache_ttl_data", 60),
+            cache_ttl_count=redis_cfg.get("cache_ttl_count", 300),
+        )
+    except Exception:
         return RedisSettingsResponse()
-    
-    return RedisSettingsResponse(
-        redis_url=settings.redis_url,
-        redis_token=settings.redis_token,
-        redis_type=settings.redis_type,
-        redis_enabled=settings.redis_enabled,
-        cache_ttl_data=settings.cache_ttl_data,
-        cache_ttl_count=settings.cache_ttl_count,
-    )
 
 
 @router.put("/redis/", response_model=RedisSettingsResponse)

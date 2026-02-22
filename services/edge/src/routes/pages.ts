@@ -356,6 +356,12 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
         );
     }
 
+    // Homepage should only be served at "/", not at "/{slug}"
+    // This frees the slug for use by other pages
+    if (page.isHomepage) {
+        return c.redirect('/', 301);
+    }
+
     // Check if page is public (for now, render all pages - auth handled later)
     // if (!page.isPublic) {
     //     return c.json({ error: 'Unauthorized', message: 'This page is private' }, 403);

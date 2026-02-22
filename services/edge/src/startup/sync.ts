@@ -11,7 +11,7 @@ import { initRedis } from '../cache/redis.js';
 import { db } from '../db/index.js';
 import { sql } from 'drizzle-orm';
 
-const FASTAPI_URL = process.env.FASTAPI_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 3000; // 3 seconds between retries
 
@@ -79,7 +79,7 @@ type SyncResult = { status: 'success' } | { status: 'not-configured' } | { statu
  */
 async function syncRedisSettingsFromFastAPI(): Promise<SyncResult> {
     try {
-        const response = await fetch(`${FASTAPI_URL}/api/sync/settings/redis/`, {
+        const response = await fetch(`${BACKEND_URL}/api/sync/settings/redis/`, {
             headers: { 'Accept': 'application/json' },
             signal: AbortSignal.timeout(5000),
         });
@@ -116,7 +116,7 @@ async function syncRedisSettingsFromFastAPI(): Promise<SyncResult> {
  */
 async function syncHomepageFromFastAPI(): Promise<boolean> {
     try {
-        const response = await fetch(`${FASTAPI_URL}/api/pages/homepage/`, {
+        const response = await fetch(`${BACKEND_URL}/api/pages/homepage/`, {
             headers: { 'Accept': 'application/json' },
             signal: AbortSignal.timeout(5000), // 5s timeout
         });

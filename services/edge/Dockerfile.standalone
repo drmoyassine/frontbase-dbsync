@@ -6,7 +6,7 @@
 # No FastAPI, no Postgres, no local Redis needed.
 #
 # Build:  docker build -f Dockerfile.standalone -t frontbase/edge-node .
-# Run:    docker run -e FRONTBASE_ENV=cloud \
+# Run:    docker run -e FRONTBASE_DEPLOYMENT_MODE=cloud \
 #           -e FRONTBASE_STATE_DB_URL=libsql://your-db.turso.io \
 #           -e FRONTBASE_STATE_DB_TOKEN=your-token \
 #           -p 3002:3002 frontbase/edge-node
@@ -50,7 +50,7 @@ RUN mkdir -p /app/data
 # =============================================================================
 ENV NODE_ENV=production
 ENV PORT=3002
-ENV FRONTBASE_ENV=cloud
+ENV FRONTBASE_DEPLOYMENT_MODE=cloud
 
 # Override these at runtime:
 # FRONTBASE_STATE_DB_URL  — Turso database URL (required)

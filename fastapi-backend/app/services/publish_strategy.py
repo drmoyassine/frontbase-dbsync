@@ -52,7 +52,7 @@ class LocalPublishStrategy(BasePublishStrategy):
     """
 
     def __init__(self):
-        self.edge_url = os.getenv("EDGE_URL", os.getenv("EDGE_ENGINE_URL", "http://localhost:3002"))
+        self.edge_url = os.getenv("EDGE_URL", "http://localhost:3002")
 
     async def publish_page(self, payload: dict, *, force: bool = True) -> dict:
         import_url = f"{self.edge_url}/api/import"
@@ -262,17 +262,18 @@ _strategy: Optional[BasePublishStrategy] = None
 
 def get_publish_strategy() -> BasePublishStrategy:
     """
-    Get the singleton publish strategy based on PUBLISH_STRATEGY env var.
+    Get the singleton publish strategy.
 
-    Returns:
-        BasePublishStrategy: The publish strategy instance.
+    Auto-detects: if TURSO_DB_URL is set (i.e., user connected Turso
+    via Settings UI), use TursoPublishStrategy. Otherwise, use local.
     """
     global _strategy
     if _strategy is None:
-        strategy_name = os.getenv("PUBLISH_STRATEGY", "local")
-        if strategy_name == "turso":
+        turso_url = os.getenv("TURSO_DB_URL", "")
+        if turso_url:
             _strategy = TursoPublishStrategy()
+            print("[PublishStrategy] Auto-detected: turso (TURSO_DB_URL is set)")
         else:
             _strategy = LocalPublishStrategy()
-        print(f"[PublishStrategy] Using: {strategy_name}")
+            print("[PublishStrategy] Using: local")
     return _strategy

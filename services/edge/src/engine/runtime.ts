@@ -338,7 +338,7 @@ async function executeDataRequest(
     node: WorkflowNode,
     inputs: Record<string, any>
 ): Promise<Record<string, any>> {
-    const FASTAPI_URL = process.env.FASTAPI_URL || 'http://localhost:8000';
+    const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
     // Get node configuration - check multiple sources
     const nodeData = node.data || {};
@@ -387,7 +387,7 @@ async function executeDataRequest(
         }
 
         // Build query URL using existing FastAPI endpoint
-        const queryUrl = new URL(`${FASTAPI_URL}/api/database/table-data/${table}/`);
+        const queryUrl = new URL(`${BACKEND_URL}/api/database/table-data/${table}/`);
         queryUrl.searchParams.set('limit', String(limit));
         queryUrl.searchParams.set('select', selectParam);
         queryUrl.searchParams.set('mode', 'builder'); // Use service key for Actions

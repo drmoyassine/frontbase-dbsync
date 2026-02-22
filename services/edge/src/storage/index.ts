@@ -1,9 +1,9 @@
 /**
  * State Provider Factory
  * 
- * Reads FRONTBASE_ENV to determine which storage provider to use:
+ * Reads FRONTBASE_DEPLOYMENT_MODE to determine which storage provider to use:
  * - 'local' (default): LocalSqliteProvider — reads from local SQLite file
- * - 'cloud': TursoHttpProvider — reads from remote Turso DB (Phase 2)
+ * - 'cloud': TursoHttpProvider — reads from remote Turso DB
  * 
  * Usage:
  *   import { stateProvider } from './storage';
@@ -22,16 +22,16 @@ import { TursoHttpProvider } from './TursoHttpProvider';
  * Returns a singleton — call this once at startup.
  */
 export function createProvider(): IStateProvider {
-    const env = process.env.FRONTBASE_ENV || 'local';
+    const env = process.env.FRONTBASE_DEPLOYMENT_MODE || 'local';
 
     switch (env) {
         case 'cloud':
-            console.log('☁️ FRONTBASE_ENV=cloud — using TursoHttpProvider');
+            console.log('☁️ FRONTBASE_DEPLOYMENT_MODE=cloud — using TursoHttpProvider');
             return new TursoHttpProvider();
 
         case 'local':
         default:
-            console.log('💾 FRONTBASE_ENV=local — using LocalSqliteProvider');
+            console.log('💾 FRONTBASE_DEPLOYMENT_MODE=local — using LocalSqliteProvider');
             return new LocalSqliteProvider();
     }
 }

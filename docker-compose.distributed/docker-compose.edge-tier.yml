@@ -17,16 +17,16 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3002
-      - FRONTBASE_ENV=${FRONTBASE_ENV:-local}
+      - FRONTBASE_DEPLOYMENT_MODE=${FRONTBASE_DEPLOYMENT_MODE:-local}
       - SQLITE_PATH=/app/data/edge.db
       - DATABASE_URL=file:/app/data/edge.db
       - PAGES_DB_URL=${PAGES_DB_URL:-file:/app/data/pages.db}
       # Backend URL — point to Machine A
-      - FASTAPI_URL=${FASTAPI_URL:-http://backend:8000}
-      # Turso (for FRONTBASE_ENV=cloud)
+      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+      # Turso (for FRONTBASE_DEPLOYMENT_MODE=cloud)
       - FRONTBASE_STATE_DB_URL=${TURSO_DB_URL:-}
       - FRONTBASE_STATE_DB_TOKEN=${TURSO_DB_TOKEN:-}
-      # Upstash (for FRONTBASE_ENV=cloud)
+      # Upstash (for FRONTBASE_DEPLOYMENT_MODE=cloud)
       - FRONTBASE_REDIS_URL=${UPSTASH_REDIS_URL:-}
       - FRONTBASE_REDIS_TOKEN=${UPSTASH_REDIS_TOKEN:-}
       - API_KEYS=${API_KEYS:-}

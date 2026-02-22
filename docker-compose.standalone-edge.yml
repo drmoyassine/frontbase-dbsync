@@ -25,7 +25,7 @@ services:
       - NODE_ENV=production
       - PORT=3002
       # Storage provider (must be 'cloud' for standalone)
-      - FRONTBASE_ENV=cloud
+      - FRONTBASE_DEPLOYMENT_MODE=cloud
       # Turso state DB (required)
       - FRONTBASE_STATE_DB_URL=${TURSO_DB_URL}
       - FRONTBASE_STATE_DB_TOKEN=${TURSO_DB_TOKEN}

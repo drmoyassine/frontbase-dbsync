@@ -19,17 +19,12 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-frontbase-dev-password}
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
-      - EDGE_URL=${EDGE_ENGINE_URL:-http://edge:3002}
-      - EDGE_SSR_URL=${EDGE_ENGINE_URL:-http://edge:3002}
-      - EDGE_ENGINE_URL=${EDGE_ENGINE_URL:-http://edge:3002}
-      - PUBLISH_STRATEGY=${PUBLISH_STRATEGY:-local}
+      - EDGE_URL=${EDGE_URL:-http://edge:3002}
+      - EDGE_SSR_URL=${EDGE_URL:-http://edge:3002}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
       - ENVIRONMENT=${ENVIRONMENT:-production}
-      # Turso (for PUBLISH_STRATEGY=turso)
-      - TURSO_DB_URL=${TURSO_DB_URL:-}
-      - TURSO_DB_TOKEN=${TURSO_DB_TOKEN:-}
     volumes:
       - backend_data:/app/data
     networks:

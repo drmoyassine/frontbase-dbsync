@@ -32,7 +32,7 @@ router = APIRouter()
 # Edge Engine URL - configurable for production (Docker uses container name 'edge')
 # Defaults to localhost:3002 for local development
 import os
-EDGE_ENGINE_URL = os.getenv("EDGE_ENGINE_URL", "http://localhost:3002")
+EDGE_URL = os.getenv("EDGE_URL", "http://localhost:3002")
 
 
 # ============ Draft CRUD ============
@@ -255,7 +255,7 @@ async def publish_draft(
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{EDGE_ENGINE_URL}/api/deploy",
+                f"{EDGE_URL}/api/deploy",
                 json=deploy_payload,
                 timeout=30.0
             )
@@ -333,7 +333,7 @@ async def test_draft(
     try:
         async with httpx.AsyncClient() as client:
             deploy_response = await client.post(
-                f"{EDGE_ENGINE_URL}/api/deploy",
+                f"{EDGE_URL}/api/deploy",
                 json=deploy_payload,
                 timeout=30.0
             )
@@ -363,7 +363,7 @@ async def test_draft(
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{EDGE_ENGINE_URL}/api/execute/{draft.id}",
+                f"{EDGE_URL}/api/execute/{draft.id}",
                 json={"parameters": request.parameters or {}},
                 timeout=30.0
             )
@@ -435,7 +435,7 @@ async def test_node(
         async with httpx.AsyncClient() as client:
             # Deploy first
             deploy_response = await client.post(
-                f"{EDGE_ENGINE_URL}/api/deploy",
+                f"{EDGE_URL}/api/deploy",
                 json=deploy_payload,
                 timeout=30.0
             )
@@ -447,7 +447,7 @@ async def test_node(
             
             # Execute single node
             response = await client.post(
-                f"{EDGE_ENGINE_URL}/api/execute/{draft.id}/node/{node_id}",
+                f"{EDGE_URL}/api/execute/{draft.id}/node/{node_id}",
                 json={"parameters": request.parameters or {}},
                 timeout=30.0
             )
@@ -485,7 +485,7 @@ async def get_execution_result(execution_id: str):
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{EDGE_ENGINE_URL}/api/executions/{execution_id}",
+                f"{EDGE_URL}/api/executions/{execution_id}",
                 timeout=10.0
             )
             
@@ -516,7 +516,7 @@ async def get_draft_executions(
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{EDGE_ENGINE_URL}/api/executions/workflow/{draft_id}",
+                f"{EDGE_URL}/api/executions/workflow/{draft_id}",
                 params={"limit": str(limit)},
                 timeout=10.0
             )
@@ -535,7 +535,7 @@ async def get_execution_stats():
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{EDGE_ENGINE_URL}/api/executions/stats",
+                f"{EDGE_URL}/api/executions/stats",
                 timeout=10.0
             )
             

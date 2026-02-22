@@ -25,17 +25,8 @@ services:
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       # Edge Engine URL (override for distributed deployment)
-      - EDGE_URL=${EDGE_ENGINE_URL:-http://edge:3002}
-      - EDGE_SSR_URL=${EDGE_ENGINE_URL:-http://edge:3002}
-      - EDGE_ENGINE_URL=${EDGE_ENGINE_URL:-http://edge:3002}
-      # Publish strategy: 'local' (HTTP POST to edge) or 'turso' (direct Turso DB write)
-      - PUBLISH_STRATEGY=${PUBLISH_STRATEGY:-local}
-      # Turso integration (for PUBLISH_STRATEGY=turso)
-      - TURSO_DB_URL=${TURSO_DB_URL:-}
-      - TURSO_DB_TOKEN=${TURSO_DB_TOKEN:-}
-      # Upstash Redis (cloud uses Upstash instead of local Redis)
-      - UPSTASH_REDIS_URL=${UPSTASH_REDIS_URL:-}
-      - UPSTASH_REDIS_TOKEN=${UPSTASH_REDIS_TOKEN:-}
+      - EDGE_URL=${EDGE_URL:-http://edge:3002}
+      - EDGE_SSR_URL=${EDGE_URL:-http://edge:3002}
       # Admin Authentication
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
@@ -81,19 +72,19 @@ services:
       - NODE_ENV=production
       - PORT=${EDGE_PORT:-3002}
       # Storage provider: 'cloud' uses Turso/Upstash (default for cloud compose)
-      - FRONTBASE_ENV=${FRONTBASE_ENV:-cloud}
-      # Turso state DB (for FRONTBASE_ENV=cloud)
+      - FRONTBASE_DEPLOYMENT_MODE=${FRONTBASE_DEPLOYMENT_MODE:-cloud}
+      # Turso state DB (credentials from Settings UI, passthrough for override)
       - FRONTBASE_STATE_DB_URL=${TURSO_DB_URL:-}
       - FRONTBASE_STATE_DB_TOKEN=${TURSO_DB_TOKEN:-}
-      # Upstash Redis (for FRONTBASE_ENV=cloud)
+      # Upstash Redis (credentials from Settings UI, passthrough for override)
       - FRONTBASE_REDIS_URL=${UPSTASH_REDIS_URL:-}
       - FRONTBASE_REDIS_TOKEN=${UPSTASH_REDIS_TOKEN:-}
       # Database for edge storage (SQLite fallback)
       - SQLITE_PATH=/app/data/edge.db
       - DATABASE_URL=file:/app/data/edge.db
       - PAGES_DB_URL=${PAGES_DB_URL:-file:/app/data/pages.db}
-      # FastAPI backend URL (override for distributed deployment)
-      - FASTAPI_URL=${FASTAPI_URL:-http://backend:8000}
+      # Backend URL (override for distributed deployment)
+      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
       # Webhook API keys (comma-separated)
       - API_KEYS=${API_KEYS:-}
       # Supabase JWT for end-user auth (optional)

@@ -116,7 +116,7 @@ async function fetchPage(slug: string): Promise<PageData | null> {
     }
 
     // Fallback to FastAPI for unpublished pages (dev mode only)
-    const apiBase = process.env.FASTAPI_URL || 'http://127.0.0.1:8000';
+    const apiBase = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
 
     try {
         const url = `${apiBase}/api/pages/public/${slug}`;
@@ -142,7 +142,7 @@ async function fetchPage(slug: string): Promise<PageData | null> {
 }
 
 async function fetchTrackingConfig(): Promise<TrackingConfig> {
-    const apiBase = process.env.FASTAPI_URL || 'http://127.0.0.1:8000';
+    const apiBase = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
     try {
         const response = await fetch(`${apiBase}/api/settings/privacy`);
         if (response.ok) {
@@ -430,7 +430,7 @@ pagesRoute.get('/', async (c) => {
             // Pull-publish: Fetch homepage from FastAPI and store locally
             console.log('[SSR] No local homepage found, pulling from FastAPI...');
 
-            const fastapiUrl = process.env.FASTAPI_URL || 'http://backend:8000';
+            const fastapiUrl = process.env.BACKEND_URL || 'http://backend:8000';
             try {
                 const response = await fetch(`${fastapiUrl}/api/pages/homepage/`);
 

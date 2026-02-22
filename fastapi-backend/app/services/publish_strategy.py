@@ -3,9 +3,12 @@ Publish Strategy — Abstraction for how the backend delivers compiled pages.
 
 Strategies:
 - LocalPublishStrategy: HTTP POST to Edge Engine /api/import (default)
-- TursoPublishStrategy: Direct SQL write to user's Turso DB (Phase 2 stub)
+- TursoPublishStrategy: Direct SQL write to user's Turso DB
 
-Factory: get_publish_strategy() reads PUBLISH_STRATEGY env var.
+Factory: get_publish_strategy() auto-detects based on:
+  1. TURSO_DB_URL env var (highest priority)
+  2. Turso settings in settings.json (from Settings UI)
+  3. Default: local
 
 AGENTS.md §4.3: Both strategies are called AFTER the DB connection is released
 (Release-Before-IO pattern).
@@ -260,19 +263,47 @@ class TursoPublishStrategy(BasePublishStrategy):
 _strategy: Optional[BasePublishStrategy] = None
 
 
+def reset_publish_strategy():
+    """
+    Reset the singleton so the next call to get_publish_strategy() re-detects.
+    Called when Turso settings are updated via the Settings UI.
+    """
+    global _strategy
+    _strategy = None
+    print("[PublishStrategy] Reset — will re-detect on next publish")
+
+
 def get_publish_strategy() -> BasePublishStrategy:
     """
     Get the singleton publish strategy.
 
-    Auto-detects: if TURSO_DB_URL is set (i.e., user connected Turso
-    via Settings UI), use TursoPublishStrategy. Otherwise, use local.
+    Auto-detects with priority:
+      1. TURSO_DB_URL env var (for docker-compose.cloud.yml)
+      2. Turso settings in settings.json (from Settings UI)
+      3. Default: local (HTTP POST to edge)
     """
     global _strategy
     if _strategy is None:
         turso_url = os.getenv("TURSO_DB_URL", "")
+        
+        # If no env var, check settings.json
+        if not turso_url:
+            try:
+                from ..routers.settings import load_settings
+                settings = load_settings()
+                turso_cfg = settings.get("turso", {})
+                if turso_cfg.get("turso_enabled") and turso_cfg.get("turso_url"):
+                    turso_url = turso_cfg["turso_url"]
+                    # Set env vars so TursoPublishStrategy picks them up
+                    os.environ["TURSO_DB_URL"] = turso_url
+                    os.environ["TURSO_DB_TOKEN"] = turso_cfg.get("turso_token", "")
+                    print("[PublishStrategy] Loaded Turso credentials from Settings UI")
+            except Exception as e:
+                print(f"[PublishStrategy] Could not read settings.json: {e}")
+        
         if turso_url:
             _strategy = TursoPublishStrategy()
-            print("[PublishStrategy] Auto-detected: turso (TURSO_DB_URL is set)")
+            print(f"[PublishStrategy] Auto-detected: turso ({turso_url[:40]}...)")
         else:
             _strategy = LocalPublishStrategy()
             print("[PublishStrategy] Using: local")

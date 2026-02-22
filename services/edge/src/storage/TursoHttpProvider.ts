@@ -19,6 +19,7 @@ import { sql, eq } from 'drizzle-orm';
 import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
 import type { PublishPage, PageLayout, SeoData, DatasourceConfig } from '../schemas/publish';
 import type { IStateProvider, ProjectSettingsData, PublishedPageSummary } from './IStateProvider';
+import { runMigrations } from './edge-migrations';
 
 // =============================================================================
 // Schema Definitions (identical to LocalSqliteProvider — same DB schema)
@@ -85,33 +86,11 @@ export class TursoHttpProvider implements IStateProvider {
     // =========================================================================
 
     async init(): Promise<void> {
-        // Create pages table (same DDL as LocalSqliteProvider)
-        await this.db.run(sql`
-            CREATE TABLE IF NOT EXISTS published_pages (
-                id TEXT PRIMARY KEY,
-                slug TEXT NOT NULL UNIQUE,
-                name TEXT NOT NULL,
-                title TEXT,
-                description TEXT,
-                layout_data TEXT NOT NULL,
-                seo_data TEXT,
-                datasources TEXT,
-                css_bundle TEXT,
-                version INTEGER NOT NULL DEFAULT 1,
-                published_at TEXT NOT NULL,
-                is_public INTEGER NOT NULL DEFAULT 1,
-                is_homepage INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
-        try {
-            await this.db.run(sql`ALTER TABLE published_pages ADD COLUMN css_bundle TEXT`);
-            console.log('☁️ Added css_bundle column to published_pages (Turso)');
-        } catch (e) {
-            // Column already exists
-        }
+        // Run versioned migrations (creates tables, indexes, etc.)
+        await runMigrations(
+            async (sqlStr) => { await this.db.run(sql.raw(sqlStr)); },
+            'Turso'
+        );
 
         console.log('☁️ Published pages table initialized (Turso)');
     }

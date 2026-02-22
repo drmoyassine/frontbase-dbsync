@@ -187,15 +187,17 @@ class TursoPublishStrategy(BasePublishStrategy):
         try:
             await self._execute_sql([stmt])
             slug = page.get("slug", "unknown")
+            is_homepage = page.get("isHomepage", False)
             print(f"[PublishStrategy:turso] ✅ Published page: {slug}")
 
             # Invalidate Upstash cache if configured
             await self._invalidate_cache(slug)
 
+            preview_path = "" if is_homepage else slug
             return {
                 "success": True,
                 "version": page.get("version", 1),
-                "previewUrl": f"/{slug}",
+                "previewUrl": f"/{preview_path}",
             }
         except Exception as e:
             print(f"[PublishStrategy:turso] ❌ Publish failed: {e}")

@@ -10,17 +10,7 @@ import {
     ImportPageRequestSchema,
     PublishPageSchema
 } from '../schemas/publish';
-import {
-    upsertPublishedPage,
-    getPublishedPageBySlug,
-    deletePublishedPage,
-    initPagesDb
-} from '../db/pages-store';
-import {
-    updateProjectSettings,
-    getProjectSettings,
-    initProjectSettingsDb
-} from '../db/project-settings';
+import { stateProvider } from '../storage';
 
 // Create the import route (non-OpenAPI for better error handling)
 export const importRoute = new Hono();
@@ -72,7 +62,7 @@ importRoute.post('/', async (c) => {
 
         // Check if page already exists with same or higher version
         if (!force) {
-            const existing = await getPublishedPageBySlug(page.slug);
+            const existing = await stateProvider.getPageBySlug(page.slug);
             if (existing && existing.version >= page.version) {
                 return c.json({
                     success: false,
@@ -87,7 +77,7 @@ importRoute.post('/', async (c) => {
         }
 
         // Upsert the page
-        const result = await upsertPublishedPage(page);
+        const result = await stateProvider.upsertPage(page);
 
         // Build preview URL - use PUBLIC_URL env var for production, fallback to host header for dev
         const publicUrl = process.env.PUBLIC_URL;
@@ -154,7 +144,7 @@ importRoute.delete('/:slug', async (c) => {
         console.log(`[Import] Unpublishing page: ${slug}`);
 
         // Check if page exists
-        const existing = await getPublishedPageBySlug(slug);
+        const existing = await stateProvider.getPageBySlug(slug);
         if (!existing) {
             console.log(`[Import] Page not found in SSR: ${slug}`);
             // Return success anyway - page might already be unpublished
@@ -165,7 +155,7 @@ importRoute.delete('/:slug', async (c) => {
         }
 
         // Delete the page
-        await deletePublishedPage(slug);
+        await stateProvider.deletePage(slug);
         console.log(`[Import] Successfully unpublished: ${slug}`);
 
         return c.json({
@@ -194,7 +184,7 @@ importRoute.post('/settings', async (c) => {
         console.log('[Import Settings] Received:', Object.keys(body));
 
         // Update project settings in local store
-        await updateProjectSettings({
+        await stateProvider.updateProjectSettings({
             faviconUrl: body.faviconUrl || null,
             logoUrl: body.logoUrl || null,
             siteName: body.siteName || body.name || null,
@@ -222,7 +212,7 @@ importRoute.post('/settings', async (c) => {
 
 importRoute.get('/settings', async (c) => {
     try {
-        const settings = await getProjectSettings();
+        const settings = await stateProvider.getProjectSettings();
         return c.json({
             success: true,
             settings,
@@ -246,6 +236,6 @@ importRoute.get('/status', async (c) => {
     });
 });
 
-// Initialize databases on module load
-initPagesDb().catch(console.error);
-initProjectSettingsDb().catch(console.error);
+// Initialize storage on module load
+stateProvider.init().catch(console.error);
+stateProvider.initSettings().catch(console.error);

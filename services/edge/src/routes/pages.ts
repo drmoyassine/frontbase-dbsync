@@ -15,7 +15,10 @@ import { renderPage } from '../ssr/PageRenderer.js';
 import { createVariableStore, VariableStore } from '../ssr/store.js';
 import { buildTemplateContext, PageData as ContextPageData } from '../ssr/lib/context.js';
 import { getDefaultTrackingConfig, TrackingConfig } from '../ssr/lib/tracking.js';
-import { getFaviconUrl, DEFAULT_FAVICON } from '../db/project-settings.js';
+import { stateProvider } from '../storage/index.js';
+
+// Default favicon path constant (for generateHtmlDocument fallback)
+const DEFAULT_FAVICON = '/static/icon.png';
 
 // Type definitions for page data
 interface PageComponent {
@@ -85,16 +88,13 @@ const renderPageRoute = createRoute({
     },
 });
 
-// Fetch page from local D1/SQLite first, fallback to FastAPI for unpublished
-import { getPublishedPageBySlug, initPagesDb } from '../db/pages-store';
 
-// Initialize pages database
-initPagesDb().catch(console.error);
+// Note: Storage init is handled by import.ts module load
 
 async function fetchPage(slug: string): Promise<PageData | null> {
     // First, try to get from local published pages storage
     try {
-        const publishedPage = await getPublishedPageBySlug(slug);
+        const publishedPage = await stateProvider.getPageBySlug(slug);
         if (publishedPage) {
             console.log(`[SSR] Found published page: ${slug} (v${publishedPage.version})`);
             return {
@@ -407,7 +407,7 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     const trackingConfig = await fetchTrackingConfig();
 
     // Get favicon from local project settings (self-sufficient, no FastAPI call)
-    const faviconUrl = await getFaviconUrl();
+    const faviconUrl = await stateProvider.getFaviconUrl();
 
     // Generate full HTML document
     const htmlDoc = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl);
@@ -421,11 +421,8 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
 
 // Homepage route - renders homepage directly or pulls from FastAPI
 pagesRoute.get('/', async (c) => {
-    // Try to find a page marked as homepage from local storage first
-    const { getHomepage: getLocalHomepage, upsertPublishedPage } = await import('../db/pages-store');
-
     try {
-        let homepage = await getLocalHomepage();
+        let homepage = await stateProvider.getHomepage();
 
         if (homepage) {
             console.log(`[SSR] Rendering homepage: ${homepage.slug} (v${homepage.version})`);
@@ -457,7 +454,7 @@ pagesRoute.get('/', async (c) => {
                         isHomepage: true,
                     };
 
-                    await upsertPublishedPage(publishData);
+                    await stateProvider.upsertPage(publishData);
                     console.log(`[SSR] Pull-published homepage: ${pageData.slug}`);
 
                     // Set homepage for rendering
@@ -523,7 +520,7 @@ pagesRoute.get('/', async (c) => {
             const trackingConfig = await fetchTrackingConfig();
 
             // Get favicon from local project settings (self-sufficient)
-            const faviconUrl = await getFaviconUrl();
+            const faviconUrl = await stateProvider.getFaviconUrl();
 
             // Return full HTML page
             const fullHtml = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl);

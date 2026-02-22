@@ -1,0 +1,73 @@
+# ==============================================================================
+# API Tier — Backend + Redis
+# ==============================================================================
+# Machine A: Backend API server with local Redis for caching
+#
+# Usage:
+#   docker-compose -f docker-compose.api-tier.yml --env-file .env.distributed up -d
+# ==============================================================================
+
+services:
+  backend:
+    build:
+      context: ../
+      dockerfile: fastapi-backend/Dockerfile
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - DATABASE=${COMPOSE_PROFILES:-sqlite}
+      - DB_PASSWORD=${DB_PASSWORD:-frontbase-dev-password}
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - EDGE_URL=${EDGE_ENGINE_URL:-http://edge:3002}
+      - EDGE_SSR_URL=${EDGE_ENGINE_URL:-http://edge:3002}
+      - EDGE_ENGINE_URL=${EDGE_ENGINE_URL:-http://edge:3002}
+      - PUBLISH_STRATEGY=${PUBLISH_STRATEGY:-local}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      # Turso (for PUBLISH_STRATEGY=turso)
+      - TURSO_DB_URL=${TURSO_DB_URL:-}
+      - TURSO_DB_TOKEN=${TURSO_DB_TOKEN:-}
+    volumes:
+      - backend_data:/app/data
+    networks:
+      - frontbase-api
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://127.0.0.1:8000/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+
+  redis:
+    build:
+      context: ../
+      dockerfile: Dockerfile.redis
+    environment:
+      SRH_MODE: env
+      SRH_TOKEN: ${REDIS_TOKEN:-dev_token_change_in_prod}
+      SRH_CONNECTION_STRING: "redis://127.0.0.1:6379"
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_HTTP_PORT:-8079}:80"
+    volumes:
+      - redis_data:/data
+    networks:
+      - frontbase-api
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  frontbase-api:
+    driver: bridge
+
+volumes:
+  backend_data:
+  redis_data:

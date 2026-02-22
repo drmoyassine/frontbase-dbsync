@@ -9,6 +9,7 @@ import httpx
 import os
 import json
 from datetime import datetime
+from app.services.publish_strategy import get_publish_strategy
 
 from .transforms import (
     normalize_binding_location,
@@ -345,82 +346,52 @@ async def publish_page(page_id: str):
             force=True  # Always overwrite on publish
         )
         
-        # Get Edge URL from environment
-        edge_url = os.getenv("EDGE_URL", "http://localhost:3002")
-        import_url = f"{edge_url}/api/import"
-        
-        print(f"[Publish] EDGE_URL env: {os.getenv('EDGE_URL', '(not set)')}")
-        print(f"[Publish] Sending to: {import_url}")
-        
-        # Send to Edge Engine
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                import_url,
-                json=payload.model_dump(by_alias=True, exclude_none=True),
-                headers={"Content-Type": "application/json"},
-                timeout=10.0
-            )
-            print(f"[Publish] Response status: {response.status_code}")
-            
-            if response.status_code == 200:
-                result = response.json()
+        # Use the configured publish strategy (local HTTP or Turso)
+        strategy = get_publish_strategy()
+        serialized = payload.model_dump(by_alias=True, exclude_none=True)
+        result = await strategy.publish_page(serialized, force=True)
+
+        if result.get("success"):
+            # 3. UPDATE DB (New fast session)
+            update_db = SessionLocal()
+            try:
+                page_to_update = update_db.query(Page).filter(Page.id == page_id).first()
+                if page_to_update:
+                    page_to_update.is_public = True
+                    update_db.commit()
                 
-                # 3. UPDATE DB (New fast session)
-                update_db = SessionLocal()
-                try:
-                    # Re-fetch page to update (safest way) OR use update query
-                    page_to_update = update_db.query(Page).filter(Page.id == page_id).first()
-                    if page_to_update:
-                        page_to_update.is_public = True
-                        update_db.commit()
+                # Gather settings data, then close DB before IO
+                project = get_project(update_db)
+                settings_payload = None
+                if project:
+                    settings_payload = {
+                        "faviconUrl": project.favicon_url,
+                        "logoUrl": getattr(project, 'logo_url', None),
+                        "siteName": project.name,
+                        "siteDescription": project.description,
+                        "appUrl": project.app_url,
+                    }
+                update_db.close()
+                
+                # Sync settings (Release-Before-IO: DB closed above)
+                if settings_payload:
+                    await strategy.sync_settings(settings_payload)
                     
-                    # Sync project settings
-                    project = get_project(update_db)
-                    if project:
-                        settings_url = f"{edge_url}/api/import/settings"
-                        # Fire and forget settings sync? Or wait? 
-                        # We wait, but since we have a new session, it's fine.
-                        # Note: We are INSIDE the IO block again (client post), but 
-                        # we are holding a DB connection now. Typically this request is fast.
-                        # But to be safer, we could gather data then close, then post.
-                        # Settings payload:
-                        settings_payload = {
-                            "faviconUrl": project.favicon_url,
-                            "logoUrl": getattr(project, 'logo_url', None),
-                            "siteName": project.name,
-                            "siteDescription": project.description,
-                            "appUrl": project.app_url,
-                        }
-                        
-                        # We can close DB before the request
-                        update_db.close()
-                        
-                        await client.post(
-                            settings_url,
-                            json=settings_payload,
-                            timeout=5.0
-                        )
-                        print(f"[Publish] Synced project settings to Edge")
-                    else:
-                         update_db.close()
-                         
-                except Exception as settings_err:
-                    print(f"[Publish] Settings sync failed (non-fatal): {settings_err}")
+            except Exception as settings_err:
+                print(f"[Publish] Settings sync failed (non-fatal): {settings_err}")
+                try:
                     update_db.close()
-                
-                return {
-                    "success": True,
-                    "message": f"Page '{page.name}' published successfully",
-                    "previewUrl": result.get("previewUrl"),
-                    "version": result.get("version")
-                }
-            else:
-                print(f"[Publish] Edge import FAILED: status={response.status_code}, body={response.text[:500]}")
-                return {
-                    "success": False,
-                    "error": f"Edge import failed: {response.status_code}",
-                    "details": response.text
-                }
+                except:
+                    pass
+            
+            return {
+                "success": True,
+                "message": f"Page '{page.name}' published successfully",
+                "previewUrl": result.get("previewUrl"),
+                "version": result.get("version")
+            }
+        else:
+            return result
                 
     except HTTPException:
         raise

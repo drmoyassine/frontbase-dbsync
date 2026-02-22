@@ -1,0 +1,66 @@
+# =============================================================================
+# Frontbase Edge Node — Standalone Dockerfile
+# =============================================================================
+# Minimal edge-only image for Cloud BYOE deployment.
+# Connects to remote Turso (state) + Upstash Redis (cache).
+# No FastAPI, no Postgres, no local Redis needed.
+#
+# Build:  docker build -f Dockerfile.standalone -t frontbase/edge-node .
+# Run:    docker run -e FRONTBASE_ENV=cloud \
+#           -e FRONTBASE_STATE_DB_URL=libsql://your-db.turso.io \
+#           -e FRONTBASE_STATE_DB_TOKEN=your-token \
+#           -p 3002:3002 frontbase/edge-node
+# =============================================================================
+
+# Stage 1: Build
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY src ./src
+COPY public ./public
+COPY tsconfig.json ./
+COPY drizzle.config.ts ./
+COPY vite.config.ts ./
+
+# Build TypeScript
+RUN npm run build:client || echo "Client build completed"
+RUN npx tsup src/index.ts --format esm --outDir dist
+RUN ls -la dist/ && ls -la public/react/
+
+# Stage 2: Production (minimal)
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install --production
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/public ./public
+
+# Create data directory (for any local caching/fallback)
+RUN mkdir -p /app/data
+
+# =============================================================================
+# Environment — Cloud BYOE defaults
+# =============================================================================
+ENV NODE_ENV=production
+ENV PORT=3002
+ENV FRONTBASE_ENV=cloud
+
+# Override these at runtime:
+# FRONTBASE_STATE_DB_URL  — Turso database URL (required)
+# FRONTBASE_STATE_DB_TOKEN — Turso auth token (required)
+# FRONTBASE_REDIS_URL     — Upstash Redis URL (optional, for L2 cache)
+# FRONTBASE_REDIS_TOKEN   — Upstash Redis token (optional)
+
+EXPOSE 3002
+
+HEALTHCHECK --interval=15s --timeout=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3002/api/health || exit 1
+
+CMD ["node", "dist/index.js"]

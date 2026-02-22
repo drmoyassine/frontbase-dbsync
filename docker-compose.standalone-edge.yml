@@ -1,0 +1,42 @@
+# ==============================================================================
+# FRONTBASE STANDALONE EDGE NODE
+# ==============================================================================
+#
+# Deploys a single Edge Engine node that connects to remote Turso + Upstash.
+# No FastAPI backend, Postgres, or Redis container needed.
+#
+# Usage:
+#   1. Create a Turso database and run turso-schema.sql
+#   2. Copy .env.standalone.example → .env
+#   3. docker-compose -f docker-compose.standalone-edge.yml up -d
+#
+# ==============================================================================
+
+services:
+  edge:
+    build:
+      context: ./services/edge
+      dockerfile: Dockerfile.standalone
+    # Or use a published image:
+    # image: frontbase/edge-node:latest
+    ports:
+      - "${EDGE_PORT:-3002}:3002"
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      # Storage provider (must be 'cloud' for standalone)
+      - FRONTBASE_ENV=cloud
+      # Turso state DB (required)
+      - FRONTBASE_STATE_DB_URL=${TURSO_DB_URL}
+      - FRONTBASE_STATE_DB_TOKEN=${TURSO_DB_TOKEN}
+      # Upstash Redis L2 cache (optional but recommended)
+      - FRONTBASE_REDIS_URL=${UPSTASH_REDIS_URL:-}
+      - FRONTBASE_REDIS_TOKEN=${UPSTASH_REDIS_TOKEN:-}
+      # Public URL for link generation
+      - PUBLIC_URL=${PUBLIC_URL:-}
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3002/api/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3

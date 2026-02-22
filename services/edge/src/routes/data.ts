@@ -14,7 +14,7 @@
 
 import { Hono } from 'hono';
 import { handleDataQuery, createDatasourceAdapter } from '../db/datasource-adapter';
-import { listPublishedPages, getPublishedPageBySlug } from '../db/pages-store';
+import { stateProvider } from '../storage/index.js';
 import { getRedis, cached } from '../cache/redis.js';
 import type { DatasourceConfig, DataRequest } from '../schemas/publish';
 
@@ -192,9 +192,9 @@ async function getDefaultDatasource(): Promise<DatasourceConfig | null> {
 
     try {
         // Get any published page to extract its datasources
-        const pages = await listPublishedPages();
+        const pages = await stateProvider.listPages();
         if (pages.length > 0) {
-            const page = await getPublishedPageBySlug(pages[0].slug);
+            const page = await stateProvider.getPageBySlug(pages[0].slug);
             if (page?.datasources && page.datasources.length > 0) {
                 cachedDatasource = page.datasources[0];
                 console.log(`[Data API] Using datasource: ${cachedDatasource.name} (${cachedDatasource.type})`);

@@ -24,10 +24,14 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-frontbase-dev-password}
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
-      # Edge Engine URL (internal network)
-      - EDGE_URL=http://edge:3002
-      - EDGE_SSR_URL=http://edge:3002
-      - EDGE_ENGINE_URL=http://edge:3002
+      # Edge Engine URL (override for distributed deployment)
+      - EDGE_URL=${EDGE_ENGINE_URL:-http://edge:3002}
+      - EDGE_SSR_URL=${EDGE_ENGINE_URL:-http://edge:3002}
+      - EDGE_ENGINE_URL=${EDGE_ENGINE_URL:-http://edge:3002}
+      # Publish strategy: 'local' (HTTP POST to edge) or 'turso' (direct DB write)
+      - PUBLISH_STRATEGY=${PUBLISH_STRATEGY:-local}
+      # Redis URL (override for distributed deployment)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       # Admin Authentication
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
@@ -71,13 +75,15 @@ services:
       - "3002"
     environment:
       - NODE_ENV=production
-      - PORT=3002
+      - PORT=${EDGE_PORT:-3002}
+      # Storage provider: 'local' (SQLite) or 'cloud' (Turso)
+      - FRONTBASE_ENV=${FRONTBASE_ENV:-local}
       # Database for edge storage (SQLite)
       - SQLITE_PATH=/app/data/edge.db
       - DATABASE_URL=file:/app/data/edge.db
-      - PAGES_DB_URL=file:/app/data/pages.db
-      # FastAPI backend URL (Docker internal network)
-      - FASTAPI_URL=http://backend:8000
+      - PAGES_DB_URL=${PAGES_DB_URL:-file:/app/data/pages.db}
+      # FastAPI backend URL (override for distributed deployment)
+      - FASTAPI_URL=${FASTAPI_URL:-http://backend:8000}
       # Webhook API keys (comma-separated)
       - API_KEYS=${API_KEYS:-}
       # Supabase JWT for end-user auth (optional)

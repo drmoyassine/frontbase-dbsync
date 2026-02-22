@@ -6,7 +6,7 @@
  * Includes retry logic to wait for FastAPI to be ready.
  */
 
-import { initPagesDb, upsertPublishedPage, getHomepage } from '../db/pages-store.js';
+import { stateProvider } from '../storage/index.js';
 import { initRedis } from '../cache/redis.js';
 import { db } from '../db/index.js';
 import { sql } from 'drizzle-orm';
@@ -154,7 +154,7 @@ async function syncHomepageFromFastAPI(): Promise<boolean> {
             isHomepage: true,
         };
 
-        await upsertPublishedPage(publishData);
+        await stateProvider.upsertPage(publishData);
         console.log(`[Startup Sync] ✅ Homepage synced: ${pageData.slug}`);
         return true;
 
@@ -176,7 +176,7 @@ export async function runStartupSync(): Promise<void> {
     console.log('[Startup Sync] 🚀 Starting Edge database initialization...');
 
     // Initialize databases first
-    await initPagesDb();
+    await stateProvider.init();
     await initActionsDb(); // Create workflows/executions tables if not exist
 
     // Sync Redis settings with retries (FastAPI may not be ready yet)
@@ -201,7 +201,7 @@ export async function runStartupSync(): Promise<void> {
     }
 
     // Check if we already have a homepage
-    const existingHomepage = await getHomepage();
+    const existingHomepage = await stateProvider.getHomepage();
     if (existingHomepage) {
         console.log(`[Startup Sync] Homepage already exists: ${existingHomepage.slug} (v${existingHomepage.version})`);
         return;

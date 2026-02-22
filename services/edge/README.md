@@ -22,9 +22,8 @@ npm start
 |----------|---------|-------------|
 | `PORT` | `3002` | Server port |
 | `DATABASE_URL` | `file:./data/actions.db` | Connection string for SQLite (local) or Turso (Edge) |
-| `FASTAPI_URL` | `http://localhost:8000` | FastAPI backend URL |
+| `BACKEND_URL` | `http://localhost:8000` | FastAPI backend URL |
 | `PUBLIC_URL` | - | Public URL for generating preview links |
-| `SUPABASE_JWT_SECRET` | - | Supabase JWT secret for user auth |
 
 ## API Endpoints
 

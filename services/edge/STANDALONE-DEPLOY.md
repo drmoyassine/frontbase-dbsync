@@ -29,7 +29,7 @@ turso db tokens create frontbase-edge  # → TURSO_DB_TOKEN
 ```bash
 docker run -d \
   --name frontbase-edge \
-  -e FRONTBASE_ENV=cloud \
+  -e FRONTBASE_DEPLOYMENT_MODE=cloud \
   -e FRONTBASE_STATE_DB_URL=libsql://your-db.turso.io \
   -e FRONTBASE_STATE_DB_TOKEN=your-token \
   -e FRONTBASE_REDIS_URL=https://your-redis.upstash.io \
@@ -59,7 +59,7 @@ curl http://localhost:3002/api/health
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `FRONTBASE_ENV` | Yes | `cloud` | Must be `cloud` for standalone |
+| `FRONTBASE_DEPLOYMENT_MODE` | Yes | `cloud` | Must be `cloud` for standalone |
 | `FRONTBASE_STATE_DB_URL` | Yes | — | Turso database URL |
 | `FRONTBASE_STATE_DB_TOKEN` | Yes | — | Turso auth token |
 | `FRONTBASE_REDIS_URL` | No | — | Upstash Redis URL (for L2 cache) |
@@ -69,7 +69,7 @@ curl http://localhost:3002/api/health
 
 ## How Pages Get Published
 
-The standalone edge node does **not** run the backend. Pages are published by the Frontbase control plane, which writes directly to your Turso DB using `PUBLISH_STRATEGY=turso`.
+The standalone edge node does **not** run the backend. Pages are published by the Frontbase control plane, which auto-detects Turso and writes directly to your Turso DB.
 
 ```
 Control Plane (FastAPI) → Turso DB ← Edge Node reads

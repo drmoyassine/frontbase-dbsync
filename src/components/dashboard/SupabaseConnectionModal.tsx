@@ -19,7 +19,8 @@ export const SupabaseConnectionModal: React.FC = () => {
     url: '',
     anonKey: '',
     serviceKey: '',
-    includeServiceKey: false
+    includeServiceKey: false,
+    jwtSecret: '',
   });
 
   const handleInputChange = (field: string, value: string) => {
@@ -88,13 +89,24 @@ export const SupabaseConnectionModal: React.FC = () => {
 
       const data = response.data;
       if (data.success) {
+        // Auto-save JWT secret to settings if provided
+        if (formData.jwtSecret) {
+          try {
+            await api.put('/api/settings/supabase/', {
+              supabase_jwt_secret: formData.jwtSecret,
+            });
+          } catch {
+            // Non-blocking — JWT secret save failure shouldn't block connection
+            console.warn('Failed to save Supabase JWT secret to settings');
+          }
+        }
         toast({
           title: "Connection saved",
           description: "Supabase connection configured successfully",
         });
         await fetchConnections();
         setSupabaseModalOpen(false);
-        setFormData({ url: '', anonKey: '', serviceKey: '', includeServiceKey: false });
+        setFormData({ url: '', anonKey: '', serviceKey: '', includeServiceKey: false, jwtSecret: '' });
       } else {
         toast({
           title: "Save failed",
@@ -175,6 +187,20 @@ export const SupabaseConnectionModal: React.FC = () => {
                   value={formData.serviceKey}
                   onChange={(e) => handleInputChange('serviceKey', e.target.value)}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="supabase-jwt-secret">JWT Secret (optional)</Label>
+                <Input
+                  id="supabase-jwt-secret"
+                  type="password"
+                  placeholder="Your JWT secret"
+                  value={formData.jwtSecret}
+                  onChange={(e) => handleInputChange('jwtSecret', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Found in Supabase Dashboard → Settings → API → JWT Settings. Required for edge auth.
+                </p>
               </div>
 
               <Alert>

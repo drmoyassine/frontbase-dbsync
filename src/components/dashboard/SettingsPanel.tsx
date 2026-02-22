@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { RefreshCw, Users } from 'lucide-react';
 import { RedisSettingsForm } from './settings/shared/RedisSettingsForm';
+import { TursoSettingsForm } from './settings/shared/TursoSettingsForm';
 import { PrivacySettingsForm } from './settings/shared/PrivacySettingsForm';
 import { ProjectDetailsForm } from './settings/shared/ProjectDetailsForm';
 import { EmailProviderSettingsForm } from './settings/shared/EmailProviderSettingsForm';
@@ -28,10 +29,11 @@ export const SettingsPanel: React.FC = () => {
       </div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 lg:w-[800px]">
+        <TabsList className="grid w-full grid-cols-5 lg:w-[900px]">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="team">Team & Emails</TabsTrigger>
           <TabsTrigger value="cache">Cache & Performance</TabsTrigger>
+          <TabsTrigger value="edge-db">Edge Database</TabsTrigger>
           <TabsTrigger value="privacy">Privacy & Tracking</TabsTrigger>
         </TabsList>
 
@@ -94,6 +96,11 @@ export const SettingsPanel: React.FC = () => {
               <RedisSettingsForm />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Edge Database Tab */}
+        <TabsContent value="edge-db" className="space-y-6 mt-6">
+          <TursoSettingsForm withCard />
         </TabsContent>
 
         {/* Privacy & Tracking Tab */}

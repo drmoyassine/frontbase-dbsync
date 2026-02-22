@@ -87,8 +87,6 @@ services:
       - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
       # Webhook API keys (comma-separated)
       - API_KEYS=${API_KEYS:-}
-      # Supabase JWT for end-user auth (optional)
-      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
       # Public URL for preview links (set PRIMARY_DOMAIN or leave empty for auto-detect)
       - PUBLIC_URL=${PRIMARY_DOMAIN:+https://${PRIMARY_DOMAIN}}
     volumes:

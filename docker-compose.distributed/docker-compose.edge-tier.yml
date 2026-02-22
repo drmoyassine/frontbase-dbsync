@@ -30,7 +30,6 @@ services:
       - FRONTBASE_REDIS_URL=${UPSTASH_REDIS_URL:-}
       - FRONTBASE_REDIS_TOKEN=${UPSTASH_REDIS_TOKEN:-}
       - API_KEYS=${API_KEYS:-}
-      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
       - PUBLIC_URL=${PUBLIC_URL:-}
     volumes:
       - edge_data:/app/data

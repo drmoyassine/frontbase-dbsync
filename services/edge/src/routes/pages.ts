@@ -459,48 +459,76 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
 // Homepage route - renders homepage directly or pulls from FastAPI
 pagesRoute.get('/', async (c) => {
     try {
-        let homepage = await stateProvider.getHomepage();
+        const cacheKey = 'page:__homepage__';
+        let homepage: any = null;
 
-        if (homepage) {
-            console.log(`[SSR] Rendering homepage: ${homepage.slug} (v${homepage.version})`);
-        } else {
-            // Pull-publish: Fetch homepage from FastAPI and store locally
-            console.log('[SSR] No local homepage found, pulling from FastAPI...');
+        // L2: Try Redis cache first
+        try {
+            const { getRedis } = await import('../cache/redis.js');
+            const redis = getRedis();
+            const cached = await redis.get<any>(cacheKey);
+            if (cached) {
+                console.log('[SSR] Cache HIT: homepage');
+                homepage = cached;
+            }
+        } catch {
+            // Redis not available — continue
+        }
 
-            const fastapiUrl = process.env.BACKEND_URL || 'http://backend:8000';
-            try {
-                const response = await fetch(`${fastapiUrl}/api/pages/homepage/`);
+        if (!homepage) {
+            homepage = await stateProvider.getHomepage();
 
-                if (response.ok) {
-                    const result = await response.json();
-                    const pageData = result.data;
+            if (homepage) {
+                console.log(`[SSR] Rendering homepage: ${homepage.slug} (v${homepage.version})`);
+            } else {
+                // Pull-publish: Fetch homepage from FastAPI and store locally
+                console.log('[SSR] No local homepage found, pulling from FastAPI...');
 
-                    // Convert to publish format and store
-                    const publishData = {
-                        id: pageData.id,
-                        slug: pageData.slug,
-                        name: pageData.name,
-                        title: pageData.title || undefined,
-                        description: pageData.description || undefined,
-                        layoutData: pageData.layoutData,
-                        seoData: pageData.seoData || undefined,
-                        datasources: pageData.datasources || undefined,
-                        version: 1,
-                        publishedAt: new Date().toISOString(),
-                        isPublic: pageData.isPublic ?? true,
-                        isHomepage: true,
-                    };
+                const fastapiUrl = process.env.BACKEND_URL || 'http://backend:8000';
+                try {
+                    const response = await fetch(`${fastapiUrl}/api/pages/homepage/`);
 
-                    await stateProvider.upsertPage(publishData);
-                    console.log(`[SSR] Pull-published homepage: ${pageData.slug}`);
+                    if (response.ok) {
+                        const result = await response.json();
+                        const pageData = result.data;
 
-                    // Set homepage for rendering
-                    homepage = publishData;
-                } else {
-                    console.warn(`[SSR] FastAPI homepage fetch failed: ${response.status}`);
+                        // Convert to publish format and store
+                        const publishData = {
+                            id: pageData.id,
+                            slug: pageData.slug,
+                            name: pageData.name,
+                            title: pageData.title || undefined,
+                            description: pageData.description || undefined,
+                            layoutData: pageData.layoutData,
+                            seoData: pageData.seoData || undefined,
+                            datasources: pageData.datasources || undefined,
+                            version: 1,
+                            publishedAt: new Date().toISOString(),
+                            isPublic: pageData.isPublic ?? true,
+                            isHomepage: true,
+                        };
+
+                        await stateProvider.upsertPage(publishData);
+                        console.log(`[SSR] Pull-published homepage: ${pageData.slug}`);
+                        homepage = publishData;
+                    } else {
+                        console.warn(`[SSR] FastAPI homepage fetch failed: ${response.status}`);
+                    }
+                } catch (fetchError) {
+                    console.error('[SSR] Pull-publish failed:', fetchError);
                 }
-            } catch (fetchError) {
-                console.error('[SSR] Pull-publish failed:', fetchError);
+            }
+
+            // Populate L2 cache on miss
+            if (homepage) {
+                try {
+                    const { getRedis } = await import('../cache/redis.js');
+                    const redis = getRedis();
+                    await redis.setex(cacheKey, 60, JSON.stringify(homepage));
+                    console.log('[SSR] Cache SET: homepage (60s TTL)');
+                } catch {
+                    // Redis not available — no-op
+                }
             }
         }
 

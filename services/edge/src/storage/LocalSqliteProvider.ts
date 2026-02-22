@@ -133,9 +133,11 @@ export class LocalSqliteProvider implements IStateProvider {
             isHomepage: page.isHomepage,
         };
 
+        // Check by slug (UNIQUE constraint) — not by id, which may differ
+        // between startup-sync imports and fresh publishes
         const existing = await database.select()
             .from(publishedPages)
-            .where(eq(publishedPages.id, page.id))
+            .where(eq(publishedPages.slug, page.slug))
             .get();
 
         if (existing) {
@@ -144,7 +146,7 @@ export class LocalSqliteProvider implements IStateProvider {
                     ...record,
                     updatedAt: new Date().toISOString(),
                 })
-                .where(eq(publishedPages.id, page.id));
+                .where(eq(publishedPages.slug, page.slug));
 
             console.log(`📝 Updated published page: ${page.slug} (v${page.version}), cssBundle: ${page.cssBundle ? page.cssBundle.length + ' bytes' : 'null'}`);
         } else {

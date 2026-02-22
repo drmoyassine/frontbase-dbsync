@@ -47,6 +47,7 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
         isSaving,
         isTesting,
         saveSuccess,
+        hasLocalRedis,
     } = useRedisSettings();
 
     const isUpstash = redisType === 'upstash';
@@ -74,20 +75,28 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
     const formContent = (
         <div className="space-y-6">
             {/* Redis Status */}
-            <div className="flex items-center gap-3 p-4 rounded-lg border bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <div className={`flex items-center gap-3 p-4 rounded-lg border ${isUpstashConnected || hasLocalRedis
+                ? "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900"
+                : "bg-muted/30 border-muted-foreground/20"
+                }`}>
+                {isUpstashConnected || hasLocalRedis ? (
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                ) : (
+                    <Info className="h-5 w-5 text-muted-foreground shrink-0" />
+                )}
                 <div className="flex-1">
                     <p className="text-sm font-medium">
-                        {isUpstashConnected ? 'Upstash Redis connected' : 'Local Redis connected'}
+                        {isUpstashConnected ? 'Upstash Redis connected'
+                            : hasLocalRedis ? 'Local Redis connected'
+                                : 'No Edge Cache Configured'}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                        {isUpstashConnected
-                            ? 'Using managed serverless Redis for edge caching'
-                            : 'Bundled Redis instance from your Docker setup'
-                        }
+                        {isUpstashConnected ? 'Using managed serverless Redis for edge caching'
+                            : hasLocalRedis ? 'Bundled Redis instance from your Docker setup'
+                                : 'Configure Upstash below to enable edge caching for your users'}
                     </p>
                 </div>
-                {!isUpstash && (
+                {hasLocalRedis && !isUpstash && (
                     <Button
                         variant="outline"
                         size="sm"

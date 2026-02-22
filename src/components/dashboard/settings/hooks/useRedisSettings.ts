@@ -40,6 +40,9 @@ export interface UseRedisSettingsReturn {
     isSaving: boolean;
     isTesting: boolean;
     saveSuccess: boolean;
+
+    // Status Flags
+    hasLocalRedis: boolean;
 }
 
 export function useRedisSettings(): UseRedisSettingsReturn {
@@ -201,5 +204,8 @@ export function useRedisSettings(): UseRedisSettingsReturn {
         isSaving: saveMutation.isPending,
         isTesting: testMutation.isPending,
         saveSuccess: saveMutation.isSuccess && !hasChanges,
+
+        // Status Flags
+        hasLocalRedis: !!localConfig.token,
     };
 }

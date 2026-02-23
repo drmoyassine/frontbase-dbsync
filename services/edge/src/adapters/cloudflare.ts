@@ -61,6 +61,9 @@ export default {
             }
         }
 
+        // Set adapter platform for health endpoint identification
+        (globalThis as any).process.env.FRONTBASE_ADAPTER_PLATFORM = adapter.platform;
+
         // Run startup sync once (non-blocking)
         if (!syncStarted) {
             syncStarted = true;

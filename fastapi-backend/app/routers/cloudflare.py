@@ -164,22 +164,36 @@ def _build_worker() -> str:
     """Build the Cloudflare Worker bundle and return the script content."""
     dist_file = EDGE_DIR / "dist" / "cloudflare.js"
 
+    # Check if dist file already exists (skip build if bundled)
+    if dist_file.exists():
+        content = dist_file.read_text(encoding="utf-8")
+        print(f"[Cloudflare] Using existing bundle: {len(content)} bytes")
+        return content
+
     # Build the bundle
     print(f"[Cloudflare] Building Worker bundle in {EDGE_DIR}...")
-    result = subprocess.run(
-        ["npx", "tsup", "src/adapters/cloudflare.ts", "--format", "esm", "--no-splitting", "--no-clean"],
-        cwd=str(EDGE_DIR),
-        capture_output=True,
-        text=True,
-        timeout=60,
-        shell=True,  # Required on Windows
-    )
+    try:
+        result = subprocess.run(
+            ["npx", "tsup", "src/adapters/cloudflare.ts", "--format", "esm", "--no-splitting", "--no-clean"],
+            cwd=str(EDGE_DIR),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            shell=True,  # Required on Windows
+        )
 
-    if result.returncode != 0:
-        raise HTTPException(500, f"Build failed: {result.stderr[:500]}")
+        if result.returncode != 0:
+            err = result.stderr.strip() or result.stdout.strip() or "Unknown build error"
+            raise HTTPException(500, f"Build failed: {err[:500]}")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(500, "Build timed out after 60 seconds")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Build process failed: {str(e)}")
 
     if not dist_file.exists():
-        raise HTTPException(500, f"Build output not found: {dist_file}")
+        raise HTTPException(500, f"Build output not found at {dist_file}. Run 'npm run build:cf' in services/edge/ first.")
 
     content = dist_file.read_text(encoding="utf-8")
     print(f"[Cloudflare] Bundle built: {len(content)} bytes")
@@ -304,11 +318,13 @@ async def deploy_to_cloudflare(payload: DeployRequest):
             "secrets_set": list(secrets.keys()),
         }
 
-    except HTTPException:
+    except HTTPException as he:
+        print(f"[Cloudflare] ❌ Deploy failed: {he.detail}")
         raise
     except Exception as e:
-        print(f"[Cloudflare] ❌ Deploy failed: {e}")
-        raise HTTPException(500, f"Deploy failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Deploy failed: {str(e) or 'Unknown error — check backend logs'}")
 
 
 @router.post("/status")

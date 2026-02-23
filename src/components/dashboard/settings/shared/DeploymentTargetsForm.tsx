@@ -160,7 +160,10 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
             });
             const data = await res.json();
             if (!res.ok || !data.success) {
-                throw new Error(data.detail || data.error || 'Deploy failed');
+                // Extract error from FastAPI HTTPException format
+                const errMsg = typeof data.detail === 'string' ? data.detail
+                    : data.detail?.msg || data.error || data.message || JSON.stringify(data.detail) || 'Connection failed';
+                throw new Error(errMsg);
             }
             // Save token for future redeploys
             localStorage.setItem('cf_api_token', cfToken);
@@ -263,15 +266,10 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                            <Label className="text-sm">Worker Name</Label>
-                            <Input value={cfWorkerName} onChange={(e) => setCfWorkerName(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                            <Label className="text-sm">Account ID <span className="text-muted-foreground text-xs">(auto-detected)</span></Label>
-                            <Input placeholder="Auto-detected" value={cfAccountId} onChange={(e) => setCfAccountId(e.target.value)} />
-                        </div>
+                    <div className="space-y-1">
+                        <Label className="text-sm">Worker Name</Label>
+                        <Input value={cfWorkerName} onChange={(e) => setCfWorkerName(e.target.value)} />
+                        <p className="text-xs text-muted-foreground">Your Worker will be available at {cfWorkerName}.your-subdomain.workers.dev</p>
                     </div>
 
                     {/* Expandable secrets */}
@@ -308,9 +306,9 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
                     <div className="flex gap-2">
                         <Button onClick={handleCloudflareDeply} disabled={!cfToken || isDeploying}>
                             {isDeploying ? (
-                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deploying...</>
+                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Connecting...</>
                             ) : (
-                                <><Rocket className="mr-2 h-4 w-4" /> Deploy to Cloudflare</>
+                                <><Cloud className="mr-2 h-4 w-4" /> Connect Cloudflare</>
                             )}
                         </Button>
                         <Button variant="ghost" onClick={resetAddFlow}>Cancel</Button>

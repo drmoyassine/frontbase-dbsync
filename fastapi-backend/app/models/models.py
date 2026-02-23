@@ -198,5 +198,27 @@ class TableSchemaCache(Base):
     is_valid = Column(Boolean, default=True)
 
 
+class DeploymentTarget(Base):
+    """Edge deployment target — a registered edge provider endpoint.
+    
+    Each row represents a deployment of the Edge Engine on a specific provider
+    (Cloudflare, Vercel, Docker, etc.). The publish pipeline iterates all active
+    targets and pushes published pages to each.
+    
+    LB-ready: future sprint adds weight, quota_limit, quota_used, last_health_check
+    columns for multi-provider load balancing.
+    """
+    __tablename__ = 'deployment_targets'
+    
+    id = Column(String, primary_key=True)
+    name = Column(String(100), nullable=False)         # "Production CF", "Staging Docker"
+    provider = Column(String(50), nullable=False)       # "cloudflare", "vercel", "docker"
+    adapter_type = Column(String(20), nullable=False)   # "pages", "automations", "full"
+    url = Column(String(500), nullable=False)           # "https://my-site.pages.dev"
+    is_active = Column(Boolean, default=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
+
 # Import Actions models to register them with Base
 from app.models.actions import AutomationDraft, AutomationExecution  # noqa

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
-from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage
+from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, deployment_targets
 from app.middleware.test_mode import TestModeMiddleware
 
 logger = logging.getLogger(__name__)
@@ -113,7 +113,7 @@ class TrailingSlashMiddleware:
     Note: Excludes /api/auth/ routes which don't use trailing slashes.
     """
     # Paths that should NOT have trailing slashes added
-    EXCLUDE_PREFIXES = ["/api/auth", "/api/actions", "/api/storage"]
+    EXCLUDE_PREFIXES = ["/api/auth", "/api/actions", "/api/storage", "/api/deployment-targets"]
     
     def __init__(self, app: ASGIApp):
         self.app = app
@@ -144,6 +144,7 @@ app.include_router(storage.router)
 app.include_router(actions.router, prefix="/api/actions", tags=["Actions"])
 app.include_router(auth_forms.router, prefix="/api/auth-forms", tags=["Auth Forms"])
 app.include_router(settings.router)  # Privacy & Tracking settings
+app.include_router(deployment_targets.router)  # Edge deployment targets
 
 # Mount DB-Synchronizer Service
 from app.services.sync.main import sync_app

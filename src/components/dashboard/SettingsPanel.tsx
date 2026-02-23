@@ -17,6 +17,7 @@ import { PrivacySettingsForm } from './settings/shared/PrivacySettingsForm';
 import { ProjectDetailsForm } from './settings/shared/ProjectDetailsForm';
 import { EmailProviderSettingsForm } from './settings/shared/EmailProviderSettingsForm';
 import { AdminInviteForm } from './settings/shared/AdminInviteForm';
+import { DeploymentTargetsForm } from './settings/shared/DeploymentTargetsForm';
 
 export const SettingsPanel: React.FC = () => {
   return (
@@ -29,11 +30,12 @@ export const SettingsPanel: React.FC = () => {
       </div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-5 lg:w-[900px]">
+        <TabsList className="grid w-full grid-cols-6 lg:w-[1000px]">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="team">Team & Emails</TabsTrigger>
           <TabsTrigger value="cache">Edge Caching</TabsTrigger>
           <TabsTrigger value="edge-db">Edge Database</TabsTrigger>
+          <TabsTrigger value="deployment">Deployment</TabsTrigger>
           <TabsTrigger value="privacy">Privacy & Tracking</TabsTrigger>
         </TabsList>
 
@@ -88,6 +90,11 @@ export const SettingsPanel: React.FC = () => {
         {/* Edge Database Tab */}
         <TabsContent value="edge-db" className="space-y-6 mt-6">
           <TursoSettingsForm withCard />
+        </TabsContent>
+
+        {/* Deployment Targets Tab */}
+        <TabsContent value="deployment" className="space-y-6 mt-6">
+          <DeploymentTargetsForm withCard />
         </TabsContent>
 
         {/* Privacy & Tracking Tab */}

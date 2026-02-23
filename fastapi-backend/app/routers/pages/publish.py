@@ -9,7 +9,7 @@ import httpx
 import os
 import json
 from datetime import datetime
-from app.services.publish_strategy import get_publish_strategy
+from app.services.publish_strategy import get_publish_strategy, fan_out_to_deployment_targets
 
 from .transforms import (
     normalize_binding_location,
@@ -384,12 +384,22 @@ async def publish_page(page_id: str):
                 except:
                     pass
             
-            return {
+            # Fan out to deployment targets (non-fatal)
+            fan_out_results = []
+            try:
+                fan_out_results = await fan_out_to_deployment_targets(serialized, scope="pages")
+            except Exception as fan_err:
+                print(f"[Publish] Fan-out failed (non-fatal): {fan_err}")
+
+            response = {
                 "success": True,
                 "message": f"Page '{page.name}' published successfully",
                 "previewUrl": result.get("previewUrl"),
-                "version": result.get("version")
+                "version": result.get("version"),
             }
+            if fan_out_results:
+                response["deploymentTargets"] = fan_out_results
+            return response
         else:
             return result
                 

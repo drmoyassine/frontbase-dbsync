@@ -24,6 +24,26 @@ Infrastructure exists (`auth.ts`, `context.ts`, `@supabase/supabase-js` already 
 - [ ] **Users panel** — List, search, invite, delete Supabase auth users from the FastAPI dashboard
 - [ ] **Decision: `supabase-py` vs raw `httpx`** — GoTrue Admin API for user CRUD (invite, list, delete, update roles)
 - [ ] **Contacts sync** — Ensure `contacts` table stays in sync with auth users
+
+## 🟠 Edge Data Resilience & Status (MEDIUM-HIGH PRIORITY)
+
+Covers provider state mismatch, quota fallback, and operational visibility.
+
+### Provider State Mismatch
+- [ ] **Auto-migrate on Turso connect** — When Turso is first enabled, bulk-push all previously published pages from backend → Turso so "Published" status stays accurate
+- [ ] **Publish-state sync check** — On Settings save (Turso toggle), compare backend published pages vs Turso rows, warn about drift
+- [ ] **Skip redundant publishes (content hash)** — Hash `layoutData + cssBundle`, store as `content_hash` column. If unchanged, skip Turso write + Upstash invalidation entirely
+
+### Quota Exhaustion & Fallback
+- [ ] **Turso quota guard** — Monitor row reads/writes. If nearing limit, warn in UI. If exceeded, auto-fallback to local SQLite with banner
+- [ ] **Upstash quota guard** — Monitor commands/month. If nearing limit, reduce TTL or disable L2 cache gracefully
+- [ ] **Graceful provider downgrade** — If Turso/Upstash connection fails at runtime, fall back to local SQLite/no-cache without crashing. Log and surface in status panel
+
+### UI Indicators
+- [ ] **Edge vs Local badge** — Show "☁️ Turso" or "💾 Local SQLite" badge on published pages in the builder, so the user knows where data lives
+- [ ] **Live status panel** — Settings page widget showing Turso (rows used / quota, connection status) and Upstash (commands used / quota, hit rate) live stats
+- [ ] **Provider switch confirmation** — When toggling Turso on/off, show confirmation dialog explaining data migration implications
+
 ## Performance
 - [ ] **Replace Tailwind CDN with build-time CSS generation** — Currently SSR pages load `cdn.tailwindcss.com` (~300KB JS) for runtime class compilation. Replace with Tailwind CLI at publish time: scan `layoutData` component classes → generate static CSS → inject as `cssBundle`. Eliminates external dependency, console warning, and ~300KB load per page.
 - [ ] **Backend Redis Caching** — Extend Redis caching to FastAPI backend for data source operations. Cache table/column metadata (Schema Discovery), external API caching, and rate limiting.

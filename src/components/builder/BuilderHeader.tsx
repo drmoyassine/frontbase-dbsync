@@ -129,12 +129,15 @@ export const BuilderHeader: React.FC<{
         // Publish the page (saves first if needed, sends to Hono, returns preview URL)
         const previewUrl = await publishPage(currentPageId);
 
-        // Open SSR preview in new tab if we got a URL back
-        if (previewUrl) {
+        // Open SSR preview in new tab
+        if (previewUrl && previewUrl.startsWith('http')) {
+          // Absolute URL from backend — use directly
           window.open(previewUrl, '_blank');
         } else {
-          // Fallback to constructed URL if no URL returned
-          const pagePath = currentPage.isHomepage ? '' : currentPage.slug;
+          // Relative path (e.g. "/home") or no URL — resolve via Edge Engine URL
+          const pagePath = previewUrl
+            ? previewUrl.replace(/^\//, '')  // strip leading slash
+            : (currentPage.isHomepage ? '' : currentPage.slug);
           window.open(getPublishUrl(pagePath), '_blank');
         }
       }

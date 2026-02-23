@@ -1,9 +1,11 @@
 /**
  * DeploymentTargetsForm
  * 
- * Settings form for managing edge deployment targets.
- * Supports CRUD operations for registering edge providers
- * (Cloudflare, Vercel, Docker, etc.).
+ * Unified deployment targets management.
+ * When adding a target, the user selects a provider:
+ * - Cloudflare: Shows API token + one-click deploy flow
+ * - Docker/Manual: Shows simple URL input
+ * - Vercel/Netlify/Fly.io: Simple URL input (future: API-based deploy)
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -14,7 +16,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Plus, Trash2, Cloud, Server, Globe, Check, X, Rocket } from 'lucide-react';
+import {
+    Loader2, Plus, Trash2, Cloud, Server, Globe, Check, X,
+    Rocket, Eye, EyeOff, ExternalLink, Info, AlertTriangle,
+} from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -35,11 +40,11 @@ interface DeploymentTargetsFormProps {
 }
 
 const PROVIDER_OPTIONS = [
-    { value: 'cloudflare', label: 'Cloudflare Workers', icon: Cloud },
-    { value: 'vercel', label: 'Vercel Edge', icon: Globe },
-    { value: 'netlify', label: 'Netlify Edge', icon: Globe },
-    { value: 'docker', label: 'Docker / Self-Hosted', icon: Server },
-    { value: 'flyio', label: 'Fly.io', icon: Rocket },
+    { value: 'cloudflare', label: 'Cloudflare Workers', icon: Cloud, needsDeploy: true },
+    { value: 'docker', label: 'Docker / Self-Hosted', icon: Server, needsDeploy: false },
+    { value: 'vercel', label: 'Vercel Edge', icon: Globe, needsDeploy: false },
+    { value: 'netlify', label: 'Netlify Edge', icon: Globe, needsDeploy: false },
+    { value: 'flyio', label: 'Fly.io', icon: Rocket, needsDeploy: false },
 ];
 
 const SCOPE_OPTIONS = [
@@ -53,13 +58,28 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // New target form state
-    const [showAddForm, setShowAddForm] = useState(false);
+    // Add flow state
+    const [showAddFlow, setShowAddFlow] = useState(false);
+    const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+
+    // Manual target fields
     const [newName, setNewName] = useState('');
-    const [newProvider, setNewProvider] = useState('cloudflare');
     const [newScope, setNewScope] = useState('pages');
     const [newUrl, setNewUrl] = useState('');
     const [isCreating, setIsCreating] = useState(false);
+
+    // Cloudflare deploy fields
+    const [cfToken, setCfToken] = useState('');
+    const [cfWorkerName, setCfWorkerName] = useState('frontbase-edge');
+    const [cfAccountId, setCfAccountId] = useState('');
+    const [showCfToken, setShowCfToken] = useState(false);
+    const [showCfSecrets, setShowCfSecrets] = useState(false);
+    const [cfTursoUrl, setCfTursoUrl] = useState('');
+    const [cfTursoToken, setCfTursoToken] = useState('');
+    const [cfUpstashUrl, setCfUpstashUrl] = useState('');
+    const [cfUpstashToken, setCfUpstashToken] = useState('');
+    const [isDeploying, setIsDeploying] = useState(false);
+
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
     // Fetch targets
@@ -77,12 +97,26 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
         }
     }, []);
 
-    useEffect(() => {
-        fetchTargets();
-    }, [fetchTargets]);
+    useEffect(() => { fetchTargets(); }, [fetchTargets]);
 
-    // Create target
-    const handleCreate = async () => {
+    const resetAddFlow = () => {
+        setShowAddFlow(false);
+        setSelectedProvider(null);
+        setNewName('');
+        setNewUrl('');
+        setNewScope('pages');
+        setCfToken('');
+        setCfWorkerName('frontbase-edge');
+        setCfAccountId('');
+        setShowCfSecrets(false);
+        setCfTursoUrl('');
+        setCfTursoToken('');
+        setCfUpstashUrl('');
+        setCfUpstashToken('');
+    };
+
+    // Manual target creation
+    const handleCreateManual = async () => {
         setIsCreating(true);
         try {
             const res = await fetch(`${API_BASE}/api/deployment-targets`, {
@@ -90,18 +124,14 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: newName,
-                    provider: newProvider,
+                    provider: selectedProvider,
                     adapter_type: newScope,
                     url: newUrl,
                     is_active: true,
                 }),
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            setShowAddForm(false);
-            setNewName('');
-            setNewUrl('');
-            setNewProvider('cloudflare');
-            setNewScope('pages');
+            resetAddFlow();
             await fetchTargets();
         } catch (e: any) {
             setError(e.message);
@@ -110,35 +140,62 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
         }
     };
 
+    // Cloudflare one-click deploy
+    const handleCloudflareDeply = async () => {
+        setIsDeploying(true);
+        setError(null);
+        try {
+            const res = await fetch(`${API_BASE}/api/cloudflare/deploy`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    api_token: cfToken,
+                    account_id: cfAccountId || undefined,
+                    worker_name: cfWorkerName,
+                    turso_url: cfTursoUrl || undefined,
+                    turso_token: cfTursoToken || undefined,
+                    upstash_url: cfUpstashUrl || undefined,
+                    upstash_token: cfUpstashToken || undefined,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.detail || data.error || 'Deploy failed');
+            }
+            // Save token for future redeploys
+            localStorage.setItem('cf_api_token', cfToken);
+            localStorage.setItem('cf_worker_name', cfWorkerName);
+            if (data.account_id) localStorage.setItem('cf_account_id', data.account_id);
+
+            resetAddFlow();
+            await fetchTargets();
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setIsDeploying(false);
+        }
+    };
+
     // Toggle active
     const handleToggle = async (target: DeploymentTarget) => {
         try {
-            const res = await fetch(`${API_BASE}/api/deployment-targets/${target.id}`, {
+            await fetch(`${API_BASE}/api/deployment-targets/${target.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ is_active: !target.is_active }),
             });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             await fetchTargets();
-        } catch (e: any) {
-            setError(e.message);
-        }
+        } catch (e: any) { setError(e.message); }
     };
 
     // Delete target
     const handleDelete = async (id: string) => {
         setDeletingId(id);
         try {
-            const res = await fetch(`${API_BASE}/api/deployment-targets/${id}`, {
-                method: 'DELETE',
-            });
-            if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
+            await fetch(`${API_BASE}/api/deployment-targets/${id}`, { method: 'DELETE' });
             await fetchTargets();
-        } catch (e: any) {
-            setError(e.message);
-        } finally {
-            setDeletingId(null);
-        }
+        } catch (e: any) { setError(e.message); }
+        finally { setDeletingId(null); }
     };
 
     const getProviderIcon = (provider: string) => {
@@ -155,60 +212,194 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
         );
     }
 
+    // Provider selection step
+    const providerSelectionStep = (
+        <div className="p-4 rounded-lg border border-dashed space-y-4">
+            <Label className="text-sm font-medium">Select a provider</Label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {PROVIDER_OPTIONS.map(opt => {
+                    const Icon = opt.icon;
+                    return (
+                        <button
+                            key={opt.value}
+                            onClick={() => setSelectedProvider(opt.value)}
+                            className={`flex items-center gap-2 p-3 rounded-lg border text-sm transition-colors text-left
+                                ${selectedProvider === opt.value
+                                    ? 'border-primary bg-primary/5 text-primary'
+                                    : 'border-border hover:bg-accent'
+                                }`}
+                        >
+                            <Icon className="h-4 w-4 shrink-0" />
+                            {opt.label}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Cloudflare deploy flow */}
+            {selectedProvider === 'cloudflare' && (
+                <div className="space-y-4 pt-2 border-t">
+                    <div className="space-y-2">
+                        <Label htmlFor="cf-token">Cloudflare API Token</Label>
+                        <div className="flex gap-2">
+                            <Input
+                                id="cf-token"
+                                type={showCfToken ? 'text' : 'password'}
+                                placeholder="Your API token with Workers Scripts: Edit permission"
+                                value={cfToken}
+                                onChange={(e) => setCfToken(e.target.value)}
+                                className="flex-1"
+                            />
+                            <Button variant="ghost" size="icon" onClick={() => setShowCfToken(!showCfToken)} type="button">
+                                {showCfToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Create at{' '}
+                            <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer" className="underline">
+                                dash.cloudflare.com/profile/api-tokens
+                            </a>
+                            {' '}→ Custom Token → Workers Scripts: Edit + Account Settings: Read
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                            <Label className="text-sm">Worker Name</Label>
+                            <Input value={cfWorkerName} onChange={(e) => setCfWorkerName(e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                            <Label className="text-sm">Account ID <span className="text-muted-foreground text-xs">(auto-detected)</span></Label>
+                            <Input placeholder="Auto-detected" value={cfAccountId} onChange={(e) => setCfAccountId(e.target.value)} />
+                        </div>
+                    </div>
+
+                    {/* Expandable secrets */}
+                    <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                        onClick={() => setShowCfSecrets(!showCfSecrets)}
+                    >
+                        <Info className="h-3 w-3" />
+                        {showCfSecrets ? 'Hide' : 'Show'} Worker Secrets (optional — auto-populated from settings)
+                    </button>
+
+                    {showCfSecrets && (
+                        <div className="grid grid-cols-2 gap-3 p-3 rounded border border-dashed bg-muted/30">
+                            <div className="space-y-1">
+                                <Label className="text-xs">Turso DB URL</Label>
+                                <Input type="password" placeholder="libsql://..." value={cfTursoUrl} onChange={(e) => setCfTursoUrl(e.target.value)} className="text-sm" />
+                            </div>
+                            <div className="space-y-1">
+                                <Label className="text-xs">Turso Token</Label>
+                                <Input type="password" placeholder="Token" value={cfTursoToken} onChange={(e) => setCfTursoToken(e.target.value)} className="text-sm" />
+                            </div>
+                            <div className="space-y-1">
+                                <Label className="text-xs">Upstash URL</Label>
+                                <Input type="password" placeholder="https://..." value={cfUpstashUrl} onChange={(e) => setCfUpstashUrl(e.target.value)} className="text-sm" />
+                            </div>
+                            <div className="space-y-1">
+                                <Label className="text-xs">Upstash Token</Label>
+                                <Input type="password" placeholder="Token" value={cfUpstashToken} onChange={(e) => setCfUpstashToken(e.target.value)} className="text-sm" />
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex gap-2">
+                        <Button onClick={handleCloudflareDeply} disabled={!cfToken || isDeploying}>
+                            {isDeploying ? (
+                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deploying...</>
+                            ) : (
+                                <><Rocket className="mr-2 h-4 w-4" /> Deploy to Cloudflare</>
+                            )}
+                        </Button>
+                        <Button variant="ghost" onClick={resetAddFlow}>Cancel</Button>
+                    </div>
+                </div>
+            )}
+
+            {/* Manual URL flow (all other providers) */}
+            {selectedProvider && selectedProvider !== 'cloudflare' && (
+                <div className="space-y-4 pt-2 border-t">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                            <Label>Name</Label>
+                            <Input placeholder="e.g. Production Docker" value={newName} onChange={(e) => setNewName(e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                            <Label>URL</Label>
+                            <Input placeholder="https://edge.mysite.com" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} />
+                        </div>
+                    </div>
+                    <div className="space-y-1">
+                        <Label>Scope</Label>
+                        <Select value={newScope} onValueChange={setNewScope}>
+                            <SelectTrigger className="w-[200px]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {SCOPE_OPTIONS.map(opt => (
+                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button onClick={handleCreateManual} disabled={!newName || !newUrl || isCreating}>
+                            {isCreating ? (
+                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Adding...</>
+                            ) : (
+                                <><Check className="mr-2 h-4 w-4" /> Add Target</>
+                            )}
+                        </Button>
+                        <Button variant="ghost" onClick={resetAddFlow}>Cancel</Button>
+                    </div>
+                </div>
+            )}
+
+            {/* Cancel if no provider selected yet */}
+            {!selectedProvider && (
+                <Button variant="ghost" onClick={resetAddFlow} className="w-full">Cancel</Button>
+            )}
+        </div>
+    );
+
     const formContent = (
         <div className="space-y-4">
             {error && (
                 <Alert variant="destructive">
-                    <X className="h-4 w-4" />
+                    <AlertTriangle className="h-4 w-4" />
                     <AlertDescription>{error}</AlertDescription>
                 </Alert>
             )}
 
             {/* Existing targets */}
-            {targets.length === 0 && !showAddForm ? (
+            {targets.length === 0 && !showAddFlow ? (
                 <div className="text-center py-8 text-muted-foreground">
                     <Cloud className="h-10 w-10 mx-auto mb-3 opacity-50" />
                     <p>No deployment targets configured</p>
-                    <p className="text-sm mt-1">Add a target to enable multi-provider publishing</p>
+                    <p className="text-sm mt-1">Add a target to deploy your Edge Engine to the cloud</p>
                 </div>
             ) : (
                 <div className="space-y-3">
                     {targets.map((target) => (
-                        <div
-                            key={target.id}
-                            className="flex items-center justify-between p-3 rounded-lg border bg-card"
-                        >
+                        <div key={target.id} className="flex items-center justify-between p-3 rounded-lg border bg-card">
                             <div className="flex items-center gap-3">
-                                <div className="flex items-center gap-2">
-                                    {getProviderIcon(target.provider)}
-                                    <span className="font-medium">{target.name}</span>
-                                </div>
-                                <Badge variant="outline" className="text-xs">
-                                    {target.provider}
-                                </Badge>
-                                <Badge variant="secondary" className="text-xs">
-                                    {target.adapter_type}
-                                </Badge>
+                                {getProviderIcon(target.provider)}
+                                <span className="font-medium">{target.name}</span>
+                                <Badge variant="outline" className="text-xs">{target.provider}</Badge>
+                                <Badge variant="secondary" className="text-xs">{target.adapter_type}</Badge>
                             </div>
                             <div className="flex items-center gap-3">
-                                <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                <a href={`${target.url}/api/health`} target="_blank" rel="noopener noreferrer"
+                                    className="text-xs text-muted-foreground hover:underline truncate max-w-[200px]">
                                     {target.url}
-                                </span>
-                                <Switch
-                                    checked={target.is_active}
-                                    onCheckedChange={() => handleToggle(target)}
-                                />
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleDelete(target.id)}
-                                    disabled={deletingId === target.id}
-                                >
-                                    {deletingId === target.id ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                    )}
+                                </a>
+                                <Switch checked={target.is_active} onCheckedChange={() => handleToggle(target)} />
+                                <Button variant="ghost" size="icon" onClick={() => handleDelete(target.id)} disabled={deletingId === target.id}>
+                                    {deletingId === target.id
+                                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                                        : <Trash2 className="h-4 w-4 text-destructive" />}
                                 </Button>
                             </div>
                         </div>
@@ -216,101 +407,13 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
                 </div>
             )}
 
-            {/* Add form */}
-            {showAddForm && (
-                <div className="p-4 rounded-lg border border-dashed space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="dt-name">Name</Label>
-                            <Input
-                                id="dt-name"
-                                placeholder="e.g. Production Cloudflare"
-                                value={newName}
-                                onChange={(e) => setNewName(e.target.value)}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="dt-url">URL</Label>
-                            <Input
-                                id="dt-url"
-                                placeholder="https://my-site.pages.dev"
-                                value={newUrl}
-                                onChange={(e) => setNewUrl(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label>Provider</Label>
-                            <Select value={newProvider} onValueChange={setNewProvider}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {PROVIDER_OPTIONS.map(opt => (
-                                        <SelectItem key={opt.value} value={opt.value}>
-                                            {opt.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Scope</Label>
-                            <Select value={newScope} onValueChange={setNewScope}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {SCOPE_OPTIONS.map(opt => (
-                                        <SelectItem key={opt.value} value={opt.value}>
-                                            {opt.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    <div className="flex gap-2">
-                        <Button
-                            onClick={handleCreate}
-                            disabled={!newName || !newUrl || isCreating}
-                        >
-                            {isCreating ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Creating...
-                                </>
-                            ) : (
-                                <>
-                                    <Check className="mr-2 h-4 w-4" />
-                                    Add Target
-                                </>
-                            )}
-                        </Button>
-                        <Button variant="ghost" onClick={() => setShowAddForm(false)}>
-                            Cancel
-                        </Button>
-                    </div>
-                </div>
-            )}
-
-            {/* Add button */}
-            {!showAddForm && (
-                <Button variant="outline" onClick={() => setShowAddForm(true)} className="w-full">
+            {/* Add flow or button */}
+            {showAddFlow ? providerSelectionStep : (
+                <Button variant="outline" onClick={() => setShowAddFlow(true)} className="w-full">
                     <Plus className="mr-2 h-4 w-4" />
                     Add Deployment Target
                 </Button>
             )}
-
-            <Alert>
-                <Rocket className="h-4 w-4" />
-                <AlertDescription>
-                    When you publish a page, it will automatically be pushed to all active
-                    deployment targets. The primary strategy (Turso/Local) runs first, then
-                    the page is fanned out to each target via HTTP POST.
-                </AlertDescription>
-            </Alert>
         </div>
     );
 
@@ -323,7 +426,7 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
                         Deployment Targets
                     </CardTitle>
                     <CardDescription>
-                        Register edge providers to publish pages to multiple platforms simultaneously
+                        Deploy your Edge Engine and manage publishing targets
                     </CardDescription>
                 </CardHeader>
                 <CardContent>{formContent}</CardContent>

@@ -164,17 +164,14 @@ def _build_worker() -> str:
     """Build the Cloudflare Worker bundle and return the script content."""
     dist_file = EDGE_DIR / "dist" / "cloudflare.js"
 
-    # Check if dist file already exists (skip build if bundled)
+    # Always rebuild to ensure fresh bundle with all deps bundled
     if dist_file.exists():
-        content = dist_file.read_text(encoding="utf-8")
-        print(f"[Cloudflare] Using existing bundle: {len(content)} bytes")
-        return content
+        dist_file.unlink()
 
-    # Build the bundle
     print(f"[Cloudflare] Building Worker bundle in {EDGE_DIR}...")
     try:
         result = subprocess.run(
-            ["npx", "tsup", "src/adapters/cloudflare.ts", "--format", "esm", "--no-splitting", "--no-clean"],
+            ["npx", "tsup", "--config", "tsup.cloudflare.ts"],
             cwd=str(EDGE_DIR),
             capture_output=True,
             text=True,

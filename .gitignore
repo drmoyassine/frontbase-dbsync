@@ -24,6 +24,7 @@ pip-delete-this-directory.txt
 # dist/ - tracked for VPS deployment (not ignored)
 dist-ssr/
 build/
+fastapi-backend/bin/tailwindcss*
 
 # =============================================================================
 # Environment & Secrets (CRITICAL)

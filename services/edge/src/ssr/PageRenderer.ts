@@ -236,7 +236,8 @@ function renderLayoutComponent(
 ): string {
     // Build inline style from both props and styles object
     const inlineStyle = buildInlineStyles(props, styles);
-    const className = buildClassName('fb-layout', type.toLowerCase(), props.className as string);
+    // Avoid naming conflicts with Tailwind (e.g. 'container' limiting max-width) by prefixing type
+    const className = buildClassName('fb-layout', `fb-${type.toLowerCase()}`, props.className as string);
 
     // Use custom anchor slug if provided, otherwise fall back to component ID
     const elementId = (props.anchor as string) || id;
@@ -717,7 +718,18 @@ export async function renderPage(
 
                 // Convert camelCase to kebab-case for CSS
                 const cssKey = prop.replace(/([A-Z])/g, '-$1').toLowerCase();
-                styleParts.push(`${cssKey}:${value}`);
+
+                // Auto-append px to numeric values for length properties
+                let cssValue = String(value);
+                const unitlessProps = [
+                    'opacity', 'z-index', 'flex', 'flex-grow', 'flex-shrink', 'order',
+                    'line-height', 'font-weight',
+                ];
+                if (/^-?\d+(\.\d+)?$/.test(cssValue) && !unitlessProps.includes(cssKey)) {
+                    cssValue += 'px';
+                }
+
+                styleParts.push(`${cssKey}:${cssValue}`);
             }
 
             // Also check for className in values

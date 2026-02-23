@@ -82,6 +82,10 @@ def map_styles_schema(component: Dict) -> Dict:
             'viewportOverrides': styles_data.get('viewportOverrides'),  # PRESERVE THIS!
         }
         
+        # PRESERVE rawCSS if the user entered Custom CSS directly via the Styling Panel
+        if 'rawCSS' in styles_data:
+            result['styles']['rawCSS'] = styles_data['rawCSS']
+        
         # Keep stylesData as well for backward compatibility with Edge
         # (Edge reads from both styles and stylesData)
         result['stylesData'] = result['styles']

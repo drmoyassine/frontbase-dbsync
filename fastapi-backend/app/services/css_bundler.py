@@ -52,7 +52,7 @@ def generate_bundle_cache_key(components: list) -> str:
     requirements_str = ','.join(sorted(requirements))
     hash_value = hashlib.md5(requirements_str.encode()).hexdigest()[:12]
     
-    return f"css:bundle:{hash_value}"
+    return f"css:bundle:v2:{hash_value}"
 
 
 # =============================================================================
@@ -265,23 +265,31 @@ async def generate_tailwind_utilities(components: list) -> str:
                 "--minify"
             ]
             
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=tmpdir
-            )
+            # Use subprocess.run in a thread to avoid asyncio subprocess deadlock on Windows
+            # (asyncio.create_subprocess_exec has known pipe buffering issues on Windows)
+            def _run_tailwind():
+                return subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    cwd=tmpdir
+                )
             
-            stdout, stderr = await process.communicate()
+            try:
+                result = await asyncio.to_thread(_run_tailwind)
+            except subprocess.TimeoutExpired:
+                print("[css_bundler] ⚠️ Tailwind CLI timed out after 30s")
+                return ""
             
             # Always log stderr for diagnostics (includes version info)
-            if stderr:
-                stderr_text = stderr.decode().strip()
+            if result.stderr:
+                stderr_text = result.stderr.strip()
                 if stderr_text:
                     print(f"[css_bundler] Tailwind CLI stderr: {stderr_text[:500]}")
             
-            if process.returncode != 0:
-                print(f"[css_bundler] Tailwind CLI failed (exit {process.returncode})")
+            if result.returncode != 0:
+                print(f"[css_bundler] Tailwind CLI failed (exit {result.returncode})")
                 return ""
                 
             if os.path.exists(output_css):

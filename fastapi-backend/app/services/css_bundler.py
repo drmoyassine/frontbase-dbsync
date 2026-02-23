@@ -64,12 +64,8 @@ import os
 import re
 import subprocess
 import tempfile
-import platform
-import shutil
-import stat
-import httpx
 
-_TAILWIND_BIN: Optional[str] = None
+from .tailwind_cli import ensure_tailwind_cli
 
 def _extract_css_classes_from_source(source_dir: str) -> set:
     """
@@ -122,60 +118,6 @@ def _extract_css_classes_from_source(source_dir: str) -> set:
     return classes
 
 
-async def _ensure_tailwind_cli() -> Optional[str]:
-    """Ensure Tailwind CSS v4 standalone CLI is available and return its path."""
-    global _TAILWIND_BIN
-    if _TAILWIND_BIN and os.path.isfile(_TAILWIND_BIN):
-        return _TAILWIND_BIN
-
-    # 1. Check system PATH
-    system_bin = shutil.which("tailwindcss")
-    if system_bin:
-        _TAILWIND_BIN = system_bin
-        return system_bin
-
-    # 2. Check local bin directory (inside fastapi-backend/)
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    bin_dir = os.path.join(base_dir, "bin")
-    os.makedirs(bin_dir, exist_ok=True)
-    
-    system = platform.system().lower()
-    machine = platform.machine().lower()
-
-    if system == "windows":
-        target = "tailwindcss-windows-x64.exe"
-    elif system == "darwin":
-        target = "tailwindcss-macos-arm64" if machine == "arm64" else "tailwindcss-macos-x64"
-    else:
-        target = "tailwindcss-linux-arm64" if machine in ("arm64", "aarch64") else "tailwindcss-linux-x64"
-
-    local_bin = os.path.join(bin_dir, target)
-    if os.path.isfile(local_bin):
-        _TAILWIND_BIN = local_bin
-        return local_bin
-
-    # 3. Download if missing
-    url = f"https://github.com/tailwindlabs/tailwindcss/releases/latest/download/{target}"
-    print(f"[css_bundler] Tailwind CLI not found, downloading from {url}...")
-    
-    try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(url, timeout=60.0)
-            response.raise_for_status()
-            
-            with open(local_bin, "wb") as f:
-                f.write(response.content)
-            
-            # Make executable
-            st = os.stat(local_bin)
-            os.chmod(local_bin, st.st_mode | stat.S_IEXEC)
-            
-            print(f"[css_bundler] ✅ Downloaded Tailwind CLI to {local_bin}")
-            _TAILWIND_BIN = local_bin
-            return local_bin
-    except Exception as e:
-        print(f"[css_bundler] ❌ Failed to download Tailwind CLI: {e}")
-        return None
 
 
 async def generate_tailwind_utilities(components: list) -> str:
@@ -253,7 +195,7 @@ async def generate_tailwind_utilities(components: list) -> str:
                 f.write('}\n')
                 
             # 5. Run tailwindcss CLI (v4 standalone binary)
-            tailwind_bin = await _ensure_tailwind_cli()
+            tailwind_bin = await ensure_tailwind_cli()
             if not tailwind_bin:
                 print("[css_bundler] ⚠️ Tailwind CLI unavailable, skipping utility generation")
                 return ""

@@ -1,43 +1,77 @@
 /**
  * tsup config for Cloudflare Workers build.
  *
- * Bundles ALL npm dependencies into a single file for Cloudflare Workers.
- * Uses platform: 'node' so Node builtins resolve during build.
- * Maps bare builtin imports (e.g. 'fs') to 'node:' prefixed versions
- * which Cloudflare's nodejs_compat flag supports at runtime.
+ * Strategy:
+ * 1. Bundle ALL npm packages (noExternal)
+ * 2. platform: 'node' so esbuild can resolve builtins during build
+ * 3. Alias UNSUPPORTED builtins (fs, path, net, etc.) to local shim stubs
+ *    so they never appear in the output as real imports
+ * 4. Supported builtins (crypto, buffer, stream, etc.) are left as external
+ *    imports — Cloudflare's nodejs_compat provides them at runtime
  */
 import { defineConfig } from 'tsup';
+import { resolve } from 'path';
+import { fileURLToPath } from 'url';
 
-// Cloudflare Workers with nodejs_compat require 'node:' prefixed builtins
-const NODE_BUILTINS = [
-    'fs', 'path', 'crypto', 'buffer', 'stream', 'events', 'util',
-    'assert', 'module', 'net', 'tls', 'dns', 'url', 'string_decoder',
-    'child_process', 'os', 'http', 'https', 'zlib', 'querystring',
-    'worker_threads', 'async_hooks', 'diagnostics_channel',
-];
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
-// Create alias map: 'fs' -> 'node:fs', 'path' -> 'node:path', etc.
-const builtinAlias: Record<string, string> = {};
-for (const mod of NODE_BUILTINS) {
-    builtinAlias[mod] = `node:${mod}`;
-}
+const fsShim = resolve(__dirname, 'shims/fs.js');
+const pathShim = resolve(__dirname, 'shims/path.js');
+const emptyShim = resolve(__dirname, 'shims/empty.js');
 
 export default defineConfig({
     entry: ['src/adapters/cloudflare.ts'],
     format: ['esm'],
-    noExternal: [/.*/],         // Bundle all npm packages
+    noExternal: [/.*/],
     splitting: false,
     sourcemap: false,
     clean: false,
     outDir: 'dist',
-    platform: 'node',           // Resolve builtins during build
+    platform: 'node',
     target: 'es2022',
-    treeshake: true,            // Remove dead code paths
+    treeshake: true,
     esbuildOptions(options) {
-        // Map bare 'fs' imports to 'node:fs' for Cloudflare nodejs_compat
         options.alias = {
             ...options.alias,
-            ...builtinAlias,
+            // UNSUPPORTED builtins -> shim stubs (inlined into bundle)
+            'fs': fsShim,
+            'node:fs': fsShim,
+            'node:fs/promises': fsShim,
+            'path': pathShim,
+            'node:path': pathShim,
+            'child_process': emptyShim,
+            'node:child_process': emptyShim,
+            'net': emptyShim,
+            'node:net': emptyShim,
+            'tls': emptyShim,
+            'node:tls': emptyShim,
+            'dns': emptyShim,
+            'node:dns': emptyShim,
+            'os': emptyShim,
+            'node:os': emptyShim,
+            'http': emptyShim,
+            'node:http': emptyShim,
+            'https': emptyShim,
+            'node:https': emptyShim,
+            'zlib': emptyShim,
+            'node:zlib': emptyShim,
+            'worker_threads': emptyShim,
+            'node:worker_threads': emptyShim,
+            'module': emptyShim,
+            'node:module': emptyShim,
+            // SUPPORTED builtins — alias bare to node: prefix
+            // (nodejs_compat provides these at CF runtime)
+            'crypto': 'node:crypto',
+            'buffer': 'node:buffer',
+            'stream': 'node:stream',
+            'events': 'node:events',
+            'util': 'node:util',
+            'assert': 'node:assert',
+            'string_decoder': 'node:string_decoder',
+            'url': 'node:url',
+            'querystring': 'node:querystring',
+            'async_hooks': 'node:async_hooks',
+            'diagnostics_channel': 'node:diagnostics_channel',
         };
     },
     define: {

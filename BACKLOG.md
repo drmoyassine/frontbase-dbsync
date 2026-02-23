@@ -1,5 +1,34 @@
 # Frontbase Backlog
 
+## 🐛 Known Bugs
+
+- [ ] **SSR page width issue** — Page content does not span the full viewport width in SSR output.
+
+  **Symptom:** Published pages show content narrower than the viewport. On widescreen, the page body appears centered with visible background bleed on the sides. The Navbar, Hero, and section backgrounds don't reach the viewport edges.
+
+  **Investigation done (2026-02-22, ~3 hours):**
+
+  **Fixes applied (these resolved related but distinct issues):**
+  1. ✅ **Tailwind `.container` conflict** — Layout type `Container` was generating the raw CSS class `container`, which triggers Tailwind's built-in `.container { max-width: 640px/768px/1024px/1280px }`. Fixed by prefixing all layout types with `fb-` (e.g. `fb-container`).
+  2. ✅ **Padding `[object Object]`** — Builder padding objects like `{ top: 100, bottom: 50 }` were being stringified to `[object Object]`. Fixed with explicit box-model expansion in `renderPage()`.
+  3. ✅ **Unit-less numeric values** — `gap: 30` was missing `px`. Fixed with auto-append logic in `renderPage()`.
+  4. ✅ **rawCSS stripping** — `transforms.py` was dropping the `rawCSS` artifact during publish. Fixed to pass it through.
+
+  **What still doesn't work:**
+  The page wrapper `.fb-page` renders at less than full viewport width on large screens. The navbar and sections appear bounded rather than edge-to-edge.
+
+  **Likely root causes (not yet verified):**
+  1. **`renderPage()` root `size` object** (line 371–381) — If `containerStyles.values.size.width` is set (e.g. `1280` with `widthUnit: 'px'`), it injects `width:1280px` on the `.fb-page` wrapper, constraining the entire page. **Check:** Log `layoutData.root.containerStyles.values` to see if a `size` object with explicit width exists.
+  2. **Container `margin:0 auto`** (line 288, 292) — Every `Container` and grid container gets `style="margin:0 auto;width:100%"`. The `width:100%` is relative to the parent's content box. If the parent `.fb-page` has an explicit width or padding, children don't reach the viewport edge.
+  3. **`fb-page` in `baseStyles.ts`** (line 58) — `.fb-page { min-height:100vh; display:flex; flex-direction:column; }` — This is correct but does NOT set `width:100%`. If `renderPage()` doesn't inject a width, the flex column may collapse to content width depending on browser defaults.
+  4. **Interaction between layers** — `containerStyles` from the builder may set `horizontalAlign: 'center'` (line 395–406), which adds `margin-left:auto; margin-right:auto` to the root `fb-page` div. Combined with no explicit `width:100%`, this could create the centering/narrowing effect.
+
+  **Recommended next steps:**
+  - Add `console.log(JSON.stringify(layoutData.root, null, 2))` to `renderPage()` and inspect the actual root data being processed
+  - Check if the builder sets a `size.width` in `containerStyles.values` by default
+  - Verify whether adding `width:100%` to the `.fb-page` style in `renderPage()` line 470 resolves the issue
+  - Compare the builder's `CanvasWrapper` root styles with what `renderPage()` generates
+
 ## 🔴 Edge Auth & Private Pages (HIGH PRIORITY)
 
 Infrastructure exists (`auth.ts`, `context.ts`, `@supabase/supabase-js` already in Edge) but is not wired up. Implementation is phased:
@@ -45,7 +74,7 @@ Covers provider state mismatch, quota fallback, and operational visibility.
 - [ ] **Provider switch confirmation** — When toggling Turso on/off, show confirmation dialog explaining data migration implications
 
 ## Performance
-- [ ] **Replace Tailwind CDN with build-time CSS generation** — Currently SSR pages load `cdn.tailwindcss.com` (~300KB JS) for runtime class compilation. Replace with Tailwind CLI at publish time: scan `layoutData` component classes → generate static CSS → inject as `cssBundle`. Eliminates external dependency, console warning, and ~300KB load per page.
+- [x] **Replace Tailwind CDN with build-time CSS generation** — ~~Currently SSR pages load `cdn.tailwindcss.com` (~300KB JS) for runtime class compilation.~~ Implemented via `tailwind_cli.py` auto-provisioning + `@source inline()` in `css_bundler.py`. Classes are extracted from `layoutData` at publish time and compiled into a static `cssBundle`.
 - [ ] **Backend Redis Caching** — Extend Redis caching to FastAPI backend for data source operations. Cache table/column metadata (Schema Discovery), external API caching, and rate limiting.
 
 ## Data Layer & Tables
@@ -58,7 +87,12 @@ Covers provider state mismatch, quota fallback, and operational visibility.
 - [ ] **Multi-Database Support** — Neon/PlanetScale HTTP drivers, Self-hosted Postgres/MySQL support.
 - [ ] **Local Data Proxy (Hybrid Edge)** — Connect Edge workers to local/private infrastructure (Redis, SQL) without public IPs using tools like `serverless-redis-http` or Cloudflare Tunnels.
 - [ ] **One-Click Integrations** — Simplify connecting third-party services (Upstash auto-create, Supabase project selector, Vercel auto-deploy).
-- [ ] **Conditional Service Deployment** — Optimize local dev by using Docker Compose `profiles` to start only necessary services (e.g. SQLite vs Postgres).
+- [x] **Conditional Service Deployment** — Implemented via `docker-compose.standalone-edge.yml` and `docker-compose.distributed/` tier-based compose files.
+- [x] **Cloudflare Workers/Pages Deployment** — Adapter pattern (`IEdgeAdapter`) with Docker (default) and Cloudflare adapters. `deployment_targets` table for multi-provider publish registry. See `services/edge/CLOUDFLARE-DEPLOY.md`.
+- [ ] **Multi-Provider Load Balancing** — DNS-level weighted routing across multiple edge providers (Cloudflare + Vercel + Netlify). Uses `deployment_targets` table hooks (add `weight`, `quota_limit`, `quota_used` columns). Advanced feature for high-traffic deployments.
+- [ ] **Vercel Edge Adapter** — New `IEdgeAdapter` implementation for Vercel Edge Functions.
+- [ ] **Netlify Edge Adapter** — New `IEdgeAdapter` implementation for Netlify Edge Functions.
+- [ ] **Automations Worker Adapter** — Separate Worker deployment for workflow execution routes (`/api/execute`, `/api/webhook`).
 
 ## Enterprise & Security
 - [ ] **Enterprise Secrets Management** — Self-hosted Infisical integration for deploy-time secrets injection, E2E encrypted storage, audit logs.

@@ -460,6 +460,8 @@ if (componentName === 'Form' || componentName === 'form') {
 - Drizzle ORM, SQLite/Turso
 - LiquidJS (templating)
 - @upstash/redis (HTTP)
+- **Adapter Pattern**: `IEdgeAdapter` interface — Docker (default), Cloudflare Workers, Vercel/Netlify (future)
+- **Deployment Targets**: `deployment_targets` table — multi-provider publish registry (LB-ready)
 
 ---
 

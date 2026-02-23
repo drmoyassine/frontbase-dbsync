@@ -1,0 +1,26 @@
+# =============================================================================
+# Frontbase Edge Engine — Cloudflare Workers Configuration
+# =============================================================================
+#
+# Deploy:  npm run deploy:cf
+# Dev:     npm run dev:cf
+#
+# Secrets (set via `wrangler secret put <NAME>`):
+#   FRONTBASE_STATE_DB_URL   — Turso libsql:// URL
+#   FRONTBASE_STATE_DB_TOKEN — Turso auth token
+#   UPSTASH_REDIS_REST_URL   — Upstash REST URL (optional)
+#   UPSTASH_REDIS_REST_TOKEN — Upstash REST token (optional)
+#   BACKEND_URL              — Control Plane URL for startup sync
+# =============================================================================
+
+name = "frontbase-edge"
+main = "dist/adapters/cloudflare.js"
+compatibility_date = "2024-12-01"
+node_compat = true
+
+[site]
+bucket = "./public"
+
+[vars]
+# Non-secret env vars (override via wrangler.toml or dashboard)
+# FRONTBASE_DEPLOYMENT_MODE = "cloud"

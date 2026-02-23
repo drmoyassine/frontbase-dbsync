@@ -92,7 +92,7 @@ async def _upload_worker(api_token: str, account_id: str, worker_name: str, scri
 
     # Metadata for ES module worker
     metadata = {
-        "main_module": "cloudflare.js",
+        "main_module": "cloudflare-lite.js",
         "compatibility_date": "2024-12-01",
         "compatibility_flags": ["nodejs_compat"],
     }
@@ -101,7 +101,7 @@ async def _upload_worker(api_token: str, account_id: str, worker_name: str, scri
     # Multipart upload: metadata + script file
     files = {
         "metadata": (None, json.dumps(metadata), "application/json"),
-        "cloudflare.js": ("cloudflare.js", script_content, "application/javascript+module"),
+        "cloudflare-lite.js": ("cloudflare-lite.js", script_content, "application/javascript+module"),
     }
 
     async with httpx.AsyncClient() as client:
@@ -161,17 +161,17 @@ async def _set_secrets(api_token: str, account_id: str, worker_name: str, secret
 
 
 def _build_worker() -> str:
-    """Build the Cloudflare Worker bundle and return the script content."""
-    dist_file = EDGE_DIR / "dist" / "cloudflare.js"
+    """Build the lightweight Cloudflare Worker bundle and return the script content."""
+    dist_file = EDGE_DIR / "dist" / "cloudflare-lite.js"
 
-    # Always rebuild to ensure fresh bundle with all deps bundled
+    # Always rebuild to ensure fresh bundle
     if dist_file.exists():
         dist_file.unlink()
 
-    print(f"[Cloudflare] Building Worker bundle in {EDGE_DIR}...")
+    print(f"[Cloudflare] Building lightweight Worker bundle in {EDGE_DIR}...")
     try:
         result = subprocess.run(
-            ["npx", "tsup", "--config", "tsup.cloudflare.ts"],
+            ["npx", "tsup", "--config", "tsup.cloudflare-lite.ts"],
             cwd=str(EDGE_DIR),
             capture_output=True,
             text=True,
@@ -190,10 +190,10 @@ def _build_worker() -> str:
         raise HTTPException(500, f"Build process failed: {str(e)}")
 
     if not dist_file.exists():
-        raise HTTPException(500, f"Build output not found at {dist_file}. Run 'npm run build:cf' in services/edge/ first.")
+        raise HTTPException(500, f"Build output not found at {dist_file}")
 
     content = dist_file.read_text(encoding="utf-8")
-    print(f"[Cloudflare] Bundle built: {len(content)} bytes")
+    print(f"[Cloudflare] Lite bundle built: {len(content)} bytes ({len(content)//1024} KB)")
     return content
 
 

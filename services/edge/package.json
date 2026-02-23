@@ -9,6 +9,7 @@
         "build": "vite build && tsup src/index.ts --format esm --dts",
         "build:client": "vite build",
         "build:cf": "vite build && tsup --config tsup.cloudflare.ts",
+        "build:cf-lite": "tsup --config tsup.cloudflare-lite.ts",
         "deploy:cf": "npm run build:cf && wrangler pages deploy ./dist",
         "dev:cf": "wrangler pages dev ./dist",
         "start": "node dist/index.js",

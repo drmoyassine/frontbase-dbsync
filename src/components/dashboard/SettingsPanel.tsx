@@ -18,6 +18,7 @@ import { ProjectDetailsForm } from './settings/shared/ProjectDetailsForm';
 import { EmailProviderSettingsForm } from './settings/shared/EmailProviderSettingsForm';
 import { AdminInviteForm } from './settings/shared/AdminInviteForm';
 import { DeploymentTargetsForm } from './settings/shared/DeploymentTargetsForm';
+import { CloudflareDeployForm } from './settings/shared/CloudflareDeployForm';
 
 export const SettingsPanel: React.FC = () => {
   return (
@@ -94,6 +95,7 @@ export const SettingsPanel: React.FC = () => {
 
         {/* Deployment Targets Tab */}
         <TabsContent value="deployment" className="space-y-6 mt-6">
+          <CloudflareDeployForm withCard />
           <DeploymentTargetsForm withCard />
         </TabsContent>
 

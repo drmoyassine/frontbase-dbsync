@@ -290,7 +290,7 @@ async def deploy_to_cloudflare(payload: DeployRequest):
                     id=str(uuid.uuid4()),
                     name=f"Cloudflare: {payload.worker_name}",
                     provider="cloudflare",
-                    adapter_type="pages",
+                    adapter_type="edge",
                     url=worker_url,
                     is_active=True,
                     created_at=now,

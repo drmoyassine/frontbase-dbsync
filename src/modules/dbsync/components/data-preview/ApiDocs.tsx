@@ -6,13 +6,8 @@ interface ApiDocsProps {
 }
 
 export const ApiDocs = ({ currentViewId }: ApiDocsProps) => {
-    // Use the current origin (works for both VPS and localhost)
-    const baseUrl = window.location.origin.includes('localhost')
-        ? 'http://localhost:8000'
-        : window.location.origin; // Assume same-origin for production unless VITE_API_URL is set
-
-    // @ts-ignore - Vite env
-    const API_URL = import.meta.env.VITE_API_URL || baseUrl;
+    // Always use same-origin — reverse proxy handles routing to backend
+    const API_URL = window.location.origin;
     // Construct the docs URL pointing to the sync service swagger
     // Sync service is mounted at /api/sync, so docs are at /api/sync/docs/views
     const DOCS_URL = API_URL.endsWith('/api')

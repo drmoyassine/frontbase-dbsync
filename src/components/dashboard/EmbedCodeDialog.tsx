@@ -26,7 +26,7 @@ export function EmbedCodeDialog({ form, open, onOpenChange }: EmbedCodeDialogPro
     // Let's assume relative path works if proxy is set up, or absolute path if we know the server URL.
     // Since we are in the browser, let's try to construct it.
 
-    const serverUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const serverUrl = window.location.origin;
     const scriptSrc = `${serverUrl}/embed.js`;
 
     const scriptCode = `<script src="${scriptSrc}" data-form-id="${form.id}" data-width="100%"></script>`;

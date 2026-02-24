@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Users } from 'lucide-react';
 import { RedisSettingsForm } from './settings/shared/RedisSettingsForm';
-import { TursoSettingsForm } from './settings/shared/TursoSettingsForm';
+import { EdgeDatabasesForm } from './settings/shared/EdgeDatabasesForm';
 import { PrivacySettingsForm } from './settings/shared/PrivacySettingsForm';
 import { ProjectDetailsForm } from './settings/shared/ProjectDetailsForm';
 import { EmailProviderSettingsForm } from './settings/shared/EmailProviderSettingsForm';
@@ -89,7 +89,7 @@ export const SettingsPanel: React.FC = () => {
 
         {/* Edge Database Tab */}
         <TabsContent value="edge-db" className="space-y-6 mt-6">
-          <TursoSettingsForm withCard />
+          <EdgeDatabasesForm withCard />
         </TabsContent>
 
         {/* Deployment Targets Tab */}

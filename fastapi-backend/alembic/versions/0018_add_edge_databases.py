@@ -8,10 +8,7 @@ Creates the edge_databases table for named edge DB connections (Turso, Neon, etc
 Adds edge_db_id foreign key to deployment_targets so each target can reference
 which edge database it uses.
 
-Pre-seeds "Local SQLite" EdgeDatabase and "Local Edge" DeploymentTarget for
-self-hosted mode. These are marked is_system=True and cannot be deleted.
-
-Migrates existing Turso config from settings.json into an EdgeDatabase row.
+Migrates existing Turso config from settings.json into the first EdgeDatabase row.
 """
 from alembic import op
 import sqlalchemy as sa
@@ -26,10 +23,6 @@ revision = '0018_add_edge_databases'
 down_revision = '0017_add_deployment_targets'
 branch_labels = None
 depends_on = None
-
-# Fixed UUIDs for system entries (stable across migrations)
-LOCAL_SQLITE_DB_ID = "00000000-0000-0000-0000-000000000001"
-LOCAL_EDGE_TARGET_ID = "00000000-0000-0000-0000-000000000002"
 
 
 def upgrade():
@@ -47,80 +40,20 @@ def upgrade():
             sa.Column('db_url', sa.String(500), nullable=False),
             sa.Column('db_token', sa.String(1000), nullable=True),
             sa.Column('is_default', sa.Boolean(), server_default='0'),
-            sa.Column('is_system', sa.Boolean(), server_default='0'),
             sa.Column('created_at', sa.String(), nullable=False),
             sa.Column('updated_at', sa.String(), nullable=False),
         )
 
-    # 2. Add columns to deployment_targets (if not exists)
+    # 2. Add edge_db_id column to deployment_targets (if not exists)
     if 'deployment_targets' in tables:
         columns = [c['name'] for c in inspector.get_columns('deployment_targets')]
         if 'edge_db_id' not in columns:
             op.add_column('deployment_targets',
                 sa.Column('edge_db_id', sa.String(36), nullable=True)
             )
-        if 'is_system' not in columns:
-            op.add_column('deployment_targets',
-                sa.Column('is_system', sa.Boolean(), server_default='0')
-            )
 
-    # 3. Pre-seed local self-hosted entries
-    _seed_local_entries(conn)
-
-    # 4. Migrate existing Turso settings → EdgeDatabase row
+    # 3. Migrate existing Turso settings → EdgeDatabase row
     _migrate_turso_settings(conn)
-
-
-def _seed_local_entries(conn):
-    """Pre-seed Local SQLite EdgeDatabase + Local Edge DeploymentTarget."""
-    from datetime import datetime
-    now = datetime.utcnow().isoformat() + "Z"
-
-    # Check if already seeded
-    result = conn.execute(
-        sa.text("SELECT id FROM edge_databases WHERE id = :id"),
-        {"id": LOCAL_SQLITE_DB_ID}
-    )
-    if result.fetchone():
-        return  # Already seeded
-
-    edge_url = os.getenv("EDGE_URL", "http://localhost:3002")
-
-    # Insert Local SQLite EdgeDatabase
-    conn.execute(
-        sa.text(
-            "INSERT INTO edge_databases (id, name, provider, db_url, db_token, is_default, is_system, created_at, updated_at) "
-            "VALUES (:id, :name, :provider, :db_url, '', 1, 1, :created_at, :updated_at)"
-        ),
-        {
-            "id": LOCAL_SQLITE_DB_ID,
-            "name": "Local SQLite",
-            "provider": "sqlite",
-            "db_url": "file:local",
-            "created_at": now,
-            "updated_at": now,
-        }
-    )
-
-    # Insert Local Edge DeploymentTarget
-    conn.execute(
-        sa.text(
-            "INSERT INTO deployment_targets (id, name, provider, adapter_type, url, edge_db_id, is_active, is_system, created_at, updated_at) "
-            "VALUES (:id, :name, :provider, :adapter_type, :url, :edge_db_id, 1, 1, :created_at, :updated_at)"
-        ),
-        {
-            "id": LOCAL_EDGE_TARGET_ID,
-            "name": "Local Edge",
-            "provider": "docker",
-            "adapter_type": "full",
-            "url": edge_url,
-            "edge_db_id": LOCAL_SQLITE_DB_ID,
-            "created_at": now,
-            "updated_at": now,
-        }
-    )
-
-    print(f"[Migration] Pre-seeded Local SQLite + Local Edge (self-hosted defaults)")
 
 
 def _migrate_turso_settings(conn):
@@ -153,8 +86,8 @@ def _migrate_turso_settings(conn):
     # Insert the EdgeDatabase row
     conn.execute(
         sa.text(
-            "INSERT INTO edge_databases (id, name, provider, db_url, db_token, is_default, is_system, created_at, updated_at) "
-            "VALUES (:id, :name, :provider, :db_url, :db_token, 0, 0, :created_at, :updated_at)"
+            "INSERT INTO edge_databases (id, name, provider, db_url, db_token, is_default, created_at, updated_at) "
+            "VALUES (:id, :name, :provider, :db_url, :db_token, 1, :created_at, :updated_at)"
         ),
         {
             "id": db_id,
@@ -167,9 +100,9 @@ def _migrate_turso_settings(conn):
         }
     )
     
-    # Update non-system deployment targets to reference this DB
+    # Update all existing deployment targets to reference this DB
     conn.execute(
-        sa.text("UPDATE deployment_targets SET edge_db_id = :db_id WHERE is_system = 0 AND edge_db_id IS NULL"),
+        sa.text("UPDATE deployment_targets SET edge_db_id = :db_id"),
         {"db_id": db_id}
     )
     
@@ -177,7 +110,6 @@ def _migrate_turso_settings(conn):
 
 
 def downgrade():
-    """Remove edge_db_id and is_system from deployment_targets, drop edge_databases."""
+    """Remove edge_db_id from deployment_targets and drop edge_databases."""
     op.drop_column('deployment_targets', 'edge_db_id')
-    op.drop_column('deployment_targets', 'is_system')
     op.drop_table('edge_databases')

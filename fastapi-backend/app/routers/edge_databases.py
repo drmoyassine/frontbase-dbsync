@@ -16,7 +16,7 @@ import httpx
 from ..database.config import SessionLocal
 from ..models.models import EdgeDatabase, DeploymentTarget
 
-router = APIRouter(prefix="/edge-databases", tags=["edge-databases"])
+router = APIRouter(prefix="/api/edge-databases", tags=["edge-databases"])
 
 
 # =============================================================================
@@ -44,6 +44,7 @@ class EdgeDatabaseResponse(BaseModel):
     db_url: str
     has_token: bool  # Never expose the actual token
     is_default: bool
+    is_system: bool = False  # True = pre-seeded, cannot be deleted
     created_at: str
     updated_at: str
     target_count: int = 0  # Number of deployment targets using this DB
@@ -76,6 +77,7 @@ async def list_edge_databases():
                 db_url=edb.db_url,
                 has_token=bool(edb.db_token),
                 is_default=edb.is_default,
+                is_system=bool(edb.is_system),
                 created_at=edb.created_at,
                 updated_at=edb.updated_at,
                 target_count=target_count,
@@ -123,6 +125,7 @@ async def create_edge_database(payload: EdgeDatabaseCreate):
             db_url=edge_db.db_url,
             has_token=bool(edge_db.db_token),
             is_default=edge_db.is_default,
+            is_system=bool(edge_db.is_system),
             created_at=edge_db.created_at,
             updated_at=edge_db.updated_at,
             target_count=0,
@@ -171,6 +174,7 @@ async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate):
             db_url=edge_db.db_url,
             has_token=bool(edge_db.db_token),
             is_default=edge_db.is_default,
+            is_system=bool(edge_db.is_system),
             created_at=edge_db.created_at,
             updated_at=edge_db.updated_at,
             target_count=target_count,
@@ -254,6 +258,12 @@ async def _test_connection(provider: str, db_url: str, db_token: Optional[str]) 
     
     if provider == "turso":
         return await _test_turso(db_url, db_token)
+    elif provider == "sqlite":
+        return TestConnectionResult(
+            success=True,
+            message="Local SQLite is always available",
+            latency_ms=0,
+        )
     elif provider == "neon":
         return TestConnectionResult(
             success=False,

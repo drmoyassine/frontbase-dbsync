@@ -215,7 +215,7 @@ async function getPage(c: any, slug: string): Promise<PageRow | null> {
             const cached = await redis.get(`page:${slug}`);
             if (cached) {
                 console.log(`[SSR] Cache HIT: ${slug}`);
-                return typeof cached === 'string' ? JSON.parse(cached) : cached;
+                return (typeof cached === 'string' ? JSON.parse(cached) : cached) as PageRow;
             }
         } catch { /* Redis optional */ }
     }
@@ -246,7 +246,7 @@ async function getHomepage(c: any): Promise<PageRow | null> {
             const cached = await redis.get('page:__homepage__');
             if (cached) {
                 console.log('[SSR] Cache HIT: homepage');
-                return typeof cached === 'string' ? JSON.parse(cached) : cached;
+                return (typeof cached === 'string' ? JSON.parse(cached) : cached) as PageRow;
             }
         } catch { }
     }

@@ -96,7 +96,7 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
     // Fetch targets
     const fetchTargets = useCallback(async () => {
         try {
-            const res = await fetch(`${API_BASE}/api/deployment-targets`);
+            const res = await fetch(`${API_BASE}/api/deployment-targets/`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
             setTargets(data);
@@ -144,7 +144,7 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
     const handleCreateManual = async () => {
         setIsCreating(true);
         try {
-            const res = await fetch(`${API_BASE}/api/deployment-targets`, {
+            const res = await fetch(`${API_BASE}/api/deployment-targets/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

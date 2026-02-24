@@ -30,9 +30,20 @@ interface DeploymentTarget {
     provider: string;
     adapter_type: string;
     url: string;
+    edge_db_id: string | null;
+    edge_db_name?: string;
     is_active: boolean;
     created_at: string;
     updated_at: string;
+}
+
+interface EdgeDatabase {
+    id: string;
+    name: string;
+    provider: string;
+    db_url: string;
+    has_token: boolean;
+    is_default: boolean;
 }
 
 interface DeploymentTargetsFormProps {
@@ -74,11 +85,11 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
     const [cfAccountId, setCfAccountId] = useState('');
     const [showCfToken, setShowCfToken] = useState(false);
     const [showCfSecrets, setShowCfSecrets] = useState(false);
-    const [cfTursoUrl, setCfTursoUrl] = useState('');
-    const [cfTursoToken, setCfTursoToken] = useState('');
+    const [cfEdgeDbId, setCfEdgeDbId] = useState<string>('');
     const [cfUpstashUrl, setCfUpstashUrl] = useState('');
     const [cfUpstashToken, setCfUpstashToken] = useState('');
     const [isDeploying, setIsDeploying] = useState(false);
+    const [edgeDatabases, setEdgeDatabases] = useState<EdgeDatabase[]>([]);
 
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -98,6 +109,20 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
     }, []);
 
     useEffect(() => { fetchTargets(); }, [fetchTargets]);
+
+    // Fetch edge databases for the dropdown
+    const fetchEdgeDbs = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/edge-databases/`);
+            if (!res.ok) return;
+            const data = await res.json();
+            setEdgeDatabases(data);
+            // Auto-select default
+            const defaultDb = data.find((d: EdgeDatabase) => d.is_default);
+            if (defaultDb && !cfEdgeDbId) setCfEdgeDbId(defaultDb.id);
+        } catch { }
+    }, []);
+    useEffect(() => { fetchEdgeDbs(); }, [fetchEdgeDbs]);
 
     const resetAddFlow = () => {
         setShowAddFlow(false);
@@ -152,20 +177,17 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
                     api_token: cfToken,
                     account_id: cfAccountId || undefined,
                     worker_name: cfWorkerName,
-                    turso_url: cfTursoUrl || undefined,
-                    turso_token: cfTursoToken || undefined,
+                    edge_db_id: cfEdgeDbId || undefined,
                     upstash_url: cfUpstashUrl || undefined,
                     upstash_token: cfUpstashToken || undefined,
                 }),
             });
             const data = await res.json();
             if (!res.ok || !data.success) {
-                // Extract error from FastAPI HTTPException format
                 const errMsg = typeof data.detail === 'string' ? data.detail
                     : data.detail?.msg || data.error || data.message || JSON.stringify(data.detail) || 'Connection failed';
                 throw new Error(errMsg);
             }
-            // Save token for future redeploys
             localStorage.setItem('cf_api_token', cfToken);
             localStorage.setItem('cf_worker_name', cfWorkerName);
             if (data.account_id) localStorage.setItem('cf_account_id', data.account_id);
@@ -283,22 +305,37 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
                     </button>
 
                     {showCfSecrets && (
-                        <div className="grid grid-cols-2 gap-3 p-3 rounded border border-dashed bg-muted/30">
+                        <div className="space-y-3 p-3 rounded border border-dashed bg-muted/30">
+                            {/* Edge Database selector */}
                             <div className="space-y-1">
-                                <Label className="text-xs">Turso DB URL</Label>
-                                <Input type="password" placeholder="libsql://..." value={cfTursoUrl} onChange={(e) => setCfTursoUrl(e.target.value)} className="text-sm" />
+                                <Label className="text-xs font-medium">Edge Database</Label>
+                                {edgeDatabases.length > 0 ? (
+                                    <Select value={cfEdgeDbId} onValueChange={setCfEdgeDbId}>
+                                        <SelectTrigger className="text-sm">
+                                            <SelectValue placeholder="Select edge database..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {edgeDatabases.map(db => (
+                                                <SelectItem key={db.id} value={db.id}>
+                                                    {db.name} ({db.provider}){db.is_default ? ' ★' : ''}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                ) : (
+                                    <p className="text-xs text-muted-foreground italic">No edge databases configured. Add one in the Edge Databases section above.</p>
+                                )}
                             </div>
-                            <div className="space-y-1">
-                                <Label className="text-xs">Turso Token</Label>
-                                <Input type="password" placeholder="Token" value={cfTursoToken} onChange={(e) => setCfTursoToken(e.target.value)} className="text-sm" />
-                            </div>
-                            <div className="space-y-1">
-                                <Label className="text-xs">Upstash URL</Label>
-                                <Input type="password" placeholder="https://..." value={cfUpstashUrl} onChange={(e) => setCfUpstashUrl(e.target.value)} className="text-sm" />
-                            </div>
-                            <div className="space-y-1">
-                                <Label className="text-xs">Upstash Token</Label>
-                                <Input type="password" placeholder="Token" value={cfUpstashToken} onChange={(e) => setCfUpstashToken(e.target.value)} className="text-sm" />
+                            {/* Upstash fields */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Upstash URL</Label>
+                                    <Input type="password" placeholder="https://..." value={cfUpstashUrl} onChange={(e) => setCfUpstashUrl(e.target.value)} className="text-sm" />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Upstash Token</Label>
+                                    <Input type="password" placeholder="Token" value={cfUpstashToken} onChange={(e) => setCfUpstashToken(e.target.value)} className="text-sm" />
+                                </div>
                             </div>
                         </div>
                     )}

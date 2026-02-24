@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
-from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, deployment_targets, cloudflare
+from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, deployment_targets, cloudflare, edge_databases
 from app.middleware.test_mode import TestModeMiddleware
 
 logger = logging.getLogger(__name__)
@@ -145,6 +145,7 @@ app.include_router(actions.router, prefix="/api/actions", tags=["Actions"])
 app.include_router(auth_forms.router, prefix="/api/auth-forms", tags=["Auth Forms"])
 app.include_router(settings.router)  # Privacy & Tracking settings
 app.include_router(deployment_targets.router)  # Edge deployment targets
+app.include_router(edge_databases.router)  # Edge database connections
 app.include_router(cloudflare.router)  # One-click Cloudflare deploy
 
 # Mount DB-Synchronizer Service

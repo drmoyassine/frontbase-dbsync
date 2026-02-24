@@ -22,7 +22,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ..database.config import SessionLocal
-from ..models.models import DeploymentTarget
+from ..models.models import DeploymentTarget, EdgeDatabase
 
 router = APIRouter(prefix="/api/cloudflare", tags=["Cloudflare Deploy"])
 
@@ -40,9 +40,8 @@ class DeployRequest(BaseModel):
     api_token: str = Field(..., description="Cloudflare API token with Workers Scripts: Edit")
     account_id: Optional[str] = Field(None, description="Cloudflare account ID (auto-detected if omitted)")
     worker_name: str = Field(default="frontbase-edge", description="Worker script name")
-    # Turso credentials (passed as Worker secrets)
-    turso_url: Optional[str] = Field(None, description="Turso libsql:// URL")
-    turso_token: Optional[str] = Field(None, description="Turso auth token")
+    # Edge database to attach (from EdgeDatabase table)
+    edge_db_id: Optional[str] = Field(None, description="EdgeDatabase ID to attach (uses default if omitted)")
     # Upstash credentials (passed as Worker secrets)
     upstash_url: Optional[str] = Field(None, description="Upstash REST URL")
     upstash_token: Optional[str] = Field(None, description="Upstash REST token")
@@ -237,26 +236,45 @@ async def deploy_to_cloudflare(payload: DeployRequest):
         )
         print(f"[Cloudflare] ✅ Workers.dev URL: {worker_url}")
 
-        # 5. Set secrets
+        # 5. Set secrets from EdgeDatabase + Upstash
         secrets = {}
-        if payload.turso_url:
-            secrets["FRONTBASE_STATE_DB_URL"] = payload.turso_url
-        if payload.turso_token:
-            secrets["FRONTBASE_STATE_DB_TOKEN"] = payload.turso_token
+        edge_db_id_to_attach = None
+
+        # Resolve edge database credentials
+        db_session = SessionLocal()
+        try:
+            edge_db = None
+            if payload.edge_db_id:
+                edge_db = db_session.query(EdgeDatabase).filter(
+                    EdgeDatabase.id == payload.edge_db_id
+                ).first()
+                if not edge_db:
+                    raise HTTPException(400, f"Edge database '{payload.edge_db_id}' not found")
+            else:
+                # Use default edge database
+                edge_db = db_session.query(EdgeDatabase).filter(
+                    EdgeDatabase.is_default == True
+                ).first()
+
+            if edge_db:
+                secrets["FRONTBASE_STATE_DB_URL"] = edge_db.db_url
+                if edge_db.db_token:
+                    secrets["FRONTBASE_STATE_DB_TOKEN"] = edge_db.db_token
+                edge_db_id_to_attach = edge_db.id
+                print(f"[Cloudflare] Using edge database: {edge_db.name} ({edge_db.provider})")
+        finally:
+            db_session.close()
+
+        # Upstash Redis (from payload or settings)
         if payload.upstash_url:
             secrets["UPSTASH_REDIS_REST_URL"] = payload.upstash_url
         if payload.upstash_token:
             secrets["UPSTASH_REDIS_REST_TOKEN"] = payload.upstash_token
 
-        # Also try to pull Turso/Upstash from existing settings
-        if not payload.turso_url:
+        if not payload.upstash_url:
             try:
                 from ..routers.settings import load_settings
                 settings = load_settings()
-                turso_cfg = settings.get("turso", {})
-                if turso_cfg.get("turso_enabled") and turso_cfg.get("turso_url"):
-                    secrets["FRONTBASE_STATE_DB_URL"] = turso_cfg["turso_url"]
-                    secrets["FRONTBASE_STATE_DB_TOKEN"] = turso_cfg.get("turso_token", "")
                 redis_cfg = settings.get("redis", {})
                 if redis_cfg.get("redis_type") == "upstash" and redis_cfg.get("redis_url"):
                     secrets["UPSTASH_REDIS_REST_URL"] = redis_cfg["redis_url"]
@@ -281,6 +299,7 @@ async def deploy_to_cloudflare(payload: DeployRequest):
             now = datetime.utcnow().isoformat()
             if existing:
                 existing.is_active = True
+                existing.edge_db_id = edge_db_id_to_attach
                 existing.updated_at = now
                 target_id = existing.id
                 db.commit()
@@ -292,6 +311,7 @@ async def deploy_to_cloudflare(payload: DeployRequest):
                     provider="cloudflare",
                     adapter_type="edge",
                     url=worker_url,
+                    edge_db_id=edge_db_id_to_attach,
                     is_active=True,
                     created_at=now,
                     updated_at=now,

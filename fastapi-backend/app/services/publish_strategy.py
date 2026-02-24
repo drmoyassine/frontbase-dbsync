@@ -300,27 +300,32 @@ def get_publish_strategy() -> BasePublishStrategy:
 
     Auto-detects with priority:
       1. TURSO_DB_URL env var (for docker-compose.cloud.yml)
-      2. Turso settings in settings.json (from Settings UI)
+      2. Default EdgeDatabase row (from Settings UI)
       3. Default: local (HTTP POST to edge)
     """
     global _strategy
     if _strategy is None:
         turso_url = os.getenv("TURSO_DB_URL", "")
         
-        # If no env var, check settings.json
+        # If no env var, check EdgeDatabase table for default
         if not turso_url:
             try:
-                from ..routers.settings import load_settings
-                settings = load_settings()
-                turso_cfg = settings.get("turso", {})
-                if turso_cfg.get("turso_enabled") and turso_cfg.get("turso_url"):
-                    turso_url = turso_cfg["turso_url"]
-                    # Set env vars so TursoPublishStrategy picks them up
-                    os.environ["TURSO_DB_URL"] = turso_url
-                    os.environ["TURSO_DB_TOKEN"] = turso_cfg.get("turso_token", "")
-                    print("[PublishStrategy] Loaded Turso credentials from Settings UI")
+                from ..database.config import SessionLocal
+                from ..models.models import EdgeDatabase
+                db = SessionLocal()
+                try:
+                    default_db = db.query(EdgeDatabase).filter(
+                        EdgeDatabase.is_default == True
+                    ).first()
+                    if default_db and default_db.db_url:
+                        turso_url = default_db.db_url
+                        os.environ["TURSO_DB_URL"] = turso_url
+                        os.environ["TURSO_DB_TOKEN"] = default_db.db_token or ""
+                        print(f"[PublishStrategy] Loaded Turso credentials from EdgeDatabase: {default_db.name}")
+                finally:
+                    db.close()
             except Exception as e:
-                print(f"[PublishStrategy] Could not read settings.json: {e}")
+                print(f"[PublishStrategy] Could not read EdgeDatabase: {e}")
         
         if turso_url:
             _strategy = TursoPublishStrategy()

@@ -198,6 +198,28 @@ class TableSchemaCache(Base):
     is_valid = Column(Boolean, default=True)
 
 
+class EdgeDatabase(Base):
+    """Named edge database connection — credentials for edge deployment targets.
+    
+    Each row represents a configured edge-compatible database (Turso, Neon, etc.)
+    that deployment targets can reference. Replaces the old global Turso settings
+    in settings.json.
+    """
+    __tablename__ = 'edge_databases'
+    
+    id = Column(String, primary_key=True)
+    name = Column(String(100), nullable=False)          # "Production Turso", "Staging Neon"
+    provider = Column(String(50), nullable=False)        # "turso", "neon", "planetscale"
+    db_url = Column(String(500), nullable=False)         # "libsql://your-db.turso.io"
+    db_token = Column(String(1000), nullable=True)       # auth token (encrypted at rest)
+    is_default = Column(Boolean, default=False)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    
+    # Relationship
+    deployment_targets = relationship("DeploymentTarget", back_populates="edge_database")
+
+
 class DeploymentTarget(Base):
     """Edge deployment target — a registered edge provider endpoint.
     
@@ -213,11 +235,15 @@ class DeploymentTarget(Base):
     id = Column(String, primary_key=True)
     name = Column(String(100), nullable=False)         # "Production CF", "Staging Docker"
     provider = Column(String(50), nullable=False)       # "cloudflare", "vercel", "docker"
-    adapter_type = Column(String(20), nullable=False)   # "pages", "automations", "full"
+    adapter_type = Column(String(20), nullable=False)   # "edge", "automations", "full"
     url = Column(String(500), nullable=False)           # "https://my-site.pages.dev"
+    edge_db_id = Column(String, ForeignKey('edge_databases.id'), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
+    
+    # Relationship
+    edge_database = relationship("EdgeDatabase", back_populates="deployment_targets")
 
 
 # Import Actions models to register them with Base

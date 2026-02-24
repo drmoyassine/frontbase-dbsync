@@ -39,7 +39,7 @@ Frontbase is an open-source, edge-native platform for deploying AI-powered apps 
 ### 2.1 Edge Runtime Self-Sufficiency (HARD RULE)
 
 > [!CAUTION]
-> **The Edge Engine MUST run independently after publication.** It relies ONLY on its local database (SQLite/Turso) and Redis. It does NOT call back to FastAPI at runtime.
+> **The Edge Engine MUST run independently after publication.** It relies ONLY on its local database (SQLite/Turso) and Redis. It does NOT call back to FastAPI at runtime. Database credentials are managed via the `EdgeDatabase` table — each deployment target references a named edge database.
 
 **The published page bundle is treated as an immutable runtime artifact.**
 Runtime code may interpret it, but must not reshape or enrich it.
@@ -102,7 +102,7 @@ The Edge Engine has no knowledge of:
 | Dropping `viewportOverrides` during publish transform | Breaks responsive styling |
 | Hardcoding CSS in Edge instead of using cssBundle | Causes builder/SSR parity drift |
 | **Modifying SQLAlchemy models without Alembic migration** | **Causes production schema drift** |
-| **Editing deployed Alembic migrations** | **Create a NEW migration instead** |
+| **Editing deployed Alembic migrations** | **Create a NEW migration instead — downgrade/re-upgrade cycles on live DBs are fragile** |
 | **Hardcoded aesthetic styles in Builder renderers** | **Use `stylesData.values` defaults instead** |
 | **Enriching publish data without updating both schemas** | **Pydantic AND Zod must accept the enriched shape** |
 | **Assuming all components store config in `binding`** | **Form/InfoList store in `props`; always check both** |
@@ -462,6 +462,9 @@ if (componentName === 'Form' || componentName === 'form') {
 - @upstash/redis (HTTP)
 - **Adapter Pattern**: `IEdgeAdapter` interface — Docker (default), Cloudflare Workers, Vercel/Netlify (future)
 - **Deployment Targets**: `deployment_targets` table — multi-provider publish registry (LB-ready)
+- **Edge Databases**: `edge_databases` table — named DB connections (Turso, Neon, etc.), each target selects which DB to use via `edge_db_id` FK
+- **System Entries**: Default Local SQLite DB + Local Edge target are pre-seeded with `is_system=True` (undeletable)
+- **Cloudflare Worker**: Lightweight skeleton (`cloudflare-lite.ts`, ~337 KB) — Hono + `@libsql/client/web` + `@upstash/redis/cloudflare`, no React/LiquidJS/native Node bindings
 
 ---
 
@@ -596,7 +599,7 @@ For detailed implementation patterns, see:
 
 ---
 
-## 10. API Migration Checklist
+## 14. API Migration Checklist
 
 > [!IMPORTANT]
 > When moving API routes between services (e.g., Edge → FastAPI), follow this checklist. Writing the new code is ~30% of the work. The other 70% is updating the surrounding infrastructure.
@@ -653,4 +656,4 @@ curl http://localhost:5173/api/<new-prefix>/<endpoint>
 
 ---
 
-*Last Updated: 2026-02-21*
+*Last Updated: 2026-02-25*

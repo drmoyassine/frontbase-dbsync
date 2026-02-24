@@ -1,12 +1,41 @@
 # Frontbase Development Progress
 
-## 🎯 Current Status: PRODUCTION READY
+## 🎯 Current Status: EDGE-NATIVE PLATFORM
 
-**Date**: 2026-01-15  
-**Phase**: Component Stabilization & Edge Prep  
-**Status**: ✅ **ALL SYSTEMS OPERATIONAL - DataTable Refactored**
+**Date**: 2026-02-25  
+**Phase**: Multi-Database Edge Deployment  
+**Status**: ✅ **ALL SYSTEMS OPERATIONAL — EdgeDatabase, CF Worker, SSR Serving**
 
 ## 🏆 Major Achievements
+
+### Phase 11: Multi-Database Edge Deployment ✅ (2026-02-25)
+
+- **MODEL**: `EdgeDatabase` table — named edge DB connections (Turso, Neon, SQLite)
+- **MIGRATION**: Alembic 0018 — creates table, FK on `deployment_targets`, pre-seeds local defaults
+- **CRUD**: `/api/edge-databases/` router — list/create/update/delete/test-connection
+- **DEPLOY**: CF deploy accepts `edge_db_id`, fetches creds from EdgeDatabase table
+- **STRATEGY**: `TursoPublishStrategy` reads from EdgeDatabase instead of `settings.json`
+- **FRONTEND**: Edge DB dropdown replaces raw Turso URL/token fields in CF form
+- **SELF-HOSTED**: `is_system=True` — Local SQLite + Local Edge pre-seeded, undeletable
+- **Key Files**: `app/models/models.py`, `app/routers/edge_databases.py`, `app/routers/cloudflare.py`
+
+### Phase 10: Cloudflare Workers Integration ✅ (2026-02-23)
+
+- **WORKER**: Lightweight skeleton (`cloudflare-lite.ts`, ~337 KB)
+- **STACK**: Hono + `@libsql/client/web` + `@upstash/redis/cloudflare` (no Node built-ins)
+- **ONE-CLICK**: Settings UI → API token → auto-build → upload → secrets → register target
+- **FAN-OUT**: `fan_out_to_deployment_targets` includes `adapter_type='edge'`
+- **ENDPOINT**: Worker `/api/import` unwraps `ImportPagePayload` format
+- **Key Files**: `services/edge/src/adapters/cloudflare-lite.ts`, `app/routers/cloudflare.py`
+
+### Phase 9: Edge Architecture & SSR ✅ (2026-02-21)
+
+- **ARCHITECTURE**: 4 deployment modes (Cloud BYOE, Self-Hosted, Standalone, Distributed)
+- **ADAPTER PATTERN**: `IEdgeAdapter` interface — Docker (default), Cloudflare, Vercel (future)
+- **PUBLISH**: Fan-out to multiple deployment targets from single publish action
+- **SSR**: Hydration strategy (hydrateRoot for DataTable, createRoot for Form skeletons)
+- **CACHING**: Four-tier (React Query → Redis → CDN → SQLite/Turso)
+- **Key Files**: `memory-bank/edge-architecture.md`, `AGENTS.md`
 
 ### 0. API & Migration Consolidation ✅ (2026-01-09)
 

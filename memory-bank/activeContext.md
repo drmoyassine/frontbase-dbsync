@@ -1,188 +1,67 @@
-f# Active Context
+# Active Context
 
 This file tracks the project's current status, including recent changes, current goals, and open questions.
-2026-01-18 - 🔧 SETTINGS REFACTOR: Extracted shared hooks and forms for Settings components (SettingsPanel, dbsync Settings)
-2026-01-18 - 🎨 VARIABLE PICKER: Replaced inline styles with Tailwind CSS classes
-2026-01-15 - 🔧 DATATABLE REFACTOR: Split `DataTable.tsx` into modular components (`datatable/`)
-2026-01-15 - 🐛 ROUTING FIX: Fixed Nginx routing for `/api/database/*` to direct to FastAPI
-2026-01-14 - 🔍 ENHANCEMENT: Simultaneous Search & Filter in `frontbase_search_rows`
-2026-01-13 - 💧 ENHANCEMENT: Cascading Filters implementation
-2026-01-09 - 🔄 MIGRATION CONSOLIDATION: Unified into single Alembic system
-2026-01-09 - 🛤️ TRAILING SLASH FIXES: Fixed 25+ routes to prevent 307 redirects
-2026-01-09 - 📝 AUTH FORMS: Fixed response format and trashed pages display
-2026-01-06 - 🔒 RLS SINGLE POLICY BUILDER: Fixed user validation bug (button disabled)
-2026-01-06 - 🔒 RLS BATCH POLICY BUILDER: Fixed TypeScript property mismatch (`authIdColumn` → `authUserIdColumn`)
-2026-01-06 - 🔄 ALEMBIC MIGRATIONS: Automated database migrations for VPS deployments
-2026-01-02 - 🎨 BUILDER UI/UX REVAMP: Visual CSS Styling, Responsive Viewport, Container Styles
-2026-01-01 - 🔒 DEPENDENCY HARDENING: Updated requirements and setup for cross-platform robustness
-2025-12-25 05:20:00 - INITIAL COMMIT READY: FastAPI + React Query Migration Complete
+
+> Last Updated: 2026-02-25
 
 ## Current Focus
 
-**🔧 DATATABLE REFACTOR & STABILITY**
+**🌐 MULTI-DATABASE EDGE DEPLOYMENT (Phase 5.5)**
 
-- **COMPLETED**: Modularized `DataTable.tsx` into `datatable/` directory
-- **COMPLETED**: Fixed Nginx routing issue for builder data fetching
-- **COMPLETED**: Implemented simultaneous search & filtering
-- **STATUS**: Storage API fully expanded and Verified. Core components stable.
+- **COMPLETED**: `EdgeDatabase` model — named edge DB connections (Turso, Neon, SQLite)
+- **COMPLETED**: Alembic migration 0018 (table, FK to `deployment_targets`, pre-seed local defaults)
+- **COMPLETED**: CRUD router `/api/edge-databases/` (list/create/update/delete/test-connection)
+- **COMPLETED**: Cloudflare deploy accepts `edge_db_id`, fetches creds from EdgeDatabase table
+- **COMPLETED**: `TursoPublishStrategy` reads from EdgeDatabase instead of `settings.json`
+- **COMPLETED**: Frontend dropdown replaces raw Turso URL/token inputs in CF deploy form
+- **COMPLETED**: `is_system` flag — Local SQLite DB + Local Edge target pre-seeded, undeletable
+- **IN PROGRESS**: Frontend Edge Databases management panel (add/edit/delete in Settings)
+- **TODO**: Remove old Turso settings endpoints from `settings.py`
 
-**🏗️ MODULAR BUILDER REFACTORING (Phase 8)**
-- **COMPLETED**: Components (`renderers/`), Properties (`properties/`), Templates (`templates/`)
-- **COMPLETED**: Registry Pattern implementation
-- **COMPLETED**: Visual Styling Panel integration
-- **STATUS**: Refactoring complete. Documentation and final verification in progress.
+**☁️ CLOUDFLARE WORKERS INTEGRATION (Phase 5–6)**
 
-**📄 DOCUMENTATION & STABILIZATION**
+- **COMPLETED**: Lightweight Worker skeleton (`cloudflare-lite.ts`, ~337 KB)
+- **COMPLETED**: Hono + `@libsql/client/web` + `@upstash/redis/cloudflare` (no Node.js built-ins)
+- **COMPLETED**: One-click deploy from Settings UI (API token → auto-build → upload → secrets → target)
+- **COMPLETED**: Publish fan-out wired: `fan_out_to_deployment_targets` includes `adapter_type='edge'`
+- **COMPLETED**: Worker `/api/import` handles `ImportPagePayload` format from publish pipeline
+- **TODO**: Verify end-to-end: publish page → Worker serves it at `/ssr/{slug}`
 
-- **COMPLETED**: PostgreSQL Migration (Dual Driver Support)
-- **COMPLETED**: Redis Unification (UI-driven, HTTP/TCP fallback)
-- **IN PROGRESS**: Comprehensive Documentation Update (Memory Bank + Repo Docs)
+**🎨 CSS SYSTEM MODERNIZATION**
 
-**🔄 MIGRATION & API CONSOLIDATION COMPLETE**
+- **COMPLETED**: Refactored CSS registry, extracted utilities
+- **COMPLETED**: Tailwind v4 `@source inline()` for responsive variants
 
-- **COMPLETED**: Unified two migration systems into single Alembic system
-- **COMPLETED**: Fixed 25+ routes with missing trailing slashes
-- **COMPLETED**: Fixed auth_forms API response format
-- **COMPLETED**: Fixed trashed pages display (includeDeleted param)
-- **STATUS**: All changes pushed to main, MIGRATIONS.md documentation created
+## Current Environment
 
-### Current Environment Status
+| Component | Port | Status |
+|-----------|------|--------|
+| FastAPI Backend | 8000 | ✅ Primary — PostgreSQL (Prod) / SQLite (Dev) |
+| Vite Frontend | 5173 | ✅ Active — dev server with HMR |
+| Edge Engine (Docker) | 3002 | ✅ Active — Hono SSR + Workflows |
+| Cloudflare Worker | — | ✅ Deployable — lightweight skeleton |
 
-- **FastAPI Backend (Port 8000)**: ✅ Primary - PostgreSQL (Prod) / SQLite (Dev)
-- **Express.js Backend (Port 3001)**: ⚠️ Legacy - Archived in `Dockerfile.legacy`
-- **Frontend (Port 5173)**: ✅ Active - Vite dev server or Nginx (Prod)
-- **Builder**: ✅ **MODULARIZED** - Phase 8 Refactoring Complete (One Component Per File)
+## Recent Changes (Feb 2026)
 
-## Recent Changes
+- **2026-02-25**: Multi-database edge deployment — `EdgeDatabase` model, CRUD router, CF deploy with `edge_db_id`, self-hosted pre-seeding
+- **2026-02-24**: Publish fan-out wired to CF Worker — scope filter, `/api/import` endpoint, `ImportPagePayload` format
+- **2026-02-23**: Cloudflare Worker one-click deploy — lightweight bundle, Settings UI, deployment targets
+- **2026-02-22**: CSS refactoring — dead code removal, modular registry, Tailwind v4 `@source inline()`
+- **2026-02-21**: Edge architecture finalized — 4 deployment modes, adapter pattern, `AGENTS.md` updated
+- **2026-02-20**: Tailwind responsive variants fix — `@source inline()` extracts classes from rendered HTML
+- **2026-02-15**: SaaS architecture — connector taxonomy, license key model, Redis strategy
 
-**2026-01-29 - 🏗️ MODULAR BUILDER REFACTORING (Phase 8)**
+## Key Design Decisions (Recent)
 
-- **ARCHITECTURE**: Decoupled monolithic files into "One File Per X" structure (Renderers, Templates, Properties)
-- **CODE REDUCTION**: `PropertiesPanel.tsx` (1140 → 299 lines), `sectionTemplates.ts` (split into 12 files)
-- **REGISTRY**: Implemented explicit component registry for type safety
-- **STYLING**: Centralized style processing logic in `styleProcessor.ts`
-- **DOCS**: Created `developmentPatterns.md` guide
+| Decision | Rationale |
+|----------|-----------|
+| `EdgeDatabase` replaces global Turso `settings.json` | Multiple named DBs per project, FK from `deployment_targets` |
+| `is_system` flag on EdgeDatabase + DeploymentTarget | Self-hosted local edge is pre-configured and undeletable |
+| Lightweight CF Worker (no React/LiquidJS) | Avoids Node.js built-ins, stays under 1MB bundle |
+| Edge DB credentials in table, not env vars | UI-managed, per-target selection, migration-safe |
 
-**2026-01-28 - 🐘 POSTGRESQL & REDIS UNIFICATION (Phase 7)**
+## Open Questions
 
-- **DATABASE**: Implemented Dual-Driver Strategy (`asyncpg` for App, `psycopg2` for Alembic)
-- **REDIS**: Implemented UI-driven configuration with HTTP (Edge) and TCP (Backend) fallback
-- **SCHEMA**: Fixed Pydantic datetime validation for PostgreSQL compatibility
-- **DOCS**: Created `database_patterns.md` and updated `documentation_refresh_plan.md`
-
-**2026-01-15 - 🔧 DATATABLE REFACTOR**
-
-- **MODULARIZATION**: Split massive `DataTable.tsx` into smaller, focused components
-- **STRUCTURE**: Created `components/datatable/` directory
-- **EXTRACTED**: `SearchableSelect`, `SearchableMultiSelect`, `Pagination`, `EmptyState`
-- **TYPES**: Centralized types in `types.ts`
-
-**2026-01-15 - 🐛 ROUTING & DATA FETCHING**
-
-- **NGINX FIX**: Corrected `/api/database/*` routing to ensure requests hit FastAPI
-- **RPC UPDATE**: Optimized `frontbase_get_rows` for cascading filters
-- **SEARCH**: Implemented simultaneous server-side search and filtering
-
-**2026-01-09 - 🔄 MIGRATION CONSOLIDATION**
-
-- **UNIFIED**: Consolidated `unified_schema.sql` + `migrate.py` into Alembic
-- **NEW MIGRATION**: `0001_frontbase_core_tables.py` (15 tables, idempotent)
-- **DOCS**: Created `MIGRATIONS.md` with comprehensive documentation
-- **CLEANUP**: Moved deprecated files to `app/database/_deprecated/`
-- **ENTRYPOINT**: Simplified to only run `alembic upgrade head`
-
-**2026-01-09 - 🛤️ TRAILING SLASH FIXES (25+ routes)**
-
-- **ISSUE**: FastAPI 307 redirects breaking frontend API calls
-- **FIX**: Added trailing slashes to all parameterized routes
-- **ROUTES FIXED**:
-  - `main.py`: `/health/`
-  - `sync/main.py`: `/health/`
-  - `pages.py`: `/{page_id}/`, `/layout/`, `/restore/`, `/permanent/`
-  - `database.py`: `/table-schema/{table_name}/`, `/table-data/{table_name}/`
-  - `testing.py`: `/{datasource_id}/test/`, `/test-update/`
-  - Plus all sync service routes (views, datasources, sync_configs, etc.)
-
-**2026-01-09 - 📝 AUTH FORMS API FIX**
-
-- **500 ERROR**: Fixed missing `auth_forms` table (now in Alembic)
-- **RESPONSE FORMAT**: Changed from raw data to `{success: true, data: ...}`
-- **FRONTEND**: Fixed `getPages()` to pass `includeDeleted` param for trashed pages
-
-**2026-01-06 - 🔒 RLS SINGLE POLICY BUILDER FIX**
-
-- **FIX**: Resolved "Create Policy" button disabled bug in `RLSPolicyBuilder.tsx`
-- **ISSUE**: Validation logic ignored `actorConditionGroup` (Visual Builder "Who" conditions)
-- **SOLUTION**: Added `actorConditionGroup` and `isUnauthenticated` checks to `isValid` logic
-- **COMMIT**: Pushed fix to main branch (`886e2b8`)
-
-**2026-01-06 - 🔒 RLS BATCH POLICY BUILDER FIX**
-
-- **FIX**: Resolved TypeScript error in `RLSBatchPolicyBuilder.tsx` line 159
-- **ISSUE**: Property `authIdColumn` did not exist on `columnMapping` type
-- **SOLUTION**: Changed `config?.columnMapping?.authIdColumn` to `config?.columnMapping?.authUserIdColumn`
-- **COMMIT**: Pushed fix to main branch (`9e80d59`)
-
-**2026-01-06 - 🔄 ALEMBIC MIGRATIONS IMPLEMENTED**
-
-- **SETUP**: Installed Alembic with SQLite batch mode support (`render_as_batch=True`)
-- **AUTO-DEPLOY**: Migrations run automatically via `docker_entrypoint.sh` on container start
-- **FIX**: Resolved VPS 500 error by adding `columns` and `foreign_keys` to `table_schema_cache`
-- **PATTERN**: Minimal, surgical migrations using raw SQL for SQLite compatibility
-- **WORKFLOW**: Generate locally → Review → Commit → Deploy automatically
-
-**2026-01-02 - 🎨 BUILDER UI/UX REVAMP COMPLETE**
-
-- **VISUAL STYLING**: Implemented metadata-driven preset CSS properties engine
-- **CONTAINER STYLES**: Zero-migration nested JSON persistence (`layoutData.root.containerStyles`)
-- **RESPONSIVE BUILDER**: Auto-switching viewport (mobile <768px, tablet 768-1024px, desktop >1024px)
-- **CANVAS UX**: Grid bounds fixed to viewport, double-click to add components
-- **DND MIGRATION**: Completed @dnd-kit migration from legacy react-dnd
-- **CODE CLEANUP**: Removed unused imports (Magnet, snapToGrid, Button, Badge)
-- **DOCS UPDATED**: agent.md with new sections 3-5 for styling, container styles, responsive builder
-
-**2025-12-27 - 🐳 Docker Organization & VPS Readiness**
-
-- **REFACTORED**: Docker configuration to separate Production (FastAPI) from Legacy (Express).
-- **RENAMED**: `docker-compose.prod.yml` → `docker-compose.yml` (Main).
-- **RENAMED**: Legacy files to `Dockerfile.legacy` and `docker-compose.legacy.yml`.
-- **CREATED**: `Dockerfile.frontend` and `nginx.conf` for VPS deployment.
-- **UPDATED**: `agent.md` and Memory Bank with new architecture details.
-
-**2025-12-25 05:20:00 - 🚀 INITIAL COMMIT PREPARATION**
-
-- **MIGRATED**: Data layer to React Query (`useDatabase.ts` hooks)
-- **FIXED**: Foreign key "dashes" bug (joins now in PostgREST `select` clause)
-- **UPDATED**: README.md with FastAPI setup instructions
-- **CLEANED**: Removed debug components from push (kept locally)
-- **OPTIMIZED**: Gitignore for clean repository
-
-**2025-12-25 04:40:00 - 🔧 React Query Migration**
-
-- **CREATED**: `src/hooks/useDatabase.ts` with:
-  - `useGlobalSchema()` - FK relationship fetching
-  - `useTables()` - Table list fetching
-  - `useTableSchema()` - Column schema fetching
-  - `useTableData()` - Data with automatic FK joins
-- **REFACTORED**: `useSimpleData.ts` to use React Query hooks
-- **UPDATED**: `TableSelector.tsx` to use `useTables()` hook
-
-**2025-12-24 - Express to FastAPI Migration**
-
-- Completed full backend migration
-- Updated Vite proxy to point to FastAPI (port 8000)
-- Archived Express server for reference
-
-## Open Questions/Issues
-
-**Resolved ✅**
-
-- ✅ FK data showing dashes → Fixed with proper `select` clause
-- ✅ Table selector not showing active table → Fixed with React Query
-- ✅ Console logging spam → Removed debug logs
-
-**Post-Push Verification**
-
-- Deploy in fresh environment to confirm no Express dependencies
-- Test all Supabase features end-to-end
-- Verify authentication flow with FastAPI
+- Edge Databases management UI design: cards vs table layout in Settings?
+- When to clean up old Turso settings endpoints from `settings.py`?
+- Phase 6 verification: pre-render HTML at publish time for Worker serving

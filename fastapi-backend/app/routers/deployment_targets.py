@@ -49,7 +49,9 @@ class DeploymentTargetResponse(BaseModel):
     provider: str
     adapter_type: str
     url: str
+    edge_db_id: Optional[str] = None
     is_active: bool
+    is_system: bool = False
     created_at: str
     updated_at: str
 
@@ -146,6 +148,9 @@ async def delete_deployment_target(target_id: str):
         target = db.query(DeploymentTarget).filter(DeploymentTarget.id == target_id).first()
         if not target:
             raise HTTPException(status_code=404, detail="Deployment target not found")
+
+        if target.is_system:
+            raise HTTPException(status_code=403, detail="Cannot delete a system deployment target")
 
         db.delete(target)
         db.commit()

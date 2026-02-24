@@ -191,6 +191,9 @@ async def delete_edge_database(db_id: str):
         if not edge_db:
             raise HTTPException(404, f"Edge database '{db_id}' not found")
         
+        if edge_db.is_system:
+            raise HTTPException(403, "Cannot delete a system edge database")
+        
         # Check for referencing targets
         target_count = db.query(DeploymentTarget).filter(
             DeploymentTarget.edge_db_id == db_id

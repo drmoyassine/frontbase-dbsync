@@ -213,6 +213,7 @@ class EdgeDatabase(Base):
     db_url = Column(String(500), nullable=False)         # "libsql://your-db.turso.io"
     db_token = Column(String(1000), nullable=True)       # auth token (encrypted at rest)
     is_default = Column(Boolean, default=False)
+    is_system = Column(Boolean, default=False)            # True = pre-seeded, cannot be deleted
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     
@@ -239,6 +240,7 @@ class DeploymentTarget(Base):
     url = Column(String(500), nullable=False)           # "https://my-site.pages.dev"
     edge_db_id = Column(String, ForeignKey('edge_databases.id'), nullable=True)
     is_active = Column(Boolean, default=True)
+    is_system = Column(Boolean, default=False)           # True = pre-seeded, cannot be deleted
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     

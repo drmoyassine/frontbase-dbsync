@@ -115,6 +115,7 @@ The Edge Engine has no knowledge of:
 | **`useQuery` without `retry` and `refetchOnWindowFocus` limits** | **Default React Query settings flood the backend on errors. Always set `retry: 1` and `refetchOnWindowFocus: false` for non-critical queries** |
 | **Assuming Supabase keys are always JWTs (`eyJ...`)** | **Newer Supabase keys use `sb_secret_` prefix. Never validate key format by counting dots** |
 | **`decrypt_data` returning raw encrypted blob on failure without flag** | **Callers must compare output to input to detect silent failures: `if decrypted != encrypted_input`** |
+| **Using `import.meta.env.VITE_API_URL`, `VITE_API_BASE_URL`, or hardcoded `http://localhost:*` for API calls in frontend components** | **Causes mixed content errors (http on https) in production. Always use relative URLs (`''` base) for API calls — Vite proxy handles dev, reverse proxy handles prod. For full-origin URLs (e.g. embed codes), use `window.location.origin`. The ONLY safe centralized helper is `getFastApiBaseUrl()` from `portConfig.ts`** |
 
 ---
 

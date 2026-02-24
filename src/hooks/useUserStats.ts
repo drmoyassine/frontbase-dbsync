@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useUserContactConfig } from './useUserContactConfig';
+import { useDashboardStore } from '@/stores/dashboard';
 import { databaseApi } from '@/services/database-api';
 
 export function useUserStats() {
   const { isConfigured } = useUserContactConfig();
+  const supabaseConnected = useDashboardStore(s => s.connections?.supabase?.connected);
   const [stats, setStats] = useState({
     totalUsers: 0,
     recentUsers: 0,
@@ -12,6 +14,12 @@ export function useUserStats() {
   });
 
   useEffect(() => {
+    // Skip RPC call if no database connection — avoids 404 console noise
+    if (!supabaseConnected) {
+      setStats(prev => ({ ...prev, loading: false, error: null }));
+      return;
+    }
+
     async function fetchStats() {
       try {
         setStats(prev => ({ ...prev, loading: true }));
@@ -19,7 +27,6 @@ export function useUserStats() {
         const result: any = await databaseApi.advancedQuery('frontbase_get_auth_stats', {});
 
         if (result.success) {
-          // The API returns the RPC result properties at the root level
           setStats({
             totalUsers: Number(result.total_users || 0),
             recentUsers: Number(result.new_users || 0),
@@ -27,26 +34,26 @@ export function useUserStats() {
             error: null
           });
         } else {
-          // Fallback if success is false
           const errorMsg = result.message || result.error || 'Unknown error';
-          console.warn('Failed to fetch stats:', errorMsg);
+          console.warn('[useUserStats] Stats unavailable:', errorMsg);
           setStats(prev => ({ ...prev, loading: false, error: errorMsg }));
         }
       } catch (err) {
-        console.error('Failed to fetch auth stats via RPC:', err);
+        // Don't spam console — this is expected when RPC function doesn't exist
+        console.warn('[useUserStats] Stats unavailable (RPC not configured)');
         setStats(prev => ({
           ...prev,
           loading: false,
-          error: 'Could not load stats from Supabase Auth'
+          error: null // Not a real error — just not available
         }));
       }
     }
 
     fetchStats();
-  }, []); // Run once on mount
+  }, [supabaseConnected]);
 
   return {
     ...stats,
-    isConfigured // Pass through for UI logic if needed, though stats are now independent
+    isConfigured
   };
 }

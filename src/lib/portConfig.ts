@@ -1,18 +1,21 @@
 // Single Source of Truth for Port Configuration
 // This file ensures all components use the same port numbers
+//
+// IMPORTANT: In production, all API calls MUST use relative URLs (empty string)
+// to avoid mixed content (http:// on an https:// page). The reverse proxy
+// handles routing to the correct backend service.
 
 const isProd = import.meta.env.PROD;
-const apiBaseUrl = import.meta.env.VITE_API_URL || '';
 
 export const PORT_CONFIG = {
   express: {
     port: 3001,
-    baseUrl: isProd ? apiBaseUrl : `http://localhost:3001`,
+    baseUrl: isProd ? '' : `http://localhost:3001`,
     description: "Express.js backend for Frontbase"
   },
   fastapi: {
     port: 8000,
-    baseUrl: isProd ? apiBaseUrl : `http://localhost:8000`,
+    baseUrl: isProd ? '' : '',  // Always relative — Vite proxy in dev, reverse proxy in prod
     description: "FastAPI backend for DB-Synchronizer"
   },
   frontend: {

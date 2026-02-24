@@ -358,7 +358,7 @@ async def fan_out_to_deployment_targets(payload: dict, scope: str = "pages") -> 
         # Query active targets matching the scope
         query = db.query(DeploymentTarget).filter(DeploymentTarget.is_active == True)
         if scope == "pages":
-            query = query.filter(DeploymentTarget.adapter_type.in_(["pages", "full"]))
+            query = query.filter(DeploymentTarget.adapter_type.in_(["pages", "edge", "full"]))
         elif scope == "automations":
             query = query.filter(DeploymentTarget.adapter_type.in_(["automations", "full"]))
         

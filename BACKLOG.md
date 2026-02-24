@@ -92,7 +92,15 @@ Covers provider state mismatch, quota fallback, and operational visibility.
 - [ ] **Multi-Provider Load Balancing** — DNS-level weighted routing across multiple edge providers (Cloudflare + Vercel + Netlify). Uses `deployment_targets` table hooks (add `weight`, `quota_limit`, `quota_used` columns). Advanced feature for high-traffic deployments.
 - [ ] **Vercel Edge Adapter** — New `IEdgeAdapter` implementation for Vercel Edge Functions.
 - [ ] **Netlify Edge Adapter** — New `IEdgeAdapter` implementation for Netlify Edge Functions.
-- [ ] **Automations Worker Adapter** — Separate Worker deployment for workflow execution routes (`/api/execute`, `/api/webhook`).
+- [ ] **Automations-Only Bundle Template** — Separate Worker bundle for workflow-only deployments. Strips React + ReactDOM (~500 KB), LiquidJS (~150 KB), SSR routes, component renderers (~100 KB), client hydration bundle, page store, and Tailwind processing (~100 KB). Keeps: Hono, Drizzle + libsql, Upstash, workflow engine, execute/webhook/health routes. Estimated ~1.1 MB vs ~2.2 MB full bundle. Needs new `cloudflare-automations.ts` adapter entry point + `tsup.cloudflare-automations.ts` config. UI: scope selector when connecting Cloudflare (Full / Pages Only / Automations Only).
+- [ ] **Extract Shared Edge Core** — Refactor `cloudflare-lite.ts` into `shared/edge-core.ts` (Hono app, routes, DB/cache logic) + thin adapter wrappers per provider (CF, Vercel, Netlify, Supabase Edge). Each wrapper is ~3 lines.
+- [ ] **Edge `/api/config` Endpoint** — Receive project settings updates (favicon, analytics ID, custom domain) without redeploying the Worker.
+- [ ] **Edge CORS Origin Configuration** — Currently allows all origins. Should be configurable per deployment target via project settings.
+- [ ] **Edge Request Logging** — Structured `console.log` with timestamp, slug, response time, cache hit/miss. Lightweight, no external deps.
+
+## SEO & Discoverability
+- [ ] **`/robots.txt` on Edge** — Auto-generated from project settings. Served by the Edge Worker, configurable (allow/disallow paths).
+- [ ] **`/sitemap.xml` on Edge** — Auto-generated from published page slugs in Turso. Served by the Edge Worker, updated on each publish.
 
 ## Enterprise & Security
 - [ ] **Enterprise Secrets Management** — Self-hosted Infisical integration for deploy-time secrets injection, E2E encrypted storage, audit logs.

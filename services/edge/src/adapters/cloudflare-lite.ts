@@ -51,11 +51,17 @@ app.get('/api/health', (c) => {
 });
 
 // -----------------------------------------------------------------------------
-// Deploy webhook — receives page data from backend publish pipeline
+// Import endpoint — receives page data from backend publish fan-out
+// Accepts ImportPagePayload format: { page: { slug, ... }, force: true }
+// Also accepts flat format: { slug, ... }
 // -----------------------------------------------------------------------------
-app.post('/api/deploy', async (c) => {
+app.post('/api/import', async (c) => {
     try {
-        const payload = await c.req.json();
+        const raw = await c.req.json();
+
+        // Unwrap ImportPagePayload format: { page: { ... }, force: true }
+        const payload = raw?.page ? raw.page : raw;
+
         if (!payload || !payload.slug) {
             return c.json({ error: 'Missing slug in payload' }, 400);
         }
@@ -106,7 +112,7 @@ app.post('/api/deploy', async (c) => {
                 typeof payload.datasources === 'string' ? payload.datasources : JSON.stringify(payload.datasources || null),
                 payload.version || 1,
                 payload.publishedAt || new Date().toISOString(),
-                payload.isPublic ? 1 : 0,
+                payload.isPublic !== false ? 1 : 0,
                 payload.isHomepage ? 1 : 0,
             ],
         });
@@ -120,9 +126,10 @@ app.post('/api/deploy', async (c) => {
             } catch { /* Redis optional */ }
         }
 
+        console.log(`[Import] ✅ Page imported: ${payload.slug}`);
         return c.json({ success: true, slug: payload.slug });
     } catch (err: any) {
-        console.error('[Deploy] Error:', err);
+        console.error('[Import] Error:', err);
         return c.json({ error: err.message }, 500);
     }
 });

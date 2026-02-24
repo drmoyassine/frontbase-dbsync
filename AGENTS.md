@@ -116,6 +116,7 @@ The Edge Engine has no knowledge of:
 | **Assuming Supabase keys are always JWTs (`eyJ...`)** | **Newer Supabase keys use `sb_secret_` prefix. Never validate key format by counting dots** |
 | **`decrypt_data` returning raw encrypted blob on failure without flag** | **Callers must compare output to input to detect silent failures: `if decrypted != encrypted_input`** |
 | **Using `import.meta.env.VITE_API_URL`, `VITE_API_BASE_URL`, or hardcoded `http://localhost:*` for API calls in frontend components** | **Causes mixed content errors (http on https) in production. Always use relative URLs (`''` base) for API calls — Vite proxy handles dev, reverse proxy handles prod. For full-origin URLs (e.g. embed codes), use `window.location.origin`. The ONLY safe centralized helper is `getFastApiBaseUrl()` from `portConfig.ts`** |
+| **Frontend `fetch`/`axios` calls to FastAPI routes WITHOUT matching trailing slashes** | **FastAPI sends 307 redirects to add the trailing slash. Behind a reverse proxy (Easypanel/nginx), the redirect URL uses `http://` instead of `https://` → mixed content. Always match the exact route definition: if the router has `@router.get("/")` the full path needs a trailing slash (e.g. `/api/deployment-targets/` not `/api/deployment-targets`). Compare your fetch URL to the route definition before committing.** |
 
 ---
 

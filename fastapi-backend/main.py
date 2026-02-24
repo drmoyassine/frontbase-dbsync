@@ -100,6 +100,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ProxyHeadersMiddleware: trust X-Forwarded-Proto from reverse proxy
+# so FastAPI constructs redirects with https:// instead of http://
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
+
 
 # Custom middleware to internally add trailing slash to paths
 # This prevents 307 redirects by normalizing paths before routing
@@ -113,7 +118,7 @@ class TrailingSlashMiddleware:
     Note: Excludes /api/auth/ routes which don't use trailing slashes.
     """
     # Paths that should NOT have trailing slashes added
-    EXCLUDE_PREFIXES = ["/api/auth", "/api/actions", "/api/storage", "/api/deployment-targets", "/api/cloudflare", "/api/edge-databases"]
+    EXCLUDE_PREFIXES = ["/api/auth", "/api/actions", "/api/storage", "/api/deployment-targets", "/api/cloudflare", "/api/edge-databases", "/api/settings"]
     
     def __init__(self, app: ASGIApp):
         self.app = app

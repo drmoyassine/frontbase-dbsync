@@ -15,6 +15,7 @@ import {
 import {
     useEdgeEngines,
     useEdgeProviders,
+    useEdgeDatabases,
     edgeInfrastructureApi,
     EdgeEngine,
 } from '@/hooks/useEdgeInfrastructure';
@@ -42,7 +43,7 @@ export function EdgeEnginesSection() {
     // Form
     const [selectedProviderId, setSelectedProviderId] = useState<string>('');
     const [workerName, setWorkerName] = useState('frontbase-edge');
-    const [edgeDbs, setEdgeDbs] = useState<any[]>([]);
+    const { data: edgeDbs = [] } = useEdgeDatabases();
     const [selectedDbId, setSelectedDbId] = useState<string>('default');
 
     // Auto-select first provider when list loads
@@ -52,14 +53,13 @@ export function EdgeEnginesSection() {
         }
     }, [validProviders, selectedProviderId]);
 
-    // Fetch Edge DBs once on mount (no deps that change → no loop)
+    // Auto-select default DB when data loads from cache
     React.useEffect(() => {
-        fetch(`${API_BASE}/api/edge-databases/`).then(r => r.json()).then(data => {
-            setEdgeDbs(data);
-            const def = data.find((d: any) => d.is_default);
+        if (edgeDbs.length > 0 && selectedDbId === 'default') {
+            const def = edgeDbs.find((d: any) => d.is_default);
             if (def) setSelectedDbId(def.id);
-        }).catch(() => { });
-    }, []);
+        }
+    }, [edgeDbs, selectedDbId]);
 
     const handleDeploy = async () => {
         setIsDeploying(true);

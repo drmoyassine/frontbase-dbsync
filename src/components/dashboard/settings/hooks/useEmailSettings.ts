@@ -62,6 +62,9 @@ export function useEmailSettings(): UseEmailSettingsReturn {
     const { data: settings, isLoading } = useQuery({
         queryKey: ['emailSettings'],
         queryFn: () => settingsApi.getEmail().then(r => r.data),
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
 
     // Sync state from server

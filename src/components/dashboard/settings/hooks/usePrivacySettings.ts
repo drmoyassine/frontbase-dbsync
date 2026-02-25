@@ -75,6 +75,9 @@ export function usePrivacySettings(): UsePrivacySettingsReturn {
     const { data: settings, isLoading } = useQuery({
         queryKey: ['privacySettings'],
         queryFn: () => settingsApi.getPrivacy().then(r => r.data),
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
 
     // Sync state from server

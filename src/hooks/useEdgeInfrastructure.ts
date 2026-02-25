@@ -94,6 +94,13 @@ export const edgeInfrastructureApi = {
         const res = await fetch(`${API_BASE}/api/edge-engines/${id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error('Failed to delete engine');
     },
+
+    // Edge Databases
+    getEdgeDatabases: async (): Promise<any[]> => {
+        const res = await fetch(`${API_BASE}/api/edge-databases/`);
+        if (!res.ok) throw new Error('Failed to fetch edge databases');
+        return res.json();
+    },
 };
 
 // ============================================================================
@@ -114,6 +121,16 @@ export function useEdgeEngines() {
     return useQuery({
         queryKey: ['edge-engines'],
         queryFn: edgeInfrastructureApi.getEngines,
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+}
+
+export function useEdgeDatabases() {
+    return useQuery({
+        queryKey: ['edge-databases'],
+        queryFn: edgeInfrastructureApi.getEdgeDatabases,
         staleTime: 5 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,

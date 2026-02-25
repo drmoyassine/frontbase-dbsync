@@ -117,6 +117,20 @@ The Edge Engine has no knowledge of:
 | **`decrypt_data` returning raw encrypted blob on failure without flag** | **Callers must compare output to input to detect silent failures: `if decrypted != encrypted_input`** |
 | **Using `import.meta.env.VITE_API_URL`, `VITE_API_BASE_URL`, or hardcoded `http://localhost:*` for API calls in frontend components** | **Causes mixed content errors (http on https) in production. Always use relative URLs (`''` base) for API calls — Vite proxy handles dev, reverse proxy handles prod. For full-origin URLs (e.g. embed codes), use `window.location.origin`. The ONLY safe centralized helper is `getFastApiBaseUrl()` from `portConfig.ts`** |
 | **Frontend `fetch`/`axios` calls to FastAPI routes WITHOUT matching trailing slashes** | **FastAPI sends 307 redirects to add the trailing slash. Behind a reverse proxy (Easypanel/nginx), the redirect URL uses `http://` instead of `https://` → mixed content. Always match the exact route definition: if the router has `@router.get("/")` the full path needs a trailing slash (e.g. `/api/deployment-targets/` not `/api/deployment-targets`). Compare your fetch URL to the route definition before committing.** |
+| **Committing Python or TypeScript changes without running type checkers** | **ALWAYS run `npx pyright <file>` on modified Python files AND `npx tsc --noEmit` on modified TypeScript/TSX files BEFORE committing. Zero errors required — fix all errors before pushing. SQLAlchemy Column types must be cast to plain Python types (`str()`, `bool()`) when passed to functions or used in conditionals.** |
+
+---
+
+### 3.1 Mandatory Pre-Commit Verification
+
+**EVERY commit must pass type checking. No exceptions.**
+
+| Language | Command | Notes |
+|----------|---------|-------|
+| Python (FastAPI) | `npx pyright <modified-files>` | Must show `0 errors`. Cast SQLAlchemy `Column[T]` → `T` with `str()`, `bool()`, or `# type: ignore[assignment]` |
+| TypeScript/TSX | `npx tsc --noEmit` | Must show no errors |
+
+If either check fails, **fix the errors before committing**. Do not push code with type errors.
 
 ---
 

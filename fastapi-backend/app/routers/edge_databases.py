@@ -71,15 +71,15 @@ async def list_edge_databases():
                 DeploymentTarget.edge_db_id == edb.id
             ).count()
             result.append(EdgeDatabaseResponse(
-                id=edb.id,
-                name=edb.name,
-                provider=edb.provider,
-                db_url=edb.db_url,
+                id=str(edb.id),
+                name=str(edb.name),
+                provider=str(edb.provider),
+                db_url=str(edb.db_url),
                 has_token=bool(edb.db_token),
-                is_default=edb.is_default,
+                is_default=bool(edb.is_default),
                 is_system=bool(edb.is_system),
-                created_at=edb.created_at,
-                updated_at=edb.updated_at,
+                created_at=str(edb.created_at),
+                updated_at=str(edb.updated_at),
                 target_count=target_count,
             ))
         return result
@@ -119,15 +119,15 @@ async def create_edge_database(payload: EdgeDatabaseCreate):
         db.refresh(edge_db)
         
         return EdgeDatabaseResponse(
-            id=edge_db.id,
-            name=edge_db.name,
-            provider=edge_db.provider,
-            db_url=edge_db.db_url,
+            id=str(edge_db.id),
+            name=str(edge_db.name),
+            provider=str(edge_db.provider),
+            db_url=str(edge_db.db_url),
             has_token=bool(edge_db.db_token),
-            is_default=edge_db.is_default,
+            is_default=bool(edge_db.is_default),
             is_system=bool(edge_db.is_system),
-            created_at=edge_db.created_at,
-            updated_at=edge_db.updated_at,
+            created_at=str(edge_db.created_at),
+            updated_at=str(edge_db.updated_at),
             target_count=0,
         )
     finally:
@@ -144,22 +144,22 @@ async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate):
             raise HTTPException(404, f"Edge database '{db_id}' not found")
         
         if payload.name is not None:
-            edge_db.name = payload.name
+            edge_db.name = payload.name  # type: ignore[assignment]
         if payload.provider is not None:
-            edge_db.provider = payload.provider
+            edge_db.provider = payload.provider  # type: ignore[assignment]
         if payload.db_url is not None:
-            edge_db.db_url = payload.db_url
+            edge_db.db_url = payload.db_url  # type: ignore[assignment]
         if payload.db_token is not None:
-            edge_db.db_token = payload.db_token
+            edge_db.db_token = payload.db_token  # type: ignore[assignment]
         if payload.is_default is not None:
             if payload.is_default:
                 # Unset all others
                 db.query(EdgeDatabase).filter(EdgeDatabase.id != db_id).update(
                     {"is_default": False}
                 )
-            edge_db.is_default = payload.is_default
+            edge_db.is_default = payload.is_default  # type: ignore[assignment]
         
-        edge_db.updated_at = datetime.utcnow().isoformat() + "Z"
+        edge_db.updated_at = datetime.utcnow().isoformat() + "Z"  # type: ignore[assignment]
         db.commit()
         db.refresh(edge_db)
         
@@ -168,15 +168,15 @@ async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate):
         ).count()
         
         return EdgeDatabaseResponse(
-            id=edge_db.id,
-            name=edge_db.name,
-            provider=edge_db.provider,
-            db_url=edge_db.db_url,
+            id=str(edge_db.id),
+            name=str(edge_db.name),
+            provider=str(edge_db.provider),
+            db_url=str(edge_db.db_url),
             has_token=bool(edge_db.db_token),
-            is_default=edge_db.is_default,
+            is_default=bool(edge_db.is_default),
             is_system=bool(edge_db.is_system),
-            created_at=edge_db.created_at,
-            updated_at=edge_db.updated_at,
+            created_at=str(edge_db.created_at),
+            updated_at=str(edge_db.updated_at),
             target_count=target_count,
         )
     finally:
@@ -195,7 +195,7 @@ async def delete_edge_database(db_id: str):
         if not edge_db:
             raise HTTPException(404, f"Edge database '{db_id}' not found")
         
-        if edge_db.is_system:
+        if edge_db.is_system:  # type: ignore[truthy-bool]
             raise HTTPException(403, "Cannot delete a system edge database")
         
         # Check for referencing targets
@@ -209,14 +209,14 @@ async def delete_edge_database(db_id: str):
                 f"Reassign them first."
             )
         
-        was_default = edge_db.is_default
+        was_default = bool(edge_db.is_default)
         db.delete(edge_db)
         
         # If we deleted the default, promote the next one
         if was_default:
             next_db = db.query(EdgeDatabase).first()
             if next_db:
-                next_db.is_default = True
+                next_db.is_default = True  # type: ignore[assignment]
         
         db.commit()
         return {"success": True, "message": f"Edge database '{edge_db.name}' deleted"}
@@ -233,13 +233,15 @@ async def test_edge_database(db_id: str):
         if not edge_db:
             raise HTTPException(404, f"Edge database '{db_id}' not found")
         
-        db_url = edge_db.db_url
-        db_token = edge_db.db_token
+        db_token_raw = edge_db.db_token
+        db_url = str(edge_db.db_url)
+        db_token = str(db_token_raw) if db_token_raw else None  # type: ignore[truthy-bool]
+        edge_provider = str(edge_db.provider)
     finally:
         db.close()
     
     # Test based on provider
-    return await _test_connection(edge_db.provider, db_url, db_token)
+    return await _test_connection(edge_provider, db_url, db_token)
 
 
 @router.post("/test-connection", response_model=TestConnectionResult)

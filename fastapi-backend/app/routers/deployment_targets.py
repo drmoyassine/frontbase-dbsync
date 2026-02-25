@@ -133,7 +133,7 @@ async def update_deployment_target(target_id: str, payload: DeploymentTargetUpda
         update_data = payload.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             setattr(target, key, value)
-        target.updated_at = datetime.utcnow().isoformat()
+        target.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
 
         db.commit()
         db.refresh(target)
@@ -159,11 +159,11 @@ async def delete_deployment_target(
         if not target:
             raise HTTPException(status_code=404, detail="Deployment target not found")
 
-        if target.is_system:
+        if target.is_system:  # type: ignore[truthy-bool]
             raise HTTPException(status_code=403, detail="Cannot delete a system deployment target")
 
         # Remote Cloudflare Worker deletion
-        if delete_remote and target.provider == "cloudflare":
+        if delete_remote and str(target.provider) == "cloudflare":
             await _delete_cloudflare_worker(target)
 
         db.delete(target)
@@ -194,7 +194,7 @@ async def test_deployment_target(target_id: str):
     finally:
         db.close()
 
-    return await _test_target_connection(url, provider)
+    return await _test_target_connection(str(url), str(provider))
 
 
 async def _test_target_connection(url: str, provider: str) -> TestConnectionResult:
@@ -268,12 +268,13 @@ async def _delete_cloudflare_worker(target: DeploymentTarget):
             db.close()
 
         # Extract worker name from URL (e.g. "frontbase-edge.account.workers.dev" → "frontbase-edge")
-        worker_name = target.name  # Fallback to target name
-        if target.url and "workers.dev" in target.url:
+        worker_name = str(target.name)  # Fallback to target name
+        target_url = str(target.url or "")
+        if target_url and "workers.dev" in target_url:
             # https://worker-name.subdomain.workers.dev → worker-name
             from urllib.parse import urlparse
-            parsed = urlparse(target.url)
-            parts = parsed.hostname.split(".")
+            parsed = urlparse(target_url)
+            parts = (parsed.hostname or "").split(".")
             if len(parts) >= 3:
                 worker_name = parts[0]
 

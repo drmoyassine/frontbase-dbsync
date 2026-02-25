@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,8 +30,11 @@ export function EdgeEnginesSection() {
     const { data: providers = [] } = useEdgeProviders();
     const [open, setOpen] = useState(false);
 
-    // Filter to only connected CF providers
-    const validProviders = providers.filter(p => p.is_active && p.provider === 'cloudflare');
+    // Memoize to avoid new array ref on every render (AGENTS.md: no unstable deps in useEffect)
+    const validProviders = useMemo(
+        () => providers.filter(p => p.is_active && p.provider === 'cloudflare'),
+        [providers]
+    );
 
     const [isDeploying, setIsDeploying] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -42,17 +45,21 @@ export function EdgeEnginesSection() {
     const [edgeDbs, setEdgeDbs] = useState<any[]>([]);
     const [selectedDbId, setSelectedDbId] = useState<string>('default');
 
+    // Auto-select first provider when list loads
     React.useEffect(() => {
         if (validProviders.length > 0 && !selectedProviderId) {
             setSelectedProviderId(validProviders[0].id);
         }
-        // Fetch Edge DBs
+    }, [validProviders, selectedProviderId]);
+
+    // Fetch Edge DBs once on mount (no deps that change → no loop)
+    React.useEffect(() => {
         fetch(`${API_BASE}/api/edge-databases/`).then(r => r.json()).then(data => {
             setEdgeDbs(data);
             const def = data.find((d: any) => d.is_default);
             if (def) setSelectedDbId(def.id);
         }).catch(() => { });
-    }, [validProviders, selectedProviderId]);
+    }, []);
 
     const handleDeploy = async () => {
         setIsDeploying(true);

@@ -201,9 +201,15 @@ async def delete_edge_engine(
     if engine.is_system:  # type: ignore[truthy-bool]
         raise HTTPException(status_code=403, detail="Cannot delete a system edge engine")
 
-    # Remote Cloudflare Worker deletion
+    # Release-Before-IO: extract creds BEFORE slow HTTP call (AGENTS.md §4.3)
+    cf_creds = None
     if delete_remote and engine.edge_provider and str(engine.edge_provider.provider) == "cloudflare":
-        await _delete_cloudflare_worker(engine)
+        cf_creds = _extract_cf_creds(engine)
+
+    if cf_creds:
+        # DB session is released by FastAPI's Depends(get_db) generator at request end,
+        # but we call the slow I/O here BEFORE any further DB writes.
+        await _delete_cloudflare_worker_from_creds(cf_creds)
 
     db.delete(engine)
     db.commit()
@@ -273,53 +279,62 @@ async def _test_target_connection(url: str, provider: str) -> TestConnectionResu
 # =============================================================================
 
 async def _delete_cloudflare_worker(engine: EdgeEngine):
-    """Delete a Cloudflare Worker using the stored API token."""
-    import httpx
+    """Delete a Cloudflare Worker — convenience wrapper for endpoints not yet split."""
+    creds = _extract_cf_creds(engine)
+    await _delete_cloudflare_worker_from_creds(creds)
+
+
+def _extract_cf_creds(engine: EdgeEngine) -> dict:
+    """Extract Cloudflare credentials and worker name from an EdgeEngine (DB-only, no I/O)."""
     import json
-    
+
     if not engine.edge_provider or not engine.edge_provider.provider_credentials:
         raise HTTPException(400, "No Cloudflare API token stored on the associated provider account")
 
-    try:
-        credentials = json.loads(str(engine.edge_provider.provider_credentials))
-        api_token = credentials.get("api_token")
-        account_id = credentials.get("account_id")
-        
-        if not api_token or not account_id:
-            raise HTTPException(400, "Invalid Cloudflare provider credentials missing api_token or account_id")
+    credentials = json.loads(str(engine.edge_provider.provider_credentials))
+    api_token = credentials.get("api_token")
+    account_id = credentials.get("account_id")
 
-        # Extract worker name from URL (e.g. "frontbase-edge.account.workers.dev" → "frontbase-edge")
-        worker_name = str(engine.name)  # Fallback to target name
-        if engine.engine_config:
-            conf = json.loads(str(engine.engine_config))
-            worker_name = conf.get("worker_name", worker_name)
-            
-        target_url = str(engine.url or "")
-        if target_url and "workers.dev" in target_url:
-            from urllib.parse import urlparse
-            parsed = urlparse(target_url)
-            parts = (parsed.hostname or "").split(".")
-            if len(parts) >= 3:
-                worker_name = parts[0]
+    if not api_token or not account_id:
+        raise HTTPException(400, "Invalid Cloudflare provider credentials missing api_token or account_id")
 
-        # Call CF API to delete the worker
-        delete_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/workers/scripts/{worker_name}"
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.delete(
-                delete_url,
-                headers={"Authorization": f"Bearer {api_token}"}
-            )
+    # Extract worker name from engine_config or URL
+    worker_name = str(engine.name)  # Fallback
+    if engine.engine_config:
+        conf = json.loads(str(engine.engine_config))
+        worker_name = conf.get("worker_name", worker_name)
 
-        if not response.is_success:
-            result = response.json()
-            errors = result.get("errors", [{}])
-            err_msg = errors[0].get("message", response.text) if errors else response.text
-            raise HTTPException(502, f"Failed to delete CF Worker: {err_msg}")
+    target_url = str(engine.url or "")
+    if target_url and "workers.dev" in target_url:
+        from urllib.parse import urlparse
+        parsed = urlparse(target_url)
+        parts = (parsed.hostname or "").split(".")
+        if len(parts) >= 3:
+            worker_name = parts[0]
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"Remote delete failed: {str(e)}")
+    return {
+        "api_token": api_token,
+        "account_id": account_id,
+        "worker_name": worker_name,
+    }
+
+
+async def _delete_cloudflare_worker_from_creds(creds: dict):
+    """Delete a Cloudflare Worker using pre-extracted credentials (pure HTTP, no DB)."""
+    import httpx
+
+    delete_url = f"https://api.cloudflare.com/client/v4/accounts/{creds['account_id']}/workers/scripts/{creds['worker_name']}"
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.delete(
+            delete_url,
+            headers={"Authorization": f"Bearer {creds['api_token']}"}
+        )
+
+    if not response.is_success:
+        result = response.json()
+        errors = result.get("errors", [{}])
+        err_msg = errors[0].get("message", response.text) if errors else response.text
+        raise HTTPException(502, f"Failed to delete CF Worker: {err_msg}")
 
 
 @router.get("/active/by-scope/{scope}", response_model=List[EdgeEngineResponse])

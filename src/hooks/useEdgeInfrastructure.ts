@@ -104,6 +104,7 @@ export function useEdgeProviders() {
     return useQuery({
         queryKey: ['edge-providers'],
         queryFn: edgeInfrastructureApi.getProviders,
+        staleTime: 5 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,
     });
@@ -113,6 +114,7 @@ export function useEdgeEngines() {
     return useQuery({
         queryKey: ['edge-engines'],
         queryFn: edgeInfrastructureApi.getEngines,
+        staleTime: 5 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,
     });

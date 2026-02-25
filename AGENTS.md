@@ -477,7 +477,7 @@ if (componentName === 'Form' || componentName === 'form') {
 - LiquidJS (templating)
 - @upstash/redis (HTTP)
 - **Adapter Pattern**: `IEdgeAdapter` interface — Docker (default), Cloudflare Workers, Vercel/Netlify (future)
-- **Deployment Targets**: `deployment_targets` table — multi-provider publish registry (LB-ready)
+- **Deployment Targets**: `edge_engines` table — multi-provider publish registry (LB-ready)
 - **Edge Databases**: `edge_databases` table — named DB connections (Turso, Neon, etc.), each target selects which DB to use via `edge_db_id` FK
 - **System Entries**: Default Local SQLite DB + Local Edge target are pre-seeded with `is_system=True` (undeletable)
 - **Cloudflare Worker**: Lightweight skeleton (`cloudflare-lite.ts`, ~337 KB) — Hono + `@libsql/client/web` + `@upstash/redis/cloudflare`, no React/LiquidJS/native Node bindings

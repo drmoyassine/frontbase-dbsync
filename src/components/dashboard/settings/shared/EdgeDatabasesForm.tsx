@@ -18,6 +18,11 @@ import {
     Database, Plus, Trash2, Pencil, Loader2, Check, X,
     Star, Shield, Zap, AlertTriangle, HardDrive, Cloud, Globe,
 } from 'lucide-react';
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+    AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 const API_BASE = '';
 
@@ -387,15 +392,40 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                         <Button variant="ghost" size="icon" onClick={() => startEdit(db)} title="Edit">
                                             <Pencil className="h-4 w-4" />
                                         </Button>
-                                        <Button
-                                            variant="ghost" size="icon"
-                                            onClick={() => handleDelete(db.id)}
-                                            disabled={deletingId === db.id}
-                                        >
-                                            {deletingId === db.id
-                                                ? <Loader2 className="h-4 w-4 animate-spin" />
-                                                : <Trash2 className="h-4 w-4 text-destructive" />}
-                                        </Button>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button
+                                                    variant="ghost" size="icon"
+                                                    disabled={deletingId === db.id}
+                                                >
+                                                    {deletingId === db.id
+                                                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                                                        : <Trash2 className="h-4 w-4 text-destructive" />}
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Delete "{db.name}"?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        This removes the database connection from Frontbase. The actual database is not affected.
+                                                        {db.target_count > 0 && (
+                                                            <span className="block mt-2 font-medium text-destructive">
+                                                                ⚠ {db.target_count} deployment target{db.target_count > 1 ? 's' : ''} use this database and will need to be reconfigured.
+                                                            </span>
+                                                        )}
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction
+                                                        onClick={() => handleDelete(db.id)}
+                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                    >
+                                                        Delete
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
                                     </>
                                 )}
                             </div>

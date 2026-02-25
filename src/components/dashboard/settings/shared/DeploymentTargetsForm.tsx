@@ -16,11 +16,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Loader2, Plus, Trash2, Cloud, Server, Globe, Check, X,
     Rocket, Eye, EyeOff, ExternalLink, Info, AlertTriangle,
+    Wifi, WifiOff, Shield,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+    AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 const API_BASE = '';
 
@@ -33,6 +40,7 @@ interface DeploymentTarget {
     edge_db_id: string | null;
     edge_db_name?: string;
     is_active: boolean;
+    is_system: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -92,6 +100,11 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
     const [edgeDatabases, setEdgeDatabases] = useState<EdgeDatabase[]>([]);
 
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [deleteRemote, setDeleteRemote] = useState(false);
+
+    // Test connection state
+    const [testingId, setTestingId] = useState<string | null>(null);
+    const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string; latency_ms?: number }>>({});
 
     // Fetch targets
     const fetchTargets = useCallback(async () => {
@@ -134,8 +147,6 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
         setCfWorkerName('frontbase-edge');
         setCfAccountId('');
         setShowCfSecrets(false);
-        setCfTursoUrl('');
-        setCfTursoToken('');
         setCfUpstashUrl('');
         setCfUpstashToken('');
     };
@@ -203,6 +214,7 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
 
     // Toggle active
     const handleToggle = async (target: DeploymentTarget) => {
+        if (target.is_system) return; // Prevent toggling system targets
         try {
             await fetch(`${API_BASE}/api/deployment-targets/${target.id}`, {
                 method: 'PUT',
@@ -214,13 +226,30 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
     };
 
     // Delete target
-    const handleDelete = async (id: string) => {
+    const handleDelete = async (id: string, remote: boolean) => {
         setDeletingId(id);
         try {
-            await fetch(`${API_BASE}/api/deployment-targets/${id}`, { method: 'DELETE' });
+            const url = remote
+                ? `${API_BASE}/api/deployment-targets/${id}?delete_remote=true`
+                : `${API_BASE}/api/deployment-targets/${id}`;
+            await fetch(url, { method: 'DELETE' });
             await fetchTargets();
         } catch (e: any) { setError(e.message); }
-        finally { setDeletingId(null); }
+        finally { setDeletingId(null); setDeleteRemote(false); }
+    };
+
+    // Test connection
+    const handleTestConnection = async (target: DeploymentTarget) => {
+        setTestingId(target.id);
+        try {
+            const res = await fetch(`${API_BASE}/api/deployment-targets/${target.id}/test`, { method: 'POST' });
+            const data = await res.json();
+            setTestResults(prev => ({ ...prev, [target.id]: data }));
+        } catch (e: any) {
+            setTestResults(prev => ({ ...prev, [target.id]: { success: false, message: e.message } }));
+        } finally {
+            setTestingId(null);
+        }
     };
 
     const getProviderIcon = (provider: string) => {
@@ -417,28 +446,101 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
                 </div>
             ) : (
                 <div className="space-y-3">
-                    {targets.map((target) => (
-                        <div key={target.id} className="flex items-center justify-between p-3 rounded-lg border bg-card">
-                            <div className="flex items-center gap-3">
-                                {getProviderIcon(target.provider)}
-                                <span className="font-medium">{target.name}</span>
-                                <Badge variant="outline" className="text-xs">{target.provider}</Badge>
-                                <Badge variant="secondary" className="text-xs">{target.adapter_type}</Badge>
+                    {targets.map((target) => {
+                        const testResult = testResults[target.id];
+                        return (
+                            <div key={target.id} className="flex items-center justify-between p-3 rounded-lg border bg-card">
+                                <div className="flex items-center gap-3">
+                                    {getProviderIcon(target.provider)}
+                                    <span className="font-medium">{target.name}</span>
+                                    <Badge variant="outline" className="text-xs">{target.provider}</Badge>
+                                    <Badge variant="secondary" className="text-xs">{target.adapter_type}</Badge>
+                                    {target.is_system && (
+                                        <Badge variant="outline" className="text-xs border-blue-300 text-blue-600 bg-blue-50">
+                                            <Shield className="h-3 w-3 mr-1" />System
+                                        </Badge>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    {/* Test result indicator */}
+                                    {testResult && (
+                                        <span className={`text-xs flex items-center gap-1 ${testResult.success ? 'text-green-600' : 'text-red-500'}`}>
+                                            {testResult.success ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+                                            {testResult.latency_ms ? `${testResult.latency_ms}ms` : testResult.message}
+                                        </span>
+                                    )}
+                                    <a href={`${target.url}/api/health`} target="_blank" rel="noopener noreferrer"
+                                        className="text-xs text-muted-foreground hover:underline truncate max-w-[200px]">
+                                        {target.url}
+                                    </a>
+                                    {/* Test connection */}
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleTestConnection(target)}
+                                        disabled={testingId === target.id}
+                                        className="text-xs h-7 px-2"
+                                    >
+                                        {testingId === target.id
+                                            ? <Loader2 className="h-3 w-3 animate-spin" />
+                                            : <Wifi className="h-3 w-3" />}
+                                    </Button>
+                                    {/* Toggle — disabled for system targets */}
+                                    <Switch
+                                        checked={target.is_active}
+                                        onCheckedChange={() => handleToggle(target)}
+                                        disabled={target.is_system}
+                                    />
+                                    {/* Delete — hidden for system targets */}
+                                    {!target.is_system && (
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="ghost" size="icon" disabled={deletingId === target.id}>
+                                                    {deletingId === target.id
+                                                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                                                        : <Trash2 className="h-4 w-4 text-destructive" />}
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Delete "{target.name}"?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        This will remove the deployment target from your configuration.
+                                                        {target.provider === 'cloudflare' && (
+                                                            <span className="block mt-2 text-foreground">
+                                                                This is a Cloudflare Worker. You can also delete it from Cloudflare.
+                                                            </span>
+                                                        )}
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                {target.provider === 'cloudflare' && (
+                                                    <div className="flex items-center gap-2 px-1">
+                                                        <Checkbox
+                                                            id={`delete-remote-${target.id}`}
+                                                            checked={deleteRemote}
+                                                            onCheckedChange={(checked) => setDeleteRemote(checked === true)}
+                                                        />
+                                                        <label htmlFor={`delete-remote-${target.id}`} className="text-sm cursor-pointer">
+                                                            Also delete the Cloudflare Worker
+                                                        </label>
+                                                    </div>
+                                                )}
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel onClick={() => setDeleteRemote(false)}>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction
+                                                        onClick={() => handleDelete(target.id, deleteRemote)}
+                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                    >
+                                                        {deleteRemote ? 'Delete Both' : 'Delete'}
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    )}
+                                </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <a href={`${target.url}/api/health`} target="_blank" rel="noopener noreferrer"
-                                    className="text-xs text-muted-foreground hover:underline truncate max-w-[200px]">
-                                    {target.url}
-                                </a>
-                                <Switch checked={target.is_active} onCheckedChange={() => handleToggle(target)} />
-                                <Button variant="ghost" size="icon" onClick={() => handleDelete(target.id)} disabled={deletingId === target.id}>
-                                    {deletingId === target.id
-                                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                                        : <Trash2 className="h-4 w-4 text-destructive" />}
-                                </Button>
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 

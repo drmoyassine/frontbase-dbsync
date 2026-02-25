@@ -1,68 +1,55 @@
 /**
  * RedisSettingsForm
  * 
- * Edge Caching configuration.
+ * Edge Caching configuration — card-list pattern matching
+ * Edge Database and Deployment Targets tabs.
  * 
  * Layout:
- * 1. Local Redis status (read-only, always connected via Docker)
- * 2. TTL configuration (always editable)
- * 3. Optional Upstash upgrade section
+ * 1. Cache provider list (Local Redis = system/undeletable, Upstash = optional)
+ * 2. "+ Add Cache Provider" button
+ * 3. Collapsible Cache TTL section
  */
 
-import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import React, { useState } from 'react';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Check, X, RefreshCw, Zap, Info, ExternalLink, CheckCircle2, Cloud } from 'lucide-react';
+import {
+    Loader2, Check, X, Zap, Shield, Plus, Trash2, Cloud,
+    HardDrive, ChevronDown, ChevronRight, Wifi, WifiOff, Settings2,
+} from 'lucide-react';
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+    AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { useRedisSettings } from '../hooks/useRedisSettings';
 
 interface RedisSettingsFormProps {
     withCard?: boolean;
 }
 
-export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) {
+export const RedisSettingsForm: React.FC<RedisSettingsFormProps> = ({ withCard = false }) => {
     const {
-        redisUrl,
-        redisToken,
-        redisType,
-        redisEnabled,
-        cacheTtlData,
-        cacheTtlCount,
-        setRedisUrl,
-        setRedisToken,
-        setRedisType,
-        setRedisEnabled,
-        setCacheTtlData,
-        setCacheTtlCount,
-        isLoading,
-        hasChanges,
-        testResult,
-        handleChange,
-        save,
-        testConnection,
-        isSaving,
-        isTesting,
-        saveSuccess,
-        hasLocalRedis,
-        isUpstashConnected,
+        redisUrl, redisToken, redisType, redisEnabled,
+        cacheTtlData, cacheTtlCount,
+        setRedisUrl, setRedisToken, setRedisType,
+        setRedisEnabled, setCacheTtlData, setCacheTtlCount,
+        isLoading, hasChanges, testResult,
+        save, testConnection, handleChange,
+        isSaving, isTesting, saveSuccess,
+        hasLocalRedis, isUpstashConnected,
     } = useRedisSettings();
 
-    const isUpstash = redisType === 'upstash';
+    const [showAddFlow, setShowAddFlow] = useState(false);
+    const [showTtl, setShowTtl] = useState(false);
 
-    const handleUpstashToggle = (enabled: boolean) => {
-        if (enabled) {
-            setRedisType('upstash');
-            setRedisEnabled(true);
-        } else {
-            setRedisType('self-hosted');
-            setRedisEnabled(true); // Keep caching on with local Redis
-        }
-        handleChange();
-    };
+    // Add Upstash form fields (separate from the hook's managed state)
+    const [addUrl, setAddUrl] = useState('');
+    const [addToken, setAddToken] = useState('');
 
     if (isLoading) {
         return (
@@ -72,177 +59,257 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
         );
     }
 
+    const handleAddUpstash = () => {
+        setRedisType('upstash');
+        setRedisUrl(addUrl);
+        setRedisToken(addToken);
+        setRedisEnabled(true);
+        // Save will be done by the user clicking "Save Changes" or we can auto-save
+        setShowAddFlow(false);
+        setAddUrl('');
+        setAddToken('');
+        // Trigger save
+        setTimeout(() => save(), 50);
+    };
+
+    const handleRemoveUpstash = () => {
+        setRedisType('self-hosted');
+        setRedisUrl('http://redis:80');
+        setRedisToken('');
+        setRedisEnabled(true);
+        setTimeout(() => save(), 50);
+    };
+
+    const handleTestLocal = () => {
+        // Temporarily switch context for test
+        setRedisType('self-hosted');
+        testConnection();
+    };
+
+    const handleTestUpstash = () => {
+        setRedisType('upstash');
+        testConnection();
+    };
+
+    // Build cache provider entries
+    const entries: Array<{
+        id: string;
+        name: string;
+        provider: string;
+        icon: React.ReactNode;
+        subtitle: string;
+        isSystem: boolean;
+        isActive: boolean;
+        canTest: boolean;
+    }> = [];
+
+    // Local Redis — always present, system entry
+    entries.push({
+        id: 'local-redis',
+        name: 'Local Redis',
+        provider: 'self-hosted',
+        icon: <HardDrive className="h-4 w-4" />,
+        subtitle: 'Docker container redis:80',
+        isSystem: true,
+        isActive: redisType === 'self-hosted',
+        canTest: true,
+    });
+
+    // Upstash — only if connected
+    if (isUpstashConnected || redisType === 'upstash') {
+        entries.push({
+            id: 'upstash',
+            name: 'Upstash Redis',
+            provider: 'upstash',
+            icon: <Cloud className="h-4 w-4" />,
+            subtitle: redisUrl || 'Serverless Redis',
+            isSystem: false,
+            isActive: redisType === 'upstash',
+            canTest: true,
+        });
+    }
+
     const formContent = (
-        <div className="space-y-6">
-            {/* Redis Status */}
-            <div className={`flex items-center gap-3 p-4 rounded-lg border ${isUpstashConnected || hasLocalRedis
-                ? "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900"
-                : "bg-muted/30 border-muted-foreground/20"
-                }`}>
-                {isUpstashConnected || hasLocalRedis ? (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                ) : (
-                    <Info className="h-5 w-5 text-muted-foreground shrink-0" />
-                )}
-                <div className="flex-1">
-                    <p className="text-sm font-medium">
-                        {isUpstashConnected ? 'Upstash Redis connected'
-                            : hasLocalRedis ? 'Local Redis connected'
-                                : 'No Edge Cache Configured'}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        {isUpstashConnected ? 'Using managed serverless Redis for edge caching'
-                            : hasLocalRedis ? 'Bundled Redis instance from your Docker setup'
-                                : 'Configure Upstash below to enable edge caching for your users'}
-                    </p>
-                </div>
-                {hasLocalRedis && !isUpstash && (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={testConnection}
-                        disabled={isTesting}
-                    >
-                        {isTesting ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                            <RefreshCw className="h-4 w-4" />
-                        )}
-                    </Button>
-                )}
-            </div>
-
-            {/* Test Result */}
-            {testResult && (
-                <Alert variant={testResult.success ? 'default' : 'destructive'}>
-                    {testResult.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                    <AlertDescription>{testResult.message}</AlertDescription>
-                </Alert>
-            )}
-
-            {/* TTL Configuration — always visible */}
-            <div className="space-y-4">
-                <Label className="text-base">Cache TTL</Label>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="ttl-data" className="text-sm font-normal">Data Cache (seconds)</Label>
-                        <Input
-                            id="ttl-data"
-                            type="number"
-                            value={cacheTtlData}
-                            onChange={(e) => { setCacheTtlData(parseInt(e.target.value)); handleChange(); }}
-                        />
-                        <p className="text-xs text-muted-foreground">How long to cache record data</p>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="ttl-count" className="text-sm font-normal">Count Cache (seconds)</Label>
-                        <Input
-                            id="ttl-count"
-                            type="number"
-                            value={cacheTtlCount}
-                            onChange={(e) => { setCacheTtlCount(parseInt(e.target.value)); handleChange(); }}
-                        />
-                        <p className="text-xs text-muted-foreground">How long to cache record counts</p>
-                    </div>
-                </div>
-            </div>
-
-            <Separator />
-
-            {/* Upstash Upgrade Section */}
-            <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <Cloud className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                            <Label htmlFor="upstash-toggle" className="text-base">Connect Upstash</Label>
-                            <p className="text-sm text-muted-foreground">
-                                Serverless Redis for globally distributed edge caching
-                            </p>
-                        </div>
-                    </div>
-                    <Switch
-                        id="upstash-toggle"
-                        checked={isUpstash}
-                        onCheckedChange={handleUpstashToggle}
-                    />
-                </div>
-
-                {isUpstash && (
-                    <div className="space-y-4 p-4 rounded-lg bg-muted/30">
-                        <div className="space-y-2">
-                            <Label htmlFor="redis-url">Upstash REST URL</Label>
-                            <Input
-                                id="redis-url"
-                                placeholder="https://your-instance.upstash.io"
-                                value={redisUrl}
-                                onChange={(e) => { setRedisUrl(e.target.value); handleChange(); }}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="redis-token">Upstash REST Token</Label>
-                            <Input
-                                id="redis-token"
-                                type="password"
-                                placeholder="AX...your-upstash-token"
-                                value={redisToken}
-                                onChange={(e) => { setRedisToken(e.target.value); handleChange(); }}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Find these in your Upstash Console → Database → REST API
-                            </p>
-                        </div>
-
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={testConnection}
-                            disabled={isTesting || !redisUrl || !redisToken}
-                        >
-                            {isTesting ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Testing...
-                                </>
-                            ) : (
-                                <>
-                                    <RefreshCw className="mr-2 h-4 w-4" />
-                                    Test Connection
-                                </>
+        <div className="space-y-4">
+            {/* Cache provider list */}
+            <div className="space-y-3">
+                {entries.map(entry => (
+                    <div key={entry.id} className="flex items-center justify-between p-3 rounded-lg border bg-card">
+                        <div className="flex items-center gap-3">
+                            {entry.icon}
+                            <span className="font-medium">{entry.name}</span>
+                            <Badge variant="outline" className="text-xs">{entry.provider}</Badge>
+                            {entry.isSystem && (
+                                <Badge variant="outline" className="text-xs border-blue-300 text-blue-600 bg-blue-50">
+                                    <Shield className="h-3 w-3 mr-1" />System
+                                </Badge>
                             )}
+                            {entry.isActive && (
+                                <Badge variant="secondary" className="text-xs gap-1">
+                                    <Check className="h-3 w-3" /> Active
+                                </Badge>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                {entry.subtitle}
+                            </span>
+
+                            {/* Test result */}
+                            {testResult && ((entry.id === 'local-redis' && redisType === 'self-hosted') || (entry.id === 'upstash' && redisType === 'upstash')) && (
+                                <span className={`text-xs flex items-center gap-1 ${testResult.success ? 'text-green-600' : 'text-red-500'}`}>
+                                    {testResult.success ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+                                    {testResult.message}
+                                </span>
+                            )}
+
+                            {/* Test button */}
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => entry.id === 'local-redis' ? handleTestLocal() : handleTestUpstash()}
+                                disabled={isTesting}
+                                className="text-xs h-7 px-2"
+                            >
+                                {isTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                            </Button>
+
+                            {/* Delete — only for non-system */}
+                            {!entry.isSystem && (
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon">
+                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Remove Upstash?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                This will disconnect Upstash Redis and fall back to Local Redis. Your Upstash account is not affected.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction
+                                                onClick={handleRemoveUpstash}
+                                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                            >
+                                                Remove
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Add Cache Provider flow */}
+            {showAddFlow ? (
+                <div className="p-4 rounded-lg border border-dashed space-y-4">
+                    <Label className="text-sm font-medium">Connect Upstash</Label>
+                    <p className="text-xs text-muted-foreground">
+                        Serverless Redis for globally distributed edge caching.{' '}
+                        <a href="https://upstash.com" target="_blank" rel="noopener noreferrer" className="underline">upstash.com</a>
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                            <Label className="text-xs">REST URL</Label>
+                            <Input
+                                type="password"
+                                placeholder="https://...upstash.io"
+                                value={addUrl}
+                                onChange={e => setAddUrl(e.target.value)}
+                                className="text-sm"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <Label className="text-xs">REST Token</Label>
+                            <Input
+                                type="password"
+                                placeholder="AX..."
+                                value={addToken}
+                                onChange={e => setAddToken(e.target.value)}
+                                className="text-sm"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button onClick={handleAddUpstash} disabled={!addUrl || !addToken}>
+                            <Check className="mr-2 h-4 w-4" /> Connect
+                        </Button>
+                        <Button variant="ghost" onClick={() => { setShowAddFlow(false); setAddUrl(''); setAddToken(''); }}>
+                            Cancel
                         </Button>
                     </div>
-                )}
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-3">
-                <Button
-                    onClick={save}
-                    disabled={!hasChanges || isSaving}
-                >
-                    {isSaving ? (
-                        <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Saving...
-                        </>
-                    ) : saveSuccess ? (
-                        <>
-                            <Check className="mr-2 h-4 w-4" />
-                            Saved
-                        </>
-                    ) : (
-                        'Save Changes'
-                    )}
-                </Button>
-
-                {isUpstash && (
-                    <Button variant="ghost" size="sm" asChild>
-                        <a href="https://upstash.com" target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            Upstash Console
-                        </a>
+                </div>
+            ) : (
+                /* Only show "Add" if Upstash not already connected */
+                !isUpstashConnected && redisType !== 'upstash' && (
+                    <Button variant="outline" onClick={() => setShowAddFlow(true)} className="w-full">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Cache Provider
                     </Button>
+                )
+            )}
+
+            {/* Collapsible Cache TTL section */}
+            <div className="border rounded-lg">
+                <button
+                    type="button"
+                    onClick={() => setShowTtl(!showTtl)}
+                    className="flex items-center justify-between w-full p-3 text-sm font-medium hover:bg-accent/50 transition-colors rounded-lg"
+                >
+                    <div className="flex items-center gap-2">
+                        <Settings2 className="h-4 w-4 text-muted-foreground" />
+                        Cache TTL Settings
+                    </div>
+                    {showTtl ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                </button>
+
+                {showTtl && (
+                    <div className="p-4 pt-0 space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Data Cache (seconds)</Label>
+                                <Input
+                                    type="number"
+                                    value={cacheTtlData}
+                                    onChange={e => { setCacheTtlData(Number(e.target.value)); handleChange(); }}
+                                    min={0}
+                                />
+                                <p className="text-xs text-muted-foreground">How long to cache record data</p>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Count Cache (seconds)</Label>
+                                <Input
+                                    type="number"
+                                    value={cacheTtlCount}
+                                    onChange={e => { setCacheTtlCount(Number(e.target.value)); handleChange(); }}
+                                    min={0}
+                                />
+                                <p className="text-xs text-muted-foreground">How long to cache record counts</p>
+                            </div>
+                        </div>
+
+                        {hasChanges && (
+                            <Button onClick={save} disabled={isSaving} size="sm">
+                                {isSaving ? (
+                                    <><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Saving...</>
+                                ) : (
+                                    <><Check className="mr-2 h-3 w-3" /> Save Changes</>
+                                )}
+                            </Button>
+                        )}
+
+                        {saveSuccess && (
+                            <span className="text-xs text-green-600 flex items-center gap-1">
+                                <Check className="h-3 w-3" /> Saved
+                            </span>
+                        )}
+                    </div>
                 )}
             </div>
         </div>
@@ -266,4 +333,4 @@ export function RedisSettingsForm({ withCard = false }: RedisSettingsFormProps) 
     }
 
     return formContent;
-}
+};

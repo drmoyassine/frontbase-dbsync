@@ -1,5 +1,7 @@
 # Frontbase Edge Architecture
 
+> Last Updated: 2026-02-23
+
 This document defines the strategic deployment architecture for the Frontbase Edge Engine (`services/edge`). A single Hono-based codebase supports four distinct deployment modes: **Cloud (BYOE)**, **Self-Hosted (All-in-One)**, **Standalone Edge Node**, and **Distributed Self-Hosted**.
 
 ---
@@ -153,12 +155,12 @@ When the user hits **Publish**:
 ### The Adapter Pattern
 The Hono Edge Engine codebase is **100% identical** across all modes. On boot, it reads one environment variable to select the correct storage adapter:
 
-| `FRONTBASE_ENV` | Storage Adapter | Connection |
+| `FRONTBASE_DEPLOYMENT_MODE` | Storage Adapter | Connection |
 |---|---|---|
-| `cloud` | `TursoHttpProvider` | HTTP to `FRONTBASE_STATE_DB_URL` |
-| `local` *(default)* | `LocalSqliteProvider` | Local file at `FRONTBASE_LOCAL_DB_PATH` |
+| `cloud` | `TursoHttpProvider` | HTTP to `FRONTBASE_STATE_DB_URL` + `FRONTBASE_STATE_DB_TOKEN` |
+| `local` *(default)* | `LocalSqliteProvider` | Local file at `PAGES_DB_URL` (default: `file:./data/pages.db`) |
 
-The **same adapter pattern applies to FastAPI's publish pipeline**: `PUBLISH_STRATEGY=local` writes to the Docker volume; `PUBLISH_STRATEGY=turso` pushes to the user's Turso DB over HTTP.
+The **same adapter pattern applies to FastAPI's publish pipeline**: in self-hosted mode, the backend writes directly to the shared Docker volume; in cloud mode, it pushes to the user's Turso DB over HTTP.
 
 ---
 
@@ -177,10 +179,11 @@ The Frontbase Control Plane (Cloud or Self-Hosted) is still the publisher:
 
 ### Required Environment Variables
 ```bash
-FRONTBASE_ENV=cloud
+FRONTBASE_DEPLOYMENT_MODE=cloud
 FRONTBASE_STATE_DB_URL=libsql://project-xyz.turso.io
 FRONTBASE_STATE_DB_TOKEN=...
-FRONTBASE_REDIS_URL=rediss://...
+UPSTASH_REDIS_REST_URL=https://...
+UPSTASH_REDIS_REST_TOKEN=...
 ```
 
 ### Why This Is Powerful
@@ -256,18 +259,27 @@ Each service discovers its dependencies via environment variables. When all serv
 
 ```bash
 # --- Backend (frontbase/backend) ---
-DATABASE_URL=postgresql://user:pass@<postgres-host>:5432/frontbase
-REDIS_URL=redis://<redis-host>:6379
-EDGE_ENGINE_URL=https://<edge-host>:3001
+SECRET_KEY=change-me-in-production
+ADMIN_EMAIL=admin@yourdomain.com
+ADMIN_PASSWORD=change-me-in-production
+REDIS_TOKEN=change-me-in-production
+# DB_PASSWORD=your-secure-password   # if using PostgreSQL profile
 
-# --- Frontend (frontbase/frontend) ---
-API_URL=https://<backend-host>:8000
+# --- Distributed / Multi-Machine ---
+BACKEND_URL=http://MACHINE_A_IP:8000
+EDGE_URL=http://MACHINE_C_IP:3002
 
 # --- Edge Engine (frontbase/edge) ---
-FRONTBASE_ENV=local          # or 'cloud' for Turso/Upstash mode
-FRONTBASE_LOCAL_DB_PATH=/data/pages.db   # if local mode with volume
-FRONTBASE_STATE_DB_URL=libsql://...      # if cloud mode
-FRONTBASE_REDIS_URL=redis://<redis-host>:6379
+FRONTBASE_DEPLOYMENT_MODE=local          # or 'cloud' for Turso/Upstash mode
+BACKEND_URL=http://backend:8000          # Backend API for startup sync
+PAGES_DB_URL=file:./data/pages.db        # Local SQLite path (local mode)
+FRONTBASE_STATE_DB_URL=libsql://...      # Turso URL (cloud mode)
+FRONTBASE_STATE_DB_TOKEN=...             # Turso auth token (cloud mode)
+UPSTASH_REDIS_REST_URL=https://...       # Upstash REST URL (cloud mode)
+UPSTASH_REDIS_REST_TOKEN=...             # Upstash REST token (cloud mode)
+PUBLIC_URL=https://yoursite.com          # Public URL for preview links
+API_KEYS=key1,key2                       # Webhook auth keys
+PORT=3002                                # Edge Engine port
 ```
 
 ### Security Considerations
@@ -297,6 +309,63 @@ When services communicate across machines (vs. the docker-compose internal netwo
 
 ---
 
+## Edge Engine Module Structure
+
+The Hono Edge Engine codebase follows a modular structure:
+
+```
+services/edge/src/
+├── routes/          # Hono route handlers
+│   ├── pages.ts     # SSR page rendering (GET /:slug)
+│   ├── import.ts    # Receive published pages (POST /api/import)
+│   ├── deploy.ts    # Receive published workflows (POST /deploy)
+│   ├── execute.ts   # Run workflow (POST /execute/:id)
+│   ├── webhook.ts   # External triggers (POST /webhook/:id)
+│   ├── data.ts      # Dynamic data queries
+│   ├── cache.ts     # Cache management
+│   ├── health.ts    # Health checks
+│   └── executions.ts # Execution history
+├── ssr/             # Server-Side Rendering engine
+│   ├── PageRenderer.ts   # Core renderer (renderPage, renderComponent)
+│   ├── styleHelpers.ts   # Extracted: buildInlineStyles, buildResponsiveCSS, buildVisibilityCSS
+│   ├── baseStyles.ts     # Extracted: BASE_CSS (theme vars, resets, dark mode)
+│   ├── store.ts          # SSR state management
+│   ├── components/       # Per-component SSR renderers
+│   │   ├── static.ts     # Static components (Text, Image, Button, etc.)
+│   │   ├── data.ts       # Data-bound components (Table, List, etc.)
+│   │   ├── interactive.ts # Interactive components
+│   │   └── landing/      # Landing page components (Hero, Navbar, Footer, etc.)
+│   └── lib/              # SSR utilities (auth, context, liquid, svg-adapter, tracking)
+├── storage/         # State provider adapter layer
+│   ├── IStateProvider.ts       # Interface contract
+│   ├── LocalSqliteProvider.ts  # Local SQLite (self-hosted)
+│   ├── TursoHttpProvider.ts    # Turso HTTP (cloud/standalone)
+│   ├── edge-migrations.ts      # Schema migrations
+│   └── index.ts                # Factory (selects provider via FRONTBASE_ENV)
+└── client/          # Client-side hydration
+    └── entry.tsx    # hydrateRoot + QueryClientProvider
+```
+
+## CSS Pipeline
+
+The CSS delivery pipeline is fully build-time — **no Tailwind CDN dependency in production**.
+
+### Publish-Time (FastAPI)
+1. `css_bundler.py` scans the `layoutData` component tree, extracting all Tailwind class names
+2. `tailwind_cli.py` auto-provisions the standalone Tailwind v4 binary for the host OS
+3. Tailwind CLI compiles classes via `@source inline("...")` into a static CSS bundle
+4. `css_registry.py` provides component-specific CSS (`fb-navbar`, `fb-footer`, `fb-accordion`, etc.) that Tailwind cannot generate
+5. The combined `cssBundle` string is stored alongside the page in the Edge DB
+
+### Runtime (Edge SSR)
+CSS is delivered through three layers:
+- **Layer 1 — Inline Styles**: `stylesData.values` → `style="..."` attributes (via `buildInlineStyles()`)
+- **Layer 2 — Scoped `<style>` Blocks**: Responsive overrides + visibility toggles → `@media` rules with `!important` (via `buildResponsiveCSS()`, `buildVisibilityCSS()`)
+- **Layer 3 — Shared CSS Bundle**: `cssBundle` from publish → `<style>` in `<head>`
+- **Fallback**: `BASE_CSS` in `baseStyles.ts` provides theme variables, resets, and dark mode support for pages without a `cssBundle`
+
+---
+
 ## Decision Log
 
 | Decision | Rationale |
@@ -306,3 +375,5 @@ When services communicate across machines (vs. the docker-compose internal netwo
 | Upstash as Cache/Buffer Only | Fully Redis-compatible, serverless HTTP driver, globally distributed. Fully disposable — zero data loss on flush. |
 | Hono for Edge Engine | First-class support for Cloudflare Workers, Vercel Edge, Node.js, and Bun out of the box. |
 | User-Connected Infrastructure | Frontbase is not a managed infra provider. Turso/Upstash are user-owned. Frontbase is an orchestration layer only. |
+| Build-time Tailwind CSS | Eliminated ~300KB Tailwind CDN runtime dependency. Classes extracted at publish time via `@source inline()`. |
+| Modular SSR (R3–R5 refactor) | `PageRenderer.ts` reduced from ~780 to ~430 lines by extracting `styleHelpers.ts`, `baseStyles.ts`, and `tailwind_cli.py`. |

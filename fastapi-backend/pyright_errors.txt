@@ -1,0 +1,60 @@
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\models.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\models.py:80:12 - error: Invalid conditional operand of type "Column[str] | str"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\models.py:81:31 - error: Argument of type "Column[str] | str" cannot be assigned to parameter "s" of type "str | bytes | bytearray" in function "loads"
+  ┬á┬áType "Column[str] | str" is not assignable to type "str | bytes | bytearray"
+  ┬á┬á┬á┬áType "Column[str]" is not assignable to type "str | bytes | bytearray"
+  ┬á┬á┬á┬á┬á┬á"Column[str]" is not assignable to "str"
+  ┬á┬á┬á┬á┬á┬á"Column[str]" is not assignable to "bytes"
+  ┬á┬á┬á┬á┬á┬á"Column[str]" is not assignable to "bytearray" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\models.py:94:12 - error: Invalid conditional operand of type "Column[str] | str"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\models.py:95:31 - error: Argument of type "Column[str] | str" cannot be assigned to parameter "s" of type "str | bytes | bytearray" in function "loads"
+  ┬á┬áType "Column[str] | str" is not assignable to type "str | bytes | bytearray"
+  ┬á┬á┬á┬áType "Column[str]" is not assignable to type "str | bytes | bytearray"
+  ┬á┬á┬á┬á┬á┬á"Column[str]" is not assignable to "str"
+  ┬á┬á┬á┬á┬á┬á"Column[str]" is not assignable to "bytes"
+  ┬á┬á┬á┬á┬á┬á"Column[str]" is not assignable to "bytearray" (reportArgumentType)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\cloudflare.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\cloudflare.py:28:6 - error: Import "..models.project" could not be resolved (reportMissingImports)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\cloudflare.py:306:30 - error: Cannot assign to attribute "provider_credentials" for class "EdgeProviderAccount"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "provider_credentials" of class "EdgeProviderAccount"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\cloudflare.py:355:30 - error: Cannot assign to attribute "provider_credentials" for class "EdgeProviderAccount"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "provider_credentials" of class "EdgeProviderAccount"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:18:6 - error: Import "..dependencies" could not be resolved (reportMissingImports)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:85:8 - error: Invalid conditional operand of type "Column[str]"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:102:61 - error: Invalid conditional operand of type "Column[str]"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:106:49 - error: Invalid conditional operand of type "Column[str]"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:293:12 - error: Invalid conditional operand of type "Column[str]"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_providers.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_providers.py:9:6 - error: Import "..dependencies" could not be resolved (reportMissingImports)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_providers.py:90:18 - error: Cannot assign to attribute "name" for class "EdgeProviderAccount"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "name" of class "EdgeProviderAccount"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_providers.py:92:18 - error: Cannot assign to attribute "is_active" for class "EdgeProviderAccount"
+  ┬á┬áExpression of type "bool" cannot be assigned to attribute "is_active" of class "EdgeProviderAccount"
+  ┬á┬á┬á┬á"bool" is not assignable to "Column[bool]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_providers.py:95:18 - error: Cannot assign to attribute "provider_credentials" for class "EdgeProviderAccount"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "provider_credentials" of class "EdgeProviderAccount"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_providers.py:97:14 - error: Cannot assign to attribute "updated_at" for class "EdgeProviderAccount"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "updated_at" of class "EdgeProviderAccount"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\publish_strategy.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\publish_strategy.py:320:24 - error: Invalid conditional operand of type "EdgeDatabase | Column[str] | None"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\publish_strategy.py:322:25 - error: Argument of type "Column[str]" cannot be assigned to parameter "value" of type "str" in function "__setitem__"
+  ┬á┬á"Column[str]" is not assignable to "str" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\publish_strategy.py:323:25 - error: Argument of type "Column[str] | Literal['']" cannot be assigned to parameter "value" of type "str" in function "__setitem__"
+  ┬á┬áType "Column[str] | Literal['']" is not assignable to type "str"
+  ┬á┬á┬á┬á"Column[str]" is not assignable to "str" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\publish_strategy.py:330:12 - error: Invalid conditional operand of type "Column[str] | str"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+21 errors, 0 warnings, 0 informations

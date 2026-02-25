@@ -317,10 +317,10 @@ def get_publish_strategy() -> BasePublishStrategy:
                     default_db = db.query(EdgeDatabase).filter(
                         EdgeDatabase.is_default == True
                     ).first()
-                    if default_db and default_db.db_url:
-                        turso_url = default_db.db_url
+                    if default_db and default_db.db_url:  # type: ignore[truthy-bool]
+                        turso_url = str(default_db.db_url)
                         os.environ["TURSO_DB_URL"] = turso_url
-                        os.environ["TURSO_DB_TOKEN"] = default_db.db_token or ""
+                        os.environ["TURSO_DB_TOKEN"] = str(default_db.db_token or "")
                         print(f"[PublishStrategy] Loaded Turso credentials from EdgeDatabase: {default_db.name}")
                 finally:
                     db.close()
@@ -356,22 +356,22 @@ async def fan_out_to_deployment_targets(payload: dict, scope: str = "pages") -> 
         All errors are non-fatal — the primary strategy result is authoritative.
     """
     from ..database.config import SessionLocal
-    from ..models.models import DeploymentTarget
+    from ..models.models import EdgeEngine
 
     db = SessionLocal()
     try:
         # Query active targets matching the scope
-        query = db.query(DeploymentTarget).filter(DeploymentTarget.is_active == True)
+        query = db.query(EdgeEngine).filter(EdgeEngine.is_active == True)
         if scope == "pages":
-            query = query.filter(DeploymentTarget.adapter_type.in_(["pages", "edge", "full"]))
+            query = query.filter(EdgeEngine.adapter_type.in_(["pages", "edge", "full"]))
         elif scope == "automations":
-            query = query.filter(DeploymentTarget.adapter_type.in_(["automations", "full"]))
+            query = query.filter(EdgeEngine.adapter_type.in_(["automations", "full"]))
         
         targets = query.all()
         
         # Detach before I/O (Release-Before-IO pattern, AGENTS.md §4.3)
         target_data = [
-            {"name": t.name, "url": t.url, "provider": t.provider}
+            {"name": t.name, "url": t.url, "provider": t.edge_provider.provider if t.edge_provider else "unknown"}
             for t in targets
         ]
     finally:

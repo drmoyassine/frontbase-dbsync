@@ -77,8 +77,8 @@ class Page(Base):
     def layout_data_dict(self):
         """Get layout_data as a dictionary"""
         import json
-        if self.layout_data:
-            return json.loads(self.layout_data)
+        if self.layout_data:  # type: ignore[truthy-bool]
+            return json.loads(str(self.layout_data))
         return {}
     
     @layout_data_dict.setter
@@ -91,8 +91,8 @@ class Page(Base):
     def seo_data_dict(self):
         """Get seo_data as a dictionary"""
         import json
-        if self.seo_data:
-            return json.loads(self.seo_data)
+        if self.seo_data:  # type: ignore[truthy-bool]
+            return json.loads(str(self.seo_data))
         return {}
     
     @seo_data_dict.setter
@@ -218,35 +218,52 @@ class EdgeDatabase(Base):
     updated_at = Column(String, nullable=False)
     
     # Relationship
-    deployment_targets = relationship("DeploymentTarget", back_populates="edge_database")
+    edge_engines = relationship("EdgeEngine", back_populates="edge_database")
 
 
-class DeploymentTarget(Base):
-    """Edge deployment target — a registered edge provider endpoint.
+class EdgeProviderAccount(Base):
+    """Authenticated account for an edge provider (e.g., Cloudflare, Vercel).
     
-    Each row represents a deployment of the Edge Engine on a specific provider
-    (Cloudflare, Vercel, Docker, etc.). The publish pipeline iterates all active
-    targets and pushes published pages to each.
-    
-    LB-ready: future sprint adds weight, quota_limit, quota_used, last_health_check
-    columns for multi-provider load balancing.
+    Stores credentials required to deploy and manage Edge Engines.
+    Provides a ""Data Source"" like connection experience.
     """
-    __tablename__ = 'deployment_targets'
+    __tablename__ = 'edge_providers_accounts'
     
     id = Column(String, primary_key=True)
-    name = Column(String(100), nullable=False)         # "Production CF", "Staging Docker"
-    provider = Column(String(50), nullable=False)       # "cloudflare", "vercel", "docker"
+    name = Column(String(100), nullable=False)          # "Personal Cloudflare", "My Docker Server"
+    provider = Column(String(50), nullable=False)       # "cloudflare", "docker", "vercel", "fastapi"
+    provider_credentials = Column(Text, nullable=True)  # JSON — e.g., {"api_token": "...", "account_id": "..."}
+    is_active = Column(Boolean, default=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
+    # Relationship
+    edge_engines = relationship("EdgeEngine", back_populates="edge_provider")
+
+
+class EdgeEngine(Base):
+    """Edge engine deployed instance — a registered edge provider endpoint.
+    
+    Each row represents a deployment of the Edge Engine (worker/container)
+    on a specific provider account (Cloudflare, Vercel, Docker, etc.).
+    """
+    __tablename__ = 'edge_engines'
+    
+    id = Column(String, primary_key=True)
+    name = Column(String(100), nullable=False)         # "frontbase-edge", "staging-docker"
+    edge_provider_id = Column(String, ForeignKey('edge_providers_accounts.id'), nullable=True)
     adapter_type = Column(String(20), nullable=False)   # "edge", "automations", "full"
     url = Column(String(500), nullable=False)           # "https://my-site.pages.dev"
     edge_db_id = Column(String, ForeignKey('edge_databases.id'), nullable=True)
-    provider_config = Column(Text, nullable=True)       # JSON — provider-specific credentials & metadata
+    engine_config = Column(Text, nullable=True)         # JSON — e.g., {"worker_name": "frontbase-edge"}
     is_active = Column(Boolean, default=True)
     is_system = Column(Boolean, default=False)           # True = pre-seeded, cannot be deleted
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     
-    # Relationship
-    edge_database = relationship("EdgeDatabase", back_populates="deployment_targets")
+    # Relationships
+    edge_database = relationship("EdgeDatabase", back_populates="edge_engines")
+    edge_provider = relationship("EdgeProviderAccount", back_populates="edge_engines")
 
 
 # Import Actions models to register them with Base

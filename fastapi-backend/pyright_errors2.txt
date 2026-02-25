@@ -1,0 +1,21 @@
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\models.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\models.py:80:12 - error: Invalid conditional operand of type "Column[str] | str"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\models.py:81:31 - error: Argument of type "Column[str] | str" cannot be assigned to parameter "s" of type "str | bytes | bytearray" in function "loads"
+  ┬á┬áType "Column[str] | str" is not assignable to type "str | bytes | bytearray"
+  ┬á┬á┬á┬áType "Column[str]" is not assignable to type "str | bytes | bytearray"
+  ┬á┬á┬á┬á┬á┬á"Column[str]" is not assignable to "str"
+  ┬á┬á┬á┬á┬á┬á"Column[str]" is not assignable to "bytes"
+  ┬á┬á┬á┬á┬á┬á"Column[str]" is not assignable to "bytearray" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\models.py:94:12 - error: Invalid conditional operand of type "Column[str] | str"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\models.py:95:31 - error: Argument of type "Column[str] | str" cannot be assigned to parameter "s" of type "str | bytes | bytearray" in function "loads"
+  ┬á┬áType "Column[str] | str" is not assignable to type "str | bytes | bytearray"
+  ┬á┬á┬á┬áType "Column[str]" is not assignable to type "str | bytes | bytearray"
+  ┬á┬á┬á┬á┬á┬á"Column[str]" is not assignable to "str"
+  ┬á┬á┬á┬á┬á┬á"Column[str]" is not assignable to "bytes"
+  ┬á┬á┬á┬á┬á┬á"Column[str]" is not assignable to "bytearray" (reportArgumentType)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\publish_strategy.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\publish_strategy.py:320:24 - error: Invalid conditional operand of type "EdgeDatabase | Column[str] | None"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+5 errors, 0 warnings, 0 informations

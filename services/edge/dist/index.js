@@ -1,33 +1,28 @@
 import {
-  DEFAULT_FAVICON,
-  getFaviconUrl,
-  getProjectSettings,
-  initProjectSettingsDb,
-  updateProjectSettings
-} from "./chunk-CE2EGWKM.js";
-import {
-  deletePublishedPage,
-  getHomepage,
-  getPublishedPageBySlug,
-  initPagesDb,
-  listPublishedPages,
-  upsertPublishedPage
-} from "./chunk-5FKI6QA4.js";
+  cached,
+  getRedis,
+  initRedis,
+  invalidate,
+  invalidatePattern,
+  testConnection
+} from "./chunk-7UNFST42.js";
 import {
   __export
 } from "./chunk-MLKGABMK.js";
 
 // src/index.ts
-import { OpenAPIHono as OpenAPIHono9 } from "@hono/zod-openapi";
-import { swaggerUI } from "@hono/swagger-ui";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
+import { compress } from "hono/compress";
 import path from "path";
 import { fileURLToPath } from "url";
+
+// src/adapters/shared.ts
+import { OpenAPIHono as OpenAPIHono8 } from "@hono/zod-openapi";
+import { swaggerUI } from "@hono/swagger-ui";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
-import { compress } from "hono/compress";
 import { requestId } from "hono/request-id";
 import { timeout } from "hono/timeout";
 import { bodyLimit } from "hono/body-limit";
@@ -168,45 +163,60 @@ var NodePositionSchema = z2.object({
 var ParameterSchema = z2.object({
   name: z2.string(),
   type: z2.string(),
-  value: z2.any().optional(),
-  description: z2.string().optional(),
-  required: z2.boolean().optional()
-}).openapi("Parameter");
+  value: z2.any().optional().nullable(),
+  description: z2.string().optional().nullable(),
+  required: z2.boolean().optional().nullable()
+}).passthrough().openapi("Parameter");
 var WorkflowNodeSchema = z2.object({
   id: z2.string(),
-  name: z2.string(),
+  // ReactFlow uses 'type' at root level
   type: z2.string(),
   position: NodePositionSchema,
-  inputs: z2.array(ParameterSchema),
-  outputs: z2.array(ParameterSchema),
-  error: z2.string().optional()
-}).openapi("WorkflowNode");
+  // ReactFlow wraps node data in 'data' object
+  data: z2.object({
+    label: z2.string().optional().nullable(),
+    type: z2.string().optional().nullable(),
+    inputs: z2.array(ParameterSchema).optional().nullable(),
+    outputs: z2.array(ParameterSchema).optional().nullable()
+  }).passthrough().optional().nullable(),
+  // Legacy format: direct properties (for backward compatibility)
+  name: z2.string().optional().nullable(),
+  inputs: z2.array(ParameterSchema).optional().nullable(),
+  outputs: z2.array(ParameterSchema).optional().nullable(),
+  error: z2.string().optional().nullable()
+}).passthrough().openapi("WorkflowNode");
 var WorkflowEdgeSchema = z2.object({
+  id: z2.string().optional(),
+  // ReactFlow adds id
   source: z2.string(),
   target: z2.string(),
-  sourceOutput: z2.string(),
-  targetInput: z2.string()
-}).openapi("WorkflowEdge");
+  // ReactFlow uses sourceHandle/targetHandle
+  sourceHandle: z2.string().nullable().optional(),
+  targetHandle: z2.string().nullable().optional(),
+  // Legacy format
+  sourceOutput: z2.string().optional(),
+  targetInput: z2.string().optional()
+}).passthrough().openapi("WorkflowEdge");
 var WorkflowSchema = z2.object({
   id: z2.string().uuid(),
   name: z2.string().min(1).max(255),
   description: z2.string().optional(),
   triggerType: TriggerTypeSchema,
-  triggerConfig: z2.record(z2.any()).optional(),
+  triggerConfig: z2.record(z2.any()).optional().nullable(),
   nodes: z2.array(WorkflowNodeSchema),
   edges: z2.array(WorkflowEdgeSchema),
-  version: z2.number().int().positive().optional(),
-  isActive: z2.boolean().optional()
+  version: z2.number().int().positive().optional().nullable(),
+  isActive: z2.boolean().optional().nullable()
 }).openapi("Workflow");
 var DeployWorkflowSchema = z2.object({
   id: z2.string().uuid(),
   name: z2.string().min(1),
-  description: z2.string().optional(),
+  description: z2.string().optional().nullable(),
   triggerType: TriggerTypeSchema,
-  triggerConfig: z2.record(z2.any()).optional(),
+  triggerConfig: z2.record(z2.any()).optional().nullable(),
   nodes: z2.array(WorkflowNodeSchema),
   edges: z2.array(WorkflowEdgeSchema),
-  publishedBy: z2.string().optional()
+  publishedBy: z2.string().optional().nullable()
 }).openapi("DeployWorkflow");
 var NodeExecutionSchema = z2.object({
   nodeId: z2.string(),
@@ -386,7 +396,9 @@ async function executeWorkflow(executionId, workflow, inputParameters) {
       const inputs = {};
       for (const edge of incomingEdges) {
         const sourceOutputs = context.nodeOutputs[edge.source] || {};
-        inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
+        if (edge.targetInput && edge.sourceOutput) {
+          inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
+        }
       }
       if (startNodes.some((n) => n.id === nodeId)) {
         Object.assign(inputs, context.parameters);
@@ -430,11 +442,109 @@ async function executeWorkflow(executionId, workflow, inputParameters) {
     }).where(eq2(executions.id, executionId));
   }
 }
+async function executeSingleNode(executionId, workflow, targetNodeId, inputParameters) {
+  const nodes = JSON.parse(workflow.nodes);
+  const edges = JSON.parse(workflow.edges);
+  const targetNode = nodes.find((n) => n.id === targetNodeId);
+  if (!targetNode) {
+    throw new Error(`Node ${targetNodeId} not found in workflow`);
+  }
+  const context = {
+    executionId,
+    workflowId: workflow.id,
+    parameters: inputParameters,
+    nodeOutputs: {},
+    nodeExecutions: []
+  };
+  try {
+    await updateExecutionStatus(executionId, "executing", context.nodeExecutions);
+    const upstreamNodes = getUpstreamNodes(targetNodeId, nodes, edges);
+    const nodesToExecute = [...upstreamNodes, targetNodeId];
+    context.nodeExecutions = nodesToExecute.map((nodeId) => ({
+      nodeId,
+      status: "idle"
+    }));
+    const executed = /* @__PURE__ */ new Set();
+    const queue = [...nodesToExecute];
+    while (queue.length > 0) {
+      const nodeId = queue.shift();
+      if (executed.has(nodeId)) continue;
+      const node = nodes.find((n) => n.id === nodeId);
+      if (!node) continue;
+      const incomingEdges = edges.filter((e) => e.target === nodeId);
+      const dependenciesMet = incomingEdges.every(
+        (e) => !nodesToExecute.includes(e.source) || executed.has(e.source)
+      );
+      if (!dependenciesMet) {
+        queue.push(nodeId);
+        continue;
+      }
+      const inputs = {};
+      for (const edge of incomingEdges) {
+        const sourceOutputs = context.nodeOutputs[edge.source] || {};
+        if (edge.targetInput && edge.sourceOutput) {
+          inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
+        }
+      }
+      const targetNodeIds = new Set(edges.map((e) => e.target));
+      if (!targetNodeIds.has(nodeId)) {
+        Object.assign(inputs, context.parameters);
+      }
+      try {
+        updateNodeStatus(context, nodeId, "executing");
+        await updateExecutionStatus(executionId, "executing", context.nodeExecutions);
+        const outputs = await executeNode(node, inputs, context);
+        context.nodeOutputs[nodeId] = outputs;
+        updateNodeStatus(context, nodeId, "completed", outputs);
+        executed.add(nodeId);
+      } catch (error) {
+        updateNodeStatus(context, nodeId, "error", void 0, error.message);
+        throw error;
+      }
+    }
+    const result = {
+      [targetNodeId]: context.nodeOutputs[targetNodeId]
+    };
+    await db.update(executions).set({
+      status: "completed",
+      nodeExecutions: JSON.stringify(context.nodeExecutions),
+      result: JSON.stringify(result),
+      endedAt: (/* @__PURE__ */ new Date()).toISOString()
+    }).where(eq2(executions.id, executionId));
+  } catch (error) {
+    await db.update(executions).set({
+      status: "error",
+      nodeExecutions: JSON.stringify(context.nodeExecutions),
+      error: error.message,
+      endedAt: (/* @__PURE__ */ new Date()).toISOString()
+    }).where(eq2(executions.id, executionId));
+  }
+}
+function getUpstreamNodes(targetNodeId, nodes, edges) {
+  const upstream = [];
+  const visited = /* @__PURE__ */ new Set();
+  const queue = [targetNodeId];
+  while (queue.length > 0) {
+    const nodeId = queue.shift();
+    if (visited.has(nodeId)) continue;
+    visited.add(nodeId);
+    const incomingEdges = edges.filter((e) => e.target === nodeId);
+    for (const edge of incomingEdges) {
+      if (!visited.has(edge.source)) {
+        upstream.push(edge.source);
+        queue.push(edge.source);
+      }
+    }
+  }
+  return upstream;
+}
 async function executeNode(node, inputs, context) {
   switch (node.type) {
     case "trigger":
     case "manual_trigger":
       return { ...inputs };
+    case "data_request":
+      return await executeDataRequest(node, inputs);
     case "http_request":
       return await executeHttpRequest(node, inputs);
     case "transform":
@@ -452,11 +562,91 @@ async function executeNode(node, inputs, context) {
       return { ...inputs };
   }
 }
+async function executeDataRequest(node, inputs) {
+  const BACKEND_URL2 = process.env.BACKEND_URL || "http://localhost:8000";
+  const nodeData = node.data || {};
+  const nodeInputs = nodeData.inputs || node.inputs || [];
+  const getInputValue = (name) => {
+    if (Array.isArray(nodeInputs)) {
+      const input = nodeInputs.find((i) => i.name === name);
+      if (input?.value !== void 0) return input.value;
+    }
+    if (nodeData[name] !== void 0) return nodeData[name];
+    return inputs[name];
+  };
+  const dataSource = getInputValue("dataSource");
+  const table = getInputValue("table");
+  const operation = getInputValue("operation") || "select";
+  const selectFields = getInputValue("selectFields") || [];
+  const whereConditions = getInputValue("whereConditions") || [];
+  const limit = getInputValue("limit") || 100;
+  const returnData = getInputValue("returnData") !== false;
+  console.log(`[Data Request] table=${table}, operation=${operation}`);
+  if (!table) {
+    return {
+      success: false,
+      error: "Table is required",
+      data: [],
+      rowCount: 0
+    };
+  }
+  try {
+    let selectParam = "*";
+    if (Array.isArray(selectFields) && selectFields.length > 0) {
+      selectParam = selectFields.map((f) => f.key || f.name || f).filter(Boolean).join(",") || "*";
+    }
+    const queryUrl = new URL(`${BACKEND_URL2}/api/database/table-data/${table}/`);
+    queryUrl.searchParams.set("limit", String(limit));
+    queryUrl.searchParams.set("select", selectParam);
+    queryUrl.searchParams.set("mode", "builder");
+    if (Array.isArray(whereConditions) && whereConditions.length > 0) {
+      whereConditions.forEach((condition) => {
+        if (condition.key && condition.value !== void 0) {
+          queryUrl.searchParams.set(`filter_${condition.key}`, String(condition.value));
+        }
+      });
+    }
+    console.log(`[Data Request] Fetching: ${queryUrl.toString()}`);
+    const response = await fetch(queryUrl.toString(), {
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Data Request] Error: ${response.status} - ${errorText}`);
+      return {
+        success: false,
+        error: `Query failed: ${response.status} - ${errorText}`,
+        data: [],
+        rowCount: 0
+      };
+    }
+    const result = await response.json();
+    const data = returnData ? result.data || result.rows || [] : [];
+    const total = result.total || data.length;
+    console.log(`[Data Request] Success: ${data.length} rows (total: ${total})`);
+    return {
+      success: true,
+      data,
+      rowCount: data.length,
+      total
+    };
+  } catch (error) {
+    console.error(`[Data Request] Error:`, error);
+    return {
+      success: false,
+      error: error.message || "Query execution failed",
+      data: [],
+      rowCount: 0
+    };
+  }
+}
 async function executeHttpRequest(node, inputs) {
-  const url = inputs.url || node.inputs.find((i) => i.name === "url")?.value;
-  const method = inputs.method || node.inputs.find((i) => i.name === "method")?.value || "GET";
-  const headers = inputs.headers || node.inputs.find((i) => i.name === "headers")?.value || {};
-  const body = inputs.body || node.inputs.find((i) => i.name === "body")?.value;
+  const nodeInputs = node.inputs || [];
+  const url = inputs.url || nodeInputs.find((i) => i.name === "url")?.value;
+  const method = inputs.method || nodeInputs.find((i) => i.name === "method")?.value || "GET";
+  const headers = inputs.headers || nodeInputs.find((i) => i.name === "headers")?.value || {};
+  const body = inputs.body || nodeInputs.find((i) => i.name === "body")?.value;
   const response = await fetch(url, {
     method,
     headers: { "Content-Type": "application/json", ...headers },
@@ -470,7 +660,7 @@ async function executeHttpRequest(node, inputs) {
   };
 }
 function executeTransform(node, inputs) {
-  const expression = node.inputs.find((i) => i.name === "expression")?.value;
+  const expression = (node.inputs || []).find((i) => i.name === "expression")?.value;
   if (expression && typeof expression === "string") {
     try {
       const fn = new Function("data", `return ${expression}`);
@@ -482,7 +672,7 @@ function executeTransform(node, inputs) {
   return { result: inputs };
 }
 function executeCondition(node, inputs) {
-  const condition = node.inputs.find((i) => i.name === "condition")?.value;
+  const condition = (node.inputs || []).find((i) => i.name === "condition")?.value;
   let result = false;
   if (condition && typeof condition === "string") {
     try {
@@ -589,6 +779,73 @@ executeRoute.openapi(route3, async (c) => {
     executionId,
     status: "started",
     message: "Workflow execution started"
+  }, 200);
+});
+var singleNodeRoute = createRoute3({
+  method: "post",
+  path: "/:id/node/:nodeId",
+  tags: ["Execution"],
+  summary: "Execute a single node",
+  description: "Executes a single node (and its upstream dependencies) for testing",
+  request: {
+    params: z4.object({
+      id: z4.string().uuid().openapi({ description: "Workflow ID" }),
+      nodeId: z4.string().openapi({ description: "Node ID to execute" })
+    }),
+    body: {
+      content: {
+        "application/json": {
+          schema: ExecuteRequestSchema
+        }
+      },
+      required: false
+    }
+  },
+  responses: {
+    200: {
+      description: "Node execution started",
+      content: {
+        "application/json": {
+          schema: ExecuteResponseSchema
+        }
+      }
+    },
+    404: {
+      description: "Workflow or node not found",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema
+        }
+      }
+    }
+  }
+});
+executeRoute.openapi(singleNodeRoute, async (c) => {
+  const { id, nodeId } = c.req.valid("param");
+  const body = await c.req.json().catch(() => ({}));
+  const [workflow] = await db.select().from(workflows).where(eq3(workflows.id, id)).limit(1);
+  if (!workflow) {
+    return c.json({
+      error: "NotFound",
+      message: `Workflow ${id} not found`
+    }, 404);
+  }
+  const executionId = uuidv4();
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  await db.insert(executions).values({
+    id: executionId,
+    workflowId: id,
+    status: "started",
+    triggerType: "node_test",
+    triggerPayload: JSON.stringify({ nodeId, parameters: body.parameters || {} }),
+    nodeExecutions: JSON.stringify([]),
+    startedAt: now
+  });
+  executeSingleNode(executionId, workflow, nodeId, body.parameters || {}).catch((err) => console.error(`Node execution ${executionId} failed:`, err));
+  return c.json({
+    executionId,
+    status: "started",
+    message: `Executing node ${nodeId}`
   }, 200);
 });
 
@@ -772,6 +1029,49 @@ executionsRoute.openapi(listRoute, async (c) => {
     total: results.length
   }, 200);
 });
+var statsRoute = createRoute5({
+  method: "get",
+  path: "/stats",
+  tags: ["Executions"],
+  summary: "Get execution counts per workflow",
+  description: "Returns run counts for each workflow",
+  responses: {
+    200: {
+      description: "Execution stats",
+      content: {
+        "application/json": {
+          schema: z6.object({
+            stats: z6.array(z6.object({
+              workflowId: z6.string(),
+              totalRuns: z6.number(),
+              successfulRuns: z6.number(),
+              failedRuns: z6.number()
+            }))
+          })
+        }
+      }
+    }
+  }
+});
+executionsRoute.openapi(statsRoute, async (c) => {
+  const allExecutions = await db.select().from(executions);
+  const statsMap = /* @__PURE__ */ new Map();
+  for (const exec of allExecutions) {
+    const current = statsMap.get(exec.workflowId) || { totalRuns: 0, successfulRuns: 0, failedRuns: 0 };
+    current.totalRuns++;
+    if (exec.status === "completed") {
+      current.successfulRuns++;
+    } else if (exec.status === "error") {
+      current.failedRuns++;
+    }
+    statsMap.set(exec.workflowId, current);
+  }
+  const stats = Array.from(statsMap.entries()).map(([workflowId, counts]) => ({
+    workflowId,
+    ...counts
+  }));
+  return c.json({ stats }, 200);
+});
 
 // src/routes/pages.ts
 import { OpenAPIHono as OpenAPIHono6, createRoute as createRoute6, z as z7 } from "@hono/zod-openapi";
@@ -844,7 +1144,9 @@ function getCommonAttributes(id, baseClass, props, extraStyle = "") {
     }).join(";");
   }
   const finalStyle = [extraStyle, propStyleString].filter(Boolean).join(";");
-  return `id="${id}" class="${className}" style="${finalStyle}"`;
+  const actionBindings = props.actionBindings;
+  const propsAttr = actionBindings && actionBindings.length > 0 ? ` data-fb-props="${escapeHtml(JSON.stringify({ actionBindings }))}"` : "";
+  return `id="${id}" class="${className}" style="${finalStyle}"${propsAttr}`;
 }
 function renderStaticComponent(type, id, props, childrenHtml) {
   switch (type) {
@@ -870,6 +1172,8 @@ function renderStaticComponent(type, id, props, childrenHtml) {
       return renderLabel(id, props);
     case "MarkdownContent":
       return renderMarkdown(id, props);
+    case "Embed":
+      return renderEmbed(id, props);
     default:
       return `<div ${getCommonAttributes(id, "fb-unknown", props)} data-fb-type="${type}">${childrenHtml}</div>`;
   }
@@ -1048,6 +1352,41 @@ function renderMarkdown(id, props) {
         <pre style="white-space:pre-wrap;font-family:inherit">${escapeHtml(content)}</pre>
     </div>`;
 }
+function renderEmbed(id, props) {
+  const embedType = props.embedType || "iframe";
+  const width = props.width || "100%";
+  const height = props.height || "400px";
+  const title = escapeHtml(String(props.title || "Embedded content"));
+  const loading = props.loading || "lazy";
+  const containerStyle = `width:${width};height:${height};min-height:100px`;
+  if (embedType === "iframe") {
+    const src = props.src || "";
+    const sandbox = escapeHtml(String(props.sandbox || "allow-scripts allow-same-origin allow-forms"));
+    if (!src) {
+      const attrs3 = getCommonAttributes(id, "fb-embed fb-embed-placeholder", props, `${containerStyle};display:flex;align-items:center;justify-content:center;background:#f5f5f5;border:2px dashed #ccc;border-radius:8px`);
+      return `<div ${attrs3}><span style="color:#999">Iframe URL not set</span></div>`;
+    }
+    const attrs2 = getCommonAttributes(id, "fb-embed fb-embed-iframe", props, containerStyle);
+    return `<div ${attrs2}>
+            <iframe 
+                src="${escapeHtml(src)}" 
+                title="${title}" 
+                width="100%" 
+                height="100%" 
+                style="border:none;border-radius:8px" 
+                loading="${loading}" 
+                sandbox="${sandbox}"
+            ></iframe>
+        </div>`;
+  }
+  const html = props.html || "";
+  if (!html) {
+    const attrs2 = getCommonAttributes(id, "fb-embed fb-embed-placeholder", props, `${containerStyle};display:flex;align-items:center;justify-content:center;background:#fffbeb;border:2px dashed #f59e0b;border-radius:8px`);
+    return `<div ${attrs2}><span style="color:#92400e">Script embed code not set</span></div>`;
+  }
+  const attrs = getCommonAttributes(id, "fb-embed fb-embed-script", props, containerStyle);
+  return `<div ${attrs}>${html}</div>`;
+}
 
 // src/ssr/components/interactive.ts
 function escapeHtml2(str) {
@@ -1154,6 +1493,8 @@ function renderButton(id, props, propsJson) {
   const disabled = props.disabled || false;
   const fullWidth = props.fullWidth || false;
   const loading = props.loading || false;
+  const actionBindings = props.actionBindings || [];
+  const onClickAction = actionBindings.find((b) => b.trigger === "onClick");
   const variantStyles = {
     default: "background:hsl(var(--primary));color:hsl(var(--primary-foreground));border:none",
     primary: "background:hsl(var(--primary));color:hsl(var(--primary-foreground));border:none",
@@ -1171,21 +1512,38 @@ function renderButton(id, props, propsJson) {
     xl: "padding:0.75rem 1.5rem;font-size:1.25rem"
   };
   const style = `${variantStyles[variant] || variantStyles.default};${sizeStyles[size] || sizeStyles.md};border-radius:0.375rem;cursor:pointer;font-weight:500;transition:all 0.15s;${fullWidth ? "width:100%" : "width:fit-content"};${disabled ? "opacity:0.5;cursor:not-allowed" : ""}`;
+  let actionAttrs = "";
+  if (onClickAction) {
+    switch (onClickAction.actionType) {
+      case "scrollToSection":
+        if (onClickAction.config?.sectionId) {
+          actionAttrs = `data-scroll-to="${escapeHtml2(onClickAction.config.sectionId)}"`;
+        }
+        break;
+      case "openPage":
+        if (onClickAction.config?.pageUrl) {
+          const url = escapeHtml2(onClickAction.config.pageUrl);
+          const newTab = onClickAction.config.openInNewTab;
+          actionAttrs = `data-navigate-to="${url}"${newTab ? ' data-navigate-new-tab="true"' : ""}`;
+        }
+        break;
+    }
+  }
   const attrs = getCommonAttributes2(id, `fb-button fb-button-${variant}`, props, style, "button", propsJson);
-  return `<button ${attrs} ${disabled ? "disabled" : ""}>
+  return `<button ${attrs} ${actionAttrs} ${disabled ? "disabled" : ""}>
         ${loading ? '<span class="fb-spinner" style="margin-right:0.5rem">\u23F3</span>' : ""}
         ${label}
     </button>`;
 }
 function renderLink(id, props, propsJson) {
-  const text2 = escapeHtml2(String(props.text || props.label || props.children || "Link"));
+  const text4 = escapeHtml2(String(props.text || props.label || props.children || "Link"));
   const href = escapeHtml2(String(props.href || props.to || "#"));
   const target = props.target || "_self";
   const color = props.color || "#3b82f6";
   const underline = props.underline !== false;
   const style = `color:${color};${underline ? "text-decoration:underline" : "text-decoration:none"};cursor:pointer`;
   const attrs = getCommonAttributes2(id, "fb-link", props, style, "link", propsJson);
-  return `<a ${attrs} href="${href}" target="${target}">${text2}</a>`;
+  return `<a ${attrs} href="${href}" target="${target}">${text4}</a>`;
 }
 function renderTabs(id, props, childrenHtml, propsJson) {
   const tabs = props.tabs || [];
@@ -1463,37 +1821,50 @@ function renderDataTable(id, props, propsJson) {
     </div>`;
 }
 function renderForm(id, props, childrenHtml, propsJson) {
+  const binding = props.binding || {};
   const title = escapeHtml3(String(props.title || "Form"));
-  const mode = props.mode || "create";
-  const tableName = props.tableName || props.table || "";
-  const fields = props.fields || [];
-  const formFields = fields.length > 0 ? fields.map((field) => `
-            <div class="fb-form-field" style="margin-bottom:1rem">
-                <label style="display:block;font-weight:500;margin-bottom:0.25rem">${escapeHtml3(field.label)}</label>
-                <div class="fb-skeleton" style="height:40px;border-radius:0.375rem">&nbsp;</div>
-            </div>
-        `).join("") : `
-            <div class="fb-form-field" style="margin-bottom:1rem">
-                <div class="fb-skeleton" style="height:16px;width:60px;margin-bottom:0.25rem">&nbsp;</div>
-                <div class="fb-skeleton" style="height:40px;border-radius:0.375rem">&nbsp;</div>
-            </div>
-            <div class="fb-form-field" style="margin-bottom:1rem">
-                <div class="fb-skeleton" style="height:16px;width:80px;margin-bottom:0.25rem">&nbsp;</div>
-                <div class="fb-skeleton" style="height:40px;border-radius:0.375rem">&nbsp;</div>
-            </div>
-        `;
-  const attrs = getCommonAttributes3(id, "fb-form", props, "", "form", propsJson, `data-table="${escapeHtml3(tableName)}" data-mode="${mode}"`);
-  return `<form ${attrs}>
-        ${title ? `<h3 style="margin:0 0 1.5rem 0;font-size:1.125rem;font-weight:600">${title}</h3>` : ""}
-        <div class="fb-form-fields fb-loading">
-            ${formFields}
-            ${childrenHtml}
+  const tableName = props._tableName || binding.tableName || props.tableName || props.table || "";
+  const dataSourceId = props._dataSourceId || binding.dataSourceId || props.dataSourceId || "";
+  const fieldOverrides = props._fieldOverrides || binding.fieldOverrides || props.fieldOverrides || {};
+  const fieldOrder = props._fieldOrder || binding.fieldOrder || props.fieldOrder || [];
+  const columns = props._columns || binding.columns || [];
+  const foreignKeys = props._foreignKeys || binding.foreignKeys || [];
+  const reactProps = {
+    binding: {
+      ...binding,
+      columns,
+      foreignKeys,
+      tableName,
+      dataSourceId,
+      fieldOverrides,
+      fieldOrder
+    },
+    tableName,
+    dataSourceId,
+    fieldOverrides,
+    fieldOrder,
+    title: props.title || "",
+    showCard: props.showCard !== false
+  };
+  const reactPropsJson = JSON.stringify(reactProps).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
+  const skeletonFields = Array(3).fill(0).map(() => `
+        <div class="fb-form-field" style="margin-bottom:1rem">
+            <div class="fb-skeleton" style="height:16px;width:60px;margin-bottom:0.25rem">&nbsp;</div>
+            <div class="fb-skeleton" style="height:40px;border-radius:0.375rem">&nbsp;</div>
         </div>
-        <div class="fb-form-actions" style="display:flex;gap:0.75rem;margin-top:1.5rem">
-            <button type="submit" class="fb-skeleton" style="padding:0.5rem 1.5rem;border-radius:0.375rem;width:100px">&nbsp;</button>
-            <button type="button" class="fb-skeleton" style="padding:0.5rem 1rem;border-radius:0.375rem;width:80px">&nbsp;</button>
+    `).join("");
+  return `<div id="${id}" class="fb-form" data-react-component="Form" data-react-props="${escapeHtml3(reactPropsJson)}" data-component-id="${id}">
+        <div class="fb-form-container" style="border:1px solid #e5e7eb;border-radius:0.5rem;padding:1.5rem">
+            ${title ? `<h3 style="margin:0 0 1.5rem 0;font-size:1.125rem;font-weight:600">${title}</h3>` : ""}
+            <div class="fb-form-fields fb-loading">
+                ${skeletonFields}
+            </div>
+            <div class="fb-form-actions" style="display:flex;gap:0.75rem;margin-top:1.5rem">
+                <button type="submit" class="fb-skeleton" style="padding:0.5rem 1.5rem;border-radius:0.375rem;width:100px">&nbsp;</button>
+                <button type="button" class="fb-skeleton" style="padding:0.5rem 1rem;border-radius:0.375rem;width:80px">&nbsp;</button>
+            </div>
         </div>
-    </form>`;
+    </div>`;
 }
 function renderInfoList(id, props, propsJson) {
   const title = escapeHtml3(String(props.title || ""));
@@ -1724,17 +2095,35 @@ function renderHero(id, props, stylesData) {
     align: alignment,
     className: "text-lg sm:text-xl text-muted-foreground"
   })}</div>` : "";
-  const primaryCtaHtml = props.ctaText ? `<a href="${escapeHtml4(props.ctaLink || "#")}" 
-             class="inline-flex items-center justify-center px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors">
-             ${escapeHtml4(props.ctaText)}
-           </a>` : "";
-  const secondaryCtaHtml = props.secondaryCtaText ? `<a href="${escapeHtml4(props.secondaryCtaLink || "#")}" 
-             class="inline-flex items-center justify-center px-6 py-3 rounded-lg border border-input bg-background hover:bg-accent hover:text-accent-foreground font-medium transition-colors">
-             ${escapeHtml4(props.secondaryCtaText)}
-           </a>` : "";
+  const renderCtaButton = (text4, link, actionBindings, isPrimary) => {
+    if (!text4) return "";
+    const baseClasses = isPrimary ? "inline-flex items-center justify-center px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors" : "inline-flex items-center justify-center px-6 py-3 rounded-lg border border-input bg-background hover:bg-accent hover:text-accent-foreground font-medium transition-colors";
+    const onClickAction = actionBindings?.find((b) => b.trigger === "onClick");
+    if (onClickAction?.actionType === "scrollToSection" && onClickAction.config?.sectionId) {
+      return `<button data-scroll-to="${escapeHtml4(onClickAction.config.sectionId)}" 
+                     class="${baseClasses}">
+                     ${escapeHtml4(text4)}
+                   </button>`;
+    }
+    if (onClickAction?.actionType === "openPage" && onClickAction.config?.pageUrl) {
+      const target = onClickAction.config.openInNewTab ? "_blank" : "_self";
+      const rel = onClickAction.config.openInNewTab ? "noopener noreferrer" : "";
+      return `<a href="${escapeHtml4(onClickAction.config.pageUrl)}" 
+                     target="${target}" ${rel ? `rel="${rel}"` : ""}
+                     class="${baseClasses}">
+                     ${escapeHtml4(text4)}
+                   </a>`;
+    }
+    return `<a href="${escapeHtml4(link || "#")}" 
+                 class="${baseClasses}">
+                 ${escapeHtml4(text4)}
+               </a>`;
+  };
+  const primaryCtaHtml = renderCtaButton(props.ctaText, props.ctaLink, props.ctaActionBindings || props.actionBindings, true);
+  const secondaryCtaHtml = renderCtaButton(props.secondaryCtaText, props.secondaryCtaLink, props.secondaryCtaActionBindings, false);
   const ctaContainerHtml = props.ctaText || props.secondaryCtaText ? `<div class="${ctaContainerClasses}">${primaryCtaHtml}${secondaryCtaHtml}</div>` : "";
   return `
-        <section id="${id}" class="${sectionClasses}" style="${combinedStyles}">
+        <section id="${props.anchor || id}" class="${sectionClasses}" style="${combinedStyles}">
             <div class="${contentClasses}">
                 ${badgeHtml}
                 ${titleHtml}
@@ -1809,7 +2198,7 @@ function renderFeatures(id, props, stylesData) {
     return renderDataComponent("Card", featureId, cardProps, "");
   }).join("");
   return `
-        <section id="${id}" class="${sectionClasses}" style="background-color: ${sectionBackground}; ${inlineStyles}">
+        <section id="${props.anchor || id}" class="${sectionClasses}" style="background-color: ${sectionBackground}; ${inlineStyles}">
             <div class="fb-container">
                 ${headerHtml}
                 <div class="${gridClasses}">
@@ -1881,7 +2270,7 @@ function renderPricing(id, props, stylesData) {
   }).join("");
   const gridCols = props.plans?.length === 2 ? "lg:grid-cols-2" : props.plans?.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-4";
   return `
-        <section id="${id}" class="${sectionClasses}" style="${inlineStyles}">
+        <section id="${props.anchor || id}" class="${sectionClasses}" style="${inlineStyles}">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 ${headerHtml}
                 <div class="grid grid-cols-1 gap-6 sm:gap-8 sm:grid-cols-2 ${gridCols} max-w-6xl mx-auto">
@@ -1913,7 +2302,7 @@ function renderCTA(id, props, stylesData) {
              ${escapeHtml4(props.secondaryCtaText)}
            </a>` : "";
   return `
-        <section id="${id}" class="${sectionClasses}" style="${combinedStyles}">
+        <section id="${props.anchor || id}" class="${sectionClasses}" style="${combinedStyles}">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="rounded-2xl bg-card border p-8 sm:p-12 lg:p-16 shadow-lg">
                     <div class="flex flex-col lg:flex-row items-center justify-between gap-8">
@@ -1936,12 +2325,12 @@ function renderCTA(id, props, stylesData) {
 }
 
 // src/ssr/components/landing/Navbar.ts
-function renderCtaLink(id, text2, target, navType, variant) {
+function renderCtaLink(id, text4, target, navType, variant) {
   const scrollAttr = navType === "scroll" ? `data-scroll-to="${escapeHtml4(target)}"` : "";
   const variantClasses = variant === "primary" ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border hover:bg-accent";
   return `<a id="${id}" href="${escapeHtml4(target)}" ${scrollAttr}
        class="inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${variantClasses}">
-        ${escapeHtml4(text2)}
+        ${escapeHtml4(text4)}
     </a>`;
 }
 function renderNavbar(id, props, stylesData) {
@@ -1966,6 +2355,7 @@ function renderNewFormat(id, props, headerClasses, inlineStyles) {
   const menuItems = props.menuItems || [];
   const primaryButton = props.primaryButton;
   const secondaryButton = props.secondaryButton;
+  const scale = props.scale || 1;
   const logoLink = logo.link || "/";
   let logoHtml;
   console.log("[Navbar SSR] Logo props:", {
@@ -1973,13 +2363,17 @@ function renderNewFormat(id, props, headerClasses, inlineStyles) {
     showIcon: logo.showIcon,
     useProjectLogo: logo.useProjectLogo,
     imageUrl: logo.imageUrl ? logo.imageUrl.substring(0, 50) + "..." : "NOT SET",
-    text: logo.text
+    text: logo.text,
+    scale
   });
+  const logoHeight = `${2 * scale}rem`;
+  const iconSize = `${1.5 * scale}rem`;
+  const logoFontSize = `${1.25 * scale}rem`;
   if (logo.type === "image" && logo.imageUrl) {
     logoHtml = renderImage(`${id}-logo-img`, {
       src: logo.imageUrl,
       alt: "Logo",
-      height: "2rem",
+      height: logoHeight,
       width: "auto",
       objectFit: "contain"
     });
@@ -1987,29 +2381,23 @@ function renderNewFormat(id, props, headerClasses, inlineStyles) {
     const iconImg = renderImage(`${id}-logo-icon`, {
       src: logo.imageUrl,
       alt: "Logo",
-      height: "1.5rem",
-      width: "1.5rem",
+      height: iconSize,
+      width: iconSize,
       objectFit: "contain"
     });
-    const brandText = renderText(`${id}-logo-text`, {
-      text: logo.text || "YourBrand",
-      size: "xl",
-      weight: "bold"
-    });
+    const brandText = `<span id="${id}-logo-text" style="font-size: ${logoFontSize}; font-weight: 700;">${escapeHtml4(logo.text || "YourBrand")}</span>`;
     logoHtml = `${iconImg}${brandText}`;
   } else {
-    logoHtml = renderText(`${id}-logo-text`, {
-      text: logo.text || "YourBrand",
-      size: "xl",
-      weight: "bold"
-    });
+    logoHtml = `<span id="${id}-logo-text" style="font-size: ${logoFontSize}; font-weight: 700;">${escapeHtml4(logo.text || "YourBrand")}</span>`;
   }
+  const menuFontSize = `${0.875 * scale}rem`;
   const menuItemsHtml = menuItems.map((item) => {
     const href = item.navType === "scroll" ? item.target : item.target;
     const scrollAttr = item.navType === "scroll" ? `data-scroll-to="${escapeHtml4(item.target)}"` : "";
     return `
             <a href="${escapeHtml4(href)}" ${scrollAttr} 
-               class="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+               class="font-medium text-muted-foreground hover:text-foreground transition-colors"
+               style="font-size: ${menuFontSize};">
                 ${escapeHtml4(item.label)}
             </a>
         `;
@@ -2061,26 +2449,30 @@ function renderNewFormat(id, props, headerClasses, inlineStyles) {
       "primary"
     );
   }
+  const navPadding = `${1 * scale}rem`;
+  const navGap = `${2 * scale}rem`;
+  const menuGap = `${1.5 * scale}rem`;
+  const buttonGap = `${0.75 * scale}rem`;
   return `
         <header id="${id}" class="${headerClasses}" style="${inlineStyles}">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex items-center justify-between py-4">
+                <div class="flex items-center justify-between" style="padding: ${navPadding} 0;">
                     <!-- Logo -->
                     <a href="${escapeHtml4(logoLink)}" class="flex items-center gap-2">
                         ${logoHtml}
                     </a>
                     
                     <!-- Desktop Navigation + CTA Buttons grouped together -->
-                    <div class="hidden md:flex items-center gap-8">
-                        <nav class="flex items-center gap-6">
+                    <div class="hidden md:flex items-center" style="gap: ${navGap};">
+                        <nav class="flex items-center" style="gap: ${menuGap};">
                             ${menuItemsHtml}
                         </nav>
-                        <div class="flex items-center gap-3">
+                        <div class="flex items-center" style="gap: ${buttonGap};">
                             ${darkModeToggleHtml}
                             ${buttonsHtml}
                         </div>
                     </div>
-                    
+
                     <!-- Mobile: Dark Mode Toggle + Menu Button -->
                     <div class="md:hidden flex items-center gap-2">
                         ${darkModeToggleHtml}
@@ -2091,7 +2483,7 @@ function renderNewFormat(id, props, headerClasses, inlineStyles) {
                         </button>
                     </div>
                 </div>
-                
+
                 <!-- Mobile Menu (hidden by default) -->
                 <div class="md:hidden hidden pb-4" data-fb-mobile-menu>
                     <nav class="flex flex-col gap-1">
@@ -2128,58 +2520,58 @@ function renderNewFormat(id, props, headerClasses, inlineStyles) {
     `.trim();
 }
 function renderLegacyFormat(id, props, headerClasses, inlineStyles) {
-  const logoHtml = renderText(`${id}-logo`, {
+  const logoHtml = renderText(`${id} -logo`, {
     text: props.logoText || "Logo",
     size: "xl",
     weight: "bold"
   });
   const desktopLinksHtml = (props.links || []).map((link) => `
-        <a href="${escapeHtml4(link.href)}" class="text-muted-foreground hover:text-foreground transition-colors">
+        < a href = "${escapeHtml4(link.href)}" class="text-muted-foreground hover:text-foreground transition-colors" >
             ${escapeHtml4(link.text)}
-        </a>
-    `).join("");
+    </a>
+        `).join("");
   const mobileLinksHtml = (props.links || []).map((link) => `
-        <a href="${escapeHtml4(link.href)}" class="block py-2 text-muted-foreground hover:text-foreground transition-colors">
+        < a href = "${escapeHtml4(link.href)}" class="block py-2 text-muted-foreground hover:text-foreground transition-colors" >
             ${escapeHtml4(link.text)}
-        </a>
-    `).join("");
-  const ctaHtml = props.ctaText ? renderCtaLink(`${id}-cta`, props.ctaText, props.ctaLink || "#", "link", "primary") : "";
+    </a>
+        `).join("");
+  const ctaHtml = props.ctaText ? renderCtaLink(`${id} -cta`, props.ctaText, props.ctaLink || "#", "link", "primary") : "";
   return `
-        <header id="${id}" class="${headerClasses}" style="${inlineStyles}">
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex items-center justify-between py-4">
-                    <!-- Logo -->
-                    <a href="/" class="flex items-center">
-                        ${logoHtml}
-                    </a>
-                    
-                    <!-- Desktop Navigation -->
-                    <nav class="hidden md:flex items-center gap-8">
-                        ${desktopLinksHtml}
-                    </nav>
-                    
-                    <!-- CTA + Mobile Menu -->
-                    <div class="flex items-center gap-4">
-                        ${ctaHtml}
-                        
-                        <!-- Mobile Menu Button -->
-                        <button type="button" class="md:hidden p-2 rounded-lg hover:bg-accent" data-fb-mobile-menu-toggle>
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-                            </svg>
-                        </button>
+        < header id = "${id}" class="${headerClasses}" style = "${inlineStyles}" >
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8" >
+                <div class="flex items-center justify-between py-4" >
+                    <!--Logo -->
+                        <a href="/" class="flex items-center" >
+                            ${logoHtml}
+    </a>
+
+        < !--Desktop Navigation-- >
+            <nav class="hidden md:flex items-center gap-8" >
+                ${desktopLinksHtml}
+    </nav>
+
+        < !--CTA + Mobile Menu-- >
+            <div class="flex items-center gap-4" >
+                ${ctaHtml}
+
+    <!--Mobile Menu Button-- >
+        <button type="button" class="md:hidden p-2 rounded-lg hover:bg-accent" data - fb - mobile - menu - toggle >
+            <svg class="w-6 h-6" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24" >
+                <path stroke - linecap="round" stroke - linejoin="round" stroke - width="2" d = "M4 6h16M4 12h16M4 18h16" > </path>
+                    </svg>
+                    </button>
                     </div>
-                </div>
-                
-                <!-- Mobile Menu (hidden by default) -->
-                <div class="md:hidden hidden pb-4" data-fb-mobile-menu>
-                    <nav class="flex flex-col gap-1">
-                        ${mobileLinksHtml}
-                    </nav>
-                </div>
-            </div>
+                    </div>
+
+                    < !--Mobile Menu(hidden by default )-- >
+                        <div class="md:hidden hidden pb-4" data - fb - mobile - menu >
+                            <nav class="flex flex-col gap-1" >
+                                ${mobileLinksHtml}
+    </nav>
+        </div>
+        </div>
         </header>
-    `.trim();
+            `.trim();
 }
 
 // src/ssr/components/landing/FAQ.ts
@@ -2215,7 +2607,7 @@ function renderFAQ(id, props, stylesData) {
         </div>
     `).join("");
   return `
-        <section id="${id}" class="${sectionClasses}" style="${inlineStyles}">
+        <section id="${props.anchor || id}" class="${sectionClasses}" style="${inlineStyles}">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 ${headerHtml}
                 <div class="max-w-3xl mx-auto" data-fb-accordion>
@@ -2291,7 +2683,7 @@ function renderLogoCloud(id, props, stylesData) {
   const logosHtml = logos.map((logo, idx) => renderItem(logo, idx)).join("");
   if (displayMode === "static") {
     return `
-            <section id="${id}" class="${sectionClasses}" style="${inlineStyles}">
+            <section id="${props.anchor || id}" class="${sectionClasses}" style="${inlineStyles}">
                 ${headerHtml}
                 <div class="flex flex-wrap justify-center items-center gap-8 md:gap-12 text-center">
                     ${logosHtml}
@@ -2299,15 +2691,21 @@ function renderLogoCloud(id, props, stylesData) {
             </section>
         `.trim();
   }
-  const duplicatedLogosHtml = [...logos, ...logos].map((logo, idx) => `
+  const originalLogosHtml = logos.map((logo, idx) => `
         <div class="logo-marquee-item px-6 md:px-8">
             ${renderItem(logo, idx)}
         </div>
     `).join("");
+  const duplicateLogosHtml = logos.map((logo, idx) => `
+        <div class="logo-marquee-item logo-duplicate px-6 md:px-8">
+            ${renderItem(logo, idx)}
+        </div>
+    `).join("");
+  const duplicatedLogosHtml = originalLogosHtml + duplicateLogosHtml;
   const pauseClass = pauseOnHover ? "logo-marquee-pause-on-hover" : "";
   const mobileOnlyClass = displayMode === "marqueeOnMobile" ? "logo-marquee-mobile-only" : "";
   return `
-        <section id="${id}" class="${sectionClasses} overflow-hidden ${mobileOnlyClass}" style="${inlineStyles}">
+        <section id="${props.anchor || id}" class="${sectionClasses} overflow-hidden ${mobileOnlyClass}" style="${inlineStyles}">
             ${headerHtml}
             <div class="logo-marquee-container ${pauseClass}">
                 <div 
@@ -2328,7 +2726,14 @@ var socialIcons = {
   instagram: '<rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/>',
   linkedin: '<path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/>',
   youtube: '<path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/>',
-  github: '<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>'
+  github: '<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>',
+  discord: '<path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>',
+  tiktok: '<path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"/>',
+  reddit: '<circle cx="12" cy="12" r="10"/><path d="M14.5 17c-1.38 0-2.49-.89-3-2h6c-.51 1.11-1.62 2-3 2z"/><circle cx="8" cy="12" r="1.5"/><circle cx="16" cy="12" r="1.5"/><path d="M12 2a10 10 0 0 1 10 10"/><circle cx="18" cy="5" r="2"/>',
+  threads: '<path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2z"/><path d="M16.5 12a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0z"/>',
+  twitch: '<path d="M21 2H3v16h5v4l4-4h5l4-4V2zm-10 9V7m5 4V7"/>',
+  pinterest: '<circle cx="12" cy="12" r="10"/><path d="M8.56 14.64a4 4 0 0 0 6.88 0"/><line x1="12" y1="2" x2="12" y2="9"/>',
+  snapchat: '<path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17l3-2 3 2v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z"/>'
 };
 function renderFooter(id, props, stylesData) {
   const footerClasses = [
@@ -2362,6 +2767,12 @@ function renderFooter(id, props, stylesData) {
     `).join("");
   const year = (/* @__PURE__ */ new Date()).getFullYear();
   const copyrightText = props.copyright || `\xA9 ${year} All rights reserved.`;
+  const mobileColsClass = {
+    1: "grid-cols-1",
+    2: "grid-cols-2",
+    3: "grid-cols-3"
+  };
+  const gridColsClass = mobileColsClass[props.mobileColumns || 1] || "grid-cols-1";
   return `
         <footer id="${id}" class="${footerClasses}" style="${inlineStyles}">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
@@ -2374,7 +2785,7 @@ function renderFooter(id, props, stylesData) {
                     </div>
                     
                     <!-- Link Columns -->
-                    <div class="grid grid-cols-${props.mobileColumns || 1} gap-6 sm:grid-cols-2 md:grid-cols-3 lg:flex lg:gap-12">
+                    <div class="grid ${gridColsClass} gap-6 sm:grid-cols-2 md:grid-cols-3 lg:flex lg:gap-12">
                         ${columnsHtml}
                     </div>
                 </div>
@@ -2502,6 +2913,189 @@ liquid.registerFilter("percent", (value, decimals = 0) => {
   return `${(num * 100).toFixed(decimals)}%`;
 });
 
+// src/ssr/styleHelpers.ts
+var UNITLESS_PROPS = /* @__PURE__ */ new Set([
+  "opacity",
+  "z-index",
+  "flex",
+  "flex-grow",
+  "flex-shrink",
+  "order",
+  "line-height",
+  "font-weight",
+  "grid-column",
+  "grid-row",
+  "grid-area",
+  "grid-column-start",
+  "grid-column-end",
+  "grid-row-start",
+  "grid-row-end",
+  "column-count",
+  "fill-opacity",
+  "stroke-opacity"
+]);
+function toKebab(key) {
+  return key.replace(/([A-Z])/g, "-$1").toLowerCase();
+}
+function maybeAddPx(cssKey, value) {
+  const v = String(value);
+  if (/^-?\d+(\.\d+)?$/.test(v) && !UNITLESS_PROPS.has(cssKey)) {
+    return v + "px";
+  }
+  return v;
+}
+var BASIC_PROP_MAP = {
+  padding: "padding",
+  margin: "margin",
+  width: "width",
+  height: "height",
+  maxWidth: "max-width",
+  minWidth: "min-width",
+  backgroundColor: "background-color",
+  color: "color"
+};
+var EXTENDED_PROP_MAP = {
+  ...BASIC_PROP_MAP,
+  maxHeight: "max-height",
+  minHeight: "min-height",
+  background: "background",
+  border: "border",
+  borderRadius: "border-radius",
+  boxShadow: "box-shadow",
+  opacity: "opacity",
+  overflow: "overflow"
+};
+function processStyleEntry(key, value, emit, formatValue = (k, v) => maybeAddPx(k, v)) {
+  if (value === void 0 || value === null || value === "") return;
+  if (key === "size" && typeof value === "object") {
+    const sizeObj = value;
+    if (sizeObj.width !== void 0 && sizeObj.width !== "auto") {
+      const widthUnit = sizeObj.widthUnit || "px";
+      emit("width", formatValue("width", sizeObj.width + widthUnit));
+    }
+    if (sizeObj.height !== void 0 && sizeObj.height !== "auto") {
+      const heightUnit = sizeObj.heightUnit || "px";
+      emit("height", formatValue("height", sizeObj.height + heightUnit));
+    }
+    return;
+  }
+  if ((key === "padding" || key === "margin") && typeof value === "object") {
+    const boxObj = value;
+    if (boxObj.top !== void 0) emit(`${key}-top`, formatValue(`${key}-top`, boxObj.top + "px"));
+    if (boxObj.right !== void 0) emit(`${key}-right`, formatValue(`${key}-right`, boxObj.right + "px"));
+    if (boxObj.bottom !== void 0) emit(`${key}-bottom`, formatValue(`${key}-bottom`, boxObj.bottom + "px"));
+    if (boxObj.left !== void 0) emit(`${key}-left`, formatValue(`${key}-left`, boxObj.left + "px"));
+    return;
+  }
+  if (key === "horizontalAlign" && typeof value === "string") {
+    if (value === "center") {
+      emit("margin-left", formatValue("margin-left", "auto"));
+      emit("margin-right", formatValue("margin-right", "auto"));
+    } else if (value === "right") {
+      emit("margin-left", formatValue("margin-left", "auto"));
+      emit("margin-right", formatValue("margin-right", "0"));
+    } else {
+      emit("margin-left", formatValue("margin-left", "0"));
+      emit("margin-right", formatValue("margin-right", "auto"));
+    }
+    return;
+  }
+  if (typeof value === "object") return;
+  const cssKey = toKebab(key);
+  emit(cssKey, formatValue(cssKey, String(value)));
+}
+function buildInlineStyles(props, styles) {
+  const cssProps = {};
+  for (const [prop, css] of Object.entries(BASIC_PROP_MAP)) {
+    if (props[prop] !== void 0) {
+      cssProps[css] = String(props[prop]);
+    }
+  }
+  let styleValues = {};
+  if (styles && typeof styles === "object") {
+    if ("values" in styles && typeof styles.values === "object") {
+      styleValues = styles.values || {};
+    } else {
+      const nonCssKeys = ["activeProperties", "stylingMode"];
+      for (const [key, value] of Object.entries(styles)) {
+        if (!nonCssKeys.includes(key)) {
+          styleValues[key] = value;
+        }
+      }
+    }
+  }
+  for (const [key, value] of Object.entries(styleValues)) {
+    processStyleEntry(key, value, (cssKey, cssValue) => {
+      cssProps[cssKey] = cssValue;
+    });
+  }
+  return Object.entries(cssProps).map(([key, value]) => `${key}:${value}`).join(";");
+}
+function buildResponsiveCSS(componentId, styles) {
+  if (!styles || !styles.viewportOverrides) {
+    return "";
+  }
+  const viewportOverrides = styles.viewportOverrides;
+  const cssRules = [];
+  const valuesToCSS = (values) => {
+    const props = [];
+    for (const [key, value] of Object.entries(values)) {
+      processStyleEntry(key, value, (cssKey, cssValue) => {
+        props.push(`${cssKey}:${cssValue} !important`);
+      }, (_k, v) => String(v));
+    }
+    return props.join(";");
+  };
+  if (viewportOverrides.tablet && Object.keys(viewportOverrides.tablet).length > 0) {
+    const tabletCSS = valuesToCSS(viewportOverrides.tablet);
+    if (tabletCSS) {
+      cssRules.push(`@media(max-width:1024px){[id="${componentId}"]{${tabletCSS}}}`);
+    }
+  }
+  if (viewportOverrides.mobile && Object.keys(viewportOverrides.mobile).length > 0) {
+    const mobileCSS = valuesToCSS(viewportOverrides.mobile);
+    if (mobileCSS) {
+      cssRules.push(`@media(max-width:640px){[id="${componentId}"]{${mobileCSS}}}`);
+    }
+  }
+  if (cssRules.length === 0) {
+    return "";
+  }
+  return `<style>${cssRules.join("")}</style>`;
+}
+function buildVisibilityCSS(componentId, visibility) {
+  if (!visibility) return "";
+  const { mobile = true, tablet = true, desktop = true } = visibility;
+  if (mobile && tablet && desktop) return "";
+  const cssRules = [];
+  if (!desktop) {
+    cssRules.push(`@media(min-width:1025px){[id="${componentId}"]{display:none!important}}`);
+  }
+  if (!tablet) {
+    cssRules.push(`@media(min-width:641px) and (max-width:1024px){[id="${componentId}"]{display:none!important}}`);
+  }
+  if (!mobile) {
+    cssRules.push(`@media(max-width:640px){[id="${componentId}"]{display:none!important}}`);
+  }
+  if (cssRules.length === 0) return "";
+  return `<style>${cssRules.join("")}</style>`;
+}
+function buildStyleString(props) {
+  const styleProps = {};
+  for (const [prop, css] of Object.entries(EXTENDED_PROP_MAP)) {
+    if (props[prop] !== void 0) {
+      styleProps[css] = String(props[prop]);
+    }
+  }
+  if (props.style && typeof props.style === "object") {
+    Object.assign(styleProps, props.style);
+  }
+  return Object.entries(styleProps).map(([key, value]) => `${key}:${value}`).join(";");
+}
+function buildClassName(...classes) {
+  return classes.filter(Boolean).join(" ");
+}
+
 // src/ssr/PageRenderer.ts
 var STATIC_COMPONENTS = /* @__PURE__ */ new Set([
   "Text",
@@ -2515,7 +3109,8 @@ var STATIC_COMPONENTS = /* @__PURE__ */ new Set([
   "Avatar",
   "Logo",
   "Label",
-  "MarkdownContent"
+  "MarkdownContent",
+  "Embed"
 ]);
 var INTERACTIVE_COMPONENTS = /* @__PURE__ */ new Set([
   "Button",
@@ -2598,8 +3193,8 @@ async function renderComponent(component, context, depth = 0) {
   if (type === "Navbar" && resolvedProps.logo) {
     const logoProps = resolvedProps.logo;
     if (logoProps.useProjectLogo || logoProps.showIcon) {
-      const { getFaviconUrl: getFaviconUrl2 } = await import("./project-settings-CJ6JOH4I.js");
-      const faviconUrl = await getFaviconUrl2();
+      const { getFaviconUrl } = await import("./project-settings-IJSR4OWY.js");
+      const faviconUrl = await getFaviconUrl();
       resolvedProps = {
         ...resolvedProps,
         logo: {
@@ -2664,10 +3259,13 @@ function renderLandingComponent(type, id, props, stylesData) {
 }
 function renderLayoutComponent(type, id, props, styles, childrenHtml, visibility) {
   const inlineStyle = buildInlineStyles(props, styles);
-  const className = buildClassName("fb-layout", type.toLowerCase(), props.className);
+  const className = buildClassName("fb-layout", `fb-${type.toLowerCase()}`, props.className);
+  const elementId = props.anchor || id;
   const responsiveCSS = buildResponsiveCSS(id, styles);
   const visibilityCSS = buildVisibilityCSS(id, visibility);
   const combinedCSS = responsiveCSS + visibilityCSS;
+  const actionBindings = props.actionBindings;
+  const propsAttr = actionBindings && actionBindings.length > 0 ? ` data-fb-props="${escapeHtml4(JSON.stringify({ actionBindings }))}"` : "";
   switch (type) {
     case "Container":
       const containerDisplay = styles.display || "";
@@ -2683,269 +3281,36 @@ function renderLayoutComponent(type, id, props, styles, childrenHtml, visibility
         })();
         const responsiveGridClass = gridCols <= 2 ? "grid grid-cols-1 md:grid-cols-2" : gridCols === 3 ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${Math.min(gridCols, 4)}`;
         const gridGapStyle = styles.gap ? `gap:${styles.gap};` : "";
-        return `${combinedCSS}<div id="${id}" class="${className} ${responsiveGridClass}" style="margin:0 auto;width:100%;${gridGapStyle}${inlineStyle.replace(/display:\s*grid[^;]*;?/gi, "").replace(/grid-template-columns[^;]*;?/gi, "")}">${childrenHtml}</div>`;
+        return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className} ${responsiveGridClass}" style="margin:0 auto;width:100%;${gridGapStyle}${inlineStyle.replace(/display:\s*grid[^;]*;?/gi, "").replace(/grid-template-columns[^;]*;?/gi, "")}">${childrenHtml}</div>`;
       }
-      return `${combinedCSS}<div id="${id}" class="${className}" style="margin:0 auto;width:100%;${inlineStyle}">${childrenHtml}</div>`;
+      return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className}" style="margin:0 auto;width:100%;${inlineStyle}">${childrenHtml}</div>`;
     case "Section":
-      return `${combinedCSS}<section id="${id}" class="${className}" style="${inlineStyle}">${childrenHtml}</section>`;
+      return `${combinedCSS}<section id="${elementId}"${propsAttr} class="${className}" style="${inlineStyle}">${childrenHtml}</section>`;
     case "Row":
-      return `${combinedCSS}<div id="${id}" class="${className} fb-row flex flex-col md:flex-row" style="width:100%;min-height:50px;${inlineStyle}">${childrenHtml}</div>`;
+      return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className} fb-row flex flex-col md:flex-row" style="width:100%;min-height:50px;${inlineStyle}">${childrenHtml}</div>`;
     case "Column":
-      return `${combinedCSS}<div id="${id}" class="${className} fb-column" style="display:flex;flex-direction:column;min-height:50px;min-width:50px;${inlineStyle}">${childrenHtml}</div>`;
+      return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className} fb-column" style="display:flex;flex-direction:column;min-height:50px;min-width:50px;${inlineStyle}">${childrenHtml}</div>`;
     case "Flex":
       const flexDirection = styles.flexDirection || props.direction || "row";
       const justify = styles.justifyContent || props.justify || "flex-start";
       const align = styles.alignItems || props.align || "stretch";
       const gap = styles.gap || props.gap || "0";
-      return `${combinedCSS}<div id="${id}" class="${className}" style="display:flex;flex-direction:${flexDirection};justify-content:${justify};align-items:${align};gap:${gap};${inlineStyle}">${childrenHtml}</div>`;
+      return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className}" style="display:flex;flex-direction:${flexDirection};justify-content:${justify};align-items:${align};gap:${gap};${inlineStyle}">${childrenHtml}</div>`;
     case "Grid":
       const columns = props.columns || 2;
       const gridGap = styles.gap || props.gap || "1rem";
       const gridResponsiveClass = columns <= 2 ? "grid grid-cols-1 md:grid-cols-2" : columns === 3 ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${Math.min(columns, 4)}`;
-      return `${combinedCSS}<div id="${id}" class="${className} ${gridResponsiveClass}" style="gap:${gridGap};${inlineStyle}">${childrenHtml}</div>`;
+      return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className} ${gridResponsiveClass}" style="gap:${gridGap};${inlineStyle}">${childrenHtml}</div>`;
     case "Stack":
       const stackGap = styles.gap || props.gap || "1rem";
-      return `${combinedCSS}<div id="${id}" class="${className}" style="display:flex;flex-direction:column;gap:${stackGap};${inlineStyle}">${childrenHtml}</div>`;
+      return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className}" style="display:flex;flex-direction:column;gap:${stackGap};${inlineStyle}">${childrenHtml}</div>`;
     case "Box":
     case "Paper":
     case "Panel":
     case "Group":
     default:
-      return `${combinedCSS}<div id="${id}" class="${className}" style="${inlineStyle}">${childrenHtml}</div>`;
+      return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className}" style="${inlineStyle}">${childrenHtml}</div>`;
   }
-}
-function buildInlineStyles(props, styles) {
-  const cssProps = {};
-  const propMap = {
-    padding: "padding",
-    margin: "margin",
-    width: "width",
-    height: "height",
-    maxWidth: "max-width",
-    minWidth: "min-width",
-    backgroundColor: "background-color",
-    color: "color"
-  };
-  for (const [prop, css] of Object.entries(propMap)) {
-    if (props[prop] !== void 0) {
-      cssProps[css] = String(props[prop]);
-    }
-  }
-  let styleValues = {};
-  if (styles && typeof styles === "object") {
-    if ("values" in styles && typeof styles.values === "object") {
-      styleValues = styles.values || {};
-    } else {
-      const nonCssKeys = ["activeProperties", "stylingMode"];
-      for (const [key, value] of Object.entries(styles)) {
-        if (!nonCssKeys.includes(key)) {
-          styleValues[key] = value;
-        }
-      }
-    }
-  }
-  for (const [key, value] of Object.entries(styleValues)) {
-    if (value === void 0 || value === null || value === "") continue;
-    if (key === "size" && typeof value === "object") {
-      const sizeObj = value;
-      if (sizeObj.width !== void 0 && sizeObj.width !== "auto") {
-        const widthUnit = sizeObj.widthUnit || "px";
-        cssProps["width"] = `${sizeObj.width}${widthUnit}`;
-      }
-      if (sizeObj.height !== void 0 && sizeObj.height !== "auto") {
-        const heightUnit = sizeObj.heightUnit || "px";
-        cssProps["height"] = `${sizeObj.height}${heightUnit}`;
-      }
-      continue;
-    }
-    if ((key === "padding" || key === "margin") && typeof value === "object") {
-      const boxObj = value;
-      if (boxObj.top !== void 0) cssProps[`${key}-top`] = `${boxObj.top}px`;
-      if (boxObj.right !== void 0) cssProps[`${key}-right`] = `${boxObj.right}px`;
-      if (boxObj.bottom !== void 0) cssProps[`${key}-bottom`] = `${boxObj.bottom}px`;
-      if (boxObj.left !== void 0) cssProps[`${key}-left`] = `${boxObj.left}px`;
-      continue;
-    }
-    if (key === "horizontalAlign" && typeof value === "string") {
-      if (value === "center") {
-        cssProps["margin-left"] = "auto";
-        cssProps["margin-right"] = "auto";
-      } else if (value === "right") {
-        cssProps["margin-left"] = "auto";
-        cssProps["margin-right"] = "0";
-      } else {
-        cssProps["margin-left"] = "0";
-        cssProps["margin-right"] = "auto";
-      }
-      continue;
-    }
-    if (typeof value === "object") continue;
-    const cssKey = key.replace(/([A-Z])/g, "-$1").toLowerCase();
-    let cssValue = String(value);
-    const unitlessProps = [
-      "opacity",
-      "z-index",
-      "flex",
-      "flex-grow",
-      "flex-shrink",
-      "order",
-      "line-height",
-      "font-weight",
-      "grid-column",
-      "grid-row",
-      "grid-area",
-      "grid-column-start",
-      "grid-column-end",
-      "grid-row-start",
-      "grid-row-end",
-      "column-count",
-      "fill-opacity",
-      "stroke-opacity"
-    ];
-    if (/^-?\d+(\.\d+)?$/.test(cssValue) && !unitlessProps.includes(cssKey)) {
-      cssValue += "px";
-    }
-    cssProps[cssKey] = cssValue;
-  }
-  return Object.entries(cssProps).map(([key, value]) => `${key}:${value}`).join(";");
-}
-function buildResponsiveCSS(componentId, styles) {
-  if (!styles || !styles.viewportOverrides) {
-    return "";
-  }
-  const viewportOverrides = styles.viewportOverrides;
-  const cssRules = [];
-  const valuesToCSS = (values) => {
-    const props = [];
-    for (const [key, value] of Object.entries(values)) {
-      if (value === void 0 || value === null || value === "") continue;
-      const withImp = (val) => `${val} !important`;
-      if (key === "size" && typeof value === "object") {
-        const sizeObj = value;
-        if (sizeObj.width !== void 0 && sizeObj.width !== "auto") {
-          const widthUnit = sizeObj.widthUnit || "px";
-          props.push(`width:${withImp(sizeObj.width + widthUnit)}`);
-        }
-        if (sizeObj.height !== void 0 && sizeObj.height !== "auto") {
-          const heightUnit = sizeObj.heightUnit || "px";
-          props.push(`height:${withImp(sizeObj.height + heightUnit)}`);
-        }
-        continue;
-      }
-      if ((key === "padding" || key === "margin") && typeof value === "object") {
-        const boxObj = value;
-        if (boxObj.top !== void 0) props.push(`${key}-top:${withImp(boxObj.top + "px")}`);
-        if (boxObj.right !== void 0) props.push(`${key}-right:${withImp(boxObj.right + "px")}`);
-        if (boxObj.bottom !== void 0) props.push(`${key}-bottom:${withImp(boxObj.bottom + "px")}`);
-        if (boxObj.left !== void 0) props.push(`${key}-left:${withImp(boxObj.left + "px")}`);
-        continue;
-      }
-      if (key === "horizontalAlign" && typeof value === "string") {
-        if (value === "center") {
-          props.push(`margin-left:${withImp("auto")}`, `margin-right:${withImp("auto")}`);
-        } else if (value === "right") {
-          props.push(`margin-left:${withImp("auto")}`, `margin-right:${withImp(0)}`);
-        } else {
-          props.push(`margin-left:${withImp(0)}`, `margin-right:${withImp("auto")}`);
-        }
-        continue;
-      }
-      if (typeof value === "object") continue;
-      const cssKey = key.replace(/([A-Z])/g, "-$1").toLowerCase();
-      let cssValue = String(value);
-      const unitlessProps = [
-        "opacity",
-        "z-index",
-        "flex",
-        "flex-grow",
-        "flex-shrink",
-        "order",
-        "line-height",
-        "font-weight",
-        "grid-column",
-        "grid-row",
-        "grid-area",
-        "grid-column-start",
-        "grid-column-end",
-        "grid-row-start",
-        "grid-row-end",
-        "column-count",
-        "fill-opacity",
-        "stroke-opacity"
-      ];
-      if (/^-?\d+(\.\d+)?$/.test(cssValue) && !unitlessProps.includes(cssKey)) {
-        cssValue += "px";
-      }
-      props.push(`${cssKey}:${withImp(cssValue)}`);
-    }
-    return props.join(";");
-  };
-  if (viewportOverrides.tablet && Object.keys(viewportOverrides.tablet).length > 0) {
-    const tabletCSS = valuesToCSS(viewportOverrides.tablet);
-    if (tabletCSS) {
-      cssRules.push(`@media(max-width:1024px){[id="${componentId}"]{${tabletCSS}}}`);
-    }
-  }
-  if (viewportOverrides.mobile && Object.keys(viewportOverrides.mobile).length > 0) {
-    const mobileCSS = valuesToCSS(viewportOverrides.mobile);
-    if (mobileCSS) {
-      cssRules.push(`@media(max-width:640px){[id="${componentId}"]{${mobileCSS}}}`);
-    }
-  }
-  if (cssRules.length === 0) {
-    return "";
-  }
-  return `<style>${cssRules.join("")}</style>`;
-}
-function buildVisibilityCSS(componentId, visibility) {
-  if (!visibility) return "";
-  const { mobile = true, tablet = true, desktop = true } = visibility;
-  if (mobile && tablet && desktop) return "";
-  const cssRules = [];
-  if (!desktop) {
-    cssRules.push(`@media(min-width:1025px){[id="${componentId}"]{display:none!important}}`);
-  }
-  if (!tablet) {
-    cssRules.push(`@media(min-width:641px) and (max-width:1024px){[id="${componentId}"]{display:none!important}}`);
-  }
-  if (!mobile) {
-    cssRules.push(`@media(max-width:640px){[id="${componentId}"]{display:none!important}}`);
-  }
-  if (cssRules.length === 0) return "";
-  return `<style>${cssRules.join("")}</style>`;
-}
-function buildStyleString(props) {
-  const styleProps = {};
-  const propMap = {
-    padding: "padding",
-    margin: "margin",
-    width: "width",
-    height: "height",
-    maxWidth: "max-width",
-    minWidth: "min-width",
-    maxHeight: "max-height",
-    minHeight: "min-height",
-    background: "background",
-    backgroundColor: "background-color",
-    color: "color",
-    border: "border",
-    borderRadius: "border-radius",
-    boxShadow: "box-shadow",
-    opacity: "opacity",
-    overflow: "overflow"
-  };
-  for (const [prop, css] of Object.entries(propMap)) {
-    if (props[prop] !== void 0) {
-      styleProps[css] = String(props[prop]);
-    }
-  }
-  if (props.style && typeof props.style === "object") {
-    Object.assign(styleProps, props.style);
-  }
-  return Object.entries(styleProps).map(([key, value]) => `${key}:${value}`).join(";");
-}
-function buildClassName(...classes) {
-  return classes.filter(Boolean).join(" ");
 }
 async function renderPage(layoutData, context) {
   if (!layoutData || !layoutData.content) {
@@ -3000,7 +3365,21 @@ async function renderPage(layoutData, context) {
           continue;
         }
         const cssKey = prop.replace(/([A-Z])/g, "-$1").toLowerCase();
-        styleParts.push(`${cssKey}:${value}`);
+        let cssValue = String(value);
+        const unitlessProps = [
+          "opacity",
+          "z-index",
+          "flex",
+          "flex-grow",
+          "flex-shrink",
+          "order",
+          "line-height",
+          "font-weight"
+        ];
+        if (/^-?\d+(\.\d+)?$/.test(cssValue) && !unitlessProps.includes(cssKey)) {
+          cssValue += "px";
+        }
+        styleParts.push(`${cssKey}:${cssValue}`);
       }
       if (values.className) {
         rootClass = buildClassName(rootClass, String(values.className));
@@ -3015,7 +3394,23 @@ async function renderPage(layoutData, context) {
   const contentHtml = (await Promise.all(
     layoutData.content.map((component) => renderComponent(component, context))
   )).join("");
-  return `<div class="fb-page ${rootClass}" style="${rootStyle}">${contentHtml}</div>`;
+  let badgeHtml = "";
+  const edition = process.env.FRONTBASE_EDITION || "community";
+  if (edition === "community" && !process.env.FRONTBASE_LICENSE_KEY) {
+    badgeHtml = `
+            <div style="position:fixed;bottom:16px;right:16px;z-index:9999;font-family:system-ui,-apple-system,sans-serif;">
+                <a href="https://frontbase.dev?ref=badge" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:6px;background:white;padding:6px 10px;border-radius:6px;box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);text-decoration:none;color:#374151;font-size:12px;font-weight:500;border:1px solid #e5e7eb;transition:all 0.2s;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>Powered by Frontbase</span>
+                </a>
+            </div>
+        `;
+  }
+  return `<div class="fb-page ${rootClass}" style="${rootStyle}">${contentHtml}${badgeHtml}</div>`;
 }
 
 // src/ssr/lib/auth.ts
@@ -3290,7 +3685,609 @@ function buildSystemContext() {
   };
 }
 
+// src/storage/LocalSqliteProvider.ts
+import { drizzle as drizzle2 } from "drizzle-orm/libsql";
+import { createClient as createClient3 } from "@libsql/client";
+import { sql, eq as eq6 } from "drizzle-orm";
+import { sqliteTable as sqliteTable2, text as text2, integer as integer2 } from "drizzle-orm/sqlite-core";
+
+// src/storage/edge-migrations.ts
+var MIGRATIONS = [
+  {
+    version: 1,
+    description: "Initial schema \u2014 published_pages + project_settings",
+    sql: [
+      // Schema version tracking
+      `CREATE TABLE IF NOT EXISTS _schema_version (
+                version INTEGER PRIMARY KEY,
+                description TEXT,
+                applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )`,
+      // Published pages
+      `CREATE TABLE IF NOT EXISTS published_pages (
+                id TEXT PRIMARY KEY,
+                slug TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                title TEXT,
+                description TEXT,
+                layout_data TEXT NOT NULL,
+                seo_data TEXT,
+                datasources TEXT,
+                css_bundle TEXT,
+                version INTEGER NOT NULL DEFAULT 1,
+                published_at TEXT NOT NULL,
+                is_public INTEGER NOT NULL DEFAULT 1,
+                is_homepage INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )`,
+      // Indexes
+      `CREATE INDEX IF NOT EXISTS idx_published_pages_slug ON published_pages(slug)`,
+      `CREATE INDEX IF NOT EXISTS idx_published_pages_homepage ON published_pages(is_homepage)`,
+      // Project settings
+      `CREATE TABLE IF NOT EXISTS project_settings (
+                id TEXT PRIMARY KEY DEFAULT 'default',
+                favicon_url TEXT,
+                logo_url TEXT,
+                site_name TEXT,
+                site_description TEXT,
+                app_url TEXT,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )`,
+      // Default settings row
+      `INSERT OR IGNORE INTO project_settings (id, updated_at) VALUES ('default', datetime('now'))`
+    ]
+  }
+  // -------------------------------------------------------------------------
+  // Future migrations go here:
+  // -------------------------------------------------------------------------
+  // {
+  //     version: 2,
+  //     description: 'Add analytics columns',
+  //     sql: [
+  //         `ALTER TABLE published_pages ADD COLUMN view_count INTEGER DEFAULT 0`,
+  //     ],
+  // },
+];
+async function runMigrations(execute, providerName) {
+  await execute(`CREATE TABLE IF NOT EXISTS _schema_version (
+        version INTEGER PRIMARY KEY,
+        description TEXT,
+        applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+  let appliedCount = 0;
+  for (const migration of MIGRATIONS) {
+    try {
+      await execute(
+        `INSERT OR IGNORE INTO _schema_version (version, description) 
+                 VALUES (${migration.version}, '${migration.description.replace(/'/g, "''")}')`
+      );
+      for (const sql4 of migration.sql) {
+        await execute(sql4);
+      }
+      appliedCount++;
+    } catch (error) {
+      console.error(`[${providerName}:Migration] Failed at v${migration.version}: ${error}`);
+      throw error;
+    }
+  }
+  const latestVersion = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
+  console.log(`[${providerName}:Migration] Schema at v${latestVersion} (${appliedCount} migrations checked)`);
+}
+
+// src/storage/LocalSqliteProvider.ts
+var publishedPages = sqliteTable2("published_pages", {
+  id: text2("id").primaryKey(),
+  slug: text2("slug").notNull().unique(),
+  name: text2("name").notNull(),
+  title: text2("title"),
+  description: text2("description"),
+  layoutData: text2("layout_data").notNull(),
+  seoData: text2("seo_data"),
+  datasources: text2("datasources"),
+  cssBundle: text2("css_bundle"),
+  version: integer2("version").notNull().default(1),
+  publishedAt: text2("published_at").notNull(),
+  isPublic: integer2("is_public", { mode: "boolean" }).notNull().default(true),
+  isHomepage: integer2("is_homepage", { mode: "boolean" }).notNull().default(false),
+  createdAt: text2("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text2("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+});
+var projectSettings = sqliteTable2("project_settings", {
+  id: text2("id").primaryKey().default("default"),
+  faviconUrl: text2("favicon_url"),
+  logoUrl: text2("logo_url"),
+  siteName: text2("site_name"),
+  siteDescription: text2("site_description"),
+  appUrl: text2("app_url"),
+  updatedAt: text2("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+});
+var DEFAULT_FAVICON = "/static/icon.png";
+var LocalSqliteProvider = class {
+  db = null;
+  /** Get or create the database connection */
+  getDb() {
+    if (!this.db) {
+      const client2 = createClient3({
+        url: process.env.PAGES_DB_URL || "file:./data/pages.db"
+      });
+      this.db = drizzle2(client2);
+    }
+    return this.db;
+  }
+  // =========================================================================
+  // Lifecycle
+  // =========================================================================
+  async init() {
+    const database = this.getDb();
+    await runMigrations(
+      async (sqlStr) => {
+        database.run(sql.raw(sqlStr));
+      },
+      "LocalSqlite"
+    );
+    console.log("\u{1F4C4} Published pages database initialized");
+  }
+  async initSettings() {
+    const database = this.getDb();
+    await database.run(sql`
+            CREATE TABLE IF NOT EXISTS project_settings (
+                id TEXT PRIMARY KEY DEFAULT 'default',
+                favicon_url TEXT,
+                logo_url TEXT,
+                site_name TEXT,
+                site_description TEXT,
+                app_url TEXT,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+    console.log("\u2699\uFE0F Project settings database initialized");
+  }
+  // =========================================================================
+  // Pages CRUD
+  // =========================================================================
+  async upsertPage(page) {
+    const database = this.getDb();
+    const record = {
+      id: page.id,
+      slug: page.slug,
+      name: page.name,
+      title: page.title || null,
+      description: page.description || null,
+      layoutData: JSON.stringify(page.layoutData),
+      seoData: page.seoData ? JSON.stringify(page.seoData) : null,
+      datasources: page.datasources ? JSON.stringify(page.datasources) : null,
+      cssBundle: page.cssBundle || null,
+      version: page.version,
+      publishedAt: page.publishedAt,
+      isPublic: page.isPublic,
+      isHomepage: page.isHomepage
+    };
+    const existing = await database.select().from(publishedPages).where(eq6(publishedPages.slug, page.slug)).get();
+    if (existing) {
+      await database.update(publishedPages).set({
+        ...record,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      }).where(eq6(publishedPages.slug, page.slug));
+      console.log(`\u{1F4DD} Updated published page: ${page.slug} (v${page.version}), cssBundle: ${page.cssBundle ? page.cssBundle.length + " bytes" : "null"}`);
+    } else {
+      await database.insert(publishedPages).values(record);
+      console.log(`\u{1F4C4} Created published page: ${page.slug} (v${page.version}), cssBundle: ${page.cssBundle ? page.cssBundle.length + " bytes" : "null"}`);
+    }
+    return { success: true, version: page.version };
+  }
+  async getPageBySlug(slug) {
+    const database = this.getDb();
+    const record = await database.select().from(publishedPages).where(eq6(publishedPages.slug, slug)).get();
+    if (!record) return null;
+    return {
+      id: record.id,
+      slug: record.slug,
+      name: record.name,
+      title: record.title || void 0,
+      description: record.description || void 0,
+      layoutData: JSON.parse(record.layoutData),
+      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
+      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
+      cssBundle: record.cssBundle || void 0,
+      version: record.version,
+      publishedAt: record.publishedAt,
+      isPublic: record.isPublic,
+      isHomepage: record.isHomepage
+    };
+  }
+  async getHomepage() {
+    const database = this.getDb();
+    const record = await database.select().from(publishedPages).where(eq6(publishedPages.isHomepage, true)).get();
+    if (!record) return null;
+    const result = {
+      id: record.id,
+      slug: record.slug,
+      name: record.name,
+      title: record.title || void 0,
+      description: record.description || void 0,
+      layoutData: JSON.parse(record.layoutData),
+      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
+      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
+      cssBundle: record.cssBundle || void 0,
+      version: record.version,
+      publishedAt: record.publishedAt,
+      isPublic: record.isPublic,
+      isHomepage: record.isHomepage
+    };
+    console.log(`[pages-store] getHomepage: cssBundle present: ${!!result.cssBundle}, length: ${result.cssBundle?.length || 0}, raw column: ${record.cssBundle ? record.cssBundle.length + " bytes" : "NULL"}`);
+    return result;
+  }
+  async deletePage(slug) {
+    const database = this.getDb();
+    await database.delete(publishedPages).where(eq6(publishedPages.slug, slug));
+    return true;
+  }
+  async listPages() {
+    const database = this.getDb();
+    const records = await database.select({
+      slug: publishedPages.slug,
+      name: publishedPages.name,
+      version: publishedPages.version
+    }).from(publishedPages);
+    return records;
+  }
+  // =========================================================================
+  // Project Settings CRUD
+  // =========================================================================
+  async getProjectSettings() {
+    const database = this.getDb();
+    const record = await database.select().from(projectSettings).where(eq6(projectSettings.id, "default")).get();
+    if (!record) {
+      return {
+        id: "default",
+        faviconUrl: null,
+        logoUrl: null,
+        siteName: null,
+        siteDescription: null,
+        appUrl: null,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+    return record;
+  }
+  async getFaviconUrl() {
+    const settings = await this.getProjectSettings();
+    return settings.faviconUrl || DEFAULT_FAVICON;
+  }
+  async updateProjectSettings(updates) {
+    const database = this.getDb();
+    const existing = await database.select().from(projectSettings).where(eq6(projectSettings.id, "default")).get();
+    if (existing) {
+      await database.update(projectSettings).set({
+        ...updates,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      }).where(eq6(projectSettings.id, "default"));
+    } else {
+      await database.insert(projectSettings).values({
+        id: "default",
+        ...updates,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      });
+    }
+    console.log("\u2699\uFE0F Project settings updated");
+    return this.getProjectSettings();
+  }
+};
+
+// src/storage/TursoHttpProvider.ts
+import { drizzle as drizzle3 } from "drizzle-orm/libsql";
+import { createClient as createClient4 } from "@libsql/client";
+import { sql as sql2, eq as eq7 } from "drizzle-orm";
+import { sqliteTable as sqliteTable3, text as text3, integer as integer3 } from "drizzle-orm/sqlite-core";
+var publishedPages2 = sqliteTable3("published_pages", {
+  id: text3("id").primaryKey(),
+  slug: text3("slug").notNull().unique(),
+  name: text3("name").notNull(),
+  title: text3("title"),
+  description: text3("description"),
+  layoutData: text3("layout_data").notNull(),
+  seoData: text3("seo_data"),
+  datasources: text3("datasources"),
+  cssBundle: text3("css_bundle"),
+  version: integer3("version").notNull().default(1),
+  publishedAt: text3("published_at").notNull(),
+  isPublic: integer3("is_public", { mode: "boolean" }).notNull().default(true),
+  isHomepage: integer3("is_homepage", { mode: "boolean" }).notNull().default(false),
+  createdAt: text3("created_at").notNull().default(sql2`CURRENT_TIMESTAMP`),
+  updatedAt: text3("updated_at").notNull().default(sql2`CURRENT_TIMESTAMP`)
+});
+var projectSettings2 = sqliteTable3("project_settings", {
+  id: text3("id").primaryKey().default("default"),
+  faviconUrl: text3("favicon_url"),
+  logoUrl: text3("logo_url"),
+  siteName: text3("site_name"),
+  siteDescription: text3("site_description"),
+  appUrl: text3("app_url"),
+  updatedAt: text3("updated_at").notNull().default(sql2`CURRENT_TIMESTAMP`)
+});
+var DEFAULT_FAVICON2 = "/static/icon.png";
+var TursoHttpProvider = class {
+  db;
+  constructor() {
+    const url = process.env.FRONTBASE_STATE_DB_URL;
+    const authToken2 = process.env.FRONTBASE_STATE_DB_TOKEN;
+    if (!url) {
+      throw new Error(
+        "[TursoHttpProvider] FRONTBASE_STATE_DB_URL is required when FRONTBASE_ENV=cloud. Set this to your Turso database URL (e.g., libsql://your-db.turso.io)."
+      );
+    }
+    const client2 = createClient4({ url, authToken: authToken2 });
+    this.db = drizzle3(client2);
+    console.log(`\u2601\uFE0F TursoHttpProvider connected to: ${url.substring(0, 40)}...`);
+  }
+  // =========================================================================
+  // Lifecycle
+  // =========================================================================
+  async init() {
+    await runMigrations(
+      async (sqlStr) => {
+        await this.db.run(sql2.raw(sqlStr));
+      },
+      "Turso"
+    );
+    console.log("\u2601\uFE0F Published pages table initialized (Turso)");
+  }
+  async initSettings() {
+    await this.db.run(sql2`
+            CREATE TABLE IF NOT EXISTS project_settings (
+                id TEXT PRIMARY KEY DEFAULT 'default',
+                favicon_url TEXT,
+                logo_url TEXT,
+                site_name TEXT,
+                site_description TEXT,
+                app_url TEXT,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+    console.log("\u2601\uFE0F Project settings table initialized (Turso)");
+  }
+  // =========================================================================
+  // Pages CRUD
+  // =========================================================================
+  async upsertPage(page) {
+    const record = {
+      id: page.id,
+      slug: page.slug,
+      name: page.name,
+      title: page.title || null,
+      description: page.description || null,
+      layoutData: JSON.stringify(page.layoutData),
+      seoData: page.seoData ? JSON.stringify(page.seoData) : null,
+      datasources: page.datasources ? JSON.stringify(page.datasources) : null,
+      cssBundle: page.cssBundle || null,
+      version: page.version,
+      publishedAt: page.publishedAt,
+      isPublic: page.isPublic,
+      isHomepage: page.isHomepage
+    };
+    const existing = await this.db.select().from(publishedPages2).where(eq7(publishedPages2.id, page.id)).get();
+    if (existing) {
+      await this.db.update(publishedPages2).set({
+        ...record,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      }).where(eq7(publishedPages2.id, page.id));
+      console.log(`\u2601\uFE0F Updated page (Turso): ${page.slug} (v${page.version})`);
+    } else {
+      await this.db.insert(publishedPages2).values(record);
+      console.log(`\u2601\uFE0F Created page (Turso): ${page.slug} (v${page.version})`);
+    }
+    return { success: true, version: page.version };
+  }
+  async getPageBySlug(slug) {
+    const record = await this.db.select().from(publishedPages2).where(eq7(publishedPages2.slug, slug)).get();
+    if (!record) return null;
+    return {
+      id: record.id,
+      slug: record.slug,
+      name: record.name,
+      title: record.title || void 0,
+      description: record.description || void 0,
+      layoutData: JSON.parse(record.layoutData),
+      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
+      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
+      cssBundle: record.cssBundle || void 0,
+      version: record.version,
+      publishedAt: record.publishedAt,
+      isPublic: record.isPublic,
+      isHomepage: record.isHomepage
+    };
+  }
+  async getHomepage() {
+    const record = await this.db.select().from(publishedPages2).where(eq7(publishedPages2.isHomepage, true)).get();
+    if (!record) return null;
+    const result = {
+      id: record.id,
+      slug: record.slug,
+      name: record.name,
+      title: record.title || void 0,
+      description: record.description || void 0,
+      layoutData: JSON.parse(record.layoutData),
+      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
+      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
+      cssBundle: record.cssBundle || void 0,
+      version: record.version,
+      publishedAt: record.publishedAt,
+      isPublic: record.isPublic,
+      isHomepage: record.isHomepage
+    };
+    console.log(`[turso-provider] getHomepage: cssBundle present: ${!!result.cssBundle}, length: ${result.cssBundle?.length || 0}`);
+    return result;
+  }
+  async deletePage(slug) {
+    await this.db.delete(publishedPages2).where(eq7(publishedPages2.slug, slug));
+    return true;
+  }
+  async listPages() {
+    return await this.db.select({
+      slug: publishedPages2.slug,
+      name: publishedPages2.name,
+      version: publishedPages2.version
+    }).from(publishedPages2);
+  }
+  // =========================================================================
+  // Project Settings CRUD
+  // =========================================================================
+  async getProjectSettings() {
+    const record = await this.db.select().from(projectSettings2).where(eq7(projectSettings2.id, "default")).get();
+    if (!record) {
+      return {
+        id: "default",
+        faviconUrl: null,
+        logoUrl: null,
+        siteName: null,
+        siteDescription: null,
+        appUrl: null,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+    return record;
+  }
+  async getFaviconUrl() {
+    const settings = await this.getProjectSettings();
+    return settings.faviconUrl || DEFAULT_FAVICON2;
+  }
+  async updateProjectSettings(updates) {
+    const existing = await this.db.select().from(projectSettings2).where(eq7(projectSettings2.id, "default")).get();
+    if (existing) {
+      await this.db.update(projectSettings2).set({
+        ...updates,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      }).where(eq7(projectSettings2.id, "default"));
+    } else {
+      await this.db.insert(projectSettings2).values({
+        id: "default",
+        ...updates,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      });
+    }
+    console.log("\u2601\uFE0F Project settings updated (Turso)");
+    return this.getProjectSettings();
+  }
+};
+
+// src/storage/index.ts
+var _provider = null;
+function createInitialProvider() {
+  const env = process.env.FRONTBASE_DEPLOYMENT_MODE || "local";
+  if (env === "cloud") {
+    console.log("\u2601\uFE0F FRONTBASE_DEPLOYMENT_MODE=cloud \u2014 using TursoHttpProvider");
+    return new TursoHttpProvider();
+  }
+  console.log("\u{1F4BE} Starting with LocalSqliteProvider (may upgrade to Turso after sync)");
+  return new LocalSqliteProvider();
+}
+function getStateProvider() {
+  if (!_provider) {
+    _provider = createInitialProvider();
+  }
+  return _provider;
+}
+async function upgradeToTurso() {
+  console.log("\u{1F504} Upgrading state provider to TursoHttpProvider...");
+  const turso = new TursoHttpProvider();
+  await turso.init();
+  _provider = turso;
+  console.log("\u2601\uFE0F State provider upgraded to TursoHttpProvider");
+  return _provider;
+}
+var stateProvider = new Proxy({}, {
+  get(_target, prop) {
+    const provider = getStateProvider();
+    const value = provider[prop];
+    if (typeof value === "function") {
+      return value.bind(provider);
+    }
+    return value;
+  }
+});
+
+// src/ssr/baseStyles.ts
+var FALLBACK_CSS = `
+/* FALLBACK CSS - Used when cssBundle is not available (legacy pages) */
+:root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+}
+.dark {
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+    --muted: 223 47% 11%;
+    --muted-foreground: 215 20% 65%;
+    --popover: 224 71% 4%;
+    --popover-foreground: 213 31% 91%;
+    --card: 224 71% 4%;
+    --card-foreground: 213 31% 91%;
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 222 47% 11%;
+    --secondary-foreground: 210 40% 98%;
+    --accent: 216 34% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --ring: 216 34% 17%;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { background-color: hsl(var(--background)); color: hsl(var(--foreground)); }
+body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; background-color: hsl(var(--background)); color: hsl(var(--foreground)); }
+.fb-page { min-height: 100vh; display: flex; flex-direction: column; }
+.fb-button { display: inline-flex; align-items: center; justify-content: center; }
+.fb-heading { margin: 0; }
+.fb-heading-1 { font-size: 2.25rem; font-weight: 700; }
+.fb-heading-2 { font-size: 1.875rem; font-weight: 600; }
+.fb-heading-3 { font-size: 1.5rem; font-weight: 600; }
+.fb-loading { opacity: 0.7; pointer-events: none; }
+.fb-skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: skeleton 1.5s infinite; }
+@keyframes skeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@keyframes marquee-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+.logo-marquee-container { overflow: hidden; width: 100%; mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
+.logo-marquee-track { display: flex; width: max-content; animation: marquee-scroll var(--marquee-speed, 20s) linear infinite; }
+.logo-marquee-pause-on-hover:hover .logo-marquee-track { animation-play-state: paused; }
+.logo-marquee-item { flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.logo-marquee-mobile-only .logo-marquee-track { animation: none; flex-wrap: wrap; justify-content: center; gap: 2rem; width: 100%; }
+.logo-marquee-mobile-only .logo-marquee-container { mask-image: none; -webkit-mask-image: none; }
+/* Hide duplicate logos on desktop (duplicates are for seamless marquee on mobile) */
+.logo-marquee-mobile-only .logo-marquee-item.logo-duplicate { display: none; }
+@media (max-width: 640px) {
+    .logo-marquee-mobile-only .logo-marquee-track { animation: marquee-scroll var(--marquee-speed, 20s) linear infinite; flex-wrap: nowrap; justify-content: flex-start; gap: 0; width: max-content; }
+    .logo-marquee-mobile-only .logo-marquee-container { mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
+    /* Show all logos (including duplicates) on mobile for seamless marquee */
+    .logo-marquee-mobile-only .logo-marquee-item.logo-duplicate { display: flex; }
+}
+/* Dark mode: invert raster images in Navbar and LogoCloud */
+.dark .fb-navbar img:not(.no-invert),
+.dark .fb-logo-cloud img:not(.no-invert) { filter: invert(1) brightness(1.1); }
+`;
+
 // src/routes/pages.ts
+var HYDRATE_VERSION = "20260205h";
+var DEFAULT_FAVICON3 = "/static/icon.png";
 var ErrorResponseSchema2 = z7.object({
   error: z7.string(),
   message: z7.string().optional()
@@ -3326,13 +4323,24 @@ var renderPageRoute = createRoute6({
     }
   }
 });
-initPagesDb().catch(console.error);
 async function fetchPage(slug) {
+  const cacheKey = `page:${slug}`;
   try {
-    const publishedPage = await getPublishedPageBySlug(slug);
+    const { getRedis: getRedis2 } = await import("./redis-DAINDPXS.js");
+    const redis = getRedis2();
+    const cached2 = await redis.get(cacheKey);
+    if (cached2) {
+      console.log(`[SSR] Cache HIT: ${slug}`);
+      return cached2;
+    }
+  } catch {
+  }
+  let page = null;
+  try {
+    const publishedPage = await stateProvider.getPageBySlug(slug);
     if (publishedPage) {
       console.log(`[SSR] Found published page: ${slug} (v${publishedPage.version})`);
-      return {
+      page = {
         id: publishedPage.id,
         name: publishedPage.name,
         slug: publishedPage.slug,
@@ -3341,6 +4349,7 @@ async function fetchPage(slug) {
         isPublic: publishedPage.isPublic,
         isHomepage: publishedPage.isHomepage,
         layoutData: publishedPage.layoutData,
+        cssBundle: publishedPage.cssBundle,
         createdAt: publishedPage.publishedAt,
         updatedAt: publishedPage.publishedAt
       };
@@ -3348,28 +4357,40 @@ async function fetchPage(slug) {
   } catch (error) {
     console.warn("[SSR] Error reading local storage:", error);
   }
-  const apiBase = process.env.FASTAPI_URL || "http://127.0.0.1:8000";
-  try {
-    const url = `${apiBase}/api/pages/public/${slug}`;
-    console.log(`[SSR] Fallback to FastAPI: ${url}`);
-    const response = await fetch(url, {
-      headers: { "Accept": "application/json" },
-      redirect: "follow"
-    });
-    if (!response.ok) {
-      if (response.status === 404) return null;
-      console.error(`Failed to fetch page: ${response.status}`);
+  if (!page) {
+    const apiBase = process.env.BACKEND_URL || "http://127.0.0.1:8000";
+    try {
+      const url = `${apiBase}/api/pages/public/${slug}`;
+      console.log(`[SSR] Fallback to FastAPI: ${url}`);
+      const response = await fetch(url, {
+        headers: { "Accept": "application/json" },
+        redirect: "follow"
+      });
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        console.error(`Failed to fetch page: ${response.status}`);
+        return null;
+      }
+      const result = await response.json();
+      page = result.success ? result.data : null;
+    } catch (error) {
+      console.error("Error fetching page from FastAPI:", error);
       return null;
     }
-    const result = await response.json();
-    return result.success ? result.data : null;
-  } catch (error) {
-    console.error("Error fetching page from FastAPI:", error);
-    return null;
   }
+  if (page) {
+    try {
+      const { getRedis: getRedis2 } = await import("./redis-DAINDPXS.js");
+      const redis = getRedis2();
+      await redis.setex(cacheKey, 60, JSON.stringify(page));
+      console.log(`[SSR] Cache SET: ${slug} (60s TTL)`);
+    } catch {
+    }
+  }
+  return page;
 }
 async function fetchTrackingConfig() {
-  const apiBase = process.env.FASTAPI_URL || "http://127.0.0.1:8000";
+  const apiBase = process.env.BACKEND_URL || "http://127.0.0.1:8000";
   try {
     const response = await fetch(`${apiBase}/api/settings/privacy`);
     if (response.ok) {
@@ -3380,7 +4401,7 @@ async function fetchTrackingConfig() {
   }
   return getDefaultTrackingConfig();
 }
-function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl = DEFAULT_FAVICON) {
+function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl = DEFAULT_FAVICON3) {
   const title = page.title || page.name;
   const description = page.description || "";
   const keywords = page.keywords || "";
@@ -3398,9 +4419,8 @@ function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, favi
     <link rel="icon" type="image/png" href="${faviconUrl}">
     <link rel="apple-touch-icon" href="${faviconUrl}">
     
-    <!-- Prefetch hydration bundles -->
-    <link rel="modulepreload" href="/static/hydrate.js">
-    <link rel="modulepreload" href="/static/react/hydrate.js">
+    <!-- Prefetch hydration bundle -->
+    <link rel="modulepreload" href="/static/react/hydrate.js?v=${HYDRATE_VERSION}">
 
     <!-- Client-Side Visitor Context Enhancement -->
     <script>
@@ -3439,101 +4459,11 @@ function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, favi
     })();
     </script>
     
-    <!-- Tailwind CSS (for builder previews) -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              border: "hsl(var(--border))",
-              input: "hsl(var(--input))",
-              ring: "hsl(var(--ring))",
-              background: "hsl(var(--background))",
-              foreground: "hsl(var(--foreground))",
-              primary: {
-                DEFAULT: "hsl(var(--primary))",
-                foreground: "hsl(var(--primary-foreground))",
-              },
-              secondary: {
-                DEFAULT: "hsl(var(--secondary))",
-                foreground: "hsl(var(--secondary-foreground))",
-              },
-              destructive: {
-                DEFAULT: "hsl(var(--destructive))",
-                foreground: "hsl(var(--destructive-foreground))",
-              },
-              muted: {
-                DEFAULT: "hsl(var(--muted))",
-                foreground: "hsl(var(--muted-foreground))",
-              },
-              accent: {
-                DEFAULT: "hsl(var(--accent))",
-                foreground: "hsl(var(--accent-foreground))",
-              },
-              popover: {
-                DEFAULT: "hsl(var(--popover))",
-                foreground: "hsl(var(--popover-foreground))",
-              },
-              card: {
-                DEFAULT: "hsl(var(--card))",
-                foreground: "hsl(var(--card-foreground))",
-              },
-            },
-          },
-        },
-      }
-    </script>
+    <!-- Tailwind CSS Bundle (injected below via cssBundle) -->
     
     <!-- Base styles (from CSS Bundle or fallback) -->
     <style>
-        ${page.cssBundle || `
-        /* FALLBACK CSS - Used when cssBundle is not available (legacy pages) */
-        :root {
-            --background: 0 0% 100%;
-            --foreground: 222.2 84% 4.9%;
-            --muted: 210 40% 96.1%;
-            --muted-foreground: 215.4 16.3% 46.9%;
-            --popover: 0 0% 100%;
-            --popover-foreground: 222.2 84% 4.9%;
-            --card: 0 0% 100%;
-            --card-foreground: 222.2 84% 4.9%;
-            --border: 214.3 31.8% 91.4%;
-            --input: 214.3 31.8% 91.4%;
-            --primary: 222.2 47.4% 11.2%;
-            --primary-foreground: 210 40% 98%;
-            --secondary: 210 40% 96.1%;
-            --secondary-foreground: 222.2 47.4% 11.2%;
-            --accent: 210 40% 96.1%;
-            --accent-foreground: 222.2 47.4% 11.2%;
-            --destructive: 0 84.2% 60.2%;
-            --destructive-foreground: 210 40% 98%;
-            --ring: 222.2 84% 4.9%;
-            --radius: 0.5rem;
-        }
-        *, *::before, *::after { box-sizing: border-box; }
-        body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }
-        .fb-page { min-height: 100vh; display: flex; flex-direction: column; padding: 2rem; gap: 1rem; }
-        .fb-button { display: inline-flex; align-items: center; justify-content: center; }
-        .fb-heading { margin: 0; }
-        .fb-heading-1 { font-size: 2.25rem; font-weight: 700; }
-        .fb-heading-2 { font-size: 1.875rem; font-weight: 600; }
-        .fb-heading-3 { font-size: 1.5rem; font-weight: 600; }
-        .fb-loading { opacity: 0.7; pointer-events: none; }
-        .fb-skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: skeleton 1.5s infinite; }
-        @keyframes skeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-        @keyframes marquee-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-        .logo-marquee-container { overflow: hidden; width: 100%; mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
-        .logo-marquee-track { display: flex; width: max-content; animation: marquee-scroll var(--marquee-speed, 20s) linear infinite; }
-        .logo-marquee-pause-on-hover:hover .logo-marquee-track { animation-play-state: paused; }
-        .logo-marquee-item { flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-        .logo-marquee-mobile-only .logo-marquee-track { animation: none; flex-wrap: wrap; justify-content: center; gap: 2rem; width: 100%; }
-        .logo-marquee-mobile-only .logo-marquee-container { mask-image: none; -webkit-mask-image: none; }
-        @media (max-width: 640px) {
-            .logo-marquee-mobile-only .logo-marquee-track { animation: marquee-scroll var(--marquee-speed, 20s) linear infinite; flex-wrap: nowrap; justify-content: flex-start; gap: 0; width: max-content; }
-            .logo-marquee-mobile-only .logo-marquee-container { mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
-        }
-        `}
+        ${page.cssBundle || FALLBACK_CSS}
     </style>
 </head>
 <body>
@@ -3541,8 +4471,8 @@ function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, favi
     
     <!-- Initial state for hydration -->
     <script>
-        window.__INITIAL_STATE__ = ${JSON.stringify(initialState)};
-        window.__PAGE_DATA__ = ${JSON.stringify({
+        window.__INITIAL_STATE__ = ${safeJsonStringify(initialState)};
+        window.__PAGE_DATA__ = ${safeJsonStringify({
     id: page.id,
     slug: page.slug,
     layoutData: page.layoutData,
@@ -3551,13 +4481,13 @@ function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, favi
   })};
     </script>
     
-    <!-- Hydration bundle (vanilla JS for simple components) -->
-    <script type="module" src="/static/hydrate.js"></script>
-    
-    <!-- React hydration bundle (DataTable, Charts, Forms) -->
-    <script type="module" src="/static/react/hydrate.js"></script>
+    <!-- Hydration bundle (all interactive components) -->
+    <script type="module" src="/static/react/hydrate.js?v=${HYDRATE_VERSION}"></script>
 </body>
 </html>`;
+}
+function safeJsonStringify(obj) {
+  return JSON.stringify(obj).replace(/<\/script>/gi, "<\\/script>").replace(/<!--/g, "<\\!--");
 }
 function escapeHtml5(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
@@ -3570,6 +4500,9 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
       { error: "Page not found", message: `No page found with slug: ${slug}` },
       404
     );
+  }
+  if (page.isHomepage) {
+    return c.redirect("/", 301);
   }
   const contextPageData = {
     id: page.id,
@@ -3606,48 +4539,70 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     cookies: context.cookies
   };
   const trackingConfig = await fetchTrackingConfig();
-  const faviconUrl = await getFaviconUrl();
+  const faviconUrl = await stateProvider.getFaviconUrl();
   const htmlDoc = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl);
   c.header("Cache-Control", "no-cache, no-store, must-revalidate");
   c.header("Content-Type", "text/html; charset=utf-8");
   return c.html(htmlDoc);
 });
 pagesRoute.get("/", async (c) => {
-  const { getHomepage: getLocalHomepage, upsertPublishedPage: upsertPublishedPage2 } = await import("./pages-store-REUKSNSS.js");
   try {
-    let homepage = await getLocalHomepage();
-    if (homepage) {
-      console.log(`[SSR] Rendering homepage: ${homepage.slug} (v${homepage.version})`);
-    } else {
-      console.log("[SSR] No local homepage found, pulling from FastAPI...");
-      const fastapiUrl = process.env.FASTAPI_URL || "http://backend:8000";
-      try {
-        const response = await fetch(`${fastapiUrl}/api/pages/homepage/`);
-        if (response.ok) {
-          const result = await response.json();
-          const pageData = result.data;
-          const publishData = {
-            id: pageData.id,
-            slug: pageData.slug,
-            name: pageData.name,
-            title: pageData.title || void 0,
-            description: pageData.description || void 0,
-            layoutData: pageData.layoutData,
-            seoData: pageData.seoData || void 0,
-            datasources: pageData.datasources || void 0,
-            version: 1,
-            publishedAt: (/* @__PURE__ */ new Date()).toISOString(),
-            isPublic: pageData.isPublic ?? true,
-            isHomepage: true
-          };
-          await upsertPublishedPage2(publishData);
-          console.log(`[SSR] Pull-published homepage: ${pageData.slug}`);
-          homepage = publishData;
-        } else {
-          console.warn(`[SSR] FastAPI homepage fetch failed: ${response.status}`);
+    const cacheKey = "page:__homepage__";
+    let homepage = null;
+    try {
+      const { getRedis: getRedis2 } = await import("./redis-DAINDPXS.js");
+      const redis = getRedis2();
+      const cached2 = await redis.get(cacheKey);
+      if (cached2) {
+        console.log("[SSR] Cache HIT: homepage");
+        homepage = cached2;
+      }
+    } catch {
+    }
+    if (!homepage) {
+      homepage = await stateProvider.getHomepage();
+      if (homepage) {
+        console.log(`[SSR] Rendering homepage: ${homepage.slug} (v${homepage.version})`);
+      } else {
+        console.log("[SSR] No local homepage found, pulling from FastAPI...");
+        const fastapiUrl = process.env.BACKEND_URL || "http://backend:8000";
+        try {
+          const response = await fetch(`${fastapiUrl}/api/pages/homepage/`);
+          if (response.ok) {
+            const result = await response.json();
+            const pageData = result.data;
+            const publishData = {
+              id: pageData.id,
+              slug: pageData.slug,
+              name: pageData.name,
+              title: pageData.title || void 0,
+              description: pageData.description || void 0,
+              layoutData: pageData.layoutData,
+              seoData: pageData.seoData || void 0,
+              datasources: pageData.datasources || void 0,
+              version: 1,
+              publishedAt: (/* @__PURE__ */ new Date()).toISOString(),
+              isPublic: pageData.isPublic ?? true,
+              isHomepage: true
+            };
+            await stateProvider.upsertPage(publishData);
+            console.log(`[SSR] Pull-published homepage: ${pageData.slug}`);
+            homepage = publishData;
+          } else {
+            console.warn(`[SSR] FastAPI homepage fetch failed: ${response.status}`);
+          }
+        } catch (fetchError) {
+          console.error("[SSR] Pull-publish failed:", fetchError);
         }
-      } catch (fetchError) {
-        console.error("[SSR] Pull-publish failed:", fetchError);
+      }
+      if (homepage) {
+        try {
+          const { getRedis: getRedis2 } = await import("./redis-DAINDPXS.js");
+          const redis = getRedis2();
+          await redis.setex(cacheKey, 60, JSON.stringify(homepage));
+          console.log("[SSR] Cache SET: homepage (60s TTL)");
+        } catch {
+        }
       }
     }
     if (homepage) {
@@ -3660,7 +4615,8 @@ pagesRoute.get("/", async (c) => {
         isPublic: homepage.isPublic,
         isHomepage: homepage.isHomepage,
         layoutData: homepage.layoutData,
-        datasources: homepage.datasources
+        datasources: homepage.datasources,
+        cssBundle: homepage.cssBundle || void 0
       };
       const contextPageData = {
         id: homepage.id,
@@ -3690,7 +4646,7 @@ pagesRoute.get("/", async (c) => {
         cookies: context.cookies
       };
       const trackingConfig = await fetchTrackingConfig();
-      const faviconUrl = await getFaviconUrl();
+      const faviconUrl = await stateProvider.getFaviconUrl();
       const fullHtml = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl);
       return c.html(fullHtml);
     }
@@ -3814,12 +4770,23 @@ var DataRequestSchema = z8.object({
   // RPC config for DataTable
 });
 var ComponentBindingSchema = z8.object({
-  componentId: z8.string(),
+  componentId: z8.string().nullish(),
   datasourceId: z8.string().nullish(),
   tableName: z8.string().nullish(),
-  columns: z8.array(z8.string()).nullish(),
+  // columns can be string[] (column names) or object[] (enriched schema from publish)
+  columns: z8.union([
+    z8.array(z8.string()),
+    z8.array(z8.object({
+      name: z8.string(),
+      type: z8.string(),
+      nullable: z8.boolean().optional(),
+      primary_key: z8.boolean().optional(),
+      default: z8.any().optional(),
+      foreign_key_table: z8.string().nullish(),
+      foreign_key_column: z8.string().nullish()
+    }).passthrough())
+  ]).nullish(),
   columnOrder: z8.array(z8.string()).nullish(),
-  // Added for React DataTable support
   columnOverrides: z8.record(z8.string(), ColumnOverrideSchema).nullish(),
   filters: z8.record(z8.string(), z8.unknown()).nullish(),
   primaryKey: z8.string().nullish(),
@@ -3827,15 +4794,19 @@ var ComponentBindingSchema = z8.object({
     column: z8.string(),
     referencedTable: z8.string(),
     referencedColumn: z8.string()
-  })).nullish(),
+  }).passthrough()).nullish(),
   dataRequest: DataRequestSchema.nullish(),
-  // Pre-computed HTTP request
+  // Form-specific fields
+  fieldOverrides: z8.record(z8.string(), z8.unknown()).nullish(),
+  fieldOrder: z8.array(z8.string()).nullish(),
+  dataSourceId: z8.string().nullish(),
+  // camelCase alias
   // Dynamic feature configuration (for DataTable server-side features)
   frontendFilters: z8.array(z8.record(z8.string(), z8.unknown())).nullish(),
   sorting: z8.record(z8.string(), z8.unknown()).nullish(),
   pagination: z8.record(z8.string(), z8.unknown()).nullish(),
   filtering: z8.record(z8.string(), z8.unknown()).nullish()
-});
+}).passthrough();
 var VisibilitySettingsSchema = z8.object({
   mobile: z8.boolean().default(true),
   tablet: z8.boolean().default(true),
@@ -3949,8 +4920,9 @@ importRoute.post("/", async (c) => {
     }
     const { page, force } = validationResult.data;
     console.log(`[Import] Validated page: ${page.slug} (v${page.version})`);
+    console.log(`[Import] cssBundle present: ${!!page.cssBundle}, length: ${page.cssBundle?.length || 0}`);
     if (!force) {
-      const existing = await getPublishedPageBySlug(page.slug);
+      const existing = await stateProvider.getPageBySlug(page.slug);
       if (existing && existing.version >= page.version) {
         return c.json({
           success: false,
@@ -3963,7 +4935,7 @@ importRoute.post("/", async (c) => {
         }, 400);
       }
     }
-    const result = await upsertPublishedPage(page);
+    const result = await stateProvider.upsertPage(page);
     const publicUrl = process.env.PUBLIC_URL;
     let previewUrl;
     const pageUrlPath = page.isHomepage ? "" : page.slug;
@@ -4007,7 +4979,7 @@ importRoute.delete("/:slug", async (c) => {
       }, 400);
     }
     console.log(`[Import] Unpublishing page: ${slug}`);
-    const existing = await getPublishedPageBySlug(slug);
+    const existing = await stateProvider.getPageBySlug(slug);
     if (!existing) {
       console.log(`[Import] Page not found in SSR: ${slug}`);
       return c.json({
@@ -4015,7 +4987,7 @@ importRoute.delete("/:slug", async (c) => {
         message: `Page "${slug}" was not published`
       }, 200);
     }
-    await deletePublishedPage(slug);
+    await stateProvider.deletePage(slug);
     console.log(`[Import] Successfully unpublished: ${slug}`);
     return c.json({
       success: true,
@@ -4034,7 +5006,7 @@ importRoute.post("/settings", async (c) => {
   try {
     const body = await c.req.json();
     console.log("[Import Settings] Received:", Object.keys(body));
-    await updateProjectSettings({
+    await stateProvider.updateProjectSettings({
       faviconUrl: body.faviconUrl || null,
       logoUrl: body.logoUrl || null,
       siteName: body.siteName || body.name || null,
@@ -4055,7 +5027,7 @@ importRoute.post("/settings", async (c) => {
 });
 importRoute.get("/settings", async (c) => {
   try {
-    const settings = await getProjectSettings();
+    const settings = await stateProvider.getProjectSettings();
     return c.json({
       success: true,
       settings
@@ -4073,8 +5045,8 @@ importRoute.get("/status", async (c) => {
     ready: true
   });
 });
-initPagesDb().catch(console.error);
-initProjectSettingsDb().catch(console.error);
+stateProvider.init().catch(console.error);
+stateProvider.initSettings().catch(console.error);
 
 // src/routes/data.ts
 import { Hono as Hono2 } from "hono";
@@ -4121,7 +5093,7 @@ var SupabaseAdapter = class {
       return { data: [], error: String(error) };
     }
   }
-  async execute(sql, params) {
+  async execute(sql4, params) {
     return { data: [], error: "Raw SQL not supported via REST" };
   }
   async close() {
@@ -4136,21 +5108,21 @@ var NeonAdapter = class {
   async query(options) {
     const { table, columns = ["*"], filters = {}, limit = 100, offset = 0 } = options;
     const selectCols = columns.join(", ");
-    let sql = `SELECT ${selectCols} FROM ${table}`;
+    let sql4 = `SELECT ${selectCols} FROM ${table}`;
     const whereConditions = Object.entries(filters).map(
       ([key, value]) => `${key} = '${value}'`
     );
     if (whereConditions.length > 0) {
-      sql += ` WHERE ${whereConditions.join(" AND ")}`;
+      sql4 += ` WHERE ${whereConditions.join(" AND ")}`;
     }
-    sql += ` LIMIT ${limit} OFFSET ${offset}`;
-    return this.execute(sql);
+    sql4 += ` LIMIT ${limit} OFFSET ${offset}`;
+    return this.execute(sql4);
   }
-  async execute(sql, params) {
+  async execute(sql4, params) {
     try {
       const { neon } = await import("@neondatabase/serverless");
       const sqlClient = neon(this.connectionString);
-      const result = await sqlClient.call(null, [sql], ...params || []);
+      const result = await sqlClient.call(null, [sql4], ...params || []);
       return { data: result };
     } catch (error) {
       console.error("[Neon] Query error:", error);
@@ -4169,21 +5141,21 @@ var PlanetScaleAdapter = class {
   async query(options) {
     const { table, columns = ["*"], filters = {}, limit = 100, offset = 0 } = options;
     const selectCols = columns.join(", ");
-    let sql = `SELECT ${selectCols} FROM \`${table}\``;
+    let sql4 = `SELECT ${selectCols} FROM \`${table}\``;
     const whereConditions = Object.entries(filters).map(
       ([key, value]) => `\`${key}\` = '${value}'`
     );
     if (whereConditions.length > 0) {
-      sql += ` WHERE ${whereConditions.join(" AND ")}`;
+      sql4 += ` WHERE ${whereConditions.join(" AND ")}`;
     }
-    sql += ` LIMIT ${limit} OFFSET ${offset}`;
-    return this.execute(sql);
+    sql4 += ` LIMIT ${limit} OFFSET ${offset}`;
+    return this.execute(sql4);
   }
-  async execute(sql, params) {
+  async execute(sql4, params) {
     try {
       const { connect } = await import("@planetscale/database");
       const conn = connect({ url: this.connectionString });
-      const result = await conn.execute(sql, params);
+      const result = await conn.execute(sql4, params);
       return { data: result.rows };
     } catch (error) {
       console.error("[PlanetScale] Query error:", error);
@@ -4204,24 +5176,24 @@ var TursoAdapter = class {
   async query(options) {
     const { table, columns = ["*"], filters = {}, limit = 100, offset = 0 } = options;
     const selectCols = columns.join(", ");
-    let sql = `SELECT ${selectCols} FROM "${table}"`;
+    let sql4 = `SELECT ${selectCols} FROM "${table}"`;
     const whereConditions = Object.entries(filters).map(
       ([key, value]) => `"${key}" = '${value}'`
     );
     if (whereConditions.length > 0) {
-      sql += ` WHERE ${whereConditions.join(" AND ")}`;
+      sql4 += ` WHERE ${whereConditions.join(" AND ")}`;
     }
-    sql += ` LIMIT ${limit} OFFSET ${offset}`;
-    return this.execute(sql);
+    sql4 += ` LIMIT ${limit} OFFSET ${offset}`;
+    return this.execute(sql4);
   }
-  async execute(sql, params) {
+  async execute(sql4, params) {
     try {
-      const { createClient: createClient4 } = await import("@libsql/client");
-      const client2 = createClient4({
+      const { createClient: createClient5 } = await import("@libsql/client");
+      const client2 = createClient5({
         url: this.url,
         authToken: this.authToken
       });
-      const result = await client2.execute(sql);
+      const result = await client2.execute(sql4);
       return { data: result.rows };
     } catch (error) {
       console.error("[Turso] Query error:", error);
@@ -4262,177 +5234,14 @@ function getDefaultDatasource() {
   return defaultAdapter;
 }
 async function handleDataQuery(table, options = {}, datasourceConfig) {
-  const adapter = datasourceConfig ? createDatasourceAdapter(datasourceConfig) : getDefaultDatasource();
-  if (!adapter) {
+  const adapter2 = datasourceConfig ? createDatasourceAdapter(datasourceConfig) : getDefaultDatasource();
+  if (!adapter2) {
     return { data: [], error: "No datasource configured" };
   }
-  return adapter.query({
+  return adapter2.query({
     table,
     ...options
   });
-}
-
-// src/cache/redis.ts
-import { Redis as UpstashRedis } from "@upstash/redis";
-var UpstashAdapter = class {
-  client;
-  constructor(url, token) {
-    this.client = new UpstashRedis({ url, token });
-  }
-  async get(key) {
-    return this.client.get(key);
-  }
-  async set(key, value) {
-    return this.client.set(key, value);
-  }
-  async setex(key, seconds, value) {
-    return this.client.setex(key, seconds, value);
-  }
-  async del(...keys) {
-    return this.client.del(...keys);
-  }
-  async keys(pattern) {
-    return this.client.keys(pattern);
-  }
-  async ping() {
-    return this.client.ping();
-  }
-  async lpush(key, ...elements) {
-    return this.client.lpush(key, ...elements);
-  }
-  async rpop(key) {
-    return this.client.rpop(key);
-  }
-  async llen(key) {
-    return this.client.llen(key);
-  }
-  async incr(key) {
-    return this.client.incr(key);
-  }
-  async expire(key, seconds) {
-    return this.client.expire(key, seconds);
-  }
-};
-var IoRedisAdapter = class {
-  client;
-  initialized;
-  constructor(url) {
-    this.initialized = this.initClient(url);
-  }
-  async initClient(url) {
-    try {
-      const { default: IORedis } = await import("ioredis");
-      this.client = new IORedis(url);
-    } catch (error) {
-      console.error("Failed to load ioredis. Ensure you are running in a Node.js environment for TCP connections.", error);
-      throw error;
-    }
-  }
-  async ensureClient() {
-    await this.initialized;
-    if (!this.client) throw new Error("Redis client not initialized");
-  }
-  async get(key) {
-    await this.ensureClient();
-    const value = await this.client.get(key);
-    if (!value) return null;
-    try {
-      return JSON.parse(value);
-    } catch {
-      return value;
-    }
-  }
-  async set(key, value) {
-    await this.ensureClient();
-    return this.client.set(key, value);
-  }
-  async setex(key, seconds, value) {
-    await this.ensureClient();
-    return this.client.setex(key, seconds, value);
-  }
-  async del(...keys) {
-    await this.ensureClient();
-    return this.client.del(...keys);
-  }
-  async keys(pattern) {
-    await this.ensureClient();
-    return this.client.keys(pattern);
-  }
-  async ping() {
-    await this.ensureClient();
-    return this.client.ping();
-  }
-  async lpush(key, ...elements) {
-    await this.ensureClient();
-    return this.client.lpush(key, ...elements);
-  }
-  async rpop(key) {
-    await this.ensureClient();
-    return this.client.rpop(key);
-  }
-  async llen(key) {
-    await this.ensureClient();
-    return this.client.llen(key);
-  }
-  async incr(key) {
-    await this.ensureClient();
-    return this.client.incr(key);
-  }
-  async expire(key, seconds) {
-    await this.ensureClient();
-    return this.client.expire(key, seconds);
-  }
-};
-var redisInstance = null;
-function initRedis(config) {
-  if (config.url.startsWith("http")) {
-    if (!config.token) {
-      throw new Error("Redis Token is required for Upstash HTTP connection");
-    }
-    redisInstance = new UpstashAdapter(config.url, config.token);
-  } else {
-    redisInstance = new IoRedisAdapter(config.url);
-  }
-  return redisInstance;
-}
-function getRedis() {
-  if (!redisInstance) {
-    throw new Error("Redis not initialized. Call initRedis() first.");
-  }
-  return redisInstance;
-}
-async function cached(key, fn, ttlSeconds = 60) {
-  const redis = getRedis();
-  const cachedValue = await redis.get(key);
-  if (cachedValue !== null) {
-    return cachedValue;
-  }
-  const result = await fn();
-  await redis.setex(key, ttlSeconds, JSON.stringify(result));
-  return result;
-}
-async function invalidate(key) {
-  const redis = getRedis();
-  await redis.del(key);
-}
-async function invalidatePattern(pattern) {
-  const redis = getRedis();
-  const keys = await redis.keys(pattern);
-  if (keys.length > 0) {
-    await redis.del(...keys);
-  }
-}
-async function testConnection() {
-  try {
-    const redis = getRedis();
-    await redis.ping();
-    return { success: true, message: "Redis connection successful" };
-  } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Connection failed"
-    };
-  }
 }
 
 // src/routes/data.ts
@@ -4471,7 +5280,7 @@ function flattenRelations(data) {
     return flat;
   });
 }
-async function executeDataRequest(dataRequest) {
+async function executeDataRequest2(dataRequest) {
   const url = resolveEnvVars(dataRequest.url);
   const headers = {};
   for (const [key, value] of Object.entries(dataRequest.headers || {})) {
@@ -4534,9 +5343,9 @@ async function executeDataRequestUncached(dataRequest, url, headers) {
 async function getDefaultDatasource2() {
   if (cachedDatasource) return cachedDatasource;
   try {
-    const pages = await listPublishedPages();
+    const pages = await stateProvider.listPages();
     if (pages.length > 0) {
-      const page = await getPublishedPageBySlug(pages[0].slug);
+      const page = await stateProvider.getPageBySlug(pages[0].slug);
       if (page?.datasources && page.datasources.length > 0) {
         cachedDatasource = page.datasources[0];
         console.log(`[Data API] Using datasource: ${cachedDatasource.name} (${cachedDatasource.type})`);
@@ -4620,7 +5429,7 @@ dataRoute.post("/execute", async (c) => {
       }, 400);
     }
     console.log(`[Data Execute] Processing request for: ${dataRequest.url.substring(0, 80)}...`);
-    const { data, total } = await executeDataRequest(dataRequest);
+    const { data, total } = await executeDataRequest2(dataRequest);
     return c.json({
       success: true,
       data,
@@ -4641,1354 +5450,9 @@ dataRoute.post("/clear-cache", async (c) => {
   return c.json({ success: true, message: "Cache cleared" });
 });
 
-// src/routes/storage.ts
-import { OpenAPIHono as OpenAPIHono7, createRoute as createRoute7, z as z10 } from "@hono/zod-openapi";
-
-// src/storage/supabase_provider.ts
-import { createClient as createClient3 } from "@supabase/supabase-js";
-var SupabaseStorage = class {
-  client;
-  bucket;
-  datasourceName;
-  constructor(config) {
-    const url = config.supabaseUrl || config.url;
-    const key = config.supabaseKey || config.key;
-    this.client = createClient3(url, key);
-    this.bucket = config.bucket || "uploads";
-    this.datasourceName = config.datasourceName || "Supabase";
-    console.log("[SUPABASE.TS] Class instance created, datasourceName:", this.datasourceName);
-  }
-  /**
-   * Upload a file to Supabase Storage
-   */
-  async upload(path2, file, options) {
-    const targetBucket = options?.bucket || this.bucket;
-    const { data, error } = await this.client.storage.from(targetBucket).upload(path2, file, {
-      contentType: options?.contentType,
-      upsert: options?.upsert ?? false
-    });
-    if (error) {
-      const err = error;
-      let msg = error.message;
-      if (!msg || msg === "{}") {
-        if (err.originalError && typeof err.originalError.status === "number") {
-          const status = err.originalError.status;
-          const statusText = err.originalError.statusText || "";
-          const statusMessages = {
-            400: "Bad request - the file may already exist or be invalid",
-            401: "Authentication failed - please check your credentials",
-            403: "Permission denied - you do not have access to this bucket",
-            404: "Bucket or path not found",
-            409: "The resource already exists",
-            413: "File too large",
-            429: "Too many requests - please try again later"
-          };
-          msg = statusMessages[status] || `Upload failed: ${status} ${statusText}`.trim();
-        } else {
-          msg = err.error_description || err.error || err.code || err.statusText || "Unknown upload error";
-        }
-      }
-      throw new Error(msg);
-    }
-    return {
-      path: data.path,
-      publicUrl: this.getPublicUrl(data.path, targetBucket)
-    };
-  }
-  /**
-   * Download a file from Supabase Storage
-   */
-  async download(path2, bucket) {
-    const targetBucket = bucket || this.bucket;
-    const { data, error } = await this.client.storage.from(targetBucket).download(path2);
-    if (error) {
-      throw new Error(`Storage download failed: ${error.message}`);
-    }
-    return data;
-  }
-  /**
-   * Delete a file or folder (recursively) from Supabase Storage
-   */
-  async delete(paths, options) {
-    const pathArray = Array.isArray(paths) ? paths : [paths];
-    const targetBucket = options?.bucket || this.bucket;
-    let allPathsToDelete = [];
-    for (const path2 of pathArray) {
-      const descendants = await this.listAllDescendants(targetBucket, path2);
-      allPathsToDelete.push(...descendants);
-      allPathsToDelete.push(path2);
-    }
-    allPathsToDelete = [...new Set(allPathsToDelete)];
-    if (allPathsToDelete.length === 0) return;
-    const chunkSize = 50;
-    for (let i = 0; i < allPathsToDelete.length; i += chunkSize) {
-      const chunk = allPathsToDelete.slice(i, i + chunkSize);
-      const { error } = await this.client.storage.from(targetBucket).remove(chunk);
-      if (error) {
-        console.error("Supabase delete error details:", JSON.stringify(error, null, 2));
-        const err = error;
-        const msg = err.message || err.error_description || err.error || JSON.stringify(error);
-        throw new Error(`Storage delete failed: ${msg}`);
-      }
-    }
-  }
-  /**
-   * Recursively list all files under a path
-   */
-  async listAllDescendants(bucket, prefix) {
-    const { data, error } = await this.client.storage.from(bucket).list(prefix);
-    if (error || !data) return [];
-    let paths = [];
-    for (const item of data) {
-      const fullPath = prefix ? `${prefix}/${item.name}` : item.name;
-      paths.push(fullPath);
-      if (!item.metadata) {
-        const children = await this.listAllDescendants(bucket, fullPath);
-        paths.push(...children);
-      }
-    }
-    return paths;
-  }
-  /**
-   * Calculate total size of a folder recursively
-   */
-  async getFolderSize(bucket, prefix) {
-    const { data, error } = await this.client.storage.from(bucket).list(prefix);
-    if (error || !data) return 0;
-    let totalSize = 0;
-    const folderPromises = [];
-    for (const item of data) {
-      if (item.name === ".folder") continue;
-      if (item.metadata) {
-        totalSize += item.metadata.size || 0;
-      } else {
-        const folderPath = prefix ? `${prefix}/${item.name}` : item.name;
-        folderPromises.push(this.getFolderSize(bucket, folderPath));
-      }
-    }
-    const subFolderSizes = await Promise.all(folderPromises);
-    return totalSize + subFolderSizes.reduce((a, b) => a + b, 0);
-  }
-  /**
-   * List files in a directory
-   */
-  async list(path2, options) {
-    const targetBucket = options?.bucket || this.bucket;
-    const { data, error } = await this.client.storage.from(targetBucket).list(path2 || "", {
-      limit: options?.limit || 100,
-      offset: options?.offset || 0,
-      search: options?.search
-    });
-    if (error) {
-      throw new Error(`Storage list failed: ${error.message}`);
-    }
-    const items = data.filter((file) => file.name !== ".folder");
-    return Promise.all(
-      items.map(async (file) => {
-        const isFolder = !file.metadata;
-        let size = file.metadata?.size || 0;
-        if (isFolder) {
-          const fullPath = path2 ? `${path2}/${file.name}` : file.name;
-          size = await this.getFolderSize(targetBucket, fullPath);
-        }
-        return {
-          name: file.name,
-          id: file.id || file.name,
-          size,
-          updated_at: file.updated_at || file.last_accessed_at || file.created_at,
-          mimetype: file.metadata?.mimetype,
-          metadata: file.metadata,
-          isFolder
-        };
-      })
-    );
-  }
-  /**
-   * Create a virtual folder (via placeholder file)
-   */
-  async createFolder(folderPath, bucket) {
-    const placeholder = new Blob([""], { type: "application/x-directory" });
-    const targetBucket = bucket || this.bucket;
-    await this.upload(`${folderPath}/.folder`, placeholder, { bucket: targetBucket });
-  }
-  /**
-   * Generate a signed URL for direct upload (presigned)
-   */
-  async createSignedUploadUrl(path2) {
-    const { data, error } = await this.client.storage.from(this.bucket).createSignedUploadUrl(path2);
-    if (error) {
-      throw new Error(`Signed upload URL failed: ${error.message}`);
-    }
-    return data.signedUrl;
-  }
-  /**
-   * Generate a signed URL for temporary download access
-   */
-  async createSignedUrl(path2, expiresIn = 3600, bucket) {
-    const targetBucket = bucket || this.bucket;
-    const { data, error } = await this.client.storage.from(targetBucket).createSignedUrl(path2, expiresIn);
-    if (error) {
-      throw new Error(`Signed URL failed: ${error.message}`);
-    }
-    return data.signedUrl;
-  }
-  /**
-   * Get public URL for a file (bucket must be public)
-   */
-  getPublicUrl(path2, bucket) {
-    const targetBucket = bucket || this.bucket;
-    const { data } = this.client.storage.from(targetBucket).getPublicUrl(path2);
-    return data.publicUrl;
-  }
-  /**
-   * List all buckets with metadata and calculated total size
-   */
-  async listBuckets() {
-    const { data, error } = await this.client.storage.listBuckets();
-    if (error) {
-      throw new Error(`List buckets failed: ${error.message}`);
-    }
-    return Promise.all(data.map(async (bucket) => {
-      const size = await this.getFolderSize(bucket.name, "");
-      return {
-        id: bucket.id,
-        name: bucket.name,
-        public: bucket.public,
-        created_at: bucket.created_at,
-        provider: this.datasourceName,
-        size
-      };
-    }));
-  }
-  /**
-   * Create a new bucket
-   */
-  async createBucket(name, options) {
-    const { data, error } = await this.client.storage.createBucket(name, {
-      public: options?.public ?? false,
-      fileSizeLimit: options?.file_size_limit,
-      allowedMimeTypes: options?.allowed_mime_types
-    });
-    if (error) {
-      throw new Error(`Create bucket failed: ${error.message}`);
-    }
-    return { id: data.name, name: data.name };
-  }
-  /**
-   * Get a bucket
-   */
-  async getBucket(id) {
-    const { data, error } = await this.client.storage.getBucket(id);
-    if (error) {
-      throw new Error(`Get bucket failed: ${error.message}`);
-    }
-    return {
-      id: data.id,
-      name: data.name,
-      public: data.public
-    };
-  }
-  /**
-   * Update a bucket
-   */
-  async updateBucket(id, options) {
-    const { data, error } = await this.client.storage.updateBucket(id, {
-      public: options.public,
-      fileSizeLimit: options.file_size_limit,
-      allowedMimeTypes: options.allowed_mime_types
-    });
-    if (error) {
-      throw new Error(`Update bucket failed: ${error.message}`);
-    }
-    return { message: data.message };
-  }
-  /**
-   * Delete a bucket
-   */
-  async deleteBucket(id) {
-    const { data, error } = await this.client.storage.deleteBucket(id);
-    if (error) {
-      console.error("Supabase deleteBucket error details:", JSON.stringify(error, null, 2));
-      const errorStr = JSON.stringify(error);
-      const err = error;
-      let msg = err.message || err.error_description || err.error;
-      if (!msg) {
-        if (err.name === "StorageUnknownError" || errorStr.includes("StorageUnknownError")) {
-          msg = "StorageUnknownError: Bucket likely not empty. Please empty it first.";
-        } else {
-          msg = errorStr;
-        }
-      }
-      throw new Error(`Delete bucket failed: ${msg}`);
-    }
-    return { message: data.message };
-  }
-  /**
-   * Empty a bucket
-   */
-  async emptyBucket(id) {
-    const { data, error } = await this.client.storage.emptyBucket(id);
-    if (error) {
-      console.error("Supabase emptyBucket error:", JSON.stringify(error, null, 2));
-      const err = error;
-      let msg = err.message || err.error_description || err.error;
-      if (!msg && err.name) {
-        msg = err.name;
-        if (err.name === "StorageUnknownError") {
-          msg += ". Potential causes: Network issue or permission error.";
-        }
-      } else if (!msg) {
-        msg = JSON.stringify(error);
-      }
-      throw new Error(`Empty bucket failed: ${msg}`);
-    }
-    return { message: data.message };
-  }
-  /**
-   * Move a file (supports cross-bucket by Copy + Delete)
-   */
-  async move(sourceKey, destinationKey, options) {
-    const sBucket = options?.sourceBucket || this.bucket;
-    const dBucket = options?.destBucket || sBucket;
-    if (sBucket === dBucket) {
-      const { data, error } = await this.client.storage.from(sBucket).move(sourceKey, destinationKey);
-      if (error) {
-        throw new Error(`Move file failed: ${error.message}`);
-      }
-      return { message: data.message };
-    } else {
-      await this.copy(sourceKey, destinationKey, { sourceBucket: sBucket, destBucket: dBucket });
-      await this.delete(sourceKey, { bucket: sBucket });
-      return { message: "Successfully moved across buckets" };
-    }
-  }
-  /**
-   * Copy a file
-   */
-  async copy(sourceKey, destinationKey, options) {
-    const sBucket = options?.sourceBucket || this.bucket;
-    const dBucket = options?.destBucket || sBucket;
-    const { data, error } = await this.client.storage.from(sBucket).copy(sourceKey, destinationKey, { destinationBucket: dBucket });
-    if (error) {
-      throw new Error(`Copy file failed: ${error.message}`);
-    }
-    return { message: "Successfully copied" };
-  }
-};
-function createStorage(config) {
-  return new SupabaseStorage(config);
-}
-
-// src/schemas/storage.ts
-import { z as z9 } from "@hono/zod-openapi";
-var StorageErrorSchema = z9.object({
-  success: z9.literal(false),
-  error: z9.string().openapi({ example: "Error message" }),
-  details: z9.any().optional()
-}).openapi("StorageError");
-var PresignRequestSchema = z9.object({
-  path: z9.string().openapi({ example: "uploads/file.png" })
-}).openapi("PresignRequest");
-var PresignResponseSchema = z9.object({
-  success: z9.literal(true),
-  signedUrl: z9.string(),
-  path: z9.string()
-}).openapi("PresignResponse");
-var CreateFolderRequestSchema = z9.object({
-  folderPath: z9.string().openapi({ example: "images" }),
-  bucket: z9.string().openapi({ example: "uploads" })
-}).openapi("CreateFolderRequest");
-var CreateFolderResponseSchema = z9.object({
-  success: z9.literal(true),
-  folderPath: z9.string(),
-  message: z9.string()
-}).openapi("CreateFolderResponse");
-var UploadRequestSchema = z9.object({
-  file: z9.instanceof(File).openapi({ type: "string", format: "binary" }),
-  path: z9.string().optional(),
-  bucket: z9.string().optional()
-}).openapi("UploadRequest");
-var UploadResponseSchema = z9.object({
-  success: z9.literal(true),
-  path: z9.string(),
-  publicUrl: z9.string()
-}).openapi("UploadResponse");
-var ListFilesQuerySchema = z9.object({
-  bucket: z9.string().optional(),
-  path: z9.string().optional(),
-  limit: z9.string().optional().default("100"),
-  offset: z9.string().optional().default("0"),
-  search: z9.string().optional()
-}).openapi("ListFilesQuery");
-var ListFilesResponseSchema = z9.object({
-  success: z9.literal(true),
-  files: z9.array(z9.object({
-    name: z9.string(),
-    id: z9.string(),
-    size: z9.number(),
-    updated_at: z9.string().optional(),
-    mimetype: z9.string().optional(),
-    isFolder: z9.boolean(),
-    metadata: z9.any().optional()
-  }))
-}).openapi("ListFilesResponse");
-var DeleteRequestSchema = z9.object({
-  paths: z9.union([z9.string(), z9.array(z9.string())]),
-  bucket: z9.string().optional()
-}).openapi("DeleteRequest");
-var BucketSchema = z9.object({
-  id: z9.string(),
-  name: z9.string(),
-  public: z9.boolean().optional(),
-  created_at: z9.string().optional(),
-  provider: z9.string().optional(),
-  size: z9.number().optional(),
-  file_size_limit: z9.number().optional(),
-  allowed_mime_types: z9.array(z9.string()).optional()
-}).openapi("Bucket");
-var BucketResponseSchema = z9.object({
-  success: z9.literal(true),
-  bucket: BucketSchema
-}).openapi("BucketResponse");
-var ListBucketsResponseSchema = z9.object({
-  success: z9.literal(true),
-  buckets: z9.array(BucketSchema)
-}).openapi("ListBucketsResponse");
-var CreateBucketRequestSchema = z9.object({
-  name: z9.string().openapi({ example: "new-bucket" }),
-  public: z9.boolean().optional(),
-  file_size_limit: z9.number().optional(),
-  allowed_mime_types: z9.array(z9.string()).optional()
-}).openapi("CreateBucketRequest");
-var UpdateBucketRequestSchema = z9.object({
-  public: z9.boolean(),
-  file_size_limit: z9.number().optional(),
-  allowed_mime_types: z9.array(z9.string()).optional()
-}).openapi("UpdateBucketRequest");
-var MoveRequestSchema = z9.object({
-  sourceKey: z9.string(),
-  destinationKey: z9.string(),
-  sourceBucket: z9.string().optional(),
-  destBucket: z9.string().optional()
-}).openapi("MoveRequest");
-var SignedUrlQuerySchema = z9.object({
-  path: z9.string(),
-  bucket: z9.string().optional(),
-  expiresIn: z9.string().optional().default("3600")
-}).openapi("SignedUrlQuery");
-var SuccessResponseSchema2 = z9.object({
-  success: z9.literal(true),
-  message: z9.string().optional()
-}).openapi("SuccessResponse");
-
-// src/routes/storage.ts
-var storageRoute = new OpenAPIHono7();
-var cachedConfig = null;
-var lastFetchTime = 0;
-var CACHE_TTL = 60 * 1e3;
-async function getStorageConfig() {
-  const envUrl = process.env.SUPABASE_URL;
-  const envKey = process.env.SUPABASE_SERVICE_KEY;
-  const envBucket = process.env.SUPABASE_STORAGE_BUCKET || "uploads";
-  const envDatasourceName = process.env.SUPABASE_DATASOURCE_NAME || "Supabase";
-  if (envUrl && envKey) {
-    return { supabaseUrl: envUrl, supabaseKey: envKey, bucket: envBucket, datasourceName: envDatasourceName };
-  }
-  const now = Date.now();
-  if (cachedConfig && now - lastFetchTime < CACHE_TTL) {
-    return cachedConfig;
-  }
-  try {
-    const fastApiUrl = process.env.FASTAPI_URL || "http://localhost:8000";
-    console.log(`[Storage Config] Fetching credentials from: ${fastApiUrl}/api/project/internal/creds/`);
-    const response = await fetch(`${fastApiUrl}/api/project/internal/creds/`);
-    if (response.ok) {
-      const data = await response.json();
-      console.log(`[Storage Config] Credentials fetched: ${data.supabaseUrl ? "Yes" : "No"}`);
-      if (data.supabaseUrl && (data.supabaseServiceKey || data.supabaseKey)) {
-        cachedConfig = {
-          supabaseUrl: data.supabaseUrl,
-          supabaseKey: data.supabaseServiceKey || data.supabaseKey,
-          bucket: envBucket,
-          // Bucket still mainly from env or default
-          datasourceName: data.datasourceName || envDatasourceName
-        };
-        console.log(`[Storage Config] datasourceName: ${cachedConfig.datasourceName}`);
-        lastFetchTime = now;
-        return cachedConfig;
-      }
-    }
-  } catch (error) {
-    console.error("Failed to fetch storage config from backend:", error);
-  }
-  return null;
-}
-var presignRoute = createRoute7({
-  method: "post",
-  path: "/presign",
-  tags: ["Storage"],
-  summary: "Get presigned upload URL",
-  description: "Generates a signed URL for direct file upload to Supabase Storage.",
-  request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: PresignRequestSchema
-        }
-      }
-    }
-  },
-  responses: {
-    200: {
-      description: "Presigned URL generated",
-      content: {
-        "application/json": {
-          schema: PresignResponseSchema
-        }
-      }
-    },
-    400: {
-      description: "Storage not configured",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    }
-  }
-});
-storageRoute.openapi(presignRoute, async (c) => {
-  const config = await getStorageConfig();
-  if (!config) {
-    return c.json({ success: false, error: "Storage not configured" }, 400);
-  }
-  try {
-    const { path: path2 } = c.req.valid("json");
-    const storage = createStorage(config);
-    const signedUrl = await storage.createSignedUploadUrl(path2);
-    return c.json({ success: true, signedUrl, path: path2 }, 200);
-  } catch (error) {
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Upload URL generation failed"
-    }, 500);
-  }
-});
-var createFolderRoute = createRoute7({
-  method: "post",
-  path: "/create-folder",
-  tags: ["Storage"],
-  summary: "Create a folder",
-  description: "Creates a folder by uploading a .folder placeholder file to Supabase Storage.",
-  request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: CreateFolderRequestSchema
-        }
-      }
-    }
-  },
-  responses: {
-    200: {
-      description: "Folder created",
-      content: {
-        "application/json": {
-          schema: CreateFolderResponseSchema
-        }
-      }
-    },
-    400: {
-      description: "Invalid request",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    }
-  }
-});
-storageRoute.openapi(createFolderRoute, async (c) => {
-  const config = await getStorageConfig();
-  if (!config) {
-    return c.json({ success: false, error: "Storage not configured" }, 400);
-  }
-  try {
-    const { folderPath, bucket } = c.req.valid("json");
-    const placeholderPath = folderPath.endsWith("/") ? `${folderPath}.folder` : `${folderPath}/.folder`;
-    const storage = createStorage(config);
-    const placeholderContent = new Blob([""], { type: "text/plain" });
-    await storage.upload(placeholderPath, placeholderContent, { bucket, upsert: true });
-    return c.json({ success: true, folderPath, message: "Folder created" }, 200);
-  } catch (error) {
-    console.error("Create folder error:", error);
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Create folder failed"
-    }, 500);
-  }
-});
-var uploadRoute = createRoute7({
-  method: "post",
-  path: "/upload",
-  tags: ["Storage"],
-  summary: "Direct file upload",
-  description: "Uploads a file directly (limited to 5MB, use presigned URL for larger files).",
-  request: {
-    body: {
-      content: {
-        "multipart/form-data": {
-          schema: UploadRequestSchema
-        }
-      }
-    }
-  },
-  responses: {
-    200: {
-      description: "File uploaded",
-      content: {
-        "application/json": {
-          schema: UploadResponseSchema
-        }
-      }
-    },
-    400: {
-      description: "Invalid request",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    413: {
-      description: "File too large",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    }
-  }
-});
-storageRoute.openapi(uploadRoute, async (c) => {
-  const config = await getStorageConfig();
-  if (!config) {
-    return c.json({ success: false, error: "Storage not configured" }, 400);
-  }
-  try {
-    const formData = await c.req.formData();
-    const file = formData.get("file");
-    const customPath = formData.get("path");
-    if (!file) {
-      return c.json({ success: false, error: "No file provided" }, 400);
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      return c.json({
-        success: false,
-        error: "File too large. Use presigned URL for files over 5MB."
-      }, 413);
-    }
-    const path2 = customPath || `uploads/${Date.now()}-${file.name}`;
-    const bucket = formData.get("bucket");
-    console.log("[Storage Upload] bucket from formData:", bucket, "path:", path2);
-    const storage = createStorage(config);
-    const result = await storage.upload(path2, file, {
-      contentType: file.type,
-      bucket: bucket || void 0
-    });
-    return c.json({
-      success: true,
-      path: result.path,
-      publicUrl: result.publicUrl || ""
-    }, 200);
-  } catch (error) {
-    console.error("Upload Error:", error);
-    let errorMessage = "Upload failed";
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    } else if (typeof error === "string") {
-      errorMessage = error;
-    } else if (error && typeof error === "object") {
-      errorMessage = error.message || JSON.stringify(error);
-    }
-    return c.json({
-      success: false,
-      error: errorMessage
-    }, 500);
-  }
-});
-var listFilesRoute = createRoute7({
-  method: "get",
-  path: "/list",
-  tags: ["Storage"],
-  summary: "List files",
-  description: "Lists files and folders in a specified path within a bucket.",
-  request: {
-    query: ListFilesQuerySchema
-  },
-  responses: {
-    200: {
-      description: "File list retrieved",
-      content: {
-        "application/json": {
-          schema: ListFilesResponseSchema
-        }
-      }
-    },
-    400: {
-      description: "Invalid request",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    }
-  }
-});
-storageRoute.openapi(listFilesRoute, async (c) => {
-  const config = await getStorageConfig();
-  if (!config) {
-    return c.json({ success: false, error: "Storage not configured" }, 400);
-  }
-  const { bucket: queryBucket, path: queryPath, limit: queryLimit, offset: queryOffset, search } = c.req.valid("query");
-  const bucket = queryBucket || config.bucket;
-  const path2 = queryPath || "";
-  const limit = parseInt(queryLimit);
-  const offset = parseInt(queryOffset);
-  const storage = createStorage(config);
-  try {
-    const files = await storage.list(path2, { limit, offset, bucket, search });
-    return c.json({ success: true, files }, 200);
-  } catch (error) {
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "List failed"
-    }, 500);
-  }
-});
-var deleteFileRoute = createRoute7({
-  method: "delete",
-  path: "/delete",
-  tags: ["Storage"],
-  summary: "Delete files",
-  description: "Deletes one or more files from a bucket.",
-  request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: DeleteRequestSchema
-        }
-      }
-    }
-  },
-  responses: {
-    200: {
-      description: "Files deleted",
-      content: {
-        "application/json": {
-          schema: SuccessResponseSchema2
-        }
-      }
-    },
-    400: {
-      description: "Invalid request",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    }
-  }
-});
-storageRoute.openapi(deleteFileRoute, async (c) => {
-  const config = await getStorageConfig();
-  if (!config) {
-    return c.json({ success: false, error: "Storage not configured" }, 400);
-  }
-  try {
-    const { paths, bucket } = c.req.valid("json");
-    const storage = createStorage(config);
-    await storage.delete(paths, { bucket });
-    return c.json({ success: true }, 200);
-  } catch (error) {
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Delete failed"
-    }, 500);
-  }
-});
-var listBucketsRoute = createRoute7({
-  method: "get",
-  path: "/buckets",
-  tags: ["Storage"],
-  summary: "List buckets",
-  description: "Lists all available storage buckets.",
-  responses: {
-    200: {
-      description: "Bucket list retrieved",
-      content: {
-        "application/json": {
-          schema: ListBucketsResponseSchema
-        }
-      }
-    },
-    400: {
-      description: "Invalid request",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    }
-  }
-});
-storageRoute.openapi(listBucketsRoute, async (c) => {
-  const config = await getStorageConfig();
-  if (!config) {
-    return c.json({ success: false, error: "Storage not configured" }, 400);
-  }
-  const storage = createStorage(config);
-  try {
-    const buckets = await storage.listBuckets();
-    return c.json({ success: true, buckets }, 200);
-  } catch (error) {
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "List buckets failed"
-    }, 500);
-  }
-});
-var createBucketRoute = createRoute7({
-  method: "post",
-  path: "/buckets",
-  tags: ["Storage"],
-  summary: "Create a bucket",
-  description: "Creates a new storage bucket in Supabase.",
-  request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: CreateBucketRequestSchema
-        }
-      }
-    }
-  },
-  responses: {
-    200: {
-      description: "Bucket created",
-      content: {
-        "application/json": {
-          schema: BucketResponseSchema
-        }
-      }
-    },
-    400: {
-      description: "Invalid request",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    }
-  }
-});
-storageRoute.openapi(createBucketRoute, async (c) => {
-  const config = await getStorageConfig();
-  if (!config) {
-    return c.json({ success: false, error: "Storage not configured" }, 400);
-  }
-  try {
-    const { name, public: isPublic, file_size_limit, allowed_mime_types } = c.req.valid("json");
-    const storage = createStorage(config);
-    const bucket = await storage.createBucket(name, {
-      public: isPublic,
-      file_size_limit,
-      allowed_mime_types
-    });
-    return c.json({ success: true, bucket }, 200);
-  } catch (error) {
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Create bucket failed"
-    }, 500);
-  }
-});
-var getBucketRoute = createRoute7({
-  method: "get",
-  path: "/buckets/{id}",
-  tags: ["Storage"],
-  summary: "Get bucket details",
-  description: "Retrieves details for a specific storage bucket.",
-  request: {
-    params: z10.object({
-      id: z10.string().openapi({ example: "my-bucket" })
-    })
-  },
-  responses: {
-    200: {
-      description: "Bucket details retrieved",
-      content: {
-        "application/json": {
-          schema: BucketResponseSchema
-        }
-      }
-    },
-    400: {
-      description: "Invalid request",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    404: {
-      description: "Bucket not found",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    }
-  }
-});
-storageRoute.openapi(getBucketRoute, async (c) => {
-  const config = await getStorageConfig();
-  if (!config) {
-    return c.json({ success: false, error: "Storage not configured" }, 400);
-  }
-  const id = c.req.param("id");
-  const storage = createStorage(config);
-  try {
-    const bucket = await storage.getBucket(id);
-    return c.json({ success: true, bucket }, 200);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Get bucket failed";
-    if (errorMessage.includes("not found") || errorMessage.includes("does not exist")) {
-      return c.json({ success: false, error: "Bucket not found" }, 404);
-    }
-    return c.json({ success: false, error: errorMessage }, 500);
-  }
-});
-var updateBucketRoute = createRoute7({
-  method: "put",
-  path: "/buckets/{id}",
-  tags: ["Storage"],
-  summary: "Update a bucket",
-  description: "Updates settings for an existing storage bucket.",
-  request: {
-    params: z10.object({
-      id: z10.string()
-    }),
-    body: {
-      content: {
-        "application/json": {
-          schema: UpdateBucketRequestSchema
-        }
-      }
-    }
-  },
-  responses: {
-    200: {
-      description: "Bucket updated",
-      content: {
-        "application/json": {
-          schema: SuccessResponseSchema2
-        }
-      }
-    },
-    400: {
-      description: "Invalid request",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    }
-  }
-});
-storageRoute.openapi(updateBucketRoute, async (c) => {
-  const config = await getStorageConfig();
-  if (!config) {
-    return c.json({ success: false, error: "Storage not configured" }, 400);
-  }
-  const id = c.req.param("id");
-  const storage = createStorage(config);
-  try {
-    const { public: isPublic, file_size_limit, allowed_mime_types } = c.req.valid("json");
-    const result = await storage.updateBucket(id, {
-      public: isPublic,
-      file_size_limit,
-      allowed_mime_types
-    });
-    return c.json({ success: true, message: result.message }, 200);
-  } catch (error) {
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Update bucket failed"
-    }, 500);
-  }
-});
-var deleteBucketRoute = createRoute7({
-  method: "delete",
-  path: "/buckets/{id}",
-  tags: ["Storage"],
-  summary: "Delete a bucket",
-  description: "Deletes a storage bucket. The bucket must be empty.",
-  request: {
-    params: z10.object({
-      id: z10.string()
-    })
-  },
-  responses: {
-    200: {
-      description: "Bucket deleted",
-      content: {
-        "application/json": {
-          schema: SuccessResponseSchema2
-        }
-      }
-    },
-    400: {
-      description: "Invalid request",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    }
-  }
-});
-storageRoute.openapi(deleteBucketRoute, async (c) => {
-  const config = await getStorageConfig();
-  if (!config) {
-    return c.json({ success: false, error: "Storage not configured" }, 400);
-  }
-  const id = c.req.param("id");
-  const storage = createStorage(config);
-  try {
-    const result = await storage.deleteBucket(id);
-    return c.json({ success: true, message: result.message }, 200);
-  } catch (error) {
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Delete bucket failed"
-    }, 500);
-  }
-});
-var emptyBucketRoute = createRoute7({
-  method: "post",
-  path: "/buckets/{id}/empty",
-  tags: ["Storage"],
-  summary: "Empty a bucket",
-  description: "Deletes all files within a storage bucket.",
-  request: {
-    params: z10.object({
-      id: z10.string()
-    })
-  },
-  responses: {
-    200: {
-      description: "Bucket emptied",
-      content: {
-        "application/json": {
-          schema: SuccessResponseSchema2
-        }
-      }
-    },
-    400: {
-      description: "Invalid request",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    }
-  }
-});
-storageRoute.openapi(emptyBucketRoute, async (c) => {
-  const config = await getStorageConfig();
-  if (!config) {
-    return c.json({ success: false, error: "Storage not configured" }, 400);
-  }
-  const id = c.req.param("id");
-  const storage = createStorage(config);
-  try {
-    const result = await storage.emptyBucket(id);
-    return c.json({ success: true, message: result.message }, 200);
-  } catch (error) {
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Empty bucket failed"
-    }, 500);
-  }
-});
-var moveFileRoute = createRoute7({
-  method: "post",
-  path: "/move",
-  tags: ["Storage"],
-  summary: "Move files",
-  description: "Moves a file from one path/bucket to another.",
-  request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: MoveRequestSchema
-        }
-      }
-    }
-  },
-  responses: {
-    200: {
-      description: "File moved",
-      content: {
-        "application/json": {
-          schema: SuccessResponseSchema2
-        }
-      }
-    },
-    400: {
-      description: "Invalid request",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    }
-  }
-});
-storageRoute.openapi(moveFileRoute, async (c) => {
-  const config = await getStorageConfig();
-  if (!config) {
-    return c.json({ success: false, error: "Storage not configured" }, 400);
-  }
-  try {
-    const { sourceKey, destinationKey, sourceBucket, destBucket } = c.req.valid("json");
-    const storage = createStorage(config);
-    const result = await storage.move(sourceKey, destinationKey, { sourceBucket, destBucket });
-    return c.json({ success: true, message: result.message }, 200);
-  } catch (error) {
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Move file failed"
-    }, 500);
-  }
-});
-var copyFileRoute = createRoute7({
-  method: "post",
-  path: "/copy",
-  tags: ["Storage"],
-  summary: "Copy files",
-  description: "Copies a file from one path/bucket to another.",
-  request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: MoveRequestSchema
-        }
-      }
-    }
-  },
-  responses: {
-    200: {
-      description: "File copied",
-      content: {
-        "application/json": {
-          schema: SuccessResponseSchema2
-        }
-      }
-    },
-    400: {
-      description: "Invalid request",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    }
-  }
-});
-storageRoute.openapi(copyFileRoute, async (c) => {
-  const config = await getStorageConfig();
-  if (!config) {
-    return c.json({ success: false, error: "Storage not configured" }, 400);
-  }
-  try {
-    const { sourceKey, destinationKey, sourceBucket, destBucket } = c.req.valid("json");
-    const storage = createStorage(config);
-    const result = await storage.copy(sourceKey, destinationKey, { sourceBucket, destBucket });
-    return c.json({ success: true, message: result.message }, 200);
-  } catch (error) {
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Copy file failed"
-    }, 500);
-  }
-});
-var getSignedUrlRoute = createRoute7({
-  method: "get",
-  path: "/signed-url",
-  tags: ["Storage"],
-  summary: "Get signed download URL",
-  description: "Generates a signed URL for temporary access to a private file.",
-  request: {
-    query: SignedUrlQuerySchema
-  },
-  responses: {
-    200: {
-      description: "Signed URL generated",
-      content: {
-        "application/json": {
-          schema: PresignResponseSchema
-        }
-      }
-    },
-    400: {
-      description: "Invalid request",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: StorageErrorSchema
-        }
-      }
-    }
-  }
-});
-storageRoute.openapi(getSignedUrlRoute, async (c) => {
-  const config = await getStorageConfig();
-  if (!config) {
-    return c.json({ success: false, error: "Storage not configured" }, 400);
-  }
-  const { path: path2, bucket, expiresIn: queryExpiresIn } = c.req.valid("query");
-  const expiresIn = parseInt(queryExpiresIn);
-  if (!path2) {
-    return c.json({ success: false, error: "Path is required" }, 400);
-  }
-  const storage = createStorage(config);
-  try {
-    const signedUrl = await storage.createSignedUrl(path2, expiresIn, bucket);
-    return c.json({ success: true, signedUrl, path: path2 }, 200);
-  } catch (error) {
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Signed URL generation failed"
-    }, 500);
-  }
-});
-
 // src/routes/cache.ts
-import { OpenAPIHono as OpenAPIHono8, createRoute as createRoute8, z as z11 } from "@hono/zod-openapi";
-var cacheRoute = new OpenAPIHono8();
+import { OpenAPIHono as OpenAPIHono7, createRoute as createRoute7, z as z9 } from "@hono/zod-openapi";
+var cacheRoute = new OpenAPIHono7();
 function isRedisInitialized() {
   try {
     getRedis();
@@ -6013,25 +5477,25 @@ function ensureRedisInitialized() {
     return false;
   }
 }
-var CacheStatusSchema = z11.object({
-  success: z11.boolean(),
-  message: z11.string()
+var CacheStatusSchema = z9.object({
+  success: z9.boolean(),
+  message: z9.string()
 });
-var CacheStatsSchema = z11.object({
-  success: z11.boolean(),
-  configured: z11.boolean(),
-  connected: z11.boolean().optional(),
-  message: z11.string()
+var CacheStatsSchema = z9.object({
+  success: z9.boolean(),
+  configured: z9.boolean(),
+  connected: z9.boolean().optional(),
+  message: z9.string()
 });
-var InvalidateRequestSchema = z11.object({
-  key: z11.string().optional().openapi({ description: "Single cache key to invalidate" }),
-  pattern: z11.string().optional().openapi({ description: "Glob pattern to match multiple keys" })
+var InvalidateRequestSchema = z9.object({
+  key: z9.string().optional().openapi({ description: "Single cache key to invalidate" }),
+  pattern: z9.string().optional().openapi({ description: "Glob pattern to match multiple keys" })
 });
-var InvalidateResponseSchema = z11.object({
-  success: z11.boolean(),
-  message: z11.string()
+var InvalidateResponseSchema = z9.object({
+  success: z9.boolean(),
+  message: z9.string()
 });
-var testRoute = createRoute8({
+var testRoute = createRoute7({
   method: "get",
   path: "/test",
   tags: ["Cache"],
@@ -6055,7 +5519,7 @@ cacheRoute.openapi(testRoute, async (c) => {
   const result = await testConnection();
   return c.json(result, 200);
 });
-var invalidateRoute = createRoute8({
+var invalidateRoute = createRoute7({
   method: "post",
   path: "/invalidate",
   tags: ["Cache"],
@@ -6119,7 +5583,7 @@ cacheRoute.openapi(invalidateRoute, async (c) => {
     }, 500);
   }
 });
-var statsRoute = createRoute8({
+var statsRoute2 = createRoute7({
   method: "get",
   path: "/stats",
   tags: ["Cache"],
@@ -6136,7 +5600,7 @@ var statsRoute = createRoute8({
     }
   }
 });
-cacheRoute.openapi(statsRoute, async (c) => {
+cacheRoute.openapi(statsRoute2, async (c) => {
   const configured = ensureRedisInitialized();
   if (!configured) {
     return c.json({
@@ -6154,16 +5618,152 @@ cacheRoute.openapi(statsRoute, async (c) => {
   }, 200);
 });
 
+// src/middleware/auth.ts
+import { bearerAuth } from "hono/bearer-auth";
+import { jwt } from "hono/jwt";
+import { csrf } from "hono/csrf";
+var apiKeyAuth = bearerAuth({
+  verifyToken: async (token, c) => {
+    const validKeys = (process.env.API_KEYS || "").split(",").filter((k) => k.trim());
+    if (validKeys.length === 0) {
+      console.warn("\u26A0\uFE0F No API_KEYS configured - webhook auth disabled");
+      return true;
+    }
+    return validKeys.includes(token.trim());
+  }
+});
+var csrfProtection = csrf({
+  origin: (origin, c) => {
+    const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:5173").split(",");
+    return allowedOrigins.includes(origin);
+  }
+});
+
+// src/adapters/shared.ts
+function createApp() {
+  const app2 = new OpenAPIHono8({
+    defaultHook: (result, c) => {
+      if (!result.success) {
+        console.error("[Zod Validation Error] Request body validation failed:");
+        console.error(JSON.stringify(result.error.issues, null, 2));
+        return c.json({
+          success: false,
+          error: "Validation failed",
+          details: result.error.issues
+        }, 400);
+      }
+    }
+  });
+  app2.onError((err, c) => {
+    console.error("[Global Error]", err);
+    if (err.name === "ZodError" || err.issues) {
+      console.error("[Zod Validation Error] Details:");
+      console.error(JSON.stringify(err.issues || err, null, 2));
+      return c.json({
+        success: false,
+        error: "Validation failed",
+        details: err.issues || err.message
+      }, 400);
+    }
+    return c.json({
+      success: false,
+      error: err.message || "Internal server error"
+    }, 500);
+  });
+  return app2;
+}
+function wireMiddleware(app2, options = {}) {
+  const { corsOrigins = [] } = options;
+  app2.use("*", requestId());
+  app2.use("*", logger());
+  app2.use("*", secureHeaders());
+  if (options.compress && options.compressMiddleware) {
+    app2.use("*", options.compressMiddleware());
+  }
+  app2.use("*", timeout(29e3));
+  app2.use("*", bodyLimit({ maxSize: 50 * 1024 * 1024 }));
+  const origins = ["http://localhost:5173", "http://localhost:8000", ...corsOrigins];
+  app2.use("/api/*", cors({ origin: origins, credentials: true }));
+  app2.use("*", cors({ origin: origins, credentials: true }));
+  app2.use("/api/webhook/*", apiKeyAuth);
+}
+function wireRoutes(app2, scope = "full") {
+  app2.route("/api/health", healthRoute);
+  app2.doc("/api/openapi.json", {
+    openapi: "3.1.0",
+    info: {
+      title: "Frontbase Edge Engine API",
+      version: "0.1.0",
+      description: "Edge runtime API for SSR pages, workflows, and triggers."
+    },
+    servers: [
+      { url: "http://localhost:3002", description: "Local development" }
+    ]
+  });
+  app2.get("/api/docs", swaggerUI({ url: "/api/openapi.json" }));
+  if (scope === "pages" || scope === "full") {
+    app2.route("/api/import", importRoute);
+    app2.route("/api/data", dataRoute);
+    app2.route("/api/cache", cacheRoute);
+    app2.route("", pagesRoute);
+  }
+  if (scope === "automations" || scope === "full") {
+    app2.route("/api/deploy", deployRoute);
+    app2.route("/api/execute", executeRoute);
+    app2.route("/api/webhook", webhookRoute);
+    app2.route("/api/executions", executionsRoute);
+  }
+}
+
 // src/startup/sync.ts
-var FASTAPI_URL = process.env.FASTAPI_URL || "http://localhost:8000";
+import { sql as sql3 } from "drizzle-orm";
+var BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 var MAX_RETRIES = 5;
 var RETRY_DELAY_MS = 3e3;
+async function initActionsDb() {
+  try {
+    await db.run(sql3`
+            CREATE TABLE IF NOT EXISTS workflows (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                trigger_type TEXT NOT NULL,
+                trigger_config TEXT,
+                nodes TEXT NOT NULL,
+                edges TEXT NOT NULL,
+                version INTEGER NOT NULL DEFAULT 1,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                published_by TEXT
+            )
+        `);
+    await db.run(sql3`
+            CREATE TABLE IF NOT EXISTS executions (
+                id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL REFERENCES workflows(id),
+                status TEXT NOT NULL,
+                trigger_type TEXT NOT NULL,
+                trigger_payload TEXT,
+                node_executions TEXT,
+                result TEXT,
+                error TEXT,
+                usage REAL DEFAULT 0,
+                started_at TEXT NOT NULL,
+                ended_at TEXT
+            )
+        `);
+    console.log("[Startup Sync] \u2705 Actions database tables initialized");
+  } catch (error) {
+    console.error("[Startup Sync] \u274C Failed to initialize Actions database:", error);
+  }
+}
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 async function syncRedisSettingsFromFastAPI() {
   try {
-    const response = await fetch(`${FASTAPI_URL}/api/sync/settings/redis/`, {
+    const response = await fetch(`${BACKEND_URL}/api/sync/settings/redis/`, {
       headers: { "Accept": "application/json" },
       signal: AbortSignal.timeout(5e3)
     });
@@ -6190,9 +5790,69 @@ async function syncRedisSettingsFromFastAPI() {
     return { status: "error", retry: true };
   }
 }
+async function syncSupabaseJwtFromFastAPI() {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/settings/supabase/`, {
+      headers: { "Accept": "application/json" },
+      signal: AbortSignal.timeout(5e3)
+    });
+    if (!response.ok) {
+      console.warn(`[Startup Sync] Supabase settings fetch failed: ${response.status}`);
+      return { status: "error", retry: response.status >= 500 };
+    }
+    const settings = await response.json();
+    if (settings.supabase_jwt_secret) {
+      process.env.SUPABASE_JWT_SECRET = settings.supabase_jwt_secret;
+      console.log("[Startup Sync] \u2705 Supabase JWT secret synced from backend");
+      return { status: "success" };
+    } else {
+      console.log("[Startup Sync] \u2139\uFE0F No Supabase JWT secret configured");
+      return { status: "not-configured" };
+    }
+  } catch (error) {
+    const isConnectionError = error?.cause?.code === "ECONNREFUSED";
+    if (!isConnectionError) {
+      console.warn("[Startup Sync] Supabase JWT sync failed:", error.message);
+    }
+    return { status: "error", retry: true };
+  }
+}
+async function syncTursoSettingsFromFastAPI() {
+  if (process.env.FRONTBASE_DEPLOYMENT_MODE === "cloud") {
+    console.log("[Startup Sync] \u2139\uFE0F Already in cloud mode \u2014 Turso sync skipped");
+    return { status: "success" };
+  }
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/settings/turso/`, {
+      headers: { "Accept": "application/json" },
+      signal: AbortSignal.timeout(5e3)
+    });
+    if (!response.ok) {
+      console.warn(`[Startup Sync] Turso settings fetch failed: ${response.status}`);
+      return { status: "error", retry: response.status >= 500 };
+    }
+    const settings = await response.json();
+    if (settings.turso_enabled && settings.turso_url && settings.turso_token) {
+      process.env.FRONTBASE_STATE_DB_URL = settings.turso_url;
+      process.env.FRONTBASE_STATE_DB_TOKEN = settings.turso_token;
+      await upgradeToTurso();
+      console.log("[Startup Sync] \u2705 Turso state provider activated from Settings UI");
+      return { status: "success" };
+    } else {
+      console.log("[Startup Sync] \u2139\uFE0F Turso not enabled in Settings UI \u2014 using local SQLite");
+      return { status: "not-configured" };
+    }
+  } catch (error) {
+    const isConnectionError = error?.cause?.code === "ECONNREFUSED";
+    if (!isConnectionError) {
+      console.warn("[Startup Sync] Turso sync failed:", error.message);
+    }
+    return { status: "error", retry: true };
+  }
+}
 async function syncHomepageFromFastAPI() {
   try {
-    const response = await fetch(`${FASTAPI_URL}/api/pages/homepage/`, {
+    const response = await fetch(`${BACKEND_URL}/api/pages/homepage/`, {
       headers: { "Accept": "application/json" },
       signal: AbortSignal.timeout(5e3)
       // 5s timeout
@@ -6225,7 +5885,7 @@ async function syncHomepageFromFastAPI() {
       isPublic: pageData.isPublic ?? true,
       isHomepage: true
     };
-    await upsertPublishedPage(publishData);
+    await stateProvider.upsertPage(publishData);
     console.log(`[Startup Sync] \u2705 Homepage synced: ${pageData.slug}`);
     return true;
   } catch (error) {
@@ -6238,23 +5898,27 @@ async function syncHomepageFromFastAPI() {
   }
 }
 async function runStartupSync() {
-  console.log("[Startup Sync] \u{1F680} Starting homepage + Redis sync...");
-  await initPagesDb();
-  console.log("[Startup Sync] Syncing Redis settings...");
+  console.log("[Startup Sync] \u{1F680} Starting Edge database initialization...");
+  await stateProvider.init();
+  await initActionsDb();
+  console.log("[Startup Sync] Syncing settings from backend...");
+  let tursoUpgraded = false;
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    const result = await syncRedisSettingsFromFastAPI();
-    if (result.status === "success") {
-      break;
+    const redisResult = await syncRedisSettingsFromFastAPI();
+    const supabaseResult = await syncSupabaseJwtFromFastAPI();
+    const tursoResult = await syncTursoSettingsFromFastAPI();
+    if (tursoResult.status === "success" && process.env.FRONTBASE_STATE_DB_URL) {
+      tursoUpgraded = true;
     }
-    if (result.status === "not-configured") {
-      break;
-    }
-    if (result.status === "error" && result.retry && attempt < MAX_RETRIES) {
+    const allDone = (redisResult.status === "success" || redisResult.status === "not-configured") && (supabaseResult.status === "success" || supabaseResult.status === "not-configured") && (tursoResult.status === "success" || tursoResult.status === "not-configured");
+    if (allDone) break;
+    const needsRetry = redisResult.status === "error" && redisResult.retry || supabaseResult.status === "error" && supabaseResult.retry || tursoResult.status === "error" && tursoResult.retry;
+    if (needsRetry && attempt < MAX_RETRIES) {
       console.log(`[Startup Sync] Attempt ${attempt}/${MAX_RETRIES}, retrying in ${RETRY_DELAY_MS / 1e3}s...`);
       await sleep(RETRY_DELAY_MS);
     }
   }
-  const existingHomepage = await getHomepage();
+  const existingHomepage = await stateProvider.getHomepage();
   if (existingHomepage) {
     console.log(`[Startup Sync] Homepage already exists: ${existingHomepage.slug} (v${existingHomepage.version})`);
     return;
@@ -6274,94 +5938,14 @@ async function runStartupSync() {
   console.warn("[Startup Sync] \u26A0\uFE0F Could not sync homepage after all retries. Homepage will be pull-published on first request.");
 }
 
-// src/middleware/auth.ts
-import { bearerAuth } from "hono/bearer-auth";
-import { jwt } from "hono/jwt";
-import { csrf } from "hono/csrf";
-var apiKeyAuth = bearerAuth({
-  verifyToken: async (token, c) => {
-    const validKeys = (process.env.API_KEYS || "").split(",").filter((k) => k.trim());
-    if (validKeys.length === 0) {
-      console.warn("\u26A0\uFE0F No API_KEYS configured - webhook auth disabled");
-      return true;
-    }
-    return validKeys.includes(token.trim());
-  }
-});
-var csrfProtection = csrf({
-  origin: (origin, c) => {
-    const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:5173").split(",");
-    return allowedOrigins.includes(origin);
-  }
-});
-
 // src/index.ts
-var app = new OpenAPIHono9({
-  defaultHook: (result, c) => {
-    if (!result.success) {
-      console.error("[Zod Validation Error] Request body validation failed:");
-      console.error(JSON.stringify(result.error.issues, null, 2));
-      return c.json({
-        success: false,
-        error: "Validation failed",
-        details: result.error.issues
-      }, 400);
-    }
-  }
-});
-app.onError((err, c) => {
-  console.error("[Global Error]", err);
-  if (err.name === "ZodError" || err.issues) {
-    console.error("[Zod Validation Error] Details:");
-    console.error(JSON.stringify(err.issues || err, null, 2));
-    return c.json({
-      success: false,
-      error: "Validation failed",
-      details: err.issues || err.message
-    }, 400);
-  }
-  return c.json({
-    success: false,
-    error: err.message || "Internal server error"
-  }, 500);
-});
-app.use("*", requestId());
-app.use("*", logger());
-app.use("*", secureHeaders());
-app.use("*", compress());
-app.use("*", timeout(29e3));
-app.use("*", bodyLimit({ maxSize: 50 * 1024 * 1024 }));
-app.use("/api/*", cors({
-  origin: ["http://localhost:5173", "http://localhost:8000"],
-  credentials: true
-}));
-app.use("*", cors({
-  origin: ["http://localhost:5173", "http://localhost:8000"],
-  credentials: true
-}));
-app.use("/api/webhook/*", apiKeyAuth);
-app.doc("/api/openapi.json", {
-  openapi: "3.1.0",
-  info: {
-    title: "Frontbase Edge Engine API",
-    version: "0.1.0",
-    description: "Edge runtime API for SSR pages, workflows, and triggers."
-  },
-  servers: [
-    { url: "http://localhost:3002", description: "Local development" }
-  ]
-});
-app.get("/api/docs", swaggerUI({ url: "/api/openapi.json" }));
-app.route("/api/health", healthRoute);
-app.route("/api/deploy", deployRoute);
-app.route("/api/execute", executeRoute);
-app.route("/api/webhook", webhookRoute);
-app.route("/api/executions", executionsRoute);
-app.route("/api/import", importRoute);
-app.route("/api/data", dataRoute);
-app.use("/api/storage/upload", bodyLimit({ maxSize: 50 * 1024 * 1024 }));
-app.route("/api/storage", storageRoute);
-app.route("/api/cache", cacheRoute);
+var adapter = {
+  platform: "docker",
+  scope: "full"
+};
+var app = createApp();
+wireMiddleware(app, { compress: true, compressMiddleware: compress });
+wireRoutes(app, adapter.scope);
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
 var publicPath = path.resolve(__dirname, "../public");
@@ -6369,7 +5953,6 @@ app.use("/static/*", serveStatic({
   root: publicPath,
   rewriteRequestPath: (p) => p.replace(/^\/static/, "")
 }));
-app.route("", pagesRoute);
 var port = parseInt(process.env.PORT || "3002");
 serve({
   fetch: app.fetch,
@@ -6377,6 +5960,7 @@ serve({
 }, (info) => {
   console.log(`\u{1F680} Edge Engine running on http://localhost:${info.port}`);
   console.log(`\u{1F4CD} PUBLIC_URL: ${process.env.PUBLIC_URL || "(not set - using request headers)"}`);
+  console.log(`\u{1F50C} Adapter: ${adapter.platform} (scope: ${adapter.scope})`);
   runStartupSync().catch((err) => {
     console.error("[Startup Sync] Error:", err);
   });

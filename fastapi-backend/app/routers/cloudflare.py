@@ -5,35 +5,34 @@ One-click deployment of the Edge Engine to Cloudflare Workers via API v4.
 This is a control plane operation — lives in the main app, not the sync sub-app.
 
 Endpoints:
-    POST /api/cloudflare/deploy   — Build + upload Worker + set secrets + register target
-    GET  /api/cloudflare/status   — Check deployment status
-    DELETE /api/cloudflare/teardown — Remove Worker + deactivate target
+    POST /api/cloudflare/connect  — Validate token, detect account, list workers
+    POST /api/cloudflare/deploy   — Build + upload Worker + set secrets + register engine
+    POST /api/cloudflare/status   — Check deployment status
+    POST /api/cloudflare/teardown — Remove Worker + deactivate engine
 """
 
 import os
 import subprocess
 import uuid
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
 from ..database.config import SessionLocal
-from ..models.models import DeploymentTarget, EdgeDatabase
+from ..models.models import EdgeEngine, EdgeDatabase, EdgeProviderAccount
 
 router = APIRouter(prefix="/api/cloudflare", tags=["Cloudflare Deploy"])
 
 CF_API = "https://api.cloudflare.com/client/v4"
 
-# Path to the edge service — use cwd (project root) for Docker compatibility
-# In dev: cwd = Frontbase-/fastapi-backend → parent = Frontbase-
-# In Docker: cwd = /app → services/edge is at /app/../services/edge
+# Path to the edge service
 EDGE_DIR = Path(os.getcwd()).parent / "services" / "edge"
 if not EDGE_DIR.exists():
-    # Fallback: try relative to __file__ (legacy)
     EDGE_DIR = Path(__file__).parent.parent.parent.parent / "services" / "edge"
 
 
@@ -41,38 +40,52 @@ if not EDGE_DIR.exists():
 # Pydantic Schemas
 # =============================================================================
 
+class ConnectRequest(BaseModel):
+    """List existing workers for a provider account."""
+    provider_id: str = Field(..., description="ID of the EdgeProviderAccount")
+
+
 class DeployRequest(BaseModel):
-    api_token: str = Field(..., description="Cloudflare API token with Workers Scripts: Edit")
-    account_id: Optional[str] = Field(None, description="Cloudflare account ID (auto-detected if omitted)")
+    provider_id: str = Field(..., description="ID of the EdgeProviderAccount")
     worker_name: str = Field(default="frontbase-edge", description="Worker script name")
-    # Edge database to attach (from EdgeDatabase table)
     edge_db_id: Optional[str] = Field(None, description="EdgeDatabase ID to attach (uses default if omitted)")
-    # Upstash credentials (passed as Worker secrets)
     upstash_url: Optional[str] = Field(None, description="Upstash REST URL")
     upstash_token: Optional[str] = Field(None, description="Upstash REST token")
 
 
 class StatusRequest(BaseModel):
-    api_token: str
-    account_id: Optional[str] = None
+    provider_id: str = Field(..., description="ID of the EdgeProviderAccount")
     worker_name: str = "frontbase-edge"
 
 
 class TeardownRequest(BaseModel):
-    api_token: str
-    account_id: Optional[str] = None
+    provider_id: str = Field(..., description="ID of the EdgeProviderAccount")
     worker_name: str = "frontbase-edge"
-
-
-class ConnectRequest(BaseModel):
-    """Validate CF token, detect account, and list existing workers."""
-    api_token: str = Field(..., description="Cloudflare API token")
-    account_id: Optional[str] = Field(None, description="Cloudflare account ID (auto-detected if omitted)")
 
 
 # =============================================================================
 # Helpers
 # =============================================================================
+
+def _get_provider_credentials(provider_id: str):
+    """Retrieve Cloudflare credentials from the EdgeProviderAccount."""
+    db = SessionLocal()
+    try:
+        provider = db.query(EdgeProviderAccount).filter(
+            EdgeProviderAccount.id == provider_id,
+            EdgeProviderAccount.provider == "cloudflare"
+        ).first()
+        if not provider:
+            raise HTTPException(404, "Cloudflare provider account not found")
+            
+        creds = json.loads(str(provider.provider_credentials or "{}"))
+        if "api_token" not in creds:
+            raise HTTPException(400, "Provider account missing api_token")
+            
+        return creds["api_token"], creds.get("account_id")
+    finally:
+        db.close()
+
 
 def _headers(api_token: str) -> dict:
     return {"Authorization": f"Bearer {api_token}"}
@@ -140,15 +153,12 @@ async def _upload_worker(api_token: str, account_id: str, worker_name: str, scri
     """Upload a Worker script via Cloudflare API v4 (ES module format)."""
     url = f"{CF_API}/accounts/{account_id}/workers/scripts/{worker_name}"
 
-    # Metadata for ES module worker
     metadata = {
         "main_module": "cloudflare-lite.js",
         "compatibility_date": "2024-12-01",
         "compatibility_flags": ["nodejs_compat"],
     }
 
-    import json
-    # Multipart upload: metadata + script file
     files = {
         "metadata": (None, json.dumps(metadata), "application/json"),
         "cloudflare-lite.js": ("cloudflare-lite.js", script_content, "application/javascript+module"),
@@ -177,7 +187,6 @@ async def _enable_workers_dev(api_token: str, account_id: str, worker_name: str)
             json={"enabled": True},
             timeout=10.0,
         )
-        # Get the subdomain
         subdomain_resp = await client.get(
             f"{CF_API}/accounts/{account_id}/workers/subdomain",
             headers=_headers(api_token),
@@ -214,7 +223,6 @@ def _build_worker() -> str:
     """Build the lightweight Cloudflare Worker bundle and return the script content."""
     dist_file = EDGE_DIR / "dist" / "cloudflare-lite.js"
 
-    # Always rebuild to ensure fresh bundle
     if dist_file.exists():
         dist_file.unlink()
 
@@ -226,7 +234,7 @@ def _build_worker() -> str:
             capture_output=True,
             text=True,
             timeout=60,
-            shell=True,  # Required on Windows
+            shell=True,
         )
 
         if result.returncode != 0:
@@ -254,38 +262,23 @@ def _build_worker() -> str:
 @router.post("/connect")
 async def connect_cloudflare(payload: ConnectRequest):
     """
-    Validate Cloudflare API token, detect account, and list existing workers.
-    
-    Flow: Validate token → Detect account → List workers
-    No build/upload/deploy happens here — this is connection-only.
+    List existing workers using saved credentials from EdgeProviderAccount.
     
     Uses run_in_executor to run sync httpx calls in a thread,
     avoiding Windows ProactorEventLoop Errno 22 with HTTPS.
     """
     import asyncio
     
+    api_token, account_id = _get_provider_credentials(payload.provider_id)
+    
     def _do_connect():
-        """Sync helper — runs all CF API calls in a thread pool."""
         import requests as req
-        hdrs = _headers(payload.api_token)
+        hdrs = _headers(api_token)
         
-        # 1. Validate token
-        print("[Cloudflare] Validating API token...")
-        verify_resp = req.get(
-            f"{CF_API}/user/tokens/verify",
-            headers=hdrs,
-            timeout=10.0,
-        )
-        if verify_resp.status_code != 200:
-            raise HTTPException(401, "Invalid API token — check permissions and expiry")
-        verify_data = verify_resp.json()
-        if verify_data.get("result", {}).get("status") != "active":
-            raise HTTPException(401, "API token is not active")
-        print("[Cloudflare] ✅ Token valid")
-
-        # 2. Detect account ID
-        account_id = payload.account_id
+        nonlocal account_id
         account_name = ""
+        
+        # Detect account ID if missing
         if not account_id:
             print("[Cloudflare] Auto-detecting account ID...")
             resp = req.get(
@@ -301,11 +294,25 @@ async def connect_cloudflare(payload: ConnectRequest):
                 raise HTTPException(400, "No Cloudflare accounts found for this API token")
             account_id = accounts[0]["id"]
             account_name = accounts[0].get("name", "")
-        print(f"[Cloudflare] ✅ Account: {account_name} ({account_id})")
+            
+            # Save detected account ID back to DB
+            db = SessionLocal()
+            try:
+                provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.provider_id).first()
+                if provider:
+                    creds = json.loads(str(provider.provider_credentials or "{}"))
+                    creds["account_id"] = account_id
+                    provider.provider_credentials = json.dumps(creds)  # type: ignore[assignment]
+                    db.commit()
+            except Exception:
+                db.rollback()
+            finally:
+                db.close()
+                
 
-        # 3. List existing workers
+        # Fetch workers
         print("[Cloudflare] Fetching existing workers...")
-        workers = _list_workers(payload.api_token, account_id)
+        workers = _list_workers(api_token, account_id)
         print(f"[Cloudflare] ✅ Found {len(workers)} worker(s)")
 
         return {
@@ -329,135 +336,102 @@ async def connect_cloudflare(payload: ConnectRequest):
 
 @router.post("/deploy")
 async def deploy_to_cloudflare(payload: DeployRequest):
-    """
-    One-click deploy the Edge Engine to Cloudflare Workers.
-    
-    1. Auto-detect account ID if not provided
-    2. Build the cloudflare.js bundle
-    3. Upload Worker script via API
-    4. Enable workers.dev subdomain
-    5. Set secrets (Turso, Upstash)
-    6. Auto-register as deployment target
-    """
+    """One-click deploy the Edge Engine to Cloudflare Workers."""
     try:
-        # 1. Detect account ID
-        account_id = payload.account_id
+        api_token, account_id = _get_provider_credentials(payload.provider_id)
+
         if not account_id:
             print("[Cloudflare] Auto-detecting account ID...")
-            account_id = await _detect_account_id(payload.api_token)
-            print(f"[Cloudflare] Account ID: {account_id}")
+            account_id = await _detect_account_id(api_token)
+            
+            # Save it explicitly in the db 
+            db = SessionLocal()
+            try:
+                provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.provider_id).first()
+                if provider:
+                    creds = json.loads(str(provider.provider_credentials or "{}"))
+                    creds["account_id"] = account_id
+                    provider.provider_credentials = json.dumps(creds)  # type: ignore[assignment]
+                    db.commit()
+            finally:
+                db.close()
 
-        # 2. Build the bundle
+
+        # Build & upload Worker
         script_content = _build_worker()
-
-        # 3. Upload Worker
         print(f"[Cloudflare] Uploading Worker '{payload.worker_name}'...")
-        upload_result = await _upload_worker(
-            payload.api_token, account_id, payload.worker_name, script_content
-        )
-        print(f"[Cloudflare] ✅ Worker uploaded")
-
-        # 4. Enable workers.dev subdomain
-        worker_url = await _enable_workers_dev(
-            payload.api_token, account_id, payload.worker_name
-        )
-        print(f"[Cloudflare] ✅ Workers.dev URL: {worker_url}")
-
-        # 5. Set secrets from EdgeDatabase + Upstash
+        await _upload_worker(api_token, account_id, payload.worker_name, script_content)
+        
+        worker_url = await _enable_workers_dev(api_token, account_id, payload.worker_name)
+        
+        # Set secrets
         secrets = {}
         edge_db_id_to_attach = None
 
-        # Resolve edge database credentials
         db_session = SessionLocal()
         try:
             edge_db = None
             if payload.edge_db_id:
-                edge_db = db_session.query(EdgeDatabase).filter(
-                    EdgeDatabase.id == payload.edge_db_id
-                ).first()
-                if not edge_db:
-                    raise HTTPException(400, f"Edge database '{payload.edge_db_id}' not found")
+                edge_db = db_session.query(EdgeDatabase).filter(EdgeDatabase.id == payload.edge_db_id).first()
             else:
-                # Use default edge database
-                edge_db = db_session.query(EdgeDatabase).filter(
-                    EdgeDatabase.is_default == True
-                ).first()
+                edge_db = db_session.query(EdgeDatabase).filter(EdgeDatabase.is_default == True).first()
 
             if edge_db:
                 secrets["FRONTBASE_STATE_DB_URL"] = str(edge_db.db_url)
                 if edge_db.db_token:  # type: ignore[truthy-bool]
                     secrets["FRONTBASE_STATE_DB_TOKEN"] = str(edge_db.db_token)
-                edge_db_id_to_attach = edge_db.id
-                print(f"[Cloudflare] Using edge database: {edge_db.name} ({edge_db.provider})")
+                edge_db_id_to_attach = str(edge_db.id)
         finally:
             db_session.close()
 
-        # Upstash Redis (from payload or settings)
+        # Upstash Secrets
         if payload.upstash_url:
             secrets["UPSTASH_REDIS_REST_URL"] = payload.upstash_url
         if payload.upstash_token:
             secrets["UPSTASH_REDIS_REST_TOKEN"] = payload.upstash_token
 
-        if not payload.upstash_url:
-            try:
-                from ..routers.settings import load_settings
-                settings = load_settings()
-                redis_cfg = settings.get("redis", {})
-                if redis_cfg.get("redis_type") == "upstash" and redis_cfg.get("redis_url"):
-                    secrets["UPSTASH_REDIS_REST_URL"] = redis_cfg["redis_url"]
-                    secrets["UPSTASH_REDIS_REST_TOKEN"] = redis_cfg.get("redis_token", "")
-            except Exception:
-                pass
-
         if secrets:
-            print(f"[Cloudflare] Setting {len(secrets)} secret(s)...")
-            await _set_secrets(payload.api_token, account_id, payload.worker_name, secrets)
-            print(f"[Cloudflare] ✅ Secrets configured")
+            await _set_secrets(api_token, account_id, payload.worker_name, secrets)
 
-        # 6. Auto-register as deployment target
-        target_id = None
+        # Register as Edge Engine
+        engine_id = None
         db = SessionLocal()
         try:
-            # Check if target already exists for this URL
-            existing = db.query(DeploymentTarget).filter(
-                DeploymentTarget.url == worker_url
-            ).first()
-
+            existing = db.query(EdgeEngine).filter(EdgeEngine.url == worker_url).first()
             now = datetime.utcnow().isoformat()
+            
+            engine_cfg = json.dumps({
+                "worker_name": payload.worker_name,
+                "secret_names": list(secrets.keys()),
+            })
+
             if existing:
                 existing.is_active = True  # type: ignore[assignment]
+                existing.edge_provider_id = payload.provider_id  # type: ignore[assignment]
                 existing.edge_db_id = edge_db_id_to_attach  # type: ignore[assignment]
+                existing.engine_config = engine_cfg  # type: ignore[assignment]
                 existing.updated_at = now  # type: ignore[assignment]
-                target_id = existing.id
+                engine_id = str(existing.id)
                 db.commit()
-                print(f"[Cloudflare] Re-activated existing target: {existing.name}")
             else:
-                import json as _json
-                _provider_cfg = _json.dumps({
-                    "api_token": payload.api_token,
-                    "account_id": account_id,
-                    "worker_name": payload.worker_name,
-                    "secret_names": list(secrets.keys()),
-                })
-                target = DeploymentTarget(
+                engine = EdgeEngine(
                     id=str(uuid.uuid4()),
                     name=f"Cloudflare: {payload.worker_name}",
-                    provider="cloudflare",
+                    edge_provider_id=payload.provider_id,
                     adapter_type="edge",
                     url=worker_url,
                     edge_db_id=edge_db_id_to_attach,
-                    provider_config=_provider_cfg,
+                    engine_config=engine_cfg,
                     is_active=True,
                     created_at=now,
                     updated_at=now,
                 )
-                db.add(target)
+                db.add(engine)
                 db.commit()
-                target_id = target.id
-                print(f"[Cloudflare] ✅ Registered deployment target: {worker_url}")
+                engine_id = str(engine.id)
         except Exception as e:
             db.rollback()
-            print(f"[Cloudflare] Warning: target registration failed: {e}")
+            print(f"[Cloudflare] Warning: engine registration failed: {e}")
         finally:
             db.close()
 
@@ -466,32 +440,31 @@ async def deploy_to_cloudflare(payload: DeployRequest):
             "url": worker_url,
             "worker_name": payload.worker_name,
             "account_id": account_id,
-            "target_id": target_id,
-            "secrets_set": list(secrets.keys()),
+            "engine_id": engine_id,
         }
 
-    except HTTPException as he:
-        print(f"[Cloudflare] ❌ Deploy failed: {he.detail}")
+    except HTTPException:
         raise
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(500, f"Deploy failed: {str(e) or 'Unknown error — check backend logs'}")
+        raise HTTPException(500, f"Deploy failed: {str(e) or 'Unknown error'}")
 
 
 @router.post("/status")
 async def cloudflare_status(payload: StatusRequest):
     """Check if a Worker is deployed and get its details."""
     try:
-        account_id = payload.account_id
+        api_token, account_id = _get_provider_credentials(payload.provider_id)
+
         if not account_id:
-            account_id = await _detect_account_id(payload.api_token)
+            account_id = await _detect_account_id(api_token)
 
         url = f"{CF_API}/accounts/{account_id}/workers/scripts/{payload.worker_name}"
         async with httpx.AsyncClient() as client:
             resp = await client.get(
                 url,
-                headers=_headers(payload.api_token),
+                headers=_headers(api_token),
                 timeout=10.0,
             )
 
@@ -501,10 +474,7 @@ async def cloudflare_status(payload: StatusRequest):
         if resp.status_code != 200:
             raise HTTPException(400, f"Status check failed: {resp.text[:300]}")
 
-        # Get the workers.dev URL
-        worker_url = await _enable_workers_dev(
-            payload.api_token, account_id, payload.worker_name
-        )
+        worker_url = await _enable_workers_dev(api_token, account_id, payload.worker_name)
 
         return {
             "deployed": True,
@@ -521,32 +491,31 @@ async def cloudflare_status(payload: StatusRequest):
 
 @router.post("/teardown")
 async def teardown_cloudflare(payload: TeardownRequest):
-    """Remove a Worker and deactivate its deployment target."""
+    """Remove a Worker and deactivate its edge engine target."""
     try:
-        account_id = payload.account_id
+        api_token, account_id = _get_provider_credentials(payload.provider_id)
         if not account_id:
-            account_id = await _detect_account_id(payload.api_token)
+            account_id = await _detect_account_id(api_token)
 
-        # Delete the Worker
+        # Delete Worker
         url = f"{CF_API}/accounts/{account_id}/workers/scripts/{payload.worker_name}"
         async with httpx.AsyncClient() as client:
             resp = await client.delete(
                 url,
-                headers=_headers(payload.api_token),
+                headers=_headers(api_token),
                 timeout=15.0,
             )
 
         if resp.status_code not in (200, 204):
             raise HTTPException(400, f"Teardown failed: {resp.text[:300]}")
 
-        # Deactivate deployment target
+        # Deactivate Edge Engine
         db = SessionLocal()
         try:
-            targets = db.query(DeploymentTarget).filter(
-                DeploymentTarget.provider == "cloudflare",
-                DeploymentTarget.name.contains(payload.worker_name),
+            engines = db.query(EdgeEngine).filter(
+                EdgeEngine.name.contains(payload.worker_name),
             ).all()
-            for t in targets:
+            for t in engines:
                 t.is_active = False  # type: ignore[assignment]
                 t.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
             db.commit()

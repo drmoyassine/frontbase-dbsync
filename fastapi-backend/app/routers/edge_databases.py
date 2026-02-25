@@ -14,7 +14,7 @@ import uuid
 import httpx
 
 from ..database.config import SessionLocal
-from ..models.models import EdgeDatabase, DeploymentTarget
+from ..models.models import EdgeDatabase, EdgeEngine
 
 router = APIRouter(prefix="/api/edge-databases", tags=["edge-databases"])
 
@@ -67,8 +67,8 @@ async def list_edge_databases():
         edge_dbs = db.query(EdgeDatabase).order_by(EdgeDatabase.created_at.desc()).all()
         result = []
         for edb in edge_dbs:
-            target_count = db.query(DeploymentTarget).filter(
-                DeploymentTarget.edge_db_id == edb.id
+            target_count = db.query(EdgeEngine).filter(
+                EdgeEngine.edge_db_id == edb.id
             ).count()
             result.append(EdgeDatabaseResponse(
                 id=str(edb.id),
@@ -163,8 +163,8 @@ async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate):
         db.commit()
         db.refresh(edge_db)
         
-        target_count = db.query(DeploymentTarget).filter(
-            DeploymentTarget.edge_db_id == db_id
+        target_count = db.query(EdgeEngine).filter(
+            EdgeEngine.edge_db_id == db_id
         ).count()
         
         return EdgeDatabaseResponse(
@@ -199,8 +199,8 @@ async def delete_edge_database(db_id: str):
             raise HTTPException(403, "Cannot delete a system edge database")
         
         # Check for referencing targets
-        target_count = db.query(DeploymentTarget).filter(
-            DeploymentTarget.edge_db_id == db_id
+        target_count = db.query(EdgeEngine).filter(
+            EdgeEngine.edge_db_id == db_id
         ).count()
         if target_count > 0:
             raise HTTPException(

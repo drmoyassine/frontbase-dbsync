@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
-from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, deployment_targets, cloudflare, edge_databases
+from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, edge_databases
 from app.middleware.test_mode import TestModeMiddleware
 
 logger = logging.getLogger(__name__)
@@ -132,7 +132,7 @@ class TrailingSlashMiddleware:
     Note: Excludes /api/auth/ routes which don't use trailing slashes.
     """
     # Paths that should NOT have trailing slashes added
-    EXCLUDE_PREFIXES = ["/api/auth", "/api/actions", "/api/storage", "/api/deployment-targets", "/api/cloudflare", "/api/edge-databases", "/api/settings"]
+    EXCLUDE_PREFIXES = ["/api/auth", "/api/actions", "/api/storage", "/api/edge-engines", "/api/edge-providers", "/api/cloudflare", "/api/edge-databases", "/api/settings"]
     
     def __init__(self, app: ASGIApp):
         self.app = app
@@ -163,7 +163,8 @@ app.include_router(storage.router)
 app.include_router(actions.router, prefix="/api/actions", tags=["Actions"])
 app.include_router(auth_forms.router, prefix="/api/auth-forms", tags=["Auth Forms"])
 app.include_router(settings.router)  # Privacy & Tracking settings
-app.include_router(deployment_targets.router)  # Edge deployment targets
+app.include_router(edge_providers.router)  # Edge provider accounts
+app.include_router(edge_engines.router)  # Edge deployed engines
 app.include_router(edge_databases.router)  # Edge database connections
 app.include_router(cloudflare.router)  # One-click Cloudflare deploy
 

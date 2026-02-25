@@ -6,7 +6,9 @@
  *   List → "Add Database" button → Provider selection → Connection form
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEdgeDatabases } from '@/hooks/useEdgeInfrastructure';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -56,8 +58,8 @@ const PROVIDER_OPTIONS = [
 ];
 
 export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard = false }) => {
-    const [databases, setDatabases] = useState<EdgeDatabase[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const queryClient = useQueryClient();
+    const { data: databases = [], isLoading } = useEdgeDatabases();
     const [error, setError] = useState<string | null>(null);
 
     // Add flow state (mirrors DeploymentTargetsForm pattern)
@@ -81,21 +83,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
     // Delete
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
-    const fetchDatabases = useCallback(async () => {
-        try {
-            const res = await fetch(`${API_BASE}/api/edge-databases/`);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-            setDatabases(data);
-            setError(null);
-        } catch (e: any) {
-            setError(e.message);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    useEffect(() => { fetchDatabases(); }, [fetchDatabases]);
+    const refetchDatabases = () => queryClient.invalidateQueries({ queryKey: ['edge-databases'] });
 
     const resetAddFlow = () => {
         setShowAddFlow(false);
@@ -147,7 +135,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                 throw new Error(data.detail || `HTTP ${res.status}`);
             }
             resetAddFlow();
-            await fetchDatabases();
+            refetchDatabases();
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -164,7 +152,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                 const data = await res.json();
                 throw new Error(data.detail || `HTTP ${res.status}`);
             }
-            await fetchDatabases();
+            refetchDatabases();
         } catch (e: any) { setError(e.message); }
         finally { setDeletingId(null); }
     };

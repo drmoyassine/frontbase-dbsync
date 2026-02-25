@@ -126,7 +126,7 @@ def process_component_children(
     return result
 
 
-def find_datasource(datasources: List[Dict], datasource_id: str = None) -> Dict:
+def find_datasource(datasources: List[Dict], datasource_id: str | None = None) -> Dict | None:
     """
     Finds datasource by ID or returns first available.
     
@@ -138,19 +138,19 @@ def find_datasource(datasources: List[Dict], datasource_id: str = None) -> Dict:
         Datasource dict or None
     """
     if not datasources:
-        return None
+        return None  # type: ignore[return-value]
     
     # Find by ID if provided
     if datasource_id:
         for ds in datasources:
             # Handle both Pydantic models and dicts
-            ds_dict = ds.model_dump(by_alias=True) if hasattr(ds, 'model_dump') else ds
+            ds_dict: Dict = ds.model_dump(by_alias=True) if hasattr(ds, 'model_dump') else ds  # type: ignore[assignment]
             if ds_dict.get('id') == datasource_id:
                 return ds_dict
     
     # Fallback to first datasource
     ds = datasources[0]
-    return ds.model_dump(by_alias=True) if hasattr(ds, 'model_dump') else ds
+    return ds.model_dump(by_alias=True) if hasattr(ds, 'model_dump') else ds  # type: ignore[return-value]
 
 # =============================================================================
 # Icon Pre-rendering via Lucide CDN
@@ -222,7 +222,7 @@ async def fetch_icon_svg(icon_name: str, client: httpx.AsyncClient) -> tuple[str
             # Update L2 Redis Cache (Background task would be better, but await is fast enough)
             if redis_url:
                 # Cache for 30 days (icons don't change often)
-                await cache_set(redis_url, cache_key, svg_content, ttl=2592000)
+                await cache_set(redis_url, cache_key, svg_content, ttl=2592000)  # type: ignore[possibly-undefined]
                 
             print(f"[icon_fetch] ✅ Fetched '{icon_name}' from CDN")
             return (icon_name, svg_content)

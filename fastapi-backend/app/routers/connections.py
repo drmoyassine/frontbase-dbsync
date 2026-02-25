@@ -10,7 +10,7 @@ router = APIRouter(prefix="/connections", tags=["connections"])
 
 @router.get("/connections/")
 async def get_connections(
-    request: ZodObject = None,
+    request: Any = None,
     db = Depends(get_db)
 ) -> Any:
     """

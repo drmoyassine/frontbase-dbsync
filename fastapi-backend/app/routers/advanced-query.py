@@ -9,8 +9,8 @@ router = APIRouter(prefix="/advanced-query", tags=["advanced-query"])
 # Original schema: advanced-query
 
 @router.post("/advanced-query")
-async def post_advanced-query(
-    request: ZodObject = None,
+async def post_advanced_query(
+    request: Any = None,
     db = Depends(get_db)
 ) -> Any:
     """

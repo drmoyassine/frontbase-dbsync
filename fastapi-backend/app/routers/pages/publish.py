@@ -73,7 +73,7 @@ def get_datasources_for_publish(db: Session) -> list:
     return result
 
 
-def convert_component(c: dict, datasources_list: list = None) -> dict:
+def convert_component(c: dict, datasources_list: list | None = None) -> dict:
     """
     Convert a component dict for publishing.
     
@@ -108,7 +108,7 @@ def convert_component(c: dict, datasources_list: list = None) -> dict:
                     binding,
                     datasource,
                     compute_data_request,  # Pass as function
-                    component_id=result.get('id')  # Add componentId for Pydantic validation
+                    component_id=str(result.get('id') or '')  # Add componentId for Pydantic validation
                 )
                 
                 print(f"[convert_component] Enriched {result.get('type', 'component')} binding")
@@ -265,29 +265,29 @@ async def convert_to_publish_schema(page: Page, datasources: list) -> PublishPag
     
     # Parse SEO data if exists
     seo_data = None
-    if hasattr(page, 'seo_data') and page.seo_data:
+    if hasattr(page, 'seo_data') and page.seo_data:  # type: ignore[truthy-bool]
         seo_raw = page.seo_data
         if isinstance(seo_raw, str):
             try:
                 seo_raw = json.loads(seo_raw)
             except:
                 seo_raw = {}
-        seo_data = SeoData(**seo_raw) if seo_raw else None
+        seo_data = SeoData(**seo_raw) if isinstance(seo_raw, dict) and seo_raw else None
     
     return PublishPageRequest(
-        id=page.id,
-        slug=page.slug,
-        name=page.name,
-        title=page.title,
-        description=page.description,
+        id=str(page.id),
+        slug=str(page.slug),
+        name=str(page.name),
+        title=str(page.title) if page.title else None,  # type: ignore[truthy-bool]
+        description=str(page.description) if page.description else None,  # type: ignore[truthy-bool]
         layoutData=page_layout,
         seoData=seo_data,
         datasources=datasources if datasources else None,
         cssBundle=css_bundle,  # Tree-shaken CSS for this page
         version=1,  # TODO: Increment on re-publish
         publishedAt=datetime.utcnow().isoformat() + "Z",
-        isPublic=page.is_public,
-        isHomepage=page.is_homepage,
+        isPublic=bool(page.is_public),
+        isHomepage=bool(page.is_homepage),
     )
 
 
@@ -357,7 +357,7 @@ async def publish_page(page_id: str):
             try:
                 page_to_update = update_db.query(Page).filter(Page.id == page_id).first()
                 if page_to_update:
-                    page_to_update.is_public = True
+                    page_to_update.is_public = True  # type: ignore[assignment]
                     update_db.commit()
                 
                 # Gather settings data, then close DB before IO

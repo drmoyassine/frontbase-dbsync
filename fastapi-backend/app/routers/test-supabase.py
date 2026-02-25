@@ -9,8 +9,8 @@ router = APIRouter(prefix="/test-supabase", tags=["test-supabase"])
 # Original schema: test-supabase
 
 @router.post("/test-supabase")
-async def post_test-supabase(
-    request: ZodObject = None,
+async def post_test_supabase(
+    request: Any = None,
     db = Depends(get_db)
 ) -> Any:
     """

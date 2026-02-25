@@ -228,12 +228,12 @@ async def delete_page(page_id: str):
         was_homepage = page.is_homepage
         
         # Append timestamp to slug to allow reuse (matching Express)
-        page.slug = f"{page.slug}-deleted-{int(time.time() * 1000)}"
-        page.deleted_at = get_current_timestamp()
+        page.slug = f"{page.slug}-deleted-{int(time.time() * 1000)}"  # type: ignore[assignment]
+        page.deleted_at = get_current_timestamp()  # type: ignore[assignment]
         
         # Clear homepage status when trashing
-        if was_homepage:
-            page.is_homepage = False
+        if was_homepage:  # type: ignore[truthy-bool]
+            page.is_homepage = False  # type: ignore[assignment]
         
         db.commit()
     except HTTPException:
@@ -249,10 +249,10 @@ async def delete_page(page_id: str):
 
     # 2. EDGE UNPUBLISH (No DB Connection Held)
     try:
-        await unpublish_from_edge(original_slug)
+        await unpublish_from_edge(str(original_slug))
         
         # If was homepage, also clear the homepage route
-        if was_homepage:
+        if was_homepage:  # type: ignore[truthy-bool]
             # The homepage in edge is stored by slug, which we already unpublished above
             print(f"[Delete] Cleared homepage status for: {original_slug}")
         
@@ -288,8 +288,8 @@ async def restore_page(page_id: str, db: Session = Depends(get_db)):
         if existing:
             new_slug = f"{new_slug}-restored-{int(time.time() * 1000)}"
         
-        page.slug = new_slug
-        page.deleted_at = None
+        page.slug = new_slug  # type: ignore[assignment]
+        page.deleted_at = None  # type: ignore[assignment]
         db.commit()
         db.refresh(page)
         
@@ -343,7 +343,7 @@ async def permanent_delete_page(page_id: str):
 
     # 2. EDGE UNPUBLISH (No DB Connection Held)
     try:
-        await unpublish_from_edge(page_slug)
+        await unpublish_from_edge(str(page_slug))
         
         return {
             "success": True,

@@ -162,9 +162,9 @@ async def get_internal_creds(db: Session = Depends(get_db)):
     }
     
     # Decrypt service key if present
-    if project.supabase_service_key_encrypted:
+    if project.supabase_service_key_encrypted:  # type: ignore[truthy-bool]
         try:
-            response["supabaseServiceKey"] = decrypt_data(project.supabase_service_key_encrypted)
+            response["supabaseServiceKey"] = decrypt_data(str(project.supabase_service_key_encrypted))
         except Exception:
             pass
             

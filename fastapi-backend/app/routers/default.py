@@ -10,7 +10,7 @@ router = APIRouter(prefix="/default", tags=["default"])
 
 @router.get("/")
 async def get_default(
-    request: ZodObject = None,
+    request: Any = None,
     db = Depends(get_db)
 ) -> Any:
     """

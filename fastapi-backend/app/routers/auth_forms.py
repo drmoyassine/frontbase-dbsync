@@ -208,7 +208,7 @@ async def update_auth_form(form_id: str, form: AuthFormUpdate, db: Session = Dep
             params["redirect_url"] = form.redirect_url
         if form.is_active is not None:
             updates.append("is_active = :is_active")
-            params["is_active"] = 1 if form.is_active else 0
+            params["is_active"] = str(1 if form.is_active else 0)
         
         updates.append("updated_at = :updated_at")
         

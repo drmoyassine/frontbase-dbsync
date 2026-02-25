@@ -281,18 +281,18 @@ async def publish_draft(
         )
     
     # Update draft with published status
-    draft.is_published = True
+    draft.is_published = True  # type: ignore[assignment]
     draft.published_version = result_data.get("version", 1)
     
     from datetime import datetime, timezone
-    draft.published_at = datetime.now(timezone.utc)
+    draft.published_at = datetime.now(timezone.utc)  # type: ignore[assignment]
     
     db.commit()
     
     return PublishResponse(
         success=True,
         message="Workflow published successfully",
-        workflow_id=draft.id,
+        workflow_id=str(draft.id),
         version=result_data.get("version", 1)
     )
 

@@ -294,6 +294,8 @@ async def create_folder(request: dict):
         bucket = request.get("bucket")
         folder_path = request.get("folderPath")
         
+        if not folder_path:
+            raise HTTPException(status_code=400, detail="folderPath is required")
         if folder_path.endswith("/"):
             folder_path = folder_path[:-1]
             

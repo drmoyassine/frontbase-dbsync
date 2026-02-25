@@ -2,7 +2,7 @@
 Data enrichment functions for component bindings.
 Adds dataRequest and optionsDataRequest while preserving all original fields.
 """
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 
 def remove_nulls(obj: Any) -> Any:
@@ -22,7 +22,7 @@ def enrich_binding_with_data_request(
     binding: Dict,
     datasource: Dict,
     compute_data_request_fn,
-    component_id: str = None
+    component_id: Optional[str] = None
 ) -> Dict:
     """
     Enriches binding with dataRequest AND preserves frontendFilters.

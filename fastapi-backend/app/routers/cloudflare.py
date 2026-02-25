@@ -257,9 +257,9 @@ async def deploy_to_cloudflare(payload: DeployRequest):
                 ).first()
 
             if edge_db:
-                secrets["FRONTBASE_STATE_DB_URL"] = edge_db.db_url
-                if edge_db.db_token:
-                    secrets["FRONTBASE_STATE_DB_TOKEN"] = edge_db.db_token
+                secrets["FRONTBASE_STATE_DB_URL"] = str(edge_db.db_url)
+                if edge_db.db_token:  # type: ignore[truthy-bool]
+                    secrets["FRONTBASE_STATE_DB_TOKEN"] = str(edge_db.db_token)
                 edge_db_id_to_attach = edge_db.id
                 print(f"[Cloudflare] Using edge database: {edge_db.name} ({edge_db.provider})")
         finally:
@@ -298,9 +298,9 @@ async def deploy_to_cloudflare(payload: DeployRequest):
 
             now = datetime.utcnow().isoformat()
             if existing:
-                existing.is_active = True
-                existing.edge_db_id = edge_db_id_to_attach
-                existing.updated_at = now
+                existing.is_active = True  # type: ignore[assignment]
+                existing.edge_db_id = edge_db_id_to_attach  # type: ignore[assignment]
+                existing.updated_at = now  # type: ignore[assignment]
                 target_id = existing.id
                 db.commit()
                 print(f"[Cloudflare] Re-activated existing target: {existing.name}")
@@ -412,8 +412,8 @@ async def teardown_cloudflare(payload: TeardownRequest):
                 DeploymentTarget.name.contains(payload.worker_name),
             ).all()
             for t in targets:
-                t.is_active = False
-                t.updated_at = datetime.utcnow().isoformat()
+                t.is_active = False  # type: ignore[assignment]
+                t.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
             db.commit()
         except Exception:
             db.rollback()

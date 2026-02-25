@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 from datetime import datetime
+import json
 import uuid
 
 from ..database.config import SessionLocal
@@ -28,8 +29,10 @@ class DeploymentTargetCreate(BaseModel):
     """Create a new deployment target."""
     name: str = Field(..., min_length=1, max_length=100)
     provider: Literal["cloudflare", "vercel", "netlify", "docker", "flyio"] = Field(...)
-    adapter_type: Literal["pages", "automations", "full"] = Field(default="full")
+    adapter_type: Literal["edge", "pages", "automations", "full"] = Field(default="full")
     url: str = Field(..., min_length=1, max_length=500)
+    edge_db_id: Optional[str] = None
+    provider_config: Optional[dict] = None  # Provider-specific credentials & metadata
     is_active: bool = Field(default=True)
 
 
@@ -37,8 +40,10 @@ class DeploymentTargetUpdate(BaseModel):
     """Update an existing deployment target."""
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     provider: Optional[Literal["cloudflare", "vercel", "netlify", "docker", "flyio"]] = None
-    adapter_type: Optional[Literal["pages", "automations", "full"]] = None
+    adapter_type: Optional[Literal["edge", "pages", "automations", "full"]] = None
     url: Optional[str] = Field(None, min_length=1, max_length=500)
+    edge_db_id: Optional[str] = None
+    provider_config: Optional[dict] = None
     is_active: Optional[bool] = None
 
 
@@ -50,6 +55,8 @@ class DeploymentTargetResponse(BaseModel):
     adapter_type: str
     url: str
     edge_db_id: Optional[str] = None
+    edge_db_name: Optional[str] = None
+    provider_config: Optional[dict] = None
     is_active: bool
     is_system: bool = False
     created_at: str
@@ -67,6 +74,39 @@ class TestConnectionResult(BaseModel):
 
 
 # =============================================================================
+# Helpers
+# =============================================================================
+
+def _serialize_target(target: DeploymentTarget) -> dict:
+    """Serialize a DeploymentTarget ORM object, parsing provider_config JSON."""
+    config = None
+    if target.provider_config:
+        try:
+            config = json.loads(str(target.provider_config))
+        except (json.JSONDecodeError, TypeError):
+            config = None
+
+    edge_db_name = None
+    if target.edge_database:
+        edge_db_name = str(target.edge_database.name)
+
+    return {
+        "id": str(target.id),
+        "name": str(target.name),
+        "provider": str(target.provider),
+        "adapter_type": str(target.adapter_type),
+        "url": str(target.url),
+        "edge_db_id": str(target.edge_db_id) if target.edge_db_id else None,
+        "edge_db_name": edge_db_name,
+        "provider_config": config,
+        "is_active": bool(target.is_active),
+        "is_system": bool(target.is_system),
+        "created_at": str(target.created_at),
+        "updated_at": str(target.updated_at),
+    }
+
+
+# =============================================================================
 # CRUD Endpoints
 # =============================================================================
 
@@ -76,7 +116,7 @@ async def list_deployment_targets():
     db = SessionLocal()
     try:
         targets = db.query(DeploymentTarget).order_by(DeploymentTarget.created_at.desc()).all()
-        return targets
+        return [_serialize_target(t) for t in targets]
     finally:
         db.close()
 
@@ -89,7 +129,7 @@ async def get_deployment_target(target_id: str):
         target = db.query(DeploymentTarget).filter(DeploymentTarget.id == target_id).first()
         if not target:
             raise HTTPException(status_code=404, detail="Deployment target not found")
-        return target
+        return _serialize_target(target)
     finally:
         db.close()
 
@@ -106,6 +146,8 @@ async def create_deployment_target(payload: DeploymentTargetCreate):
             provider=payload.provider,
             adapter_type=payload.adapter_type,
             url=payload.url,
+            edge_db_id=payload.edge_db_id,
+            provider_config=json.dumps(payload.provider_config) if payload.provider_config else None,
             is_active=payload.is_active,
             created_at=now,
             updated_at=now,
@@ -113,7 +155,7 @@ async def create_deployment_target(payload: DeploymentTargetCreate):
         db.add(target)
         db.commit()
         db.refresh(target)
-        return target
+        return _serialize_target(target)
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -131,13 +173,16 @@ async def update_deployment_target(target_id: str, payload: DeploymentTargetUpda
             raise HTTPException(status_code=404, detail="Deployment target not found")
 
         update_data = payload.model_dump(exclude_unset=True)
+        # Serialize provider_config dict to JSON string for storage
+        if 'provider_config' in update_data and update_data['provider_config'] is not None:
+            update_data['provider_config'] = json.dumps(update_data['provider_config'])
         for key, value in update_data.items():
             setattr(target, key, value)
         target.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
 
         db.commit()
         db.refresh(target)
-        return target
+        return _serialize_target(target)
     except HTTPException:
         raise
     except Exception as e:

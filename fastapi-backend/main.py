@@ -64,6 +64,20 @@ app = FastAPI(
     # redirect_slashes=True (default) normalizes /api/foo/ → /api/foo
 )
 
+# Global exception handler — catch hidden 500s and log full tracebacks
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import JSONResponse as StarletteJSONResponse
+import traceback as _tb
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: StarletteRequest, exc: Exception):
+    logger.error(f"[UNHANDLED] {request.method} {request.url.path}: {exc}")
+    logger.error(_tb.format_exc())
+    return StarletteJSONResponse(
+        status_code=500,
+        content={"detail": f"Internal error: {str(exc)}"},
+    )
+
 # Configure CORS for frontend integration
 # Default to allowing everything if not specified (relative domain support)
 cors_origins_str = os.getenv("CORS_ORIGINS", "*")

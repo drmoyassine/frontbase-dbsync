@@ -39,6 +39,7 @@ interface DeploymentTarget {
     url: string;
     edge_db_id: string | null;
     edge_db_name?: string;
+    provider_config?: Record<string, any> | null;
     is_active: boolean;
     is_system: boolean;
     created_at: string;
@@ -87,7 +88,7 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
     const [newUrl, setNewUrl] = useState('');
     const [isCreating, setIsCreating] = useState(false);
 
-    // Cloudflare deploy fields
+    // Cloudflare connect fields
     const [cfToken, setCfToken] = useState('');
     const [cfWorkerName, setCfWorkerName] = useState('frontbase-edge');
     const [cfAccountId, setCfAccountId] = useState('');
@@ -98,6 +99,13 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
     const [cfUpstashToken, setCfUpstashToken] = useState('');
     const [isDeploying, setIsDeploying] = useState(false);
     const [edgeDatabases, setEdgeDatabases] = useState<EdgeDatabase[]>([]);
+
+    // New: Cloudflare connection state
+    const [cfConnected, setCfConnected] = useState(false);
+    const [cfAccountName, setCfAccountName] = useState('');
+    const [cfWorkers, setCfWorkers] = useState<Array<{ name: string; url: string; modified_on: string; created_on: string }>>([]);
+    const [connectStep, setConnectStep] = useState<'idle' | 'validating' | 'fetching-workers' | 'done' | 'error'>('idle');
+    const [isImporting, setIsImporting] = useState<string | null>(null);
 
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [deleteRemote, setDeleteRemote] = useState(false);
@@ -110,7 +118,10 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
     const fetchTargets = useCallback(async () => {
         try {
             const res = await fetch(`${API_BASE}/api/deployment-targets/`);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text.startsWith('{') ? JSON.parse(text)?.detail || text : `HTTP ${res.status}`);
+            }
             const data = await res.json();
             setTargets(data);
             setError(null);
@@ -149,6 +160,10 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
         setShowCfSecrets(false);
         setCfUpstashUrl('');
         setCfUpstashToken('');
+        setCfConnected(false);
+        setCfAccountName('');
+        setCfWorkers([]);
+        setConnectStep('idle');
     };
 
     // Manual target creation
@@ -176,7 +191,77 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
         }
     };
 
-    // Cloudflare one-click deploy
+    // Cloudflare: Connect (validate token + list workers)
+    const handleCloudflareConnect = async () => {
+        setError(null);
+        setConnectStep('validating');
+        try {
+            const res = await fetch(`${API_BASE}/api/cloudflare/connect`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    api_token: cfToken,
+                    account_id: cfAccountId || undefined,
+                }),
+            });
+            const text = await res.text();
+            let data: any;
+            try { data = JSON.parse(text); } catch { throw new Error(text || `HTTP ${res.status}`); }
+            if (!res.ok || !data.success) {
+                const errMsg = typeof data.detail === 'string' ? data.detail
+                    : data.detail?.msg || data.error || JSON.stringify(data.detail) || 'Connection failed';
+                throw new Error(errMsg);
+            }
+
+            // Connected — save credentials
+            setCfAccountId(data.account_id);
+            setCfAccountName(data.account_name || '');
+            localStorage.setItem('cf_api_token', cfToken);
+            localStorage.setItem('cf_account_id', data.account_id);
+
+            // Fetch workers step
+            setConnectStep('fetching-workers');
+            setCfWorkers(data.workers || []);
+            setCfConnected(true);
+            setConnectStep('done');
+        } catch (e: any) {
+            setConnectStep('error');
+            setError(e.message);
+        }
+    };
+
+    // Import an existing CF worker as deployment target
+    const handleImportWorker = async (worker: { name: string; url: string }) => {
+        setIsImporting(worker.name);
+        setError(null);
+        try {
+            const res = await fetch(`${API_BASE}/api/deployment-targets/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: `Cloudflare: ${worker.name}`,
+                    provider: 'cloudflare',
+                    adapter_type: 'edge',
+                    url: worker.url,
+                    edge_db_id: cfEdgeDbId || undefined,
+                    provider_config: {
+                        api_token: cfToken,
+                        account_id: cfAccountId,
+                        worker_name: worker.name,
+                    },
+                    is_active: true,
+                }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            await fetchTargets();
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setIsImporting(null);
+        }
+    };
+
+    // Cloudflare: Deploy new worker (build + upload + register)
     const handleCloudflareDeply = async () => {
         setIsDeploying(true);
         setError(null);
@@ -196,10 +281,9 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
             const data = await res.json();
             if (!res.ok || !data.success) {
                 const errMsg = typeof data.detail === 'string' ? data.detail
-                    : data.detail?.msg || data.error || data.message || JSON.stringify(data.detail) || 'Connection failed';
+                    : data.detail?.msg || data.error || data.message || JSON.stringify(data.detail) || 'Deploy failed';
                 throw new Error(errMsg);
             }
-            localStorage.setItem('cf_api_token', cfToken);
             localStorage.setItem('cf_worker_name', cfWorkerName);
             if (data.account_id) localStorage.setItem('cf_account_id', data.account_id);
 
@@ -290,58 +374,146 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
                 })}
             </div>
 
-            {/* Cloudflare deploy flow */}
+            {/* Cloudflare connect flow */}
             {selectedProvider === 'cloudflare' && (
                 <div className="space-y-4 pt-2 border-t">
-                    <div className="space-y-2">
-                        <Label htmlFor="cf-token">Cloudflare API Token</Label>
-                        <div className="flex gap-2">
-                            <Input
-                                id="cf-token"
-                                type={showCfToken ? 'text' : 'password'}
-                                placeholder="Your API token with Workers Scripts: Edit permission"
-                                value={cfToken}
-                                onChange={(e) => setCfToken(e.target.value)}
-                                className="flex-1"
-                            />
-                            <Button variant="ghost" size="icon" onClick={() => setShowCfToken(!showCfToken)} type="button">
-                                {showCfToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                            </Button>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            Create at{' '}
-                            <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer" className="underline">
-                                dash.cloudflare.com/profile/api-tokens
-                            </a>
-                            {' '}→ Custom Token → Workers Scripts: Edit + Account Settings: Read
-                        </p>
-                    </div>
+                    {/* Phase 1: Token input + Connect */}
+                    {!cfConnected && (
+                        <>
+                            <div className="space-y-2">
+                                <Label htmlFor="cf-token">Cloudflare API Token</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        id="cf-token"
+                                        type={showCfToken ? 'text' : 'password'}
+                                        placeholder="Your API token with Workers Scripts: Edit permission"
+                                        value={cfToken}
+                                        onChange={(e) => setCfToken(e.target.value)}
+                                        className="flex-1"
+                                        disabled={connectStep === 'validating' || connectStep === 'fetching-workers'}
+                                    />
+                                    <Button variant="ghost" size="icon" onClick={() => setShowCfToken(!showCfToken)} type="button">
+                                        {showCfToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                    </Button>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    Create at{' '}
+                                    <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer" className="underline">
+                                        dash.cloudflare.com/profile/api-tokens
+                                    </a>
+                                    {' '}→ Custom Token → Workers Scripts: Edit + Account Settings: Read
+                                </p>
+                            </div>
 
-                    <div className="space-y-1">
-                        <Label className="text-sm">Worker Name</Label>
-                        <Input value={cfWorkerName} onChange={(e) => setCfWorkerName(e.target.value)} />
-                        <p className="text-xs text-muted-foreground">Your Worker will be available at {cfWorkerName}.your-subdomain.workers.dev</p>
-                    </div>
+                            {/* Connect progress */}
+                            {connectStep !== 'idle' && connectStep !== 'error' && (
+                                <div className="space-y-2 text-sm">
+                                    <div className="flex items-center gap-2">
+                                        {connectStep === 'validating' ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                                        ) : (
+                                            <Check className="h-3.5 w-3.5 text-green-500" />
+                                        )}
+                                        <span className={connectStep === 'validating' ? 'text-primary' : 'text-green-600'}>
+                                            {connectStep === 'validating' ? 'Validating token...' : 'Token valid'}
+                                        </span>
+                                    </div>
+                                    {(connectStep === 'fetching-workers' || connectStep === 'done') && (
+                                        <div className="flex items-center gap-2">
+                                            {connectStep === 'fetching-workers' ? (
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                                            ) : (
+                                                <Check className="h-3.5 w-3.5 text-green-500" />
+                                            )}
+                                            <span className={connectStep === 'fetching-workers' ? 'text-primary' : 'text-green-600'}>
+                                                {connectStep === 'fetching-workers' ? 'Fetching existing workers...' : `Found ${cfWorkers.length} worker(s)`}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
-                    {/* Expandable secrets */}
-                    <button
-                        type="button"
-                        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-                        onClick={() => setShowCfSecrets(!showCfSecrets)}
-                    >
-                        <Info className="h-3 w-3" />
-                        {showCfSecrets ? 'Hide' : 'Show'} Worker Secrets (optional — auto-populated from settings)
-                    </button>
+                            <div className="flex gap-2">
+                                <Button
+                                    onClick={handleCloudflareConnect}
+                                    disabled={!cfToken || connectStep === 'validating' || connectStep === 'fetching-workers'}
+                                >
+                                    {connectStep === 'validating' || connectStep === 'fetching-workers' ? (
+                                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Connecting...</>
+                                    ) : (
+                                        <><Cloud className="mr-2 h-4 w-4" /> Connect Cloudflare</>
+                                    )}
+                                </Button>
+                                <Button variant="ghost" onClick={resetAddFlow}>Cancel</Button>
+                            </div>
+                        </>
+                    )}
 
-                    {showCfSecrets && (
-                        <div className="space-y-3 p-3 rounded border border-dashed bg-muted/30">
-                            {/* Edge Database selector */}
+                    {/* Phase 2: Connected — show workers + actions */}
+                    {cfConnected && (
+                        <>
+                            {/* Connected banner */}
+                            <Alert className="border-green-500/50 bg-green-500/10">
+                                <Check className="h-4 w-4 text-green-500" />
+                                <AlertDescription className="flex items-center justify-between">
+                                    <span>
+                                        Connected to <strong>{cfAccountName || 'Cloudflare'}</strong>
+                                        <span className="text-muted-foreground ml-1 text-xs">({cfAccountId})</span>
+                                    </span>
+                                    <Badge variant="outline" className="text-green-600 border-green-500/50">Connected</Badge>
+                                </AlertDescription>
+                            </Alert>
+
+                            {/* Existing workers list */}
+                            {cfWorkers.length > 0 ? (
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-medium">Existing Workers ({cfWorkers.length})</Label>
+                                    <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                                        {cfWorkers.map(w => {
+                                            const alreadyImported = targets.some(t => t.url === w.url || t.name === `Cloudflare: ${w.name}`);
+                                            return (
+                                                <div key={w.name} className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/30">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <Cloud className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                        <span className="text-sm font-medium truncate">{w.name}</span>
+                                                        <span className="text-xs text-muted-foreground truncate hidden sm:inline">{w.url}</span>
+                                                    </div>
+                                                    {alreadyImported ? (
+                                                        <Badge variant="secondary" className="text-xs gap-1 shrink-0">
+                                                            <Check className="h-3 w-3" /> Imported
+                                                        </Badge>
+                                                    ) : (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => handleImportWorker(w)}
+                                                            disabled={isImporting === w.name}
+                                                            className="text-xs h-7 shrink-0"
+                                                        >
+                                                            {isImporting === w.name ? (
+                                                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                                            ) : (
+                                                                <Plus className="h-3 w-3 mr-1" />
+                                                            )}
+                                                            Import as Target
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-muted-foreground italic">No existing workers found on this account.</p>
+                            )}
+
+                            {/* Edge Database selector — always visible */}
                             <div className="space-y-1">
-                                <Label className="text-xs font-medium">Edge Database</Label>
+                                <Label className="text-sm">Edge Database <span className="text-xs text-muted-foreground">(optional)</span></Label>
                                 {edgeDatabases.length > 0 ? (
                                     <Select value={cfEdgeDbId} onValueChange={setCfEdgeDbId}>
                                         <SelectTrigger className="text-sm">
-                                            <SelectValue placeholder="Select edge database..." />
+                                            <SelectValue placeholder="None — select edge database..." />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {edgeDatabases.map(db => (
@@ -352,33 +524,54 @@ export const DeploymentTargetsForm: React.FC<DeploymentTargetsFormProps> = ({ wi
                                         </SelectContent>
                                     </Select>
                                 ) : (
-                                    <p className="text-xs text-muted-foreground italic">No edge databases configured. Add one in the Edge Databases section above.</p>
+                                    <p className="text-xs text-muted-foreground italic">No edge databases configured. Add one in the Edge Databases section.</p>
                                 )}
                             </div>
-                            {/* Upstash fields */}
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Upstash URL</Label>
-                                    <Input type="password" placeholder="https://..." value={cfUpstashUrl} onChange={(e) => setCfUpstashUrl(e.target.value)} className="text-sm" />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Upstash Token</Label>
-                                    <Input type="password" placeholder="Token" value={cfUpstashToken} onChange={(e) => setCfUpstashToken(e.target.value)} className="text-sm" />
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
-                    <div className="flex gap-2">
-                        <Button onClick={handleCloudflareDeply} disabled={!cfToken || isDeploying}>
-                            {isDeploying ? (
-                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Connecting...</>
-                            ) : (
-                                <><Cloud className="mr-2 h-4 w-4" /> Connect Cloudflare</>
-                            )}
-                        </Button>
-                        <Button variant="ghost" onClick={resetAddFlow}>Cancel</Button>
-                    </div>
+                            {/* Create New Worker section */}
+                            <div className="space-y-3 p-3 rounded-lg border border-dashed">
+                                <Label className="text-sm font-medium">Create New Worker</Label>
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Worker Name</Label>
+                                    <Input value={cfWorkerName} onChange={(e) => setCfWorkerName(e.target.value)} className="text-sm" />
+                                    <p className="text-xs text-muted-foreground">{cfWorkerName}.workers.dev</p>
+                                </div>
+
+                                {/* Optional secrets for new worker */}
+                                <button
+                                    type="button"
+                                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                                    onClick={() => setShowCfSecrets(!showCfSecrets)}
+                                >
+                                    <Info className="h-3 w-3" />
+                                    {showCfSecrets ? 'Hide' : 'Show'} Worker Secrets (optional)
+                                </button>
+
+                                {showCfSecrets && (
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Upstash URL</Label>
+                                            <Input type="password" placeholder="https://..." value={cfUpstashUrl} onChange={(e) => setCfUpstashUrl(e.target.value)} className="text-sm" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Upstash Token</Label>
+                                            <Input type="password" placeholder="Token" value={cfUpstashToken} onChange={(e) => setCfUpstashToken(e.target.value)} className="text-sm" />
+                                        </div>
+                                    </div>
+                                )}
+
+                                <Button onClick={handleCloudflareDeply} disabled={!cfWorkerName || isDeploying} size="sm">
+                                    {isDeploying ? (
+                                        <><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Deploying...</>
+                                    ) : (
+                                        <><Rocket className="mr-2 h-3 w-3" /> Deploy New Worker</>
+                                    )}
+                                </Button>
+                            </div>
+
+                            <Button variant="ghost" onClick={resetAddFlow}>Done</Button>
+                        </>
+                    )}
                 </div>
             )}
 

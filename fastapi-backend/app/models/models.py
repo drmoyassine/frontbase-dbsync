@@ -239,6 +239,7 @@ class DeploymentTarget(Base):
     adapter_type = Column(String(20), nullable=False)   # "edge", "automations", "full"
     url = Column(String(500), nullable=False)           # "https://my-site.pages.dev"
     edge_db_id = Column(String, ForeignKey('edge_databases.id'), nullable=True)
+    provider_config = Column(Text, nullable=True)       # JSON — provider-specific credentials & metadata
     is_active = Column(Boolean, default=True)
     is_system = Column(Boolean, default=False)           # True = pre-seeded, cannot be deleted
     created_at = Column(String, nullable=False)

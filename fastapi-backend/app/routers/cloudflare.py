@@ -28,8 +28,13 @@ router = APIRouter(prefix="/api/cloudflare", tags=["Cloudflare Deploy"])
 
 CF_API = "https://api.cloudflare.com/client/v4"
 
-# Path to the edge service (relative to fastapi-backend/)
-EDGE_DIR = Path(__file__).parent.parent.parent.parent / "services" / "edge"
+# Path to the edge service — use cwd (project root) for Docker compatibility
+# In dev: cwd = Frontbase-/fastapi-backend → parent = Frontbase-
+# In Docker: cwd = /app → services/edge is at /app/../services/edge
+EDGE_DIR = Path(os.getcwd()).parent / "services" / "edge"
+if not EDGE_DIR.exists():
+    # Fallback: try relative to __file__ (legacy)
+    EDGE_DIR = Path(__file__).parent.parent.parent.parent / "services" / "edge"
 
 
 # =============================================================================
@@ -59,12 +64,58 @@ class TeardownRequest(BaseModel):
     worker_name: str = "frontbase-edge"
 
 
+class ConnectRequest(BaseModel):
+    """Validate CF token, detect account, and list existing workers."""
+    api_token: str = Field(..., description="Cloudflare API token")
+    account_id: Optional[str] = Field(None, description="Cloudflare account ID (auto-detected if omitted)")
+
+
 # =============================================================================
 # Helpers
 # =============================================================================
 
 def _headers(api_token: str) -> dict:
     return {"Authorization": f"Bearer {api_token}"}
+
+
+def _list_workers(api_token: str, account_id: str) -> list:
+    """List all Workers scripts for an account (uses requests for Windows compat)."""
+    import requests as req
+    hdrs = _headers(api_token)
+    
+    resp = req.get(
+        f"{CF_API}/accounts/{account_id}/workers/scripts",
+        headers=hdrs,
+        timeout=15.0,
+    )
+    if resp.status_code != 200:
+        return []  # Non-fatal — just return empty list
+    data = resp.json()
+    scripts = data.get("result", [])
+
+    # Get the subdomain for URL construction
+    subdomain_resp = req.get(
+        f"{CF_API}/accounts/{account_id}/workers/subdomain",
+        headers=hdrs,
+        timeout=10.0,
+    )
+    subdomain = "workers.dev"
+    if subdomain_resp.status_code == 200:
+        sub_data = subdomain_resp.json()
+        subdomain_name = sub_data.get("result", {}).get("subdomain", "")
+        if subdomain_name:
+            subdomain = f"{subdomain_name}.workers.dev"
+
+    workers = []
+    for s in scripts:
+        name = s.get("id", "")
+        workers.append({
+            "name": name,
+            "url": f"https://{name}.{subdomain}",
+            "modified_on": s.get("modified_on", ""),
+            "created_on": s.get("created_on", ""),
+        })
+    return workers
 
 
 async def _detect_account_id(api_token: str) -> str:
@@ -200,6 +251,82 @@ def _build_worker() -> str:
 # Endpoints
 # =============================================================================
 
+@router.post("/connect")
+async def connect_cloudflare(payload: ConnectRequest):
+    """
+    Validate Cloudflare API token, detect account, and list existing workers.
+    
+    Flow: Validate token → Detect account → List workers
+    No build/upload/deploy happens here — this is connection-only.
+    
+    Uses run_in_executor to run sync httpx calls in a thread,
+    avoiding Windows ProactorEventLoop Errno 22 with HTTPS.
+    """
+    import asyncio
+    
+    def _do_connect():
+        """Sync helper — runs all CF API calls in a thread pool."""
+        import requests as req
+        hdrs = _headers(payload.api_token)
+        
+        # 1. Validate token
+        print("[Cloudflare] Validating API token...")
+        verify_resp = req.get(
+            f"{CF_API}/user/tokens/verify",
+            headers=hdrs,
+            timeout=10.0,
+        )
+        if verify_resp.status_code != 200:
+            raise HTTPException(401, "Invalid API token — check permissions and expiry")
+        verify_data = verify_resp.json()
+        if verify_data.get("result", {}).get("status") != "active":
+            raise HTTPException(401, "API token is not active")
+        print("[Cloudflare] ✅ Token valid")
+
+        # 2. Detect account ID
+        account_id = payload.account_id
+        account_name = ""
+        if not account_id:
+            print("[Cloudflare] Auto-detecting account ID...")
+            resp = req.get(
+                f"{CF_API}/accounts",
+                headers=hdrs,
+                params={"per_page": 5},
+                timeout=10.0,
+            )
+            if resp.status_code != 200:
+                raise HTTPException(400, f"Failed to list accounts: {resp.text[:300]}")
+            accounts = resp.json().get("result", [])
+            if not accounts:
+                raise HTTPException(400, "No Cloudflare accounts found for this API token")
+            account_id = accounts[0]["id"]
+            account_name = accounts[0].get("name", "")
+        print(f"[Cloudflare] ✅ Account: {account_name} ({account_id})")
+
+        # 3. List existing workers
+        print("[Cloudflare] Fetching existing workers...")
+        workers = _list_workers(payload.api_token, account_id)
+        print(f"[Cloudflare] ✅ Found {len(workers)} worker(s)")
+
+        return {
+            "success": True,
+            "account_id": account_id,
+            "account_name": account_name,
+            "workers": workers,
+        }
+    
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _do_connect)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Connection failed: {str(e)}")
+
+
 @router.post("/deploy")
 async def deploy_to_cloudflare(payload: DeployRequest):
     """
@@ -305,6 +432,13 @@ async def deploy_to_cloudflare(payload: DeployRequest):
                 db.commit()
                 print(f"[Cloudflare] Re-activated existing target: {existing.name}")
             else:
+                import json as _json
+                _provider_cfg = _json.dumps({
+                    "api_token": payload.api_token,
+                    "account_id": account_id,
+                    "worker_name": payload.worker_name,
+                    "secret_names": list(secrets.keys()),
+                })
                 target = DeploymentTarget(
                     id=str(uuid.uuid4()),
                     name=f"Cloudflare: {payload.worker_name}",
@@ -312,6 +446,7 @@ async def deploy_to_cloudflare(payload: DeployRequest):
                     adapter_type="edge",
                     url=worker_url,
                     edge_db_id=edge_db_id_to_attach,
+                    provider_config=_provider_cfg,
                     is_active=True,
                     created_at=now,
                     updated_at=now,

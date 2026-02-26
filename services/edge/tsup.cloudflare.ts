@@ -18,6 +18,8 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const fsShim = resolve(__dirname, 'shims/fs.js');
 const pathShim = resolve(__dirname, 'shims/path.js');
 const emptyShim = resolve(__dirname, 'shims/empty.js');
+const wsShim = resolve(__dirname, 'shims/ws.js');
+const localSqliteShim = resolve(__dirname, 'shims/LocalSqliteProvider.js');
 
 export default defineConfig({
     entry: ['src/adapters/cloudflare.ts'],
@@ -30,9 +32,22 @@ export default defineConfig({
     platform: 'node',
     target: 'es2022',
     treeshake: true,
+    esbuildPlugins: [
+        {
+            name: 'replace-local-sqlite',
+            setup(build) {
+                build.onResolve({ filter: /LocalSqliteProvider/ }, () => ({
+                    path: localSqliteShim,
+                }));
+            },
+        },
+    ],
     esbuildOptions(options) {
         options.alias = {
             ...options.alias,
+            // NPM packages — force CF-compatible variants
+            '@libsql/client': '@libsql/client/web',
+            'ws': wsShim,  // CF Workers have native WebSocket
             // UNSUPPORTED builtins -> shim stubs (inlined into bundle)
             'fs': fsShim,
             'node:fs': fsShim,

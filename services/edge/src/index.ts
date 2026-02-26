@@ -13,27 +13,15 @@ import { compress } from 'hono/compress';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import { createApp, wireMiddleware, wireRoutes } from './adapters/shared.js';
-import type { IEdgeAdapter } from './adapters/IEdgeAdapter.js';
+import { fullApp } from './engine/full.js';
 import { runStartupSync } from './startup/sync.js';
 
 // =============================================================================
-// Docker Adapter
+// Docker-Specific Middleware
 // =============================================================================
 
-const adapter: IEdgeAdapter = {
-    platform: 'docker',
-    scope: 'full',
-};
-
-// Create and configure the Hono app
-const app = createApp();
-
-// Wire middleware — with compression (Node.js doesn't handle it natively)
-wireMiddleware(app, { compress: true, compressMiddleware: compress });
-
-// Wire routes — full scope (pages + automations)
-wireRoutes(app, adapter.scope);
+// Compression (Node.js doesn't handle it natively, unlike Cloudflare)
+fullApp.use('*', compress());
 
 // =============================================================================
 // Static Files (for hydrate.js and other client assets)
@@ -42,7 +30,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicPath = path.resolve(__dirname, '../public');
 
-app.use('/static/*', serveStatic({
+fullApp.use('/static/*', serveStatic({
     root: publicPath,
     rewriteRequestPath: (p) => p.replace(/^\/static/, '')
 }));
@@ -53,12 +41,12 @@ app.use('/static/*', serveStatic({
 const port = parseInt(process.env.PORT || '3002');
 
 serve({
-    fetch: app.fetch,
+    fetch: fullApp.fetch,
     port,
 }, (info) => {
     console.log(`🚀 Edge Engine running on http://localhost:${info.port}`);
     console.log(`📍 PUBLIC_URL: ${process.env.PUBLIC_URL || '(not set - using request headers)'}`);
-    console.log(`🔌 Adapter: ${adapter.platform} (scope: ${adapter.scope})`);
+    console.log(`🔌 Adapter: docker (scope: full)`);
 
     // Run startup sync in background (non-blocking)
     runStartupSync().catch(err => {
@@ -66,4 +54,4 @@ serve({
     });
 });
 
-export default app;
+export default fullApp;

@@ -48,7 +48,9 @@ class ConnectRequest(BaseModel):
 class DeployRequest(BaseModel):
     provider_id: str = Field(..., description="ID of the EdgeProviderAccount")
     worker_name: str = Field(default="frontbase-edge", description="Worker script name")
+    adapter_type: str = Field(default="automations", description="Engine type: 'automations' (Lite) or 'full'")
     edge_db_id: Optional[str] = Field(None, description="EdgeDatabase ID to attach (uses default if omitted)")
+    edge_cache_id: Optional[str] = Field(None, description="EdgeCache ID to attach")
     upstash_url: Optional[str] = Field(None, description="Upstash REST URL")
     upstash_token: Optional[str] = Field(None, description="Upstash REST token")
 
@@ -149,19 +151,19 @@ async def _detect_account_id(api_token: str) -> str:
         return accounts[0]["id"]
 
 
-async def _upload_worker(api_token: str, account_id: str, worker_name: str, script_content: str) -> dict:
+async def _upload_worker(api_token: str, account_id: str, worker_name: str, script_content: str, script_filename: str = "cloudflare-lite.js") -> dict:
     """Upload a Worker script via Cloudflare API v4 (ES module format)."""
     url = f"{CF_API}/accounts/{account_id}/workers/scripts/{worker_name}"
 
     metadata = {
-        "main_module": "cloudflare-lite.js",
+        "main_module": script_filename,
         "compatibility_date": "2024-12-01",
         "compatibility_flags": ["nodejs_compat"],
     }
 
     files = {
         "metadata": (None, json.dumps(metadata), "application/json"),
-        "cloudflare-lite.js": ("cloudflare-lite.js", script_content, "application/javascript+module"),
+        script_filename: (script_filename, script_content, "application/javascript+module"),
     }
 
     async with httpx.AsyncClient() as client:
@@ -219,21 +221,27 @@ async def _set_secrets(api_token: str, account_id: str, worker_name: str, secret
                     print(f"[Cloudflare] Warning: Failed to set secret {name}: {resp.status_code}")
 
 
-def _build_worker() -> str:
-    """Build the lightweight Cloudflare Worker bundle and return the script content."""
-    dist_file = EDGE_DIR / "dist" / "cloudflare-lite.js"
+def _build_worker(adapter_type: str = "automations") -> str:
+    """Build the Cloudflare Worker bundle and return the script content."""
+    is_full = adapter_type == "full"
+    config_file = "tsup.cloudflare.ts" if is_full else "tsup.cloudflare-lite.ts"
+    output_file = "cloudflare.js" if is_full else "cloudflare-lite.js"
+    label = "Full" if is_full else "Lite"
+
+    dist_file = EDGE_DIR / "dist" / output_file
 
     if dist_file.exists():
         dist_file.unlink()
 
-    print(f"[Cloudflare] Building lightweight Worker bundle in {EDGE_DIR}...")
+    print(f"[Cloudflare] Building {label} Worker bundle in {EDGE_DIR}...")
     try:
         result = subprocess.run(
-            ["npx", "tsup", "--config", "tsup.cloudflare-lite.ts"],
+            ["npx", "tsup", "--config", config_file],
             cwd=str(EDGE_DIR),
             capture_output=True,
             text=True,
-            timeout=60,
+            encoding='utf-8',
+            timeout=120 if is_full else 60,
             shell=True,
         )
 
@@ -241,7 +249,7 @@ def _build_worker() -> str:
             err = result.stderr.strip() or result.stdout.strip() or "Unknown build error"
             raise HTTPException(500, f"Build failed: {err[:500]}")
     except subprocess.TimeoutExpired:
-        raise HTTPException(500, "Build timed out after 60 seconds")
+        raise HTTPException(500, f"Build timed out")
     except HTTPException:
         raise
     except Exception as e:
@@ -251,7 +259,7 @@ def _build_worker() -> str:
         raise HTTPException(500, f"Build output not found at {dist_file}")
 
     content = dist_file.read_text(encoding="utf-8")
-    print(f"[Cloudflare] Lite bundle built: {len(content)} bytes ({len(content)//1024} KB)")
+    print(f"[Cloudflare] {label} bundle built: {len(content)} bytes ({len(content)//1024} KB)")
     return content
 
 
@@ -358,15 +366,19 @@ async def deploy_to_cloudflare(payload: DeployRequest):
 
 
         # Build & upload Worker
-        script_content = _build_worker()
+        script_content = _build_worker(payload.adapter_type)
         print(f"[Cloudflare] Uploading Worker '{payload.worker_name}'...")
-        await _upload_worker(api_token, account_id, payload.worker_name, script_content)
+
+        # Pick the correct output filename for upload metadata
+        script_filename = "cloudflare.js" if payload.adapter_type == "full" else "cloudflare-lite.js"
+        await _upload_worker(api_token, account_id, payload.worker_name, script_content, script_filename)
         
         worker_url = await _enable_workers_dev(api_token, account_id, payload.worker_name)
         
         # Set secrets
         secrets = {}
         edge_db_id_to_attach = None
+        edge_cache_id_to_attach = payload.edge_cache_id
 
         db_session = SessionLocal()
         try:
@@ -409,6 +421,7 @@ async def deploy_to_cloudflare(payload: DeployRequest):
                 existing.is_active = True  # type: ignore[assignment]
                 existing.edge_provider_id = payload.provider_id  # type: ignore[assignment]
                 existing.edge_db_id = edge_db_id_to_attach  # type: ignore[assignment]
+                existing.edge_cache_id = edge_cache_id_to_attach  # type: ignore[assignment]
                 existing.engine_config = engine_cfg  # type: ignore[assignment]
                 existing.updated_at = now  # type: ignore[assignment]
                 engine_id = str(existing.id)
@@ -418,9 +431,10 @@ async def deploy_to_cloudflare(payload: DeployRequest):
                     id=str(uuid.uuid4()),
                     name=f"Cloudflare: {payload.worker_name}",
                     edge_provider_id=payload.provider_id,
-                    adapter_type="edge",
+                    adapter_type=payload.adapter_type,
                     url=worker_url,
                     edge_db_id=edge_db_id_to_attach,
+                    edge_cache_id=edge_cache_id_to_attach,
                     engine_config=engine_cfg,
                     is_active=True,
                     created_at=now,

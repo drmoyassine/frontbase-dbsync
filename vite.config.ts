@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
           target: 'http://localhost:8000', // Redirect all API calls to FastAPI
           changeOrigin: true,
           secure: false,
-          timeout: 10000, // 10 second timeout
+          timeout: 120000, // 120s — deploy builds a bundle + uploads to CF
           onProxyReq: (proxyReq: any, req: any, res: any) => {
             // Add CORS headers for development
             proxyReq.setHeader('Access-Control-Allow-Origin', '*');

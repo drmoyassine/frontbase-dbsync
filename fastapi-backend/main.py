@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
-from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, edge_databases
+from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, edge_databases, edge_caches
 from app.middleware.test_mode import TestModeMiddleware
 
 logger = logging.getLogger(__name__)
@@ -61,7 +61,6 @@ app = FastAPI(
     description="Unified API for Frontbase and DB-Sync functionality",
     version="1.0.0",
     lifespan=lifespan,
-    # redirect_slashes=True (default) normalizes /api/foo/ → /api/foo
 )
 
 # Global exception handler — catch hidden 500s and log full tracebacks
@@ -129,10 +128,22 @@ class TrailingSlashMiddleware:
     Middleware that adds trailing slash to paths internally.
     This prevents 307 redirects that can cause mixed-content issues.
     
-    Note: Excludes /api/auth/ routes which don't use trailing slashes.
+    Routers that define routes WITHOUT trailing slashes must be excluded
+    here, otherwise the middleware creates infinite 307 redirect loops.
     """
     # Paths that should NOT have trailing slashes added
-    EXCLUDE_PREFIXES = ["/api/auth", "/api/actions", "/api/storage", "/api/edge-engines", "/api/edge-providers", "/api/cloudflare", "/api/edge-databases", "/api/settings"]
+    # (these routers define routes without trailing slashes)
+    EXCLUDE_PREFIXES = [
+        "/api/auth",
+        "/api/actions",
+        "/api/storage",
+        "/api/edge-engines",
+        "/api/edge-providers",
+        "/api/edge-caches",
+        "/api/edge-databases",
+        "/api/cloudflare",
+        "/api/settings",
+    ]
     
     def __init__(self, app: ASGIApp):
         self.app = app
@@ -166,6 +177,7 @@ app.include_router(settings.router)  # Privacy & Tracking settings
 app.include_router(edge_providers.router)  # Edge provider accounts
 app.include_router(edge_engines.router)  # Edge deployed engines
 app.include_router(edge_databases.router)  # Edge database connections
+app.include_router(edge_caches.router)  # Edge cache connections
 app.include_router(cloudflare.router)  # One-click Cloudflare deploy
 
 # Mount DB-Synchronizer Service

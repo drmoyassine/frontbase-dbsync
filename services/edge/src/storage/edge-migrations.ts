@@ -74,16 +74,43 @@ export const MIGRATIONS: Migration[] = [
             `INSERT OR IGNORE INTO project_settings (id, updated_at) VALUES ('default', datetime('now'))`,
         ],
     },
-    // -------------------------------------------------------------------------
-    // Future migrations go here:
-    // -------------------------------------------------------------------------
-    // {
-    //     version: 2,
-    //     description: 'Add analytics columns',
-    //     sql: [
-    //         `ALTER TABLE published_pages ADD COLUMN view_count INTEGER DEFAULT 0`,
-    //     ],
-    // },
+    {
+        version: 2,
+        description: 'Add workflows + executions tables',
+        sql: [
+            `CREATE TABLE IF NOT EXISTS workflows (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                trigger_type TEXT NOT NULL,
+                trigger_config TEXT,
+                nodes TEXT NOT NULL,
+                edges TEXT NOT NULL,
+                version INTEGER NOT NULL DEFAULT 1,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                published_by TEXT
+            )`,
+
+            `CREATE TABLE IF NOT EXISTS executions (
+                id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL REFERENCES workflows(id),
+                status TEXT NOT NULL,
+                trigger_type TEXT NOT NULL,
+                trigger_payload TEXT,
+                node_executions TEXT,
+                result TEXT,
+                error TEXT,
+                usage REAL DEFAULT 0,
+                started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ended_at TEXT
+            )`,
+
+            `CREATE INDEX IF NOT EXISTS idx_executions_workflow ON executions(workflow_id)`,
+            `CREATE INDEX IF NOT EXISTS idx_executions_started ON executions(started_at)`,
+        ],
+    },
 ];
 
 // =============================================================================

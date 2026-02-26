@@ -3,11 +3,12 @@
  * 
  * Core runtime logic for executing workflow nodes.
  * Handles node traversal, parameter resolution, and state updates.
+ * 
+ * Provider-agnostic: uses stateProvider instead of Drizzle ORM.
  */
 
-import { db } from '../db';
-import { executions, Workflow as DbWorkflow } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { stateProvider } from '../storage/index.js';
+import type { WorkflowData } from '../storage/IStateProvider.js';
 import { WorkflowNode, WorkflowEdge, NodeExecutionStatus } from '../schemas';
 
 interface NodeExecution {
@@ -31,7 +32,7 @@ interface ExecutionContext {
  */
 export async function executeWorkflow(
     executionId: string,
-    workflow: DbWorkflow,
+    workflow: WorkflowData,
     inputParameters: Record<string, any>
 ): Promise<void> {
     const nodes: WorkflowNode[] = JSON.parse(workflow.nodes);
@@ -124,25 +125,21 @@ export async function executeWorkflow(
         }
 
         // Mark as completed
-        await db.update(executions)
-            .set({
-                status: 'completed',
-                nodeExecutions: JSON.stringify(context.nodeExecutions),
-                result: JSON.stringify(result),
-                endedAt: new Date().toISOString(),
-            })
-            .where(eq(executions.id, executionId));
+        await stateProvider.updateExecution(executionId, {
+            status: 'completed',
+            nodeExecutions: JSON.stringify(context.nodeExecutions),
+            result: JSON.stringify(result),
+            endedAt: new Date().toISOString(),
+        });
 
     } catch (error: any) {
         // Mark as error
-        await db.update(executions)
-            .set({
-                status: 'error',
-                nodeExecutions: JSON.stringify(context.nodeExecutions),
-                error: error.message,
-                endedAt: new Date().toISOString(),
-            })
-            .where(eq(executions.id, executionId));
+        await stateProvider.updateExecution(executionId, {
+            status: 'error',
+            nodeExecutions: JSON.stringify(context.nodeExecutions),
+            error: error.message,
+            endedAt: new Date().toISOString(),
+        });
     }
 }
 
@@ -152,7 +149,7 @@ export async function executeWorkflow(
  */
 export async function executeSingleNode(
     executionId: string,
-    workflow: DbWorkflow,
+    workflow: WorkflowData,
     targetNodeId: string,
     inputParameters: Record<string, any>
 ): Promise<void> {
@@ -218,8 +215,8 @@ export async function executeSingleNode(
             }
 
             // Merge workflow parameters for trigger nodes
-            const targetNodeIds = new Set(edges.map(e => e.target));
-            if (!targetNodeIds.has(nodeId)) {
+            const allTargetNodeIds = new Set(edges.map(e => e.target));
+            if (!allTargetNodeIds.has(nodeId)) {
                 Object.assign(inputs, context.parameters);
             }
 
@@ -244,24 +241,20 @@ export async function executeSingleNode(
             [targetNodeId]: context.nodeOutputs[targetNodeId],
         };
 
-        await db.update(executions)
-            .set({
-                status: 'completed',
-                nodeExecutions: JSON.stringify(context.nodeExecutions),
-                result: JSON.stringify(result),
-                endedAt: new Date().toISOString(),
-            })
-            .where(eq(executions.id, executionId));
+        await stateProvider.updateExecution(executionId, {
+            status: 'completed',
+            nodeExecutions: JSON.stringify(context.nodeExecutions),
+            result: JSON.stringify(result),
+            endedAt: new Date().toISOString(),
+        });
 
     } catch (error: any) {
-        await db.update(executions)
-            .set({
-                status: 'error',
-                nodeExecutions: JSON.stringify(context.nodeExecutions),
-                error: error.message,
-                endedAt: new Date().toISOString(),
-            })
-            .where(eq(executions.id, executionId));
+        await stateProvider.updateExecution(executionId, {
+            status: 'error',
+            nodeExecutions: JSON.stringify(context.nodeExecutions),
+            error: error.message,
+            endedAt: new Date().toISOString(),
+        });
     }
 }
 
@@ -540,10 +533,8 @@ async function updateExecutionStatus(
     status: string,
     nodeExecutions: NodeExecution[]
 ) {
-    await db.update(executions)
-        .set({
-            status,
-            nodeExecutions: JSON.stringify(nodeExecutions),
-        })
-        .where(eq(executions.id, executionId));
+    await stateProvider.updateExecution(executionId, {
+        status,
+        nodeExecutions: JSON.stringify(nodeExecutions),
+    });
 }

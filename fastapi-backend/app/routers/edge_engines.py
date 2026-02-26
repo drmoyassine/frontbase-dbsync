@@ -33,6 +33,7 @@ class EdgeEngineCreate(BaseModel):
     adapter_type: Literal["edge", "pages", "automations", "full"] = Field(default="full")
     url: str = Field(..., min_length=1, max_length=500)
     edge_db_id: Optional[str] = None
+    edge_cache_id: Optional[str] = None
     engine_config: Optional[dict] = None  # Engine-specific metadata (e.g. worker_name)
     is_active: bool = Field(default=True)
 
@@ -44,6 +45,7 @@ class EdgeEngineUpdate(BaseModel):
     adapter_type: Optional[Literal["edge", "pages", "automations", "full"]] = None
     url: Optional[str] = Field(None, min_length=1, max_length=500)
     edge_db_id: Optional[str] = None
+    edge_cache_id: Optional[str] = None
     engine_config: Optional[dict] = None
     is_active: Optional[bool] = None
 
@@ -58,6 +60,8 @@ class EdgeEngineResponse(BaseModel):
     url: str
     edge_db_id: Optional[str] = None
     edge_db_name: Optional[str] = None
+    edge_cache_id: Optional[str] = None
+    edge_cache_name: Optional[str] = None
     engine_config: Optional[dict] = None
     is_active: bool
     is_system: bool = False
@@ -92,6 +96,10 @@ def _serialize_engine(engine: EdgeEngine) -> dict:
     if engine.edge_database:
         edge_db_name = str(engine.edge_database.name)
 
+    edge_cache_name = None
+    if engine.edge_cache:
+        edge_cache_name = str(engine.edge_cache.name)
+
     provider_name = None
     if engine.edge_provider:
         provider_name = str(engine.edge_provider.provider)
@@ -105,6 +113,8 @@ def _serialize_engine(engine: EdgeEngine) -> dict:
         "url": str(engine.url),
         "edge_db_id": str(engine.edge_db_id) if engine.edge_db_id else None,
         "edge_db_name": edge_db_name,
+        "edge_cache_id": str(engine.edge_cache_id) if engine.edge_cache_id else None,
+        "edge_cache_name": edge_cache_name,
         "engine_config": config,
         "is_active": bool(engine.is_active),
         "is_system": bool(engine.is_system),
@@ -150,6 +160,7 @@ async def create_edge_engine(payload: EdgeEngineCreate, db: Session = Depends(ge
         adapter_type=payload.adapter_type,
         url=payload.url,
         edge_db_id=payload.edge_db_id,
+        edge_cache_id=payload.edge_cache_id,
         engine_config=json.dumps(payload.engine_config) if payload.engine_config else None,
         is_active=payload.is_active,
         created_at=now,

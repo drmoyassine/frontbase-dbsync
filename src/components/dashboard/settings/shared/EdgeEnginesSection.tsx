@@ -6,7 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Cloud, Server, Rocket, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
+import { Cloud, Server, Rocket, ExternalLink, Loader2, AlertTriangle, Cpu, Layers } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -16,11 +16,13 @@ import {
     useEdgeEngines,
     useEdgeProviders,
     useEdgeDatabases,
+    useEdgeCaches,
     edgeInfrastructureApi,
     EdgeEngine,
 } from '@/hooks/useEdgeInfrastructure';
 import { API_BASE, PROVIDER_ICONS } from './edgeConstants';
 import { DeleteEngineDialog } from './DeleteEngineDialog';
+import { ReconfigureEngineDialog } from './ReconfigureEngineDialog';
 
 const Info = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
@@ -44,7 +46,10 @@ export function EdgeEnginesSection() {
     const [selectedProviderId, setSelectedProviderId] = useState<string>('');
     const [workerName, setWorkerName] = useState('frontbase-edge');
     const { data: edgeDbs = [] } = useEdgeDatabases();
+    const { data: edgeCaches = [] } = useEdgeCaches();
     const [selectedDbId, setSelectedDbId] = useState<string>('default');
+    const [selectedCacheId, setSelectedCacheId] = useState<string>('default');
+    const [engineType, setEngineType] = useState<'lite' | 'full'>('lite');
 
     // Auto-select first provider when list loads
     React.useEffect(() => {
@@ -61,6 +66,14 @@ export function EdgeEnginesSection() {
         }
     }, [edgeDbs, selectedDbId]);
 
+    // Auto-select default cache when data loads
+    React.useEffect(() => {
+        if (edgeCaches.length > 0 && selectedCacheId === 'default') {
+            const def = edgeCaches.find(c => c.is_default);
+            if (def) setSelectedCacheId(def.id);
+        }
+    }, [edgeCaches, selectedCacheId]);
+
     const handleDeploy = async () => {
         setIsDeploying(true);
         setError(null);
@@ -71,7 +84,9 @@ export function EdgeEnginesSection() {
                 body: JSON.stringify({
                     provider_id: selectedProviderId,
                     worker_name: workerName,
+                    adapter_type: engineType === 'full' ? 'full' : 'automations',
                     edge_db_id: selectedDbId === 'default' ? undefined : selectedDbId,
+                    edge_cache_id: selectedCacheId === 'default' ? undefined : selectedCacheId,
                 })
             });
             const data = await res.json();
@@ -174,6 +189,46 @@ export function EdgeEnginesSection() {
                             </div>
 
                             <div className="space-y-2">
+                                <Label>Engine Type</Label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setEngineType('lite')}
+                                        className={`relative flex flex-col items-start gap-1.5 rounded-lg border-2 p-3 text-left transition-all ${engineType === 'lite'
+                                            ? 'border-primary bg-primary/5'
+                                            : 'border-border hover:border-muted-foreground/50'
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <Cpu className="w-4 h-4 text-blue-500" />
+                                            <span className="font-medium text-sm">Lite</span>
+                                            <Badge variant="secondary" className="text-[10px] h-4 py-0 bg-blue-500/10 text-blue-500">~880 KB</Badge>
+                                        </div>
+                                        <p className="text-[11px] text-muted-foreground leading-tight">
+                                            Automations, webhooks, workflows, LiquidJS templates, API gateway. No page rendering.
+                                        </p>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEngineType('full')}
+                                        className={`relative flex flex-col items-start gap-1.5 rounded-lg border-2 p-3 text-left transition-all ${engineType === 'full'
+                                            ? 'border-primary bg-primary/5'
+                                            : 'border-border hover:border-muted-foreground/50'
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <Layers className="w-4 h-4 text-purple-500" />
+                                            <span className="font-medium text-sm">Full</span>
+                                            <Badge variant="secondary" className="text-[10px] h-4 py-0 bg-purple-500/10 text-purple-500">~2.2 MB</Badge>
+                                        </div>
+                                        <p className="text-[11px] text-muted-foreground leading-tight">
+                                            Everything in Lite + SSR pages, React rendering, component library, data routes.
+                                        </p>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
                                 <Label>Worker Name</Label>
                                 <div className="flex gap-2 items-center">
                                     <Input value={workerName} onChange={e => setWorkerName(e.target.value)} />
@@ -193,6 +248,20 @@ export function EdgeEnginesSection() {
                                     </SelectContent>
                                 </Select>
                                 <p className="text-xs text-muted-foreground">The runtime needs a fast database for global state cache.</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Edge Cache</Label>
+                                <Select value={selectedCacheId} onValueChange={setSelectedCacheId}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="default">None</SelectItem>
+                                        {edgeCaches.map(cache => (
+                                            <SelectItem key={cache.id} value={cache.id}>{cache.name} ({cache.provider})</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">Optional caching layer (Upstash, Redis) for faster page loads.</p>
                             </div>
                         </div>
 
@@ -243,6 +312,14 @@ export function EdgeEnginesSection() {
                                                 ) : (
                                                     <Badge variant="secondary" className="text-[10px] h-5 py-0 bg-muted text-muted-foreground">Paused</Badge>
                                                 )}
+                                                {engine.adapter_type && (
+                                                    <Badge variant="outline" className={`text-[10px] h-5 py-0 ${engine.adapter_type === 'full'
+                                                        ? 'bg-purple-500/5 border-purple-500/20 text-purple-400'
+                                                        : 'bg-blue-500/5 border-blue-500/20 text-blue-400'
+                                                        }`}>
+                                                        {engine.adapter_type === 'full' ? 'Full' : 'Lite'}
+                                                    </Badge>
+                                                )}
                                             </div>
                                             <div className="text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
                                                 <div className="flex items-center gap-1">
@@ -254,6 +331,20 @@ export function EdgeEnginesSection() {
                                                     {engine.url.replace(/^https?:\/\//, '')}
                                                 </a>
                                             </div>
+                                            {(engine.edge_db_name || engine.edge_cache_name) && (
+                                                <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                                    {engine.edge_db_name && (
+                                                        <Badge variant="outline" className="text-[10px] h-5 py-0 bg-blue-500/5 border-blue-500/20 text-blue-400">
+                                                            DB: {engine.edge_db_name}
+                                                        </Badge>
+                                                    )}
+                                                    {engine.edge_cache_name && (
+                                                        <Badge variant="outline" className="text-[10px] h-5 py-0 bg-amber-500/5 border-amber-500/20 text-amber-400">
+                                                            Cache: {engine.edge_cache_name}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
@@ -268,10 +359,13 @@ export function EdgeEnginesSection() {
                                         </div>
 
                                         {!engine.is_system && (
-                                            <DeleteEngineDialog
-                                                engine={engine}
-                                                onDelete={handleDelete}
-                                            />
+                                            <>
+                                                <ReconfigureEngineDialog engine={engine} />
+                                                <DeleteEngineDialog
+                                                    engine={engine}
+                                                    onDelete={handleDelete}
+                                                />
+                                            </>
                                         )}
                                     </div>
                                 </div>

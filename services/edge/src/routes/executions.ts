@@ -3,10 +3,8 @@
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { db } from '../db';
-import { executions } from '../db/schema';
+import { stateProvider } from '../storage/index.js';
 import { ExecutionSchema, ErrorResponseSchema, ExecutionStatus, TriggerType } from '../schemas';
-import { eq, desc } from 'drizzle-orm';
 
 const executionsRoute = new OpenAPIHono();
 
@@ -45,10 +43,7 @@ const getRoute = createRoute({
 executionsRoute.openapi(getRoute, async (c) => {
     const { id } = c.req.valid('param');
 
-    const [execution] = await db.select()
-        .from(executions)
-        .where(eq(executions.id, id))
-        .limit(1);
+    const execution = await stateProvider.getExecutionById(id);
 
     if (!execution) {
         return c.json({
@@ -107,11 +102,7 @@ executionsRoute.openapi(listRoute, async (c) => {
     const { limit } = c.req.valid('query');
     const maxResults = Math.min(parseInt(limit || '20'), 100);
 
-    const results = await db.select()
-        .from(executions)
-        .where(eq(executions.workflowId, workflowId))
-        .orderBy(desc(executions.startedAt))
-        .limit(maxResults);
+    const results = await stateProvider.listExecutionsByWorkflow(workflowId, maxResults);
 
     return c.json({
         executions: results.map(e => ({
@@ -155,29 +146,7 @@ const statsRoute = createRoute({
 });
 
 executionsRoute.openapi(statsRoute, async (c) => {
-    // Get all executions and aggregate by workflowId
-    const allExecutions = await db.select()
-        .from(executions);
-
-    // Aggregate counts per workflow
-    const statsMap = new Map<string, { totalRuns: number; successfulRuns: number; failedRuns: number }>();
-
-    for (const exec of allExecutions) {
-        const current = statsMap.get(exec.workflowId) || { totalRuns: 0, successfulRuns: 0, failedRuns: 0 };
-        current.totalRuns++;
-        if (exec.status === 'completed') {
-            current.successfulRuns++;
-        } else if (exec.status === 'error') {
-            current.failedRuns++;
-        }
-        statsMap.set(exec.workflowId, current);
-    }
-
-    const stats = Array.from(statsMap.entries()).map(([workflowId, counts]) => ({
-        workflowId,
-        ...counts,
-    }));
-
+    const stats = await stateProvider.getExecutionStats();
     return c.json({ stats }, 200);
 });
 

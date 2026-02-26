@@ -221,6 +221,29 @@ class EdgeDatabase(Base):
     edge_engines = relationship("EdgeEngine", back_populates="edge_database")
 
 
+class EdgeCache(Base):
+    """Named edge cache connection — credentials for edge caching providers.
+    
+    Each row represents a configured edge-compatible cache (Upstash, Redis, etc.)
+    that edge engines can reference. Replaces the old global Redis settings
+    in settings.json.
+    """
+    __tablename__ = 'edge_caches'
+    
+    id = Column(String, primary_key=True)
+    name = Column(String(100), nullable=False)          # "Production Upstash", "Staging Redis"
+    provider = Column(String(50), nullable=False)        # "upstash", "redis", "dragonfly"
+    cache_url = Column(String(500), nullable=False)     # "https://xxx.upstash.io"
+    cache_token = Column(String(1000), nullable=True)   # auth token (write-only to frontend)
+    is_default = Column(Boolean, default=False)
+    is_system = Column(Boolean, default=False)      # System caches are undeletable
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    
+    # Relationship
+    edge_engines = relationship("EdgeEngine", back_populates="edge_cache")
+
+
 class EdgeProviderAccount(Base):
     """Authenticated account for an edge provider (e.g., Cloudflare, Vercel).
     
@@ -255,6 +278,7 @@ class EdgeEngine(Base):
     adapter_type = Column(String(20), nullable=False)   # "edge", "automations", "full"
     url = Column(String(500), nullable=False)           # "https://my-site.pages.dev"
     edge_db_id = Column(String, ForeignKey('edge_databases.id'), nullable=True)
+    edge_cache_id = Column(String, ForeignKey('edge_caches.id'), nullable=True)
     engine_config = Column(Text, nullable=True)         # JSON — e.g., {"worker_name": "frontbase-edge"}
     is_active = Column(Boolean, default=True)
     is_system = Column(Boolean, default=False)           # True = pre-seeded, cannot be deleted
@@ -263,6 +287,7 @@ class EdgeEngine(Base):
     
     # Relationships
     edge_database = relationship("EdgeDatabase", back_populates="edge_engines")
+    edge_cache = relationship("EdgeCache", back_populates="edge_engines")
     edge_provider = relationship("EdgeProviderAccount", back_populates="edge_engines")
 
 

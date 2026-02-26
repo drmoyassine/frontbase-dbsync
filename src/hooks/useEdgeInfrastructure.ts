@@ -25,11 +25,26 @@ export interface EdgeEngine {
     url: string;
     edge_db_id: string | null;
     edge_db_name?: string;
+    edge_cache_id: string | null;
+    edge_cache_name?: string;
     engine_config?: any;
     is_active: boolean;
     is_system?: boolean;
     created_at: string;
     updated_at: string;
+}
+
+export interface EdgeCache {
+    id: string;
+    name: string;
+    provider: string; // 'upstash', 'redis', 'dragonfly'
+    cache_url: string;
+    has_token: boolean;
+    is_default: boolean;
+    is_system: boolean;
+    created_at: string;
+    updated_at: string;
+    engine_count: number;
 }
 
 // ============================================================================
@@ -101,6 +116,52 @@ export const edgeInfrastructureApi = {
         if (!res.ok) throw new Error('Failed to fetch edge databases');
         return res.json();
     },
+
+    // Edge Caches
+    getEdgeCaches: async (): Promise<EdgeCache[]> => {
+        const res = await fetch(`${API_BASE}/api/edge-caches/`);
+        if (!res.ok) throw new Error('Failed to fetch edge caches');
+        return res.json();
+    },
+    createEdgeCache: async (data: Partial<EdgeCache> & { cache_token?: string }): Promise<EdgeCache> => {
+        const res = await fetch(`${API_BASE}/api/edge-caches/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Failed to create edge cache');
+        return res.json();
+    },
+    updateEdgeCache: async ({ id, data }: { id: string; data: Partial<EdgeCache> & { cache_token?: string } }): Promise<EdgeCache> => {
+        const res = await fetch(`${API_BASE}/api/edge-caches/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Failed to update edge cache');
+        return res.json();
+    },
+    deleteEdgeCache: async (id: string): Promise<void> => {
+        const res = await fetch(`${API_BASE}/api/edge-caches/${id}`, { method: 'DELETE' });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || 'Failed to delete edge cache');
+        }
+    },
+    testEdgeCache: async (id: string): Promise<{ success: boolean; message: string; latency_ms?: number }> => {
+        const res = await fetch(`${API_BASE}/api/edge-caches/${id}/test`, { method: 'POST' });
+        if (!res.ok) throw new Error('Failed to test cache connection');
+        return res.json();
+    },
+    testEdgeCacheInline: async (data: { provider: string; cache_url: string; cache_token?: string }): Promise<{ success: boolean; message: string; latency_ms?: number }> => {
+        const res = await fetch(`${API_BASE}/api/edge-caches/test-connection/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...data, name: 'test' }),
+        });
+        if (!res.ok) throw new Error('Failed to test cache connection');
+        return res.json();
+    },
 };
 
 // ============================================================================
@@ -131,6 +192,16 @@ export function useEdgeDatabases() {
     return useQuery({
         queryKey: ['edge-databases'],
         queryFn: edgeInfrastructureApi.getEdgeDatabases,
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+}
+
+export function useEdgeCaches() {
+    return useQuery({
+        queryKey: ['edge-caches'],
+        queryFn: edgeInfrastructureApi.getEdgeCaches,
         staleTime: 5 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,

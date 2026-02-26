@@ -3,11 +3,9 @@
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { db } from '../db';
-import { workflows, executions } from '../db/schema';
+import { stateProvider } from '../storage/index.js';
 import { ExecuteRequestSchema, ExecuteResponseSchema, ErrorResponseSchema } from '../schemas';
 import { v4 as uuidv4 } from 'uuid';
-import { eq } from 'drizzle-orm';
 import { executeWorkflow, executeSingleNode } from '../engine/runtime';
 
 const executeRoute = new OpenAPIHono();
@@ -63,11 +61,8 @@ executeRoute.openapi(route, async (c) => {
     const { id } = c.req.valid('param');
     const body = await c.req.json().catch(() => ({}));
 
-    // Fetch workflow
-    const [workflow] = await db.select()
-        .from(workflows)
-        .where(eq(workflows.id, id))
-        .limit(1);
+    // Fetch workflow via provider
+    const workflow = await stateProvider.getWorkflowById(id);
 
     if (!workflow) {
         return c.json({
@@ -83,11 +78,11 @@ executeRoute.openapi(route, async (c) => {
         }, 400);
     }
 
-    // Create execution record
+    // Create execution record via provider
     const executionId = uuidv4();
     const now = new Date().toISOString();
 
-    await db.insert(executions).values({
+    await stateProvider.createExecution({
         id: executionId,
         workflowId: id,
         status: 'started',
@@ -153,11 +148,8 @@ executeRoute.openapi(singleNodeRoute, async (c) => {
     const { id, nodeId } = c.req.valid('param');
     const body = await c.req.json().catch(() => ({}));
 
-    // Fetch workflow
-    const [workflow] = await db.select()
-        .from(workflows)
-        .where(eq(workflows.id, id))
-        .limit(1);
+    // Fetch workflow via provider
+    const workflow = await stateProvider.getWorkflowById(id);
 
     if (!workflow) {
         return c.json({
@@ -166,11 +158,11 @@ executeRoute.openapi(singleNodeRoute, async (c) => {
         }, 404);
     }
 
-    // Create execution record
+    // Create execution record via provider
     const executionId = uuidv4();
     const now = new Date().toISOString();
 
-    await db.insert(executions).values({
+    await stateProvider.createExecution({
         id: executionId,
         workflowId: id,
         status: 'started',

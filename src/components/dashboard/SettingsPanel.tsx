@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Users } from 'lucide-react';
-import { RedisSettingsForm } from './settings/shared/RedisSettingsForm';
+import { EdgeCachesForm } from './settings/shared/EdgeCachesForm';
 import { EdgeDatabasesForm } from './settings/shared/EdgeDatabasesForm';
 import { PrivacySettingsForm } from './settings/shared/PrivacySettingsForm';
 import { ProjectDetailsForm } from './settings/shared/ProjectDetailsForm';
@@ -84,7 +84,7 @@ export const SettingsPanel: React.FC = () => {
 
         {/* Edge Caching Tab */}
         <TabsContent value="cache" className="space-y-6 mt-6">
-          <RedisSettingsForm withCard />
+          <EdgeCachesForm withCard />
         </TabsContent>
 
         {/* Edge Database Tab */}

@@ -6,33 +6,18 @@
  */
 
 import { Redis as UpstashRedis } from '@upstash/redis';
+import type { ICacheProvider } from './ICacheProvider.js';
 
 export interface RedisConfig {
     url: string;
     token?: string;
 }
 
-// Unified interface for both clients
-interface RedisClientAdapter {
-    get<T>(key: string): Promise<T | null>;
-    set(key: string, value: string): Promise<void | any>;
-    setex(key: string, seconds: number, value: string): Promise<void | any>;
-    del(...keys: string[]): Promise<number>;
-    keys(pattern: string): Promise<string[]>;
-    ping(): Promise<string>;
-
-    // Queue ops
-    lpush(key: string, ...elements: string[]): Promise<number>;
-    rpop(key: string): Promise<string | null>;
-    llen(key: string): Promise<number>;
-
-    // Rate limiting
-    incr(key: string): Promise<number>;
-    expire(key: string, seconds: number): Promise<number>;
-}
+// Backward-compatible alias — ICacheProvider is the canonical interface
+type RedisClientAdapter = ICacheProvider;
 
 // Adapter for Upstash (HTTP)
-class UpstashAdapter implements RedisClientAdapter {
+export class UpstashAdapter implements ICacheProvider {
     private client: UpstashRedis;
 
     constructor(url: string, token: string) {
@@ -85,7 +70,7 @@ class UpstashAdapter implements RedisClientAdapter {
 }
 
 // Adapter for IORedis (TCP)
-class IoRedisAdapter implements RedisClientAdapter {
+export class IoRedisAdapter implements ICacheProvider {
     private client: any;
     private initialized: Promise<void>;
 

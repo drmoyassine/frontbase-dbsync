@@ -1,8 +1,11 @@
 /**
  * IStateProvider - Storage adapter interface for the Edge Engine
  * 
- * This defines the contract for how the Edge Engine reads/writes
- * published pages and project settings. Implementations:
+ * This defines the contract for how the Edge Engine reads/writes:
+ * - Published pages and project settings
+ * - Workflows and execution history
+ * 
+ * Implementations:
  * - LocalSqliteProvider: local SQLite file (self-hosted)
  * - TursoHttpProvider: remote Turso DB over HTTP (cloud/BYOE)
  * 
@@ -37,6 +40,56 @@ export interface ProjectSettingsData {
 }
 
 // =============================================================================
+// Workflow Types (provider-agnostic)
+// =============================================================================
+
+export interface WorkflowData {
+    id: string;
+    name: string;
+    description: string | null;
+    triggerType: string;   // manual, http_webhook, scheduled, data_change
+    triggerConfig: string | null;  // JSON string
+    nodes: string;         // JSON string
+    edges: string;         // JSON string
+    version: number;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+    publishedBy: string | null;
+}
+
+export interface NewExecutionData {
+    id: string;
+    workflowId: string;
+    status: string;
+    triggerType: string;
+    triggerPayload?: string | null;
+    nodeExecutions?: string | null;
+    startedAt: string;
+}
+
+export interface ExecutionData {
+    id: string;
+    workflowId: string;
+    status: string;
+    triggerType: string;
+    triggerPayload: string | null;
+    nodeExecutions: string | null;
+    result: string | null;
+    error: string | null;
+    usage: number | null;
+    startedAt: string;
+    endedAt: string | null;
+}
+
+export interface ExecutionStats {
+    workflowId: string;
+    totalRuns: number;
+    successfulRuns: number;
+    failedRuns: number;
+}
+
+// =============================================================================
 // State Provider Interface
 // =============================================================================
 
@@ -48,31 +101,44 @@ export interface IStateProvider {
     // --- Pages ---
     /** Upsert a published page (insert or update) */
     upsertPage(page: PublishPage): Promise<{ success: boolean; version: number }>;
-
     /** Get a published page by slug */
     getPageBySlug(slug: string): Promise<PublishPage | null>;
-
     /** Get the homepage */
     getHomepage(): Promise<PublishPage | null>;
-
     /** Delete a published page by slug */
     deletePage(slug: string): Promise<boolean>;
-
     /** List all published pages (summary only) */
     listPages(): Promise<PublishedPageSummary[]>;
 
     // --- Project Settings ---
     /** Initialize settings storage */
     initSettings(): Promise<void>;
-
     /** Get project settings (returns defaults if not set) */
     getProjectSettings(): Promise<ProjectSettingsData>;
-
     /** Get favicon URL (with fallback to default) */
     getFaviconUrl(): Promise<string>;
-
     /** Update project settings */
     updateProjectSettings(
         updates: Partial<Omit<ProjectSettingsData, 'id' | 'updatedAt'>>
     ): Promise<ProjectSettingsData>;
+
+    // --- Workflows ---
+    /** Upsert a workflow (insert or update). Returns version number. */
+    upsertWorkflow(workflow: WorkflowData): Promise<{ version: number }>;
+    /** Get a workflow by ID */
+    getWorkflowById(id: string): Promise<WorkflowData | null>;
+    /** Get an active webhook-triggered workflow by ID */
+    getActiveWebhookWorkflow(id: string): Promise<WorkflowData | null>;
+
+    // --- Executions ---
+    /** Create a new execution record */
+    createExecution(execution: NewExecutionData): Promise<void>;
+    /** Get an execution by ID */
+    getExecutionById(id: string): Promise<ExecutionData | null>;
+    /** Update an execution (status, result, error, etc.) */
+    updateExecution(id: string, updates: Partial<ExecutionData>): Promise<void>;
+    /** List executions for a workflow, ordered by most recent */
+    listExecutionsByWorkflow(workflowId: string, limit?: number): Promise<ExecutionData[]>;
+    /** Get execution stats (counts) for all workflows */
+    getExecutionStats(): Promise<ExecutionStats[]>;
 }

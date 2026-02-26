@@ -3,11 +3,9 @@
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { db } from '../db';
-import { workflows, executions } from '../db/schema';
+import { stateProvider } from '../storage/index.js';
 import { WebhookPayloadSchema, ExecuteResponseSchema, ErrorResponseSchema } from '../schemas';
 import { v4 as uuidv4 } from 'uuid';
-import { eq, and } from 'drizzle-orm';
 import { executeWorkflow } from '../engine/runtime';
 
 const webhookRoute = new OpenAPIHono();
@@ -54,16 +52,8 @@ webhookRoute.openapi(route, async (c) => {
     const { id } = c.req.valid('param');
     const payload = c.req.valid('json');
 
-    // Fetch workflow (must be active and webhook-triggered)
-    const [workflow] = await db.select()
-        .from(workflows)
-        .where(
-            and(
-                eq(workflows.id, id),
-                eq(workflows.isActive, true)
-            )
-        )
-        .limit(1);
+    // Fetch active workflow via provider
+    const workflow = await stateProvider.getActiveWebhookWorkflow(id);
 
     if (!workflow) {
         return c.json({
@@ -72,11 +62,11 @@ webhookRoute.openapi(route, async (c) => {
         }, 404);
     }
 
-    // Create execution record
+    // Create execution record via provider
     const executionId = uuidv4();
     const now = new Date().toISOString();
 
-    await db.insert(executions).values({
+    await stateProvider.createExecution({
         id: executionId,
         workflowId: id,
         status: 'started',

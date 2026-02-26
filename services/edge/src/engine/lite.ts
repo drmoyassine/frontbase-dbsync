@@ -25,7 +25,6 @@ import { timeout } from 'hono/timeout';
 import { bodyLimit } from 'hono/body-limit';
 import { etag } from 'hono/etag';
 import { timing } from 'hono/timing';
-import { cache } from 'hono/cache';
 // Streaming + SSE available via: import { streamSSE } from 'hono/streaming'
 // JWT available via: import { jwt } from 'hono/jwt'
 // IP restriction available via: import { ipRestriction } from 'hono/ip-restriction'
@@ -90,15 +89,26 @@ export function createLiteApp() {
     app.use('*', logger());
     app.use('*', secureHeaders());
     app.use('*', timing());               // Server-Timing header
-    app.use('*', timeout(29000));          // 29s (CF Workers limit)
     app.use('*', bodyLimit({ maxSize: 50 * 1024 * 1024 })); // 50MB
     app.use('/api/*', etag());            // ETag + 304 Not Modified
 
-    // Cache control for API responses
-    app.use('/api/*', cache({
-        cacheName: 'frontbase-edge',
-        cacheControl: 'no-cache',         // Revalidate with ETag
-    }));
+    // Timeout: wrap in try-catch for CF Workers where ExecutionContext may be missing
+    app.use('*', async (c, next) => {
+        try {
+            const mw = timeout(29000);    // 29s (CF Workers limit)
+            return await mw(c, next);
+        } catch {
+            return await next();          // Degrade gracefully
+        }
+    });
+
+    // Cache-Control headers (doesn't use CF Cache API, avoids ExecutionContext error)
+    app.use('/api/*', async (c, next) => {
+        await next();
+        if (!c.res.headers.has('Cache-Control')) {
+            c.res.headers.set('Cache-Control', 'no-cache');
+        }
+    });
 
     // CORS
     const origins = ['http://localhost:5173', 'http://localhost:8000'];

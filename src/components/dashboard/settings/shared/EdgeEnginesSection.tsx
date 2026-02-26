@@ -23,6 +23,7 @@ import {
 import { API_BASE, PROVIDER_ICONS } from './edgeConstants';
 import { DeleteEngineDialog } from './DeleteEngineDialog';
 import { ReconfigureEngineDialog } from './ReconfigureEngineDialog';
+import { EdgeInspectorDialog } from './EdgeInspectorDialog';
 
 const Info = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
@@ -355,6 +356,7 @@ export function EdgeEnginesSection() {
 
                                         {!engine.is_system && (
                                             <>
+                                                <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
                                                 <ReconfigureEngineDialog engine={engine} />
                                                 <DeleteEngineDialog
                                                     engine={engine}

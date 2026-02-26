@@ -17,6 +17,9 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
+    Accordion, AccordionItem, AccordionTrigger, AccordionContent,
+} from '@/components/ui/accordion';
+import {
     Search, FileCode, Lock, Settings2, ChevronDown, ChevronRight,
     File, Shield, Globe, Clock, Cpu, Loader2, AlertTriangle, ExternalLink, Zap,
 } from 'lucide-react';
@@ -112,6 +115,28 @@ function getEndpointsForAdapter(adapterType: string): EndpointDef[] {
     return isFullAdapter ? [...LITE_ENDPOINTS, ...FULL_EXTRA_ENDPOINTS] : LITE_ENDPOINTS;
 }
 
+function getWorkerBaseUrl(engine: EdgeEngine): string {
+    if (!engine.url) return '';
+    const url = engine.url.startsWith('http') ? engine.url : `https://${engine.url}`;
+    return url.replace(/\/$/, '');
+}
+
+// Extract OpenAPI path info for an endpoint
+function getOpenApiInfo(spec: any, path: string, method: string): { summary?: string; requestBody?: any; responses?: any; parameters?: any } | null {
+    if (!spec?.paths) return null;
+    // Try exact match first, then try with parameter normalization
+    const pathObj = spec.paths[path] || spec.paths[path.replace(/:([\w]+)/g, '{$1}')];
+    if (!pathObj) return null;
+    const op = pathObj[method.toLowerCase()];
+    if (!op) return null;
+    return {
+        summary: op.summary || op.description,
+        requestBody: op.requestBody,
+        responses: op.responses,
+        parameters: op.parameters,
+    };
+}
+
 async function inspectFetch<T>(endpoint: string, providerId: string, workerName: string): Promise<T> {
     const resp = await fetch(`${API_BASE}/api/cloudflare/inspect/${endpoint}`, {
         method: 'POST',
@@ -168,6 +193,21 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         queryKey: ['edge-inspector', 'secrets', cacheKey],
         queryFn: () => inspectFetch<InspectSecretsResponse>('secrets', providerId, workerName),
         enabled: open && !!providerId,
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+
+    // Fetch live OpenAPI spec from the worker itself
+    const workerBaseUrl = getWorkerBaseUrl(engine);
+    const { data: openApiSpec } = useQuery<any>({
+        queryKey: ['edge-inspector', 'openapi', workerBaseUrl],
+        queryFn: async () => {
+            const resp = await fetch(`${workerBaseUrl}/api/openapi.json`);
+            if (!resp.ok) return null;
+            return resp.json();
+        },
+        enabled: open && !!workerBaseUrl,
         staleTime: 5 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,
@@ -481,10 +521,21 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
                                 s.routes.map((route, i) => (
                                     <div key={i} className="p-3 rounded-lg border bg-card flex items-center gap-3">
                                         <Badge variant="outline" className="text-[10px] font-mono shrink-0">{route.type}</Badge>
-                                        <span className="text-sm font-mono">{route.pattern}</span>
+                                        <a
+                                            href={`https://${route.pattern}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-sm font-mono text-primary hover:underline flex items-center gap-1.5 transition-colors"
+                                        >
+                                            {route.pattern}
+                                            <ExternalLink className="h-3 w-3 opacity-60" />
+                                        </a>
                                     </div>
                                 ))
                             )}
+                            <p className="text-[10px] text-muted-foreground italic mt-3">
+                                Routes define how traffic reaches this worker. Add custom domains in the Cloudflare Dashboard.
+                            </p>
                         </div>
                     </div>
                 );
@@ -505,21 +556,108 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
                                 <Zap className="h-3.5 w-3.5" />
                                 <span className="text-xs font-medium">Endpoints ({endpoints.length})</span>
                             </div>
-                            <Badge variant="outline" className="text-[10px]">{engine.adapter_type || 'automations'}</Badge>
+                            <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[10px]">{engine.adapter_type || 'automations'}</Badge>
+                                {workerBaseUrl && (
+                                    <a
+                                        href={`${workerBaseUrl}/api/docs`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[10px] text-primary hover:underline flex items-center gap-1"
+                                    >
+                                        Swagger UI <ExternalLink className="h-2.5 w-2.5" />
+                                    </a>
+                                )}
+                            </div>
                         </div>
                         <ScrollArea className="flex-1">
-                            <div className="p-4 space-y-1.5">
-                                {endpoints.map((ep, i) => (
-                                    <div key={i} className="p-2.5 rounded-lg border bg-card flex items-center gap-3">
-                                        <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${methodColors[ep.method] || ''}`}>
-                                            {ep.method}
-                                        </span>
-                                        <span className="text-sm font-mono font-medium">{ep.path}</span>
-                                        {ep.dynamic && <Badge variant="secondary" className="text-[10px] h-4 ml-auto">dynamic</Badge>}
-                                        <span className="text-[10px] text-muted-foreground ml-auto">{ep.description}</span>
-                                    </div>
-                                ))}
-                            </div>
+                            <Accordion type="multiple" className="px-4 py-2">
+                                {endpoints.map((ep, i) => {
+                                    const oaInfo = openApiSpec ? getOpenApiInfo(openApiSpec, ep.path, ep.method) : null;
+                                    const fullUrl = workerBaseUrl ? `${workerBaseUrl}${ep.path}` : null;
+                                    const isClickable = ep.method === 'GET' && fullUrl && !ep.path.includes(':');
+                                    return (
+                                        <AccordionItem key={i} value={`ep-${i}`} className="border-b-0 mb-1">
+                                            <AccordionTrigger className="py-2 px-2.5 rounded-lg border bg-card hover:bg-accent/50 hover:no-underline [&[data-state=open]]:rounded-b-none">
+                                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${methodColors[ep.method] || ''}`}>
+                                                        {ep.method}
+                                                    </span>
+                                                    {isClickable ? (
+                                                        <a
+                                                            href={fullUrl}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-sm font-mono font-medium text-primary hover:underline flex items-center gap-1"
+                                                            onClick={e => e.stopPropagation()}
+                                                        >
+                                                            {ep.path}
+                                                            <ExternalLink className="h-2.5 w-2.5 opacity-60" />
+                                                        </a>
+                                                    ) : (
+                                                        <span className="text-sm font-mono font-medium">{ep.path}</span>
+                                                    )}
+                                                    {ep.dynamic && <Badge variant="secondary" className="text-[10px] h-4">dynamic</Badge>}
+                                                    <span className="text-[10px] text-muted-foreground ml-auto mr-2 hidden sm:inline">{ep.description}</span>
+                                                </div>
+                                            </AccordionTrigger>
+                                            <AccordionContent className="px-2.5 pb-2.5 border border-t-0 rounded-b-lg bg-card">
+                                                <div className="space-y-3 pt-2">
+                                                    <p className="text-xs text-muted-foreground">{oaInfo?.summary || ep.description}</p>
+                                                    {fullUrl && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[10px] text-muted-foreground">URL:</span>
+                                                            <code className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded break-all">{fullUrl}</code>
+                                                        </div>
+                                                    )}
+                                                    {oaInfo?.requestBody && (
+                                                        <div>
+                                                            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Request Body</div>
+                                                            <pre className="text-[10px] font-mono bg-muted p-2 rounded overflow-x-auto max-h-32">
+                                                                {JSON.stringify(
+                                                                    oaInfo.requestBody?.content?.['application/json']?.schema || oaInfo.requestBody,
+                                                                    null, 2
+                                                                )}
+                                                            </pre>
+                                                        </div>
+                                                    )}
+                                                    {oaInfo?.parameters && oaInfo.parameters.length > 0 && (
+                                                        <div>
+                                                            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Parameters</div>
+                                                            <div className="space-y-1">
+                                                                {oaInfo.parameters.map((p: any, j: number) => (
+                                                                    <div key={j} className="flex items-center gap-2 text-[10px]">
+                                                                        <Badge variant="outline" className="text-[9px] h-4">{p.in}</Badge>
+                                                                        <code className="font-mono">{p.name}</code>
+                                                                        {p.required && <span className="text-red-400">*</span>}
+                                                                        <span className="text-muted-foreground">{p.schema?.type || ''}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    {oaInfo?.responses && (
+                                                        <div>
+                                                            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Responses</div>
+                                                            <div className="space-y-1">
+                                                                {Object.entries(oaInfo.responses).map(([code, resp]: [string, any]) => (
+                                                                    <div key={code} className="flex items-start gap-2 text-[10px]">
+                                                                        <Badge variant={code.startsWith('2') ? 'default' : 'destructive'} className="text-[9px] h-4 shrink-0">{code}</Badge>
+                                                                        <span className="text-muted-foreground">{resp.description || ''}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    {!oaInfo && (
+                                                        <p className="text-[10px] text-muted-foreground italic">No OpenAPI documentation available for this endpoint.</p>
+                                                    )}
+                                                </div>
+                                            </AccordionContent>
+                                        </AccordionItem>
+                                    );
+                                })}
+                            </Accordion>
                             <div className="px-4 pb-4">
                                 <p className="text-[10px] text-muted-foreground italic">
                                     Endpoints are baked into the bundle at build time. Publishing pages or automations

@@ -30,6 +30,11 @@ export interface EdgeEngine {
     engine_config?: any;
     is_active: boolean;
     is_system?: boolean;
+    bundle_checksum?: string | null;
+    config_checksum?: string | null;
+    last_deployed_at?: string | null;
+    last_synced_at?: string | null;
+    sync_status?: 'synced' | 'stale' | 'unknown';
     created_at: string;
     updated_at: string;
 }
@@ -45,6 +50,12 @@ export interface EdgeCache {
     created_at: string;
     updated_at: string;
     engine_count: number;
+}
+
+export interface BatchResult {
+    success: string[];
+    failed: { id: string; error: string }[];
+    total: number;
 }
 
 // ============================================================================
@@ -108,6 +119,35 @@ export const edgeInfrastructureApi = {
     deleteEngine: async (id: string): Promise<void> => {
         const res = await fetch(`${API_BASE}/api/edge-engines/${id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error('Failed to delete engine');
+    },
+
+    // Batch Operations
+    batchDelete: async (engine_ids: string[], delete_remote = false): Promise<BatchResult> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/batch/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ engine_ids, delete_remote }),
+        });
+        if (!res.ok) throw new Error('Batch delete failed');
+        return res.json();
+    },
+    batchToggle: async (engine_ids: string[], is_active: boolean): Promise<BatchResult> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/batch/toggle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ engine_ids, is_active }),
+        });
+        if (!res.ok) throw new Error('Batch toggle failed');
+        return res.json();
+    },
+    batchSyncCheck: async (engine_ids: string[]): Promise<BatchResult> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/batch/sync-check`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ engine_ids }),
+        });
+        if (!res.ok) throw new Error('Batch sync check failed');
+        return res.json();
     },
 
     // Edge Databases

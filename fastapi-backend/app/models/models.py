@@ -282,6 +282,10 @@ class EdgeEngine(Base):
     engine_config = Column(Text, nullable=True)         # JSON — e.g., {"worker_name": "frontbase-edge"}
     is_active = Column(Boolean, default=True)
     is_system = Column(Boolean, default=False)           # True = pre-seeded, cannot be deleted
+    bundle_checksum = Column(String(64), nullable=True)  # SHA-256 of deployed JS bundle
+    config_checksum = Column(String(64), nullable=True)  # SHA-256 of local config (db+cache+adapter+secrets)
+    last_deployed_at = Column(String, nullable=True)     # ISO timestamp of last successful deploy
+    last_synced_at = Column(String, nullable=True)       # ISO timestamp of last drift verification
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     

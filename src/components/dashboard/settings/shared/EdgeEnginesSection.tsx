@@ -5,8 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Cloud, Server, Rocket, ExternalLink, Loader2, AlertTriangle, Cpu, Layers } from 'lucide-react';
+import { Cloud, Server, Rocket, ExternalLink, Loader2, AlertTriangle, Cpu, Layers, Search, Trash2, Power, RefreshCw, CheckSquare } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -24,6 +25,7 @@ import { API_BASE, PROVIDER_ICONS } from './edgeConstants';
 import { DeleteEngineDialog } from './DeleteEngineDialog';
 import { ReconfigureEngineDialog } from './ReconfigureEngineDialog';
 import { EdgeInspectorDialog } from './EdgeInspectorDialog';
+import { BulkDeleteDialog } from './BulkDeleteDialog';
 
 const Info = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
@@ -51,6 +53,61 @@ export function EdgeEnginesSection() {
     const [selectedDbId, setSelectedDbId] = useState<string>('default');
     const [selectedCacheId, setSelectedCacheId] = useState<string>('none');
     const [engineType, setEngineType] = useState<'lite' | 'full'>('lite');
+
+    // ── Search, filters, selection ───────────────────────────────────────
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filterProvider, setFilterProvider] = useState<string>('all');
+    const [filterBundle, setFilterBundle] = useState<string>('all');
+    const [filterStatus, setFilterStatus] = useState<string>('all');
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [bulkLoading, setBulkLoading] = useState(false);
+    const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+    // ── Filtered engines ────────────────────────────────────────────────
+    const filteredEngines = useMemo(() => {
+        return engines.filter(e => {
+            // Search
+            if (searchQuery && !e.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+            // Provider
+            if (filterProvider !== 'all' && e.provider !== filterProvider) return false;
+            // Bundle
+            if (filterBundle !== 'all') {
+                const isLite = e.adapter_type === 'automations' || e.adapter_type === 'edge';
+                if (filterBundle === 'lite' && !isLite) return false;
+                if (filterBundle === 'full' && isLite) return false;
+            }
+            // Status
+            if (filterStatus === 'active' && !e.is_active) return false;
+            if (filterStatus === 'inactive' && e.is_active) return false;
+            return true;
+        });
+    }, [engines, searchQuery, filterProvider, filterBundle, filterStatus]);
+
+    // Distinct providers for filter dropdown
+    const providerOptions = useMemo(
+        () => [...new Set(engines.map(e => e.provider).filter(Boolean))],
+        [engines]
+    );
+
+    const selectableEngines = filteredEngines.filter(e => !e.is_system);
+    const allSelected = selectableEngines.length > 0 && selectableEngines.every(e => selectedIds.has(e.id));
+
+    const toggleSelectAll = () => {
+        if (allSelected) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(selectableEngines.map(e => e.id)));
+        }
+    };
+
+    const toggleSelect = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
 
     // Auto-select first provider when list loads
     React.useEffect(() => {
@@ -142,6 +199,52 @@ export function EdgeEnginesSection() {
         } catch (e: any) {
             alert(e.message);
         }
+    };
+
+    // ── Bulk Action Handlers ─────────────────────────────────────────────
+    const handleBulkDelete = async (deleteRemote: boolean) => {
+        setBulkLoading(true);
+        try {
+            const result = await edgeInfrastructureApi.batchDelete([...selectedIds], deleteRemote);
+            if (result.failed.length > 0) {
+                setError(`${result.success.length} deleted, ${result.failed.length} failed: ${result.failed.map(f => f.error).join(', ')}`);
+            }
+            setSelectedIds(new Set());
+            await refetchEngines();
+        } catch (e: any) { setError(e.message); } finally { setBulkLoading(false); }
+    };
+
+    const handleBulkToggle = async (activate: boolean) => {
+        setBulkLoading(true);
+        try {
+            await edgeInfrastructureApi.batchToggle([...selectedIds], activate);
+            setSelectedIds(new Set());
+            await refetchEngines();
+        } catch (e: any) { alert(e.message); } finally { setBulkLoading(false); }
+    };
+
+    const handleBulkSyncCheck = async () => {
+        setBulkLoading(true);
+        try {
+            const result = await edgeInfrastructureApi.batchSyncCheck([...selectedIds]);
+            if (result.failed.length > 0) {
+                alert(`${result.success.length} reachable, ${result.failed.length} unreachable:\n${result.failed.map(f => `${f.id}: ${f.error}`).join('\n')}`);
+            }
+            await refetchEngines();
+        } catch (e: any) { alert(e.message); } finally { setBulkLoading(false); }
+    };
+
+    // ── Relative time helper ──────────────────────────────────────────────
+    const timeAgo = (iso: string | null | undefined): string => {
+        if (!iso) return 'Never';
+        const diff = Date.now() - new Date(iso).getTime();
+        const mins = Math.floor(diff / 60000);
+        if (mins < 1) return 'Just now';
+        if (mins < 60) return `${mins}m ago`;
+        const hours = Math.floor(mins / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        return `${days}d ago`;
     };
 
     return (
@@ -290,87 +393,215 @@ export function EdgeEnginesSection() {
                         <p className="text-sm text-muted-foreground mt-1">Deploy an engine to handle active traffic.</p>
                     </div>
                 ) : (
-                    <div className="space-y-3">
-                        {engines.map(engine => {
-                            const Icon = PROVIDER_ICONS[engine.provider] || Server;
-                            const providerName = providers.find(p => p.id === engine.edge_provider_id)?.name || engine.provider;
-                            return (
-                                <div key={engine.id} className="flex items-center justify-between p-4 border rounded-lg bg-card hover:border-border transition-colors group">
-                                    <div className="flex items-start gap-3">
-                                        <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center shrink-0">
-                                            <Icon className="w-5 h-5 text-muted-foreground" />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2">
-                                                <h4 className="font-medium text-sm">{engine.name}</h4>
-                                                {engine.is_active ? (
-                                                    <Badge variant="secondary" className="bg-green-500/10 text-green-500 hover:bg-green-500/20 text-[10px] h-5 py-0">Active Route</Badge>
-                                                ) : (
-                                                    <Badge variant="secondary" className="text-[10px] h-5 py-0 bg-muted text-muted-foreground">Paused</Badge>
-                                                )}
-                                                {engine.adapter_type && (
-                                                    <Badge variant="outline" className={`text-[10px] h-5 py-0 ${engine.adapter_type === 'full'
-                                                        ? 'bg-purple-500/5 border-purple-500/20 text-purple-400'
-                                                        : 'bg-blue-500/5 border-blue-500/20 text-blue-400'
-                                                        }`}>
-                                                        {engine.adapter_type === 'full' ? 'Full' : 'Lite'}
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                                                <div className="flex items-center gap-1">
-                                                    <Cloud className="w-3 h-3" />
-                                                    <span>{providerName}</span>
-                                                </div>
-                                                <a href={engine.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-primary transition-colors">
-                                                    <ExternalLink className="w-3 h-3" />
-                                                    {engine.url.replace(/^https?:\/\//, '')}
-                                                </a>
-                                            </div>
-                                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                                                <Badge variant="outline" className={`text-[10px] h-5 py-0 ${engine.edge_db_name
-                                                    ? 'bg-blue-500/5 border-blue-500/20 text-blue-400'
-                                                    : 'bg-muted/50 border-border text-muted-foreground'
-                                                    }`}>
-                                                    DB: {engine.edge_db_name || 'None'}
-                                                </Badge>
-                                                <Badge variant="outline" className={`text-[10px] h-5 py-0 ${engine.edge_cache_name
-                                                    ? 'bg-amber-500/5 border-amber-500/20 text-amber-400'
-                                                    : 'bg-muted/50 border-border text-muted-foreground'
-                                                    }`}>
-                                                    Cache: {engine.edge_cache_name || 'None'}
-                                                </Badge>
-                                            </div>
-                                        </div>
-                                    </div>
+                    <>
+                        {/* ── Search & Filter Toolbar ─────────────────── */}
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                            <div className="relative flex-1 min-w-[200px]">
+                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                <Input
+                                    placeholder="Search engines..."
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                    className="h-8 pl-8 text-xs"
+                                />
+                            </div>
+                            <Select value={filterProvider} onValueChange={setFilterProvider}>
+                                <SelectTrigger className="h-8 w-[130px] text-xs">
+                                    <SelectValue placeholder="Provider" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Providers</SelectItem>
+                                    {providerOptions.map(p => (
+                                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Select value={filterBundle} onValueChange={setFilterBundle}>
+                                <SelectTrigger className="h-8 w-[110px] text-xs">
+                                    <SelectValue placeholder="Bundle" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Bundles</SelectItem>
+                                    <SelectItem value="lite">Lite</SelectItem>
+                                    <SelectItem value="full">Full</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Select value={filterStatus} onValueChange={setFilterStatus}>
+                                <SelectTrigger className="h-8 w-[110px] text-xs">
+                                    <SelectValue placeholder="Status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Status</SelectItem>
+                                    <SelectItem value="active">Active</SelectItem>
+                                    <SelectItem value="inactive">Inactive</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
 
-                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <div className="flex items-center space-x-2 mr-2">
-                                            <Switch
-                                                id={`active-${engine.id}`}
-                                                checked={engine.is_active}
-                                                onCheckedChange={() => handleToggle(engine)}
-                                                disabled={engine.is_system}
-                                            />
-                                        </div>
-
-                                        {!engine.is_system && (
-                                            <>
-                                                <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
-                                                <ReconfigureEngineDialog engine={engine} />
-                                                <DeleteEngineDialog
-                                                    engine={engine}
-                                                    onDelete={handleDelete}
-                                                />
-                                            </>
-                                        )}
-                                    </div>
+                        {/* ── Bulk Action Bar ─────────────────────────── */}
+                        <div className="flex items-center gap-2 mb-3">
+                            <Checkbox
+                                id="select-all-engines"
+                                checked={allSelected}
+                                onCheckedChange={toggleSelectAll}
+                                disabled={selectableEngines.length === 0}
+                            />
+                            <label htmlFor="select-all-engines" className="text-xs text-muted-foreground cursor-pointer">
+                                {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
+                            </label>
+                            {selectedIds.size > 0 && (
+                                <div className="flex items-center gap-1.5 ml-auto">
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 text-xs gap-1.5"
+                                        onClick={handleBulkSyncCheck}
+                                        disabled={bulkLoading}
+                                    >
+                                        <RefreshCw className="w-3 h-3" /> Sync Check
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 text-xs gap-1.5"
+                                        onClick={() => handleBulkToggle(true)}
+                                        disabled={bulkLoading}
+                                    >
+                                        <Power className="w-3 h-3" /> Enable
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 text-xs gap-1.5"
+                                        onClick={() => handleBulkToggle(false)}
+                                        disabled={bulkLoading}
+                                    >
+                                        <Power className="w-3 h-3" /> Disable
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        className="h-7 text-xs gap-1.5"
+                                        onClick={() => setBulkDeleteOpen(true)}
+                                        disabled={bulkLoading}
+                                    >
+                                        <Trash2 className="w-3 h-3" /> Delete
+                                    </Button>
                                 </div>
-                            );
-                        })}
-                    </div>
+                            )}
+                        </div>
+
+                        {filteredEngines.length === 0 ? (
+                            <div className="text-center p-6 text-sm text-muted-foreground">No engines match your filters.</div>
+                        ) : (
+                            <div className="space-y-3">
+                                {filteredEngines.map(engine => {
+                                    const Icon = PROVIDER_ICONS[engine.provider] || Server;
+                                    const providerName = providers.find(p => p.id === engine.edge_provider_id)?.name || engine.provider;
+                                    const isSelected = selectedIds.has(engine.id);
+                                    return (
+                                        <div key={engine.id} className={`flex items-center justify-between p-4 border rounded-lg bg-card hover:border-border transition-colors group ${isSelected ? 'ring-1 ring-primary border-primary' : ''}`}>
+                                            <div className="flex items-start gap-3">
+                                                {/* Checkbox */}
+                                                {!engine.is_system && (
+                                                    <Checkbox
+                                                        checked={isSelected}
+                                                        onCheckedChange={() => toggleSelect(engine.id)}
+                                                        className="mt-1"
+                                                    />
+                                                )}
+                                                <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center shrink-0">
+                                                    <Icon className="w-5 h-5 text-muted-foreground" />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <h4 className="font-medium text-sm">{engine.name}</h4>
+                                                        {engine.is_active ? (
+                                                            <Badge variant="secondary" className="bg-green-500/10 text-green-500 hover:bg-green-500/20 text-[10px] h-5 py-0">Active Route</Badge>
+                                                        ) : (
+                                                            <Badge variant="secondary" className="text-[10px] h-5 py-0 bg-muted text-muted-foreground">Paused</Badge>
+                                                        )}
+                                                        {engine.adapter_type && (
+                                                            <Badge variant="outline" className={`text-[10px] h-5 py-0 ${engine.adapter_type === 'full'
+                                                                ? 'bg-purple-500/5 border-purple-500/20 text-purple-400'
+                                                                : 'bg-blue-500/5 border-blue-500/20 text-blue-400'
+                                                                }`}>
+                                                                {engine.adapter_type === 'full' ? 'Full' : 'Lite'}
+                                                            </Badge>
+                                                        )}
+                                                        {engine.sync_status === 'synced' && (
+                                                            <Badge variant="outline" className="text-[10px] h-5 py-0 bg-green-500/5 border-green-500/20 text-green-400">✓ Synced</Badge>
+                                                        )}
+                                                        {engine.sync_status === 'stale' && (
+                                                            <Badge variant="outline" className="text-[10px] h-5 py-0 bg-amber-500/5 border-amber-500/20 text-amber-400">⚠ Stale</Badge>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                                                        <div className="flex items-center gap-1">
+                                                            <Cloud className="w-3 h-3" />
+                                                            <span>{providerName}</span>
+                                                        </div>
+                                                        <a href={engine.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-primary transition-colors">
+                                                            <ExternalLink className="w-3 h-3" />
+                                                            {engine.url.replace(/^https?:\/\//, '')}
+                                                        </a>
+                                                        {engine.last_deployed_at && (
+                                                            <span className="text-[10px]">Deployed {timeAgo(engine.last_deployed_at)}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                                        <Badge variant="outline" className={`text-[10px] h-5 py-0 ${engine.edge_db_name
+                                                            ? 'bg-blue-500/5 border-blue-500/20 text-blue-400'
+                                                            : 'bg-muted/50 border-border text-muted-foreground'
+                                                            }`}>
+                                                            DB: {engine.edge_db_name || 'None'}
+                                                        </Badge>
+                                                        <Badge variant="outline" className={`text-[10px] h-5 py-0 ${engine.edge_cache_name
+                                                            ? 'bg-amber-500/5 border-amber-500/20 text-amber-400'
+                                                            : 'bg-muted/50 border-border text-muted-foreground'
+                                                            }`}>
+                                                            Cache: {engine.edge_cache_name || 'None'}
+                                                        </Badge>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div className="flex items-center space-x-2 mr-2">
+                                                    <Switch
+                                                        id={`active-${engine.id}`}
+                                                        checked={engine.is_active}
+                                                        onCheckedChange={() => handleToggle(engine)}
+                                                        disabled={engine.is_system}
+                                                    />
+                                                </div>
+
+                                                {!engine.is_system && (
+                                                    <>
+                                                        <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
+                                                        <ReconfigureEngineDialog engine={engine} />
+                                                        <DeleteEngineDialog
+                                                            engine={engine}
+                                                            onDelete={handleDelete}
+                                                        />
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </>
                 )}
             </CardContent>
-        </Card>
+
+            <BulkDeleteDialog
+                open={bulkDeleteOpen}
+                onOpenChange={setBulkDeleteOpen}
+                selectedCount={selectedIds.size}
+                onConfirm={handleBulkDelete}
+            />
+        </Card >
     );
 }

@@ -91,7 +91,7 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
                         <Select value={selectedDbId} onValueChange={setSelectedDbId}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="none">None</SelectItem>
+                                <SelectItem value="none">None (No Database)</SelectItem>
                                 {edgeDbs.map((db: any) => (
                                     <SelectItem key={db.id} value={db.id}>
                                         {db.name} ({db.provider})

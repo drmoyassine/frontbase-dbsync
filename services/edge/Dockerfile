@@ -26,13 +26,18 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files and install production deps only
+# Copy package files and install ALL deps (including tsup/esbuild for CF bundle builds)
 COPY package*.json ./
-RUN npm install --production
+RUN npm install
 
 # Copy built files
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
+
+# Copy source + configs for CF bundle building via /api/build-bundle
+COPY --from=builder /app/src ./src
+COPY tsup.cloudflare.ts tsup.cloudflare-lite.ts tsconfig.json ./
+COPY shims ./shims
 
 # Copy drizzle config for migrations (if needed at runtime)
 COPY drizzle.config.ts ./

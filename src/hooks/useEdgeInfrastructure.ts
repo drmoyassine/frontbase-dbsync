@@ -154,7 +154,7 @@ export const edgeInfrastructureApi = {
         return res.json();
     },
     testEdgeCacheInline: async (data: { provider: string; cache_url: string; cache_token?: string }): Promise<{ success: boolean; message: string; latency_ms?: number }> => {
-        const res = await fetch(`${API_BASE}/api/edge-caches/test-connection/`, {
+        const res = await fetch(`${API_BASE}/api/edge-caches/test-connection`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...data, name: 'test' }),

@@ -222,18 +222,51 @@ async def _set_secrets(api_token: str, account_id: str, worker_name: str, secret
 
 
 def _build_worker(adapter_type: str = "automations") -> str:
-    """Build the Cloudflare Worker bundle and return the script content."""
+    """Build the Cloudflare Worker bundle and return the script content.
+    
+    In Docker/VPS: delegates to the edge container's /api/build-bundle endpoint.
+    In local dev: runs npx tsup directly (edge source is available locally).
+    """
     is_full = adapter_type == "full"
-    config_file = "tsup.cloudflare.ts" if is_full else "tsup.cloudflare-lite.ts"
-    output_file = "cloudflare.js" if is_full else "cloudflare-lite.js"
     label = "Full" if is_full else "Lite"
 
+    # --- Strategy 1: Delegate to edge container (Docker/VPS) ---
+    edge_url = os.environ.get("EDGE_URL", os.environ.get("EDGE_SSR_URL", ""))
+    if edge_url:
+        import requests as req
+        build_url = f"{edge_url}/api/build-bundle"
+        print(f"[Cloudflare] Delegating {label} bundle build to edge container ({build_url})...")
+        try:
+            resp = req.post(
+                build_url,
+                json={"adapter_type": adapter_type},
+                timeout=120 if is_full else 60,
+            )
+            data = resp.json()
+            if resp.status_code != 200 or not data.get("success"):
+                err = data.get("error", "Unknown build error")
+                raise HTTPException(500, f"Edge build failed: {err[:500]}")
+            
+            content = data["script_content"]
+            print(f"[Cloudflare] {label} bundle received: {len(content)} bytes ({len(content)//1024} KB)")
+            return content
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"[Cloudflare] Edge build delegation failed: {e}, trying local fallback...")
+
+    # --- Strategy 2: Local build (development) ---
+    if not EDGE_DIR.exists():
+        raise HTTPException(500, f"Edge service not available for building. EDGE_DIR={EDGE_DIR} does not exist and EDGE_URL is not set.")
+
+    config_file = "tsup.cloudflare.ts" if is_full else "tsup.cloudflare-lite.ts"
+    output_file = "cloudflare.js" if is_full else "cloudflare-lite.js"
     dist_file = EDGE_DIR / "dist" / output_file
 
     if dist_file.exists():
         dist_file.unlink()
 
-    print(f"[Cloudflare] Building {label} Worker bundle in {EDGE_DIR}...")
+    print(f"[Cloudflare] Building {label} Worker bundle locally in {EDGE_DIR}...")
     try:
         result = subprocess.run(
             ["npx", "tsup", "--config", config_file],
@@ -379,13 +412,20 @@ async def deploy_to_cloudflare(payload: DeployRequest):
         secrets = {}
         edge_db_id_to_attach = None
         edge_cache_id_to_attach = payload.edge_cache_id
+        # '__none__' sentinel means user explicitly chose "No Database/Cache"
+        if edge_cache_id_to_attach == "__none__":
+            edge_cache_id_to_attach = None
 
         db_session = SessionLocal()
         try:
             edge_db = None
-            if payload.edge_db_id:
+            if payload.edge_db_id == "__none__":
+                # User explicitly chose "None (No Database)" — skip DB entirely
+                edge_db = None
+            elif payload.edge_db_id:
                 edge_db = db_session.query(EdgeDatabase).filter(EdgeDatabase.id == payload.edge_db_id).first()
             else:
+                # No DB specified — use system default
                 edge_db = db_session.query(EdgeDatabase).filter(EdgeDatabase.is_default == True).first()
 
             if edge_db:

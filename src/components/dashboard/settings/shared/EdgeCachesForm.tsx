@@ -183,7 +183,7 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
         setTestingId('inline');
         setTestResult(null);
         try {
-            const res = await fetch(`${API_BASE}/api/edge-caches/test-connection/`, {
+            const res = await fetch(`${API_BASE}/api/edge-caches/test-connection`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

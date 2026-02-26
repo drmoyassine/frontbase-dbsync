@@ -48,7 +48,7 @@ export function EdgeEnginesSection() {
     const { data: edgeDbs = [] } = useEdgeDatabases();
     const { data: edgeCaches = [] } = useEdgeCaches();
     const [selectedDbId, setSelectedDbId] = useState<string>('default');
-    const [selectedCacheId, setSelectedCacheId] = useState<string>('default');
+    const [selectedCacheId, setSelectedCacheId] = useState<string>('none');
     const [engineType, setEngineType] = useState<'lite' | 'full'>('lite');
 
     // Auto-select first provider when list loads
@@ -66,13 +66,7 @@ export function EdgeEnginesSection() {
         }
     }, [edgeDbs, selectedDbId]);
 
-    // Auto-select default cache when data loads
-    React.useEffect(() => {
-        if (edgeCaches.length > 0 && selectedCacheId === 'default') {
-            const def = edgeCaches.find(c => c.is_default);
-            if (def) setSelectedCacheId(def.id);
-        }
-    }, [edgeCaches, selectedCacheId]);
+    // Cache is optional — no auto-select. User explicitly picks one if needed.
 
     const handleDeploy = async () => {
         setIsDeploying(true);
@@ -85,8 +79,8 @@ export function EdgeEnginesSection() {
                     provider_id: selectedProviderId,
                     worker_name: workerName,
                     adapter_type: engineType === 'full' ? 'full' : 'automations',
-                    edge_db_id: selectedDbId === 'default' ? undefined : selectedDbId,
-                    edge_cache_id: selectedCacheId === 'default' ? undefined : selectedCacheId,
+                    edge_db_id: selectedDbId === 'none' ? '__none__' : selectedDbId === 'default' ? undefined : selectedDbId,
+                    edge_cache_id: selectedCacheId === 'none' ? '__none__' : selectedCacheId,
                 })
             });
             const data = await res.json();
@@ -241,6 +235,7 @@ export function EdgeEnginesSection() {
                                 <Select value={selectedDbId} onValueChange={setSelectedDbId}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
+                                        <SelectItem value="none">None (No Database)</SelectItem>
                                         <SelectItem value="default">Use System Default</SelectItem>
                                         {edgeDbs.map(db => (
                                             <SelectItem key={db.id} value={db.id}>{db.name} ({db.provider})</SelectItem>
@@ -255,7 +250,7 @@ export function EdgeEnginesSection() {
                                 <Select value={selectedCacheId} onValueChange={setSelectedCacheId}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="default">None</SelectItem>
+                                        <SelectItem value="none">None</SelectItem>
                                         {edgeCaches.map(cache => (
                                             <SelectItem key={cache.id} value={cache.id}>{cache.name} ({cache.provider})</SelectItem>
                                         ))}
@@ -331,20 +326,20 @@ export function EdgeEnginesSection() {
                                                     {engine.url.replace(/^https?:\/\//, '')}
                                                 </a>
                                             </div>
-                                            {(engine.edge_db_name || engine.edge_cache_name) && (
-                                                <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                                                    {engine.edge_db_name && (
-                                                        <Badge variant="outline" className="text-[10px] h-5 py-0 bg-blue-500/5 border-blue-500/20 text-blue-400">
-                                                            DB: {engine.edge_db_name}
-                                                        </Badge>
-                                                    )}
-                                                    {engine.edge_cache_name && (
-                                                        <Badge variant="outline" className="text-[10px] h-5 py-0 bg-amber-500/5 border-amber-500/20 text-amber-400">
-                                                            Cache: {engine.edge_cache_name}
-                                                        </Badge>
-                                                    )}
-                                                </div>
-                                            )}
+                                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                                <Badge variant="outline" className={`text-[10px] h-5 py-0 ${engine.edge_db_name
+                                                    ? 'bg-blue-500/5 border-blue-500/20 text-blue-400'
+                                                    : 'bg-muted/50 border-border text-muted-foreground'
+                                                    }`}>
+                                                    DB: {engine.edge_db_name || 'None'}
+                                                </Badge>
+                                                <Badge variant="outline" className={`text-[10px] h-5 py-0 ${engine.edge_cache_name
+                                                    ? 'bg-amber-500/5 border-amber-500/20 text-amber-400'
+                                                    : 'bg-muted/50 border-border text-muted-foreground'
+                                                    }`}>
+                                                    Cache: {engine.edge_cache_name || 'None'}
+                                                </Badge>
+                                            </div>
                                         </div>
                                     </div>
 

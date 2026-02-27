@@ -4,7 +4,7 @@
  * No-op implementation for engines deployed without a cache backend.
  * Returns null/0/empty for all operations — never throws.
  * 
- * Used when neither UPSTASH_REDIS_REST_URL nor REDIS_URL is configured.
+ * Used when FRONTBASE_CACHE_URL is not configured.
  */
 
 import type { ICacheProvider } from './ICacheProvider.js';

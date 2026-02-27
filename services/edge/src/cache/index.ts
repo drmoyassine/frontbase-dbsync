@@ -5,8 +5,8 @@
  * for transparent hot-swap after startup sync.
  * 
  * Priority order:
- *   1. UPSTASH_REDIS_REST_URL + TOKEN → UpstashAdapter (HTTP, CF-compatible)
- *   2. REDIS_URL → IoRedisAdapter (TCP, Docker/Node.js only)
+ *   1. FRONTBASE_CACHE_URL (HTTP https://) + FRONTBASE_CACHE_TOKEN → HttpCacheAdapter
+ *   2. FRONTBASE_CACHE_URL (TCP redis://) → IoRedisAdapter (Docker/Node.js only)
  *   3. Default: NullCacheProvider (no-op, no crash)
  * 
  * Usage:
@@ -31,34 +31,34 @@ let _provider: ICacheProvider | null = null;
  * Create the initial cache provider from environment variables.
  */
 function createInitialProvider(): ICacheProvider {
-    const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
-    const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
-    const redisUrl = process.env.REDIS_URL;
+    const cacheUrl = process.env.FRONTBASE_CACHE_URL;
+    const cacheToken = process.env.FRONTBASE_CACHE_TOKEN;
 
-    if (upstashUrl && upstashToken) {
-        // Lazy import to allow tree-shaking in Lite bundles
+    if (cacheUrl && cacheUrl.startsWith('http') && cacheToken) {
+        // HTTP cache (Upstash, SRH proxy, Dragonfly HTTP, etc.)
         try {
             const { initRedis } = require('./redis.js');
-            console.log('🔴 Cache: Upstash HTTP provider');
-            return initRedis({ url: upstashUrl, token: upstashToken });
+            console.log('🔴 Cache: HTTP provider');
+            return initRedis({ url: cacheUrl, token: cacheToken });
         } catch {
-            console.warn('⚠️ Failed to init Upstash adapter, falling back to NullCache');
+            console.warn('⚠️ Failed to init HTTP cache adapter, falling back to NullCache');
             return new NullCacheProvider();
         }
     }
 
-    if (redisUrl) {
+    if (cacheUrl && !cacheUrl.startsWith('http')) {
+        // TCP cache (redis://, rediss://) — Docker/Node.js only
         try {
             const { initRedis } = require('./redis.js');
             console.log('🔴 Cache: IoRedis TCP provider');
-            return initRedis({ url: redisUrl });
+            return initRedis({ url: cacheUrl });
         } catch {
             console.warn('⚠️ Failed to init IoRedis adapter, falling back to NullCache');
             return new NullCacheProvider();
         }
     }
 
-    console.log('⬜ Cache: NullCacheProvider (no Redis configured)');
+    console.log('⬜ Cache: NullCacheProvider (no cache configured)');
     return new NullCacheProvider();
 }
 

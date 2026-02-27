@@ -25,7 +25,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
 from ..database.config import SessionLocal
-from ..models.models import EdgeEngine, EdgeDatabase, EdgeProviderAccount
+from ..models.models import EdgeEngine, EdgeDatabase, EdgeCache, EdgeProviderAccount
 
 router = APIRouter(prefix="/api/cloudflare", tags=["Cloudflare Deploy"])
 
@@ -52,8 +52,8 @@ class DeployRequest(BaseModel):
     adapter_type: str = Field(default="automations", description="Engine type: 'automations' (Lite) or 'full'")
     edge_db_id: Optional[str] = Field(None, description="EdgeDatabase ID to attach (uses default if omitted)")
     edge_cache_id: Optional[str] = Field(None, description="EdgeCache ID to attach")
-    upstash_url: Optional[str] = Field(None, description="Upstash REST URL")
-    upstash_token: Optional[str] = Field(None, description="Upstash REST token")
+    cache_url: Optional[str] = Field(None, description="Cache REST URL (Upstash, SRH, etc.)")
+    cache_token: Optional[str] = Field(None, description="Cache REST auth token")
 
 
 class StatusRequest(BaseModel):
@@ -217,15 +217,27 @@ async def _set_secrets(api_token: str, account_id: str, worker_name: str, secret
 
     async with httpx.AsyncClient() as client:
         for name, value in secrets.items():
-            if value:
-                resp = await client.put(
-                    url,
-                    headers={**_headers(api_token), "Content-Type": "application/json"},
-                    json={"name": name, "text": value, "type": "secret_text"},
-                    timeout=10.0,
-                )
-                if resp.status_code not in (200, 201):
-                    print(f"[Cloudflare] Warning: Failed to set secret {name}: {resp.status_code}")
+            if value is not None:
+                try:
+                    resp = await client.put(
+                        url,
+                        headers={**_headers(api_token), "Content-Type": "application/json"},
+                        json={"name": name, "text": value, "type": "secret_text"},
+                        timeout=30.0,
+                    )
+                    if resp.status_code not in (200, 201):
+                        print(f"[Cloudflare] Warning: Failed to set secret {name}: {resp.status_code}")
+                except httpx.TimeoutException:
+                    raise HTTPException(
+                        status_code=504,
+                        detail=f"Cloudflare API timed out while setting secret '{name}'. "
+                               f"The Worker was uploaded but secrets may be incomplete. Try again."
+                    )
+                except httpx.HTTPError as e:
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"Cloudflare API error while setting secret '{name}': {e}"
+                    )
 
 
 def _build_worker(adapter_type: str = "automations") -> str:
@@ -443,14 +455,34 @@ async def deploy_to_cloudflare(payload: DeployRequest):
         finally:
             db_session.close()
 
-        # Upstash Secrets
-        if payload.upstash_url:
-            secrets["UPSTASH_REDIS_REST_URL"] = payload.upstash_url
-        if payload.upstash_token:
-            secrets["UPSTASH_REDIS_REST_TOKEN"] = payload.upstash_token
+        # Cache Secrets — resolve from EdgeCache table or direct payload
+        if payload.cache_url:
+            secrets["FRONTBASE_CACHE_URL"] = payload.cache_url
+        if payload.cache_token:
+            secrets["FRONTBASE_CACHE_TOKEN"] = payload.cache_token
+
+        # If no direct cache URL but edge_cache_id was provided, look up from EdgeCache table
+        if not payload.cache_url and edge_cache_id_to_attach:
+            cache_session = SessionLocal()
+            try:
+                edge_cache = cache_session.query(EdgeCache).filter(EdgeCache.id == edge_cache_id_to_attach).first()
+                if edge_cache:
+                    secrets["FRONTBASE_CACHE_URL"] = str(edge_cache.cache_url)
+                    if edge_cache.cache_token:  # type: ignore[truthy-bool]
+                        secrets["FRONTBASE_CACHE_TOKEN"] = str(edge_cache.cache_token)
+            finally:
+                cache_session.close()
 
         if secrets:
-            await _set_secrets(api_token, account_id, payload.worker_name, secrets)
+            try:
+                await _set_secrets(api_token, account_id, payload.worker_name, secrets)
+            except HTTPException:
+                raise  # Re-raise clear error messages from _set_secrets
+            except Exception as e:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Failed to push secrets to Cloudflare: {e}"
+                )
 
         # Register as Edge Engine
         engine_id = None

@@ -28,8 +28,8 @@ function ensureRedisInitialized(): boolean {
     }
 
     // Fallback to environment variables (for backwards compatibility / direct env config)
-    const url = process.env.UPSTASH_REDIS_REST_URL;
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+    const url = process.env.FRONTBASE_CACHE_URL;
+    const token = process.env.FRONTBASE_CACHE_TOKEN;
 
     if (!url || !token) {
         return false;
@@ -209,6 +209,44 @@ cacheRoute.openapi(statsRoute, async (c) => {
         connected: connectionResult.success,
         message: connectionResult.message,
     }, 200);
+});
+
+// =============================================================================
+// POST /flush - Flush all cached data
+// =============================================================================
+const flushRoute = createRoute({
+    method: 'post',
+    path: '/flush',
+    tags: ['Cache'],
+    summary: 'Flush all cache entries',
+    description: 'Clears all cached data. Called after reconfiguration or redeployment.',
+    responses: {
+        200: {
+            description: 'Flush result',
+            content: {
+                'application/json': {
+                    schema: CacheStatusSchema,
+                },
+            },
+        },
+    },
+});
+
+cacheRoute.openapi(flushRoute, async (c) => {
+    if (!ensureRedisInitialized()) {
+        // No cache configured — nothing to flush, still success
+        return c.json({ success: true, message: 'No cache configured, nothing to flush' }, 200);
+    }
+
+    try {
+        await invalidatePattern('*');
+        return c.json({ success: true, message: 'All cache entries flushed' }, 200);
+    } catch (error) {
+        return c.json({
+            success: false,
+            message: error instanceof Error ? error.message : 'Flush failed',
+        }, 200);
+    }
 });
 
 export { cacheRoute };

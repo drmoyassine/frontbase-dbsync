@@ -18,7 +18,7 @@ import uuid
 
 from ..database.config import get_db
 from sqlalchemy.orm import Session
-from ..models.models import EdgeEngine, EdgeProviderAccount
+from ..models.models import EdgeEngine, EdgeProviderAccount, EdgeDatabase, EdgeCache
 
 router = APIRouter(prefix="/api/edge-engines", tags=["Edge Engines"])
 
@@ -240,6 +240,196 @@ async def update_edge_engine(engine_id: str, payload: EdgeEngineUpdate, db: Sess
     db.commit()
     db.refresh(engine)
     return _serialize_engine(engine)
+
+
+class ReconfigureRequest(BaseModel):
+    """Reconfigure an engine's DB/cache bindings and push secrets to the remote."""
+    edge_db_id: Optional[str] = None   # null = detach DB
+    edge_cache_id: Optional[str] = None  # null = detach cache
+
+
+# Frontbase-managed binding names — only these are touched during reconfigure
+FRONTBASE_BINDING_NAMES = frozenset([
+    'FRONTBASE_STATE_DB_URL',
+    'FRONTBASE_STATE_DB_TOKEN',
+    'FRONTBASE_CACHE_URL',
+    'FRONTBASE_CACHE_TOKEN',
+])
+
+
+@router.post("/{engine_id}/reconfigure")
+async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Session = Depends(get_db)):
+    """
+    Live-reconfigure an engine's DB/cache bindings.
+    
+    Uses the CF Settings API PATCH to update bindings without full redeployment.
+    Only touches Frontbase-managed bindings — all other bindings are preserved.
+    
+    Flow:
+    1. Looks up credentials from EdgeDatabase / EdgeCache tables
+    2. GETs current worker settings (preserves non-Frontbase bindings)
+    3. PATCHes settings with merged bindings (triggers new Worker version)
+    4. Updates the local engine record
+    5. Flushes the target's cache so stale data is cleared
+    """
+    import httpx
+
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if not engine:
+        raise HTTPException(status_code=404, detail="Edge engine not found")
+
+    # --- 1. Resolve CF credentials (Release-Before-IO: read DB first) ---
+    provider_id = engine.edge_provider_id
+    is_cloudflare = False
+    api_token = None
+    account_id = None
+    worker_name = None
+
+    if provider_id:
+        provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id).first()
+        if provider and str(provider.provider) == 'cloudflare':
+            is_cloudflare = True
+            creds = json.loads(str(provider.provider_credentials or '{}'))
+            api_token = creds.get('api_token')
+            account_id = creds.get('account_id')
+            cfg = json.loads(str(engine.engine_config or '{}'))
+            worker_name = cfg.get('worker_name')
+
+    # --- 2. Build NEW bindings from DB/cache selections ---
+    new_bindings: dict[str, str] = {}
+
+    # Database
+    if payload.edge_db_id:
+        edge_db = db.query(EdgeDatabase).filter(EdgeDatabase.id == payload.edge_db_id).first()
+        if not edge_db:
+            raise HTTPException(400, "Invalid edge_db_id")
+        new_bindings['FRONTBASE_STATE_DB_URL'] = str(edge_db.db_url)
+        if edge_db.db_token:  # type: ignore[truthy-bool]
+            new_bindings['FRONTBASE_STATE_DB_TOKEN'] = str(edge_db.db_token)
+    # If no edge_db_id → these bindings are simply omitted (= removed)
+
+    # Cache
+    if payload.edge_cache_id:
+        edge_cache = db.query(EdgeCache).filter(EdgeCache.id == payload.edge_cache_id).first()
+        if not edge_cache:
+            raise HTTPException(400, "Invalid edge_cache_id")
+        new_bindings['FRONTBASE_CACHE_URL'] = str(edge_cache.cache_url)
+        if edge_cache.cache_token:  # type: ignore[truthy-bool]
+            new_bindings['FRONTBASE_CACHE_TOKEN'] = str(edge_cache.cache_token)
+    # If no edge_cache_id → these bindings are simply omitted (= removed)
+
+    # --- 3. PATCH CF Worker settings ---
+    settings_patched = False
+    bindings_set: list[str] = []
+    bindings_removed: list[str] = []
+
+    if is_cloudflare and api_token and account_id and worker_name:
+        from .cloudflare import CF_API, _headers
+        settings_url = f"{CF_API}/accounts/{account_id}/workers/scripts/{worker_name}/settings"
+
+        try:
+            async with httpx.AsyncClient() as client:
+                # GET current settings to preserve non-Frontbase bindings
+                get_resp = await client.get(
+                    settings_url,
+                    headers={**_headers(api_token), "Content-Type": "application/json"},
+                    timeout=15.0,
+                )
+
+                existing_bindings: list[dict] = []
+                if get_resp.status_code == 200:
+                    data = get_resp.json()
+                    result = data.get("result", {})
+                    existing_bindings = result.get("bindings", [])
+
+                # Filter out Frontbase-managed bindings (we'll replace them)
+                preserved_bindings = [
+                    b for b in existing_bindings
+                    if b.get("name") not in FRONTBASE_BINDING_NAMES
+                ]
+
+                # Track what we're removing
+                existing_fb_names = {
+                    b.get("name") for b in existing_bindings
+                    if b.get("name") in FRONTBASE_BINDING_NAMES
+                }
+                bindings_removed = list(existing_fb_names - set(new_bindings.keys()))
+
+                # Add our new bindings as secret_text
+                for name, value in new_bindings.items():
+                    preserved_bindings.append({
+                        "type": "secret_text",
+                        "name": name,
+                        "text": value,
+                    })
+                    bindings_set.append(name)
+
+                # PATCH settings — CF API requires multipart/form-data
+                settings_payload = json.dumps({"bindings": preserved_bindings})
+                patch_resp = await client.patch(
+                    settings_url,
+                    headers=_headers(api_token),
+                    files={
+                        "settings": (None, settings_payload, "application/json"),
+                    },
+                    timeout=15.0,
+                )
+
+                settings_patched = patch_resp.status_code in (200, 201)
+                if settings_patched:
+                    print(f"[Reconfigure] Settings PATCH OK for '{worker_name}': "
+                          f"set={bindings_set}, removed={bindings_removed}")
+                else:
+                    print(f"[Reconfigure] Settings PATCH failed: "
+                          f"{patch_resp.status_code} {patch_resp.text[:300]}")
+
+                # Also DELETE removed secrets (legacy per-script secrets persist independently)
+                secrets_url = f"{CF_API}/accounts/{account_id}/workers/scripts/{worker_name}/secrets"
+                for secret_name in bindings_removed:
+                    try:
+                        del_resp = await client.delete(
+                            f"{secrets_url}/{secret_name}",
+                            headers=_headers(api_token),
+                            timeout=15.0,
+                        )
+                        if del_resp.status_code in (200, 204):
+                            print(f"[Reconfigure] Deleted legacy secret '{secret_name}'")
+                        else:
+                            print(f"[Reconfigure] Could not delete secret '{secret_name}': {del_resp.status_code}")
+                    except Exception as del_err:
+                        print(f"[Reconfigure] Error deleting secret '{secret_name}': {del_err}")
+
+        except Exception as e:
+            print(f"[Reconfigure] Settings PATCH error: {e}")
+
+    # --- 4. Update local DB record ---
+    engine.edge_db_id = payload.edge_db_id  # type: ignore[assignment]
+    engine.edge_cache_id = payload.edge_cache_id  # type: ignore[assignment]
+    engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+    db.commit()
+    db.refresh(engine)
+
+    # --- 5. Flush edge cache on the target ---
+    cache_flushed = False
+    engine_url = str(engine.url).rstrip('/')
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{engine_url}/api/cache/flush",
+                timeout=10.0
+            )
+            cache_flushed = resp.status_code in (200, 204)
+    except Exception as e:
+        print(f"[Reconfigure] Cache flush failed for {engine_url}: {e}")
+
+    return {
+        "success": True,
+        "engine": _serialize_engine(engine),
+        "settings_patched": settings_patched,
+        "cache_flushed": cache_flushed,
+        "bindings_set": bindings_set,
+        "bindings_removed": bindings_removed,
+    }
 
 
 @router.delete("/{engine_id}", status_code=204)

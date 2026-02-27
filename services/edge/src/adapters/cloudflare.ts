@@ -11,8 +11,8 @@
  * Required secrets (set via `wrangler secret put`):
  *   FRONTBASE_STATE_DB_URL   — Turso libsql:// URL
  *   FRONTBASE_STATE_DB_TOKEN — Turso auth token
- *   UPSTASH_REDIS_REST_URL   — Upstash REST URL (optional, for caching)
- *   UPSTASH_REDIS_REST_TOKEN — Upstash REST token (optional)
+ *   FRONTBASE_CACHE_URL         — Cache REST URL (optional, for caching)
+ *   FRONTBASE_CACHE_TOKEN       — Cache REST token (optional)
  */
 
 import { fullApp } from '../engine/full.js';

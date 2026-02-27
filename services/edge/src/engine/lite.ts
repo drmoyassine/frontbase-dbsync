@@ -125,6 +125,15 @@ export function createLiteApp() {
     app.route('/api/webhook', webhookRoute);
     app.route('/api/executions', executionsRoute);
 
+    // ── Root Info (avoids confusing raw 404) ────────────────────────────
+    app.get('/', (c) => c.json({
+        service: 'Frontbase Edge Engine',
+        mode: 'lite',
+        status: 'running',
+        docs: '/api/docs',
+        health: '/api/health',
+    }));
+
     // ── OpenAPI Docs ───────────────────────────────────────────────────
     app.doc('/api/openapi.json', {
         openapi: '3.1.0',

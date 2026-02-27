@@ -114,8 +114,8 @@ const { allowed, remaining } = await rateLimit('api:user123', 100, 60);
 If Redis is not configured via UI, the Edge Engine falls back to these env vars:
 
 ```env
-UPSTASH_REDIS_REST_URL=https://your-instance.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-token
+FRONTBASE_CACHE_URL=https://your-instance.upstash.io   # or redis://localhost:6379 for TCP
+FRONTBASE_CACHE_TOKEN=your-token                        # required for HTTP, optional for TCP
 ```
 
 ## Local Development

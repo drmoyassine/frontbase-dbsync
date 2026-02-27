@@ -521,32 +521,16 @@ pagesRoute.get('/', async (c) => {
         console.error('Error fetching homepage:', error);
     }
 
-    // Ultimate fallback: No homepage in FastAPI either
-    return c.html(`
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>No Homepage Configured</title>
-    <style>
-        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 2rem; }
-        .container { max-width: 600px; margin: 0 auto; text-align: center; padding-top: 4rem; }
-        h1 { color: #1e293b; }
-        p { color: #64748b; }
-        a { display: inline-block; background: #1e293b; color: white; padding: 0.75rem 2rem; border-radius: 0.5rem; text-decoration: none; margin-top: 1rem; }
-        a:hover { background: #334155; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>No Homepage Configured</h1>
-        <p>Create a homepage in the dashboard and mark it as the homepage.</p>
-        <a href="/dashboard">Go to Dashboard</a>
-    </div>
-</body>
-</html>
-    `);
+    // Ultimate fallback: No homepage available
+    return c.json({
+        service: 'Frontbase Edge Engine',
+        mode: 'full',
+        status: 'running',
+        homepage: false,
+        message: 'No homepage published. Publish a page marked as homepage from the dashboard.',
+        docs: '/api/docs',
+        health: '/api/health',
+    });
 });
 
 export { pagesRoute };

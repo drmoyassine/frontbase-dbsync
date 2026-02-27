@@ -24087,6 +24087,13 @@ function createLiteApp() {
   app.route("/api/execute", executeRoute);
   app.route("/api/webhook", webhookRoute);
   app.route("/api/executions", executionsRoute);
+  app.get("/", (c) => c.json({
+    service: "Frontbase Edge Engine",
+    mode: "lite",
+    status: "running",
+    docs: "/api/docs",
+    health: "/api/health"
+  }));
   app.doc("/api/openapi.json", {
     openapi: "3.1.0",
     info: {

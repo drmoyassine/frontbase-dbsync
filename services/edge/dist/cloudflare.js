@@ -39609,83 +39609,6 @@ var endTime = (c, name, precision) => {
   metrics.timers.delete(name);
 };
 
-// node_modules/hono/dist/middleware/cache/index.js
-var defaultCacheableStatusCodes = [200];
-var shouldSkipCache = (res) => {
-  const vary = res.headers.get("Vary");
-  return vary && vary.includes("*");
-};
-var cache = (options) => {
-  if (!globalThis.caches) {
-    console.log("Cache Middleware is not enabled because caches is not defined.");
-    return async (_c, next) => await next();
-  }
-  if (options.wait === void 0) {
-    options.wait = false;
-  }
-  const cacheControlDirectives = options.cacheControl?.split(",").map((directive) => directive.toLowerCase());
-  const varyDirectives = Array.isArray(options.vary) ? options.vary : options.vary?.split(",").map((directive) => directive.trim());
-  if (options.vary?.includes("*")) {
-    throw new Error(
-      'Middleware vary configuration cannot include "*", as it disallows effective caching.'
-    );
-  }
-  const cacheableStatusCodes = new Set(
-    options.cacheableStatusCodes ?? defaultCacheableStatusCodes
-  );
-  const addHeader = (c) => {
-    if (cacheControlDirectives) {
-      const existingDirectives = c.res.headers.get("Cache-Control")?.split(",").map((d2) => d2.trim().split("=", 1)[0]) ?? [];
-      for (const directive of cacheControlDirectives) {
-        let [name, value] = directive.trim().split("=", 2);
-        name = name.toLowerCase();
-        if (!existingDirectives.includes(name)) {
-          c.header("Cache-Control", `${name}${value ? `=${value}` : ""}`, { append: true });
-        }
-      }
-    }
-    if (varyDirectives) {
-      const existingDirectives = c.res.headers.get("Vary")?.split(",").map((d2) => d2.trim()) ?? [];
-      const vary = Array.from(
-        new Set(
-          [...existingDirectives, ...varyDirectives].map((directive) => directive.toLowerCase())
-        )
-      ).sort();
-      if (vary.includes("*")) {
-        c.header("Vary", "*");
-      } else {
-        c.header("Vary", vary.join(", "));
-      }
-    }
-  };
-  return async function cache2(c, next) {
-    let key = c.req.url;
-    if (options.keyGenerator) {
-      key = await options.keyGenerator(c);
-    }
-    const cacheName = typeof options.cacheName === "function" ? await options.cacheName(c) : options.cacheName;
-    const cache3 = await caches.open(cacheName);
-    const response = await cache3.match(key);
-    if (response) {
-      return new Response(response.body, response);
-    }
-    await next();
-    if (!cacheableStatusCodes.has(c.res.status)) {
-      return;
-    }
-    addHeader(c);
-    if (shouldSkipCache(c.res)) {
-      return;
-    }
-    const res = c.res.clone();
-    if (options.wait) {
-      await cache3.put(key, res);
-    } else {
-      c.executionCtx.waitUntil(cache3.put(key, res));
-    }
-  };
-};
-
 // node_modules/liquidjs/dist/liquid.node.mjs
 init_path();
 init_fs();
@@ -41311,14 +41234,14 @@ function normalize2(options) {
       options.layouts = options.root;
   }
   if (options.hasOwnProperty("cache")) {
-    let cache2;
+    let cache;
     if (typeof options.cache === "number")
-      cache2 = options.cache > 0 ? new LRU(options.cache) : void 0;
+      cache = options.cache > 0 ? new LRU(options.cache) : void 0;
     else if (typeof options.cache === "object")
-      cache2 = options.cache;
+      cache = options.cache;
     else
-      cache2 = options.cache ? new LRU(1024) : void 0;
-    options.cache = cache2;
+      cache = options.cache ? new LRU(1024) : void 0;
+    options.cache = cache;
   }
   options = Object.assign(Object.assign(Object.assign({}, defaultOptions), options.jekyllInclude ? { dynamicPartials: false } : {}), options);
   if ((!options.fs.dirname || !options.fs.sep) && options.relativeReference) {
@@ -42386,18 +42309,18 @@ var Parser = class {
     return new ParseStream(tokens, (token, tokens2) => this.parseToken(token, tokens2));
   }
   *_parseFileCached(file, sync, type2 = LookupType.Root, currentFile) {
-    const cache2 = this.cache;
+    const cache = this.cache;
     const key = this.loader.shouldLoadRelative(file) ? currentFile + "," + file : type2 + ":" + file;
-    const tpls = yield cache2.read(key);
+    const tpls = yield cache.read(key);
     if (tpls)
       return tpls;
     const task = this._parseFile(file, sync, type2, currentFile);
     const taskOrTpl = sync ? yield task : toPromise(task);
-    cache2.write(key, taskOrTpl);
+    cache.write(key, taskOrTpl);
     try {
       return yield taskOrTpl;
     } catch (err) {
-      cache2.remove(key);
+      cache.remove(key);
       throw err;
     }
   }
@@ -45922,14 +45845,22 @@ function createLiteApp() {
   app2.use("*", logger());
   app2.use("*", secureHeaders());
   app2.use("*", timing());
-  app2.use("*", timeout(29e3));
   app2.use("*", bodyLimit({ maxSize: 50 * 1024 * 1024 }));
   app2.use("/api/*", etag());
-  app2.use("/api/*", cache({
-    cacheName: "frontbase-edge",
-    cacheControl: "no-cache"
-    // Revalidate with ETag
-  }));
+  app2.use("*", async (c, next) => {
+    try {
+      const mw = timeout(29e3);
+      return await mw(c, next);
+    } catch {
+      return await next();
+    }
+  });
+  app2.use("/api/*", async (c, next) => {
+    await next();
+    if (!c.res.headers.has("Cache-Control")) {
+      c.res.headers.set("Cache-Control", "no-cache");
+    }
+  });
   const origins = ["http://localhost:5173", "http://localhost:8000"];
   app2.use("/api/*", cors({ origin: origins, credentials: true }));
   app2.use("*", cors({ origin: origins, credentials: true }));
@@ -45939,6 +45870,13 @@ function createLiteApp() {
   app2.route("/api/execute", executeRoute);
   app2.route("/api/webhook", webhookRoute);
   app2.route("/api/executions", executionsRoute);
+  app2.get("/", (c) => c.json({
+    service: "Frontbase Edge Engine",
+    mode: "lite",
+    status: "running",
+    docs: "/api/docs",
+    health: "/api/health"
+  }));
   app2.doc("/api/openapi.json", {
     openapi: "3.1.0",
     info: {
@@ -60692,31 +60630,15 @@ pagesRoute.get("/", async (c) => {
   } catch (error) {
     console.error("Error fetching homepage:", error);
   }
-  return c.html(`
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>No Homepage Configured</title>
-    <style>
-        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 2rem; }
-        .container { max-width: 600px; margin: 0 auto; text-align: center; padding-top: 4rem; }
-        h1 { color: #1e293b; }
-        p { color: #64748b; }
-        a { display: inline-block; background: #1e293b; color: white; padding: 0.75rem 2rem; border-radius: 0.5rem; text-decoration: none; margin-top: 1rem; }
-        a:hover { background: #334155; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>No Homepage Configured</h1>
-        <p>Create a homepage in the dashboard and mark it as the homepage.</p>
-        <a href="/dashboard">Go to Dashboard</a>
-    </div>
-</body>
-</html>
-    `);
+  return c.json({
+    service: "Frontbase Edge Engine",
+    mode: "full",
+    status: "running",
+    homepage: false,
+    message: "No homepage published. Publish a page marked as homepage from the dashboard.",
+    docs: "/api/docs",
+    health: "/api/health"
+  });
 });
 
 // src/schemas/publish.ts
@@ -61497,8 +61419,8 @@ function ensureRedisInitialized() {
   if (isRedisInitialized()) {
     return true;
   }
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.FRONTBASE_CACHE_URL;
+  const token = process.env.FRONTBASE_CACHE_TOKEN;
   if (!url || !token) {
     return false;
   }
@@ -61648,6 +61570,37 @@ cacheRoute.openapi(statsRoute2, async (c) => {
     connected: connectionResult.success,
     message: connectionResult.message
   }, 200);
+});
+var flushRoute = createRoute({
+  method: "post",
+  path: "/flush",
+  tags: ["Cache"],
+  summary: "Flush all cache entries",
+  description: "Clears all cached data. Called after reconfiguration or redeployment.",
+  responses: {
+    200: {
+      description: "Flush result",
+      content: {
+        "application/json": {
+          schema: CacheStatusSchema
+        }
+      }
+    }
+  }
+});
+cacheRoute.openapi(flushRoute, async (c) => {
+  if (!ensureRedisInitialized()) {
+    return c.json({ success: true, message: "No cache configured, nothing to flush" }, 200);
+  }
+  try {
+    await invalidatePattern("*");
+    return c.json({ success: true, message: "All cache entries flushed" }, 200);
+  } catch (error) {
+    return c.json({
+      success: false,
+      message: error instanceof Error ? error.message : "Flush failed"
+    }, 200);
+  }
 });
 
 // src/engine/full.ts

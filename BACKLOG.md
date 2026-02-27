@@ -115,3 +115,13 @@ Covers provider state mismatch, quota fallback, and operational visibility.
 - [ ] **PWA Support for Published Apps** — Dynamic Manifest, Service Worker (Cache-first for static, Network-first for API), offline support, "Add to Home Screen" prompt.
 - [ ] **Custom WebSockets** — Custom WebSocket implementation for real-time workflow execution streaming (replacing Supabase Realtime).
 - [ ] **Observability** — Axiom/Sentry logging integration, OpenTelemetry tracing.
+
+## Edge DX & Tooling
+- [ ] **Edge Code Editor (Inspector IDE)** — Turn the Edge Inspector into a lightweight code editor for the edge codebase:
+  - Inspector displays the **source TypeScript files** from the local `services/edge/src/` directory (served by the backend, NOT uploaded to CF).
+  - User can **browse and edit** source files in the Monaco editor (routes, engine, cache, storage, adapters, etc.).
+  - "Compile & Deploy" action: backend writes modified files → compiles via existing Docker/local `_build_worker()` → deploys compiled `worker.js` to CF.
+  - **CF Worker only ever contains `worker.js`** (compiled bundle). Source code stays local.
+  - **No paid plan needed** — uses existing compilation infrastructure. No new services required.
+  - **Primary consumer: AI coding agent** living inside the dashboard — reads source, modifies files, compiles & deploys autonomously.
+  - **Prerequisite:** The edge source codebase (`services/edge/src/`) must maintain a clean, well-commented, human-readable structure with JSDoc comments on all exports, clear file/folder naming, and architectural comments. This serves as context for both the AI agent and human reviewers inspecting deployed Workers.

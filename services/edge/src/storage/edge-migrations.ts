@@ -111,6 +111,13 @@ export const MIGRATIONS: Migration[] = [
             `CREATE INDEX IF NOT EXISTS idx_executions_started ON executions(started_at)`,
         ],
     },
+    {
+        version: 3,
+        description: 'Add content_hash column to published_pages',
+        sql: [
+            `ALTER TABLE published_pages ADD COLUMN content_hash TEXT`,
+        ],
+    },
 ];
 
 // =============================================================================

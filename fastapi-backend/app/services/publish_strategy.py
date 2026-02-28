@@ -211,6 +211,8 @@ class TursoPublishStrategy(BasePublishStrategy):
 
             # Invalidate Upstash cache if configured
             await self._invalidate_cache(slug)
+            if is_homepage:
+                await self._invalidate_cache("__homepage__")
 
             preview_path = "" if is_homepage else slug
             return {
@@ -265,14 +267,15 @@ class TursoPublishStrategy(BasePublishStrategy):
 
         try:
             # Delete the page cache key
+            # Upstash REST API format: GET /del/{key}
             cache_key = f"page:{slug}"
             async with httpx.AsyncClient() as client:
-                await client.delete(
+                resp = await client.get(
                     f"{self.upstash_url}/del/{cache_key}",
                     headers={"Authorization": f"Bearer {self.upstash_token}"},
                     timeout=3.0,
                 )
-                print(f"[PublishStrategy:turso] Cache invalidated: {cache_key}")
+                print(f"[PublishStrategy:turso] Cache invalidated: {cache_key} (status={resp.status_code})")
         except Exception as e:
             print(f"[PublishStrategy:turso] Cache invalidation failed (non-fatal): {e}")
 
@@ -363,7 +366,7 @@ async def fan_out_to_deployment_targets(payload: dict, scope: str = "pages") -> 
         # Query active targets matching the scope
         query = db.query(EdgeEngine).filter(EdgeEngine.is_active == True)
         if scope == "pages":
-            query = query.filter(EdgeEngine.adapter_type.in_(["pages", "edge", "full"]))
+            query = query.filter(EdgeEngine.adapter_type.in_(["full"]))
         elif scope == "automations":
             query = query.filter(EdgeEngine.adapter_type.in_(["automations", "full"]))
         
@@ -371,7 +374,12 @@ async def fan_out_to_deployment_targets(payload: dict, scope: str = "pages") -> 
         
         # Detach before I/O (Release-Before-IO pattern, AGENTS.md §4.3)
         target_data = [
-            {"name": t.name, "url": t.url, "provider": t.edge_provider.provider if t.edge_provider else "unknown"}
+            {
+                "id": t.id,
+                "name": t.name,
+                "url": t.url,
+                "provider": t.edge_provider.provider if t.edge_provider else "unknown"
+            }
             for t in targets
         ]
     finally:
@@ -395,6 +403,7 @@ async def fan_out_to_deployment_targets(payload: dict, scope: str = "pages") -> 
                 )
                 success = response.status_code == 200
                 result = {
+                    "target_id": target["id"],
                     "target_name": target["name"],
                     "target_url": target["url"],
                     "provider": target["provider"],
@@ -408,6 +417,7 @@ async def fan_out_to_deployment_targets(payload: dict, scope: str = "pages") -> 
             except Exception as e:
                 print(f"[FanOut] ❌ {target['name']} ({target['provider']}): {e}")
                 results.append({
+                    "target_id": target["id"],
                     "target_name": target["name"],
                     "target_url": target["url"],
                     "provider": target["provider"],

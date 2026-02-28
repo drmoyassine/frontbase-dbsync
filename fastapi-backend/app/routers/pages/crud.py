@@ -14,7 +14,10 @@ import httpx
 
 from ...database.utils import get_db, create_page, update_page, get_page_by_slug, get_current_timestamp
 from ...models.schemas import PageCreateRequest, PageUpdateRequest
-from ...models.models import Page
+from ...models.models import Page, PageDeployment, EdgeEngine
+from .publish import compute_page_hash
+from sqlalchemy.orm import joinedload
+import asyncio
 
 
 router = APIRouter()
@@ -36,7 +39,39 @@ def serialize_page(page: Page) -> dict:
             layout_data = json.loads(layout_data)
         except:
             layout_data = {"content": [], "root": {}}
+    api_deployments = []
+    has_unpublished_changes = False
     
+    if hasattr(page, 'deployments') and page.deployments:
+        for dep in page.deployments:
+            target_data = {}
+            if dep.edge_engine:
+                target_data = {
+                    "id": dep.edge_engine.id,
+                    "name": dep.edge_engine.name,
+                    "url": dep.edge_engine.url,
+                    "provider": dep.edge_engine.edge_provider.provider if getattr(dep.edge_engine, 'edge_provider', None) else "unknown"
+                }
+                
+            api_deployments.append({
+                "id": dep.id,
+                "engineId": dep.edge_engine_id,
+                "status": dep.status,
+                "version": dep.version,
+                "contentHash": dep.content_hash,
+                "publishedAt": dep.published_at,
+                "errorMessage": dep.error_message,
+                "target": target_data
+            })
+            
+            # If there's a successful deployment and its hash differs from the page's current hash,
+            # then there are unpublished changes.
+            if dep.status == "published" and dep.content_hash != getattr(page, 'content_hash', None):
+                has_unpublished_changes = True
+    elif page.is_public:
+        # Legacy case: Page is marked public but has no deployment records in the new system
+        has_unpublished_changes = True
+
     return {
         "id": page.id,
         "name": page.name,
@@ -49,40 +84,102 @@ def serialize_page(page: Page) -> dict:
         "layoutData": layout_data or {"content": [], "root": {}},
         "createdAt": page.created_at,
         "updatedAt": page.updated_at,
-        "deletedAt": page.deleted_at
+        "deletedAt": page.deleted_at,
+        "contentHash": getattr(page, 'content_hash', None),
+        "hasUnpublishedChanges": has_unpublished_changes,
+        "deployments": api_deployments
     }
 
 
-async def unpublish_from_edge(slug: str):
+async def fan_out_unpublish(slug: str, page_id: str, db: Session):
     """
-    Call the edge SSR service to remove a page from its local storage.
-    This ensures deleted pages no longer render on the SSR endpoint.
+    Unpublish a page from ALL active full-bundle Edge Engines.
+    Sends DELETE /api/import/{slug} to each engine in parallel.
+    Cleans up PageDeployment records.
+    Non-blocking: logs warnings if an engine is unreachable.
     """
-    edge_url = os.getenv("EDGE_SSR_URL", "http://localhost:3002")
-    
     # Extract original slug if it was modified during soft delete
     original_slug = slug.split("-deleted-")[0] if "-deleted-" in slug else slug
     
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.delete(f"{edge_url}/api/import/{original_slug}")
-            if response.status_code == 200:
-                print(f"[Unpublish] Successfully removed from SSR: {original_slug}")
+    # Get all active full-bundle Edge Engines with a DB connected
+    engines = db.query(EdgeEngine).filter(
+        EdgeEngine.adapter_type == "full",
+        EdgeEngine.is_active == True,
+        EdgeEngine.edge_db_id != None
+    ).all()
+    
+    if not engines:
+        print(f"[Unpublish] No active full-bundle engines found")
+        return
+    
+    # Fan out DELETE requests in parallel
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        tasks = []
+        for engine in engines:
+            url = f"{str(engine.url).rstrip('/')}/api/import/{original_slug}"
+            tasks.append(client.delete(url))
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for engine, result in zip(engines, results):
+            if isinstance(result, Exception):
+                print(f"[Unpublish] Warning - could not reach {engine.name}: {result}")
+            elif result.status_code == 200:
+                print(f"[Unpublish] Removed from {engine.name}: {original_slug}")
             else:
-                print(f"[Unpublish] Edge returned {response.status_code}: {response.text}")
+                print(f"[Unpublish] {engine.name} returned {result.status_code}: {result.text}")
+    
+    # Clean up PageDeployment records
+    db.query(PageDeployment).filter(PageDeployment.page_id == page_id).delete()
+    db.commit()
+    print(f"[Unpublish] Cleaned up deployment records for page {page_id}")
+
+
+async def unpublish_from_single_target(slug: str, page_id: str, engine_id: str, db: Session) -> dict:
+    """
+    Unpublish a page from a SINGLE Edge Engine.
+    Returns a result dict with success/error.
+    """
+    original_slug = slug.split("-deleted-")[0] if "-deleted-" in slug else slug
+    
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if not engine:
+        return {"success": False, "error": f"Edge engine not found: {engine_id}"}
+    
+    # Send DELETE to the specific engine
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            url = f"{str(engine.url).rstrip('/')}/api/import/{original_slug}"
+            response = await client.delete(url)
+            if response.status_code == 200:
+                print(f"[Unpublish] Removed from {engine.name}: {original_slug}")
+            else:
+                print(f"[Unpublish] {engine.name} returned {response.status_code}: {response.text}")
     except Exception as e:
-        # Don't fail the delete operation if edge is unreachable
-        print(f"[Unpublish] Warning - could not reach edge service: {e}")
+        print(f"[Unpublish] Warning - could not reach {engine.name}: {e}")
+        return {"success": False, "error": f"Could not reach {engine.name}: {e}"}
+    
+    # Delete the specific PageDeployment record
+    db.query(PageDeployment).filter(
+        PageDeployment.page_id == page_id,
+        PageDeployment.edge_engine_id == engine_id
+    ).delete()
+    db.commit()
+    
+    return {"success": True, "message": f"Page unpublished from {engine.name}"}
 
 
 @router.get("/")
 async def get_pages(includeDeleted: bool = False, db: Session = Depends(get_db)):
     """Get all pages - matches Express: { success, data: pages[] }"""
     try:
+        base_query = db.query(Page).options(
+            joinedload(Page.deployments).joinedload(PageDeployment.edge_engine)
+        )
         if includeDeleted:
-            pages = db.query(Page).all()
+            pages = base_query.all()
         else:
-            pages = db.query(Page).filter(Page.deleted_at == None).all()
+            pages = base_query.filter(Page.deleted_at == None).all()
         
         return {
             "success": True,
@@ -99,7 +196,9 @@ async def get_pages(includeDeleted: bool = False, db: Session = Depends(get_db))
 async def get_page(page_id: str, db: Session = Depends(get_db)):
     """Get a page by ID - matches Express: { success, data: page }"""
     try:
-        page = db.query(Page).filter(Page.id == page_id, Page.deleted_at == None).first()
+        page = db.query(Page).options(
+            joinedload(Page.deployments).joinedload(PageDeployment.edge_engine)
+        ).filter(Page.id == page_id, Page.deleted_at == None).first()
         if not page:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -161,6 +260,11 @@ async def update_page_endpoint(page_id: str, request: PageUpdateRequest, db: Ses
                 detail="Page not found"
             )
         
+        # Recompute content hash so staleness detection works
+        page.content_hash = compute_page_hash(page)  # type: ignore[assignment]
+        db.commit()
+        db.refresh(page)
+
         return {
             "success": True,
             "data": serialize_page(page)
@@ -192,6 +296,11 @@ async def update_page_layout(page_id: str, request: dict, db: Session = Depends(
                 detail="Page not found"
             )
         
+        # Recompute content hash so staleness detection works
+        page.content_hash = compute_page_hash(page)  # type: ignore[assignment]
+        db.commit()
+        db.refresh(page)
+
         return {
             "success": True,
             "data": serialize_page(page)
@@ -208,11 +317,10 @@ async def update_page_layout(page_id: str, request: dict, db: Session = Depends(
 @router.delete("/{page_id}/")
 async def delete_page(page_id: str):
     """Soft delete a page - matches Express: { success, message }.
-    Optimized: Releases DB connection before Edge unpublish call.
+    Unpublishes from ALL active full-bundle Edge Engines.
     """
     from ...database.config import SessionLocal
     
-    # 1. DB OPERATIONS
     db = SessionLocal()
     try:
         page = db.query(Page).filter(Page.id == page_id).first()
@@ -224,8 +332,9 @@ async def delete_page(page_id: str):
             )
         
         # Store original slug before modifying (for unpublish)
-        original_slug = page.slug
+        original_slug = str(page.slug)
         was_homepage = page.is_homepage
+        page_id_str = str(page.id)
         
         # Append timestamp to slug to allow reuse (matching Express)
         page.slug = f"{page.slug}-deleted-{int(time.time() * 1000)}"  # type: ignore[assignment]
@@ -236,35 +345,26 @@ async def delete_page(page_id: str):
             page.is_homepage = False  # type: ignore[assignment]
         
         db.commit()
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.close()
-        return {
-            "success": False,
-            "error": str(e)
-        }
-    finally:
-        db.close()  # RELEASE CONNECTION BEFORE EDGE CALL
-
-    # 2. EDGE UNPUBLISH (No DB Connection Held)
-    try:
-        await unpublish_from_edge(str(original_slug))
         
-        # If was homepage, also clear the homepage route
+        # Fan-out unpublish to all active full-bundle Edge Engines
+        await fan_out_unpublish(original_slug, page_id_str, db)
+        
         if was_homepage:  # type: ignore[truthy-bool]
-            # The homepage in edge is stored by slug, which we already unpublished above
             print(f"[Delete] Cleared homepage status for: {original_slug}")
         
         return {
             "success": True,
             "message": "Page moved to trash successfully"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         return {
             "success": False,
             "error": str(e)
         }
+    finally:
+        db.close()
 
 
 @router.post("/{page_id}/restore/")
@@ -310,11 +410,10 @@ async def restore_page(page_id: str, db: Session = Depends(get_db)):
 @router.delete("/{page_id}/permanent/")
 async def permanent_delete_page(page_id: str):
     """Permanently delete a page - matches Express: { success, message }.
-    Optimized: Releases DB connection before Edge unpublish call.
+    Unpublishes from ALL active full-bundle Edge Engines, then hard-deletes.
     """
     from ...database.config import SessionLocal
     
-    # 1. DB OPERATIONS
     db = SessionLocal()
     try:
         page = db.query(Page).filter(Page.id == page_id).first()
@@ -326,33 +425,56 @@ async def permanent_delete_page(page_id: str):
             )
         
         # Store slug for unpublish (handles -deleted- suffix)
-        page_slug = page.slug
+        page_slug = str(page.slug)
+        page_id_str = str(page.id)
         
+        # Fan-out unpublish BEFORE hard delete (so deployment records still exist to query)
+        await fan_out_unpublish(page_slug, page_id_str, db)
+        
+        # Now hard delete (cascade cleans up any remaining PageDeployment rows)
         db.delete(page)
         db.commit()
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.close()
-        return {
-            "success": False,
-            "error": str(e)
-        }
-    finally:
-        db.close()  # RELEASE CONNECTION BEFORE EDGE CALL
-
-    # 2. EDGE UNPUBLISH (No DB Connection Held)
-    try:
-        await unpublish_from_edge(str(page_slug))
         
         return {
             "success": True,
             "message": "Page permanently deleted"
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        # Don't fail the already-committed delete
-        print(f"[PermanentDelete] Edge unpublish failed (non-fatal): {e}")
+        print(f"[PermanentDelete] Error: {e}")
         return {
-            "success": True,
-            "message": "Page permanently deleted (edge sync may have failed)"
+            "success": False,
+            "error": str(e)
+        }
+    finally:
+        db.close()
+
+
+@router.post("/{page_id}/unpublish/{engine_id}/")
+async def unpublish_page_from_target(page_id: str, engine_id: str, db: Session = Depends(get_db)):
+    """Unpublish a page from a specific Edge Engine target.
+    Page remains in the backend DB and on other targets.
+    """
+    try:
+        page = db.query(Page).filter(
+            Page.id == page_id,
+            Page.deleted_at == None
+        ).first()
+        if not page:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Page not found"
+            )
+        
+        result = await unpublish_from_single_target(
+            str(page.slug), str(page.id), engine_id, db
+        )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
         }

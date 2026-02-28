@@ -1,0 +1,413 @@
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\alembic\versions\0011_ensure_ds_views_cols.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\alembic\versions\0011_ensure_ds_views_cols.py:30:43 - error: Argument of type "Connection" cannot be assigned to parameter "bind" of type "Engine" in function "from_engine"
+  ┬á┬á"Connection" is not assignable to "Engine" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\alembic\versions\0011_ensure_ds_views_cols.py:61:43 - error: Argument of type "Connection" cannot be assigned to parameter "bind" of type "Engine" in function "from_engine"
+  ┬á┬á"Connection" is not assignable to "Engine" (reportArgumentType)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\alembic\versions\0012_add_missing_target_table.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\alembic\versions\0012_add_missing_target_table.py:27:43 - error: Argument of type "Connection" cannot be assigned to parameter "bind" of type "Engine" in function "from_engine"
+  ┬á┬á"Connection" is not assignable to "Engine" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\alembic\versions\0012_add_missing_target_table.py:50:43 - error: Argument of type "Connection" cannot be assigned to parameter "bind" of type "Engine" in function "from_engine"
+  ┬á┬á"Connection" is not assignable to "Engine" (reportArgumentType)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\database\utils.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\database\utils.py:103:10 - error: Cannot assign to attribute "updated_at" for class "Page"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "updated_at" of class "Page"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\database\utils.py:142:21 - error: Cannot assign to attribute "users_config" for class "Project"
+  ┬á┬áExpression of type "str | Unknown" cannot be assigned to attribute "users_config" of class "Project"
+  ┬á┬á┬á┬áType "str | Unknown" is not assignable to type "Column[str]"
+  ┬á┬á┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\database\utils.py:143:17 - error: Cannot assign to attribute "updated_at" for class "Project"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "updated_at" of class "Project"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\database\utils.py:190:88 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+  ┬á┬á"None" is not assignable to "dict[Unknown, Unknown]" (reportArgumentType)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\middleware\auto_generated\auto_schema_middleware.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\middleware\auto_generated\auto_schema_middleware.py:96:16 - error: "{" was not closed
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\middleware\auto_generated\auto_schema_middleware.py:104:77 - error: "true" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\middleware\auto_generated\auto_schema_middleware.py:110:77 - error: "true" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\middleware\auto_generated\auto_schema_middleware.py:114:3 - error: Expected expression
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\middleware\auto_generated\auto_schema_middleware.py:114:3 - error: Dictionary entries must contain key/value pairs
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:11:15 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:12:15 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:15:15 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:17:15 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:37:11 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:38:11 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:50:20 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:91:10 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:92:14 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:93:26 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:107:20 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:112:28 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:113:33 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:114:36 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:151:11 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:152:11 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:158:20 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\models\schemas.py:159:20 - error: Call expression not allowed in type expression (reportInvalidTypeForm)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_caches.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_caches.py:267:25 - error: Argument of type "str | None" cannot be assigned to parameter "redis_token" of type "str" in function "test_redis_connection"
+  ┬á┬áType "str | None" is not assignable to type "str"
+  ┬á┬á┬á┬á"None" is not assignable to "str" (reportArgumentType)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:117:8 - error: Invalid conditional operand of type "Column[str]"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:136:58 - error: Invalid conditional operand of type "Column[str]"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:137:58 - error: Invalid conditional operand of type "Column[str]"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:138:60 - error: Invalid conditional operand of type "Column[str]"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:139:56 - error: Invalid conditional operand of type "Column[str]"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:149:61 - error: Invalid conditional operand of type "Column[str]"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:153:49 - error: Invalid conditional operand of type "Column[str]"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:155:55 - error: Invalid conditional operand of type "Column[str]"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:288:8 - error: Invalid conditional operand of type "Column[str]"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:356:36 - error: Type "list[Unknown | None]" is not assignable to declared type "list[str]"
+  ┬á┬á"list[Unknown | None]" is not assignable to "list[str]"
+  ┬á┬á┬á┬áType parameter "_T@list" is invariant, but "Unknown | None" is not the same as "str"
+  ┬á┬á┬á┬áConsider switching from "list" to "Sequence" which is covariant (reportAssignmentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:548:8 - error: Invalid conditional operand of type "Column[str]"
+  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:597:44 - error: Invalid conditional operand of type "Column[bool]"
+  ┬á┬áMethod __bool__ for type "Column[bool]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:598:45 - error: Invalid conditional operand of type "Column[bool]"
+  ┬á┬áMethod __bool__ for type "Column[bool]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\crud.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\crud.py:111:73 - error: "get_db" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\crud.py:134:56 - error: "get_db" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\crud.py:160:82 - error: "get_db" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\crud.py:164:25 - error: "get_page_by_slug" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\crud.py:173:16 - error: "create_page" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\crud.py:189:96 - error: "get_db" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\crud.py:194:16 - error: "update_page" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\crud.py:215:81 - error: "get_db" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\crud.py:225:16 - error: "update_page" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\crud.py:308:60 - error: "get_db" is not defined (reportUndefinedVariable)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py:341:29 - error: "status" is unbound (reportUnboundVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py:341:36 - error: Cannot access attribute "HTTP_404_NOT_FOUND" for class "Unbound" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py:358:14 - error: Cannot assign to attribute "content_hash" for class "Page"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "content_hash" of class "Page"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py:445:42 - error: Cannot assign to attribute "status" for class "PageDeployment"
+  ┬á┬áExpression of type "Literal['published', 'failed']" cannot be assigned to attribute "status" of class "PageDeployment"
+  ┬á┬á┬á┬áType "Literal['published', 'failed']" is not assignable to type "Column[str]"
+  ┬á┬á┬á┬á┬á┬á"Literal['failed']" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py:446:42 - error: Cannot assign to attribute "content_hash" for class "PageDeployment"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "content_hash" of class "PageDeployment"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py:447:42 - error: Cannot assign to attribute "published_at" for class "PageDeployment"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "published_at" of class "PageDeployment"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py:448:42 - error: Cannot assign to attribute "error_message" for class "PageDeployment"
+  ┬á┬áExpression of type "Unknown | None" cannot be assigned to attribute "error_message" of class "PageDeployment"
+  ┬á┬á┬á┬áType "Unknown | None" is not assignable to type "Column[str]"
+  ┬á┬á┬á┬á┬á┬á"None" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py:449:42 - error: Cannot assign to attribute "updated_at" for class "PageDeployment"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "updated_at" of class "PageDeployment"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py:541:14 - error: Cannot assign to attribute "content_hash" for class "Page"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "content_hash" of class "Page"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py:589:26 - error: Cannot assign to attribute "status" for class "PageDeployment"
+  ┬á┬áExpression of type "Literal['published', 'failed']" cannot be assigned to attribute "status" of class "PageDeployment"
+  ┬á┬á┬á┬áType "Literal['published', 'failed']" is not assignable to type "Column[str]"
+  ┬á┬á┬á┬á┬á┬á"Literal['failed']" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py:590:26 - error: Cannot assign to attribute "content_hash" for class "PageDeployment"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "content_hash" of class "PageDeployment"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py:591:26 - error: Cannot assign to attribute "published_at" for class "PageDeployment"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "published_at" of class "PageDeployment"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py:592:26 - error: Cannot assign to attribute "error_message" for class "PageDeployment"
+  ┬á┬áExpression of type "str | None" cannot be assigned to attribute "error_message" of class "PageDeployment"
+  ┬á┬á┬á┬áType "str | None" is not assignable to type "Column[str]"
+  ┬á┬á┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\publish.py:593:26 - error: Cannot assign to attribute "updated_at" for class "PageDeployment"
+  ┬á┬áExpression of type "str" cannot be assigned to attribute "updated_at" of class "PageDeployment"
+  ┬á┬á┬á┬á"str" is not assignable to "Column[str]" (reportAttributeAccessIssue)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:32:36 - error: Argument of type "str | None" cannot be assigned to parameter "host" of type "str" in function "_sanitize_host"
+  ┬á┬áType "str | None" is not assignable to type "str"
+  ┬á┬á┬á┬á"None" is not assignable to "str" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:55:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:63:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:121:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:254:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:266:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:272:15 - error: Method "search_records" overrides class "DatabaseAdapter" in an incompatible manner
+  ┬á┬áPositional parameter count mismatch; base method has 4, but override has 3
+  ┬á┬áParameter 4 mismatch: base parameter "limit" is keyword parameter, override parameter is position-only (reportIncompatibleMethodOverride)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:316:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:344:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:478:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:540:35 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:549:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:562:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:593:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:614:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:636:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\mysql_adapter.py:677:35 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py:15:37 - error: "Datasource" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py:22:36 - error: Argument of type "str | None" cannot be assigned to parameter "host" of type "str" in function "_sanitize_host"
+  ┬á┬áType "str | None" is not assignable to type "str"
+  ┬á┬á┬á┬á"None" is not assignable to "str" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py:90:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py:102:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py:173:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py:192:20 - error: Type "list[dict[str, Unknown]]" is not assignable to return type "Dict[str, Any]"
+  ┬á┬á"list[dict[str, Unknown]]" is not assignable to "Dict[str, Any]" (reportReturnType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py:227:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py:365:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py:376:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py:407:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py:418:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py:479:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py:498:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\postgres_adapter.py:526:31 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\supabase_adapter.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\supabase_adapter.py:178:20 - error: Type "Dict[str, Any]" is not assignable to return type "List[Dict[str, Any]]"
+  ┬á┬á"Dict[str, Any]" is not assignable to "List[Dict[str, Any]]" (reportReturnType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\supabase_adapter.py:205:43 - error: "post" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\supabase_adapter.py:387:66 - error: "get" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\supabase_adapter.py:418:39 - error: "get" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\supabase_adapter.py:438:96 - error: No parameter named "search" (reportCallIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\supabase_adapter.py:519:66 - error: "get" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\supabase_adapter.py:534:39 - error: "get" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\supabase_adapter.py:561:39 - error: "get" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\supabase_adapter.py:579:39 - error: "post" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\supabase_adapter.py:598:39 - error: "delete" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\supabase_adapter.py:633:43 - error: "post" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\supabase_adapter.py:649:57 - error: "acquire" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\supabase_adapter.py:657:43 - error: "post" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:107:62 - error: Type "tuple[list[Unknown] | list[Dict[str, Any]], Headers]" is not assignable to return type "tuple[List[Dict[str, Any]], Dict[str, str]]"
+  ┬á┬á"Headers" is not assignable to "Dict[str, str]" (reportReturnType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:348:43 - error: Argument of type "None" cannot be assigned to parameter "redis_url" of type "str" in function "cache_get"
+  ┬á┬á"None" is not assignable to "str" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:433:29 - error: Argument of type "None" cannot be assigned to parameter "redis_url" of type "str" in function "cache_set"
+  ┬á┬á"None" is not assignable to "str" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:486:39 - error: Argument of type "Dict[str, Any] | Any | None" cannot be assigned to parameter "x" of type "ConvertibleToFloat" in function "__new__"
+  ┬á┬áType "Dict[str, Any] | Any | None" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬áType "Dict[str, Any]" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is not assignable to "str"
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is incompatible with protocol "Buffer"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__buffer__" is not present
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is incompatible with protocol "SupportsFloat"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__float__" is not present
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:486:39 - error: Argument of type "Dict[str, Any] | Any | None" cannot be assigned to parameter "x" of type "ConvertibleToFloat" in function "__new__"
+  ┬á┬áType "Dict[str, Any] | Any | None" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬áType "Dict[str, Any]" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is not assignable to "str"
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is incompatible with protocol "Buffer"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__buffer__" is not present
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is incompatible with protocol "SupportsFloat"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__float__" is not present
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:486:59 - error: Argument of type "Any | Literal[''] | None" cannot be assigned to parameter "x" of type "ConvertibleToFloat" in function "__new__"
+  ┬á┬áType "Any | Literal[''] | None" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬áType "None" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬á┬á┬á"None" is not assignable to "str"
+  ┬á┬á┬á┬á┬á┬á"None" is incompatible with protocol "Buffer"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__buffer__" is not present
+  ┬á┬á┬á┬á┬á┬á"None" is incompatible with protocol "SupportsFloat"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__float__" is not present
+  ┬á┬á┬á┬á┬á┬á"None" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:486:59 - error: Argument of type "Any | Literal[''] | None" cannot be assigned to parameter "x" of type "ConvertibleToFloat" in function "__new__"
+  ┬á┬áType "Any | Literal[''] | None" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬áType "None" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬á┬á┬á"None" is not assignable to "str"
+  ┬á┬á┬á┬á┬á┬á"None" is incompatible with protocol "Buffer"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__buffer__" is not present
+  ┬á┬á┬á┬á┬á┬á"None" is incompatible with protocol "SupportsFloat"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__float__" is not present
+  ┬á┬á┬á┬á┬á┬á"None" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:489:39 - error: Argument of type "Dict[str, Any] | Any | None" cannot be assigned to parameter "x" of type "ConvertibleToFloat" in function "__new__"
+  ┬á┬áType "Dict[str, Any] | Any | None" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬áType "Dict[str, Any]" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is not assignable to "str"
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is incompatible with protocol "Buffer"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__buffer__" is not present
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is incompatible with protocol "SupportsFloat"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__float__" is not present
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:489:39 - error: Argument of type "Dict[str, Any] | Any | None" cannot be assigned to parameter "x" of type "ConvertibleToFloat" in function "__new__"
+  ┬á┬áType "Dict[str, Any] | Any | None" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬áType "Dict[str, Any]" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is not assignable to "str"
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is incompatible with protocol "Buffer"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__buffer__" is not present
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is incompatible with protocol "SupportsFloat"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__float__" is not present
+  ┬á┬á┬á┬á┬á┬á"Dict[str, Any]" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:489:59 - error: Argument of type "Any | Literal[''] | None" cannot be assigned to parameter "x" of type "ConvertibleToFloat" in function "__new__"
+  ┬á┬áType "Any | Literal[''] | None" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬áType "None" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬á┬á┬á"None" is not assignable to "str"
+  ┬á┬á┬á┬á┬á┬á"None" is incompatible with protocol "Buffer"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__buffer__" is not present
+  ┬á┬á┬á┬á┬á┬á"None" is incompatible with protocol "SupportsFloat"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__float__" is not present
+  ┬á┬á┬á┬á┬á┬á"None" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:489:59 - error: Argument of type "Any | Literal[''] | None" cannot be assigned to parameter "x" of type "ConvertibleToFloat" in function "__new__"
+  ┬á┬áType "Any | Literal[''] | None" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬áType "None" is not assignable to type "ConvertibleToFloat"
+  ┬á┬á┬á┬á┬á┬á"None" is not assignable to "str"
+  ┬á┬á┬á┬á┬á┬á"None" is incompatible with protocol "Buffer"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__buffer__" is not present
+  ┬á┬á┬á┬á┬á┬á"None" is incompatible with protocol "SupportsFloat"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"__float__" is not present
+  ┬á┬á┬á┬á┬á┬á"None" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:528:36 - error: Argument of type "None" cannot be assigned to parameter "redis_url" of type "str" in function "cache_delete_pattern"
+  ┬á┬á"None" is not assignable to "str" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:529:36 - error: Argument of type "None" cannot be assigned to parameter "redis_url" of type "str" in function "cache_delete_pattern"
+  ┬á┬á"None" is not assignable to "str" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:561:36 - error: Argument of type "None" cannot be assigned to parameter "redis_url" of type "str" in function "cache_delete_pattern"
+  ┬á┬á"None" is not assignable to "str" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:562:36 - error: Argument of type "None" cannot be assigned to parameter "redis_url" of type "str" in function "cache_delete_pattern"
+  ┬á┬á"None" is not assignable to "str" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:599:44 - error: Argument of type "None" cannot be assigned to parameter "redis_url" of type "str" in function "cache_get"
+  ┬á┬á"None" is not assignable to "str" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:659:29 - error: Argument of type "None" cannot be assigned to parameter "redis_url" of type "str" in function "cache_set"
+  ┬á┬á"None" is not assignable to "str" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:719:15 - error: Method "read_records" overrides class "DatabaseAdapter" in an incompatible manner
+  ┬á┬áParameter 4 type mismatch: base parameter is type "Dict[str, Any] | List[Dict[str, Any]] | None", override parameter is type "Dict[str, Any] | None"
+  ┬á┬á┬á┬áType "Dict[str, Any] | List[Dict[str, Any]] | None" is not assignable to type "Dict[str, Any] | None"
+  ┬á┬á┬á┬á┬á┬áType "List[Dict[str, Any]]" is not assignable to type "Dict[str, Any] | None"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"List[Dict[str, Any]]" is not assignable to "Dict[str, Any]"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"List[Dict[str, Any]]" is not assignable to "None" (reportIncompatibleMethodOverride)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\adapters\wordpress_api_adapter.py:782:15 - error: Method "count_records" overrides class "DatabaseAdapter" in an incompatible manner
+  ┬á┬áParameter 3 type mismatch: base parameter is type "Dict[str, Any] | List[Dict[str, Any]] | None", override parameter is type "Dict[str, Any] | None"
+  ┬á┬á┬á┬áType "Dict[str, Any] | List[Dict[str, Any]] | None" is not assignable to type "Dict[str, Any] | None"
+  ┬á┬á┬á┬á┬á┬áType "List[Dict[str, Any]]" is not assignable to type "Dict[str, Any] | None"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"List[Dict[str, Any]]" is not assignable to "Dict[str, Any]"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"List[Dict[str, Any]]" is not assignable to "None" (reportIncompatibleMethodOverride)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\engine\conflict_resolver.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\engine\conflict_resolver.py:134:21 - error: Argument of type "str | None" cannot be assigned to parameter "url" of type "URLTypes" in function "post"
+  ┬á┬áType "str | None" is not assignable to type "URLTypes"
+  ┬á┬á┬á┬áType "None" is not assignable to type "URLTypes"
+  ┬á┬á┬á┬á┬á┬á"None" is not assignable to "URL"
+  ┬á┬á┬á┬á┬á┬á"None" is not assignable to "str" (reportArgumentType)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\engine\sync_executor.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\engine\sync_executor.py:138:25 - error: "logger" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\engine\sync_executor.py:162:13 - error: "logger" is not defined (reportUndefinedVariable)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\main.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\main.py:78:56 - error: Argument of type "(request: Request, exc: RequestValidationError) -> CoroutineType[Any, Any, JSONResponse]" cannot be assigned to parameter "handler" of type "ExceptionHandler" in function "add_exception_handler"
+  ┬á┬áType "(request: Request, exc: RequestValidationError) -> CoroutineType[Any, Any, JSONResponse]" is not assignable to type "ExceptionHandler"
+  ┬á┬á┬á┬áType "(request: Request, exc: RequestValidationError) -> CoroutineType[Any, Any, JSONResponse]" is not assignable to type "HTTPExceptionHandler"
+  ┬á┬á┬á┬á┬á┬áParameter 2: type "Exception" is incompatible with type "RequestValidationError"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"Exception" is not assignable to "RequestValidationError"
+  ┬á┬á┬á┬áType "(request: Request, exc: RequestValidationError) -> CoroutineType[Any, Any, JSONResponse]" is not assignable to type "WebSocketExceptionHandler"
+  ┬á┬á┬á┬á┬á┬áParameter 1: type "WebSocket" is incompatible with type "Request"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"WebSocket" is not assignable to "Request"
+  ┬á┬á┬á┬á┬á┬áParameter 2: type "Exception" is incompatible with type "RequestValidationError"
+    ... (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\main.py:79:49 - error: Argument of type "(request: Request, exc: SQLAlchemyError) -> CoroutineType[Any, Any, JSONResponse]" cannot be assigned to parameter "handler" of type "ExceptionHandler" in function "add_exception_handler"
+  ┬á┬áType "(request: Request, exc: SQLAlchemyError) -> CoroutineType[Any, Any, JSONResponse]" is not assignable to type "ExceptionHandler"
+  ┬á┬á┬á┬áType "(request: Request, exc: SQLAlchemyError) -> CoroutineType[Any, Any, JSONResponse]" is not assignable to type "HTTPExceptionHandler"
+  ┬á┬á┬á┬á┬á┬áParameter 2: type "Exception" is incompatible with type "SQLAlchemyError"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"Exception" is not assignable to "SQLAlchemyError"
+  ┬á┬á┬á┬áType "(request: Request, exc: SQLAlchemyError) -> CoroutineType[Any, Any, JSONResponse]" is not assignable to type "WebSocketExceptionHandler"
+  ┬á┬á┬á┬á┬á┬áParameter 1: type "WebSocket" is incompatible with type "Request"
+  ┬á┬á┬á┬á┬á┬á┬á┬á"WebSocket" is not assignable to "Request"
+  ┬á┬á┬á┬á┬á┬áParameter 2: type "Exception" is incompatible with type "SQLAlchemyError"
+    ... (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\main.py:242:29 - error: Argument of type "None" cannot be assigned to parameter "swagger_favicon_url" of type "str" in function "get_swagger_ui_html"
+  ┬á┬á"None" is not assignable to "str" (reportArgumentType)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\models\datasource.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\models\datasource.py:78:25 - error: "DatasourceView" is not defined (reportUndefinedVariable)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\models\sync_config.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\models\sync_config.py:100:35 - error: "DatasourceView" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\models\sync_config.py:104:34 - error: "DatasourceView" is not defined (reportUndefinedVariable)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\models\view.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\models\view.py:74:25 - error: "Datasource" is not defined (reportUndefinedVariable)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\redis_client.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\redis_client.py:243:24 - error: Expression of type "None" cannot be assigned to parameter of type "str"
+  ┬á┬á"None" is not assignable to "str" (reportArgumentType)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\data.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\data.py:110:84 - error: No parameter named "offset" (reportCallIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\data.py:167:57 - error: Cannot access attribute "read_records_with_relations" for class "DatabaseAdapter"
+  ┬á┬áAttribute "read_records_with_relations" is unknown (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\data.py:180:57 - error: Cannot access attribute "read_records_with_relations" for class "DatabaseAdapter"
+  ┬á┬áAttribute "read_records_with_relations" is unknown (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\data.py:230:25 - error: No parameter named "related_specs" (reportCallIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\data.py:231:25 - error: No parameter named "search" (reportCallIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\data.py:273:40 - error: Cannot access attribute "get_distinct_values" for class "DatabaseAdapter"
+  ┬á┬áAttribute "get_distinct_values" is unknown (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\data.py:307:40 - error: Cannot access attribute "create_record" for class "DatabaseAdapter"
+  ┬á┬áAttribute "create_record" is unknown (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\data.py:341:40 - error: Cannot access attribute "update_record" for class "DatabaseAdapter"
+  ┬á┬áAttribute "update_record" is unknown (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\data.py:361:31 - error: "select" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\data.py:425:31 - error: "select" is not defined (reportUndefinedVariable)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\migration.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\migration.py:42:40 - error: Cannot access attribute "check_migration_status" for class "DatabaseAdapter"
+  ┬á┬áAttribute "check_migration_status" is unknown (reportAttributeAccessIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\migration.py:89:40 - error: Cannot access attribute "apply_migration" for class "DatabaseAdapter"
+  ┬á┬áAttribute "apply_migration" is unknown (reportAttributeAccessIssue)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\schema.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\datasources\schema.py:91:40 - error: Argument of type "Any | List[Dict[str, Any]]" cannot be assigned to parameter "columns" of type "list[ColumnSchema]" in function "__init__"
+  ┬á┬áType "Any | List[Dict[str, Any]]" is not assignable to type "list[ColumnSchema]"
+  ┬á┬á┬á┬á"List[Dict[str, Any]]" is not assignable to "list[ColumnSchema]"
+  ┬á┬á┬á┬á┬á┬áType parameter "_T@list" is invariant, but "Dict[str, Any]" is not the same as "ColumnSchema"
+  ┬á┬á┬á┬á┬á┬áConsider switching from "list" to "Sequence" which is covariant (reportArgumentType)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\settings.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\settings.py:124:19 - error: Argument of type "str | None" cannot be assigned to parameter "redis_url" of type "str" in function "test_redis_connection"
+  ┬á┬áType "str | None" is not assignable to type "str"
+  ┬á┬á┬á┬á"None" is not assignable to "str" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\settings.py:125:21 - error: Argument of type "str | None" cannot be assigned to parameter "redis_token" of type "str" in function "test_redis_connection"
+  ┬á┬áType "str | None" is not assignable to type "str"
+  ┬á┬á┬á┬á"None" is not assignable to "str" (reportArgumentType)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\sync.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\sync.py:205:22 - error: Expression of type "None" cannot be assigned to parameter of type "str"
+  ┬á┬á"None" is not assignable to "str" (reportArgumentType)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\views.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\views.py:261:27 - error: Argument of type "Datasource | None" cannot be assigned to parameter "datasource" of type "Datasource" in function "get_adapter"
+  ┬á┬áType "Datasource | None" is not assignable to type "Datasource"
+  ┬á┬á┬á┬á"None" is not assignable to "Datasource" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\views.py:264:25 - error: Argument missing for parameter "key_column" (reportCallIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\views.py:294:27 - error: Argument of type "Datasource | None" cannot be assigned to parameter "datasource" of type "Datasource" in function "get_adapter"
+  ┬á┬áType "Datasource | None" is not assignable to type "Datasource"
+  ┬á┬á┬á┬á"None" is not assignable to "Datasource" (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\routers\views.py:368:55 - error: Cannot access attribute "render" for class "ExpressionEngine"
+  ┬á┬áAttribute "render" is unknown (reportAttributeAccessIssue)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\services\state_manager.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\services\state_manager.py:54:15 - error: "int" is not awaitable
+  ┬á┬á"int" is incompatible with protocol "Awaitable[_T_co@Awaitable]"
+  ┬á┬á┬á┬á"__await__" is not present (reportGeneralTypeIssues)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\services\state_manager.py:94:21 - error: "Set[Unknown]" is not awaitable
+  ┬á┬á"Set[Unknown]" is incompatible with protocol "Awaitable[_T_co@Awaitable]"
+  ┬á┬á┬á┬á"__await__" is not present (reportGeneralTypeIssues)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\tests\conftest.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\tests\conftest.py:9:36 - error: "app" is unknown import symbol (reportAttributeAccessIssue)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\tests\test_field_mapper.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\tests\test_field_mapper.py:10:62 - error: Expression of type "None" cannot be assigned to parameter of type "str"
+  ┬á┬á"None" is not assignable to "str" (reportArgumentType)
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\main.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\main.py:36:16 - error: Type "Module("app")" is not assignable to declared type "FastAPI"
+  ┬á┬áType "Module("app")" is not assignable to type "FastAPI" (reportAssignmentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\main.py:119:20 - error: Argument of type "type[ProxyHeadersMiddleware]" cannot be assigned to parameter "middleware_class" of type "type[_MiddlewareClass[P@add_middleware]]" in function "add_middleware"
+  ┬á┬á"ProxyHeadersMiddleware" is incompatible with protocol "_MiddlewareClass[P@add_middleware]"
+  ┬á┬áType "type[ProxyHeadersMiddleware]" is not assignable to type "type[_MiddlewareClass[P@add_middleware]]"
+  ┬á┬á┬á┬á"__init__" is an incompatible type
+  ┬á┬á┬á┬á┬á┬áType "(app: ASGI3Application, trusted_hosts: List[str] | str = "127.0.0.1") -> None" is not assignable to type "(app: ASGIApp, **P@_MiddlewareClass) -> None"
+  ┬á┬á┬á┬á┬á┬á┬á┬áParameter 1: type "ASGIApp" is incompatible with type "ASGI3Application"
+  ┬á┬á┬á┬á┬á┬á┬á┬á┬á┬áType "ASGIApp" is not assignable to type "ASGI3Application"
+  ┬á┬á┬á┬á"__call__" is an incompatible type
+  ┬á┬á┬á┬á┬á┬áType "(scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable) -> CoroutineType[Any, Any, None]" is not assignable to type "(scope: Scope, receive: Receive, send: Send) -> CoroutineType[Any, Any, None]"
+    ... (reportArgumentType)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\main.py:119:58 - error: Arguments for ParamSpec "P@add_middleware" are missing (reportCallIssue)
+170 errors, 0 warnings, 0 informations

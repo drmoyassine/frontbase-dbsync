@@ -1,0 +1,398 @@
+{
+    "version": "1.1.408",
+    "time": "1772233350890",
+    "generalDiagnostics": [
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\crud.py",
+            "severity": "error",
+            "message": "\"get_db\" is not defined",
+            "range": {
+                "start": {
+                    "line": 110,
+                    "character": 72
+                },
+                "end": {
+                    "line": 110,
+                    "character": 78
+                }
+            },
+            "rule": "reportUndefinedVariable"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\crud.py",
+            "severity": "error",
+            "message": "\"get_db\" is not defined",
+            "range": {
+                "start": {
+                    "line": 133,
+                    "character": 55
+                },
+                "end": {
+                    "line": 133,
+                    "character": 61
+                }
+            },
+            "rule": "reportUndefinedVariable"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\crud.py",
+            "severity": "error",
+            "message": "\"get_db\" is not defined",
+            "range": {
+                "start": {
+                    "line": 159,
+                    "character": 81
+                },
+                "end": {
+                    "line": 159,
+                    "character": 87
+                }
+            },
+            "rule": "reportUndefinedVariable"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\crud.py",
+            "severity": "error",
+            "message": "\"get_page_by_slug\" is not defined",
+            "range": {
+                "start": {
+                    "line": 163,
+                    "character": 24
+                },
+                "end": {
+                    "line": 163,
+                    "character": 40
+                }
+            },
+            "rule": "reportUndefinedVariable"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\crud.py",
+            "severity": "error",
+            "message": "\"create_page\" is not defined",
+            "range": {
+                "start": {
+                    "line": 172,
+                    "character": 15
+                },
+                "end": {
+                    "line": 172,
+                    "character": 26
+                }
+            },
+            "rule": "reportUndefinedVariable"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\crud.py",
+            "severity": "error",
+            "message": "\"get_db\" is not defined",
+            "range": {
+                "start": {
+                    "line": 188,
+                    "character": 95
+                },
+                "end": {
+                    "line": 188,
+                    "character": 101
+                }
+            },
+            "rule": "reportUndefinedVariable"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\crud.py",
+            "severity": "error",
+            "message": "\"update_page\" is not defined",
+            "range": {
+                "start": {
+                    "line": 193,
+                    "character": 15
+                },
+                "end": {
+                    "line": 193,
+                    "character": 26
+                }
+            },
+            "rule": "reportUndefinedVariable"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\crud.py",
+            "severity": "error",
+            "message": "\"get_db\" is not defined",
+            "range": {
+                "start": {
+                    "line": 214,
+                    "character": 80
+                },
+                "end": {
+                    "line": 214,
+                    "character": 86
+                }
+            },
+            "rule": "reportUndefinedVariable"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\crud.py",
+            "severity": "error",
+            "message": "\"update_page\" is not defined",
+            "range": {
+                "start": {
+                    "line": 224,
+                    "character": 15
+                },
+                "end": {
+                    "line": 224,
+                    "character": 26
+                }
+            },
+            "rule": "reportUndefinedVariable"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\crud.py",
+            "severity": "error",
+            "message": "\"get_db\" is not defined",
+            "range": {
+                "start": {
+                    "line": 307,
+                    "character": 59
+                },
+                "end": {
+                    "line": 307,
+                    "character": 65
+                }
+            },
+            "rule": "reportUndefinedVariable"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\publish.py",
+            "severity": "error",
+            "message": "\"status\" is unbound",
+            "range": {
+                "start": {
+                    "line": 340,
+                    "character": 28
+                },
+                "end": {
+                    "line": 340,
+                    "character": 34
+                }
+            },
+            "rule": "reportUnboundVariable"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\publish.py",
+            "severity": "error",
+            "message": "Cannot access attribute \"HTTP_404_NOT_FOUND\" for class \"Unbound\"",
+            "range": {
+                "start": {
+                    "line": 340,
+                    "character": 35
+                },
+                "end": {
+                    "line": 340,
+                    "character": 53
+                }
+            },
+            "rule": "reportAttributeAccessIssue"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\publish.py",
+            "severity": "error",
+            "message": "Cannot assign to attribute \"content_hash\" for class \"Page\"\n┬á┬áExpression of type \"str\" cannot be assigned to attribute \"content_hash\" of class \"Page\"\n┬á┬á┬á┬á\"str\" is not assignable to \"Column[str]\"",
+            "range": {
+                "start": {
+                    "line": 357,
+                    "character": 13
+                },
+                "end": {
+                    "line": 357,
+                    "character": 25
+                }
+            },
+            "rule": "reportAttributeAccessIssue"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\publish.py",
+            "severity": "error",
+            "message": "Cannot assign to attribute \"status\" for class \"PageDeployment\"\n┬á┬áExpression of type \"Literal['published', 'failed']\" cannot be assigned to attribute \"status\" of class \"PageDeployment\"\n┬á┬á┬á┬áType \"Literal['published', 'failed']\" is not assignable to type \"Column[str]\"\n┬á┬á┬á┬á┬á┬á\"Literal['failed']\" is not assignable to \"Column[str]\"",
+            "range": {
+                "start": {
+                    "line": 444,
+                    "character": 41
+                },
+                "end": {
+                    "line": 444,
+                    "character": 47
+                }
+            },
+            "rule": "reportAttributeAccessIssue"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\publish.py",
+            "severity": "error",
+            "message": "Cannot assign to attribute \"content_hash\" for class \"PageDeployment\"\n┬á┬áExpression of type \"str\" cannot be assigned to attribute \"content_hash\" of class \"PageDeployment\"\n┬á┬á┬á┬á\"str\" is not assignable to \"Column[str]\"",
+            "range": {
+                "start": {
+                    "line": 445,
+                    "character": 41
+                },
+                "end": {
+                    "line": 445,
+                    "character": 53
+                }
+            },
+            "rule": "reportAttributeAccessIssue"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\publish.py",
+            "severity": "error",
+            "message": "Cannot assign to attribute \"published_at\" for class \"PageDeployment\"\n┬á┬áExpression of type \"str\" cannot be assigned to attribute \"published_at\" of class \"PageDeployment\"\n┬á┬á┬á┬á\"str\" is not assignable to \"Column[str]\"",
+            "range": {
+                "start": {
+                    "line": 446,
+                    "character": 41
+                },
+                "end": {
+                    "line": 446,
+                    "character": 53
+                }
+            },
+            "rule": "reportAttributeAccessIssue"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\publish.py",
+            "severity": "error",
+            "message": "Cannot assign to attribute \"error_message\" for class \"PageDeployment\"\n┬á┬áExpression of type \"Unknown | None\" cannot be assigned to attribute \"error_message\" of class \"PageDeployment\"\n┬á┬á┬á┬áType \"Unknown | None\" is not assignable to type \"Column[str]\"\n┬á┬á┬á┬á┬á┬á\"None\" is not assignable to \"Column[str]\"",
+            "range": {
+                "start": {
+                    "line": 447,
+                    "character": 41
+                },
+                "end": {
+                    "line": 447,
+                    "character": 54
+                }
+            },
+            "rule": "reportAttributeAccessIssue"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\publish.py",
+            "severity": "error",
+            "message": "Cannot assign to attribute \"updated_at\" for class \"PageDeployment\"\n┬á┬áExpression of type \"str\" cannot be assigned to attribute \"updated_at\" of class \"PageDeployment\"\n┬á┬á┬á┬á\"str\" is not assignable to \"Column[str]\"",
+            "range": {
+                "start": {
+                    "line": 448,
+                    "character": 41
+                },
+                "end": {
+                    "line": 448,
+                    "character": 51
+                }
+            },
+            "rule": "reportAttributeAccessIssue"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\publish.py",
+            "severity": "error",
+            "message": "Cannot assign to attribute \"content_hash\" for class \"Page\"\n┬á┬áExpression of type \"str\" cannot be assigned to attribute \"content_hash\" of class \"Page\"\n┬á┬á┬á┬á\"str\" is not assignable to \"Column[str]\"",
+            "range": {
+                "start": {
+                    "line": 540,
+                    "character": 13
+                },
+                "end": {
+                    "line": 540,
+                    "character": 25
+                }
+            },
+            "rule": "reportAttributeAccessIssue"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\publish.py",
+            "severity": "error",
+            "message": "Cannot assign to attribute \"status\" for class \"PageDeployment\"\n┬á┬áExpression of type \"Literal['published', 'failed']\" cannot be assigned to attribute \"status\" of class \"PageDeployment\"\n┬á┬á┬á┬áType \"Literal['published', 'failed']\" is not assignable to type \"Column[str]\"\n┬á┬á┬á┬á┬á┬á\"Literal['failed']\" is not assignable to \"Column[str]\"",
+            "range": {
+                "start": {
+                    "line": 588,
+                    "character": 25
+                },
+                "end": {
+                    "line": 588,
+                    "character": 31
+                }
+            },
+            "rule": "reportAttributeAccessIssue"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\publish.py",
+            "severity": "error",
+            "message": "Cannot assign to attribute \"content_hash\" for class \"PageDeployment\"\n┬á┬áExpression of type \"str\" cannot be assigned to attribute \"content_hash\" of class \"PageDeployment\"\n┬á┬á┬á┬á\"str\" is not assignable to \"Column[str]\"",
+            "range": {
+                "start": {
+                    "line": 589,
+                    "character": 25
+                },
+                "end": {
+                    "line": 589,
+                    "character": 37
+                }
+            },
+            "rule": "reportAttributeAccessIssue"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\publish.py",
+            "severity": "error",
+            "message": "Cannot assign to attribute \"published_at\" for class \"PageDeployment\"\n┬á┬áExpression of type \"str\" cannot be assigned to attribute \"published_at\" of class \"PageDeployment\"\n┬á┬á┬á┬á\"str\" is not assignable to \"Column[str]\"",
+            "range": {
+                "start": {
+                    "line": 590,
+                    "character": 25
+                },
+                "end": {
+                    "line": 590,
+                    "character": 37
+                }
+            },
+            "rule": "reportAttributeAccessIssue"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\publish.py",
+            "severity": "error",
+            "message": "Cannot assign to attribute \"error_message\" for class \"PageDeployment\"\n┬á┬áExpression of type \"str | None\" cannot be assigned to attribute \"error_message\" of class \"PageDeployment\"\n┬á┬á┬á┬áType \"str | None\" is not assignable to type \"Column[str]\"\n┬á┬á┬á┬á┬á┬á\"str\" is not assignable to \"Column[str]\"",
+            "range": {
+                "start": {
+                    "line": 591,
+                    "character": 25
+                },
+                "end": {
+                    "line": 591,
+                    "character": 38
+                }
+            },
+            "rule": "reportAttributeAccessIssue"
+        },
+        {
+            "file": "c:\\Users\\drmoy\\OneDrive - studygram.me\\VsCode\\Frontbase-\\fastapi-backend\\app\\routers\\pages\\publish.py",
+            "severity": "error",
+            "message": "Cannot assign to attribute \"updated_at\" for class \"PageDeployment\"\n┬á┬áExpression of type \"str\" cannot be assigned to attribute \"updated_at\" of class \"PageDeployment\"\n┬á┬á┬á┬á\"str\" is not assignable to \"Column[str]\"",
+            "range": {
+                "start": {
+                    "line": 592,
+                    "character": 25
+                },
+                "end": {
+                    "line": 592,
+                    "character": 35
+                }
+            },
+            "rule": "reportAttributeAccessIssue"
+        }
+    ],
+    "summary": {
+        "filesAnalyzed": 5,
+        "errorCount": 24,
+        "warningCount": 0,
+        "informationCount": 0,
+        "timeInSec": 3.757
+    }
+}
+

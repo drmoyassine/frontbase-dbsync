@@ -26,6 +26,7 @@ export interface PageSlice {
     // Database integration
     savePageToDatabase: (pageId: string) => Promise<void>;
     publishPage: (pageId: string) => Promise<string | undefined>;
+    publishPageToTarget: (pageId: string, engineId: string) => Promise<string | undefined>;
     togglePageVisibility: (pageId: string) => Promise<void>;
     loadPagesFromDatabase: (includeDeleted?: boolean) => Promise<void>;
     createPageInDatabase: (pageData: Omit<Page, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string | null>;
@@ -220,6 +221,9 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
                 updatePage(pageId, { isPublic: true });
                 setUnsavedChanges(false);
 
+                // Reload pages to get the updated deployments array from the single-source-of-truth
+                get().loadPagesFromDatabase();
+
                 toast({
                     title: "Page published",
                     description: result.message || "Page has been published successfully"
@@ -235,6 +239,89 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
             toast({
                 title: "Error publishing page",
                 description: error.message || "Failed to publish page to Edge",
+                variant: "destructive"
+            });
+        } finally {
+            setSaving(false);
+        }
+    },
+
+    publishPageToTarget: async (pageId: string, engineId: string) => {
+        const { pages, updatePage, setSaving, setUnsavedChanges, savePageToDatabase } = get();
+        const page = pages.find(p => p.id === pageId);
+        if (!page) return;
+
+        setSaving(true);
+        try {
+            // First save any unsaved changes
+            const { hasUnsavedChanges } = get();
+            if (hasUnsavedChanges) {
+                await savePageToDatabase(pageId);
+            }
+
+            // Call the targeted publish endpoint
+            const response = await fetch(`/api/pages/${pageId}/publish/${engineId}/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                setUnsavedChanges(false);
+
+                // We should reload to get updated deployments array
+                get().loadPagesFromDatabase();
+
+                toast({
+                    title: "Page published to target",
+                    description: result.message || "Page has been published successfully to the specific target"
+                });
+
+                return result.previewUrl;
+            } else {
+                throw new Error(result.error || 'Failed to publish page to target');
+            }
+        } catch (error: any) {
+            console.error('Publish error:', error);
+            toast({
+                title: "Error publishing page",
+                description: error.message || "Failed to publish page to specific Edge Engine",
+                variant: "destructive"
+            });
+        } finally {
+            setSaving(false);
+        }
+    },
+
+    unpublishPageFromTarget: async (pageId: string, engineId: string) => {
+        const { setSaving, toast } = get();
+        setSaving(true);
+
+        try {
+            const response = await fetch(`/api/pages/${pageId}/unpublish/${engineId}/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                // Reload pages to reflect the removed deployment
+                get().loadPagesFromDatabase();
+
+                toast({
+                    title: "Target unpublished",
+                    description: result.message || "Page has been removed from the target"
+                });
+            } else {
+                throw new Error(result.error || 'Failed to unpublish from target');
+            }
+        } catch (error: any) {
+            console.error('Unpublish error:', error);
+            toast({
+                title: "Error unpublishing",
+                description: error.message || "Failed to unpublish page from target",
                 variant: "destructive"
             });
         } finally {
@@ -302,7 +389,10 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
                         containerStyles, // Expose at top level for easy access
                         createdAt: page.createdAt ?? page.created_at ?? new Date().toISOString(),
                         updatedAt: page.updatedAt ?? page.updated_at ?? new Date().toISOString(),
-                        deletedAt: page.deletedAt ?? page.deleted_at ?? null
+                        deletedAt: page.deletedAt ?? page.deleted_at ?? null,
+                        contentHash: page.contentHash ?? page.content_hash,
+                        hasUnpublishedChanges: page.hasUnpublishedChanges ?? page.has_unpublished_changes ?? false,
+                        deployments: page.deployments || []
                     };
                 }) as Page[];
 

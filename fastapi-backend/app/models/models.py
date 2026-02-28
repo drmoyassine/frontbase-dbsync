@@ -72,6 +72,10 @@ class Page(Base):
     deleted_at = Column(String)
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
+    content_hash = Column(String(64))  # SHA-256 of layout_data + seo_data before enrichment
+    
+    # Relationships
+    deployments = relationship("PageDeployment", back_populates="page", cascade="all, delete-orphan")
     
     @property
     def layout_data_dict(self):
@@ -293,6 +297,31 @@ class EdgeEngine(Base):
     edge_database = relationship("EdgeDatabase", back_populates="edge_engines")
     edge_cache = relationship("EdgeCache", back_populates="edge_engines")
     edge_provider = relationship("EdgeProviderAccount", back_populates="edge_engines")
+    page_deployments = relationship("PageDeployment", back_populates="edge_engine", cascade="all, delete-orphan")
+
+
+class PageDeployment(Base):
+    """Tracks the deployment status of a page to a specific edge engine."""
+    __tablename__ = 'page_deployments'
+    
+    id = Column(String, primary_key=True)
+    page_id = Column(String, ForeignKey('pages.id'), nullable=False)
+    edge_engine_id = Column(String, ForeignKey('edge_engines.id'), nullable=False)
+    status = Column(String, default='published')     # published | failed
+    version = Column(Integer, default=1)            # Matches edge's published version
+    content_hash = Column(String(64))               # Hash of what was published
+    published_at = Column(String)                    # Last attempt timestamp
+    error_message = Column(Text)                     # If status == 'failed'
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    
+    # Unique constraint: one record per page per engine
+    from sqlalchemy import UniqueConstraint
+    __table_args__ = (UniqueConstraint('page_id', 'edge_engine_id', name='uq_page_engine'),)
+    
+    # Relationships
+    page = relationship("Page", back_populates="deployments")
+    edge_engine = relationship("EdgeEngine", back_populates="page_deployments")
 
 
 # Import Actions models to register them with Base

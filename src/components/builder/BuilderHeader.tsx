@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
+import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,24 +22,29 @@ import {
   FileEdit,
   Trash2,
   Grid3x3,
-  Settings
+  Settings,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useBuilderStore } from '@/stores/builder';
 import { PageSelector } from './PageSelector';
 import { PageSettingsDrawer } from './PageSettingsDrawer';
 import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
+
+interface EdgeTarget {
+  id: string;
+  name: string;
+  url: string;
+  adapter_type: string;
+  is_active: boolean;
+  edge_db_id: string | null;
+}
 
 export const BuilderHeader: React.FC<{
   isMobile?: boolean;
@@ -68,24 +74,25 @@ export const BuilderHeader: React.FC<{
       setShowGrid,
       savePageToDatabase,
       publishPage,
+      publishPageToTarget,
+      loadPagesFromDatabase,
       togglePageVisibility,
       deleteSelectedComponent
     } = useBuilderStore();
 
     const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
     const [showPageSettings, setShowPageSettings] = useState(false);
+    const [publishOpen, setPublishOpen] = useState(false);
+    const [targets, setTargets] = useState<EdgeTarget[]>([]);
+    const [selectedTargets, setSelectedTargets] = useState<Set<string>>(new Set());
+    const [isPublishing, setIsPublishing] = useState(false);
+    const [loadingTargets, setLoadingTargets] = useState(false);
 
     const currentPage = pages.find(page => page.id === currentPageId);
 
-    // Get publish URL - use configured appUrl or fallback to auto-detect
-    const getPublishUrl = (pagePath: string = '') => {
-      if (project?.appUrl) {
-        // Use configured app URL
-        const baseUrl = project.appUrl.replace(/\/$/, ''); // Remove trailing slash
-        return `${baseUrl}/${pagePath}`;
-      }
-      // Fallback: auto-detect from current origin, swap builder port for edge port
-      const baseUrl = window.location.origin.replace(':5173', ':3002');
+    // Get preview URL for a specific engine
+    const getPreviewUrl = (engineUrl: string, pagePath: string = '') => {
+      const baseUrl = engineUrl.replace(/\/$/, '');
       return `${baseUrl}/${pagePath}`;
     };
 
@@ -124,23 +131,95 @@ export const BuilderHeader: React.FC<{
       }
     };
 
-    const handlePublish = async () => {
-      if (currentPageId && currentPage) {
-        // Publish the page (saves first if needed, sends to Hono, returns preview URL)
-        const previewUrl = await publishPage(currentPageId);
-
-        // Open SSR preview in new tab
-        if (previewUrl && previewUrl.startsWith('http')) {
-          // Absolute URL from backend — use directly
-          window.open(previewUrl, '_blank');
-        } else {
-          // Relative path (e.g. "/home") or no URL — resolve via Edge Engine URL
-          const pagePath = previewUrl
-            ? previewUrl.replace(/^\//, '')  // strip leading slash
-            : (currentPage.isHomepage ? '' : currentPage.slug);
-          window.open(getPublishUrl(pagePath), '_blank');
-        }
+    // Single-target: publish and auto-preview
+    const handleSingleTargetPublish = async (target: EdgeTarget) => {
+      if (!currentPageId || !currentPage) return;
+      setIsPublishing(true);
+      try {
+        await publishPageToTarget(currentPageId, target.id);
+        const pagePath = currentPage.isHomepage ? '' : currentPage.slug;
+        window.open(getPreviewUrl(target.url, pagePath), '_blank');
+      } finally {
+        setIsPublishing(false);
+        setPublishOpen(false);
       }
+    };
+
+    // Multi-target: publish to all selected
+    const handleMultiTargetPublish = async () => {
+      if (!currentPageId || !currentPage || selectedTargets.size === 0) return;
+      setIsPublishing(true);
+      try {
+        const selected = targets.filter(t => selectedTargets.has(t.id) && !isTargetSynced(t.id));
+        if (selected.length === 0) {
+          toast.info('All selected targets are already up to date');
+          return;
+        }
+        await Promise.all(
+          selected.map(t => publishPageToTarget(currentPageId, t.id))
+        );
+        // Reload pages to update deployment data / status dots
+        await loadPagesFromDatabase();
+        // Single consolidated toast
+        const names = selected.map(t => t.name).join(', ');
+        toast.success(`Published to ${names}`);
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to publish');
+      } finally {
+        setIsPublishing(false);
+        setPublishOpen(false);
+      }
+    };
+
+    // Main publish handler: single-target fallback vs dropdown
+    const handlePublishClick = async () => {
+      if (!currentPageId || !currentPage) return;
+
+      setLoadingTargets(true);
+      try {
+        const response = await fetch('/api/edge-engines/active/by-scope/full');
+        const data = await response.json();
+        const eligible = (data as EdgeTarget[]).filter(e => e.edge_db_id);
+
+        if (eligible.length === 1) {
+          // Single target → direct publish + auto-preview (no dropdown)
+          await handleSingleTargetPublish(eligible[0]);
+        } else if (eligible.length > 1) {
+          // Multiple targets → show dropdown, only pre-select unsynced
+          setTargets(eligible);
+          setSelectedTargets(new Set(
+            eligible.filter(e => !isTargetSynced(e.id)).map(e => e.id)
+          ));
+          setPublishOpen(true);
+        } else {
+          // No targets → show empty state
+          setTargets([]);
+          setPublishOpen(true);
+        }
+      } catch (err) {
+        console.error('Failed to load targets:', err);
+      } finally {
+        setLoadingTargets(false);
+      }
+    };
+
+    const toggleTarget = (id: string) => {
+      setSelectedTargets(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    };
+
+    // Check if target is already synced with current page
+    const isTargetSynced = (targetId: string) => {
+      // If there are unsaved changes, nothing is synced
+      if (hasUnsavedChanges) return false;
+      if (!currentPage?.deployments) return false;
+      return currentPage.deployments.some(
+        (d: any) => d.engineId === targetId && d.status === 'published' && d.contentHash === currentPage.contentHash
+      );
     };
 
     const handleToggleVisibility = async () => {
@@ -272,7 +351,7 @@ export const BuilderHeader: React.FC<{
 
         {/* Right Section */}
         <div className="flex items-center gap-4 ml-auto">
-          {/* Status Badge - before Save */}
+          {/* Status Badge */}
           {pageStatus && (
             <Badge
               variant="outline"
@@ -283,7 +362,7 @@ export const BuilderHeader: React.FC<{
             </Badge>
           )}
 
-          {/* Save Button - icon-only on mobile */}
+          {/* Save Button */}
           <Button
             variant="outline"
             size="sm"
@@ -300,36 +379,112 @@ export const BuilderHeader: React.FC<{
             </span>
           </Button>
 
-          {/* Publish Button - icon-only on mobile */}
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button size="sm" disabled={isSaving}>
-                <Play className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Publish</span>
+          {/* Publish Button with Target Dropdown */}
+          <Popover open={publishOpen} onOpenChange={setPublishOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                size="sm"
+                disabled={isSaving || isPublishing || loadingTargets}
+                onClick={handlePublishClick}
+              >
+                {(isPublishing || loadingTargets) ? (
+                  <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4 sm:mr-2" />
+                )}
+                <span className="hidden sm:inline">
+                  {isPublishing ? 'Publishing...' : 'Publish'}
+                </span>
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Publish & Preview</AlertDialogTitle>
-                <AlertDialogDescription>
-                  {hasUnsavedChanges && "Your changes will be saved. "}
-                  This will publish your page and open a preview at:
-                  <br />
-                  <code className="text-xs bg-muted px-1 py-0.5 rounded mt-1 inline-block">
-                    {currentPage ? getPublishUrl(currentPage.isHomepage ? '' : currentPage.slug) : 'Loading...'}
-                  </code>
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handlePublish}>
-                  Publish & Preview
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-0" align="end">
+              <div className="p-3 border-b">
+                <p className="text-sm font-semibold">Publish to targets</p>
+                {hasUnsavedChanges && (
+                  <p className="text-xs text-muted-foreground mt-1">Changes will be saved first.</p>
+                )}
+              </div>
 
-          {/* Page Settings - visible on all screens */}
+              {targets.length === 0 ? (
+                <div className="p-4 text-center">
+                  <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">No publish targets available.</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Add a Full-Bundle Edge Engine with a database to get started.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="max-h-48 overflow-y-auto">
+                    {targets.map(target => {
+                      const synced = isTargetSynced(target.id);
+                      const pagePath = currentPage?.isHomepage ? '' : currentPage?.slug || '';
+                      const previewUrl = getPreviewUrl(target.url, pagePath);
+                      return (
+                        <div
+                          key={target.id}
+                          className={cn(
+                            "flex items-center gap-3 px-3 py-2.5 border-b last:border-b-0",
+                            synced ? "opacity-60" : "hover:bg-muted/50"
+                          )}
+                        >
+                          <Checkbox
+                            checked={synced || selectedTargets.has(target.id)}
+                            onCheckedChange={() => !synced && toggleTarget(target.id)}
+                            disabled={synced}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium truncate">{target.name}</span>
+                              <span
+                                className={cn(
+                                  "h-2 w-2 rounded-full flex-shrink-0",
+                                  synced ? "bg-emerald-500" : "bg-amber-500"
+                                )}
+                                title={synced ? "Up to date" : "Needs sync"}
+                              />
+                            </div>
+                            <span className="text-[11px] text-muted-foreground truncate block">
+                              {target.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                            </span>
+                          </div>
+                          <button
+                            className="flex-shrink-0 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(previewUrl, '_blank');
+                            }}
+                            title={`Preview on ${target.name}`}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="p-2 border-t">
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      disabled={selectedTargets.size === 0 || isPublishing}
+                      onClick={handleMultiTargetPublish}
+                    >
+                      {isPublishing ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Play className="h-4 w-4 mr-2" />
+                      )}
+                      {isPublishing
+                        ? 'Publishing...'
+                        : `Publish to ${selectedTargets.size} target${selectedTargets.size !== 1 ? 's' : ''}`}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </PopoverContent>
+          </Popover>
+
+          {/* Page Settings */}
           <Button
             variant="outline"
             size="sm"

@@ -38,6 +38,7 @@ export const publishedPages = sqliteTable('published_pages', {
     publishedAt: text('published_at').notNull(),
     isPublic: integer('is_public', { mode: 'boolean' }).notNull().default(true),
     isHomepage: integer('is_homepage', { mode: 'boolean' }).notNull().default(false),
+    contentHash: text('content_hash'),
     createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });

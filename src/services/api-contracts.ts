@@ -80,6 +80,23 @@ export const PageSchema = z.object({
     createdAt: z.string(),
     updatedAt: z.string(),
     deletedAt: z.string().nullable().optional(),
+    contentHash: z.string().nullable().optional(),
+    hasUnpublishedChanges: z.boolean().optional(),
+    deployments: z.array(z.object({
+        id: z.string(),
+        engineId: z.string(),
+        status: z.string(),
+        version: z.number().nullable().optional(),
+        contentHash: z.string().nullable().optional(),
+        publishedAt: z.string().nullable().optional(),
+        errorMessage: z.string().nullable().optional(),
+        target: z.object({
+            id: z.string().optional(),
+            name: z.string().optional(),
+            url: z.string().optional(),
+            provider: z.string().optional(),
+        }).optional(),
+    })).optional(),
 });
 
 export const PageListSchema = z.array(PageSchema);

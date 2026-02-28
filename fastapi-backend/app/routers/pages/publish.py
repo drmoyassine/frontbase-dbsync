@@ -8,8 +8,34 @@ from sqlalchemy.orm import Session
 import httpx
 import os
 import json
+import hashlib
 from datetime import datetime
 from app.services.publish_strategy import get_publish_strategy, fan_out_to_deployment_targets
+
+def compute_page_hash(page) -> str:
+    """Compute a SHA-256 hash of the page's source attributes for drift detection."""
+    def serialize(d):
+        if not d: return "{}"
+        if isinstance(d, str):
+            try:
+                # If it's already a JSON string, re-serialize with sorted keys
+                obj = json.loads(d)
+                return json.dumps(obj, sort_keys=True) if isinstance(obj, dict) else json.dumps(obj)
+            except: return d
+        return json.dumps(d, sort_keys=True)
+
+    parts = [
+        str(page.name or ""),
+        str(page.slug or ""),
+        str(page.title or ""),
+        str(page.description or ""),
+        "1" if getattr(page, 'is_homepage', False) else "0",
+        serialize(getattr(page, 'layout_data', None)),
+        serialize(getattr(page, 'seo_data', None)),
+    ]
+    raw_string = "|".join(parts)
+    return hashlib.sha256(raw_string.encode('utf-8')).hexdigest()
+
 
 from .transforms import (
     normalize_binding_location,
@@ -27,7 +53,8 @@ from app.schemas.publish import (
     DatasourceConfig, DatasourceType as PublishDatasourceType, SeoData
 )
 from app.services.sync.models.datasource import Datasource, DatasourceType
-from ...models.models import Page
+import uuid
+from ...models.models import Page, PageDeployment
 from ...database.utils import get_db, get_project
 
 
@@ -286,6 +313,7 @@ async def convert_to_publish_schema(page: Page, datasources: list) -> PublishPag
         cssBundle=css_bundle,  # Tree-shaken CSS for this page
         version=1,  # TODO: Increment on re-publish
         publishedAt=datetime.utcnow().isoformat() + "Z",
+        contentHash=getattr(page, 'content_hash', None),
         isPublic=bool(page.is_public),
         isHomepage=bool(page.is_homepage),
     )
@@ -300,6 +328,7 @@ async def publish_page(page_id: str):
     """
     # 1. FETCH DATA (Fast DB Interaction)
     db = SessionLocal()
+    db.expire_on_commit = False  # Keep attributes loaded after commit
     page = None
     datasources = []
     try:
@@ -324,6 +353,13 @@ async def publish_page(page_id: str):
         _ = page.description
         _ = page.is_public
         _ = page.is_homepage
+        
+        # Compute the source content hash
+        page_content_hash = compute_page_hash(page)
+        page.content_hash = page_content_hash  # type: ignore[assignment]
+        # Commit the hash to the backend DB so it's queryable later
+        db.commit()
+
         
         # Expunge page BEFORE datasource query — if the datasources table
         # doesn't exist, the rollback would expire all loaded objects
@@ -388,6 +424,49 @@ async def publish_page(page_id: str):
             fan_out_results = []
             try:
                 fan_out_results = await fan_out_to_deployment_targets(serialized, scope="pages")
+                
+                # Update page_deployments join table
+                if fan_out_results:
+                    deploy_db = SessionLocal()
+                    try:
+                        now_str = datetime.utcnow().isoformat() + "Z"
+                        for res in fan_out_results:
+                            engine_id = res.get("target_id")
+                            if not engine_id: continue
+                            
+                            deploy_status = "published" if res.get("success") else "failed"
+                            error_msg = res.get("error") if not res.get("success") else None
+                            
+                            existing = deploy_db.query(PageDeployment).filter(
+                                PageDeployment.page_id == page_id,
+                                PageDeployment.edge_engine_id == engine_id
+                            ).first()
+                            
+                            if existing:
+                                existing.status = deploy_status  # type: ignore[assignment]
+                                existing.content_hash = page_content_hash  # type: ignore[assignment]
+                                existing.published_at = now_str  # type: ignore[assignment]
+                                existing.error_message = error_msg  # type: ignore[assignment]
+                                existing.updated_at = now_str  # type: ignore[assignment]
+                            else:
+                                new_deploy = PageDeployment(
+                                    id=str(uuid.uuid4()),
+                                    page_id=page_id,
+                                    edge_engine_id=engine_id,
+                                    status=deploy_status,
+                                    version=1,
+                                    content_hash=page_content_hash,
+                                    published_at=now_str,
+                                    error_message=error_msg,
+                                    created_at=now_str,
+                                    updated_at=now_str
+                                )
+                                deploy_db.add(new_deploy)
+                        deploy_db.commit()
+                    except Exception as dep_err:
+                        print(f"[Publish] Failed to update deployments table: {dep_err}")
+                    finally:
+                        deploy_db.close()
             except Exception as fan_err:
                 print(f"[Publish] Fan-out failed (non-fatal): {fan_err}")
 
@@ -415,3 +494,135 @@ async def publish_page(page_id: str):
             "success": False,
             "error": str(e)
         }
+
+
+@router.post("/{page_id}/publish/{engine_id}/")
+async def publish_to_target(page_id: str, engine_id: str):
+    """
+    Publish a page to a specific Edge Engine target.
+    """
+    from ...models.models import EdgeEngine, PageDeployment
+    import uuid
+    
+    # 1. FETCH DATA (Fast DB Interaction)
+    db = SessionLocal()
+    db.expire_on_commit = False  # Prevent attributes from expiring after commit
+    page = None
+    engine = None
+    datasources = []
+    try:
+        page = db.query(Page).filter(
+            Page.id == page_id,
+            Page.deleted_at == None
+        ).first()
+        
+        if not page:
+            raise HTTPException(status_code=404, detail=f"Page not found: {page_id}")
+            
+        engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+        if not engine:
+            raise HTTPException(status_code=404, detail=f"Engine not found: {engine_id}")
+        
+        # Force load ALL attributes before detaching
+        _ = page.layout_data
+        _ = page.seo_data
+        _ = page.id
+        _ = page.slug
+        _ = page.name
+        _ = page.title
+        _ = page.description
+        _ = page.is_public
+        _ = page.is_homepage
+        
+        engine_url = getattr(engine, 'url', None)
+        if not engine_url:
+            raise HTTPException(status_code=400, detail="Engine URL is missing")
+            
+        page_content_hash = compute_page_hash(page)
+        # Update the backend source of truth hash
+        page.content_hash = page_content_hash  # type: ignore[assignment]
+        db.commit()
+        
+        db.expunge(page)
+        datasources = get_datasources_for_publish(db)
+    finally:
+        db.close()
+        
+    try:
+        # Convert to publish schema
+        publish_data = await convert_to_publish_schema(page, datasources)
+        
+        payload = ImportPagePayload(
+            page=publish_data,
+            force=True
+        )
+        
+        serialized = payload.model_dump(by_alias=True, exclude_none=True)
+        # Inject the computed hash
+        if "page" in serialized:
+            serialized["page"]["contentHash"] = page_content_hash
+            
+        # POST to specific engine
+        import_url = f"{engine_url.rstrip('/')}/api/import"
+        print(f"[Publish:SingleTarget] Sending to: {import_url}")
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                import_url,
+                json=serialized,
+                headers={"Content-Type": "application/json"},
+                timeout=15.0,
+            )
+            success = response.status_code == 200
+            error_msg = f"HTTP {response.status_code}: {response.text[:200]}" if not success else None
+            
+        # Update the DB
+        deploy_db = SessionLocal()
+        try:
+            now_str = datetime.utcnow().isoformat() + "Z"
+            existing = deploy_db.query(PageDeployment).filter(
+                PageDeployment.page_id == page_id,
+                PageDeployment.edge_engine_id == engine_id
+            ).first()
+            
+            deploy_status = "published" if success else "failed"
+            
+            if existing:
+                existing.status = deploy_status  # type: ignore[assignment]
+                existing.content_hash = page_content_hash  # type: ignore[assignment]
+                existing.published_at = now_str  # type: ignore[assignment]
+                existing.error_message = error_msg  # type: ignore[assignment]
+                existing.updated_at = now_str  # type: ignore[assignment]
+            else:
+                new_deploy = PageDeployment(
+                    id=str(uuid.uuid4()),
+                    page_id=page_id,
+                    edge_engine_id=engine_id,
+                    status=deploy_status,
+                    version=1,
+                    content_hash=page_content_hash,
+                    published_at=now_str,
+                    error_message=error_msg,
+                    created_at=now_str,
+                    updated_at=now_str
+                )
+                deploy_db.add(new_deploy)
+            deploy_db.commit()
+        finally:
+            deploy_db.close()
+            
+        if success:
+            res_json = response.json() if response.status_code == 200 else {}
+            return {
+                "success": True,
+                "message": f"Page '{page.name}' published to specific target",
+                "previewUrl": res_json.get("previewUrl") or f"{engine_url.rstrip('/')}/{page.slug}",
+                "version": 1
+            }
+        else:
+            return {"success": False, "error": error_msg}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"success": False, "error": str(e)}

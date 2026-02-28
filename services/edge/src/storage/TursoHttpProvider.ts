@@ -39,6 +39,7 @@ const publishedPages = sqliteTable('published_pages', {
     publishedAt: text('published_at').notNull(),
     isPublic: integer('is_public', { mode: 'boolean' }).notNull().default(true),
     isHomepage: integer('is_homepage', { mode: 'boolean' }).notNull().default(false),
+    contentHash: text('content_hash'),
     createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -196,7 +197,7 @@ export class TursoHttpProvider implements IStateProvider {
     async getHomepage(): Promise<PublishPage | null> {
         const record = await this.getDb().select()
             .from(publishedPages)
-            .where(eq(publishedPages.isHomepage, true))
+            .where(eq(publishedPages.isHomepage, 1 as any))
             .get();
 
         if (!record) return null;

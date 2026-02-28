@@ -55,6 +55,26 @@ export interface Page {
     createdAt: string;
     updatedAt: string;
     deletedAt?: string | null;
+
+    contentHash?: string;
+    hasUnpublishedChanges?: boolean;
+    deployments?: PageDeployment[];
+}
+
+export interface PageDeployment {
+    id: string;
+    engineId: string;
+    status: 'published' | 'failed' | 'stale';
+    version: number;
+    contentHash?: string;
+    publishedAt: string;
+    errorMessage?: string;
+    target?: {
+        id?: string;
+        name?: string;
+        url?: string;
+        provider?: string;
+    };
 }
 
 export interface UserContactConfig {

@@ -214,6 +214,7 @@ class PublishPageRequest(BaseModel):
     # Versioning
     version: int = 1
     published_at: str = Field(..., alias="publishedAt")
+    content_hash: Optional[str] = Field(None, alias="contentHash")
     
     # Flags
     is_public: bool = Field(True, alias="isPublic")

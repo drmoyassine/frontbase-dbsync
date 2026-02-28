@@ -44370,6 +44370,7 @@ var publishedPages = sqliteTable("published_pages", {
   publishedAt: text("published_at").notNull(),
   isPublic: integer("is_public", { mode: "boolean" }).notNull().default(true),
   isHomepage: integer("is_homepage", { mode: "boolean" }).notNull().default(false),
+  contentHash: text("content_hash"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
@@ -44496,7 +44497,7 @@ var TursoHttpProvider = class {
     };
   }
   async getHomepage() {
-    const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.isHomepage, true)).get();
+    const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.isHomepage, 1)).get();
     if (!record) return null;
     return {
       id: record.id,
@@ -45870,13 +45871,6 @@ function createLiteApp() {
   app2.route("/api/execute", executeRoute);
   app2.route("/api/webhook", webhookRoute);
   app2.route("/api/executions", executionsRoute);
-  app2.get("/", (c) => c.json({
-    service: "Frontbase Edge Engine",
-    mode: "lite",
-    status: "running",
-    docs: "/api/docs",
-    health: "/api/health"
-  }));
   app2.doc("/api/openapi.json", {
     openapi: "3.1.0",
     info: {
@@ -45891,7 +45885,14 @@ function createLiteApp() {
   app2.get("/api/docs", middleware({ url: "/api/openapi.json" }));
   return app2;
 }
-createLiteApp();
+var liteApp = createLiteApp();
+liteApp.get("/", (c) => c.json({
+  service: "Frontbase Edge Engine",
+  mode: "lite",
+  status: "running",
+  docs: "/api/docs",
+  health: "/api/health"
+}));
 
 // src/ssr/components/static.ts
 function escapeHtml(str) {

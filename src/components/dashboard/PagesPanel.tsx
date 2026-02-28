@@ -32,7 +32,7 @@ import { CreatePageDialog } from './CreatePageDialog';
 
 export const PagesPanel: React.FC = () => {
   const navigate = useNavigate();
-  const { project, pages, createPage, deletePage, restorePage, permanentDeletePage, setCurrentPageId, loadPagesFromDatabase } = useBuilderStore();
+  const { project, pages, createPage, deletePage, restorePage, permanentDeletePage, setCurrentPageId, loadPagesFromDatabase, publishPage, publishPageToTarget, unpublishPageFromTarget } = useBuilderStore();
   const { isAuthenticated, isLoading } = useAuthStore();
   const { searchQuery, setSearchQuery, filterStatus } = useDashboardStore();
   const [isCreating, setIsCreating] = useState(false);
@@ -106,6 +106,18 @@ export const PagesPanel: React.FC = () => {
     const pagePath = page.isHomepage ? '' : page.slug;
     const url = getPublishUrl(pagePath);
     window.open(url, '_blank');
+  };
+
+  const handleSyncAllTargets = async (pageId: string) => {
+    await publishPage(pageId);
+  };
+
+  const handleSyncTarget = async (pageId: string, engineId: string) => {
+    await publishPageToTarget(pageId, engineId);
+  };
+
+  const handleUnpublishTarget = async (pageId: string, engineId: string) => {
+    await unpublishPageFromTarget(pageId, engineId);
   };
 
   const handleDeletePage = async (pageId: string) => {
@@ -411,6 +423,12 @@ export const PagesPanel: React.FC = () => {
                           <Download className="mr-2 h-4 w-4" />
                           Export
                         </DropdownMenuItem>
+                        {page.isPublic && (
+                          <DropdownMenuItem onClick={() => handleSyncAllTargets(page.id)}>
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            Sync Targets
+                          </DropdownMenuItem>
+                        )}
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <DropdownMenuItem
@@ -443,15 +461,19 @@ export const PagesPanel: React.FC = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   {showTrash ? (
                     <Badge variant="destructive">Trashed</Badge>
                   ) : (
                     <>
-                      <Badge variant={page.isPublic ? "default" : "secondary"}>
-                        {page.isPublic ? 'Published' : 'Draft'}
-                      </Badge>
+                      {page.hasUnpublishedChanges && <Badge variant="destructive">Unsynced</Badge>}
+                      {/* Only show page-level Published/Draft if no per-target deployments */}
+                      {(!page.deployments || page.deployments.length === 0) && (
+                        <Badge variant={page.isPublic ? "default" : "secondary"}>
+                          {page.isPublic ? 'Published' : 'Draft'}
+                        </Badge>
+                      )}
                       {page.isHomepage && (
                         <Badge variant="outline">Homepage</Badge>
                       )}
@@ -459,7 +481,55 @@ export const PagesPanel: React.FC = () => {
                   )}
                 </div>
 
-                <div className="flex gap-2">
+                {/* Deployments list (only for full edge engines where we published) */}
+                {!showTrash && page.deployments && page.deployments.length > 0 && (
+                  <div className="flex flex-col gap-2 mt-4">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Targets</span>
+                    {page.deployments.map(dep => (
+                      <div key={dep.id} className="flex items-center justify-between text-sm bg-muted/30 p-2 rounded-md border">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{dep.target?.name || 'Unknown'}</span>
+                          <Badge
+                            variant={dep.status === 'failed' ? 'destructive' : 'outline'}
+                            className={`text-[10px] px-1.5 py-0 h-4 ${dep.status === 'published' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : ''}`}
+                          >
+                            {dep.status}
+                          </Badge>
+                        </div>
+                        <div className="flex gap-1">
+                          {dep.status === 'published' && dep.target?.url && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2 text-xs"
+                              onClick={() => window.open(`${dep.target?.url.replace(/\/$/, '')}/${page.isHomepage ? '' : page.slug}`, '_blank')}
+                            >
+                              Preview
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => handleSyncTarget(page.id, dep.engineId)}
+                          >
+                            {dep.status === 'failed' ? 'Retry' : 'Sync'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                            onClick={() => handleUnpublishTarget(page.id, dep.engineId)}
+                          >
+                            Unpublish
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-2">
                   <Button
                     size="sm"
                     onClick={() => handleEditPage(page.id)}
@@ -468,14 +538,15 @@ export const PagesPanel: React.FC = () => {
                     <Edit className="mr-2 h-4 w-4" />
                     Edit
                   </Button>
-                  {page.isPublic && (
+
+                  {(!showTrash && !page.hasUnpublishedChanges && page.isPublic) && (
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => handlePreviewPage(page)}
                     >
                       <Eye className="mr-2 h-4 w-4" />
-                      Preview
+                      Preview Default
                     </Button>
                   )}
                 </div>

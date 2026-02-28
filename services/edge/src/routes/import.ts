@@ -79,6 +79,20 @@ importRoute.post('/', async (c) => {
         // Upsert the page
         const result = await stateProvider.upsertPage(page);
 
+        // Invalidate Redis cache so visitors get the new version immediately
+        try {
+            const { getRedis } = await import('../cache/redis.js');
+            const redis = getRedis();
+            await redis.del(`page:${page.slug}`);
+            console.log(`[Import] Cache invalidated: page:${page.slug}`);
+            if (page.isHomepage) {
+                await redis.del('page:__homepage__');
+                console.log(`[Import] Cache invalidated: page:__homepage__`);
+            }
+        } catch {
+            // Redis not configured — no-op
+        }
+
         // Build preview URL - use PUBLIC_URL env var for production, fallback to host header for dev
         const publicUrl = process.env.PUBLIC_URL;
         let previewUrl: string;

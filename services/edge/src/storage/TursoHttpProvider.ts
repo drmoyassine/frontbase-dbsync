@@ -155,8 +155,16 @@ export class TursoHttpProvider implements IStateProvider {
             publishedAt: page.publishedAt,
             isPublic: page.isPublic,
             isHomepage: page.isHomepage,
-            contentHash: (page as any).contentHash || null,
+            contentHash: page.contentHash || null,
         };
+
+        // Enforce homepage uniqueness: clear old homepage before setting new one
+        if (page.isHomepage) {
+            await this.getDb().update(publishedPages)
+                .set({ isHomepage: false })
+                .where(eq(publishedPages.isHomepage, true));
+            console.log(`☁️ Cleared old homepage flag(s) before setting new homepage: ${page.slug}`);
+        }
 
         // Atomic upsert — avoids race condition when multiple targets publish concurrently
         await this.getDb().insert(publishedPages)
@@ -192,7 +200,7 @@ export class TursoHttpProvider implements IStateProvider {
     async getHomepage(): Promise<PublishPage | null> {
         const record = await this.getDb().select()
             .from(publishedPages)
-            .where(eq(publishedPages.isHomepage, 1 as any))
+            .where(eq(publishedPages.isHomepage, true))
             .get();
 
         if (!record) return null;

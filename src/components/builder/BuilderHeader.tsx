@@ -73,7 +73,6 @@ export const BuilderHeader: React.FC<{
       showGrid,
       setShowGrid,
       savePageToDatabase,
-      publishPage,
       publishPageToTarget,
       loadPagesFromDatabase,
       togglePageVisibility,

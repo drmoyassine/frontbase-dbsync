@@ -32,7 +32,7 @@ import { CreatePageDialog } from './CreatePageDialog';
 
 export const PagesPanel: React.FC = () => {
   const navigate = useNavigate();
-  const { project, pages, createPage, deletePage, restorePage, permanentDeletePage, setCurrentPageId, loadPagesFromDatabase, publishPage, publishPageToTarget, unpublishPageFromTarget } = useBuilderStore();
+  const { project, pages, createPage, deletePage, restorePage, permanentDeletePage, setCurrentPageId, loadPagesFromDatabase, publishPageToTarget, unpublishPageFromTarget } = useBuilderStore();
   const { isAuthenticated, isLoading } = useAuthStore();
   const { searchQuery, setSearchQuery, filterStatus } = useDashboardStore();
   const [isCreating, setIsCreating] = useState(false);
@@ -109,7 +109,19 @@ export const PagesPanel: React.FC = () => {
   };
 
   const handleSyncAllTargets = async (pageId: string) => {
-    await publishPage(pageId);
+    try {
+      // Fetch active full-scope engines and publish to each
+      const response = await fetch('/api/edge-engines/active/by-scope/full');
+      const engines = await response.json();
+      if (!Array.isArray(engines) || engines.length === 0) {
+        toast.error('No active deployment targets found');
+        return;
+      }
+      await Promise.all(engines.map((eng: any) => publishPageToTarget(pageId, eng.id)));
+      toast.success(`Synced to ${engines.length} target(s)`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to sync targets');
+    }
   };
 
   const handleSyncTarget = async (pageId: string, engineId: string) => {

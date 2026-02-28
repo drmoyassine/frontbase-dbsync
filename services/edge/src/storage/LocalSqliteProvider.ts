@@ -112,7 +112,7 @@ export class LocalSqliteProvider implements IStateProvider {
     async init(): Promise<void> {
         const database = this.getDb();
         await runMigrations(
-            async (sqlStr) => { database.run(sql.raw(sqlStr)); },
+            async (sqlStr) => { await database.run(sql.raw(sqlStr)); },
             'LocalSqlite'
         );
         console.log('📄 State DB initialized (local SQLite)');
@@ -138,8 +138,16 @@ export class LocalSqliteProvider implements IStateProvider {
             cssBundle: page.cssBundle || null,
             version: page.version, publishedAt: page.publishedAt,
             isPublic: page.isPublic, isHomepage: page.isHomepage,
-            contentHash: (page as any).contentHash || null,
+            contentHash: page.contentHash || null,
         };
+
+        // Enforce homepage uniqueness: clear old homepage before setting new one
+        if (page.isHomepage) {
+            await database.update(publishedPages)
+                .set({ isHomepage: false })
+                .where(eq(publishedPages.isHomepage, true));
+            console.log(`📝 Cleared old homepage flag(s) before setting new homepage: ${page.slug}`);
+        }
 
         // Atomic upsert — avoids race condition when multiple targets publish concurrently
         await database.insert(publishedPages)

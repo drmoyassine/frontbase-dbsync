@@ -25,8 +25,9 @@ export interface PageSlice {
 
     // Database integration
     savePageToDatabase: (pageId: string) => Promise<void>;
-    publishPage: (pageId: string) => Promise<string | undefined>;
+
     publishPageToTarget: (pageId: string, engineId: string) => Promise<string | undefined>;
+    unpublishPageFromTarget: (pageId: string, engineId: string) => Promise<void>;
     togglePageVisibility: (pageId: string) => Promise<void>;
     loadPagesFromDatabase: (includeDeleted?: boolean, force?: boolean) => Promise<void>;
     createPageInDatabase: (pageData: Omit<Page, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string | null>;
@@ -202,57 +203,6 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
             toast({
                 title: "Error saving page",
                 description: error.response?.data?.message || error.message || "Failed to save page",
-                variant: "destructive"
-            });
-        } finally {
-            setSaving(false);
-        }
-    },
-
-    publishPage: async (pageId: string) => {
-        const { pages, updatePage, setSaving, setUnsavedChanges, savePageToDatabase } = get();
-        const page = pages.find(p => p.id === pageId);
-        if (!page) return;
-
-        setSaving(true);
-        try {
-            // First save any unsaved changes
-            const { hasUnsavedChanges } = get();
-            if (hasUnsavedChanges) {
-                await savePageToDatabase(pageId);
-            }
-
-            // Call the publish endpoint (FastAPI → Hono)
-            const response = await fetch(`/api/pages/${pageId}/publish/`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                // Update local state
-                updatePage(pageId, { isPublic: true });
-                setUnsavedChanges(false);
-
-                // Reload pages to get the updated deployments array from the single-source-of-truth
-                get().loadPagesFromDatabase(false, true);
-
-                toast({
-                    title: "Page published",
-                    description: result.message || "Page has been published successfully"
-                });
-
-                // Return the preview URL for the caller to use
-                return result.previewUrl;
-            } else {
-                throw new Error(result.error || 'Failed to publish page');
-            }
-        } catch (error: any) {
-            console.error('Publish error:', error);
-            toast({
-                title: "Error publishing page",
-                description: error.message || "Failed to publish page to Edge",
                 variant: "destructive"
             });
         } finally {

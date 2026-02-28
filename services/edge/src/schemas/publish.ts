@@ -235,6 +235,9 @@ export const PublishPageSchema = z.object({
     // Flags
     isPublic: z.boolean().default(true),
     isHomepage: z.boolean().default(false),
+
+    // Content hash for drift detection (SHA-256 of publishable attributes)
+    contentHash: z.string().nullable().optional(),
 });
 
 export type PublishPage = z.infer<typeof PublishPageSchema>;

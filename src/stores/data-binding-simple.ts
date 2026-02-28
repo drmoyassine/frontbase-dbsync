@@ -83,6 +83,8 @@ export const useDataBindingStore = create<DataBindingState>()(
         _initPromise = (async () => {
           try {
             await get().syncConnectionStatus();
+            // Re-read AFTER sync — syncConnectionStatus uses set() which is
+            // synchronous in Zustand, so get().connected is now authoritative
             if (get().connected) {
               await get().fetchTables();
             }
@@ -94,8 +96,8 @@ export const useDataBindingStore = create<DataBindingState>()(
         })();
       },
 
-      // Sync only connection status from dashboard store
-      // Skips set() if value hasn't changed (avoids unnecessary subscriber re-renders)
+      // Sync connection status from dashboard store — FORCES a live API check
+      // to prevent stale localStorage from triggering database calls
       syncConnectionStatus: async () => {
         try {
           // Use dynamic import to avoid circular dependency
@@ -104,9 +106,15 @@ export const useDataBindingStore = create<DataBindingState>()(
             getDashboardState = dashboardModule.useDashboardStore.getState;
           }
 
+          // Force a live check from the API — don't trust persisted state
           const dashboardState = getDashboardState();
+          if (dashboardState.fetchConnections) {
+            await dashboardState.fetchConnections();
+          }
 
-          const connected = dashboardState.connections.supabase?.connected || false;
+          // NOW read the fresh, API-verified connection status
+          const freshState = getDashboardState();
+          const connected = freshState.connections.supabase?.connected || false;
           const connectionError = connected ? null : 'Not connected to database';
 
           // Only set() if value actually changed — prevents triggering subscriber re-renders
@@ -116,6 +124,8 @@ export const useDataBindingStore = create<DataBindingState>()(
             debug.critical('DATA_BINDING', 'Synced connection status:', { connected });
           }
         } catch (error) {
+          // API unreachable — mark as disconnected to prevent stale requests
+          set({ connected: false, connectionError: 'Could not verify database connection' });
           debug.error('DATA_BINDING', 'Failed to sync connection status:', error);
         }
       },

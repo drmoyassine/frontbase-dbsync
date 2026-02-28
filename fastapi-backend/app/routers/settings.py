@@ -157,10 +157,6 @@ async def update_turso_settings(settings_update: TursoSettings):
     settings["turso"] = settings_update.dict()
     save_settings(settings)
     
-    # Reset the publish strategy singleton so it re-detects on next call
-    from ..services.publish_strategy import reset_publish_strategy
-    reset_publish_strategy()
-    
     return settings_update
 
 

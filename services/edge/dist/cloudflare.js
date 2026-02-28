@@ -44327,6 +44327,13 @@ var MIGRATIONS = [
       `CREATE INDEX IF NOT EXISTS idx_executions_workflow ON executions(workflow_id)`,
       `CREATE INDEX IF NOT EXISTS idx_executions_started ON executions(started_at)`
     ]
+  },
+  {
+    version: 3,
+    description: "Add content_hash column to published_pages",
+    sql: [
+      `ALTER TABLE published_pages ADD COLUMN content_hash TEXT`
+    ]
   }
 ];
 async function runMigrations(execute, providerName) {
@@ -44343,7 +44350,16 @@ async function runMigrations(execute, providerName) {
                  VALUES (${migration.version}, '${migration.description.replace(/'/g, "''")}')`
       );
       for (const sql2 of migration.sql) {
-        await execute(sql2);
+        try {
+          await execute(sql2);
+        } catch (sqlError) {
+          const msg = String(sqlError?.message || sqlError || "");
+          if (msg.includes("duplicate column")) {
+            console.log(`[${providerName}:Migration] Column already exists (v${migration.version}), skipping.`);
+          } else {
+            throw sqlError;
+          }
+        }
       }
       appliedCount++;
     } catch (error) {
@@ -44465,16 +44481,18 @@ var TursoHttpProvider = class {
       version: page.version,
       publishedAt: page.publishedAt,
       isPublic: page.isPublic,
-      isHomepage: page.isHomepage
+      isHomepage: page.isHomepage,
+      contentHash: page.contentHash || null
     };
-    const existing = await this.getDb().select().from(publishedPages).where(eq(publishedPages.id, page.id)).get();
-    if (existing) {
-      await this.getDb().update(publishedPages).set({ ...record, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(eq(publishedPages.id, page.id));
-      console.log(`\u2601\uFE0F Updated page (Turso): ${page.slug} (v${page.version})`);
-    } else {
-      await this.getDb().insert(publishedPages).values(record);
-      console.log(`\u2601\uFE0F Created page (Turso): ${page.slug} (v${page.version})`);
+    if (page.isHomepage) {
+      await this.getDb().update(publishedPages).set({ isHomepage: false }).where(eq(publishedPages.isHomepage, true));
+      console.log(`\u2601\uFE0F Cleared old homepage flag(s) before setting new homepage: ${page.slug}`);
     }
+    await this.getDb().insert(publishedPages).values(record).onConflictDoUpdate({
+      target: publishedPages.id,
+      set: { ...record, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }
+    });
+    console.log(`\u2601\uFE0F Upserted page (Turso): ${page.slug} (v${page.version})`);
     return { success: true, version: page.version };
   }
   async getPageBySlug(slug) {
@@ -44497,7 +44515,7 @@ var TursoHttpProvider = class {
     };
   }
   async getHomepage() {
-    const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.isHomepage, 1)).get();
+    const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.isHomepage, true)).get();
     if (!record) return null;
     return {
       id: record.id,
@@ -60828,7 +60846,9 @@ var PublishPageSchema = external_exports.object({
   publishedAt: external_exports.string().datetime(),
   // Flags
   isPublic: external_exports.boolean().default(true),
-  isHomepage: external_exports.boolean().default(false)
+  isHomepage: external_exports.boolean().default(false),
+  // Content hash for drift detection (SHA-256 of publishable attributes)
+  contentHash: external_exports.string().nullable().optional()
 });
 var ImportPageRequestSchema = external_exports.object({
   page: PublishPageSchema,
@@ -60894,6 +60914,17 @@ importRoute.post("/", async (c) => {
       }
     }
     const result = await stateProvider.upsertPage(page);
+    try {
+      const { getRedis: getRedis2 } = await Promise.resolve().then(() => (init_redis(), redis_exports));
+      const redis = getRedis2();
+      await redis.del(`page:${page.slug}`);
+      console.log(`[Import] Cache invalidated: page:${page.slug}`);
+      if (page.isHomepage) {
+        await redis.del("page:__homepage__");
+        console.log(`[Import] Cache invalidated: page:__homepage__`);
+      }
+    } catch {
+    }
     const publicUrl = process.env.PUBLIC_URL;
     let previewUrl;
     const pageUrlPath = page.isHomepage ? "" : page.slug;

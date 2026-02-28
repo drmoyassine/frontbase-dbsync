@@ -73,18 +73,51 @@ export async function upgradeToTurso(): Promise<IStateProvider> {
     const turso = new TursoHttpProvider();
     await turso.init();
     _provider = turso;
+    _initPromise = Promise.resolve(); // Already initialized
     console.log('☁️ State provider upgraded to TursoHttpProvider');
     return _provider;
+}
+
+// =============================================================================
+// Init Gate — ensures migrations complete before any DB operation
+// =============================================================================
+
+let _initPromise: Promise<void> | null = null;
+
+/**
+ * Ensure the state provider is initialized (migrations applied).
+ * Returns a cached promise — safe to call from multiple concurrent requests.
+ */
+export function ensureInitialized(): Promise<void> {
+    if (!_initPromise) {
+        const provider = getStateProvider();
+        _initPromise = provider.init().catch((err) => {
+            // Reset so next call retries
+            _initPromise = null;
+            throw err;
+        });
+    }
+    return _initPromise;
 }
 
 /** 
  * Global state provider proxy.
  * Defers provider creation to method invocation (not property access)
  * so it survives CF Workers' module evaluation phase.
+ * 
+ * IMPORTANT: Every method call awaits ensureInitialized() first,
+ * guaranteeing migrations are applied before any DB operation.
+ * This prevents the CF Worker race where the first import request
+ * hits Turso before runStartupSync() finishes migrations.
  */
 export const stateProvider: IStateProvider = new Proxy({} as IStateProvider, {
     get(_target, prop: string) {
-        return (...args: any[]) => {
+        // init() delegates to ensureInitialized() for dedup
+        if (prop === 'init') {
+            return () => ensureInitialized();
+        }
+        return async (...args: any[]) => {
+            await ensureInitialized();
             const provider = getStateProvider();
             const value = (provider as any)[prop];
             if (typeof value === 'function') {

@@ -249,7 +249,3 @@ importRoute.get('/status', async (c) => {
         ready: true,
     });
 });
-
-// Initialize storage on module load
-stateProvider.init().catch(console.error);
-stateProvider.initSettings().catch(console.error);

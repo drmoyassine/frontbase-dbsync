@@ -152,19 +152,12 @@ export async function runMigrations(
 
     for (const migration of MIGRATIONS) {
         try {
-            // Check if already applied by trying to insert the version record
-            // If it already exists, INSERT OR IGNORE silently skips
-            await execute(
-                `INSERT OR IGNORE INTO _schema_version (version, description) 
-                 VALUES (${migration.version}, '${migration.description.replace(/'/g, "''")}')`
-            );
-
-            // Run the migration SQL — most statements are idempotent
+            // Run the migration SQL first — most statements are idempotent
             // (CREATE IF NOT EXISTS, INSERT OR IGNORE), but ALTER TABLE
             // ADD COLUMN is not. We catch "duplicate column" errors gracefully.
-            for (const sql of migration.sql) {
+            for (const sqlStmt of migration.sql) {
                 try {
-                    await execute(sql);
+                    await execute(sqlStmt);
                 } catch (sqlError: any) {
                     const msg = String(sqlError?.message || sqlError || '');
                     if (msg.includes('duplicate column')) {
@@ -174,6 +167,13 @@ export async function runMigrations(
                     }
                 }
             }
+
+            // Mark version as applied AFTER SQL succeeds
+            // INSERT OR IGNORE so re-runs are idempotent
+            await execute(
+                `INSERT OR IGNORE INTO _schema_version (version, description) 
+                 VALUES (${migration.version}, '${migration.description.replace(/'/g, "''")}')`
+            );
             appliedCount++;
         } catch (error) {
             console.error(`[${providerName}:Migration] Failed at v${migration.version}: ${error}`);

@@ -118,6 +118,11 @@ The Edge Engine has no knowledge of:
 | **Using `import.meta.env.VITE_API_URL`, `VITE_API_BASE_URL`, or hardcoded `http://localhost:*` for API calls in frontend components** | **Causes mixed content errors (http on https) in production. Always use relative URLs (`''` base) for API calls — Vite proxy handles dev, reverse proxy handles prod. For full-origin URLs (e.g. embed codes), use `window.location.origin`. The ONLY safe centralized helper is `getFastApiBaseUrl()` from `portConfig.ts`** |
 | **Frontend `fetch`/`axios` calls to FastAPI routes WITHOUT matching trailing slashes** | **FastAPI sends 307 redirects to add the trailing slash. Behind a reverse proxy (Easypanel/nginx), the redirect URL uses `http://` instead of `https://` → mixed content. Always match the exact route definition: if the router has `@router.get("/")` the full path needs a trailing slash (e.g. `/api/deployment-targets/` not `/api/deployment-targets`). Compare your fetch URL to the route definition before committing.** |
 | **Committing Python or TypeScript changes without running type checkers** | **ALWAYS run `npx pyright <file>` on modified Python files AND `npx tsc --noEmit` on modified TypeScript/TSX files BEFORE committing. Zero errors required — fix all errors before pushing. SQLAlchemy Column types must be cast to plain Python types (`str()`, `bool()`) when passed to functions or used in conditionals.** |
+| **Creating a new service/strategy that duplicates existing functionality** | **ALWAYS investigate existing systems first. Before writing a new publish strategy, data path, or storage provider, search the codebase for existing implementations (e.g., edge `/api/import` already does upserts). Duplicates create dual-write bugs, schema drift, and maintenance burden. DRY applies across service boundaries.** |
+| **Missing `await` on async DB operations inside migration executors or callbacks** | **`database.run(sql.raw(...))` returns a Promise. Without `await`, the migration runner moves on before the SQL completes. Always compare sibling implementations (e.g. TursoHttpProvider vs LocalSqliteProvider) to catch inconsistencies.** |
+| **Using raw integers (`1 as any`) with Drizzle `mode: 'boolean'` columns** | **Drizzle maps `true`→`1` and `false`→`0` internally. Using `eq(col, 1 as any)` bypasses this mapping and the WHERE clause silently matches nothing. Always use `eq(col, true)` or `eq(col, false)`.** |
+| **Assuming deployed CF Worker bundles reflect local source changes** | **Cloudflare Workers run a built/deployed bundle. Local code fixes only take effect after a rebuild + redeploy (`wrangler deploy`). Always check whether the target is a live service or a deployed artifact before debugging "why isn't my fix working".** |
+| **Deleting code paths without querying dependent infrastructure** | **Before removing an endpoint, strategy, or Zustand action, query the actual database (e.g. `edge_engines`, `edge_databases`) to understand how many targets, providers, and deployment paths exist. Never assume from the UI — always verify with data.** |
 
 ---
 
@@ -672,4 +677,4 @@ curl http://localhost:5173/api/<new-prefix>/<endpoint>
 
 ---
 
-*Last Updated: 2026-02-25*
+*Last Updated: 2026-02-28*

@@ -175,7 +175,21 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
                 serializedToRoot: !!sanitizedPage.layoutData?.root?.containerStyles
             });
 
-            await updatePageApi(pageId, sanitizedPage);
+            const updatedPage = await updatePageApi(pageId, sanitizedPage);
+
+            // Merge the backend's updated contentHash + deployments into Zustand
+            if (updatedPage) {
+                const mergeFields: Record<string, unknown> = {};
+                if (updatedPage.contentHash) mergeFields.contentHash = updatedPage.contentHash;
+                if (updatedPage.deployments) mergeFields.deployments = updatedPage.deployments;
+                if (Object.keys(mergeFields).length > 0) {
+                    set((state) => ({
+                        pages: state.pages.map(p =>
+                            p.id === pageId ? { ...p, ...mergeFields } : p
+                        ),
+                    }));
+                }
+            }
 
             setUnsavedChanges(false);
 
@@ -270,8 +284,8 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
             if (result.success) {
                 setUnsavedChanges(false);
 
-                // We should reload to get updated deployments array
-                get().loadPagesFromDatabase();
+                // Reload to get updated deployments array (await to ensure state is settled)
+                await get().loadPagesFromDatabase();
 
                 toast({
                     title: "Page published to target",

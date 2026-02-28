@@ -158,8 +158,7 @@ export const BuilderHeader: React.FC<{
         await Promise.all(
           selected.map(t => publishPageToTarget(currentPageId, t.id))
         );
-        // Reload pages to update deployment data / status dots
-        await loadPagesFromDatabase();
+        // No need for loadPagesFromDatabase — each publishPageToTarget already awaits it
         // Single consolidated toast
         const names = selected.map(t => t.name).join(', ');
         toast.success(`Published to ${names}`);

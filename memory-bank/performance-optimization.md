@@ -5,14 +5,14 @@
 
 ---
 
-## 1. Dead Code Removal (High Priority)
+## 1. Dead Code Removal (High Priority) ✅
 
 | File | Lines | Status | Action |
 |------|-------|--------|--------|
-| `fastapi-backend/app/services/publish_strategy.py` | 93 | **No callers** — `fan_out_to_deployment_targets()` is unreferenced after publish consolidation | **DELETE entire file** |
-| `services/edge/src/db/pages-store.ts` | ~60 | **No imports** — superseded by `storage/LocalSqliteProvider.ts` | **DELETE** |
-| `services/edge/src/db/project-settings.ts` | ~50 | **No imports** — superseded by `storage/` providers | **DELETE** |
-| `/tmp/check_hash.py` | ~20 | Scratch debug script | **DELETE** |
+| `fastapi-backend/app/services/publish_strategy.py` | 93 | ✅ **Archived** → `_archived/publish_strategy.py` | Done |
+| `services/edge/src/db/pages-store.ts` | ~60 | ✅ **Archived** → `_archived/pages-store.ts` | Done |
+| `services/edge/src/db/project-settings.ts` | ~50 | ⚠️ **NOT dead** — imported by `PageRenderer.ts` for `getFaviconUrl()` | **KEEP** |
+| `/tmp/check_hash.py` | ~20 | ✅ Deleted | Done |
 
 ---
 
@@ -56,10 +56,9 @@
 ### 3.1 Publish Pipeline (Resolved ✅)
 - ~~Dual-write via `TursoPublishStrategy` + `fan_out_to_deployment_targets()`~~ → Consolidated to single path via `publish_to_target()` → edge `/api/import`
 
-### 3.2 State Provider Duplication
-- `db/pages-store.ts` and `db/project-settings.ts` are **dead files** that duplicate `storage/LocalSqliteProvider.ts` logic
-- The old `db/` pattern uses raw `drizzle(createClient(...))` outside the provider abstraction
-- **Action**: Delete both files
+### 3.2 State Provider Duplication (Resolved ✅)
+- ~~`db/pages-store.ts` duplicates `storage/LocalSqliteProvider.ts`~~ → **Archived**
+- `db/project-settings.ts` — **Retained** (active import from `PageRenderer.ts` for `getFaviconUrl()`)
 
 ### 3.3 Edge Schema Duplication
 - `publishedPages` table schema is defined in **both** `TursoHttpProvider.ts` (line 28) and `LocalSqliteProvider.ts` (line 28)
@@ -71,10 +70,9 @@
 - No automated validation exists — drift is caught only by runtime errors
 - **Action (Future)**: Consider generating Zod from Pydantic via codegen, or add a CI test that validates shape parity
 
-### 3.5 Migration Runner Safety
-- `edge-migrations.ts` marks a version as applied (`INSERT OR IGNORE`) **before** running its SQL
-- If the SQL fails (non-duplicate error), the version is marked applied but the change didn't happen
-- **Action**: Move `INSERT INTO _schema_version` to AFTER successful SQL execution
+### 3.5 Migration Runner Safety (Resolved ✅)
+- ~~`edge-migrations.ts` marks version applied before SQL~~ → Fixed: version record now inserted AFTER SQL succeeds
+- Added `ensureInitialized()` init gate in `storage/index.ts` Proxy — prevents CF Worker race condition where DB operations run before migrations complete
 
 ---
 
@@ -85,7 +83,7 @@
 - `publish.py` uses `from ...models.models import EdgeEngine, PageDeployment` inline inside the endpoint — should be top-level
 
 ### 4.2 Edge
-- `import.ts` line 254 calls `stateProvider.init()` at module-load time, AND `sync.ts` line 214 also calls `stateProvider.init()` — **double initialization**. Remove the one in `import.ts` since startup sync handles it.
+- ~~`import.ts` double init~~ → ✅ Removed module-level `stateProvider.init()`. Init is now gated through the Proxy's `ensureInitialized()` on first method call.
 
 ---
 
@@ -94,15 +92,15 @@
 > [!TIP]
 > Ordered by impact × effort ratio. Quick wins first.
 
-| # | Item | Effort | Impact |
-|---|------|--------|--------|
-| 1 | Delete `publish_strategy.py` (dead file) | 5 min | Removes 93 lines of dead code |
-| 2 | Delete `db/pages-store.ts` + `db/project-settings.ts` | 5 min | Removes ~110 lines of dead code |
-| 3 | Extract shared Drizzle schema from providers | 30 min | Prevents future schema drift |
-| 4 | Remove double `stateProvider.init()` in `import.ts` | 5 min | Removes redundant DB init |
-| 5 | Fix migration runner version tracking order | 15 min | Prevents phantom "applied" migrations |
-| 6 | Split `publish.py` into router + services | 30 min | AGENTS.md compliance |
-| 7 | Split `models/models.py` by domain | 45 min | Maintainability |
-| 8 | Split `nodeSchemas.ts` by node category | 30 min | Reduces cognitive load |
-| 9 | Split `FileBrowser/index.tsx` into subcomponents | 1 hr | React best practices |
-| 10 | Split `runtime.ts` data-fetching logic | 45 min | Separation of concerns |
+| # | Item | Effort | Impact | Status |
+|---|------|--------|--------|--------|
+| 1 | ~~Archive `publish_strategy.py`~~ | 5 min | Removes 93 lines of dead code | ✅ Done |
+| 2 | ~~Archive `db/pages-store.ts`~~ (kept `project-settings.ts`) | 5 min | Removes ~60 lines of dead code | ✅ Done |
+| 3 | Extract shared Drizzle schema from providers | 30 min | Prevents future schema drift | Pending |
+| 4 | ~~Remove double `stateProvider.init()`~~ | 5 min | Removes redundant DB init | ✅ Done |
+| 5 | ~~Fix migration runner version tracking~~ | 15 min | Prevents phantom migrations | ✅ Done |
+| 6 | Split `publish.py` into router + services | 30 min | AGENTS.md compliance | Pending |
+| 7 | Split `models/models.py` by domain | 45 min | Maintainability | Pending |
+| 8 | Split `nodeSchemas.ts` by node category | 30 min | Reduces cognitive load | Pending |
+| 9 | Split `FileBrowser/index.tsx` into subcomponents | 1 hr | React best practices | Pending |
+| 10 | Split `runtime.ts` data-fetching logic | 45 min | Separation of concerns | Pending |

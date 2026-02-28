@@ -677,4 +677,45 @@ curl http://localhost:5173/api/<new-prefix>/<endpoint>
 
 ---
 
-*Last Updated: 2026-02-28*
+## 11. Edge State Provider & CF Worker Patterns
+
+### 11.1 Init Gate (Critical)
+
+All `stateProvider` method calls are gated by `ensureInitialized()` in the Proxy (`storage/index.ts`). This ensures **migrations always complete before any DB operation**. Never bypass the Proxy or call provider methods directly without awaiting init.
+
+- `storage/index.ts` — Proxy with `ensureInitialized()` gate
+- `storage/edge-migrations.ts` — Migration runner (version recorded AFTER SQL succeeds)
+- **DO NOT** add module-level `stateProvider.init()` calls — they fail silently on CF Workers
+
+### 11.2 CF Worker Lifecycle
+
+CF Workers have a different lifecycle than Docker/local dev:
+
+1. **Module evaluation** — code executes but `process.env` is empty (no Cloudflare env vars yet)
+2. **`fetch()` handler** — bridges `env` → `process.env`, then runs startup sync via `ctx.waitUntil()` (non-blocking)
+3. **Request handling** — runs immediately in parallel with startup sync
+
+The init gate ensures DB operations wait for migrations regardless of this ordering.
+
+### 11.3 Publish Pipeline Flow
+
+```
+Frontend → POST /api/pages/{id}/publish/{engineId}/
+  → FastAPI: compute_page_hash(), convert_to_publish_schema()
+    → POST {engine.url}/api/import (engine URL from DB, derived by deploy_to_cloudflare)
+      → Edge Engine: stateProvider.upsertPage() (gated by init)
+        → Turso or LocalSqlite depending on provider
+```
+
+- The engine URL is **derived from the CF API** during deployment (`_enable_workers_dev`), not manually entered
+- After deploying a new worker, allow a few seconds for CF propagation before publishing
+
+### 11.4 Migration Runner Rules
+
+1. **Version record AFTER SQL** — never mark a version as applied before its SQL succeeds
+2. **Idempotent SQL** — use `CREATE IF NOT EXISTS`, `INSERT OR IGNORE`, and catch `duplicate column` for `ALTER TABLE`
+3. **Single executor pattern** — migrations work through a generic `SqlExecutor` function, agnostic to Turso vs SQLite
+
+---
+
+*Last Updated: 2026-03-01*

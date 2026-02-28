@@ -110,10 +110,9 @@ export function createLiteApp() {
         }
     });
 
-    // CORS
-    const origins = ['http://localhost:5173', 'http://localhost:8000'];
-    app.use('/api/*', cors({ origin: origins, credentials: true }));
-    app.use('*', cors({ origin: origins, credentials: true }));
+    // CORS — allow all origins (edge engines are public-facing; auth is via API keys)
+    app.use('/api/*', cors({ origin: '*' }));
+    app.use('*', cors({ origin: '*' }));
 
     // Auth
     app.use('/api/webhook/*', apiKeyAuth);

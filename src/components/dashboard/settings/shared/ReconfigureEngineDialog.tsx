@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from './edgeConstants';
 import { useQueryClient } from '@tanstack/react-query';
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -22,7 +23,7 @@ import {
     EdgeEngine,
 } from '@/hooks/useEdgeInfrastructure';
 
-const API_BASE = `http://localhost:${import.meta.env.VITE_API_PORT || 8000}`;
+
 
 interface ReconfigureEngineDialogProps {
     engine: EdgeEngine;

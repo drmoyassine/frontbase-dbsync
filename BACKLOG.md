@@ -75,6 +75,7 @@ Covers provider state mismatch, quota fallback, and operational visibility.
 
 ## Performance
 - [x] **Replace Tailwind CDN with build-time CSS generation** — ~~Currently SSR pages load `cdn.tailwindcss.com` (~300KB JS) for runtime class compilation.~~ Implemented via `tailwind_cli.py` auto-provisioning + `@source inline()` in `css_bundler.py`. Classes are extracted from `layoutData` at publish time and compiled into a static `cssBundle`.
+- [ ] **Optimize Caching & Refetch Strategy Across All Dashboard Pages** — Unify the React Query / Zustand cache behaviour for all list views (Engines, Pages, Automations). Currently each hook uses different `staleTime` values (5 min for edge infra, 30 s for actions, manual `isInitialized` guard for pages). Need a consistent strategy that: (1) refetches on first/uncached load so deleted or updated items don't linger, (2) keeps `refetchOnWindowFocus: false` to avoid spurious requests when switching browser tabs, (3) adds frontend filters to `/pages` Dashboard panel for Edge Engine deployment status and page status. **Files:** `useEdgeInfrastructure.ts` (4 hooks), `useActionsQuery.ts` (2 hooks), `createPageSlice.ts` (Zustand guard), `PagesContentPanel.tsx` (filters).
 - [ ] **Backend Redis Caching** — Extend Redis caching to FastAPI backend for data source operations. Cache table/column metadata (Schema Discovery), external API caching, and rate limiting.
 
 ## Data Layer & Tables

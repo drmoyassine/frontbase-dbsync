@@ -104,3 +104,20 @@
 | 8 | Split `nodeSchemas.ts` by node category | 30 min | Reduces cognitive load | Pending |
 | 9 | Split `FileBrowser/index.tsx` into subcomponents | 1 hr | React best practices | Pending |
 | 10 | Split `runtime.ts` data-fetching logic | 45 min | Separation of concerns | Pending |
+| 11 | Fix stale `advanced-query` 404 on VPS (no Supabase) | 30 min | Prevents noisy 404s in logs | Low Priority |
+
+### Item 11: Stale `advanced-query` 404 Details
+
+**Symptom:** `POST /api/database/advanced-query` returns 404 on VPS when Supabase isn't configured.
+
+**Root cause chain:**
+1. `dashboard.ts` persists `connections.supabase.connected` in localStorage (line 126)
+2. `PropertiesPanel.tsx` calls `initialize()` on every component selection (line 80)
+3. `syncConnectionStatus()` reads stale `connected: true` from the dashboard store
+4. `fetchGlobalSchema()` fires `POST /api/database/advanced-query` → `get_project_context_sync()` throws `HTTPException(404, "Supabase connection not configured")`
+
+**Partial fix applied:** `syncConnectionStatus` now calls `fetchConnections()` first (commit `b672e90`), but may have race conditions with localStorage hydration.
+
+**Recommended full fix (two-layer):**
+- **Frontend:** Don't persist `connections` in dashboard store, OR guard `fetchGlobalSchema` with a try/catch that silently handles 404
+- **Backend:** Change `advanced_query` endpoint to return `{"success": false, "error": "Database not configured", "rows": []}` instead of HTTP 404 when Supabase isn't configured

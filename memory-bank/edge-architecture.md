@@ -1,6 +1,6 @@
 # Frontbase Edge Architecture
 
-> Last Updated: 2026-02-23
+> Last Updated: 2026-03-01
 
 This document defines the strategic deployment architecture for the Frontbase Edge Engine (`services/edge`). A single Hono-based codebase supports four distinct deployment modes: **Cloud (BYOE)**, **Self-Hosted (All-in-One)**, **Standalone Edge Node**, and **Distributed Self-Hosted**.
 
@@ -296,16 +296,150 @@ When services communicate across machines (vs. the docker-compose internal netwo
 |---|---|---|
 | Page layouts & routing trees | ✅ Persistent storage | ✅ Hot JSON cache (L2) |
 | Compiled CSS bundles | ✅ Persistent storage | ✅ Cached strings for fast delivery |
-| Action/automation definitions | ✅ Persistent storage | — |
-| Automation execution logs | ✅ Persistent storage | ✅ Buffered writes (batch flush) |
+| Workflow definitions | ✅ Persistent storage (versioned) | — |
+| Workflow execution history | ✅ Permanent audit trail | ✅ Buffered writes (batch flush to Turso) |
+| Execution checkpoints | — | ✅ TTL-based (auto-expire after completion) |
+| Workflow rate limits | ✅ Persistent rule config | ✅ Atomic counters (`INCR` + `EXPIRE`) |
+| Workflow debounce locks | — | ✅ `SET NX EX` (auto-expire) |
+| Cross-execution counters | ✅ Periodic flush (permanent totals) | ✅ Atomic `INCR` (hot counters) |
 | Analytics data | ✅ Persistent aggregates | ✅ Buffered counters (periodic flush) |
-| Rate limit rules | ✅ Persistent rule config | ✅ Ephemeral active state (TTL-based) |
 | Preview links | — | ✅ Temporary keys (auto-expire via TTL) |
 
 > **Golden Rule:** Writes always persist to Turso (directly or via Redis buffer flush). Reads always try Redis first, fall back to Turso on cache miss. Redis is 100% disposable.
 
-> [!NOTE]
-> **Future Vision:** Upstash Redis will expand beyond caching into a **workflow dispatch and message queue** role. As the automation/workflow engine matures, Redis will act as the broker that pushes and schedules Action executions to edge workers (Cloudflare Workers, Supabase Edge Functions, etc.), enabling globally distributed, event-driven automation pipelines.
+---
+
+## Workflow Automation Data Architecture
+
+This section defines how Turso and Upstash work together for the workflow automation engine.
+
+### Turso: Source of Truth
+
+Turso stores all **permanent** workflow data:
+
+- **Workflow definitions** — nodes, edges, trigger config, version history. Written via `stateProvider.upsertWorkflow()` when a workflow is published from FastAPI.
+- **Execution history** — full audit trail of every execution (status, node results, errors, timestamps). Written via `stateProvider.createExecution()` / `updateExecution()`.
+- **Permanent counters** — total executions per workflow, aggregated success/failure counts. Periodically flushed from Upstash.
+- **Rate limit rules** — workflow-level configuration ("max 10 executions per hour"). Stored as metadata on the workflow definition.
+
+### Upstash: Ephemeral Buffer & Fast State
+
+Upstash handles all **time-sensitive, high-frequency, or disposable** workflow state:
+
+#### 1. Execution Buffering (Write Buffer → Flush to Turso)
+```
+Execution starts → write to Upstash (instant, <1ms)
+  → Buffer accumulates node results as workflow progresses
+  → On completion: batch-flush entire execution record to Turso
+  → Clear Upstash keys
+```
+**Why:** Turso HTTP writes are ~5-10ms each. A 10-node workflow writing status after each node = 10 × 10ms = 100ms of Turso overhead. Buffering in Upstash and flushing once at the end = 1 Turso write.
+
+#### 2. Rate Limiting (Atomic Counters)
+```
+Webhook arrives → INCR workflow:{id}:rate:{window} → check against limit
+  → If under limit: execute
+  → If at limit: return 429 Too Many Requests
+  → Key auto-expires via TTL (window duration)
+```
+**Why:** `INCR` is atomic — 50 simultaneous webhook triggers won't race. Turso `UPDATE SET count = count + 1` under concurrency requires transactions.
+
+#### 3. Debouncing (Lock Keys)
+```
+Trigger fires → SET workflow:{id}:debounce EX 5 NX
+  → If SET succeeded (NX = "only if not exists"): execute
+  → If SET failed (key exists): skip, already triggered within 5s
+```
+**Why:** Single atomic operation. No read-then-write race condition.
+
+#### 4. Execution Spike Leveling (Queue Buffer)
+```
+Burst: 100 webhooks arrive in 1 second
+  → Push to Upstash list: RPUSH workflow:{id}:queue {payload}
+  → Worker pops and processes: LPOP at controlled rate
+```
+**Why:** Prevents CF Worker CPU exhaustion. Smooths traffic spikes into steady execution rate.
+
+#### 5. Durable Execution Checkpoints (Resume/Retry)
+```
+Node A completes → SET exec:{id}:checkpoint {lastNode: A, outputs: {...}} EX 3600
+Node B completes → SET exec:{id}:checkpoint {lastNode: B, outputs: {...}} EX 3600
+[Worker dies / CF 10ms CPU limit hit]
+
+Retry (via QStash or Cron) → GET exec:{id}:checkpoint
+  → Resume at Node C with persisted outputs
+  → On completion: flush to Turso, DEL checkpoint
+```
+**Why:** Checkpoints are ephemeral by nature — they're only needed during execution. TTL ensures stale checkpoints don't accumulate.
+
+#### 6. Cross-Execution Shared Variables
+```
+Workflow A writes → SET shared:customer_sync:last_id 4527
+Workflow B reads  → GET shared:customer_sync:last_id → 4527
+Periodic flush    → Write current values to Turso for durability
+```
+**Why:** Multiple workflows can coordinate via shared Redis keys without Turso query overhead. Values are periodically flushed to Turso for durability.
+
+### Data Flow Diagram
+
+```mermaid
+flowchart TD
+    subgraph Trigger["Trigger (Webhook / Cron / Manual)"]
+        T[Incoming Request]
+    end
+
+    subgraph Upstash["Upstash Redis (Ephemeral)"]
+        RL[Rate Limit Check<br>INCR + EXPIRE]
+        DB[Debounce Lock<br>SET NX EX]
+        Q[Execution Queue<br>RPUSH/LPOP]
+        CP[Checkpoint<br>SET EX]
+        BUF[Execution Buffer<br>node results]
+    end
+
+    subgraph Worker["CF Worker / Edge Engine"]
+        RT[Runtime Engine<br>executeWorkflow]
+    end
+
+    subgraph Turso["Turso (Source of Truth)"]
+        WF[Workflow Definitions]
+        EH[Execution History]
+        PC[Permanent Counters]
+    end
+
+    T --> RL
+    RL -->|Under limit| DB
+    RL -->|Over limit| REJECT[429 Too Many]
+    DB -->|Not debounced| Q
+    DB -->|Debounced| SKIP[Skip]
+    Q --> RT
+    RT -->|After each node| CP
+    RT -->|After each node| BUF
+    RT -->|On complete| EH
+    RT -->|Read workflow| WF
+    BUF -->|Batch flush| EH
+    CP -->|On retry| RT
+    RL -->|Periodic flush| PC
+```
+
+### CF Worker Requirements by Engine Type
+
+| Capability | Lite (Automations) | Full (Pages + Automations) |
+|---|---|---|
+| **Turso** | ✅ Required (workflow storage + execution logs) | ✅ Required (pages + workflows) |
+| **Upstash** | 🟡 Optional (MVP: not needed; Phase 2: rate limits, checkpoints) | 🟡 Optional (page cache + workflow state) |
+| **Bundle size** | ~1.1 MB (no React/SSR) | ~2.2 MB (full SSR + React) |
+| **Deploy routes** | `/api/deploy`, `/api/execute`, `/api/webhook` | All of Lite + `/api/import`, `/:slug` |
+
+### Implementation Phases
+
+| Phase | Feature | Data Store | Priority |
+|---|---|---|---|
+| **MVP** | Workflow deploy + execute on CF Workers | Turso only | 🔴 Now |
+| **Phase 2** | Execution buffering (write to Upstash, flush to Turso) | Upstash + Turso | 🟡 Next |
+| **Phase 2** | Rate limiting + debouncing | Upstash | 🟡 Next |
+| **Phase 3** | Durable execution (checkpoint + QStash retry) | Upstash + QStash | 🔵 Later |
+| **Phase 3** | Execution spike leveling (queue buffer) | Upstash | 🔵 Later |
+| **Phase 3** | Cross-execution shared variables | Upstash → Turso flush | 🔵 Later |
 
 ---
 

@@ -159,11 +159,20 @@ export async function runMigrations(
                  VALUES (${migration.version}, '${migration.description.replace(/'/g, "''")}')`
             );
 
-            // Check if we actually inserted (i.e., this is a new migration)
-            // We do this by running the migration SQL — CREATE IF NOT EXISTS
-            // and INSERT OR IGNORE make this idempotent
+            // Run the migration SQL — most statements are idempotent
+            // (CREATE IF NOT EXISTS, INSERT OR IGNORE), but ALTER TABLE
+            // ADD COLUMN is not. We catch "duplicate column" errors gracefully.
             for (const sql of migration.sql) {
-                await execute(sql);
+                try {
+                    await execute(sql);
+                } catch (sqlError: any) {
+                    const msg = String(sqlError?.message || sqlError || '');
+                    if (msg.includes('duplicate column')) {
+                        console.log(`[${providerName}:Migration] Column already exists (v${migration.version}), skipping.`);
+                    } else {
+                        throw sqlError;
+                    }
+                }
             }
             appliedCount++;
         } catch (error) {

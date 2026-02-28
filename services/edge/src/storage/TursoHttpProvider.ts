@@ -155,23 +155,18 @@ export class TursoHttpProvider implements IStateProvider {
             publishedAt: page.publishedAt,
             isPublic: page.isPublic,
             isHomepage: page.isHomepage,
+            contentHash: (page as any).contentHash || null,
         };
 
-        const existing = await this.getDb().select()
-            .from(publishedPages)
-            .where(eq(publishedPages.id, page.id))
-            .get();
+        // Atomic upsert — avoids race condition when multiple targets publish concurrently
+        await this.getDb().insert(publishedPages)
+            .values(record)
+            .onConflictDoUpdate({
+                target: publishedPages.id,
+                set: { ...record, updatedAt: new Date().toISOString() },
+            });
 
-        if (existing) {
-            await this.getDb().update(publishedPages)
-                .set({ ...record, updatedAt: new Date().toISOString() })
-                .where(eq(publishedPages.id, page.id));
-            console.log(`☁️ Updated page (Turso): ${page.slug} (v${page.version})`);
-        } else {
-            await this.getDb().insert(publishedPages).values(record);
-            console.log(`☁️ Created page (Turso): ${page.slug} (v${page.version})`);
-        }
-
+        console.log(`☁️ Upserted page (Turso): ${page.slug} (v${page.version})`);
         return { success: true, version: page.version };
     }
 

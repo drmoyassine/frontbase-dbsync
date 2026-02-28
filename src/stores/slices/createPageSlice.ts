@@ -28,7 +28,7 @@ export interface PageSlice {
     publishPage: (pageId: string) => Promise<string | undefined>;
     publishPageToTarget: (pageId: string, engineId: string) => Promise<string | undefined>;
     togglePageVisibility: (pageId: string) => Promise<void>;
-    loadPagesFromDatabase: (includeDeleted?: boolean) => Promise<void>;
+    loadPagesFromDatabase: (includeDeleted?: boolean, force?: boolean) => Promise<void>;
     createPageInDatabase: (pageData: Omit<Page, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string | null>;
 }
 
@@ -236,7 +236,7 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
                 setUnsavedChanges(false);
 
                 // Reload pages to get the updated deployments array from the single-source-of-truth
-                get().loadPagesFromDatabase();
+                get().loadPagesFromDatabase(false, true);
 
                 toast({
                     title: "Page published",
@@ -285,7 +285,7 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
                 setUnsavedChanges(false);
 
                 // Reload to get updated deployments array (await to ensure state is settled)
-                await get().loadPagesFromDatabase();
+                await get().loadPagesFromDatabase(false, true);
 
                 toast({
                     title: "Page published to target",
@@ -309,7 +309,7 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
     },
 
     unpublishPageFromTarget: async (pageId: string, engineId: string) => {
-        const { setSaving, toast } = get();
+        const { setSaving } = get();
         setSaving(true);
 
         try {
@@ -322,7 +322,7 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
 
             if (result.success) {
                 // Reload pages to reflect the removed deployment
-                get().loadPagesFromDatabase();
+                get().loadPagesFromDatabase(false, true);
 
                 toast({
                     title: "Target unpublished",
@@ -370,14 +370,15 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
         }
     },
 
-    loadPagesFromDatabase: async (includeDeleted = false) => {
+    loadPagesFromDatabase: async (includeDeleted = false, force = false) => {
         // Skip if pages already loaded (handles sequential callers like BuilderPage after App.tsx)
-        if (!includeDeleted && get().isInitialized && get().pages.length > 0) {
+        // force=true bypasses this check (used after publish/sync operations)
+        if (!force && !includeDeleted && get().isInitialized && get().pages.length > 0) {
             return;
         }
 
         // In-flight dedup: concurrent callers share one promise
-        if (!includeDeleted && _loadPagesPromise) {
+        if (!force && !includeDeleted && _loadPagesPromise) {
             await _loadPagesPromise;
             return;
         }

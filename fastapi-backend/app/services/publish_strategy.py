@@ -182,8 +182,8 @@ class TursoPublishStrategy(BasePublishStrategy):
             "sql": """INSERT OR REPLACE INTO published_pages 
                       (id, slug, name, title, description, layout_data, seo_data, 
                        datasources, css_bundle, version, published_at, is_public, 
-                       is_homepage, created_at, updated_at)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       is_homepage, created_at, updated_at, content_hash)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             "args": [
                 {"type": "text", "value": str(page.get("id", ""))},
                 {"type": "text", "value": str(page.get("slug", ""))},
@@ -200,6 +200,7 @@ class TursoPublishStrategy(BasePublishStrategy):
                 {"type": "integer", "value": "1" if page.get("isHomepage", False) else "0"},
                 {"type": "text", "value": now},
                 {"type": "text", "value": now},
+                {"type": "text", "value": str(page.get("contentHash") or "")},
             ]
         }
 

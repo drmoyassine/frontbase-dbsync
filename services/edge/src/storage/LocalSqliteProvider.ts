@@ -138,21 +138,18 @@ export class LocalSqliteProvider implements IStateProvider {
             cssBundle: page.cssBundle || null,
             version: page.version, publishedAt: page.publishedAt,
             isPublic: page.isPublic, isHomepage: page.isHomepage,
+            contentHash: (page as any).contentHash || null,
         };
 
-        const existing = await database.select()
-            .from(publishedPages).where(eq(publishedPages.slug, page.slug)).get();
+        // Atomic upsert — avoids race condition when multiple targets publish concurrently
+        await database.insert(publishedPages)
+            .values(record)
+            .onConflictDoUpdate({
+                target: publishedPages.slug,
+                set: { ...record, updatedAt: new Date().toISOString() },
+            });
 
-        if (existing) {
-            await database.update(publishedPages)
-                .set({ ...record, updatedAt: new Date().toISOString() })
-                .where(eq(publishedPages.slug, page.slug));
-            console.log(`📝 Updated published page: ${page.slug} (v${page.version})`);
-        } else {
-            await database.insert(publishedPages).values(record);
-            console.log(`📄 Created published page: ${page.slug} (v${page.version})`);
-        }
-
+        console.log(`📝 Upserted published page: ${page.slug} (v${page.version})`);
         return { success: true, version: page.version };
     }
 

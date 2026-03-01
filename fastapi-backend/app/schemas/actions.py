@@ -71,7 +71,7 @@ class WorkflowDraftBase(BaseModel):
     """Base fields for workflow drafts"""
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
-    trigger_type: TriggerType = TriggerType.MANUAL
+    trigger_type: str = "manual"
     trigger_config: Optional[Dict[str, Any]] = None
     nodes: List[WorkflowNode] = Field(default_factory=list)
     edges: List[WorkflowEdge] = Field(default_factory=list)
@@ -86,7 +86,7 @@ class WorkflowDraftUpdate(BaseModel):
     """Schema for updating an existing workflow draft (partial)"""
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
-    trigger_type: Optional[TriggerType] = None
+    trigger_type: Optional[str] = None
     trigger_config: Optional[Dict[str, Any]] = None
     nodes: Optional[List[WorkflowNode]] = None
     edges: Optional[List[WorkflowEdge]] = None
@@ -96,6 +96,7 @@ class WorkflowDraftResponse(WorkflowDraftBase):
     """Response schema for workflow drafts"""
     id: str
     is_published: bool = False
+    is_active: bool = True
     published_version: Optional[int] = None
     created_at: datetime
     updated_at: datetime

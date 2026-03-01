@@ -397,7 +397,7 @@ export const BuilderHeader: React.FC<{
             </PopoverTrigger>
             <PopoverContent className="w-72 p-0" align="end">
               <div className="p-3 border-b">
-                <p className="text-sm font-semibold">Publish to targets</p>
+                <p className="text-sm font-semibold">Publish to Edge</p>
                 {hasUnsavedChanges && (
                   <p className="text-xs text-muted-foreground mt-1">Changes will be saved first.</p>
                 )}
@@ -442,9 +442,6 @@ export const BuilderHeader: React.FC<{
                                 title={synced ? "Up to date" : "Needs sync"}
                               />
                             </div>
-                            <span className="text-[11px] text-muted-foreground truncate block">
-                              {target.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                            </span>
                           </div>
                           <button
                             className="flex-shrink-0 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"

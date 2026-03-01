@@ -2,6 +2,8 @@
 
 ## 🐛 Known Bugs
 
+- [ ] **Multi-trigger publish fails for non-webhook triggers** — Publishing works when canvas has only `webhook_trigger` nodes, but adding `data_change_trigger`, `schedule_trigger`, or `manual_trigger` causes a Zod enum validation error on the edge (`'triggerType'` path). The `DeployWorkflowSchema` was updated to `z.string()` locally but the **deployed CF Worker** still has the old enum bundle. Local edge schema is fixed. **Root cause:** The CF Worker needs redeployment with the updated `workflow.ts` schema. Also verify `ExecutionSchema` (L120) still uses `TriggerTypeSchema` enum — may need updating too.
+
 - [ ] **SSR page width issue** — Page content does not span the full viewport width in SSR output.
 
   **Symptom:** Published pages show content narrower than the viewport. On widescreen, the page body appears centered with visible background bleed on the sides. The Navbar, Hero, and section backgrounds don't reach the viewport edges.
@@ -111,6 +113,39 @@ Covers provider state mismatch, quota fallback, and operational visibility.
 ## Storage & Assets
 - [ ] **Storage Architecture Refactor** — Move admin storage APIs to FastAPI. On-demand edge shipping (tree-shaking storage routes from edge bundle).
 - [ ] **Storage Provider Selector** — Dropdown in Settings to select default storage provider (multi-provider support: Supabase, S3, R2).
+
+## 🟡 Automations UI/UX, Execution & Nodes (MEDIUM PRIORITY)
+
+Covers automations enhancements to make the workflow builder production-ready.
+
+### UI/UX Enhancements
+- [ ] **Description field** — Add editable description textarea to WorkflowEditor toolbar/header, mapped to `description` column
+- [ ] **Automation card improvements** — Show `is_active` status badge, trigger type icons, last execution time on the automations list cards
+- [ ] **Persistent endpoint URL on automation card** — Show deployed webhook URL directly on the card (not just in PropertiesPane)
+- [ ] **Better error toasts** — Parse and display structured error details from backend (currently shows `[object Object]` for some errors)
+
+### Execution Logs
+- [ ] **Execution history panel** — List of past executions with status, duration, trigger info per workflow
+- [ ] **Execution detail view** — Drill-down into a specific execution showing per-node status, inputs/outputs, timing
+- [ ] **Live execution streaming** — Real-time execution progress updates (WebSocket or polling)
+- [ ] **Execution log retention** — Configurable cleanup of old execution records
+
+### Trigger Nodes
+- [ ] **Fix multi-trigger publish to CF Worker** — Redeploy CF Worker with updated `z.string()` triggerType schema (see Known Bugs)
+- [ ] **Schedule trigger implementation** — Cron expression picker UI, edge-side cron scheduler
+- [ ] **Data change trigger implementation** — Polling-based or webhook-based table change detection
+- [ ] **Manual trigger improvements** — Custom parameter form for manual execution
+
+### Additional Action Nodes
+- [ ] **Email node** — Send emails via configured SMTP or API (SendGrid/Resend)
+- [ ] **Delay/Wait node** — Pause execution for a configurable duration
+- [ ] **Loop/Iterator node** — Iterate over array data from upstream nodes
+- [ ] **Webhook Response node** — Return custom response body/headers for webhook-triggered workflows
+
+### Node Validation
+- [ ] **Required field validation** — Validate required inputs before save/publish, show warnings
+- [ ] **Node connection validation** — Verify type compatibility between connected node outputs/inputs
+- [ ] **Schema-driven defaults** — Ensure all node schemas define sensible defaults for all fields
 
 ## Enhancements & App Experience
 - [ ] **PWA Support for Published Apps** — Dynamic Manifest, Service Worker (Cache-first for static, Network-first for API), offline support, "Add to Home Screen" prompt.

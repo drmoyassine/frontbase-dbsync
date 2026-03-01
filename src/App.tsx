@@ -102,7 +102,8 @@ const App = () => {
                 <Route element={<UnifiedShell />}>
                   <Route path="/dashboard" element={<Overview />} />
                   <Route path="/pages" element={<PagesPanel />} />
-                  <Route path="/actions" element={<ActionsPage />} />
+                  <Route path="/automations" element={<ActionsPage />} />
+                  <Route path="/automations/:id" element={<ActionsPage />} />
 
                   {/* Data Studio (Tabbed Interface) */}
                   <Route path="/data-studio" element={<DataStudio />}>

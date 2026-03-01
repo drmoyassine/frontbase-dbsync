@@ -1,12 +1,13 @@
-import React, { useState, useMemo } from 'react';
-import { useWorkflowDrafts, useBulkDeleteDrafts } from '@/stores/actions';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useWorkflowDrafts, useBulkDeleteDrafts, useToggleDraftActive } from '@/stores/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Play, GitBranch, Workflow, Trash2, Search, X, CheckSquare, Square } from 'lucide-react';
+import { Plus, Play, GitBranch, Workflow, Trash2, Search, X, CheckSquare, Square, Globe, Database, Clock, Zap } from 'lucide-react';
 import { WorkflowEditor } from '@/components/actions/editor/WorkflowEditor';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -20,10 +21,13 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
+import { useParams, useNavigate } from 'react-router-dom';
 
 export default function ActionsPage() {
-    const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
-    const [isEditorOpen, setIsEditorOpen] = useState(false);
+    const { id: routeId } = useParams<{ id: string }>();
+    const navigate = useNavigate();
+    const [editingDraftId, setEditingDraftId] = useState<string | null>(routeId || null);
+    const [isEditorOpen, setIsEditorOpen] = useState(!!routeId);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -31,6 +35,28 @@ export default function ActionsPage() {
     const { toast } = useToast();
     const { data, isLoading } = useWorkflowDrafts();
     const bulkDelete = useBulkDeleteDrafts();
+    const toggleActive = useToggleDraftActive();
+
+    // Map trigger type string to icon
+    const triggerIcon = (type: string) => {
+        switch (type) {
+            case 'http_webhook': case 'webhook_trigger': return <Globe className="w-3 h-3" />;
+            case 'data_change': case 'data_change_trigger': return <Database className="w-3 h-3" />;
+            case 'scheduled': case 'schedule_trigger': return <Clock className="w-3 h-3" />;
+            case 'manual': case 'manual_trigger': return <Play className="w-3 h-3" />;
+            default: return <Zap className="w-3 h-3" />;
+        }
+    };
+
+    const triggerLabel = (type: string) => {
+        switch (type) {
+            case 'http_webhook': case 'webhook_trigger': return 'Webhook';
+            case 'data_change': case 'data_change_trigger': return 'Data Change';
+            case 'scheduled': case 'schedule_trigger': return 'Scheduled';
+            case 'manual': case 'manual_trigger': return 'Manual';
+            default: return type;
+        }
+    };
 
     // Filter drafts by search query
     const filteredDrafts = useMemo(() => {
@@ -44,9 +70,21 @@ export default function ActionsPage() {
         );
     }, [data?.drafts, searchQuery]);
 
+    // Sync with URL param changes (e.g. browser back/forward)
+    useEffect(() => {
+        if (routeId && routeId !== editingDraftId) {
+            setEditingDraftId(routeId);
+            setIsEditorOpen(true);
+        } else if (!routeId && isEditorOpen) {
+            setIsEditorOpen(false);
+            setEditingDraftId(null);
+        }
+    }, [routeId]);
+
     const handleCreate = () => {
         setEditingDraftId(null);
         setIsEditorOpen(true);
+        // Don't navigate yet — wait for save to get the ID
     };
 
     const handleEdit = (id: string) => {
@@ -55,8 +93,7 @@ export default function ActionsPage() {
             toggleSelection(id);
             return;
         }
-        setEditingDraftId(id);
-        setIsEditorOpen(true);
+        navigate(`/automations/${id}`);
     };
 
     const toggleSelection = (id: string) => {
@@ -106,7 +143,7 @@ export default function ActionsPage() {
             <div className="h-[calc(100vh-4rem)] -m-6">
                 <WorkflowEditor
                     draftId={editingDraftId}
-                    onClose={() => setIsEditorOpen(false)}
+                    onClose={() => navigate('/automations')}
                     className="h-full"
                 />
             </div>
@@ -228,21 +265,38 @@ export default function ActionsPage() {
                             <CardHeader className="pb-3 pr-10">
                                 <div className="flex justify-between items-start">
                                     <CardTitle className="truncate pr-2">{draft.name}</CardTitle>
-                                    {draft.is_published && <Badge variant="secondary">v{draft.published_version}</Badge>}
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        {draft.is_published && <Badge variant="secondary">v{draft.published_version}</Badge>}
+                                        <Badge variant={draft.is_active !== false ? 'default' : 'outline'}
+                                            className={draft.is_active !== false ? 'bg-emerald-500/15 text-emerald-700 border-emerald-200 hover:bg-emerald-500/25' : 'text-muted-foreground'}>
+                                            {draft.is_active !== false ? 'Active' : 'Inactive'}
+                                        </Badge>
+                                    </div>
                                 </div>
                                 <CardDescription>
                                     Updated {formatDistanceToNow(new Date(draft.updated_at), { addSuffix: true })}
                                 </CardDescription>
                             </CardHeader>
-                            <CardFooter className="text-xs text-muted-foreground flex gap-4 pt-0">
+                            <CardFooter className="text-xs text-muted-foreground flex items-center gap-3 pt-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    {draft.trigger_type.split(',').map((t, i) => (
+                                        <span key={i} className="flex items-center gap-1 bg-secondary/30 px-2 py-1 rounded">
+                                            {triggerIcon(t.trim())}
+                                            {triggerLabel(t.trim())}
+                                        </span>
+                                    ))}
+                                </div>
                                 <span className="flex items-center gap-1 bg-secondary/30 px-2 py-1 rounded">
                                     <GitBranch className="w-3 h-3" />
-                                    {draft.trigger_type}
-                                </span>
-                                <span className="flex items-center gap-1 bg-secondary/30 px-2 py-1 rounded">
-                                    <Play className="w-3 h-3" />
                                     {draft.nodes.length} nodes
                                 </span>
+                                <div className="ml-auto" onClick={(e) => e.stopPropagation()}>
+                                    <Switch
+                                        checked={draft.is_active !== false}
+                                        onCheckedChange={(checked) => toggleActive.mutate({ draftId: draft.id, isActive: checked })}
+                                        className="scale-75"
+                                    />
+                                </div>
                             </CardFooter>
                         </Card>
                     ))}

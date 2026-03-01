@@ -88,10 +88,14 @@ export function WorkflowEditor({
     // Edge engines for publish dropdown
     const { data: engines = [] } = useEdgeEngines();
 
+    // Description state (initialized from draft)
+    const [description, setDescription] = useState<string>('');
+
     // Load draft data when available
     useEffect(() => {
         if (draft) {
             setCurrentDraft(draft.id, draft.name);
+            setDescription(draft.description || '');
             setNodes(draft.nodes.map((n, i) => ({
                 id: n.id,
                 type: n.type === 'manual_trigger' ? 'trigger' : n.type,
@@ -162,6 +166,7 @@ export function WorkflowEditor({
 
         const workflowData = {
             name: draftName,
+            description: description || null,
             trigger_type: derivedTriggerType,
             trigger_config: triggerConfig,
             nodes: nodes.map((n) => ({
@@ -191,7 +196,8 @@ export function WorkflowEditor({
             }
             markClean();
         } catch (error: any) {
-            toast({ title: 'Error', description: error.message, variant: 'destructive' });
+            const detail = error?.response?.data?.detail || error?.message || 'Unknown error';
+            toast({ title: 'Save Failed', description: typeof detail === 'object' ? JSON.stringify(detail) : String(detail), variant: 'destructive' });
         }
     };
 
@@ -312,7 +318,8 @@ export function WorkflowEditor({
             });
             markClean();
         } catch (error: any) {
-            toast({ title: 'Publish Failed', description: error.message, variant: 'destructive' });
+            const detail = error?.response?.data?.detail || error?.message || 'Unknown error';
+            toast({ title: 'Publish Failed', description: typeof detail === 'object' ? JSON.stringify(detail) : String(detail), variant: 'destructive' });
         }
     };
 
@@ -336,6 +343,12 @@ export function WorkflowEditor({
                             onChange={(e) => useActionsStore.setState({ draftName: e.target.value, isDirty: true })}
                             className="w-64 font-medium"
                             placeholder="Workflow name"
+                        />
+                        <Input
+                            value={description}
+                            onChange={(e) => { setDescription(e.target.value); useActionsStore.setState({ isDirty: true }); }}
+                            className="w-64 text-sm text-muted-foreground"
+                            placeholder="Add description..."
                         />
 
                         <div className="flex items-center gap-2">

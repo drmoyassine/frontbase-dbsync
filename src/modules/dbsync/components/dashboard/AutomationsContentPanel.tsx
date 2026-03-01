@@ -161,7 +161,7 @@ export function AutomationsContentPanel() {
                                 ))}
                             </SelectContent>
                         </Select>
-                        <Button size="sm" onClick={() => navigate('/actions')}>
+                        <Button size="sm" onClick={() => navigate('/automations')}>
                             Manage Automations
                         </Button>
                     </div>
@@ -242,7 +242,7 @@ export function AutomationsContentPanel() {
                                             variant="ghost"
                                             size="icon"
                                             className="h-8 w-8"
-                                            onClick={() => navigate(`/actions/edit/${workflow.id}`)}
+                                            onClick={() => navigate(`/automations/${workflow.id}`)}
                                             title="Edit"
                                         >
                                             <Edit className="w-4 h-4" />

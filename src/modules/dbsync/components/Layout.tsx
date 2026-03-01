@@ -16,7 +16,7 @@ const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/pages', label: 'Builder Studio', icon: FileText },
     { path: '/data-studio', label: 'Data Studio', icon: Database },
-    { path: '/actions', label: 'Automations', icon: Workflow },
+    { path: '/automations', label: 'Automations', icon: Workflow },
     { path: '/users', label: 'Users', icon: Users },
     { path: '/storage', label: 'Storage', icon: HardDrive },
     { path: '/settings', label: 'Settings', icon: Settings },

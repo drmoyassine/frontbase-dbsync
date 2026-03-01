@@ -6,11 +6,20 @@
 
 import React, { useEffect, useState } from 'react';
 import { ReactFlowProvider } from 'reactflow';
-import { Save, Play, Rocket, X, Plus, Loader2 } from 'lucide-react';
+import { Save, Play, Rocket, X, Plus, Loader2, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useEdgeEngines } from '@/hooks/useEdgeInfrastructure';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    DropdownMenuSeparator,
+    DropdownMenuLabel,
+} from '@/components/ui/dropdown-menu';
 import { WorkflowCanvas } from './WorkflowCanvas';
 import { NodePalette } from './NodePalette';
 import { PropertiesPane } from './PropertiesPane';
@@ -21,6 +30,7 @@ import {
     useCreateDraft,
     useUpdateDraft,
     usePublishDraft,
+    usePublishDraftToEngine,
     useTestDraft,
     useTestNode,
     useExecutionResult
@@ -71,8 +81,12 @@ export function WorkflowEditor({
     const createDraft = useCreateDraft();
     const updateDraft = useUpdateDraft();
     const publishDraft = usePublishDraft();
+    const publishToEngine = usePublishDraftToEngine();
     const testDraft = useTestDraft();
     const testNode = useTestNode();
+
+    // Edge engines for publish dropdown
+    const { data: engines = [] } = useEdgeEngines();
 
     // Load draft data when available
     useEffect(() => {
@@ -230,7 +244,7 @@ export function WorkflowEditor({
         }
     }, [executionResult?.status]);
 
-    // Publish handler
+    // Publish handler (local edge)
     const handlePublish = async () => {
         if (!currentDraftId) {
             toast({ title: 'Save first', description: 'Please save the workflow before publishing', variant: 'destructive' });
@@ -246,7 +260,29 @@ export function WorkflowEditor({
             const result = await publishDraft.mutateAsync(currentDraftId);
             toast({
                 title: 'Published!',
-                description: `Version ${result.version} deployed to runtime`
+                description: `Version ${result.version} deployed to local edge`
+            });
+        } catch (error: any) {
+            toast({ title: 'Publish Failed', description: error.message, variant: 'destructive' });
+        }
+    };
+
+    // Publish to specific engine handler
+    const handlePublishToEngine = async (engineId: number, engineName: string) => {
+        if (!currentDraftId) {
+            toast({ title: 'Save first', description: 'Please save the workflow before publishing', variant: 'destructive' });
+            return;
+        }
+
+        if (isDirty) {
+            await handleSave();
+        }
+
+        try {
+            const result = await publishToEngine.mutateAsync({ draftId: currentDraftId, engineId });
+            toast({
+                title: 'Published!',
+                description: result.message || `Deployed to ${engineName}`
             });
         } catch (error: any) {
             toast({ title: 'Publish Failed', description: error.message, variant: 'destructive' });
@@ -312,10 +348,49 @@ export function WorkflowEditor({
                             )}
                         </Button>
 
-                        <Button size="sm" onClick={handlePublish} disabled={publishDraft.isPending}>
-                            <Rocket className="w-4 h-4 mr-2" />
-                            Publish
-                        </Button>
+                        {/* Publish split button: primary + engine dropdown */}
+                        <div className="flex items-center">
+                            <Button
+                                size="sm"
+                                onClick={handlePublish}
+                                disabled={publishDraft.isPending || publishToEngine.isPending}
+                                className="rounded-r-none"
+                            >
+                                <Rocket className="w-4 h-4 mr-2" />
+                                Publish
+                            </Button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        size="sm"
+                                        disabled={publishDraft.isPending || publishToEngine.isPending}
+                                        className="rounded-l-none border-l px-1.5"
+                                    >
+                                        <ChevronDown className="w-4 h-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuLabel className="text-xs text-muted-foreground">Deploy to Engine</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={handlePublish}>
+                                        🖥️ Local Edge
+                                    </DropdownMenuItem>
+                                    {engines.filter((e: any) => !e.is_system).map((engine: any) => (
+                                        <DropdownMenuItem
+                                            key={engine.id}
+                                            onClick={() => handlePublishToEngine(engine.id, engine.name)}
+                                        >
+                                            ☁️ {engine.name}
+                                        </DropdownMenuItem>
+                                    ))}
+                                    {engines.filter((e: any) => !e.is_system).length === 0 && (
+                                        <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+                                            No remote engines configured
+                                        </DropdownMenuItem>
+                                    )}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
 
                         {onClose && (
                             <Button variant="ghost" size="icon" onClick={handleClose}>

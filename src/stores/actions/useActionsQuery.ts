@@ -125,6 +125,19 @@ async function publishDraft(id: string): Promise<{ success: boolean; workflow_id
     return response.json();
 }
 
+async function publishDraftToEngine(
+    { draftId, engineId }: { draftId: string; engineId: number }
+): Promise<{ success: boolean; workflow_id: string; version: number; message: string }> {
+    const response = await fetch(`${API_BASE}/drafts/${draftId}/publish/${engineId}/`, {
+        method: 'POST',
+    });
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to publish to engine');
+    }
+    return response.json();
+}
+
 async function testDraft(id: string, parameters?: Record<string, any>): Promise<{ execution_id: string; status: string }> {
     const response = await fetch(`${API_BASE}/drafts/${id}/test`, {
         method: 'POST',
@@ -232,6 +245,18 @@ export function usePublishDraft() {
         onSuccess: (_, id) => {
             queryClient.invalidateQueries({ queryKey: ['workflow-drafts'] });
             queryClient.invalidateQueries({ queryKey: ['workflow-draft', id] });
+        },
+    });
+}
+
+export function usePublishDraftToEngine() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: publishDraftToEngine,
+        onSuccess: (_, { draftId }) => {
+            queryClient.invalidateQueries({ queryKey: ['workflow-drafts'] });
+            queryClient.invalidateQueries({ queryKey: ['workflow-draft', draftId] });
         },
     });
 }

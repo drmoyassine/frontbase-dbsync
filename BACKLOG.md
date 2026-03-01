@@ -130,11 +130,25 @@ Covers automations enhancements to make the workflow builder production-ready.
 - [ ] **Live execution streaming** — Real-time execution progress updates (WebSocket or polling)
 - [ ] **Execution log retention** — Configurable cleanup of old execution records
 
-### Trigger Nodes
+### Trigger Nodes — Edge Implementation Strategy
+
+**Current edge runtime support:**
+
+| Trigger | Edge Status | Invocation Path |
+|---------|------------|-----------------|
+| `webhook_trigger` | ✅ Working | External POST → `/api/webhook/:id` |
+| `manual_trigger` | ✅ Working (low priority) | Dashboard POST → `/api/execute/:id` |
+| `ui_event_trigger` | 🟡 Easy to add | Client hydration → `/api/execute/:id` |
+| `data_change_trigger` | 🔴 Not implemented | Data source webhook → edge |
+| `schedule_trigger` | 🔴 Not implemented | QStash cron → edge |
+
 - [ ] **Fix multi-trigger publish to CF Worker** — Redeploy CF Worker with updated `z.string()` triggerType schema (see Known Bugs)
-- [ ] **Schedule trigger implementation** — Cron expression picker UI, edge-side cron scheduler
-- [ ] **Data change trigger implementation** — Polling-based or webhook-based table change detection
-- [ ] **Manual trigger improvements** — Custom parameter form for manual execution
+
+- [ ] **UI Event Trigger (onClick/onHover)** — New `ui_event_trigger` node. Easiest to implement: the hydrated page component calls the edge's `/api/execute/:id` on user interaction (click, hover, form submit). Config: event type, target element, debounce. No backend infrastructure needed — purely frontend-driven.
+
+- [ ] **Data Change Trigger (data source webhook)** — Edge-sufficient design: when a workflow with `data_change_trigger` is published, the deploy process **registers a webhook endpoint in the data source itself** (e.g., Supabase Database Webhooks via `pg_net`, Postgres `LISTEN/NOTIFY`). The data source pushes change events to the edge's `/api/webhook/:id`. **Node config:** Data Source → Table → Change Type (INSERT/UPDATE/DELETE) → Filter conditions (AND/OR). **On publish:** auto-register the edge webhook URL in the data source. **On unpublish:** auto-deregister. No polling, no background processes — the data source is the scheduler.
+
+- [ ] **Schedule Trigger (QStash cron)** — Edge-sufficient design: on publish, register a **QStash schedule** (`https://qstash.upstash.io/v2/schedules`) that calls the edge's `/api/execute/:id` at the configured cron interval. **Node config:** Cron expression (with picker UI) + timezone. **On publish:** `POST /v2/schedules` with destination = edge execute URL. **On unpublish:** `DELETE /v2/schedules/:scheduleId`. QStash handles retries, deduplication, and dead-letter. Aligns with existing Upstash infrastructure.
 
 ### Additional Action Nodes
 - [ ] **Email node** — Send emails via configured SMTP or API (SendGrid/Resend)

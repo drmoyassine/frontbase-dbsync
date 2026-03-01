@@ -104,10 +104,11 @@ flowchart TD
 Targeted at SaaS customers wanting infinite scalability with zero self-managed infrastructure.
 
 ### Control Plane (Frontbase Managed)
-- **Builder SPA:** `app.frontbase.dev` (React/Vite).
+- **Builder SPA:** `app.frontbase.dev` (React/Vite). Stateless, shared across all tenants.
 - **FastAPI Backend:** Handles auth, project CRUD, and orchestrates the publish pipeline.
-- **Central Postgres:** Source of truth for all draft builder state (users, workspaces, projects, billing).
+- **Central Postgres:** Source of truth for all draft builder state (users, workspaces, projects, billing, **test execution logs**).
 - **Central Redis:** Backend task queues, rate limiting, live builder session state.
+- **Shared Dev Edge:** A stateless Docker edge instance used by all tenants for test execution during development. Does not persist data — test results are written back to Central Postgres.
 
 ### User-Connected Infrastructure
 These services are provisioned and owned by the user. Frontbase provides a one-click OAuth or connection string flow to connect them:

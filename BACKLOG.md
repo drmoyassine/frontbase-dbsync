@@ -119,6 +119,7 @@ Covers provider state mismatch, quota fallback, and operational visibility.
 Covers automations enhancements to make the workflow builder production-ready.
 
 ### UI/UX Enhancements
+- [ ] **Rename route `/frontbase-admin/actions` → `/frontbase-admin/automations`** — Update router config, sidebar nav links, and all `navigate()` calls. Also add deep-link route `/frontbase-admin/automations/:id` that opens directly into the workflow editor canvas for that automation.
 - [ ] **Description field** — Add editable description textarea to WorkflowEditor toolbar/header, mapped to `description` column
 - [ ] **Automation card improvements** — Show `is_active` status badge, trigger type icons, last execution time on the automations list cards
 - [ ] **Persistent endpoint URL on automation card** — Show deployed webhook URL directly on the card (not just in PropertiesPane)

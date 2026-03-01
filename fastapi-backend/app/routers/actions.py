@@ -8,13 +8,18 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from typing import List, Optional
+from datetime import datetime, timezone
 from pydantic import BaseModel
 import httpx
 import json
 import logging
+import asyncio
+import uuid
 
 from app.database.utils import get_db
+from app.database.config import SessionLocal
 from app.models.actions import AutomationDraft, AutomationExecution
+from app.models.models import EdgeEngine
 from app.schemas.actions import (
     WorkflowDraftCreate,
     WorkflowDraftUpdate,
@@ -33,6 +38,20 @@ router = APIRouter()
 # Defaults to localhost:3002 for local development
 import os
 EDGE_URL = os.getenv("EDGE_URL", "http://localhost:3002")
+
+
+def _build_deploy_payload(draft: AutomationDraft, name_prefix: str = "") -> dict:
+    """Build the deploy payload for the Edge /api/deploy endpoint."""
+    return {
+        "id": str(draft.id),
+        "name": f"{name_prefix}{draft.name}",
+        "description": str(draft.description) if str(draft.description or "") else None,
+        "triggerType": str(draft.trigger_type),
+        "triggerConfig": draft.trigger_config or {},
+        "nodes": draft.nodes,
+        "edges": draft.edges,
+        "publishedBy": str(draft.created_by) if str(draft.created_by or "") else None,
+    }
 
 
 # ============ Draft CRUD ============
@@ -227,9 +246,8 @@ async def publish_draft(
     db: Session = Depends(get_db)
 ):
     """
-    Publish a workflow draft to the Actions Runtime (Hono).
-    
-    This deploys the workflow so it can be executed via the runtime API.
+    Publish a workflow draft to the local Edge Engine.
+    Kept for backward compatibility (no engine_id = local dev edge).
     """
     result = db.execute(
         select(AutomationDraft).where(AutomationDraft.id == draft_id)
@@ -239,18 +257,7 @@ async def publish_draft(
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
     
-    # Prepare payload for Hono /deploy endpoint
-    # This must match the DeployWorkflowSchema in Hono
-    deploy_payload = {
-        "id": draft.id,
-        "name": draft.name,
-        "description": draft.description,
-        "triggerType": draft.trigger_type,
-        "triggerConfig": draft.trigger_config or {},
-        "nodes": draft.nodes,
-        "edges": draft.edges,
-        "publishedBy": draft.created_by,
-    }
+    deploy_payload = _build_deploy_payload(draft)
     
     try:
         async with httpx.AsyncClient() as client:
@@ -283,16 +290,113 @@ async def publish_draft(
     # Update draft with published status
     draft.is_published = True  # type: ignore[assignment]
     draft.published_version = result_data.get("version", 1)
-    
-    from datetime import datetime, timezone
     draft.published_at = datetime.now(timezone.utc)  # type: ignore[assignment]
-    
     db.commit()
     
     return PublishResponse(
         success=True,
         message="Workflow published successfully",
         workflow_id=str(draft.id),
+        version=result_data.get("version", 1)
+    )
+
+
+@router.post("/drafts/{draft_id}/publish/{engine_id}/", response_model=PublishResponse)
+async def publish_draft_to_engine(
+    draft_id: str,
+    engine_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Publish a workflow draft to a specific Edge Engine target.
+    Mirrors the page publish_to_target() pattern.
+    Uses Release-Before-IO (AGENTS.md §4.3).
+    """
+    # 1. FETCH DATA — fast DB interaction
+    result = db.execute(
+        select(AutomationDraft).where(AutomationDraft.id == draft_id)
+    )
+    draft = result.scalar_one_or_none()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if not engine:
+        raise HTTPException(status_code=404, detail=f"Engine not found: {engine_id}")
+    
+    engine_url = getattr(engine, 'url', None)
+    engine_name = getattr(engine, 'name', f'Engine {engine_id}')
+    if not engine_url:
+        raise HTTPException(status_code=400, detail="Engine URL is missing")
+    
+    # Force-load attributes before detaching
+    deploy_payload = _build_deploy_payload(draft)
+    draft_id_str = str(draft.id)
+    
+    # Release connection before slow I/O
+    db.expunge(draft)
+    db.close()
+    
+    # 2. SLOW I/O — no DB connection held
+    try:
+        async with httpx.AsyncClient() as client:
+            # Pre-flight health check
+            try:
+                health_resp = await client.get(
+                    f"{engine_url.rstrip('/')}/api/health",
+                    timeout=5.0
+                )
+                if health_resp.status_code != 200:
+                    raise HTTPException(
+                        status_code=503,
+                        detail=f"Engine '{engine_name}' health check failed: HTTP {health_resp.status_code}"
+                    )
+            except httpx.ConnectError:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Engine '{engine_name}' is unreachable at {engine_url}"
+                )
+            
+            # Deploy workflow
+            response = await client.post(
+                f"{engine_url.rstrip('/')}/api/deploy",
+                json=deploy_payload,
+                timeout=30.0
+            )
+            
+            if response.status_code != 200:
+                error_detail = response.json() if response.headers.get("content-type", "").startswith("application/json") else response.text
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Failed to deploy to '{engine_name}': {error_detail}"
+                )
+            
+            result_data = response.json()
+            
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Engine '{engine_name}' timed out"
+        )
+    
+    # 3. UPDATE DB — new connection for post-deploy status update
+    update_db = SessionLocal()
+    try:
+        draft_record = update_db.query(AutomationDraft).filter(
+            AutomationDraft.id == draft_id_str
+        ).first()
+        if draft_record:
+            draft_record.is_published = True  # type: ignore[assignment]
+            draft_record.published_version = result_data.get("version", 1)
+            draft_record.published_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+            update_db.commit()
+    finally:
+        update_db.close()
+    
+    return PublishResponse(
+        success=True,
+        message=f"Workflow published to '{engine_name}'",
+        workflow_id=draft_id_str,
         version=result_data.get("version", 1)
     )
 
@@ -380,7 +484,7 @@ async def test_draft(
                     if response.status_code == 404:
                         error_detail = "Workflow not found in Edge Engine. Try deploying first."
                 raise HTTPException(
-                    status_code=502,  # Use 502 to indicate upstream failure
+                    status_code=502,
                     detail=error_detail
                 )
             
@@ -392,8 +496,17 @@ async def test_draft(
             detail="Edge Engine connection lost during execution"
         )
     
+    # Write test execution to backend DB
+    execution_id = result_data.get("executionId", str(uuid.uuid4()))
+    _save_test_execution(
+        execution_id=execution_id,
+        draft_id=str(draft.id),
+        trigger_type="manual",
+        input_params=request.parameters,
+    )
+    
     return TestExecuteResponse(
-        execution_id=result_data.get("executionId"),
+        execution_id=execution_id,
         status=result_data.get("status", "started"),
         message=result_data.get("message")
     )
@@ -470,8 +583,17 @@ async def test_node(
             detail="Edge Engine connection lost during node execution"
         )
     
+    # Write test execution to backend DB
+    execution_id = result_data.get("executionId", str(uuid.uuid4()))
+    _save_test_execution(
+        execution_id=execution_id,
+        draft_id=str(draft.id),
+        trigger_type="node_test",
+        input_params={"nodeId": node_id, **(request.parameters or {})},
+    )
+    
     return TestExecuteResponse(
-        execution_id=result_data.get("executionId"),
+        execution_id=execution_id,
         status=result_data.get("status", "started"),
         message=result_data.get("message")
     )
@@ -504,6 +626,71 @@ async def get_execution_result(execution_id: str):
         )
 
 
+# ============ Execution Log Writeback ============
+
+def _save_test_execution(
+    execution_id: str,
+    draft_id: str,
+    trigger_type: str,
+    input_params: Optional[dict] = None,
+):
+    """Save a test execution record to the backend DB."""
+    db = SessionLocal()
+    try:
+        record = AutomationExecution(
+            id=execution_id,
+            draft_id=draft_id,
+            status="started",
+            trigger_type=trigger_type,
+            trigger_payload=input_params,
+            started_at=datetime.now(timezone.utc),
+        )
+        db.add(record)
+        db.commit()
+    except Exception as e:
+        logger.error(f"Failed to save test execution: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
+async def _poll_and_update_execution(execution_id: str, max_attempts: int = 30):
+    """
+    Poll the edge engine for execution result and update the backend DB.
+    Called as background task after test execution starts.
+    """
+    for attempt in range(max_attempts):
+        await asyncio.sleep(1)
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    f"{EDGE_URL}/api/executions/{execution_id}",
+                    timeout=5.0
+                )
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                status = data.get("status", "started")
+                if status in ("completed", "error"):
+                    db = SessionLocal()
+                    try:
+                        record = db.query(AutomationExecution).filter(
+                            AutomationExecution.id == execution_id
+                        ).first()
+                        if record:
+                            record.status = status  # type: ignore[assignment]
+                            record.node_executions = data.get("nodeExecutions")  # type: ignore[assignment]
+                            record.result = data.get("result")  # type: ignore[assignment]
+                            record.error = data.get("error")  # type: ignore[assignment]
+                            record.ended_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+                            db.commit()
+                    finally:
+                        db.close()
+                    return
+        except Exception as e:
+            logger.error(f"Poll execution {execution_id} attempt {attempt}: {e}")
+
+
 # ============ Execution History ============
 
 @router.get("/executions/{draft_id}")
@@ -512,7 +699,33 @@ async def get_draft_executions(
     limit: int = 20,
     db: Session = Depends(get_db)
 ):
-    """Get execution history for a draft from the Actions Engine"""
+    """Get execution history for a draft — merges backend test logs + local edge production logs."""
+    # 1. Test logs from backend DB
+    test_records = db.execute(
+        select(AutomationExecution)
+        .where(AutomationExecution.draft_id == draft_id)
+        .order_by(AutomationExecution.started_at.desc())
+        .limit(limit)
+    ).scalars().all()
+    
+    test_logs = []
+    for r in test_records:
+        test_logs.append({
+            "id": str(r.id),
+            "workflowId": str(r.draft_id),
+            "status": str(r.status),
+            "triggerType": str(r.trigger_type),
+            "triggerPayload": r.trigger_payload,
+            "nodeExecutions": r.node_executions,
+            "result": r.result,
+            "error": str(r.error) if str(r.error or "") else None,
+            "startedAt": r.started_at.isoformat() if r.started_at is not None else None,  # type: ignore[union-attr]
+            "endedAt": r.ended_at.isoformat() if r.ended_at is not None else None,  # type: ignore[union-attr]
+            "source": "test",
+        })
+    
+    # 2. Production logs from local edge
+    edge_logs = []
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -520,13 +733,53 @@ async def get_draft_executions(
                 params={"limit": str(limit)},
                 timeout=10.0
             )
-            
             if response.status_code == 200:
-                return response.json()
-            return {"executions": [], "total": 0}
-            
+                data = response.json()
+                for e in data.get("executions", []):
+                    e["source"] = "local_edge"
+                    edge_logs.append(e)
     except httpx.ConnectError:
-        return {"executions": [], "total": 0, "error": "Actions Engine not available"}
+        pass  # Edge not available, skip production logs
+    
+    # 3. Merge and sort by startedAt desc
+    all_logs = test_logs + edge_logs
+    all_logs.sort(key=lambda x: x.get("startedAt", ""), reverse=True)
+    
+    return {"executions": all_logs[:limit], "total": len(all_logs)}
+
+
+@router.get("/executions/{draft_id}/production/{engine_id}")
+async def get_production_executions(
+    draft_id: str,
+    engine_id: int,
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    """Get production execution history from a specific edge engine."""
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if not engine:
+        raise HTTPException(status_code=404, detail=f"Engine not found: {engine_id}")
+    
+    engine_url = getattr(engine, 'url', None)
+    engine_name = getattr(engine, 'name', f'Engine {engine_id}')
+    if not engine_url:
+        return {"executions": [], "total": 0, "error": "Engine URL is missing"}
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{engine_url.rstrip('/')}/api/executions/workflow/{draft_id}",
+                params={"limit": str(limit)},
+                timeout=10.0
+            )
+            if response.status_code == 200:
+                data = response.json()
+                for e in data.get("executions", []):
+                    e["source"] = str(engine_name)
+                return data
+            return {"executions": [], "total": 0}
+    except httpx.ConnectError:
+        return {"executions": [], "total": 0, "error": f"Engine '{engine_name}' not reachable"}
 
 
 @router.get("/execution-stats")

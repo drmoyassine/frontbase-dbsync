@@ -104,7 +104,7 @@ async def create_draft(
     db_draft = AutomationDraft(
         name=draft.name,
         description=draft.description,
-        trigger_type=draft.trigger_type.value if hasattr(draft.trigger_type, 'value') else draft.trigger_type,
+        trigger_type=draft.trigger_type,
         trigger_config=draft.trigger_config,
         nodes=[safe_dump(node) for node in draft.nodes],
         edges=[safe_dump(edge) for edge in draft.edges],
@@ -180,8 +180,6 @@ async def update_draft(
     
     if "edges" in update_data:
         update_data["edges"] = [e.model_dump() if hasattr(e, 'model_dump') else e for e in update_data["edges"]]
-    if "trigger_type" in update_data:
-        update_data["trigger_type"] = update_data["trigger_type"].value
     
     for key, value in update_data.items():
         setattr(draft, key, value)

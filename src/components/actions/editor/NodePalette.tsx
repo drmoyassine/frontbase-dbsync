@@ -42,6 +42,13 @@ const nodeTypes: NodeTypeConfig[] = [
         icon: <Timer className="w-4 h-4" />,
         category: 'triggers',
     },
+    {
+        type: 'data_change_trigger',
+        label: 'Data Change',
+        description: 'Trigger when data changes',
+        icon: <Database className="w-4 h-4" />,
+        category: 'triggers',
+    },
 
     // Actions
     {

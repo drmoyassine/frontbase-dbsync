@@ -9,7 +9,6 @@ import { ReactFlowProvider } from 'reactflow';
 import { Save, Play, Rocket, X, Plus, Loader2, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useEdgeEngines } from '@/hooks/useEdgeInfrastructure';
 import {
@@ -59,13 +58,11 @@ export function WorkflowEditor({
     const {
         currentDraftId,
         draftName,
-        triggerType,
         nodes,
         edges,
         isDirty,
         selectedNodeId,
         setCurrentDraft,
-        setTriggerType,
         setNodes,
         setEdges,
         markClean,
@@ -136,9 +133,35 @@ export function WorkflowEditor({
 
     // Save handler
     const handleSave = async () => {
+        // Derive trigger_type from trigger nodes on canvas
+        const TRIGGER_TYPE_MAP: Record<string, string> = {
+            trigger: 'manual',
+            manual_trigger: 'manual',
+            webhook_trigger: 'http_webhook',
+            schedule_trigger: 'scheduled',
+            data_change_trigger: 'data_change',
+        };
+        const triggerNodes = nodes.filter(n => TRIGGER_TYPE_MAP[n.data.type]);
+        const derivedTriggerType = [...new Set(triggerNodes.map(n => TRIGGER_TYPE_MAP[n.data.type]))].join(',') || 'manual';
+
+        // Build trigger_config map keyed by trigger node ID (Option A)
+        const triggerConfig: Record<string, Record<string, any>> = {};
+        for (const tn of triggerNodes) {
+            const inputs: Record<string, any> = {};
+            if (Array.isArray(tn.data.inputs)) {
+                for (const inp of tn.data.inputs) {
+                    if (inp.name && inp.value !== undefined) {
+                        inputs[inp.name] = inp.value;
+                    }
+                }
+            }
+            triggerConfig[tn.id] = inputs;
+        }
+
         const workflowData = {
             name: draftName,
-            trigger_type: triggerType,
+            trigger_type: derivedTriggerType,
+            trigger_config: triggerConfig,
             nodes: nodes.map((n) => ({
                 id: n.id,
                 name: n.data.label,
@@ -262,6 +285,7 @@ export function WorkflowEditor({
                 title: 'Published!',
                 description: `Version ${result.version} deployed to local edge`
             });
+            markClean();
         } catch (error: any) {
             toast({ title: 'Publish Failed', description: error.message, variant: 'destructive' });
         }
@@ -284,6 +308,7 @@ export function WorkflowEditor({
                 title: 'Published!',
                 description: result.message || `Deployed to ${engineName}`
             });
+            markClean();
         } catch (error: any) {
             toast({ title: 'Publish Failed', description: error.message, variant: 'destructive' });
         }
@@ -310,18 +335,6 @@ export function WorkflowEditor({
                             className="w-64 font-medium"
                             placeholder="Workflow name"
                         />
-
-                        <Select value={triggerType} onValueChange={(v: any) => setTriggerType(v)}>
-                            <SelectTrigger className="w-40">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="manual">Manual</SelectItem>
-                                <SelectItem value="http_webhook">Webhook</SelectItem>
-                                <SelectItem value="scheduled">Scheduled</SelectItem>
-                                <SelectItem value="data_change">Data Change</SelectItem>
-                            </SelectContent>
-                        </Select>
 
                         {isDirty && (
                             <span className="text-xs text-muted-foreground">• Unsaved changes</span>

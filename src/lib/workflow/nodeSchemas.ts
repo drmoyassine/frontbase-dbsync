@@ -213,6 +213,55 @@ export const scheduleTriggerSchema: NodeSchema = {
     ],
 };
 
+export const dataChangeTriggerSchema: NodeSchema = {
+    type: 'data_change_trigger',
+    label: 'Data Change',
+    description: 'Trigger when data changes',
+    category: 'triggers',
+    inputs: [
+        {
+            name: 'dataSource',
+            type: 'select',
+            label: 'Data Source',
+            required: true,
+            description: 'Select Data Source to watch',
+            options: 'datasources',
+        } as SelectFieldDefinition,
+        {
+            name: 'table',
+            type: 'select',
+            label: 'Table',
+            required: true,
+            description: 'Table to monitor for changes',
+            options: 'tables',
+        } as SelectFieldDefinition,
+        {
+            name: 'operation',
+            type: 'select',
+            label: 'On Operation',
+            default: 'any',
+            options: [
+                { value: 'any', label: 'Any Change' },
+                { value: 'insert', label: 'Insert' },
+                { value: 'update', label: 'Update' },
+                { value: 'delete', label: 'Delete' },
+            ],
+        } as SelectFieldDefinition,
+        {
+            name: 'pollingInterval',
+            type: 'number',
+            label: 'Polling Interval (s)',
+            default: 30,
+            description: 'How often to check for changes (seconds)',
+        },
+    ],
+    outputs: [
+        { name: 'changes', type: 'array', description: 'Changed records' },
+        { name: 'operation', type: 'string', description: 'What changed (insert/update/delete)' },
+        { name: 'count', type: 'number', description: 'Number of changed records' },
+    ],
+};
+
 // --- ACTIONS ---
 
 export const httpRequestSchema: NodeSchema = {
@@ -814,6 +863,7 @@ export const nodeSchemas: Record<string, NodeSchema> = {
     trigger: manualTriggerSchema,
     webhook_trigger: webhookTriggerSchema,
     schedule_trigger: scheduleTriggerSchema,
+    data_change_trigger: dataChangeTriggerSchema,
     // Actions
     http_request: httpRequestSchema,
     transform: transformSchema,

@@ -304,7 +304,7 @@ async def publish_draft(
 @router.post("/drafts/{draft_id}/publish/{engine_id}/", response_model=PublishResponse)
 async def publish_draft_to_engine(
     draft_id: str,
-    engine_id: int,
+    engine_id: str,
     db: Session = Depends(get_db)
 ):
     """
@@ -751,7 +751,7 @@ async def get_draft_executions(
 @router.get("/executions/{draft_id}/production/{engine_id}")
 async def get_production_executions(
     draft_id: str,
-    engine_id: int,
+    engine_id: str,
     limit: int = 20,
     db: Session = Depends(get_db)
 ):

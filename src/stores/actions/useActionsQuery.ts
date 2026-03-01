@@ -126,7 +126,7 @@ async function publishDraft(id: string): Promise<{ success: boolean; workflow_id
 }
 
 async function publishDraftToEngine(
-    { draftId, engineId }: { draftId: string; engineId: number }
+    { draftId, engineId }: { draftId: string; engineId: string }
 ): Promise<{ success: boolean; workflow_id: string; version: number; message: string }> {
     const response = await fetch(`${API_BASE}/drafts/${draftId}/publish/${engineId}/`, {
         method: 'POST',

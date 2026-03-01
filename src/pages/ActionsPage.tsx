@@ -391,16 +391,11 @@ export default function ActionsPage() {
                                                                         <DropdownMenuItem
                                                                             key={engineId}
                                                                             disabled={deployedEngine.is_active === false || draft.is_active === false}
-                                                                            className="flex flex-col items-start gap-1 py-2 cursor-pointer"
+                                                                            className="flex items-center justify-between py-2 cursor-pointer w-full"
                                                                             onClick={(e) => handleCopyWebhookUrl(e, deployedEngine.url, draft.id)}
                                                                         >
-                                                                            <div className="flex items-center justify-between w-full">
-                                                                                <span className="font-medium">{engineName}</span>
-                                                                                {isCopied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5 opacity-50" />}
-                                                                            </div>
-                                                                            <span className="text-[10px] text-muted-foreground font-mono truncate w-full" title={url}>
-                                                                                {url}
-                                                                            </span>
+                                                                            <span className="font-medium truncate pr-2">{engineName}</span>
+                                                                            {isCopied ? <Check className="w-3.5 h-3.5 text-green-500 shrink-0" /> : <Copy className="w-3.5 h-3.5 opacity-50 shrink-0" />}
                                                                         </DropdownMenuItem>
                                                                     );
                                                                 })

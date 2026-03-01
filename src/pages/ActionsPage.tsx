@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useWorkflowDrafts, useBulkDeleteDrafts, useToggleDraftActive } from '@/stores/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Play, GitBranch, Workflow, Trash2, Search, X, CheckSquare, Square, Globe, Database, Clock, Zap } from 'lucide-react';
+import { Plus, Play, GitBranch, Workflow, Trash2, Search, X, CheckSquare, Square, Globe, Database, Clock, Zap, Server } from 'lucide-react';
 import { WorkflowEditor } from '@/components/actions/editor/WorkflowEditor';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -290,6 +290,16 @@ export default function ActionsPage() {
                                     <GitBranch className="w-3 h-3" />
                                     {draft.nodes.length} nodes
                                 </span>
+                                {draft.deployed_engines && Object.keys(draft.deployed_engines).length > 0 && (
+                                    <div className="flex items-center gap-1 flex-wrap">
+                                        {Object.values(draft.deployed_engines as Record<string, { name: string }>).map((eng, i) => (
+                                            <span key={i} className="flex items-center gap-1 bg-blue-500/10 text-blue-700 px-2 py-1 rounded text-[11px]">
+                                                <Server className="w-3 h-3" />
+                                                {eng.name}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
                                 <div className="ml-auto" onClick={(e) => e.stopPropagation()}>
                                     <Switch
                                         checked={draft.is_active !== false}

@@ -34,6 +34,7 @@ export interface WorkflowDraft {
     is_published: boolean;
     is_active: boolean;
     published_version?: number;
+    deployed_engines?: Record<string, { name: string; url: string; deployed_at: string }>;
     created_at: string;
     updated_at: string;
     created_by?: string;

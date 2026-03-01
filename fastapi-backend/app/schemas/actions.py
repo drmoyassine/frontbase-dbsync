@@ -98,6 +98,7 @@ class WorkflowDraftResponse(WorkflowDraftBase):
     is_published: bool = False
     is_active: bool = True
     published_version: Optional[int] = None
+    deployed_engines: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
     created_by: Optional[str] = None

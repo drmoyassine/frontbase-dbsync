@@ -408,6 +408,14 @@ async def publish_draft_to_engine(
             draft_record.is_published = True  # type: ignore[assignment]
             draft_record.published_version = result_data.get("version", 1)
             draft_record.published_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+            # Accumulate deployed engine record
+            engines = dict(draft_record.deployed_engines or {})
+            engines[engine_id] = {
+                "name": engine_name,
+                "url": engine_url,
+                "deployed_at": datetime.now(timezone.utc).isoformat()
+            }
+            draft_record.deployed_engines = engines  # type: ignore[assignment]
             update_db.commit()
     finally:
         update_db.close()

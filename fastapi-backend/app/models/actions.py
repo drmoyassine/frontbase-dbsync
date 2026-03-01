@@ -34,6 +34,7 @@ class AutomationDraft(Base):
     is_published = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     published_version = Column(Integer, nullable=True)
+    deployed_engines = Column(JSON, nullable=True, default=dict)  # {engine_id: {name, url, deployed_at}}
     published_at = Column(DateTime(timezone=True), nullable=True)
     
     # Metadata

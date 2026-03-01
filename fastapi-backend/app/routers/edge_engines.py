@@ -652,9 +652,8 @@ async def batch_toggle_engines(payload: BatchToggleRequest, db: Session = Depend
 
     now = datetime.utcnow().isoformat()
     for engine in engines:
-        if engine.is_system:  # type: ignore[truthy-bool]
-            result.failed.append({"id": str(engine.id), "error": "Cannot toggle system engine"})
-            continue
+        # System engines CAN be toggled active/inactive, they just can't be deleted.
+        # This fixes a bug where the Local Edge got stuck in an inactive state.
         engine.is_active = payload.is_active  # type: ignore[assignment]
         engine.updated_at = now  # type: ignore[assignment]
         result.success.append(str(engine.id))

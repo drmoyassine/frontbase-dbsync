@@ -569,10 +569,11 @@ export function EdgeEnginesSection() {
                                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <div className="flex items-center space-x-2 mr-2">
                                                     <Switch
+                                                        title={engine.is_active ? "Pause Engine" : "Activate Engine"}
                                                         id={`active-${engine.id}`}
                                                         checked={engine.is_active}
                                                         onCheckedChange={() => handleToggle(engine)}
-                                                        disabled={engine.is_system}
+                                                    // System engines can be toggled now to fix Local Edge getting stuck
                                                     />
                                                 </div>
 

@@ -1,13 +1,22 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useWorkflowDrafts, useBulkDeleteDrafts, useToggleDraftActive } from '@/stores/actions';
+import { useWorkflowDrafts, useBulkDeleteDrafts, useToggleDraftActive, useToggleTargetActive } from '@/stores/actions';
+import { useEdgeEngines } from '@/hooks/useEdgeInfrastructure';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Play, GitBranch, Workflow, Trash2, Search, X, CheckSquare, Square, Globe, Database, Clock, Zap, Server } from 'lucide-react';
+import { Plus, Play, GitBranch, Workflow, Trash2, Search, X, CheckSquare, Square, Globe, Database, Clock, Zap, Server, Copy, Check } from 'lucide-react';
 import { WorkflowEditor } from '@/components/actions/editor/WorkflowEditor';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -31,11 +40,24 @@ export default function ActionsPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+
+    const handleCopyWebhookUrl = (e: React.MouseEvent, url: string, draftId: string) => {
+        e.stopPropagation();
+        const webhookUrl = `${url.replace(/\/$/, '')}/api/webhook/${draftId}`;
+        navigator.clipboard.writeText(webhookUrl);
+        setCopiedUrl(webhookUrl);
+        setTimeout(() => setCopiedUrl(null), 2000);
+        toast({ title: 'Webhook URL copied', description: 'URL copied to clipboard' });
+    };
 
     const { toast } = useToast();
-    const { data, isLoading } = useWorkflowDrafts();
+    const { data: actionsData, isLoading } = useWorkflowDrafts();
+    const { data: engines = [] } = useEdgeEngines();
+    const data = actionsData; // Alias for backward compatibility below
     const bulkDelete = useBulkDeleteDrafts();
     const toggleActive = useToggleDraftActive();
+    const toggleTargetActive = useToggleTargetActive();
 
     // Map trigger type string to icon
     const triggerIcon = (type: string) => {
@@ -265,48 +287,143 @@ export default function ActionsPage() {
                             <CardHeader className="pb-3 pr-10">
                                 <div className="flex justify-between items-start">
                                     <CardTitle className="truncate pr-2">{draft.name}</CardTitle>
-                                    <div className="flex items-center gap-1.5 shrink-0">
+                                    <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} onPointerDown={(e) => e.stopPropagation()}>
                                         {draft.is_published && <Badge variant="secondary">v{draft.published_version}</Badge>}
-                                        <Badge variant={draft.is_active !== false ? 'default' : 'outline'}
-                                            className={draft.is_active !== false ? 'bg-emerald-500/15 text-emerald-700 border-emerald-200 hover:bg-emerald-500/25' : 'text-muted-foreground'}>
-                                            {draft.is_active !== false ? 'Active' : 'Inactive'}
-                                        </Badge>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Badge
+                                                    variant={!draft.is_published ? 'secondary' : (draft.is_active !== false ? 'default' : 'outline')}
+                                                    className={cn(
+                                                        "cursor-pointer transition-colors",
+                                                        !draft.is_published
+                                                            ? "bg-amber-500/15 text-amber-700 border-amber-200 hover:bg-amber-500/25"
+                                                            : (draft.is_active !== false
+                                                                ? "bg-emerald-500/15 text-emerald-700 border-emerald-200 hover:bg-emerald-500/25"
+                                                                : "text-muted-foreground hover:bg-muted")
+                                                    )}
+                                                >
+                                                    {!draft.is_published ? 'Draft' : (draft.is_active !== false ? 'Active' : 'Inactive')}
+                                                </Badge>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
+                                                <DropdownMenuLabel className="flex justify-between items-center font-normal">
+                                                    <span>Global Active State</span>
+                                                    <Switch
+                                                        checked={draft.is_active !== false}
+                                                        onCheckedChange={(checked) => toggleActive.mutate({ draftId: draft.id, isActive: checked })}
+                                                        className="scale-75"
+                                                    />
+                                                </DropdownMenuLabel>
+                                                {draft.deployed_engines && Object.keys(draft.deployed_engines).length > 0 && (
+                                                    <>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuLabel className="text-xs text-muted-foreground uppercase opacity-80 pt-1 pb-1">
+                                                            Deployed Targets
+                                                        </DropdownMenuLabel>
+                                                        {Object.entries(draft.deployed_engines)
+                                                            .map(([engineId, deployedEngine]: [string, any]) => {
+                                                                // Find the actual engine to see if it still exists
+                                                                // Use the stored name as a fallback if the engine name is missing, but if the engine isn't found at all, skip rendering
+                                                                const actualEngine = engines?.find((e: any) => e.id === engineId);
+                                                                // We also check for 'local' for backward compatibility during the transition
+                                                                if (!actualEngine && engineId !== 'local') return null;
+
+                                                                const engineName = actualEngine?.name || deployedEngine.name;
+
+                                                                return (
+                                                                    <div key={engineId} className="flex items-center justify-between px-2 py-1.5 text-sm">
+                                                                        <div className="flex items-center gap-2 truncate pr-2">
+                                                                            <Server className="w-3.5 h-3.5 opacity-70" />
+                                                                            <span className="truncate">{engineName}</span>
+                                                                        </div>
+                                                                        <Switch
+                                                                            checked={deployedEngine.is_active !== false}
+                                                                            disabled={draft.is_active === false}
+                                                                            onCheckedChange={(checked) => toggleTargetActive.mutate({
+                                                                                draftId: draft.id,
+                                                                                engineId,
+                                                                                is_active: checked
+                                                                            })}
+                                                                            className="scale-75 shrink-0"
+                                                                        />
+                                                                    </div>
+                                                                );
+                                                            })
+                                                            .filter(Boolean)
+                                                        }
+                                                    </>
+                                                )}
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </div>
                                 </div>
                                 <CardDescription>
                                     Updated {formatDistanceToNow(new Date(draft.updated_at), { addSuffix: true })}
                                 </CardDescription>
                             </CardHeader>
-                            <CardFooter className="text-xs text-muted-foreground flex items-center gap-3 pt-0">
+                            <CardFooter className="text-xs text-muted-foreground flex items-center gap-3 pt-0" >
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                    {draft.trigger_type.split(',').map((t, i) => (
-                                        <span key={i} className="flex items-center gap-1 bg-secondary/30 px-2 py-1 rounded">
-                                            {triggerIcon(t.trim())}
-                                            {triggerLabel(t.trim())}
-                                        </span>
-                                    ))}
+                                    {draft.trigger_type.split(',').map((t, i) => {
+                                        const type = t.trim();
+                                        const isWebhook = type === 'http_webhook' || type === 'webhook_trigger';
+
+                                        if (isWebhook && draft.deployed_engines && Object.keys(draft.deployed_engines).length > 0) {
+                                            return (
+                                                <div key={i} onClick={(e) => e.stopPropagation()}>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <span className="flex items-center gap-1 bg-secondary/30 px-2 py-1 rounded cursor-pointer hover:bg-secondary/50 transition-colors">
+                                                                {triggerIcon(type)}
+                                                                {triggerLabel(type)}
+                                                            </span>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end" className="w-64" onClick={(e) => e.stopPropagation()}>
+                                                            <DropdownMenuLabel className="font-normal text-xs text-muted-foreground pb-2">Copy webhook URL for target:</DropdownMenuLabel>
+                                                            {Object.entries(draft.deployed_engines)
+                                                                .map(([engineId, deployedEngine]: [string, any]) => {
+                                                                    const actualEngine = engines?.find((e: any) => e.id === engineId);
+                                                                    if (!actualEngine && engineId !== 'local') return null;
+
+                                                                    const engineName = actualEngine?.name || deployedEngine.name;
+                                                                    const url = `${deployedEngine.url.replace(/\/$/, '')}/api/webhook/${draft.id}`;
+                                                                    const isCopied = copiedUrl === url;
+                                                                    return (
+                                                                        <DropdownMenuItem
+                                                                            key={engineId}
+                                                                            disabled={deployedEngine.is_active === false || draft.is_active === false}
+                                                                            className="flex flex-col items-start gap-1 py-2 cursor-pointer"
+                                                                            onClick={(e) => handleCopyWebhookUrl(e, deployedEngine.url, draft.id)}
+                                                                        >
+                                                                            <div className="flex items-center justify-between w-full">
+                                                                                <span className="font-medium">{engineName}</span>
+                                                                                {isCopied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5 opacity-50" />}
+                                                                            </div>
+                                                                            <span className="text-[10px] text-muted-foreground font-mono truncate w-full" title={url}>
+                                                                                {url}
+                                                                            </span>
+                                                                        </DropdownMenuItem>
+                                                                    );
+                                                                })
+                                                                .filter(Boolean)
+                                                            }
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <span key={i} className="flex items-center gap-1 bg-secondary/30 px-2 py-1 rounded">
+                                                {triggerIcon(type)}
+                                                {triggerLabel(type)}
+                                            </span>
+                                        );
+                                    })}
                                 </div>
-                                <span className="flex items-center gap-1 bg-secondary/30 px-2 py-1 rounded">
+                                <span className="flex items-center gap-1 bg-secondary/30 px-2 py-1 rounded ml-auto">
                                     <GitBranch className="w-3 h-3" />
                                     {draft.nodes.length} nodes
                                 </span>
-                                {draft.deployed_engines && Object.keys(draft.deployed_engines).length > 0 && (
-                                    <div className="flex items-center gap-1 flex-wrap">
-                                        {Object.values(draft.deployed_engines as Record<string, { name: string }>).map((eng, i) => (
-                                            <span key={i} className="flex items-center gap-1 bg-blue-500/10 text-blue-700 px-2 py-1 rounded text-[11px]">
-                                                <Server className="w-3 h-3" />
-                                                {eng.name}
-                                            </span>
-                                        ))}
-                                    </div>
-                                )}
-                                <div className="ml-auto" onClick={(e) => e.stopPropagation()}>
-                                    <Switch
-                                        checked={draft.is_active !== false}
-                                        onCheckedChange={(checked) => toggleActive.mutate({ draftId: draft.id, isActive: checked })}
-                                        className="scale-75"
-                                    />
-                                </div>
                             </CardFooter>
                         </Card>
                     ))}

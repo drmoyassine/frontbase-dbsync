@@ -6,10 +6,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { ReactFlowProvider } from 'reactflow';
-import { Save, Play, Rocket, X, Plus, Loader2, ChevronDown } from 'lucide-react';
+import { Save, Play, Rocket, X, Plus, Loader2, ChevronDown, Server } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useEdgeEngines } from '@/hooks/useEdgeInfrastructure';
 import {
@@ -32,6 +33,7 @@ import {
     usePublishDraft,
     usePublishDraftToEngine,
     useToggleDraftActive,
+    useToggleTargetActive,
     useTestDraft,
     useTestNode,
     useExecutionResult
@@ -82,6 +84,7 @@ export function WorkflowEditor({
     const publishDraft = usePublishDraft();
     const publishToEngine = usePublishDraftToEngine();
     const toggleActive = useToggleDraftActive();
+    const toggleTargetActive = useToggleTargetActive();
     const testDraft = useTestDraft();
     const testNode = useTestNode();
 
@@ -351,21 +354,6 @@ export function WorkflowEditor({
                             placeholder="Add description..."
                         />
 
-                        <div className="flex items-center gap-2">
-                            <Switch
-                                checked={draft?.is_active !== false}
-                                onCheckedChange={(checked) => {
-                                    if (currentDraftId) {
-                                        toggleActive.mutate({ draftId: currentDraftId, isActive: checked });
-                                    }
-                                }}
-                                className="data-[state=checked]:bg-green-500"
-                            />
-                            <span className="text-xs text-muted-foreground">
-                                {draft?.is_active !== false ? 'Active' : 'Inactive'}
-                            </span>
-                        </div>
-
                         {isDirty && (
                             <span className="text-xs text-muted-foreground">• Unsaved changes</span>
                         )}
@@ -412,20 +400,79 @@ export function WorkflowEditor({
                                         <ChevronDown className="w-4 h-4" />
                                     </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    <DropdownMenuLabel className="text-xs text-muted-foreground">Deploy to Engine</DropdownMenuLabel>
+                                <DropdownMenuContent align="end" className="w-[240px]">
+                                    <DropdownMenuLabel className="text-xs text-muted-foreground uppercase opacity-80 pt-1 pb-1">Deploy to Engine</DropdownMenuLabel>
                                     <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={handlePublish}>
-                                        🖥️ Local Edge
-                                    </DropdownMenuItem>
-                                    {engines.filter((e: any) => !e.is_system).map((engine: any) => (
-                                        <DropdownMenuItem
-                                            key={engine.id}
-                                            onClick={() => handlePublishToEngine(engine.id, engine.name)}
-                                        >
-                                            ☁️ {engine.name}
-                                        </DropdownMenuItem>
-                                    ))}
+
+                                    {/* Local Edge toggle */}
+                                    {(() => {
+                                        const localEdge = engines.find(e => e.is_system && e.name === 'Local Edge');
+                                        if (!localEdge) return null;
+
+                                        const isDeployed = draft?.deployed_engines?.[localEdge.id];
+                                        const isActive = isDeployed?.is_active !== false;
+
+                                        return (
+                                            <div className="flex items-center justify-between px-2 py-1.5 text-sm group">
+                                                <div
+                                                    className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors flex-1"
+                                                    onClick={() => handlePublishToEngine(localEdge.id, localEdge.name)}
+                                                    title="Push update to Local Edge"
+                                                >
+                                                    <Server className="w-4 h-4 opacity-70 group-hover:opacity-100" />
+                                                    <span>Local Edge</span>
+                                                </div>
+                                                <Switch
+                                                    checked={!!isDeployed && isActive}
+                                                    onCheckedChange={(checked) => {
+                                                        if (!isDeployed && checked) {
+                                                            handlePublishToEngine(localEdge.id, localEdge.name);
+                                                        } else {
+                                                            toggleTargetActive.mutate({
+                                                                draftId: currentDraftId,
+                                                                engineId: localEdge.id,
+                                                                is_active: checked
+                                                            });
+                                                        }
+                                                    }}
+                                                    className="scale-75 shrink-0 m-0"
+                                                />
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Remote Engines */}
+                                    {engines.filter((e: any) => !e.is_system).map((engine: any) => {
+                                        const isDeployed = draft?.deployed_engines?.[engine.id];
+                                        const isActive = isDeployed?.is_active !== false;
+                                        return (
+                                            <div key={engine.id} className="flex items-center justify-between px-2 py-1.5 text-sm group">
+                                                <div
+                                                    className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors flex-1"
+                                                    onClick={() => handlePublishToEngine(engine.id, engine.name)}
+                                                    title={`Push update to ${engine.name}`}
+                                                >
+                                                    <Server className="w-4 h-4 opacity-70 group-hover:opacity-100" />
+                                                    <span className="truncate">{engine.name}</span>
+                                                </div>
+                                                <Switch
+                                                    checked={!!isDeployed && isActive}
+                                                    onCheckedChange={(checked) => {
+                                                        if (!isDeployed && checked) {
+                                                            handlePublishToEngine(engine.id, engine.name);
+                                                        } else {
+                                                            toggleTargetActive.mutate({
+                                                                draftId: currentDraftId,
+                                                                engineId: engine.id,
+                                                                is_active: checked
+                                                            });
+                                                        }
+                                                    }}
+                                                    className="scale-75 shrink-0 m-0"
+                                                />
+                                            </div>
+                                        );
+                                    })}
                                     {engines.filter((e: any) => !e.is_system).length === 0 && (
                                         <DropdownMenuItem disabled className="text-xs text-muted-foreground">
                                             No remote engines configured
@@ -434,6 +481,65 @@ export function WorkflowEditor({
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
+
+                        {/* Active Badge Dropdown */}
+                        {draft && currentDraftId && (
+                            <div className="flex flex-col items-center justify-center pl-2 ml-2 border-l">
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Badge
+                                            variant={!draft.is_published ? 'secondary' : (draft.is_active !== false ? 'default' : 'outline')}
+                                            className={cn(
+                                                "cursor-pointer transition-colors px-3 py-1 text-[13px]",
+                                                !draft.is_published
+                                                    ? "bg-amber-500/15 text-amber-700 border-amber-200 hover:bg-amber-500/25"
+                                                    : (draft.is_active !== false
+                                                        ? "bg-emerald-500/15 text-emerald-700 border-emerald-200 hover:bg-emerald-500/25"
+                                                        : "text-muted-foreground hover:bg-muted")
+                                            )}
+                                        >
+                                            {!draft.is_published ? 'Draft' : (draft.is_active !== false ? 'Active' : 'Inactive')}
+                                        </Badge>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
+                                        <DropdownMenuLabel className="flex justify-between items-center font-normal">
+                                            <span>Global Active State</span>
+                                            <Switch
+                                                checked={draft.is_active !== false}
+                                                onCheckedChange={(checked) => toggleActive.mutate({ draftId: currentDraftId, isActive: checked })}
+                                                className="scale-75"
+                                            />
+                                        </DropdownMenuLabel>
+                                        {draft.deployed_engines && Object.keys(draft.deployed_engines).length > 0 && (
+                                            <>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuLabel className="text-xs text-muted-foreground uppercase opacity-80 pt-1 pb-1">
+                                                    Deployed Targets
+                                                </DropdownMenuLabel>
+                                                {Object.entries(draft.deployed_engines).map(([engineId, engine]: [string, any]) => (
+                                                    <div key={engineId} className="flex items-center justify-between px-2 py-1.5 text-sm">
+                                                        <div className="flex items-center gap-2 truncate pr-2">
+                                                            <Server className="w-3.5 h-3.5 opacity-70" />
+                                                            <span className="truncate">{engine.name}</span>
+                                                        </div>
+                                                        <Switch
+                                                            checked={engine.is_active !== false}
+                                                            disabled={draft.is_active === false}
+                                                            onCheckedChange={(checked) => toggleTargetActive.mutate({
+                                                                draftId: currentDraftId,
+                                                                engineId,
+                                                                is_active: checked
+                                                            })}
+                                                            className="scale-75 shrink-0"
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </>
+                                        )}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                        )}
 
                         {onClose && (
                             <Button variant="ghost" size="icon" onClick={handleClose}>

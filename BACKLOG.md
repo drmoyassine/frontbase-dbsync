@@ -142,6 +142,11 @@ Covers automations enhancements to make the workflow builder production-ready.
 | `data_change_trigger` | 🔴 Not implemented | Data source webhook → edge |
 | `schedule_trigger` | 🔴 Not implemented | QStash cron → edge |
 
+**Edge bundle changes needed (minimal):**
+1. **Redeploy CF Worker** with `triggerType: z.string()` schema fix (already in source)
+2. **Add trigger aliases in `runtime.ts` `executeNode` switch** — add `case 'webhook_trigger': case 'data_change_trigger': case 'schedule_trigger': case 'ui_event_trigger':` alongside existing `case 'trigger': case 'manual_trigger':` pass-through block (avoids `Unknown node type` console warnings)
+3. **No new routes needed** — all triggers invoke via existing `/api/webhook/:id` or `/api/execute/:id`. The edge is just the receiver; orchestration (QStash registration, data source webhook setup) happens in the publish pipeline (`actions.py`).
+
 - [ ] **Fix multi-trigger publish to CF Worker** — Redeploy CF Worker with updated `z.string()` triggerType schema (see Known Bugs)
 
 - [ ] **UI Event Trigger (onClick/onHover)** — New `ui_event_trigger` node. Easiest to implement: the hydrated page component calls the edge's `/api/execute/:id` on user interaction (click, hover, form submit). Config: event type, target element, debounce. No backend infrastructure needed — purely frontend-driven.

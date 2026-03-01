@@ -116,6 +116,8 @@ Covers provider state mismatch, quota fallback, and operational visibility.
 - [ ] **PWA Support for Published Apps** — Dynamic Manifest, Service Worker (Cache-first for static, Network-first for API), offline support, "Add to Home Screen" prompt.
 - [ ] **Custom WebSockets** — Custom WebSocket implementation for real-time workflow execution streaming (replacing Supabase Realtime).
 - [ ] **Observability** — Axiom/Sentry logging integration, OpenTelemetry tracing.
+- [ ] **Version History & Rollback (Pages + Workflows)** — Snapshot table (`page_versions`, `automation_draft_versions`) storing full JSON state per version. Backend-only (Postgres/SQLite). Enables rollback ("revert to v3"), diff view ("what changed between v2 and v3"), and audit trail ("who changed what, when"). Applies to both pages and workflow drafts with the same pattern.
+- [ ] **Durable Workflow Execution** — Upstash checkpointing + QStash retry for long-running workflows that exceed CF Worker CPU limits (10ms free / 30s paid). Node-level checkpoint in Redis (`SET exec:{id}:checkpoint EX 3600`), automatic resume on retry, idempotency keys to prevent duplicate execution. Includes execution spike leveling (queue buffer via `RPUSH/LPOP`), rate limiting (`INCR + EXPIRE`), and debouncing (`SET NX EX`). See `edge-architecture.md` → Workflow Automation Data Architecture for full design.
 
 ## Edge DX & Tooling
 - [ ] **Edge Code Editor (Inspector IDE)** — Turn the Edge Inspector into a lightweight code editor for the edge codebase:

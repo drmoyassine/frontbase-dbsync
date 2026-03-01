@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 
 interface WorkflowNode {
     id: string;
-    type: string;
+    type?: string;
     data: {
         label: string;
         type: string;

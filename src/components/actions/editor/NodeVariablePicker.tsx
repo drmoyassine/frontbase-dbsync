@@ -13,7 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/comp
 
 interface WorkflowNode {
     id: string;
-    type: string;
+    type?: string;
     data: {
         label: string;
         type: string;

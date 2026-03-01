@@ -32,6 +32,7 @@ class AutomationDraft(Base):
     
     # Publishing status
     is_published = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
     published_version = Column(Integer, nullable=True)
     published_at = Column(DateTime(timezone=True), nullable=True)
     

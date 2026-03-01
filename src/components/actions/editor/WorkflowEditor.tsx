@@ -9,6 +9,7 @@ import { ReactFlowProvider } from 'reactflow';
 import { Save, Play, Rocket, X, Plus, Loader2, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { useEdgeEngines } from '@/hooks/useEdgeInfrastructure';
 import {
@@ -30,6 +31,7 @@ import {
     useUpdateDraft,
     usePublishDraft,
     usePublishDraftToEngine,
+    useToggleDraftActive,
     useTestDraft,
     useTestNode,
     useExecutionResult
@@ -79,6 +81,7 @@ export function WorkflowEditor({
     const updateDraft = useUpdateDraft();
     const publishDraft = usePublishDraft();
     const publishToEngine = usePublishDraftToEngine();
+    const toggleActive = useToggleDraftActive();
     const testDraft = useTestDraft();
     const testNode = useTestNode();
 
@@ -113,7 +116,6 @@ export function WorkflowEditor({
             // Contextual initialization for new drafts
             useActionsStore.setState({
                 draftName: `${initialTriggerLabel || 'New'} Automation`,
-                triggerType: initialTriggerType as any
             });
 
             // Auto-place trigger node
@@ -129,7 +131,7 @@ export function WorkflowEditor({
                 }
             }]);
         }
-    }, [draft, draftId, initialTriggerType, initialTriggerLabel, setCurrentDraft, setTriggerType, setNodes, setEdges, markClean]);
+    }, [draft, draftId, initialTriggerType, initialTriggerLabel, setCurrentDraft, setNodes, setEdges, markClean]);
 
     // Save handler
     const handleSave = async () => {
@@ -292,7 +294,7 @@ export function WorkflowEditor({
     };
 
     // Publish to specific engine handler
-    const handlePublishToEngine = async (engineId: number, engineName: string) => {
+    const handlePublishToEngine = async (engineId: string, engineName: string) => {
         if (!currentDraftId) {
             toast({ title: 'Save first', description: 'Please save the workflow before publishing', variant: 'destructive' });
             return;
@@ -335,6 +337,21 @@ export function WorkflowEditor({
                             className="w-64 font-medium"
                             placeholder="Workflow name"
                         />
+
+                        <div className="flex items-center gap-2">
+                            <Switch
+                                checked={draft?.is_active !== false}
+                                onCheckedChange={(checked) => {
+                                    if (currentDraftId) {
+                                        toggleActive.mutate({ draftId: currentDraftId, isActive: checked });
+                                    }
+                                }}
+                                className="data-[state=checked]:bg-green-500"
+                            />
+                            <span className="text-xs text-muted-foreground">
+                                {draft?.is_active !== false ? 'Active' : 'Inactive'}
+                            </span>
+                        </div>
 
                         {isDirty && (
                             <span className="text-xs text-muted-foreground">• Unsaved changes</span>

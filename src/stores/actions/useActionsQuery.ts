@@ -27,11 +27,12 @@ export interface WorkflowDraft {
     id: string;
     name: string;
     description?: string;
-    trigger_type: 'manual' | 'http_webhook' | 'scheduled' | 'data_change';
+    trigger_type: string;
     trigger_config?: Record<string, any>;
     nodes: WorkflowNode[];
     edges: WorkflowEdge[];
     is_published: boolean;
+    is_active: boolean;
     published_version?: number;
     created_at: string;
     updated_at: string;
@@ -41,7 +42,8 @@ export interface WorkflowDraft {
 export interface CreateDraftInput {
     name: string;
     description?: string;
-    trigger_type?: 'manual' | 'http_webhook' | 'scheduled' | 'data_change';
+    trigger_type?: string;
+    trigger_config?: Record<string, any>;
     nodes?: WorkflowNode[];
     edges?: WorkflowEdge[];
 }
@@ -49,7 +51,7 @@ export interface CreateDraftInput {
 export interface UpdateDraftInput {
     name?: string;
     description?: string;
-    trigger_type?: 'manual' | 'http_webhook' | 'scheduled' | 'data_change';
+    trigger_type?: string;
     trigger_config?: Record<string, any>;
     nodes?: WorkflowNode[];
     edges?: WorkflowEdge[];
@@ -254,6 +256,33 @@ export function usePublishDraftToEngine() {
 
     return useMutation({
         mutationFn: publishDraftToEngine,
+        onSuccess: (_, { draftId }) => {
+            queryClient.invalidateQueries({ queryKey: ['workflow-drafts'] });
+            queryClient.invalidateQueries({ queryKey: ['workflow-draft', draftId] });
+        },
+    });
+}
+
+async function toggleDraftActive(
+    { draftId, isActive }: { draftId: string; isActive: boolean }
+): Promise<{ id: string; is_active: boolean }> {
+    const response = await fetch(`${API_BASE}/drafts/${draftId}/active`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: isActive }),
+    });
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to toggle active status');
+    }
+    return response.json();
+}
+
+export function useToggleDraftActive() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: toggleDraftActive,
         onSuccess: (_, { draftId }) => {
             queryClient.invalidateQueries({ queryKey: ['workflow-drafts'] });
             queryClient.invalidateQueries({ queryKey: ['workflow-draft', draftId] });

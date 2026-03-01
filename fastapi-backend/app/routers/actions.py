@@ -238,6 +238,27 @@ async def bulk_delete_drafts(
     return {"deleted": deleted_count}
 
 
+class ToggleActiveRequest(BaseModel):
+    is_active: bool
+
+
+@router.patch("/drafts/{draft_id}/active")
+async def toggle_draft_active(
+    draft_id: str,
+    request: ToggleActiveRequest,
+    db: Session = Depends(get_db)
+):
+    """Toggle a workflow draft's is_active status."""
+    draft = db.query(AutomationDraft).filter(AutomationDraft.id == draft_id).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    draft.is_active = request.is_active  # type: ignore[assignment]
+    db.commit()
+    db.refresh(draft)
+    return {"id": str(draft.id), "is_active": bool(draft.is_active)}
+
+
 # ============ Publishing ============
 
 @router.post("/drafts/{draft_id}/publish", response_model=PublishResponse)

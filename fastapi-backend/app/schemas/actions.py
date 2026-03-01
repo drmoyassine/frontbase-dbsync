@@ -128,6 +128,11 @@ class PublishResponse(BaseModel):
     version: int
 
 
+class TargetToggleRequest(BaseModel):
+    """Request to toggle a workflow on a specific target engine"""
+    is_active: bool
+
+
 # ============ Test Execution ============
 
 class TestExecuteRequest(BaseModel):

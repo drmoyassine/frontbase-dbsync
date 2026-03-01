@@ -100,6 +100,7 @@ export const DeployWorkflowSchema = z.object({
     triggerConfig: z.record(z.any()).optional().nullable(),
     nodes: z.array(WorkflowNodeSchema),
     edges: z.array(WorkflowEdgeSchema),
+    isActive: z.boolean().optional(),
     publishedBy: z.string().optional().nullable(),
 }).openapi('DeployWorkflow');
 

@@ -32,6 +32,17 @@ Frontbase is an open-source, edge-native platform for deploying AI-powered apps 
 | **Backend** | FastAPI, SQLAlchemy, Alembic | API, design-time operations, publishing |
 | **Edge Engine** | Hono, Drizzle ORM | Runtime SSR, workflows, self-sufficient |
 
+### 1.5 Architecture & Documentation References
+
+For deep architectural explanations, deployments, and subsystem-specific workflows, **agents must review the following primary documents**:
+
+- **[`ARCHITECTURE.md`](./ARCHITECTURE.md)**: The central source of truth for Edge Delivery Architecture, Workflow Automation, Unified Databases, and Redis patterns.
+- **[`fastapi-backend/README.md`](./fastapi-backend/README.md)**: Python dev setup, Alembic migration commands, and API routing schemas.
+- **[`services/edge/README.md`](./services/edge/README.md)**: Hono SSR dev setup, Drizzle SQLite migrations, and local tests.
+- **[`README.md`](./README.md)**: Root project orchestrations and Docker startup commands.
+
+*(Note: `AGENTS.md` retains the hard, non-negotiable architectural rules and protocols. Deep context and implementation explanations are delegated to the documents above.)*
+
 ---
 
 ## 2. Core Architectural Invariants
@@ -73,6 +84,9 @@ Runtime code may interpret it, but must not reshape or enrich it.
 | Development | SQLite | `aiosqlite` (async) |
 | Production | PostgreSQL | `asyncpg` (async) |
 | Migrations | Both | Sync drivers via Alembic |
+
+> [!NOTE]
+> **Local Dev Database Path Resolution:** The FastAPI config (`config.py`) checks if `/app/data` exists. On Docker Desktop setups (or Windows machines where this path exists), it connects to `/app/data/frontbase.db`. Otherwise it defaults to `./frontbase.db` in the backend directory. **Always verify which file is actively being used** before running local manual migrations or scripts, as stale `*.db` files can accumulate in the backend folder.
 
 **Rule**: All SQL operations must work on both dialects. Use `render_as_batch=True` for SQLite ALTER TABLE compatibility.
 

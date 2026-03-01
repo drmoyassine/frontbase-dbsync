@@ -60,7 +60,7 @@ deployRoute.openapi(route, async (c) => {
             nodes: JSON.stringify(body.nodes),
             edges: JSON.stringify(body.edges),
             version: 1,
-            isActive: true,
+            isActive: body.isActive ?? true,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             publishedBy: body.publishedBy || null,

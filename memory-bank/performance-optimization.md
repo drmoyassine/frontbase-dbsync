@@ -1,6 +1,6 @@
 # Performance & Code Health Optimization Backlog
 
-> Audit date: 2026-02-28
+> Audit date: 2026-03-02
 > Generated from full codebase scan across FastAPI backend, Vite/React frontend, and Hono Edge service.
 
 ---
@@ -34,10 +34,12 @@
 
 | File | Lines | Issue | Proposed Split |
 |------|-------|-------|----------------|
-| `lib/workflow/nodeSchemas.ts` | **891** | All workflow node definitions in one file | Group by node category (triggers, actions, conditions) |
+| `components/actions/editor/WorkflowEditor.tsx` | **599** | Massive inline JSX toolbar + editor logic | Extract `WorkflowEditorHeader.tsx` and `WorkflowTestStatus.tsx` |
 | `components/dashboard/FileBrowser/index.tsx` | **818** | File browser UI + logic in one component | Extract file tree rendering, toolbar, and file actions into subcomponents |
 | `components/builder/data-table/DataColumnConfigurator.tsx` | **489** | Column configuration UI | Extract column type pickers and sorting config into subcomponents |
 | `components/dashboard/settings/shared/EdgeCachesForm.tsx` | **434** | Edge cache settings form | Extract cache config sections into subcomponents |
+| `modules/dbsync/components/dashboard/AutomationsContentPanel.tsx` | **306** | Mixes data fetching, pagination, analytics, and table UI | Extract `AutomationsAnalytics.tsx`, `AutomationsTable.tsx`, and `useAutomationsList.ts` hook |
+| `lib/workflow/nodeSchemas.ts` | **891** | All workflow node definitions in one file | Group by node category (triggers, actions, conditions) |
 
 ### Edge (Hono Service)
 
@@ -104,7 +106,9 @@
 | 8 | Split `nodeSchemas.ts` by node category | 30 min | Reduces cognitive load | Pending |
 | 9 | Split `FileBrowser/index.tsx` into subcomponents | 1 hr | React best practices | Pending |
 | 10 | Split `runtime.ts` data-fetching logic | 45 min | Separation of concerns | Pending |
-| 11 | Fix stale `advanced-query` 404 on VPS (no Supabase) | 30 min | Prevents noisy 404s in logs | Low Priority |
+| 11 | Split `WorkflowEditor.tsx` into subcomponents | 45 min | Extracts massive inline toolbars/state | Pending |
+| 12 | Split `AutomationsContentPanel.tsx` into subcomponents | 45 min | Extracts analytics, filters, tables | Pending |
+| 13 | Fix stale `advanced-query` 404 on VPS (no Supabase) | 30 min | Prevents noisy 404s in logs | Low Priority |
 
 ### Item 11: Stale `advanced-query` 404 Details
 

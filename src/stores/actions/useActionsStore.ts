@@ -139,18 +139,24 @@ export const useActionsStore = create<ActionsState>((set, get) => ({
         isDirty: true
     })),
 
-    onNodesChange: (changes) => set((state) => ({
-        nodes: applyNodeChanges(changes, state.nodes) as WorkflowNode[],
-        isDirty: true
-    })),
+    onNodesChange: (changes) => set((state) => {
+        const isSignificant = changes.some(c => c.type !== 'select' && c.type !== 'dimensions');
+        return {
+            nodes: applyNodeChanges(changes, state.nodes) as WorkflowNode[],
+            isDirty: state.isDirty || isSignificant
+        };
+    }),
 
     // Edge operations
     setEdges: (edges) => set({ edges }),
 
-    onEdgesChange: (changes) => set((state) => ({
-        edges: applyEdgeChanges(changes, state.edges),
-        isDirty: true
-    })),
+    onEdgesChange: (changes) => set((state) => {
+        const isSignificant = changes.some(c => c.type !== 'select');
+        return {
+            edges: applyEdgeChanges(changes, state.edges),
+            isDirty: state.isDirty || isSignificant
+        };
+    }),
 
     onConnect: (connection) => set((state) => ({
         edges: addEdge({ ...connection, animated: true }, state.edges),

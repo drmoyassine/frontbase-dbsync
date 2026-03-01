@@ -2,7 +2,7 @@
 
 ## 🐛 Known Bugs
 
-- [ ] **Multi-trigger publish fails for non-webhook triggers** — Publishing works when canvas has only `webhook_trigger` nodes, but adding `data_change_trigger`, `schedule_trigger`, or `manual_trigger` causes a Zod enum validation error on the edge (`'triggerType'` path). The `DeployWorkflowSchema` was updated to `z.string()` locally but the **deployed CF Worker** still has the old enum bundle. Local edge schema is fixed. **Root cause:** The CF Worker needs redeployment with the updated `workflow.ts` schema. Also verify `ExecutionSchema` (L120) still uses `TriggerTypeSchema` enum — may need updating too.
+- [x] **Multi-trigger publish fails for non-webhook triggers** — Fixed Zod validation error on the edge for non-webhook triggers (data, schedule, manual).
 
 - [ ] **SSR page width issue** — Page content does not span the full viewport width in SSR output.
 
@@ -95,7 +95,7 @@ Covers provider state mismatch, quota fallback, and operational visibility.
 - [ ] **Multi-Provider Load Balancing** — DNS-level weighted routing across multiple edge providers (Cloudflare + Vercel + Netlify). Uses `deployment_targets` table hooks (add `weight`, `quota_limit`, `quota_used` columns). Advanced feature for high-traffic deployments.
 - [ ] **Vercel Edge Adapter** — New `IEdgeAdapter` implementation for Vercel Edge Functions.
 - [ ] **Netlify Edge Adapter** — New `IEdgeAdapter` implementation for Netlify Edge Functions.
-- [ ] **Automations-Only Bundle Template** — Separate Worker bundle for workflow-only deployments. Strips React + ReactDOM (~500 KB), LiquidJS (~150 KB), SSR routes, component renderers (~100 KB), client hydration bundle, page store, and Tailwind processing (~100 KB). Keeps: Hono, Drizzle + libsql, Upstash, workflow engine, execute/webhook/health routes. Estimated ~1.1 MB vs ~2.2 MB full bundle. Needs new `cloudflare-automations.ts` adapter entry point + `tsup.cloudflare-automations.ts` config. UI: scope selector when connecting Cloudflare (Full / Pages Only / Automations Only).
+- [x] **Automations-Only Bundle Template** — Implemented via `engine/lite.ts` and `tsup.cloudflare-lite.ts`. Provides a lightweight Worker bundle exclusively for workflows, stripping React and SSR dependencies.
 - [ ] **Extract Shared Edge Core** — Refactor `cloudflare-lite.ts` into `shared/edge-core.ts` (Hono app, routes, DB/cache logic) + thin adapter wrappers per provider (CF, Vercel, Netlify, Supabase Edge). Each wrapper is ~3 lines.
 - [ ] **Edge `/api/config` Endpoint** — Receive project settings updates (favicon, analytics ID, custom domain) without redeploying the Worker.
 - [ ] **Edge CORS Origin Configuration** — Currently allows all origins. Should be configurable per deployment target via project settings.

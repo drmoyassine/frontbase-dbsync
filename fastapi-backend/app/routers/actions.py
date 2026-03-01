@@ -27,6 +27,7 @@ from app.schemas.actions import (
     WorkflowDraftListResponse,
     PublishRequest,
     PublishResponse,
+    TargetToggleRequest,
     TestExecuteRequest,
     TestExecuteResponse,
 )
@@ -40,7 +41,7 @@ import os
 EDGE_URL = os.getenv("EDGE_URL", "http://localhost:3002")
 
 
-def _build_deploy_payload(draft: AutomationDraft, name_prefix: str = "") -> dict:
+def _build_deploy_payload(draft: AutomationDraft, name_prefix: str = "", override_is_active: Optional[bool] = None) -> dict:
     """Build the deploy payload for the Edge /api/deploy endpoint."""
     return {
         "id": str(draft.id),
@@ -50,6 +51,7 @@ def _build_deploy_payload(draft: AutomationDraft, name_prefix: str = "") -> dict
         "triggerConfig": draft.trigger_config or {},
         "nodes": draft.nodes,
         "edges": draft.edges,
+        "isActive": override_is_active if override_is_active is not None else draft.is_active,
         "publishedBy": str(draft.created_by) if str(draft.created_by or "") else None,
     }
 
@@ -413,7 +415,8 @@ async def publish_draft_to_engine(
             engines[engine_id] = {
                 "name": engine_name,
                 "url": engine_url,
-                "deployed_at": datetime.now(timezone.utc).isoformat()
+                "deployed_at": datetime.now(timezone.utc).isoformat(),
+                "is_active": draft_record.is_active  # Inherit global active state on fresh publish
             }
             draft_record.deployed_engines = engines  # type: ignore[assignment]
             update_db.commit()
@@ -426,6 +429,84 @@ async def publish_draft_to_engine(
         workflow_id=draft_id_str,
         version=result_data.get("version", 1)
     )
+
+@router.post("/drafts/{draft_id}/publish/{engine_id}/toggle")
+async def toggle_target_active(
+    draft_id: str,
+    engine_id: str,
+    request: TargetToggleRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Toggle a workflow's active status on a specific target engine by republishing it with the new active state.
+    """
+    import uuid
+    from app.models.engines import EdgeEngine
+    from sqlalchemy.orm import Session
+    from app.database.config import SessionLocal
+
+    try:
+        draft_uuid = uuid.UUID(draft_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid draft ID format")
+        
+    draft = db.query(AutomationDraft).filter(AutomationDraft.id == draft_id).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Workflow draft not found")
+
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if not engine:
+        raise HTTPException(status_code=404, detail="Deployment target not found")
+        
+    engine_name = str(engine.name)
+    engine_url = str(engine.url)
+
+    # Re-build payload but override isActive
+    deploy_payload = _build_deploy_payload(draft, override_is_active=request.is_active)
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{engine_url.rstrip('/')}/api/deploy",
+                json=deploy_payload,
+                timeout=30.0
+            )
+            
+            if response.status_code != 200:
+                error_detail = response.json() if response.headers.get("content-type", "").startswith("application/json") else response.text
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Failed to update target '{engine_name}': {error_detail}"
+                )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Engine '{engine_name}' timed out"
+        )
+        
+    # UPDATE DB with new is_active state for this engine
+    update_db = SessionLocal()
+    try:
+        draft_record = update_db.query(AutomationDraft).filter(
+            AutomationDraft.id == draft_id
+        ).first()
+        if draft_record:
+            engines = dict(draft_record.deployed_engines or {})
+            if engine_id in engines:
+                engines[engine_id]["is_active"] = request.is_active
+            else:
+                engines[engine_id] = {
+                    "name": engine_name,
+                    "url": engine_url,
+                    "deployed_at": datetime.now(timezone.utc).isoformat(),
+                    "is_active": request.is_active
+                }
+            draft_record.deployed_engines = engines  # type: ignore[assignment]
+            update_db.commit()
+    finally:
+        update_db.close()
+        
+    return {"success": True, "message": f"Workflow {'enabled' if request.is_active else 'disabled'} on '{engine_name}'"}
 
 
 # ============ Test Execution ============

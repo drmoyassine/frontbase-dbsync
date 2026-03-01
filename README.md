@@ -14,10 +14,14 @@ Frontbase is an open-source, edge-native platform enabling teams to deploy AI-po
 
 ## Quick Start
  
- ### Architecture: Design vs. Runtime
+### Hub & Spoke Documentation
  
  > [!IMPORTANT]
- > **Edge Self-Sufficiency**: The Edge Engine (Hono) is designed to run **independently** of the builder (FastAPI). Once a site is published, the Edge Engine relies solely on its own database (SQLite/Turso) and Redis. It **does NOT** make runtime calls to the backend API.
+ > **Start Here**: For deep technical context on how Frontbase operates (Edge Self-Sufficiency, Unified DB Patterns, Workflows), please read the [**Root ARCHITECTURE.md**](./ARCHITECTURE.md) guide.
+
+ For subsystem-specific commands (pip, npm, db migrations), refer to:
+ - **[FastAPI Backend README](./fastapi-backend/README.md)** (Control Plane, API, Publishing)
+ - **[Edge Engine README](./services/edge/README.md)** (Runtime SSR, Webhooks)
  
  ### Prerequisites
 

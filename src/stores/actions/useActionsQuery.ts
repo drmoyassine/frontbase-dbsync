@@ -34,7 +34,7 @@ export interface WorkflowDraft {
     is_published: boolean;
     is_active: boolean;
     published_version?: number;
-    deployed_engines?: Record<string, { name: string; url: string; deployed_at: string }>;
+    deployed_engines?: Record<string, { name: string; url: string; deployed_at: string; is_active?: boolean }>;
     created_at: string;
     updated_at: string;
     created_by?: string;
@@ -137,6 +137,21 @@ async function publishDraftToEngine(
     if (!response.ok) {
         const error = await response.json();
         throw new Error(error.detail || 'Failed to publish to engine');
+    }
+    return response.json();
+}
+
+async function toggleTargetActive(
+    { draftId, engineId, is_active }: { draftId: string; engineId: string; is_active: boolean }
+): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${API_BASE}/drafts/${draftId}/publish/${engineId}/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active }),
+    });
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to toggle target');
     }
     return response.json();
 }
@@ -257,6 +272,18 @@ export function usePublishDraftToEngine() {
 
     return useMutation({
         mutationFn: publishDraftToEngine,
+        onSuccess: (_, { draftId }) => {
+            queryClient.invalidateQueries({ queryKey: ['workflow-drafts'] });
+            queryClient.invalidateQueries({ queryKey: ['workflow-draft', draftId] });
+        },
+    });
+}
+
+export function useToggleTargetActive() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: toggleTargetActive,
         onSuccess: (_, { draftId }) => {
             queryClient.invalidateQueries({ queryKey: ['workflow-drafts'] });
             queryClient.invalidateQueries({ queryKey: ['workflow-draft', draftId] });

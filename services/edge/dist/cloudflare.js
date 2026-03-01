@@ -44345,13 +44345,9 @@ async function runMigrations(execute, providerName) {
   let appliedCount = 0;
   for (const migration of MIGRATIONS) {
     try {
-      await execute(
-        `INSERT OR IGNORE INTO _schema_version (version, description) 
-                 VALUES (${migration.version}, '${migration.description.replace(/'/g, "''")}')`
-      );
-      for (const sql2 of migration.sql) {
+      for (const sqlStmt of migration.sql) {
         try {
-          await execute(sql2);
+          await execute(sqlStmt);
         } catch (sqlError) {
           const msg = String(sqlError?.message || sqlError || "");
           if (msg.includes("duplicate column")) {
@@ -44361,6 +44357,10 @@ async function runMigrations(execute, providerName) {
           }
         }
       }
+      await execute(
+        `INSERT OR IGNORE INTO _schema_version (version, description) 
+                 VALUES (${migration.version}, '${migration.description.replace(/'/g, "''")}')`
+      );
       appliedCount++;
     } catch (error) {
       console.error(`[${providerName}:Migration] Failed at v${migration.version}: ${error}`);
@@ -44765,12 +44765,28 @@ async function upgradeToTurso() {
   const turso = new TursoHttpProvider();
   await turso.init();
   _provider = turso;
+  _initPromise = Promise.resolve();
   console.log("\u2601\uFE0F State provider upgraded to TursoHttpProvider");
   return _provider;
 }
+var _initPromise = null;
+function ensureInitialized() {
+  if (!_initPromise) {
+    const provider = getStateProvider();
+    _initPromise = provider.init().catch((err) => {
+      _initPromise = null;
+      throw err;
+    });
+  }
+  return _initPromise;
+}
 var stateProvider = new Proxy({}, {
   get(_target, prop) {
-    return (...args) => {
+    if (prop === "init") {
+      return () => ensureInitialized();
+    }
+    return async (...args) => {
+      await ensureInitialized();
       const provider = getStateProvider();
       const value = provider[prop];
       if (typeof value === "function") {
@@ -44847,7 +44863,7 @@ external_exports.object({
   id: external_exports.string().uuid(),
   name: external_exports.string().min(1).max(255),
   description: external_exports.string().optional(),
-  triggerType: TriggerTypeSchema,
+  triggerType: external_exports.string().openapi({ description: "Trigger type(s), comma-separated for multi-trigger" }),
   triggerConfig: external_exports.record(external_exports.any()).optional().nullable(),
   nodes: external_exports.array(WorkflowNodeSchema),
   edges: external_exports.array(WorkflowEdgeSchema),
@@ -44858,10 +44874,11 @@ var DeployWorkflowSchema = external_exports.object({
   id: external_exports.string().uuid(),
   name: external_exports.string().min(1),
   description: external_exports.string().optional().nullable(),
-  triggerType: TriggerTypeSchema,
+  triggerType: external_exports.string().openapi({ description: "Trigger type(s), comma-separated for multi-trigger" }),
   triggerConfig: external_exports.record(external_exports.any()).optional().nullable(),
   nodes: external_exports.array(WorkflowNodeSchema),
   edges: external_exports.array(WorkflowEdgeSchema),
+  isActive: external_exports.boolean().optional(),
   publishedBy: external_exports.string().optional().nullable()
 }).openapi("DeployWorkflow");
 var NodeExecutionSchema = external_exports.object({
@@ -44958,7 +44975,7 @@ deployRoute.openapi(route2, async (c) => {
       nodes: JSON.stringify(body.nodes),
       edges: JSON.stringify(body.edges),
       version: 1,
-      isActive: true,
+      isActive: body.isActive ?? true,
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
       updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
       publishedBy: body.publishedBy || null
@@ -45880,9 +45897,8 @@ function createLiteApp() {
       c.res.headers.set("Cache-Control", "no-cache");
     }
   });
-  const origins = ["http://localhost:5173", "http://localhost:8000"];
-  app2.use("/api/*", cors({ origin: origins, credentials: true }));
-  app2.use("*", cors({ origin: origins, credentials: true }));
+  app2.use("/api/*", cors({ origin: "*" }));
+  app2.use("*", cors({ origin: "*" }));
   app2.use("/api/webhook/*", apiKeyAuth);
   app2.route("/api/health", healthRoute);
   app2.route("/api/deploy", deployRoute);
@@ -61034,8 +61050,6 @@ importRoute.get("/status", async (c) => {
     ready: true
   });
 });
-stateProvider.init().catch(console.error);
-stateProvider.initSettings().catch(console.error);
 
 // src/db/datasource-adapter.ts
 var SupabaseAdapter = class {

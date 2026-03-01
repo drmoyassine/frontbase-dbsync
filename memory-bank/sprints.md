@@ -265,11 +265,11 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 - [ ] **History & Versioning**: Version incrementing is implemented in `deploy.ts`, but history retrieval and rollback features are missing.
 - [x] **Testing/Debugging**: Backend API support (`singleNodeRoute`) is implemented for testing individual nodes.
 
-#### 2. Edge Deployment (Pending)
-- [ ] **Configuration**: `wrangler.toml` for Cloudflare Workers.
+#### 2. Edge Deployment (In Progress)
+- [x] **Configuration**: `wrangler.toml` for Cloudflare Workers.
 - [ ] **Scripts**: One-click deploy scripts.
 - [ ] **Targets**: Cloudflare Workers, Vercel Edge, Supabase Edge.
-- [ ] **UI Integration**: Deployment status in Builder.
+- [x] **UI Integration**: Deployment status in Builder. Engine toggles & Webhook copy UI implemented.
 
 #### 3. Environment Config (Pending)
 - [ ] Secrets management for edge deployments.
@@ -280,7 +280,7 @@ Based on the Universal Edge Implementation Plan, here are the phased sprints org
 - [x] New automation nodes work in workflow editor (Schema & Runtime support verified)
 - [ ] Workflows can be scheduled with cron triggers
 - [ ] One-click deploy to Cloudflare Workers works
-- [ ] Deployment status visible in Builder UI
+- [x] Deployment status visible in Builder UI (Active target toggles added)
 - [ ] Secrets are securely managed
 
 ---

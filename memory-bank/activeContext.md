@@ -2,30 +2,27 @@
 
 This file tracks the project's current status, including recent changes, current goals, and open questions.
 
-> Last Updated: 2026-02-25
+> Last Updated: 2026-03-02
 
 ## Current Focus
 
-**🌐 MULTI-DATABASE EDGE DEPLOYMENT (Phase 5.5)**
+**🔐 EDGE AUTH & PRIVATE PAGES (Priority 1)**
+- **TODO**: Implement Supabase Auth forms (login/signup) on the builder.
+- **TODO**: Issue HTTP-only cookies on login, passing them to the Edge Engine for verification.
+- **TODO**: Implement private page gating and redirect logic on the Edge.
 
+**🐛 DESIGN-TIME BUGS (Priority 2)**
+- **TODO**: Fix the `SSR page width issue` where published pages do not span the full viewport width on widescreen devices due to flex/width constraints on `.fb-page`.
+
+**🌐 MULTI-DATABASE EDGE DEPLOYMENT (Completed)**
 - **COMPLETED**: `EdgeDatabase` model — named edge DB connections (Turso, Neon, SQLite)
-- **COMPLETED**: Alembic migration 0018 (table, FK to `deployment_targets`, pre-seed local defaults)
-- **COMPLETED**: CRUD router `/api/edge-databases/` (list/create/update/delete/test-connection)
 - **COMPLETED**: Cloudflare deploy accepts `edge_db_id`, fetches creds from EdgeDatabase table
 - **COMPLETED**: `TursoPublishStrategy` reads from EdgeDatabase instead of `settings.json`
-- **COMPLETED**: Frontend dropdown replaces raw Turso URL/token inputs in CF deploy form
-- **COMPLETED**: `is_system` flag — Local SQLite DB + Local Edge target pre-seeded, undeletable
-- **IN PROGRESS**: Frontend Edge Databases management panel (add/edit/delete in Settings)
-- **TODO**: Remove old Turso settings endpoints from `settings.py`
 
-**☁️ CLOUDFLARE WORKERS INTEGRATION (Phase 5–6)**
-
+**☁️ CLOUDFLARE WORKERS INTEGRATION (Completed)**
 - **COMPLETED**: Lightweight Worker skeleton (`cloudflare-lite.ts`, ~337 KB)
-- **COMPLETED**: Hono + `@libsql/client/web` + `@upstash/redis/cloudflare` (no Node.js built-ins)
 - **COMPLETED**: One-click deploy from Settings UI (API token → auto-build → upload → secrets → target)
-- **COMPLETED**: Publish fan-out wired: `fan_out_to_deployment_targets` includes `adapter_type='edge'`
-- **COMPLETED**: Worker `/api/import` handles `ImportPagePayload` format from publish pipeline
-- **TODO**: Verify end-to-end: publish page → Worker serves it at `/ssr/{slug}`
+- **COMPLETED**: Verified end-to-end publish flow to Workers and Lite Engine execution.
 
 **🎨 CSS SYSTEM MODERNIZATION**
 

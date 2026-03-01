@@ -152,11 +152,6 @@ Component → useSimpleData() → useTableData() → databaseApi → FastAPI →
     - **Routing**: Nginx reverse proxy for SPA and API
 - **Benefits**: Scalability, isolation, identical environment between VPS and local test
 
-### Legacy Parity Pattern
-- **Pattern**: Archived legacy components for reference
-- **Implementation**: `docker-compose.legacy.yml` + `Dockerfile.legacy`
-- **Purpose**: Behavioral verification and historical reference during migration
-
 ### Database Migration Pattern (Alembic - CONSOLIDATED)
 - **Pattern**: Single Alembic-based migration system (unified 2026-01-09)
 - **Documentation**: See `fastapi-backend/MIGRATIONS.md` for full guide

@@ -40,6 +40,13 @@
 - [x] Pre-flight health check in `publish_to_target` and `reconfigure_engine`
 - [x] `wrangler.toml` name alignment with engine DB records
 
+### Completed in March 2026 Session ✅
+- [x] Automations Route Rename (`/actions` → `/automations`) + Deep Links
+- [x] Engine Toggles & Webhook URLs UI/UX Polish (Per-target `is_active` toggles)
+- [x] Omit deleted targets from UI dropdowns (Ghost Target Cleanup)
+- [x] Fixed Local Edge stuck inactive bug (Removed `is_system` UI lock)
+- [x] Fixed Multi-trigger publish Zod validation error for non-webhook triggers
+
 ### Pending
 - [ ] Composable State DB adapters (Turso, Neon, Supabase, SQLite, Null) — currently only Turso + LocalSqlite
 - [ ] Rewrite provider adapters as thin wrappers (`engine/core.ts` extraction)
@@ -81,18 +88,18 @@
 
 ## Priority Queue (Verified 2026-03-01)
 
-### P1: E2E Verification of Deployed Workers ✅ (Resolved Feb 28)
+### P1: E2E Verification of Deployed Workers ✅ (Resolved Feb/March)
 - [x] Hit deployed worker health endpoint — `GET /api/health` returns 200
 - [x] Deploy Full worker + test SSR page — page served at CF Worker URL
 - [x] Verify Turso DB gets data — `publish_to_target` → `POST /api/import` → TursoHttpProvider writes
 - [x] Verify publish to new and old CF Workers — confirmed by user
-- [ ] Deploy a workflow to CF Lite + execute it — **pending** (workflow deploy not yet wired)
+- [x] Deploy a workflow to CF Lite + execute it — Confirmed workflow deployment and webhook triggers.
 
-### P2: Publish Pages & Automations to Edge Engines
+### P2: Publish Pages & Automations to Edge Engines ✅
 - [x] Verify page publish pushes to CF Workers — confirmed working (single-target via `publish_to_target()`)
 - [x] Test: publish a page → confirm it appears on CF Worker — ✅
-- [ ] Extend workflow publish with same pattern — deploy workflow definitions to edge `/api/deploy`
-- [ ] Test: publish a workflow → confirm callable on Workers via `/api/execute` and `/api/webhook`
+- [x] Extend workflow publish with same pattern — deploy workflow definitions to edge `/api/deploy`
+- [x] Test: publish a workflow → confirm callable on Workers via `/api/execute` and `/api/webhook`
 
 ### P3: Code Cleanup ✅ (Resolved Feb 28)
 - [x] `db/pages-store.ts` — archived to `_archived/`

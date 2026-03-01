@@ -5,7 +5,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { X, Trash2, Play, Loader2 } from 'lucide-react';
+import { X, Trash2, Play, Loader2, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,6 +24,7 @@ import {
 import { SelectField, DynamicSelectField, KeyValueField, ColumnKeyValueField, CodeField, ExpressionField, ConditionBuilderField, FieldMappingField } from './fields';
 import { RecordViewer } from './RecordViewer';
 import { NodeVariableInput } from './NodeVariableInput';
+import { useEdgeEngines } from '@/hooks/useEdgeInfrastructure';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -52,7 +53,9 @@ interface PropertiesPaneProps {
 }
 
 export function PropertiesPane({ className, nodeExecutions, onTestNode, isTestingNode }: PropertiesPaneProps) {
-    const { nodes, edges, selectedNodeId, updateNode, removeNode, selectNode } = useActionsStore();
+    const { nodes, edges, selectedNodeId, currentDraftId, updateNode, removeNode, selectNode } = useActionsStore();
+    const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+    const { data: engines = [] } = useEdgeEngines();
 
     const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
@@ -402,6 +405,37 @@ export function PropertiesPane({ className, nodeExecutions, onTestNode, isTestin
 
                 {/* Schema-driven fields */}
                 {schema?.inputs.map(renderField)}
+
+                {/* Webhook Endpoint URL (only for webhook_trigger nodes) */}
+                {selectedNode.data.type === 'webhook_trigger' && currentDraftId && engines.length > 0 && (
+                    <div className="pt-3 border-t space-y-2">
+                        <Label className="text-xs font-medium text-muted-foreground">Endpoint URLs</Label>
+                        {engines.map((engine: any) => {
+                            const endpointUrl = `${engine.url?.replace(/\/$/, '')}/api/webhook/${currentDraftId}`;
+                            const isCopied = copiedUrl === endpointUrl;
+                            return (
+                                <div key={engine.id} className="flex items-center gap-1">
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-medium truncate">{engine.name}</p>
+                                        <code className="text-[10px] text-muted-foreground break-all block">{endpointUrl}</code>
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 shrink-0"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(endpointUrl);
+                                            setCopiedUrl(endpointUrl);
+                                            setTimeout(() => setCopiedUrl(null), 2000);
+                                        }}
+                                    >
+                                        {isCopied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                                    </Button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
 
                 {/* Fallback for nodes without schema */}
                 {!schema && selectedNode.data.inputs.map((input) => (

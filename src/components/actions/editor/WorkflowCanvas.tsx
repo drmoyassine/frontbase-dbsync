@@ -31,6 +31,7 @@ const nodeTypes = {
     trigger: TriggerNode,
     webhook_trigger: TriggerNode,
     schedule_trigger: TriggerNode,
+    data_change_trigger: TriggerNode,
     // Core actions
     action: ActionNode,
     condition: ConditionNode,
@@ -190,14 +191,27 @@ export function WorkflowCanvas({ className, nodeExecutions }: WorkflowCanvasProp
         const schema = getNodeSchema(nodeType);
         const label = schema?.label || nodeType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
+        const newNodeId = `${nodeType}-${Date.now()}`;
+
+        // Auto-populate webhook path for webhook_trigger nodes
+        let defaultInputs = getDefaultInputsFromSchema(nodeType);
+        if (nodeType === 'webhook_trigger') {
+            const shortId = newNodeId.slice(-8);
+            defaultInputs = defaultInputs.map(inp =>
+                inp.name === 'path'
+                    ? { ...inp, value: `/wh/${shortId}` }
+                    : inp
+            );
+        }
+
         const newNode = {
-            id: `${nodeType}-${Date.now()}`,
+            id: newNodeId,
             type: nodeType,
             position,
             data: {
                 label,
                 type: nodeType,
-                inputs: getDefaultInputsFromSchema(nodeType),
+                inputs: defaultInputs,
                 outputs: getDefaultOutputsFromSchema(nodeType),
             },
         };

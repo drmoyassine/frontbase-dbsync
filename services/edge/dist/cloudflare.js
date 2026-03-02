@@ -45106,12 +45106,24 @@ async function executeWorkflow(executionId, workflow, inputParameters) {
     for (const node of endNodes) {
       result[node.id] = context.nodeOutputs[node.id];
     }
+    const responseNode = endNodes.find((n) => n.type === "http_response");
+    let httpResponse = void 0;
+    if (responseNode && context.nodeOutputs[responseNode.id]) {
+      const out = context.nodeOutputs[responseNode.id];
+      httpResponse = {
+        statusCode: out.statusCode || 200,
+        body: out.body,
+        headers: out.headers,
+        contentType: out.contentType || "application/json"
+      };
+    }
     await stateProvider.updateExecution(executionId, {
       status: "completed",
       nodeExecutions: JSON.stringify(context.nodeExecutions),
       result: JSON.stringify(result),
       endedAt: (/* @__PURE__ */ new Date()).toISOString()
     });
+    return { status: "completed", result, httpResponse };
   } catch (error) {
     await stateProvider.updateExecution(executionId, {
       status: "error",
@@ -45119,6 +45131,7 @@ async function executeWorkflow(executionId, workflow, inputParameters) {
       error: error.message,
       endedAt: (/* @__PURE__ */ new Date()).toISOString()
     });
+    return { status: "error", result: {}, error: error.message };
   }
 }
 async function executeSingleNode(executionId, workflow, targetNodeId, inputParameters) {
@@ -45236,6 +45249,19 @@ async function executeNode(node, inputs, context) {
     case "console":
       console.log(`[Node ${node.id}]:`, inputs);
       return { logged: true, data: inputs };
+    case "http_response": {
+      const nodeInputs = node.inputs || [];
+      const getVal = (name) => {
+        const inp = nodeInputs.find((i) => i.name === name);
+        return inp?.value !== void 0 ? inp.value : inputs[name];
+      };
+      return {
+        statusCode: getVal("statusCode") || 200,
+        body: getVal("body") ?? inputs,
+        headers: getVal("headers"),
+        contentType: getVal("contentType") || "application/json"
+      };
+    }
     default:
       console.warn(`Unknown node type: ${node.type}`);
       return { ...inputs };
@@ -45588,6 +45614,36 @@ webhookRoute.openapi(route4, async (c) => {
     nodeExecutions: JSON.stringify([]),
     startedAt: now
   });
+  const nodes = JSON.parse(workflow.nodes);
+  const hasResponseNode = nodes.some((n) => n.type === "http_response");
+  if (hasResponseNode) {
+    try {
+      const execResult = await executeWorkflow(executionId, workflow, payload.data);
+      if (execResult.httpResponse) {
+        const { statusCode, body, headers: respHeaders, contentType } = execResult.httpResponse;
+        const responseBody = typeof body === "string" ? body : JSON.stringify(body);
+        c.header("Content-Type", contentType || "application/json");
+        if (respHeaders) {
+          for (const [k, v2] of Object.entries(respHeaders)) {
+            c.header(k, v2);
+          }
+        }
+        c.status(statusCode);
+        return c.body(responseBody);
+      }
+      return c.json({
+        executionId,
+        status: execResult.status,
+        result: execResult.result
+      }, 200);
+    } catch (err) {
+      return c.json({
+        executionId,
+        status: "error",
+        error: err.message
+      }, 500);
+    }
+  }
   executeWorkflow(executionId, workflow, payload.data).catch((err) => console.error(`Webhook execution ${executionId} failed:`, err));
   return c.json({
     executionId,

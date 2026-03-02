@@ -6,7 +6,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { ReactFlowProvider } from 'reactflow';
-import { Save, Play, Rocket, X, Plus, Loader2, ChevronDown, Server } from 'lucide-react';
+import { Save, Play, Rocket, X, Plus, Loader2, ChevronDown, Server, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -25,6 +25,7 @@ import { WorkflowCanvas } from './WorkflowCanvas';
 import { NodePalette } from './NodePalette';
 import { PropertiesPane } from './PropertiesPane';
 import { RecordViewer } from './RecordViewer';
+import { ExecutionLogTable } from '@/components/actions/ExecutionLogTable';
 import { useActionsStore } from '@/stores/actions';
 import {
     useWorkflowDraft,
@@ -36,7 +37,8 @@ import {
     useToggleTargetActive,
     useTestDraft,
     useTestNode,
-    useExecutionResult
+    useExecutionResult,
+    useDraftExecutions,
 } from '@/stores/actions';
 import { cn } from '@/lib/utils';
 
@@ -76,6 +78,10 @@ export function WorkflowEditor({
     // Execution state for test results
     const [currentExecutionId, setCurrentExecutionId] = useState<string | null>(null);
     const { data: executionResult, isLoading: isPollingResult } = useExecutionResult(currentExecutionId);
+
+    // History panel state
+    const [showHistory, setShowHistory] = useState(false);
+    const { data: historyData } = useDraftExecutions(draftId || currentDraftId);
 
     // API hooks
     const { data: draft } = useWorkflowDraft(draftId || currentDraftId);
@@ -546,6 +552,21 @@ export function WorkflowEditor({
                                 <X className="w-4 h-4" />
                             </Button>
                         )}
+                        {/* History Toggle */}
+                        <Button
+                            variant={showHistory ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setShowHistory(!showHistory)}
+                            className="gap-1.5"
+                        >
+                            <History className="w-4 h-4" />
+                            History
+                            {historyData?.total ? (
+                                <Badge variant="secondary" className="ml-0.5 text-xs h-5 px-1.5">
+                                    {historyData.total}
+                                </Badge>
+                            ) : null}
+                        </Button>
                     </div>
                 </div>
 
@@ -579,6 +600,19 @@ export function WorkflowEditor({
                                 >
                                     <X className="w-3 h-3" />
                                 </Button>
+                            </div>
+                        )}
+
+                        {/* Execution History Panel */}
+                        {showHistory && (
+                            <div className="border-t bg-muted/10 max-h-[250px] overflow-auto">
+                                <div className="px-3 py-2 border-b bg-muted/30 flex items-center justify-between text-xs font-medium text-muted-foreground">
+                                    <span>Execution History</span>
+                                    <Button variant="ghost" size="sm" className="h-5 px-1" onClick={() => setShowHistory(false)}>
+                                        <X className="w-3 h-3" />
+                                    </Button>
+                                </div>
+                                <ExecutionLogTable executions={historyData?.executions || []} />
                             </div>
                         )}
                     </div>

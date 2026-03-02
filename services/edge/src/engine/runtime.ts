@@ -27,6 +27,18 @@ interface ExecutionContext {
     nodeExecutions: NodeExecution[];
 }
 
+export interface ExecutionResult {
+    status: 'completed' | 'error';
+    result: Record<string, any>;
+    error?: string;
+    httpResponse?: {
+        statusCode: number;
+        body: any;
+        headers?: Record<string, string>;
+        contentType?: string;
+    };
+}
+
 /**
  * Execute a workflow
  */
@@ -34,7 +46,7 @@ export async function executeWorkflow(
     executionId: string,
     workflow: WorkflowData,
     inputParameters: Record<string, any>
-): Promise<void> {
+): Promise<ExecutionResult> {
     const nodes: WorkflowNode[] = JSON.parse(workflow.nodes);
     const edges: WorkflowEdge[] = JSON.parse(workflow.edges);
 
@@ -124,6 +136,19 @@ export async function executeWorkflow(
             result[node.id] = context.nodeOutputs[node.id];
         }
 
+        // Check for http_response node output
+        const responseNode = endNodes.find(n => n.type === 'http_response');
+        let httpResponse: ExecutionResult['httpResponse'] = undefined;
+        if (responseNode && context.nodeOutputs[responseNode.id]) {
+            const out = context.nodeOutputs[responseNode.id];
+            httpResponse = {
+                statusCode: out.statusCode || 200,
+                body: out.body,
+                headers: out.headers,
+                contentType: out.contentType || 'application/json',
+            };
+        }
+
         // Mark as completed
         await stateProvider.updateExecution(executionId, {
             status: 'completed',
@@ -131,6 +156,8 @@ export async function executeWorkflow(
             result: JSON.stringify(result),
             endedAt: new Date().toISOString(),
         });
+
+        return { status: 'completed', result, httpResponse };
 
     } catch (error: any) {
         // Mark as error
@@ -140,6 +167,8 @@ export async function executeWorkflow(
             error: error.message,
             endedAt: new Date().toISOString(),
         });
+
+        return { status: 'error', result: {}, error: error.message };
     }
 }
 
@@ -316,6 +345,21 @@ async function executeNode(
         case 'console':
             console.log(`[Node ${node.id}]:`, inputs);
             return { logged: true, data: inputs };
+
+        case 'http_response': {
+            // Extract response config from node inputs
+            const nodeInputs = node.inputs || [];
+            const getVal = (name: string) => {
+                const inp = nodeInputs.find((i: any) => i.name === name);
+                return inp?.value !== undefined ? inp.value : inputs[name];
+            };
+            return {
+                statusCode: getVal('statusCode') || 200,
+                body: getVal('body') ?? inputs,
+                headers: getVal('headers'),
+                contentType: getVal('contentType') || 'application/json',
+            };
+        }
 
         default:
             // Generic pass-through for unknown types

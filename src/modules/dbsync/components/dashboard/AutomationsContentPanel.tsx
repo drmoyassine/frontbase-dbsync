@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useNavigate } from 'react-router-dom';
+import { ExecutionLogPanel } from '@/components/actions/ExecutionLogPanel';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -300,6 +301,9 @@ export function AutomationsContentPanel() {
                     )}
                 </div>
             </div>
+
+            {/* Execution Log */}
+            <ExecutionLogPanel />
         </div>
     );
 }

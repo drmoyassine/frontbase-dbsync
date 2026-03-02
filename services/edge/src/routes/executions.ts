@@ -8,7 +8,99 @@ import { ExecutionSchema, ErrorResponseSchema, ExecutionStatus, TriggerType } fr
 
 const executionsRoute = new OpenAPIHono();
 
-// Get single execution
+// ── Global list (must be BEFORE /:id to avoid path collision) ───────────────
+
+const allRoute = createRoute({
+    method: 'get',
+    path: '/all',
+    tags: ['Executions'],
+    summary: 'List all executions across all workflows',
+    description: 'Returns recent executions with optional filters (status, date range)',
+    request: {
+        query: z.object({
+            limit: z.string().optional().openapi({ description: 'Max results (default 100)' }),
+            status: z.string().optional().openapi({ description: 'Comma-separated statuses' }),
+            workflowId: z.string().optional().openapi({ description: 'Filter by workflow ID' }),
+            since: z.string().optional().openapi({ description: 'ISO date lower bound' }),
+            until: z.string().optional().openapi({ description: 'ISO date upper bound' }),
+        }),
+    },
+    responses: {
+        200: {
+            description: 'All executions',
+            content: {
+                'application/json': {
+                    schema: z.object({
+                        executions: z.array(ExecutionSchema.omit({ nodeExecutions: true, triggerPayload: true })),
+                        total: z.number(),
+                    }),
+                },
+            },
+        },
+    },
+});
+
+executionsRoute.openapi(allRoute, async (c) => {
+    const q = c.req.valid('query');
+    const filters = {
+        limit: Math.min(parseInt(q.limit || '100'), 500),
+        status: q.status ? q.status.split(',') : undefined,
+        workflowId: q.workflowId || undefined,
+        since: q.since || undefined,
+        until: q.until || undefined,
+    };
+
+    const results = await stateProvider.listAllExecutions(filters);
+
+    return c.json({
+        executions: results.map(e => ({
+            id: e.id,
+            workflowId: e.workflowId,
+            status: e.status as ExecutionStatus,
+            triggerType: e.triggerType as TriggerType,
+            error: e.error || undefined,
+            usage: e.usage || undefined,
+            startedAt: e.startedAt,
+            endedAt: e.endedAt || undefined,
+        })),
+        total: results.length,
+    }, 200);
+});
+
+// ── Stats (also must be before /:id) ────────────────────────────────────────
+
+const statsRoute = createRoute({
+    method: 'get',
+    path: '/stats',
+    tags: ['Executions'],
+    summary: 'Get execution counts per workflow',
+    description: 'Returns run counts for each workflow',
+    responses: {
+        200: {
+            description: 'Execution stats',
+            content: {
+                'application/json': {
+                    schema: z.object({
+                        stats: z.array(z.object({
+                            workflowId: z.string(),
+                            totalRuns: z.number(),
+                            successfulRuns: z.number(),
+                            failedRuns: z.number(),
+                        })),
+                    }),
+                },
+            },
+        },
+    },
+});
+
+executionsRoute.openapi(statsRoute, async (c) => {
+    const stats = await stateProvider.getExecutionStats();
+    return c.json({ stats }, 200);
+});
+
+// ── Get single execution ────────────────────────────────────────────────────
+
 const getRoute = createRoute({
     method: 'get',
     path: '/:id',
@@ -67,7 +159,8 @@ executionsRoute.openapi(getRoute, async (c) => {
     }, 200);
 });
 
-// List executions for a workflow
+// ── List executions for a workflow ──────────────────────────────────────────
+
 const listRoute = createRoute({
     method: 'get',
     path: '/workflow/:workflowId',
@@ -117,37 +210,6 @@ executionsRoute.openapi(listRoute, async (c) => {
         })),
         total: results.length,
     }, 200);
-});
-
-// Get execution stats (counts) for all workflows
-const statsRoute = createRoute({
-    method: 'get',
-    path: '/stats',
-    tags: ['Executions'],
-    summary: 'Get execution counts per workflow',
-    description: 'Returns run counts for each workflow',
-    responses: {
-        200: {
-            description: 'Execution stats',
-            content: {
-                'application/json': {
-                    schema: z.object({
-                        stats: z.array(z.object({
-                            workflowId: z.string(),
-                            totalRuns: z.number(),
-                            successfulRuns: z.number(),
-                            failedRuns: z.number(),
-                        })),
-                    }),
-                },
-            },
-        },
-    },
-});
-
-executionsRoute.openapi(statsRoute, async (c) => {
-    const stats = await stateProvider.getExecutionStats();
-    return c.json({ stats }, 200);
 });
 
 export { executionsRoute };

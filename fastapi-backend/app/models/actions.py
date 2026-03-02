@@ -58,6 +58,10 @@ class AutomationExecution(Base):
     trigger_type = Column(String(50), nullable=False)
     trigger_payload = Column(JSON, nullable=True)
     
+    # Edge target tracking
+    engine_id = Column(String(36), nullable=True)   # FK to EdgeEngine (null for test runs)
+    engine_name = Column(String(100), nullable=True) # Denormalized: "Test", "Local Edge", etc.
+    
     node_executions = Column(JSON, nullable=True)
     result = Column(JSON, nullable=True)
     error = Column(Text, nullable=True)

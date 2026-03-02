@@ -49,42 +49,135 @@ const route = createRoute({
 });
 
 webhookRoute.openapi(route, async (c) => {
-    const { id } = c.req.valid('param');
-    const payload = c.req.valid('json');
+    try {
+        const { id } = c.req.valid('param');
+        const payload = c.req.valid('json');
 
-    // Fetch active workflow via provider
-    const workflow = await stateProvider.getActiveWebhookWorkflow(id);
+        // Fetch active workflow via provider
+        const workflow = await stateProvider.getActiveWebhookWorkflow(id);
 
-    if (!workflow) {
+        if (!workflow) {
+            return c.json({
+                error: 'NotFound',
+                message: `Active workflow ${id} not found`,
+            }, 404);
+        }
+
+        // ── Per-webhook authentication ──────────────────────────────────
+        const wfNodes = JSON.parse(workflow.nodes);
+        const triggerNode = wfNodes.find((n: any) =>
+            n.type === 'webhook_trigger' || n.data?.type === 'webhook_trigger'
+        );
+        if (triggerNode) {
+            const inputs = triggerNode.data?.inputs || triggerNode.inputs || [];
+            const getInput = (name: string) => {
+                const inp = inputs.find((i: any) => i.name === name);
+                return inp?.value;
+            };
+            const authMode = getInput('authentication') || 'none';
+
+            if (authMode === 'header') {
+                const expectedName = getInput('headerName') || 'X-API-Key';
+                const expectedValue = getInput('headerValue');
+                if (expectedValue) {
+                    const actual = c.req.header(expectedName);
+                    if (actual !== expectedValue) {
+                        return c.json({
+                            error: 'Unauthorized',
+                            message: `Missing or invalid '${expectedName}' header`,
+                        }, 401) as any;
+                    }
+                }
+            } else if (authMode === 'basic') {
+                const expectedUser = getInput('username') || '';
+                const expectedPass = getInput('password') || '';
+                const authHeader = c.req.header('Authorization');
+                if (!authHeader || !authHeader.startsWith('Basic ')) {
+                    c.header('WWW-Authenticate', 'Basic realm="Webhook"');
+                    return c.json({
+                        error: 'Unauthorized',
+                        message: 'Basic authentication required',
+                    }, 401) as any;
+                }
+                const decoded = atob(authHeader.slice(6));
+                const [user, pass] = decoded.split(':');
+                if (user !== expectedUser || pass !== expectedPass) {
+                    return c.json({
+                        error: 'Unauthorized',
+                        message: 'Invalid credentials',
+                    }, 401) as any;
+                }
+            }
+            // authMode === 'none' → no validation needed
+        }
+
+        // Create execution record via provider
+        const executionId = uuidv4();
+        const now = new Date().toISOString();
+
+        await stateProvider.createExecution({
+            id: executionId,
+            workflowId: id,
+            status: 'started',
+            triggerType: 'http_webhook',
+            triggerPayload: JSON.stringify(payload),
+            nodeExecutions: JSON.stringify([]),
+            startedAt: now,
+        });
+
+        // Check if workflow contains an http_response node (sync mode)
+        const hasResponseNode = wfNodes.some((n: any) => n.type === 'http_response');
+
+        if (hasResponseNode) {
+            // Sync execution — wait and return user-defined response
+            try {
+                const execResult = await executeWorkflow(executionId, workflow, payload.data);
+
+                if (execResult.httpResponse) {
+                    const { statusCode, body, headers: respHeaders, contentType } = execResult.httpResponse;
+                    const responseBody = typeof body === 'string' ? body : JSON.stringify(body);
+                    c.header('Content-Type', contentType || 'application/json');
+                    if (respHeaders) {
+                        for (const [k, v] of Object.entries(respHeaders)) {
+                            c.header(k, v);
+                        }
+                    }
+                    c.status(statusCode as any);
+                    return c.body(responseBody) as any;
+                }
+
+                // Response node existed but produced no output — return default
+                return c.json({
+                    executionId,
+                    status: execResult.status,
+                    result: execResult.result,
+                }, 200);
+            } catch (err: any) {
+                return c.json({
+                    executionId,
+                    status: 'error',
+                    error: err.message,
+                }, 500);
+            }
+        }
+
+        // No response node — fire and forget (async, original behavior)
+        executeWorkflow(executionId, workflow, payload.data)
+            .catch(err => console.error(`Webhook execution ${executionId} failed:`, err));
+
         return c.json({
-            error: 'NotFound',
-            message: `Active workflow ${id} not found`,
-        }, 404);
+            executionId,
+            status: 'started' as const,
+            message: 'Webhook received, execution started',
+        }, 200);
+    } catch (err: any) {
+        console.error('[Webhook Error]', err);
+        return c.json({
+            success: false,
+            error: err.message || 'Unknown webhook error',
+            stack: process.env.NODE_ENV !== 'production' ? err.stack : undefined,
+        }, 500) as any;
     }
-
-    // Create execution record via provider
-    const executionId = uuidv4();
-    const now = new Date().toISOString();
-
-    await stateProvider.createExecution({
-        id: executionId,
-        workflowId: id,
-        status: 'started',
-        triggerType: 'http_webhook',
-        triggerPayload: JSON.stringify(payload),
-        nodeExecutions: JSON.stringify([]),
-        startedAt: now,
-    });
-
-    // Execute workflow asynchronously
-    executeWorkflow(executionId, workflow, payload.data)
-        .catch(err => console.error(`Webhook execution ${executionId} failed:`, err));
-
-    return c.json({
-        executionId,
-        status: 'started' as const,
-        message: 'Webhook received, execution started',
-    }, 200);
 });
 
 export { webhookRoute };

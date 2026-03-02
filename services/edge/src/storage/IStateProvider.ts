@@ -139,6 +139,14 @@ export interface IStateProvider {
     updateExecution(id: string, updates: Partial<ExecutionData>): Promise<void>;
     /** List executions for a workflow, ordered by most recent */
     listExecutionsByWorkflow(workflowId: string, limit?: number): Promise<ExecutionData[]>;
+    /** List all executions across all workflows, with optional filters */
+    listAllExecutions(filters?: {
+        limit?: number;
+        status?: string[];
+        workflowId?: string;
+        since?: string;
+        until?: string;
+    }): Promise<ExecutionData[]>;
     /** Get execution stats (counts) for all workflows */
     getExecutionStats(): Promise<ExecutionStats[]>;
 }

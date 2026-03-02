@@ -205,7 +205,127 @@ export function useExecutionStats() {
     return useQuery({
         queryKey: ['execution-stats'],
         queryFn: fetchExecutionStats,
-        staleTime: 30000,
+        refetchInterval: 30000,
+    });
+}
+
+// ============ Execution History ============
+
+export interface ExecutionLog {
+    id: string;
+    workflowId: string;
+    workflowName?: string;
+    status: 'started' | 'executing' | 'completed' | 'error';
+    triggerType: string;
+    triggerPayload?: Record<string, any>;
+    nodeExecutions?: Array<{
+        nodeId: string;
+        status: string;
+        outputs?: Record<string, unknown>;
+        error?: string;
+    }>;
+    result?: Record<string, unknown>;
+    error?: string;
+    engineId?: string;
+    engineName?: string;
+    startedAt?: string;
+    endedAt?: string;
+}
+
+async function fetchAllExecutions(params?: {
+    limit?: number;
+    status?: string;
+    engine_name?: string;
+    trigger_type?: string;
+    fresh?: boolean;
+}): Promise<{ executions: ExecutionLog[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.engine_name) searchParams.set('engine_name', params.engine_name);
+    if (params?.trigger_type) searchParams.set('trigger_type', params.trigger_type);
+    if (params?.fresh) searchParams.set('fresh', 'true');
+    const qs = searchParams.toString();
+    const response = await fetch(`${API_BASE}/executions${qs ? `?${qs}` : ''}`);
+    if (!response.ok) throw new Error('Failed to fetch executions');
+    return response.json();
+}
+
+export function useAllExecutions(params?: {
+    limit?: number;
+    status?: string;
+    engine_name?: string;
+    trigger_type?: string;
+}) {
+    return useQuery({
+        queryKey: ['all-executions', params],
+        queryFn: () => fetchAllExecutions(params),
+        staleTime: 5 * 60 * 1000, // 5 minutes
+    });
+}
+
+/** Refresh executions by pulling fresh from edges (bypasses L2 cache) */
+export function useRefreshExecutions() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (params?: { limit?: number; status?: string; engine_name?: string; trigger_type?: string }) =>
+            fetchAllExecutions({ ...params, fresh: true }),
+        onSuccess: (data) => {
+            queryClient.setQueryData(['all-executions', undefined], data);
+        },
+    });
+}
+
+/** Export executions as CSV — also refreshes the UI cache */
+export function useExportExecutions() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (params: {
+            engine_ids?: string;
+            workflow_ids?: string;
+            statuses?: string;
+            date_from?: string;
+            date_to?: string;
+        }) => {
+            const searchParams = new URLSearchParams();
+            if (params.engine_ids) searchParams.set('engine_ids', params.engine_ids);
+            if (params.workflow_ids) searchParams.set('workflow_ids', params.workflow_ids);
+            if (params.statuses) searchParams.set('statuses', params.statuses);
+            if (params.date_from) searchParams.set('date_from', params.date_from);
+            if (params.date_to) searchParams.set('date_to', params.date_to);
+            const qs = searchParams.toString();
+            const response = await fetch(`${API_BASE}/executions/export${qs ? `?${qs}` : ''}`);
+            if (!response.ok) throw new Error('Failed to export executions');
+            const blob = await response.blob();
+            // Trigger browser download
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'execution_log.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        },
+        onSuccess: () => {
+            // Invalidate cache to refresh execution log UI with fresh data
+            queryClient.invalidateQueries({ queryKey: ['all-executions'] });
+        },
+    });
+}
+
+async function fetchDraftExecutions(draftId: string, limit: number = 20): Promise<{ executions: ExecutionLog[]; total: number }> {
+    const response = await fetch(`${API_BASE}/executions/${draftId}?limit=${limit}`);
+    if (!response.ok) throw new Error('Failed to fetch draft executions');
+    return response.json();
+}
+
+export function useDraftExecutions(draftId: string | null, limit: number = 20) {
+    return useQuery({
+        queryKey: ['draft-executions', draftId, limit],
+        queryFn: () => draftId ? fetchDraftExecutions(draftId, limit) : null,
+        enabled: !!draftId,
+        refetchInterval: 10000,
     });
 }
 

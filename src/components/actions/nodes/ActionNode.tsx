@@ -4,7 +4,7 @@
 
 import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { Send, Code, MessageSquare, Database, Bell, ExternalLink, RefreshCw, Check, X, Loader2 } from 'lucide-react';
+import { Send, Code, MessageSquare, Database, Bell, ExternalLink, RefreshCw, Reply, Check, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const iconMap: Record<string, React.ElementType> = {
@@ -19,6 +19,9 @@ const iconMap: Record<string, React.ElementType> = {
     toast: Bell,
     redirect: ExternalLink,
     refresh: RefreshCw,
+    // Output
+    http_response: Reply,
+    data_request: Database,
 };
 
 export const ActionNode = memo(({ data, selected }: NodeProps) => {
@@ -45,6 +48,16 @@ export const ActionNode = memo(({ data, selected }: NodeProps) => {
                 handle: '!bg-orange-500',
                 iconBg: 'bg-orange-500/20',
                 iconText: 'text-orange-500',
+            };
+        }
+        const outputNodes = ['http_response'];
+        if (outputNodes.includes(type)) {
+            return {
+                border: 'border-cyan-500/50 bg-cyan-500/5',
+                ring: 'ring-cyan-500',
+                handle: '!bg-cyan-500',
+                iconBg: 'bg-cyan-500/20',
+                iconText: 'text-cyan-500',
             };
         }
         // Default: blue for actions

@@ -19,24 +19,33 @@ import type { Context, Next } from 'hono';
 // =============================================================================
 
 /**
- * Bearer token middleware for webhook endpoints.
- * Validates API keys from the API_KEYS environment variable.
+ * Custom API key middleware for webhook endpoints.
+ * Checks for Bearer token only when API_KEYS env var is configured.
  * 
- * Usage: app.use('/webhook/*', apiKeyAuth);
+ * If no API_KEYS are set, all requests are allowed (dev mode).
+ * This avoids Hono's bearerAuth throwing when no Authorization header is present.
  */
-export const apiKeyAuth = bearerAuth({
-    verifyToken: async (token: string, c: Context) => {
-        const validKeys = (process.env.API_KEYS || '').split(',').filter(k => k.trim());
+export const apiKeyAuth = async (c: Context, next: Next) => {
+    const validKeys = (process.env.API_KEYS || '').split(',').map(k => k.trim()).filter(Boolean);
 
-        if (validKeys.length === 0) {
-            // No API keys configured - allow all (dev mode)
-            console.warn('⚠️ No API_KEYS configured - webhook auth disabled');
-            return true;
-        }
+    if (validKeys.length === 0) {
+        // No API keys configured — allow all (dev mode)
+        console.warn('⚠️ No API_KEYS configured - webhook auth disabled');
+        return next();
+    }
 
-        return validKeys.includes(token.trim());
-    },
-});
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return c.json({ error: 'Unauthorized', message: 'Missing or invalid Authorization header' }, 401);
+    }
+
+    const token = authHeader.slice(7).trim();
+    if (!validKeys.includes(token)) {
+        return c.json({ error: 'Unauthorized', message: 'Invalid API key' }, 401);
+    }
+
+    return next();
+};
 
 // =============================================================================
 // JWT Authentication (for Edge-deployed End User Routes)

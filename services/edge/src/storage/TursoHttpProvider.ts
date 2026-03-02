@@ -363,6 +363,38 @@ export class TursoHttpProvider implements IStateProvider {
         return rows as ExecutionData[];
     }
 
+    async listAllExecutions(filters?: {
+        limit?: number;
+        status?: string[];
+        workflowId?: string;
+        since?: string;
+        until?: string;
+    }): Promise<ExecutionData[]> {
+        const conditions = [];
+        if (filters?.workflowId) {
+            conditions.push(eq(executionsTable.workflowId, filters.workflowId));
+        }
+        if (filters?.since) {
+            conditions.push(sql`${executionsTable.startedAt} >= ${filters.since}`);
+        }
+        if (filters?.until) {
+            conditions.push(sql`${executionsTable.startedAt} <= ${filters.until}`);
+        }
+
+        let query = this.getDb().select().from(executionsTable);
+        if (conditions.length > 0) {
+            query = query.where(and(...conditions)) as any;
+        }
+        let rows = await (query as any)
+            .orderBy(desc(executionsTable.startedAt))
+            .limit(filters?.limit || 100);
+
+        if (filters?.status && filters.status.length > 0) {
+            rows = rows.filter((r: any) => filters.status!.includes(r.status));
+        }
+        return rows as ExecutionData[];
+    }
+
     async getExecutionStats(): Promise<ExecutionStats[]> {
         const allExecutions = await this.getDb().select().from(executionsTable);
         const statsMap = new Map<string, ExecutionStats>();

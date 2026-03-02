@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Zap, GitBranch, Globe, Code, MessageSquare, Database, Timer, Send, Bell, ExternalLink, RefreshCw } from 'lucide-react';
+import { Zap, GitBranch, Globe, Code, MessageSquare, Database, Timer, Send, Bell, ExternalLink, RefreshCw, Reply } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActionsStore } from '@/stores/actions';
 import { getNodeSchema, getDefaultInputsFromSchema, getDefaultOutputsFromSchema } from '@/lib/workflow/nodeSchemas';
@@ -16,7 +16,7 @@ interface NodeTypeConfig {
     label: string;
     description: string;
     icon: React.ReactNode;
-    category: 'triggers' | 'actions' | 'logic' | 'integrations' | 'interface';
+    category: 'triggers' | 'actions' | 'logic' | 'integrations' | 'interface' | 'output';
 }
 
 const nodeTypes: NodeTypeConfig[] = [
@@ -113,6 +113,15 @@ const nodeTypes: NodeTypeConfig[] = [
         icon: <RefreshCw className="w-4 h-4" />,
         category: 'interface',
     },
+
+    // Output
+    {
+        type: 'http_response',
+        label: 'HTTP Response',
+        description: 'Return response to webhook caller',
+        icon: <Reply className="w-4 h-4" />,
+        category: 'output',
+    },
 ];
 
 const categories = [
@@ -121,6 +130,7 @@ const categories = [
     { id: 'logic', label: 'Logic', color: 'text-purple-500' },
     { id: 'integrations', label: 'Integrations', color: 'text-orange-500' },
     { id: 'interface', label: 'User Interface', color: 'text-pink-500' },
+    { id: 'output', label: 'Output', color: 'text-cyan-500' },
 ] as const;
 
 interface NodePaletteProps {

@@ -441,7 +441,7 @@ async def toggle_target_active(
     Toggle a workflow's active status on a specific target engine by republishing it with the new active state.
     """
     import uuid
-    from app.models.engines import EdgeEngine
+    from app.models.models import EdgeEngine
     from sqlalchemy.orm import Session
     from app.database.config import SessionLocal
 
@@ -485,26 +485,20 @@ async def toggle_target_active(
         )
         
     # UPDATE DB with new is_active state for this engine
-    update_db = SessionLocal()
-    try:
-        draft_record = update_db.query(AutomationDraft).filter(
-            AutomationDraft.id == draft_id
-        ).first()
-        if draft_record:
-            engines = dict(draft_record.deployed_engines or {})
-            if engine_id in engines:
-                engines[engine_id]["is_active"] = request.is_active
-            else:
-                engines[engine_id] = {
-                    "name": engine_name,
-                    "url": engine_url,
-                    "deployed_at": datetime.now(timezone.utc).isoformat(),
-                    "is_active": request.is_active
-                }
-            draft_record.deployed_engines = engines  # type: ignore[assignment]
-            update_db.commit()
-    finally:
-        update_db.close()
+    from sqlalchemy.orm.attributes import flag_modified
+    engines = dict(draft.deployed_engines or {})
+    if engine_id in engines:
+        engines[engine_id]["is_active"] = request.is_active
+    else:
+        engines[engine_id] = {
+            "name": engine_name,
+            "url": engine_url,
+            "deployed_at": datetime.now(timezone.utc).isoformat(),
+            "is_active": request.is_active
+        }
+    draft.deployed_engines = engines  # type: ignore[assignment]
+    flag_modified(draft, "deployed_engines")
+    db.commit()
         
     return {"success": True, "message": f"Workflow {'enabled' if request.is_active else 'disabled'} on '{engine_name}'"}
 
@@ -751,6 +745,7 @@ def _save_test_execution(
             status="started",
             trigger_type=trigger_type,
             trigger_payload=input_params,
+            engine_name="Test",
             started_at=datetime.now(timezone.utc),
         )
         db.add(record)
@@ -801,6 +796,318 @@ async def _poll_and_update_execution(execution_id: str, max_attempts: int = 30):
 
 # ============ Execution History ============
 
+
+def _serialize_execution(r):
+    """Shared serializer for AutomationExecution records."""
+    return {
+        "id": str(r.id),
+        "workflowId": str(r.draft_id or r.workflow_id or ""),
+        "status": str(r.status),
+        "triggerType": str(r.trigger_type),
+        "triggerPayload": r.trigger_payload,
+        "nodeExecutions": r.node_executions,
+        "result": r.result,
+        "error": str(r.error) if str(r.error or "") else None,
+        "engineId": r.engine_id,
+        "engineName": r.engine_name or "Test",
+        "startedAt": r.started_at.isoformat() if r.started_at is not None else None,
+        "endedAt": r.ended_at.isoformat() if r.ended_at is not None else None,
+    }
+
+
+# ── Execution Log: Edge Fan-Out + Redis Cache ────────────────────────────────
+
+EXEC_CACHE_TTL = 1200  # 20 minutes
+
+async def _collect_edge_urls(db: Session) -> dict:
+    """Gather unique edge URLs from the EdgeEngine registry table.
+    Returns {url: engine_name} mapping — only engines that have
+    workflows deployed to them (matching deployed_engines keys)."""
+    # Get all engine IDs that have at least one workflow deployed
+    drafts = db.execute(
+        select(AutomationDraft).where(AutomationDraft.deployed_engines.isnot(None))
+    ).scalars().all()
+
+    deployed_engine_ids = set()
+    for draft in drafts:
+        engines = draft.deployed_engines or {}
+        deployed_engine_ids.update(engines.keys())
+
+    if not deployed_engine_ids:
+        return {}
+
+    # Fetch the canonical URLs from the EdgeEngine table
+    all_engines = db.execute(select(EdgeEngine)).scalars().all()
+    edge_map = {}
+    for engine in all_engines:
+        if str(engine.id) in deployed_engine_ids:
+            url = str(engine.url).rstrip("/")
+            if url:
+                edge_map[url] = engine.name
+    return edge_map
+
+
+async def _fetch_from_edge(client: httpx.AsyncClient, url: str, engine_name: str, params: dict) -> list:
+    """Fetch executions from a single edge engine."""
+    try:
+        resp = await client.get(f"{url}/api/executions/all", params=params, timeout=5.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            executions = data.get("executions", [])
+            for e in executions:
+                e["engineName"] = engine_name
+                e["engineUrl"] = url
+            return executions
+    except Exception as exc:
+        logging.warning(f"[Exec-Log] Failed to reach edge '{engine_name}' ({url}): {exc}")
+    return []
+
+
+async def _pull_from_edges(db: Session, params: dict) -> list:
+    """Fan out to all edges with deployed workflows and collect executions."""
+    edge_map = await _collect_edge_urls(db)
+    if not edge_map:
+        return []
+
+    async with httpx.AsyncClient() as client:
+        tasks = [
+            _fetch_from_edge(client, url, name, params)
+            for url, name in edge_map.items()
+        ]
+        results = await asyncio.gather(*tasks)
+
+    all_executions = []
+    for batch in results:
+        all_executions.extend(batch)
+
+    # Sort merged results by startedAt descending
+    all_executions.sort(key=lambda e: e.get("startedAt", ""), reverse=True)
+    return all_executions
+
+
+@router.get("/executions")
+async def list_all_executions(
+    limit: int = 100,
+    status: Optional[str] = None,
+    engine_name: Optional[str] = None,
+    trigger_type: Optional[str] = None,
+    fresh: bool = False,
+    db: Session = Depends(get_db),
+):
+    """Global execution log — pulls from all edges with deployed workflows.
+    Caches in Redis for 20 minutes. Pass ?fresh=true to bypass cache."""
+    from app.services.sync.redis_client import cache_get, cache_set, get_configured_redis_settings
+
+    # Build cache key from filters
+    cache_key = f"exec_log:{limit}:{status}:{engine_name}:{trigger_type}"
+
+    # L2: Redis Cache Check (unless fresh=true)
+    redis_settings = await get_configured_redis_settings()
+    redis_url = redis_settings.get("url") if redis_settings and redis_settings.get("enabled") else None
+
+    if not fresh and redis_url:
+        cached = await cache_get(redis_url, cache_key)
+        if cached:
+            logging.info(f"[Exec-Log] L2 Redis cache hit: {cache_key}")
+            return cached
+
+    # Pull from edges
+    edge_params = {"limit": str(limit)}
+    if status:
+        edge_params["status"] = status
+    edge_executions = await _pull_from_edges(db, edge_params)
+
+    # Also get test runs from PostgreSQL
+    test_query = (
+        select(AutomationExecution)
+        .order_by(AutomationExecution.started_at.desc())
+        .limit(limit)
+    )
+    if status:
+        test_query = test_query.where(AutomationExecution.status == status)
+    if trigger_type:
+        test_query = test_query.where(AutomationExecution.trigger_type == trigger_type)
+    test_records = db.execute(test_query).scalars().all()
+
+    # Resolve workflow names
+    all_draft_ids = set()
+    for e in edge_executions:
+        wf_id = e.get("workflowId", "")
+        if wf_id:
+            all_draft_ids.add(wf_id)
+    for r in test_records:
+        if r.draft_id:
+            all_draft_ids.add(str(r.draft_id))
+
+    drafts_map = {}
+    if all_draft_ids:
+        drafts = db.execute(
+            select(AutomationDraft.id, AutomationDraft.name)
+            .where(AutomationDraft.id.in_(list(all_draft_ids)))
+        ).all()
+        drafts_map = {str(d.id): d.name for d in drafts}
+
+    # Enrich edge executions with workflow names
+    for e in edge_executions:
+        e["workflowName"] = drafts_map.get(e.get("workflowId", ""), "Unknown")
+
+    # Serialize test runs
+    test_executions = []
+    for r in test_records:
+        data = _serialize_execution(r)
+        data["workflowName"] = drafts_map.get(str(r.draft_id), "Unknown")
+        test_executions.append(data)
+
+    # Merge and sort by startedAt
+    all_executions = edge_executions + test_executions
+    all_executions.sort(key=lambda e: e.get("startedAt", ""), reverse=True)
+
+    # Apply engine_name filter post-merge
+    if engine_name:
+        all_executions = [e for e in all_executions if e.get("engineName") == engine_name]
+
+    all_executions = all_executions[:limit]
+
+    result = {"executions": all_executions, "total": len(all_executions)}
+
+    # Cache in Redis
+    if redis_url:
+        await cache_set(redis_url, cache_key, result, ttl=EXEC_CACHE_TTL)
+
+    return result
+
+
+# ── CSV Export ────────────────────────────────────────────────────────────────
+
+@router.get("/executions/export")
+async def export_executions_csv(
+    engine_ids: Optional[str] = None,
+    workflow_ids: Optional[str] = None,
+    statuses: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Export execution logs as CSV. Always pulls fresh from selected edges.
+    Also updates the Redis cache with fresh data."""
+    from fastapi.responses import StreamingResponse
+    from app.services.sync.redis_client import cache_set, get_configured_redis_settings
+    import io
+    import csv
+
+    # Determine which edges to query
+    edge_map = await _collect_edge_urls(db)
+
+    # Filter by engine_ids if specified
+    if engine_ids:
+        requested_ids = set(engine_ids.split(","))
+        # Resolve engine IDs to URLs
+        engines = db.execute(
+            select(EdgeEngine).where(EdgeEngine.id.in_(list(requested_ids)))
+        ).scalars().all()
+        allowed_urls = {str(e.url).rstrip("/") for e in engines}
+        edge_map = {url: name for url, name in edge_map.items() if url in allowed_urls}
+
+    # Build query params
+    params: dict = {"limit": "500"}
+    if statuses:
+        params["status"] = statuses
+    if workflow_ids:
+        params["workflowId"] = workflow_ids.split(",")[0]  # Edge filter supports single workflow
+    if date_from:
+        params["since"] = date_from
+    if date_to:
+        params["until"] = date_to
+
+    # Pull fresh from edges
+    all_executions = []
+    async with httpx.AsyncClient() as client:
+        tasks = [
+            _fetch_from_edge(client, url, name, params)
+            for url, name in edge_map.items()
+        ]
+        results = await asyncio.gather(*tasks)
+        for batch in results:
+            all_executions.extend(batch)
+
+    # Also get test runs if no engine filter or "Test" is included
+    if not engine_ids:
+        test_query = select(AutomationExecution).order_by(AutomationExecution.started_at.desc()).limit(500)
+        if statuses:
+            test_query = test_query.where(AutomationExecution.status.in_(statuses.split(",")))
+        test_records = db.execute(test_query).scalars().all()
+        for r in test_records:
+            data = _serialize_execution(r)
+            all_executions.append(data)
+
+    # Filter by workflow_ids post-merge
+    if workflow_ids:
+        wf_set = set(workflow_ids.split(","))
+        all_executions = [e for e in all_executions if e.get("workflowId") in wf_set]
+
+    # Resolve workflow names
+    all_draft_ids = {e.get("workflowId", "") for e in all_executions if e.get("workflowId")}
+    drafts_map = {}
+    if all_draft_ids:
+        drafts = db.execute(
+            select(AutomationDraft.id, AutomationDraft.name)
+            .where(AutomationDraft.id.in_(list(all_draft_ids)))
+        ).all()
+        drafts_map = {str(d.id): d.name for d in drafts}
+
+    for e in all_executions:
+        e["workflowName"] = drafts_map.get(e.get("workflowId", ""), "Unknown")
+
+    # Sort by date
+    all_executions.sort(key=lambda e: e.get("startedAt", ""), reverse=True)
+
+    # Also update Redis cache with the fresh data
+    redis_settings = await get_configured_redis_settings()
+    redis_url = redis_settings.get("url") if redis_settings and redis_settings.get("enabled") else None
+    if redis_url:
+        cache_key = f"exec_log:100:None:None:None"
+        await cache_set(redis_url, cache_key, {
+            "executions": all_executions[:100],
+            "total": min(len(all_executions), 100),
+        }, ttl=EXEC_CACHE_TTL)
+
+    # Generate CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Execution ID", "Workflow Name", "Workflow ID", "Trigger", "Status",
+                      "Edge Name", "Started", "Ended", "Duration (s)", "Error"])
+    for e in all_executions:
+        started = e.get("startedAt", "")
+        ended = e.get("endedAt", "")
+        duration = ""
+        if started and ended:
+            try:
+                from dateutil.parser import parse as parse_dt
+                dur = (parse_dt(ended) - parse_dt(started)).total_seconds()
+                duration = f"{dur:.1f}"
+            except Exception:
+                pass
+        writer.writerow([
+            e.get("id", ""),
+            e.get("workflowName", "Unknown"),
+            e.get("workflowId", ""),
+            e.get("triggerType", ""),
+            e.get("status", ""),
+            e.get("engineName", "Test"),
+            started,
+            ended,
+            duration,
+            e.get("error", ""),
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=execution_log.csv"},
+    )
+
+
 @router.get("/executions/{draft_id}")
 async def get_draft_executions(
     draft_id: str,
@@ -816,21 +1123,7 @@ async def get_draft_executions(
         .limit(limit)
     ).scalars().all()
     
-    test_logs = []
-    for r in test_records:
-        test_logs.append({
-            "id": str(r.id),
-            "workflowId": str(r.draft_id),
-            "status": str(r.status),
-            "triggerType": str(r.trigger_type),
-            "triggerPayload": r.trigger_payload,
-            "nodeExecutions": r.node_executions,
-            "result": r.result,
-            "error": str(r.error) if str(r.error or "") else None,
-            "startedAt": r.started_at.isoformat() if r.started_at is not None else None,  # type: ignore[union-attr]
-            "endedAt": r.ended_at.isoformat() if r.ended_at is not None else None,  # type: ignore[union-attr]
-            "source": "test",
-        })
+    test_logs = [_serialize_execution(r) for r in test_records]
     
     # 2. Production logs from local edge
     edge_logs = []
@@ -844,7 +1137,7 @@ async def get_draft_executions(
             if response.status_code == 200:
                 data = response.json()
                 for e in data.get("executions", []):
-                    e["source"] = "local_edge"
+                    e["engineName"] = e.get("engineName", "Local Edge")
                     edge_logs.append(e)
     except httpx.ConnectError:
         pass  # Edge not available, skip production logs

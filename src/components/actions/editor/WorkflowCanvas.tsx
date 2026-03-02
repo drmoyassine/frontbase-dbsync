@@ -45,6 +45,8 @@ const nodeTypes = {
     toast: ActionNode,
     redirect: ActionNode,
     refresh: ActionNode,
+    // Output
+    http_response: ActionNode,
 };
 
 // Node execution status type

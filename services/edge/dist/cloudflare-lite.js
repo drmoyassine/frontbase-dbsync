@@ -1581,46 +1581,7 @@ var HTTPException = class extends Error {
   }
 };
 
-// node_modules/hono/dist/utils/crypto.js
-var sha256 = async (data) => {
-  const algorithm = { name: "SHA-256"};
-  const hash = await createHash(data, algorithm);
-  return hash;
-};
-var createHash = async (data, algorithm) => {
-  let sourceBuffer;
-  if (ArrayBuffer.isView(data) || data instanceof ArrayBuffer) {
-    sourceBuffer = data;
-  } else {
-    if (typeof data === "object") {
-      data = JSON.stringify(data);
-    }
-    sourceBuffer = new TextEncoder().encode(String(data));
-  }
-  if (crypto && crypto.subtle) {
-    const buffer = await crypto.subtle.digest(
-      {
-        name: algorithm.name
-      },
-      sourceBuffer
-    );
-    const hash = Array.prototype.map.call(new Uint8Array(buffer), (x) => ("00" + x.toString(16)).slice(-2)).join("");
-    return hash;
-  }
-  return null;
-};
-
 // node_modules/hono/dist/utils/buffer.js
-var timingSafeEqual = async (a, b, hashFunction) => {
-  if (!hashFunction) {
-    hashFunction = sha256;
-  }
-  const [sa, sb] = await Promise.all([hashFunction(a), hashFunction(b)]);
-  if (!sa || !sb) {
-    return false;
-  }
-  return sa === sb && a === b;
-};
 var bufferToFormData = (arrayBuffer, contentType) => {
   const response = new Response(arrayBuffer, {
     headers: {
@@ -22552,6 +22513,13 @@ var MIGRATIONS = [
       `CREATE INDEX IF NOT EXISTS idx_executions_workflow ON executions(workflow_id)`,
       `CREATE INDEX IF NOT EXISTS idx_executions_started ON executions(started_at)`
     ]
+  },
+  {
+    version: 3,
+    description: "Add content_hash column to published_pages",
+    sql: [
+      `ALTER TABLE published_pages ADD COLUMN content_hash TEXT`
+    ]
   }
 ];
 async function runMigrations(execute, providerName) {
@@ -22563,13 +22531,22 @@ async function runMigrations(execute, providerName) {
   let appliedCount = 0;
   for (const migration of MIGRATIONS) {
     try {
+      for (const sqlStmt of migration.sql) {
+        try {
+          await execute(sqlStmt);
+        } catch (sqlError) {
+          const msg = String(sqlError?.message || sqlError || "");
+          if (msg.includes("duplicate column")) {
+            console.log(`[${providerName}:Migration] Column already exists (v${migration.version}), skipping.`);
+          } else {
+            throw sqlError;
+          }
+        }
+      }
       await execute(
         `INSERT OR IGNORE INTO _schema_version (version, description) 
                  VALUES (${migration.version}, '${migration.description.replace(/'/g, "''")}')`
       );
-      for (const sql2 of migration.sql) {
-        await execute(sql2);
-      }
       appliedCount++;
     } catch (error) {
       console.error(`[${providerName}:Migration] Failed at v${migration.version}: ${error}`);
@@ -22595,6 +22572,7 @@ var publishedPages = sqliteTable("published_pages", {
   publishedAt: text("published_at").notNull(),
   isPublic: integer("is_public", { mode: "boolean" }).notNull().default(true),
   isHomepage: integer("is_homepage", { mode: "boolean" }).notNull().default(false),
+  contentHash: text("content_hash"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
@@ -22689,16 +22667,18 @@ var TursoHttpProvider = class {
       version: page.version,
       publishedAt: page.publishedAt,
       isPublic: page.isPublic,
-      isHomepage: page.isHomepage
+      isHomepage: page.isHomepage,
+      contentHash: page.contentHash || null
     };
-    const existing = await this.getDb().select().from(publishedPages).where(eq(publishedPages.id, page.id)).get();
-    if (existing) {
-      await this.getDb().update(publishedPages).set({ ...record, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(eq(publishedPages.id, page.id));
-      console.log(`\u2601\uFE0F Updated page (Turso): ${page.slug} (v${page.version})`);
-    } else {
-      await this.getDb().insert(publishedPages).values(record);
-      console.log(`\u2601\uFE0F Created page (Turso): ${page.slug} (v${page.version})`);
+    if (page.isHomepage) {
+      await this.getDb().update(publishedPages).set({ isHomepage: false }).where(eq(publishedPages.isHomepage, true));
+      console.log(`\u2601\uFE0F Cleared old homepage flag(s) before setting new homepage: ${page.slug}`);
     }
+    await this.getDb().insert(publishedPages).values(record).onConflictDoUpdate({
+      target: publishedPages.id,
+      set: { ...record, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }
+    });
+    console.log(`\u2601\uFE0F Upserted page (Turso): ${page.slug} (v${page.version})`);
     return { success: true, version: page.version };
   }
   async getPageBySlug(slug) {
@@ -22866,6 +22846,27 @@ var TursoHttpProvider = class {
     const rows = await this.getDb().select().from(executionsTable).where(eq(executionsTable.workflowId, workflowId)).orderBy(desc(executionsTable.startedAt)).limit(limit2);
     return rows;
   }
+  async listAllExecutions(filters2) {
+    const conditions = [];
+    if (filters2?.workflowId) {
+      conditions.push(eq(executionsTable.workflowId, filters2.workflowId));
+    }
+    if (filters2?.since) {
+      conditions.push(sql`${executionsTable.startedAt} >= ${filters2.since}`);
+    }
+    if (filters2?.until) {
+      conditions.push(sql`${executionsTable.startedAt} <= ${filters2.until}`);
+    }
+    let query = this.getDb().select().from(executionsTable);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    let rows = await query.orderBy(desc(executionsTable.startedAt)).limit(filters2?.limit || 100);
+    if (filters2?.status && filters2.status.length > 0) {
+      rows = rows.filter((r) => filters2.status.includes(r.status));
+    }
+    return rows;
+  }
   async getExecutionStats() {
     const allExecutions = await this.getDb().select().from(executionsTable);
     const statsMap = /* @__PURE__ */ new Map();
@@ -22966,9 +22967,24 @@ function getStateProvider() {
   }
   return _provider;
 }
+var _initPromise = null;
+function ensureInitialized() {
+  if (!_initPromise) {
+    const provider = getStateProvider();
+    _initPromise = provider.init().catch((err) => {
+      _initPromise = null;
+      throw err;
+    });
+  }
+  return _initPromise;
+}
 var stateProvider = new Proxy({}, {
   get(_target, prop) {
-    return (...args) => {
+    if (prop === "init") {
+      return () => ensureInitialized();
+    }
+    return async (...args) => {
+      await ensureInitialized();
       const provider = getStateProvider();
       const value = provider[prop];
       if (typeof value === "function") {
@@ -23045,7 +23061,7 @@ external_exports.object({
   id: external_exports.string().uuid(),
   name: external_exports.string().min(1).max(255),
   description: external_exports.string().optional(),
-  triggerType: TriggerTypeSchema,
+  triggerType: external_exports.string().openapi({ description: "Trigger type(s), comma-separated for multi-trigger" }),
   triggerConfig: external_exports.record(external_exports.any()).optional().nullable(),
   nodes: external_exports.array(WorkflowNodeSchema),
   edges: external_exports.array(WorkflowEdgeSchema),
@@ -23056,10 +23072,11 @@ var DeployWorkflowSchema = external_exports.object({
   id: external_exports.string().uuid(),
   name: external_exports.string().min(1),
   description: external_exports.string().optional().nullable(),
-  triggerType: TriggerTypeSchema,
+  triggerType: external_exports.string().openapi({ description: "Trigger type(s), comma-separated for multi-trigger" }),
   triggerConfig: external_exports.record(external_exports.any()).optional().nullable(),
   nodes: external_exports.array(WorkflowNodeSchema),
   edges: external_exports.array(WorkflowEdgeSchema),
+  isActive: external_exports.boolean().optional(),
   publishedBy: external_exports.string().optional().nullable()
 }).openapi("DeployWorkflow");
 var NodeExecutionSchema = external_exports.object({
@@ -23156,7 +23173,7 @@ deployRoute.openapi(route2, async (c) => {
       nodes: JSON.stringify(body.nodes),
       edges: JSON.stringify(body.edges),
       version: 1,
-      isActive: true,
+      isActive: body.isActive ?? true,
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
       updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
       publishedBy: body.publishedBy || null
@@ -23287,12 +23304,24 @@ async function executeWorkflow(executionId, workflow, inputParameters) {
     for (const node of endNodes) {
       result[node.id] = context.nodeOutputs[node.id];
     }
+    const responseNode = endNodes.find((n) => n.type === "http_response");
+    let httpResponse = void 0;
+    if (responseNode && context.nodeOutputs[responseNode.id]) {
+      const out = context.nodeOutputs[responseNode.id];
+      httpResponse = {
+        statusCode: out.statusCode || 200,
+        body: out.body,
+        headers: out.headers,
+        contentType: out.contentType || "application/json"
+      };
+    }
     await stateProvider.updateExecution(executionId, {
       status: "completed",
       nodeExecutions: JSON.stringify(context.nodeExecutions),
       result: JSON.stringify(result),
       endedAt: (/* @__PURE__ */ new Date()).toISOString()
     });
+    return { status: "completed", result, httpResponse };
   } catch (error) {
     await stateProvider.updateExecution(executionId, {
       status: "error",
@@ -23300,6 +23329,7 @@ async function executeWorkflow(executionId, workflow, inputParameters) {
       error: error.message,
       endedAt: (/* @__PURE__ */ new Date()).toISOString()
     });
+    return { status: "error", result: {}, error: error.message };
   }
 }
 async function executeSingleNode(executionId, workflow, targetNodeId, inputParameters) {
@@ -23417,6 +23447,19 @@ async function executeNode(node, inputs, context) {
     case "console":
       console.log(`[Node ${node.id}]:`, inputs);
       return { logged: true, data: inputs };
+    case "http_response": {
+      const nodeInputs = node.inputs || [];
+      const getVal = (name) => {
+        const inp = nodeInputs.find((i) => i.name === name);
+        return inp?.value !== void 0 ? inp.value : inputs[name];
+      };
+      return {
+        statusCode: getVal("statusCode") || 200,
+        body: getVal("body") ?? inputs,
+        headers: getVal("headers"),
+        contentType: getVal("contentType") || "application/json"
+      };
+    }
     default:
       console.warn(`Unknown node type: ${node.type}`);
       return { ...inputs };
@@ -23749,36 +23792,199 @@ var route4 = createRoute({
   }
 });
 webhookRoute.openapi(route4, async (c) => {
-  const { id } = c.req.valid("param");
-  const payload = c.req.valid("json");
-  const workflow = await stateProvider.getActiveWebhookWorkflow(id);
-  if (!workflow) {
+  try {
+    const { id } = c.req.valid("param");
+    const payload = c.req.valid("json");
+    const workflow = await stateProvider.getActiveWebhookWorkflow(id);
+    if (!workflow) {
+      return c.json({
+        error: "NotFound",
+        message: `Active workflow ${id} not found`
+      }, 404);
+    }
+    const wfNodes = JSON.parse(workflow.nodes);
+    const triggerNode = wfNodes.find(
+      (n) => n.type === "webhook_trigger" || n.data?.type === "webhook_trigger"
+    );
+    if (triggerNode) {
+      const inputs = triggerNode.data?.inputs || triggerNode.inputs || [];
+      const getInput = (name) => {
+        const inp = inputs.find((i) => i.name === name);
+        return inp?.value;
+      };
+      const authMode = getInput("authentication") || "none";
+      if (authMode === "header") {
+        const expectedName = getInput("headerName") || "X-API-Key";
+        const expectedValue = getInput("headerValue");
+        if (expectedValue) {
+          const actual = c.req.header(expectedName);
+          if (actual !== expectedValue) {
+            return c.json({
+              error: "Unauthorized",
+              message: `Missing or invalid '${expectedName}' header`
+            }, 401);
+          }
+        }
+      } else if (authMode === "basic") {
+        const expectedUser = getInput("username") || "";
+        const expectedPass = getInput("password") || "";
+        const authHeader = c.req.header("Authorization");
+        if (!authHeader || !authHeader.startsWith("Basic ")) {
+          c.header("WWW-Authenticate", 'Basic realm="Webhook"');
+          return c.json({
+            error: "Unauthorized",
+            message: "Basic authentication required"
+          }, 401);
+        }
+        const decoded = atob(authHeader.slice(6));
+        const [user, pass] = decoded.split(":");
+        if (user !== expectedUser || pass !== expectedPass) {
+          return c.json({
+            error: "Unauthorized",
+            message: "Invalid credentials"
+          }, 401);
+        }
+      }
+    }
+    const executionId = v4_default();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    await stateProvider.createExecution({
+      id: executionId,
+      workflowId: id,
+      status: "started",
+      triggerType: "http_webhook",
+      triggerPayload: JSON.stringify(payload),
+      nodeExecutions: JSON.stringify([]),
+      startedAt: now
+    });
+    const hasResponseNode = wfNodes.some((n) => n.type === "http_response");
+    if (hasResponseNode) {
+      try {
+        const execResult = await executeWorkflow(executionId, workflow, payload.data);
+        if (execResult.httpResponse) {
+          const { statusCode, body, headers: respHeaders, contentType } = execResult.httpResponse;
+          const responseBody = typeof body === "string" ? body : JSON.stringify(body);
+          c.header("Content-Type", contentType || "application/json");
+          if (respHeaders) {
+            for (const [k, v] of Object.entries(respHeaders)) {
+              c.header(k, v);
+            }
+          }
+          c.status(statusCode);
+          return c.body(responseBody);
+        }
+        return c.json({
+          executionId,
+          status: execResult.status,
+          result: execResult.result
+        }, 200);
+      } catch (err) {
+        return c.json({
+          executionId,
+          status: "error",
+          error: err.message
+        }, 500);
+      }
+    }
+    executeWorkflow(executionId, workflow, payload.data).catch((err) => console.error(`Webhook execution ${executionId} failed:`, err));
     return c.json({
-      error: "NotFound",
-      message: `Active workflow ${id} not found`
-    }, 404);
+      executionId,
+      status: "started",
+      message: "Webhook received, execution started"
+    }, 200);
+  } catch (err) {
+    console.error("[Webhook Error]", err);
+    return c.json({
+      success: false,
+      error: err.message || "Unknown webhook error",
+      stack: void 0
+    }, 500);
   }
-  const executionId = v4_default();
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  await stateProvider.createExecution({
-    id: executionId,
-    workflowId: id,
-    status: "started",
-    triggerType: "http_webhook",
-    triggerPayload: JSON.stringify(payload),
-    nodeExecutions: JSON.stringify([]),
-    startedAt: now
-  });
-  executeWorkflow(executionId, workflow, payload.data).catch((err) => console.error(`Webhook execution ${executionId} failed:`, err));
-  return c.json({
-    executionId,
-    status: "started",
-    message: "Webhook received, execution started"
-  }, 200);
 });
 
 // src/routes/executions.ts
 var executionsRoute = new OpenAPIHono();
+var allRoute = createRoute({
+  method: "get",
+  path: "/all",
+  tags: ["Executions"],
+  summary: "List all executions across all workflows",
+  description: "Returns recent executions with optional filters (status, date range)",
+  request: {
+    query: external_exports.object({
+      limit: external_exports.string().optional().openapi({ description: "Max results (default 100)" }),
+      status: external_exports.string().optional().openapi({ description: "Comma-separated statuses" }),
+      workflowId: external_exports.string().optional().openapi({ description: "Filter by workflow ID" }),
+      since: external_exports.string().optional().openapi({ description: "ISO date lower bound" }),
+      until: external_exports.string().optional().openapi({ description: "ISO date upper bound" })
+    })
+  },
+  responses: {
+    200: {
+      description: "All executions",
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            executions: external_exports.array(ExecutionSchema.omit({ nodeExecutions: true, triggerPayload: true })),
+            total: external_exports.number()
+          })
+        }
+      }
+    }
+  }
+});
+executionsRoute.openapi(allRoute, async (c) => {
+  const q = c.req.valid("query");
+  const filters2 = {
+    limit: Math.min(parseInt(q.limit || "100"), 500),
+    status: q.status ? q.status.split(",") : void 0,
+    workflowId: q.workflowId || void 0,
+    since: q.since || void 0,
+    until: q.until || void 0
+  };
+  const results = await stateProvider.listAllExecutions(filters2);
+  return c.json({
+    executions: results.map((e) => ({
+      id: e.id,
+      workflowId: e.workflowId,
+      status: e.status,
+      triggerType: e.triggerType,
+      error: e.error || void 0,
+      usage: e.usage || void 0,
+      startedAt: e.startedAt,
+      endedAt: e.endedAt || void 0
+    })),
+    total: results.length
+  }, 200);
+});
+var statsRoute = createRoute({
+  method: "get",
+  path: "/stats",
+  tags: ["Executions"],
+  summary: "Get execution counts per workflow",
+  description: "Returns run counts for each workflow",
+  responses: {
+    200: {
+      description: "Execution stats",
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            stats: external_exports.array(external_exports.object({
+              workflowId: external_exports.string(),
+              totalRuns: external_exports.number(),
+              successfulRuns: external_exports.number(),
+              failedRuns: external_exports.number()
+            }))
+          })
+        }
+      }
+    }
+  }
+});
+executionsRoute.openapi(statsRoute, async (c) => {
+  const stats = await stateProvider.getExecutionStats();
+  return c.json({ stats }, 200);
+});
 var getRoute = createRoute({
   method: "get",
   path: "/:id",
@@ -23879,113 +24085,6 @@ executionsRoute.openapi(listRoute, async (c) => {
     total: results.length
   }, 200);
 });
-var statsRoute = createRoute({
-  method: "get",
-  path: "/stats",
-  tags: ["Executions"],
-  summary: "Get execution counts per workflow",
-  description: "Returns run counts for each workflow",
-  responses: {
-    200: {
-      description: "Execution stats",
-      content: {
-        "application/json": {
-          schema: external_exports.object({
-            stats: external_exports.array(external_exports.object({
-              workflowId: external_exports.string(),
-              totalRuns: external_exports.number(),
-              successfulRuns: external_exports.number(),
-              failedRuns: external_exports.number()
-            }))
-          })
-        }
-      }
-    }
-  }
-});
-executionsRoute.openapi(statsRoute, async (c) => {
-  const stats = await stateProvider.getExecutionStats();
-  return c.json({ stats }, 200);
-});
-
-// node_modules/hono/dist/middleware/bearer-auth/index.js
-var TOKEN_STRINGS = "[A-Za-z0-9._~+/-]+=*";
-var PREFIX = "Bearer";
-var HEADER = "Authorization";
-var bearerAuth = (options) => {
-  if (!("token" in options || "verifyToken" in options)) {
-    throw new Error('bearer auth middleware requires options for "token"');
-  }
-  if (!options.realm) {
-    options.realm = "";
-  }
-  if (options.prefix === void 0) {
-    options.prefix = PREFIX;
-  }
-  const realm = options.realm?.replace(/"/g, '\\"');
-  const prefixRegexStr = options.prefix === "" ? "" : `${options.prefix} +`;
-  const regexp = new RegExp(`^${prefixRegexStr}(${TOKEN_STRINGS}) *$`);
-  const wwwAuthenticatePrefix = options.prefix === "" ? "" : `${options.prefix} `;
-  const throwHTTPException = async (c, status, wwwAuthenticateHeader, messageOption) => {
-    const wwwAuthenticateHeaderValue = typeof wwwAuthenticateHeader === "function" ? await wwwAuthenticateHeader(c) : wwwAuthenticateHeader;
-    const headers = {
-      "WWW-Authenticate": typeof wwwAuthenticateHeaderValue === "string" ? wwwAuthenticateHeaderValue : `${wwwAuthenticatePrefix}${Object.entries(wwwAuthenticateHeaderValue).map(([key, value]) => `${key}="${value}"`).join(",")}`
-    };
-    const responseMessage = typeof messageOption === "function" ? await messageOption(c) : messageOption;
-    const res = typeof responseMessage === "string" ? new Response(responseMessage, { status, headers }) : new Response(JSON.stringify(responseMessage), {
-      status,
-      headers: {
-        ...headers,
-        "content-type": "application/json"
-      }
-    });
-    throw new HTTPException(status, { res });
-  };
-  return async function bearerAuth2(c, next) {
-    const headerToken = c.req.header(options.headerName || HEADER);
-    if (!headerToken) {
-      await throwHTTPException(
-        c,
-        401,
-        options.noAuthenticationHeader?.wwwAuthenticateHeader || `${wwwAuthenticatePrefix}realm="${realm}"`,
-        options.noAuthenticationHeader?.message || options.noAuthenticationHeaderMessage || "Unauthorized"
-      );
-    } else {
-      const match2 = regexp.exec(headerToken);
-      if (!match2) {
-        await throwHTTPException(
-          c,
-          400,
-          options.invalidAuthenticationHeader?.wwwAuthenticateHeader || `${wwwAuthenticatePrefix}error="invalid_request"`,
-          options.invalidAuthenticationHeader?.message || options.invalidAuthenticationHeaderMessage || "Bad Request"
-        );
-      } else {
-        let equal = false;
-        if ("verifyToken" in options) {
-          equal = await options.verifyToken(match2[1], c);
-        } else if (typeof options.token === "string") {
-          equal = await timingSafeEqual(options.token, match2[1], options.hashFunction);
-        } else if (Array.isArray(options.token) && options.token.length > 0) {
-          for (const token of options.token) {
-            if (await timingSafeEqual(token, match2[1], options.hashFunction)) {
-              equal = true;
-              break;
-            }
-          }
-        }
-        if (!equal) {
-          await throwHTTPException(
-            c,
-            401,
-            options.invalidToken?.wwwAuthenticateHeader || `${wwwAuthenticatePrefix}error="invalid_token"`,
-            options.invalidToken?.message || options.invalidTokenMessage || "Unauthorized"
-          );
-        }
-      }
-    }
-    await next();
-  };
-};
 
 // node_modules/hono/dist/utils/jwt/jwa.js
 var AlgorithmTypes = /* @__PURE__ */ ((AlgorithmTypes2) => {
@@ -24015,16 +24114,22 @@ new TextDecoder();
 ];
 
 // src/middleware/auth.ts
-var apiKeyAuth = bearerAuth({
-  verifyToken: async (token, c) => {
-    const validKeys = (process.env.API_KEYS || "").split(",").filter((k) => k.trim());
-    if (validKeys.length === 0) {
-      console.warn("\u26A0\uFE0F No API_KEYS configured - webhook auth disabled");
-      return true;
-    }
-    return validKeys.includes(token.trim());
+var apiKeyAuth = async (c, next) => {
+  const validKeys = (process.env.API_KEYS || "").split(",").map((k) => k.trim()).filter(Boolean);
+  if (validKeys.length === 0) {
+    console.warn("\u26A0\uFE0F No API_KEYS configured - webhook auth disabled");
+    return next();
   }
-});
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return c.json({ error: "Unauthorized", message: "Missing or invalid Authorization header" }, 401);
+  }
+  const token = authHeader.slice(7).trim();
+  if (!validKeys.includes(token)) {
+    return c.json({ error: "Unauthorized", message: "Invalid API key" }, 401);
+  }
+  return next();
+};
 
 // src/engine/lite.ts
 new Liquid({
@@ -24078,22 +24183,14 @@ function createLiteApp() {
       c.res.headers.set("Cache-Control", "no-cache");
     }
   });
-  const origins = ["http://localhost:5173", "http://localhost:8000"];
-  app.use("/api/*", cors({ origin: origins, credentials: true }));
-  app.use("*", cors({ origin: origins, credentials: true }));
+  app.use("/api/*", cors({ origin: "*" }));
+  app.use("*", cors({ origin: "*" }));
   app.use("/api/webhook/*", apiKeyAuth);
   app.route("/api/health", healthRoute);
   app.route("/api/deploy", deployRoute);
   app.route("/api/execute", executeRoute);
   app.route("/api/webhook", webhookRoute);
   app.route("/api/executions", executionsRoute);
-  app.get("/", (c) => c.json({
-    service: "Frontbase Edge Engine",
-    mode: "lite",
-    status: "running",
-    docs: "/api/docs",
-    health: "/api/health"
-  }));
   app.doc("/api/openapi.json", {
     openapi: "3.1.0",
     info: {
@@ -24109,6 +24206,13 @@ function createLiteApp() {
   return app;
 }
 var liteApp = createLiteApp();
+liteApp.get("/", (c) => c.json({
+  service: "Frontbase Edge Engine",
+  mode: "lite",
+  status: "running",
+  docs: "/api/docs",
+  health: "/api/health"
+}));
 
 // src/adapters/cloudflare-lite.ts
 var cloudflare_lite_default = {

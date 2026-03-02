@@ -72,7 +72,7 @@ export interface NodeSchema {
     type: string;
     label: string;
     description: string;
-    category: 'triggers' | 'actions' | 'logic' | 'integrations' | 'interface';
+    category: 'triggers' | 'actions' | 'logic' | 'integrations' | 'interface' | 'output';
     inputs: FieldDefinition[];
     outputs: OutputDefinition[];
 }
@@ -141,6 +141,18 @@ export const webhookTriggerSchema: NodeSchema = {
             type: 'password',
             label: 'Header Value',
             showWhen: { authentication: 'header' },
+        },
+        {
+            name: 'username',
+            type: 'string',
+            label: 'Username',
+            showWhen: { authentication: 'basic' },
+        },
+        {
+            name: 'password',
+            type: 'password',
+            label: 'Password',
+            showWhen: { authentication: 'basic' },
         },
     ],
     outputs: [
@@ -856,6 +868,56 @@ export const refreshSchema: NodeSchema = {
     outputs: [],
 };
 
+// --- OUTPUT ---
+
+export const httpResponseSchema: NodeSchema = {
+    type: 'http_response',
+    label: 'HTTP Response',
+    description: 'Return a custom response to the webhook caller',
+    category: 'output',
+    inputs: [
+        {
+            name: 'statusCode',
+            type: 'number',
+            label: 'Status Code',
+            default: 200,
+            description: 'HTTP status code to return',
+        },
+        {
+            name: 'contentType',
+            type: 'select',
+            label: 'Content Type',
+            default: 'application/json',
+            options: [
+                { value: 'application/json', label: 'JSON' },
+                { value: 'text/plain', label: 'Plain Text' },
+                { value: 'text/html', label: 'HTML' },
+            ],
+        } as SelectFieldDefinition,
+        {
+            name: 'body',
+            type: 'json',
+            label: 'Response Body',
+            description: 'The response body to send. Use {{ expressions }} to reference upstream node outputs.',
+        },
+        {
+            name: 'sendHeaders',
+            type: 'boolean',
+            label: 'Custom Headers',
+            default: false,
+        },
+        {
+            name: 'headers',
+            type: 'keyValue',
+            label: 'Response Headers',
+            showWhen: { sendHeaders: true },
+            keyPlaceholder: 'Header name',
+            valuePlaceholder: 'Header value',
+        } as KeyValueFieldDefinition,
+    ],
+    outputs: [], // Terminal node — no outputs
+};
+
 // ============ Schema Registry ============
 
 export const nodeSchemas: Record<string, NodeSchema> = {
@@ -876,6 +938,8 @@ export const nodeSchemas: Record<string, NodeSchema> = {
     toast: toastSchema,
     redirect: redirectSchema,
     refresh: refreshSchema,
+    // Output
+    http_response: httpResponseSchema,
 };
 
 /**

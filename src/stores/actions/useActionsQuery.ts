@@ -228,6 +228,7 @@ export interface ExecutionLog {
     error?: string;
     engineId?: string;
     engineName?: string;
+    engineUrl?: string;
     startedAt?: string;
     endedAt?: string;
 }
@@ -273,6 +274,28 @@ export function useRefreshExecutions() {
         onSuccess: (data) => {
             queryClient.setQueryData(['all-executions', undefined], data);
         },
+    });
+}
+
+// ── Lazy-load execution detail (on row expand) ──────────────────────────────
+
+async function fetchExecutionDetail(executionId: string, engineUrl?: string): Promise<ExecutionLog> {
+    const params = new URLSearchParams();
+    if (engineUrl) params.set('engine_url', engineUrl);
+    const qs = params.toString();
+    const response = await fetch(`${API_BASE}/executions/detail/${executionId}${qs ? `?${qs}` : ''}`);
+    if (!response.ok) throw new Error(`Failed to fetch execution detail: ${response.status}`);
+    return response.json();
+}
+
+export function useExecutionDetail(executionId: string | null, engineUrl?: string) {
+    return useQuery({
+        queryKey: ['execution-detail', executionId],
+        queryFn: () => fetchExecutionDetail(executionId!, engineUrl),
+        enabled: !!executionId,
+        staleTime: Infinity, // Execution details are immutable once completed
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
 }
 

@@ -14,6 +14,7 @@ Endpoints:
 import os
 import asyncio
 import subprocess
+import hashlib
 import uuid
 import json
 from datetime import datetime
@@ -25,7 +26,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
 from ..database.config import SessionLocal
-from ..models.models import EdgeEngine, EdgeDatabase, EdgeCache, EdgeProviderAccount
+from ..models.models import EdgeEngine, EdgeDatabase, EdgeCache, EdgeQueue, EdgeProviderAccount
 
 router = APIRouter(prefix="/api/cloudflare", tags=["Cloudflare Deploy"])
 
@@ -52,6 +53,7 @@ class DeployRequest(BaseModel):
     adapter_type: str = Field(default="automations", description="Engine type: 'automations' (Lite) or 'full'")
     edge_db_id: Optional[str] = Field(None, description="EdgeDatabase ID to attach (uses default if omitted)")
     edge_cache_id: Optional[str] = Field(None, description="EdgeCache ID to attach")
+    edge_queue_id: Optional[str] = Field(None, description="EdgeQueue ID to attach")
     cache_url: Optional[str] = Field(None, description="Cache REST URL (Upstash, SRH, etc.)")
     cache_token: Optional[str] = Field(None, description="Cache REST auth token")
 
@@ -240,8 +242,27 @@ async def _set_secrets(api_token: str, account_id: str, worker_name: str, secret
                     )
 
 
-def _build_worker(adapter_type: str = "automations") -> str:
-    """Build the Cloudflare Worker bundle and return the script content.
+def _compute_bundle_hash(content: str) -> str:
+    """Compute a 12-char SHA-256 hash of a bundle."""
+    return hashlib.sha256(content.encode('utf-8')).hexdigest()[:12]
+
+
+def _get_current_bundle_hash(adapter_type: str = "automations") -> str | None:
+    """Read the current dist bundle and return its hash WITHOUT rebuilding.
+    
+    Returns None if the dist file doesn't exist (hasn't been built yet).
+    """
+    is_full = adapter_type == "full"
+    output_file = "cloudflare.js" if is_full else "cloudflare-lite.js"
+    dist_file = EDGE_DIR / "dist" / output_file
+    if dist_file.exists():
+        content = dist_file.read_text(encoding="utf-8")
+        return _compute_bundle_hash(content)
+    return None
+
+
+def _build_worker(adapter_type: str = "automations") -> tuple[str, str]:
+    """Build the Cloudflare Worker bundle and return (script_content, bundle_hash).
     
     In Docker/VPS: delegates to the edge container's /api/build-bundle endpoint.
     In local dev: runs npx tsup directly (edge source is available locally).
@@ -267,8 +288,9 @@ def _build_worker(adapter_type: str = "automations") -> str:
                 raise HTTPException(500, f"Edge build failed: {err[:500]}")
             
             content = data["script_content"]
-            print(f"[Cloudflare] {label} bundle received: {len(content)} bytes ({len(content)//1024} KB)")
-            return content
+            bundle_hash = _compute_bundle_hash(content)
+            print(f"[Cloudflare] {label} bundle received: {len(content)} bytes ({len(content)//1024} KB) hash={bundle_hash}")
+            return content, bundle_hash
         except HTTPException:
             raise
         except Exception as e:
@@ -311,8 +333,9 @@ def _build_worker(adapter_type: str = "automations") -> str:
         raise HTTPException(500, f"Build output not found at {dist_file}")
 
     content = dist_file.read_text(encoding="utf-8")
-    print(f"[Cloudflare] {label} bundle built: {len(content)} bytes ({len(content)//1024} KB)")
-    return content
+    bundle_hash = _compute_bundle_hash(content)
+    print(f"[Cloudflare] {label} bundle built: {len(content)} bytes ({len(content)//1024} KB) hash={bundle_hash}")
+    return content, bundle_hash
 
 
 # =============================================================================
@@ -418,8 +441,8 @@ async def deploy_to_cloudflare(payload: DeployRequest):
 
 
         # Build & upload Worker
-        script_content = _build_worker(payload.adapter_type)
-        print(f"[Cloudflare] Uploading Worker '{payload.worker_name}'...")
+        script_content, bundle_hash = _build_worker(payload.adapter_type)
+        print(f"[Cloudflare] Uploading Worker '{payload.worker_name}' (hash={bundle_hash})...")
 
         # Pick the correct output filename for upload metadata
         script_filename = "cloudflare.js" if payload.adapter_type == "full" else "cloudflare-lite.js"
@@ -473,6 +496,26 @@ async def deploy_to_cloudflare(payload: DeployRequest):
             finally:
                 cache_session.close()
 
+        # Queue secrets — provider-agnostic FRONTBASE_QUEUE_* vars from EdgeQueue
+        edge_queue_id_to_attach = payload.edge_queue_id
+        if edge_queue_id_to_attach == "__none__":
+            edge_queue_id_to_attach = None
+        if edge_queue_id_to_attach:
+            queue_session = SessionLocal()
+            try:
+                edge_queue = queue_session.query(EdgeQueue).filter(EdgeQueue.id == edge_queue_id_to_attach).first()
+                if edge_queue:
+                    secrets["FRONTBASE_QUEUE_PROVIDER"] = str(edge_queue.provider)
+                    secrets["FRONTBASE_QUEUE_URL"] = str(edge_queue.queue_url)
+                    if edge_queue.queue_token:  # type: ignore[truthy-bool]
+                        secrets["FRONTBASE_QUEUE_TOKEN"] = str(edge_queue.queue_token)
+                    if edge_queue.signing_key:  # type: ignore[truthy-bool]
+                        secrets["FRONTBASE_QUEUE_SIGNING_KEY"] = str(edge_queue.signing_key)
+                    if edge_queue.next_signing_key:  # type: ignore[truthy-bool]
+                        secrets["FRONTBASE_QUEUE_NEXT_SIGNING_KEY"] = str(edge_queue.next_signing_key)
+            finally:
+                queue_session.close()
+
         if secrets:
             try:
                 await _set_secrets(api_token, account_id, payload.worker_name, secrets)
@@ -495,13 +538,17 @@ async def deploy_to_cloudflare(payload: DeployRequest):
                 "worker_name": payload.worker_name,
                 "secret_names": list(secrets.keys()),
             })
+            deployed_at = datetime.utcnow().isoformat() + "Z"
 
             if existing:
                 existing.is_active = True  # type: ignore[assignment]
                 existing.edge_provider_id = payload.provider_id  # type: ignore[assignment]
                 existing.edge_db_id = edge_db_id_to_attach  # type: ignore[assignment]
                 existing.edge_cache_id = edge_cache_id_to_attach  # type: ignore[assignment]
+                existing.edge_queue_id = edge_queue_id_to_attach  # type: ignore[assignment]
                 existing.engine_config = engine_cfg  # type: ignore[assignment]
+                existing.bundle_checksum = bundle_hash  # type: ignore[assignment]
+                existing.last_deployed_at = deployed_at  # type: ignore[assignment]
                 existing.updated_at = now  # type: ignore[assignment]
                 engine_id = str(existing.id)
                 db.commit()
@@ -514,7 +561,10 @@ async def deploy_to_cloudflare(payload: DeployRequest):
                     url=worker_url,
                     edge_db_id=edge_db_id_to_attach,
                     edge_cache_id=edge_cache_id_to_attach,
+                    edge_queue_id=edge_queue_id_to_attach,
                     engine_config=engine_cfg,
+                    bundle_checksum=bundle_hash,
+                    last_deployed_at=deployed_at,
                     is_active=True,
                     created_at=now,
                     updated_at=now,

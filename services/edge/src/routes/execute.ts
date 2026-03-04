@@ -7,6 +7,7 @@ import { stateProvider } from '../storage/index.js';
 import { ExecuteRequestSchema, ExecuteResponseSchema, ErrorResponseSchema } from '../schemas';
 import { v4 as uuidv4 } from 'uuid';
 import { executeWorkflow, executeSingleNode } from '../engine/runtime';
+import { rateLimit } from '../cache/redis.js';
 
 const executeRoute = new OpenAPIHono();
 
@@ -54,6 +55,15 @@ const route = createRoute({
                 },
             },
         },
+        429: {
+            description: 'Rate limited',
+            content: {
+                'application/json': {
+                    schema: ErrorResponseSchema,
+                },
+            },
+        },
+
     },
 });
 
@@ -76,6 +86,24 @@ executeRoute.openapi(route, async (c) => {
             error: 'WorkflowInactive',
             message: `Workflow ${id} is not active`,
         }, 400);
+    }
+
+    // ── Rate limiting (60 executions/minute per workflow) ────────────
+    try {
+        const { allowed, remaining } = await rateLimit(
+            `wf:${id}:rate:${Math.floor(Date.now() / 60000)}`,
+            60,
+            60
+        );
+        if (!allowed) {
+            return c.json({
+                error: 'RateLimited',
+                message: `Workflow ${id} rate limit exceeded (60/min). Retry after 1 minute.`,
+            }, 429);
+        }
+        c.header('X-RateLimit-Remaining', String(remaining));
+    } catch {
+        // Redis unavailable — allow execution
     }
 
     // Create execution record via provider

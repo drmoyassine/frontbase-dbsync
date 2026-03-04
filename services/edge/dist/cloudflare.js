@@ -32559,46 +32559,7 @@ var HTTPException = class extends Error {
   }
 };
 
-// node_modules/hono/dist/utils/crypto.js
-var sha256 = async (data) => {
-  const algorithm = { name: "SHA-256"};
-  const hash = await createHash(data, algorithm);
-  return hash;
-};
-var createHash = async (data, algorithm) => {
-  let sourceBuffer;
-  if (ArrayBuffer.isView(data) || data instanceof ArrayBuffer) {
-    sourceBuffer = data;
-  } else {
-    if (typeof data === "object") {
-      data = JSON.stringify(data);
-    }
-    sourceBuffer = new TextEncoder().encode(String(data));
-  }
-  if (crypto && crypto.subtle) {
-    const buffer = await crypto.subtle.digest(
-      {
-        name: algorithm.name
-      },
-      sourceBuffer
-    );
-    const hash = Array.prototype.map.call(new Uint8Array(buffer), (x2) => ("00" + x2.toString(16)).slice(-2)).join("");
-    return hash;
-  }
-  return null;
-};
-
 // node_modules/hono/dist/utils/buffer.js
-var timingSafeEqual = async (a2, b2, hashFunction) => {
-  if (!hashFunction) {
-    hashFunction = sha256;
-  }
-  const [sa, sb] = await Promise.all([hashFunction(a2), hashFunction(b2)]);
-  if (!sa || !sb) {
-    return false;
-  }
-  return sa === sb && a2 === b2;
-};
 var bufferToFormData = (arrayBuffer, contentType) => {
   const response = new Response(arrayBuffer, {
     headers: {
@@ -44660,6 +44621,27 @@ var TursoHttpProvider = class {
     const rows = await this.getDb().select().from(executionsTable).where(eq(executionsTable.workflowId, workflowId)).orderBy(desc(executionsTable.startedAt)).limit(limit2);
     return rows;
   }
+  async listAllExecutions(filters2) {
+    const conditions = [];
+    if (filters2?.workflowId) {
+      conditions.push(eq(executionsTable.workflowId, filters2.workflowId));
+    }
+    if (filters2?.since) {
+      conditions.push(sql`${executionsTable.startedAt} >= ${filters2.since}`);
+    }
+    if (filters2?.until) {
+      conditions.push(sql`${executionsTable.startedAt} <= ${filters2.until}`);
+    }
+    let query = this.getDb().select().from(executionsTable);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    let rows = await query.orderBy(desc(executionsTable.startedAt)).limit(filters2?.limit || 100);
+    if (filters2?.status && filters2.status.length > 0) {
+      rows = rows.filter((r) => filters2.status.includes(r.status));
+    }
+    return rows;
+  }
   async getExecutionStats() {
     const allExecutions = await this.getDb().select().from(executionsTable);
     const statsMap = /* @__PURE__ */ new Map();
@@ -45594,66 +45576,199 @@ var route4 = createRoute({
   }
 });
 webhookRoute.openapi(route4, async (c) => {
-  const { id } = c.req.valid("param");
-  const payload = c.req.valid("json");
-  const workflow = await stateProvider.getActiveWebhookWorkflow(id);
-  if (!workflow) {
-    return c.json({
-      error: "NotFound",
-      message: `Active workflow ${id} not found`
-    }, 404);
-  }
-  const executionId = v4_default();
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  await stateProvider.createExecution({
-    id: executionId,
-    workflowId: id,
-    status: "started",
-    triggerType: "http_webhook",
-    triggerPayload: JSON.stringify(payload),
-    nodeExecutions: JSON.stringify([]),
-    startedAt: now
-  });
-  const nodes = JSON.parse(workflow.nodes);
-  const hasResponseNode = nodes.some((n) => n.type === "http_response");
-  if (hasResponseNode) {
-    try {
-      const execResult = await executeWorkflow(executionId, workflow, payload.data);
-      if (execResult.httpResponse) {
-        const { statusCode, body, headers: respHeaders, contentType } = execResult.httpResponse;
-        const responseBody = typeof body === "string" ? body : JSON.stringify(body);
-        c.header("Content-Type", contentType || "application/json");
-        if (respHeaders) {
-          for (const [k, v2] of Object.entries(respHeaders)) {
-            c.header(k, v2);
+  try {
+    const { id } = c.req.valid("param");
+    const payload = c.req.valid("json");
+    const workflow = await stateProvider.getActiveWebhookWorkflow(id);
+    if (!workflow) {
+      return c.json({
+        error: "NotFound",
+        message: `Active workflow ${id} not found`
+      }, 404);
+    }
+    const wfNodes = JSON.parse(workflow.nodes);
+    const triggerNode = wfNodes.find(
+      (n) => n.type === "webhook_trigger" || n.data?.type === "webhook_trigger"
+    );
+    if (triggerNode) {
+      const inputs = triggerNode.data?.inputs || triggerNode.inputs || [];
+      const getInput = (name) => {
+        const inp = inputs.find((i) => i.name === name);
+        return inp?.value;
+      };
+      const authMode = getInput("authentication") || "none";
+      if (authMode === "header") {
+        const expectedName = getInput("headerName") || "X-API-Key";
+        const expectedValue = getInput("headerValue");
+        if (expectedValue) {
+          const actual = c.req.header(expectedName);
+          if (actual !== expectedValue) {
+            return c.json({
+              error: "Unauthorized",
+              message: `Missing or invalid '${expectedName}' header`
+            }, 401);
           }
         }
-        c.status(statusCode);
-        return c.body(responseBody);
+      } else if (authMode === "basic") {
+        const expectedUser = getInput("username") || "";
+        const expectedPass = getInput("password") || "";
+        const authHeader = c.req.header("Authorization");
+        if (!authHeader || !authHeader.startsWith("Basic ")) {
+          c.header("WWW-Authenticate", 'Basic realm="Webhook"');
+          return c.json({
+            error: "Unauthorized",
+            message: "Basic authentication required"
+          }, 401);
+        }
+        const decoded = atob(authHeader.slice(6));
+        const [user, pass] = decoded.split(":");
+        if (user !== expectedUser || pass !== expectedPass) {
+          return c.json({
+            error: "Unauthorized",
+            message: "Invalid credentials"
+          }, 401);
+        }
       }
-      return c.json({
-        executionId,
-        status: execResult.status,
-        result: execResult.result
-      }, 200);
-    } catch (err) {
-      return c.json({
-        executionId,
-        status: "error",
-        error: err.message
-      }, 500);
     }
+    const executionId = v4_default();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    await stateProvider.createExecution({
+      id: executionId,
+      workflowId: id,
+      status: "started",
+      triggerType: "http_webhook",
+      triggerPayload: JSON.stringify(payload),
+      nodeExecutions: JSON.stringify([]),
+      startedAt: now
+    });
+    const hasResponseNode = wfNodes.some((n) => n.type === "http_response");
+    if (hasResponseNode) {
+      try {
+        const execResult = await executeWorkflow(executionId, workflow, payload.data);
+        if (execResult.httpResponse) {
+          const { statusCode, body, headers: respHeaders, contentType } = execResult.httpResponse;
+          const responseBody = typeof body === "string" ? body : JSON.stringify(body);
+          c.header("Content-Type", contentType || "application/json");
+          if (respHeaders) {
+            for (const [k, v2] of Object.entries(respHeaders)) {
+              c.header(k, v2);
+            }
+          }
+          c.status(statusCode);
+          return c.body(responseBody);
+        }
+        return c.json({
+          executionId,
+          status: execResult.status,
+          result: execResult.result
+        }, 200);
+      } catch (err) {
+        return c.json({
+          executionId,
+          status: "error",
+          error: err.message
+        }, 500);
+      }
+    }
+    executeWorkflow(executionId, workflow, payload.data).catch((err) => console.error(`Webhook execution ${executionId} failed:`, err));
+    return c.json({
+      executionId,
+      status: "started",
+      message: "Webhook received, execution started"
+    }, 200);
+  } catch (err) {
+    console.error("[Webhook Error]", err);
+    return c.json({
+      success: false,
+      error: err.message || "Unknown webhook error",
+      stack: void 0
+    }, 500);
   }
-  executeWorkflow(executionId, workflow, payload.data).catch((err) => console.error(`Webhook execution ${executionId} failed:`, err));
-  return c.json({
-    executionId,
-    status: "started",
-    message: "Webhook received, execution started"
-  }, 200);
 });
 
 // src/routes/executions.ts
 var executionsRoute = new OpenAPIHono();
+var allRoute = createRoute({
+  method: "get",
+  path: "/all",
+  tags: ["Executions"],
+  summary: "List all executions across all workflows",
+  description: "Returns recent executions with optional filters (status, date range)",
+  request: {
+    query: external_exports.object({
+      limit: external_exports.string().optional().openapi({ description: "Max results (default 100)" }),
+      status: external_exports.string().optional().openapi({ description: "Comma-separated statuses" }),
+      workflowId: external_exports.string().optional().openapi({ description: "Filter by workflow ID" }),
+      since: external_exports.string().optional().openapi({ description: "ISO date lower bound" }),
+      until: external_exports.string().optional().openapi({ description: "ISO date upper bound" })
+    })
+  },
+  responses: {
+    200: {
+      description: "All executions",
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            executions: external_exports.array(ExecutionSchema.omit({ nodeExecutions: true, triggerPayload: true })),
+            total: external_exports.number()
+          })
+        }
+      }
+    }
+  }
+});
+executionsRoute.openapi(allRoute, async (c) => {
+  const q = c.req.valid("query");
+  const filters2 = {
+    limit: Math.min(parseInt(q.limit || "100"), 500),
+    status: q.status ? q.status.split(",") : void 0,
+    workflowId: q.workflowId || void 0,
+    since: q.since || void 0,
+    until: q.until || void 0
+  };
+  const results = await stateProvider.listAllExecutions(filters2);
+  return c.json({
+    executions: results.map((e) => ({
+      id: e.id,
+      workflowId: e.workflowId,
+      status: e.status,
+      triggerType: e.triggerType,
+      error: e.error || void 0,
+      usage: e.usage || void 0,
+      startedAt: e.startedAt,
+      endedAt: e.endedAt || void 0
+    })),
+    total: results.length
+  }, 200);
+});
+var statsRoute = createRoute({
+  method: "get",
+  path: "/stats",
+  tags: ["Executions"],
+  summary: "Get execution counts per workflow",
+  description: "Returns run counts for each workflow",
+  responses: {
+    200: {
+      description: "Execution stats",
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            stats: external_exports.array(external_exports.object({
+              workflowId: external_exports.string(),
+              totalRuns: external_exports.number(),
+              successfulRuns: external_exports.number(),
+              failedRuns: external_exports.number()
+            }))
+          })
+        }
+      }
+    }
+  }
+});
+executionsRoute.openapi(statsRoute, async (c) => {
+  const stats = await stateProvider.getExecutionStats();
+  return c.json({ stats }, 200);
+});
 var getRoute = createRoute({
   method: "get",
   path: "/:id",
@@ -45754,113 +45869,6 @@ executionsRoute.openapi(listRoute, async (c) => {
     total: results.length
   }, 200);
 });
-var statsRoute = createRoute({
-  method: "get",
-  path: "/stats",
-  tags: ["Executions"],
-  summary: "Get execution counts per workflow",
-  description: "Returns run counts for each workflow",
-  responses: {
-    200: {
-      description: "Execution stats",
-      content: {
-        "application/json": {
-          schema: external_exports.object({
-            stats: external_exports.array(external_exports.object({
-              workflowId: external_exports.string(),
-              totalRuns: external_exports.number(),
-              successfulRuns: external_exports.number(),
-              failedRuns: external_exports.number()
-            }))
-          })
-        }
-      }
-    }
-  }
-});
-executionsRoute.openapi(statsRoute, async (c) => {
-  const stats = await stateProvider.getExecutionStats();
-  return c.json({ stats }, 200);
-});
-
-// node_modules/hono/dist/middleware/bearer-auth/index.js
-var TOKEN_STRINGS = "[A-Za-z0-9._~+/-]+=*";
-var PREFIX = "Bearer";
-var HEADER = "Authorization";
-var bearerAuth = (options) => {
-  if (!("token" in options || "verifyToken" in options)) {
-    throw new Error('bearer auth middleware requires options for "token"');
-  }
-  if (!options.realm) {
-    options.realm = "";
-  }
-  if (options.prefix === void 0) {
-    options.prefix = PREFIX;
-  }
-  const realm = options.realm?.replace(/"/g, '\\"');
-  const prefixRegexStr = options.prefix === "" ? "" : `${options.prefix} +`;
-  const regexp = new RegExp(`^${prefixRegexStr}(${TOKEN_STRINGS}) *$`);
-  const wwwAuthenticatePrefix = options.prefix === "" ? "" : `${options.prefix} `;
-  const throwHTTPException = async (c, status, wwwAuthenticateHeader, messageOption) => {
-    const wwwAuthenticateHeaderValue = typeof wwwAuthenticateHeader === "function" ? await wwwAuthenticateHeader(c) : wwwAuthenticateHeader;
-    const headers = {
-      "WWW-Authenticate": typeof wwwAuthenticateHeaderValue === "string" ? wwwAuthenticateHeaderValue : `${wwwAuthenticatePrefix}${Object.entries(wwwAuthenticateHeaderValue).map(([key, value]) => `${key}="${value}"`).join(",")}`
-    };
-    const responseMessage = typeof messageOption === "function" ? await messageOption(c) : messageOption;
-    const res = typeof responseMessage === "string" ? new Response(responseMessage, { status, headers }) : new Response(JSON.stringify(responseMessage), {
-      status,
-      headers: {
-        ...headers,
-        "content-type": "application/json"
-      }
-    });
-    throw new HTTPException(status, { res });
-  };
-  return async function bearerAuth2(c, next) {
-    const headerToken = c.req.header(options.headerName || HEADER);
-    if (!headerToken) {
-      await throwHTTPException(
-        c,
-        401,
-        options.noAuthenticationHeader?.wwwAuthenticateHeader || `${wwwAuthenticatePrefix}realm="${realm}"`,
-        options.noAuthenticationHeader?.message || options.noAuthenticationHeaderMessage || "Unauthorized"
-      );
-    } else {
-      const match2 = regexp.exec(headerToken);
-      if (!match2) {
-        await throwHTTPException(
-          c,
-          400,
-          options.invalidAuthenticationHeader?.wwwAuthenticateHeader || `${wwwAuthenticatePrefix}error="invalid_request"`,
-          options.invalidAuthenticationHeader?.message || options.invalidAuthenticationHeaderMessage || "Bad Request"
-        );
-      } else {
-        let equal = false;
-        if ("verifyToken" in options) {
-          equal = await options.verifyToken(match2[1], c);
-        } else if (typeof options.token === "string") {
-          equal = await timingSafeEqual(options.token, match2[1], options.hashFunction);
-        } else if (Array.isArray(options.token) && options.token.length > 0) {
-          for (const token of options.token) {
-            if (await timingSafeEqual(token, match2[1], options.hashFunction)) {
-              equal = true;
-              break;
-            }
-          }
-        }
-        if (!equal) {
-          await throwHTTPException(
-            c,
-            401,
-            options.invalidToken?.wwwAuthenticateHeader || `${wwwAuthenticatePrefix}error="invalid_token"`,
-            options.invalidToken?.message || options.invalidTokenMessage || "Unauthorized"
-          );
-        }
-      }
-    }
-    await next();
-  };
-};
 
 // node_modules/hono/dist/utils/jwt/jwa.js
 var AlgorithmTypes = /* @__PURE__ */ ((AlgorithmTypes2) => {
@@ -45890,16 +45898,22 @@ new TextDecoder();
 ];
 
 // src/middleware/auth.ts
-var apiKeyAuth = bearerAuth({
-  verifyToken: async (token, c) => {
-    const validKeys = (process.env.API_KEYS || "").split(",").filter((k) => k.trim());
-    if (validKeys.length === 0) {
-      console.warn("\u26A0\uFE0F No API_KEYS configured - webhook auth disabled");
-      return true;
-    }
-    return validKeys.includes(token.trim());
+var apiKeyAuth = async (c, next) => {
+  const validKeys = (process.env.API_KEYS || "").split(",").map((k) => k.trim()).filter(Boolean);
+  if (validKeys.length === 0) {
+    console.warn("\u26A0\uFE0F No API_KEYS configured - webhook auth disabled");
+    return next();
   }
-});
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return c.json({ error: "Unauthorized", message: "Missing or invalid Authorization header" }, 401);
+  }
+  const token = authHeader.slice(7).trim();
+  if (!validKeys.includes(token)) {
+    return c.json({ error: "Unauthorized", message: "Invalid API key" }, 401);
+  }
+  return next();
+};
 
 // src/engine/lite.ts
 new Liquid({

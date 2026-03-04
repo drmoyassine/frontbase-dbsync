@@ -18,6 +18,7 @@ import { ProjectDetailsForm } from './settings/shared/ProjectDetailsForm';
 import { EmailProviderSettingsForm } from './settings/shared/EmailProviderSettingsForm';
 import { AdminInviteForm } from './settings/shared/AdminInviteForm';
 import { EdgeEnginesPanel } from './settings/shared/EdgeEnginesPanel';
+import { EdgeQueuesForm } from './settings/shared/EdgeQueuesForm';
 
 export const SettingsPanel: React.FC = () => {
   return (
@@ -30,11 +31,12 @@ export const SettingsPanel: React.FC = () => {
       </div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-6 lg:w-[1000px]">
+        <TabsList className="grid w-full grid-cols-7 lg:w-[1100px]">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="team">Team & Emails</TabsTrigger>
           <TabsTrigger value="cache">Edge Caching</TabsTrigger>
           <TabsTrigger value="edge-db">Edge Database</TabsTrigger>
+          <TabsTrigger value="queues">Edge Queues</TabsTrigger>
           <TabsTrigger value="deployment">Deployment</TabsTrigger>
           <TabsTrigger value="privacy">Privacy & Tracking</TabsTrigger>
         </TabsList>
@@ -90,6 +92,11 @@ export const SettingsPanel: React.FC = () => {
         {/* Edge Database Tab */}
         <TabsContent value="edge-db" className="space-y-6 mt-6">
           <EdgeDatabasesForm withCard />
+        </TabsContent>
+
+        {/* Edge Queues Tab */}
+        <TabsContent value="queues" className="space-y-6 mt-6">
+          <EdgeQueuesForm withCard />
         </TabsContent>
 
         {/* Deployment Targets Tab */}

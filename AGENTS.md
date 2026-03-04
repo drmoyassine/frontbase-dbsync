@@ -732,4 +732,50 @@ Frontend → POST /api/pages/{id}/publish/{engineId}/
 
 ---
 
-*Last Updated: 2026-03-01*
+## 12. Feature Documentation (`features/`)
+
+After completing a **major feature implementation**, ask the user:
+
+> "Would you like me to create a feature doc in `features/` for this? It can be used for the frontbase.dev landing page and documentation."
+
+If approved, create a markdown file in the `features/` directory following this template:
+
+```markdown
+# Feature Name
+
+> One-line value proposition (user-facing, not technical)
+
+## What It Does
+Brief, non-technical explanation.
+
+## How It Works
+High-level technical explanation with diagrams/tables as needed.
+
+## Key Capabilities
+Bullet list of concrete capabilities.
+
+## Graceful Degradation (if applicable)
+What happens when optional dependencies aren't configured.
+
+## Configuration
+Env vars or settings needed to enable the feature.
+```
+
+**Rules:**
+- Write for a **SaaS customer**, not a developer — focus on value, not implementation
+- One feature per file, named `kebab-case.md`
+- Include tables and diagrams where they add clarity
+- Mark feature status honestly (✅ Production, 🟡 Planned, 🔴 Pending)
+- Keep files concise — these are landing page copy, not technical specs
+
+**Existing feature docs:**
+- `features/durable-workflow-execution.md`
+- `features/rate-limiting-debouncing.md`
+- `features/edge-native-workflow-engine.md`
+- `features/global-execution-observability.md`
+- `features/multi-target-edge-deployment.md`
+
+---
+
+*Last Updated: 2026-03-03*
+

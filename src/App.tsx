@@ -52,6 +52,27 @@ const queryClient = new QueryClient({
 const persister = createSyncStoragePersister({
   storage: window.localStorage,
   key: 'frontbase-query-cache',
+  // Bump this version to invalidate stale caches after schema changes
+  serialize: (data) => JSON.stringify(data),
+  deserialize: (cached) => {
+    try {
+      const parsed = JSON.parse(cached);
+      // Scrub corrupted query entries (e.g. error objects persisted as data)
+      if (parsed?.clientState?.queries) {
+        parsed.clientState.queries = parsed.clientState.queries.filter((q: any) => {
+          // Remove pages queries where data is not an array
+          if (q.queryKey?.[0] === 'pages' && q.state?.data && !Array.isArray(q.state.data)) {
+            console.warn('[Cache] Scrubbed corrupted pages query from persisted cache');
+            return false;
+          }
+          return true;
+        });
+      }
+      return parsed;
+    } catch {
+      return { buster: '', timestamp: 0, clientState: { mutations: [], queries: [] } };
+    }
+  },
 });
 
 const App = () => {

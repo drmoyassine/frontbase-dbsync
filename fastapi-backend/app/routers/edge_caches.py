@@ -238,7 +238,6 @@ async def test_edge_cache(cache_id: str):
     finally:
         db.close()
     
-    # Test based on provider
     return await _test_cache(cache_provider, cache_url, cache_token)
 
 
@@ -259,7 +258,6 @@ async def _test_cache(provider: str, cache_url: str, cache_token: Optional[str])
     if provider == "upstash":
         return await _test_upstash(cache_url, cache_token)
     elif provider in ("redis", "dragonfly"):
-        # Use the unified test from redis_client (supports both HTTP and TCP)
         from ..services.sync.redis_client import test_redis_connection
         start = time.time()
         success, message = await test_redis_connection(

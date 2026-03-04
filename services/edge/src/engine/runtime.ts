@@ -5,13 +5,17 @@
  * Handles node traversal, parameter resolution, and state updates.
  * 
  * Provider-agnostic: uses stateProvider instead of Drizzle ORM.
+ * 
+ * Durable execution: checkpoints are saved to Redis after each node.
+ * If the Worker dies mid-execution, retry resumes from checkpoint.
  */
 
 import { stateProvider } from '../storage/index.js';
 import type { WorkflowData } from '../storage/IStateProvider.js';
 import { WorkflowNode, WorkflowEdge, NodeExecutionStatus } from '../schemas';
+import { saveCheckpoint, loadCheckpoint, clearCheckpoint } from './checkpoint.js';
 
-interface NodeExecution {
+export interface NodeExecution {
     nodeId: string;
     status: NodeExecutionStatus;
     outputs?: Record<string, any>;
@@ -62,6 +66,20 @@ export async function executeWorkflow(
     };
 
     try {
+        // ── Checkpoint resume: restore state from a previous attempt ──
+        const checkpoint = await loadCheckpoint(executionId);
+        const executed = new Set<string>();
+
+        if (checkpoint) {
+            console.log(`[Runtime] Resuming execution ${executionId} from checkpoint (${checkpoint.completedNodes.length} nodes done)`);
+            // Restore completed nodes, outputs, and execution statuses
+            for (const nodeId of checkpoint.completedNodes) {
+                executed.add(nodeId);
+            }
+            Object.assign(context.nodeOutputs, checkpoint.nodeOutputs);
+            context.nodeExecutions = checkpoint.nodeExecutions;
+        }
+
         // Update status to executing
         await updateExecutionStatus(executionId, 'executing', context.nodeExecutions);
 
@@ -70,13 +88,21 @@ export async function executeWorkflow(
         const startNodes = nodes.filter(n => !targetNodeIds.has(n.id));
 
         // Execute nodes in topological order
-        const executed = new Set<string>();
         const queue = [...startNodes.map(n => n.id)];
 
         while (queue.length > 0) {
             const nodeId = queue.shift()!;
 
-            if (executed.has(nodeId)) continue;
+            if (executed.has(nodeId)) {
+                // Already completed (from checkpoint) — still queue downstream
+                const outgoingEdges = edges.filter(e => e.source === nodeId);
+                for (const edge of outgoingEdges) {
+                    if (!executed.has(edge.target)) {
+                        queue.push(edge.target);
+                    }
+                }
+                continue;
+            }
 
             const node = nodes.find(n => n.id === nodeId);
             if (!node) continue;
@@ -107,13 +133,21 @@ export async function executeWorkflow(
             // Execute the node
             try {
                 updateNodeStatus(context, nodeId, 'executing');
-                await updateExecutionStatus(executionId, 'executing', context.nodeExecutions);
 
                 const outputs = await executeNode(node, inputs, context);
 
                 context.nodeOutputs[nodeId] = outputs;
                 updateNodeStatus(context, nodeId, 'completed', outputs);
                 executed.add(nodeId);
+
+                // ── Checkpoint: save progress after each node ──
+                await saveCheckpoint({
+                    executionId,
+                    workflowId: workflow.id,
+                    completedNodes: Array.from(executed),
+                    nodeOutputs: context.nodeOutputs,
+                    nodeExecutions: context.nodeExecutions,
+                });
 
                 // Queue downstream nodes
                 const outgoingEdges = edges.filter(e => e.source === nodeId);
@@ -124,6 +158,7 @@ export async function executeWorkflow(
                 }
             } catch (error: any) {
                 updateNodeStatus(context, nodeId, 'error', undefined, error.message);
+                // Leave checkpoint in Redis for retry (TTL 1h)
                 throw error;
             }
         }
@@ -149,13 +184,14 @@ export async function executeWorkflow(
             };
         }
 
-        // Mark as completed
+        // ── Flush to Turso (single write) + clear checkpoint ──
         await stateProvider.updateExecution(executionId, {
             status: 'completed',
             nodeExecutions: JSON.stringify(context.nodeExecutions),
             result: JSON.stringify(result),
             endedAt: new Date().toISOString(),
         });
+        await clearCheckpoint(executionId);
 
         return { status: 'completed', result, httpResponse };
 

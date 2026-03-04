@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Cloud, Server, Rocket, ExternalLink, Loader2, AlertTriangle, Cpu, Layers, Search, Trash2, Power, RefreshCw, CheckSquare } from 'lucide-react';
+import { Cloud, Server, Rocket, ExternalLink, Loader2, AlertTriangle, Cpu, Layers, Search, Trash2, Power, RefreshCw, CheckSquare, Upload } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -18,6 +18,7 @@ import {
     useEdgeProviders,
     useEdgeDatabases,
     useEdgeCaches,
+    useEdgeQueues,
     edgeInfrastructureApi,
     EdgeEngine,
 } from '@/hooks/useEdgeInfrastructure';
@@ -50,8 +51,10 @@ export function EdgeEnginesSection() {
     const [workerName, setWorkerName] = useState('frontbase-edge');
     const { data: edgeDbs = [] } = useEdgeDatabases();
     const { data: edgeCaches = [] } = useEdgeCaches();
+    const { data: edgeQueues = [] } = useEdgeQueues();
     const [selectedDbId, setSelectedDbId] = useState<string>('default');
     const [selectedCacheId, setSelectedCacheId] = useState<string>('none');
+    const [selectedQueueId, setSelectedQueueId] = useState<string>('none');
     const [engineType, setEngineType] = useState<'lite' | 'full'>('lite');
 
     // ── Search, filters, selection ───────────────────────────────────────
@@ -62,6 +65,7 @@ export function EdgeEnginesSection() {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [bulkLoading, setBulkLoading] = useState(false);
     const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+    const [redeployingId, setRedeployingId] = useState<string | null>(null);
 
     // ── Filtered engines ────────────────────────────────────────────────
     const filteredEngines = useMemo(() => {
@@ -139,6 +143,7 @@ export function EdgeEnginesSection() {
                     adapter_type: engineType === 'full' ? 'full' : 'automations',
                     edge_db_id: selectedDbId === 'none' ? '__none__' : selectedDbId === 'default' ? undefined : selectedDbId,
                     edge_cache_id: selectedCacheId === 'none' ? '__none__' : selectedCacheId,
+                    edge_queue_id: selectedQueueId === 'none' ? '__none__' : selectedQueueId,
                 })
             });
             const data = await res.json();
@@ -362,6 +367,20 @@ export function EdgeEnginesSection() {
                                 </Select>
                                 <p className="text-xs text-muted-foreground">Optional caching layer (Upstash, Redis) for faster page loads.</p>
                             </div>
+
+                            <div className="space-y-2">
+                                <Label>Edge Queue</Label>
+                                <Select value={selectedQueueId} onValueChange={setSelectedQueueId}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">None</SelectItem>
+                                        {edgeQueues.map(queue => (
+                                            <SelectItem key={queue.id} value={queue.id}>{queue.name} ({queue.provider})</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">Optional message queue (QStash) for durable workflow execution.</p>
+                            </div>
                         </div>
 
                         <DialogFooter>
@@ -532,8 +551,11 @@ export function EdgeEnginesSection() {
                                                         {engine.sync_status === 'synced' && (
                                                             <Badge variant="outline" className="text-[10px] h-5 py-0 bg-green-500/5 border-green-500/20 text-green-400">✓ Synced</Badge>
                                                         )}
-                                                        {engine.sync_status === 'stale' && (
+                                                        {engine.sync_status === 'stale' && !engine.is_outdated && (
                                                             <Badge variant="outline" className="text-[10px] h-5 py-0 bg-amber-500/5 border-amber-500/20 text-amber-400">⚠ Stale</Badge>
+                                                        )}
+                                                        {engine.is_outdated && (
+                                                            <Badge variant="outline" className="text-[10px] h-5 py-0 bg-orange-500/5 border-orange-500/20 text-orange-400 animate-pulse">⚠ Outdated</Badge>
                                                         )}
                                                     </div>
                                                     <div className="text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
@@ -562,6 +584,12 @@ export function EdgeEnginesSection() {
                                                             }`}>
                                                             Cache: {engine.edge_cache_name || 'None'}
                                                         </Badge>
+                                                        <Badge variant="outline" className={`text-[10px] h-5 py-0 ${engine.edge_queue_name
+                                                            ? 'bg-green-500/5 border-green-500/20 text-green-400'
+                                                            : 'bg-muted/50 border-border text-muted-foreground'
+                                                            }`}>
+                                                            Queue: {engine.edge_queue_name || 'None'}
+                                                        </Badge>
                                                     </div>
                                                 </div>
                                             </div>
@@ -580,6 +608,30 @@ export function EdgeEnginesSection() {
                                                 {!engine.is_system && (
                                                     <>
                                                         <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
+                                                        {engine.is_outdated && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                title="Redeploy with latest code"
+                                                                disabled={redeployingId === engine.id}
+                                                                onClick={async () => {
+                                                                    setRedeployingId(engine.id);
+                                                                    try {
+                                                                        await edgeInfrastructureApi.redeployEngine(engine.id);
+                                                                        await refetchEngines();
+                                                                    } catch (e: any) {
+                                                                        setError(e.message);
+                                                                    } finally {
+                                                                        setRedeployingId(null);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                {redeployingId === engine.id
+                                                                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                                                                    : <Upload className="h-4 w-4 text-orange-400" />
+                                                                }
+                                                            </Button>
+                                                        )}
                                                         <ReconfigureEngineDialog engine={engine} />
                                                         <DeleteEngineDialog
                                                             engine={engine}

@@ -1,6 +1,7 @@
 # Performance & Code Health Optimization Backlog
 
 > Audit date: 2026-03-02
+> Last updated: 2026-03-03
 > Generated from full codebase scan across FastAPI backend, Vite/React frontend, and Hono Edge service.
 
 ---
@@ -26,6 +27,7 @@
 |------|-------|-------|----------------|
 | `services/sync/adapters/supabase_adapter.py` | **800** | Supabase adapter handles schema introspection, query building, and data fetching in one file | Split into `supabase_schema.py` (introspection), `supabase_query.py` (query builder), `supabase_adapter.py` (thin orchestrator) |
 | `routers/pages/publish.py` | **441** | Mixes `compute_page_hash()`, `convert_to_publish_schema()`, and endpoint handler | Extract `services/page_hash.py` (hash util) and `services/publish_serializer.py` (schema conversion); leave `publish.py` as thin router |
+| `routers/edge_caches.py` | **383** | Mixes CRUD, test endpoints, QStash inline test, and helper functions (`_test_cache`, `_test_upstash`, `_test_qstash`) | Extract `services/cache_tester.py` (test helpers), keep `edge_caches.py` as thin router with CRUD + test endpoints |
 | `services/css_bundler.py` | **362** | CSS tree-shaking + bundling logic | Review for extraction of Tailwind v4 source-inline logic into separate utility |
 | `middleware/schema_comparison.py` | **339** | Schema diff/comparison engine | Review — may be acceptable if single-concern |
 | `models/models.py` | **303** | All ORM models in one file | Split by domain: `models/page.py`, `models/edge.py`, `models/settings.py` |
@@ -34,12 +36,12 @@
 
 | File | Lines | Issue | Proposed Split |
 |------|-------|-------|----------------|
-| `components/actions/editor/WorkflowEditor.tsx` | **599** | Massive inline JSX toolbar + editor logic | Extract `WorkflowEditorHeader.tsx` and `WorkflowTestStatus.tsx` |
-| `components/dashboard/FileBrowser/index.tsx` | **818** | File browser UI + logic in one component | Extract file tree rendering, toolbar, and file actions into subcomponents |
-| `components/builder/data-table/DataColumnConfigurator.tsx` | **489** | Column configuration UI | Extract column type pickers and sorting config into subcomponents |
-| `components/dashboard/settings/shared/EdgeCachesForm.tsx` | **434** | Edge cache settings form | Extract cache config sections into subcomponents |
-| `modules/dbsync/components/dashboard/AutomationsContentPanel.tsx` | **306** | Mixes data fetching, pagination, analytics, and table UI | Extract `AutomationsAnalytics.tsx`, `AutomationsTable.tsx`, and `useAutomationsList.ts` hook |
 | `lib/workflow/nodeSchemas.ts` | **891** | All workflow node definitions in one file | Group by node category (triggers, actions, conditions) |
+| `components/dashboard/FileBrowser/index.tsx` | **818** | File browser UI + logic in one component | Extract file tree rendering, toolbar, and file actions into subcomponents |
+| `components/dashboard/settings/shared/EdgeCachesForm.tsx` | **635** ⚠️ | Was 434 — grew +201 from modal dialog, QStash .env paste, dual test toast logic. Mixes form state (15+ useState), CRUD handlers, provider selection, QStash env parsing, test logic, and 3 render blocks (dialog, list, card) | Extract: `EdgeCacheDialog.tsx` (modal form + QStash section), `useEdgeCacheForm.ts` (form state + handlers), keep `EdgeCachesForm.tsx` as list + layout |
+| `components/actions/editor/WorkflowEditor.tsx` | **599** | Massive inline JSX toolbar + editor logic | Extract `WorkflowEditorHeader.tsx` and `WorkflowTestStatus.tsx` |
+| `components/builder/data-table/DataColumnConfigurator.tsx` | **489** | Column configuration UI | Extract column type pickers and sorting config into subcomponents |
+| `modules/dbsync/components/dashboard/AutomationsContentPanel.tsx` | **306** | Mixes data fetching, pagination, analytics, and table UI | Extract `AutomationsAnalytics.tsx`, `AutomationsTable.tsx`, and `useAutomationsList.ts` hook |
 
 ### Edge (Hono Service)
 
@@ -76,6 +78,10 @@
 - ~~`edge-migrations.ts` marks version applied before SQL~~ → Fixed: version record now inserted AFTER SQL succeeds
 - Added `ensureInitialized()` init gate in `storage/index.ts` Proxy — prevents CF Worker race condition where DB operations run before migrations complete
 
+### 3.6 QStash Coupling (Planned Fix — 2026-03-04)
+- QStash credentials are currently on `EdgeCache` model — wrong domain
+- **Action**: Extract into new `EdgeQueue` entity (peer to EdgeDB + EdgeCache) per `memory-bank/tomorrows-session.md`
+
 ---
 
 ## 4. Dependency & Import Hygiene
@@ -109,6 +115,8 @@
 | 11 | Split `WorkflowEditor.tsx` into subcomponents | 45 min | Extracts massive inline toolbars/state | Pending |
 | 12 | Split `AutomationsContentPanel.tsx` into subcomponents | 45 min | Extracts analytics, filters, tables | Pending |
 | 13 | Fix stale `advanced-query` 404 on VPS (no Supabase) | 30 min | Prevents noisy 404s in logs | Low Priority |
+| 14 | **Split `EdgeCachesForm.tsx` (635→~200 + 250 + 150)** | 45 min | Extract `EdgeCacheDialog.tsx`, `useEdgeCacheForm.ts` hook | Pending |
+| 15 | **Extract `edge_caches.py` test helpers (383→~200 + 180)** | 20 min | Move `_test_cache`, `_test_upstash`, `_test_qstash` into `services/cache_tester.py` | Pending |
 
 ### Item 11: Stale `advanced-query` 404 Details
 

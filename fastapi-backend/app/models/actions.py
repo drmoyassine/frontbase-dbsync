@@ -35,6 +35,7 @@ class AutomationDraft(Base):
     is_active = Column(Boolean, default=True)
     published_version = Column(Integer, nullable=True)
     deployed_engines = Column(JSON, nullable=True, default=dict)  # {engine_id: {name, url, deployed_at}}
+    settings = Column(JSON, nullable=True, default=dict)  # Per-workflow config: rate_limit, debounce, timeout, queue options
     published_at = Column(DateTime(timezone=True), nullable=True)
     
     # Metadata

@@ -977,6 +977,44 @@ async def list_all_executions(
     return result
 
 
+# ── Execution Detail (lazy-load on row expand) ────────────────────────────────
+
+@router.get("/executions/detail/{execution_id}")
+async def get_execution_detail(execution_id: str, engine_url: Optional[str] = None):
+    """Fetch full execution detail (nodeExecutions, triggerPayload) from the
+    correct Edge engine.  The global log strips these fields for payload size;
+    the frontend calls this endpoint when a user expands a row.
+
+    - engine_url provided → proxy to that remote edge
+    - engine_url absent   → fall back to local EDGE_URL
+    """
+    target_url = engine_url.rstrip("/") if engine_url else EDGE_URL
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{target_url}/api/executions/{execution_id}",
+                timeout=10.0,
+            )
+            if response.status_code == 404:
+                raise HTTPException(status_code=404, detail="Execution not found")
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Edge returned {response.status_code}",
+                )
+            return response.json()
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Edge engine at {target_url} is not reachable",
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Edge engine at {target_url} timed out",
+        )
+
+
 # ── CSV Export ────────────────────────────────────────────────────────────────
 
 @router.get("/executions/export")
@@ -1114,7 +1152,8 @@ async def get_draft_executions(
     limit: int = 20,
     db: Session = Depends(get_db)
 ):
-    """Get execution history for a draft — merges backend test logs + local edge production logs."""
+    """Get execution history for a draft — merges backend test logs + production
+    logs from ALL edges where this workflow is deployed (fan-out)."""
     # 1. Test logs from backend DB
     test_records = db.execute(
         select(AutomationExecution)
@@ -1125,22 +1164,51 @@ async def get_draft_executions(
     
     test_logs = [_serialize_execution(r) for r in test_records]
     
-    # 2. Production logs from local edge
-    edge_logs = []
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{EDGE_URL}/api/executions/workflow/{draft_id}",
-                params={"limit": str(limit)},
-                timeout=10.0
-            )
-            if response.status_code == 200:
-                data = response.json()
-                for e in data.get("executions", []):
-                    e["engineName"] = e.get("engineName", "Local Edge")
-                    edge_logs.append(e)
-    except httpx.ConnectError:
-        pass  # Edge not available, skip production logs
+    # 2. Production logs from ALL deployed edges (fan-out)
+    edge_logs: list = []
+    draft = db.execute(
+        select(AutomationDraft).where(AutomationDraft.id == draft_id)
+    ).scalar_one_or_none()
+
+    deployed_engine_ids = set((draft.deployed_engines or {}).keys()) if draft else set()
+
+    if deployed_engine_ids:
+        # Resolve canonical URLs from EdgeEngine table
+        all_engines = db.execute(select(EdgeEngine)).scalars().all()
+        engine_map = {}
+        for engine in all_engines:
+            if str(engine.id) in deployed_engine_ids:
+                url = str(engine.url).rstrip("/")
+                if url:
+                    engine_map[url] = str(engine.name)
+
+        async def _fetch_workflow_logs(client: httpx.AsyncClient, url: str, name: str):
+            try:
+                resp = await client.get(
+                    f"{url}/api/executions/workflow/{draft_id}",
+                    params={"limit": str(limit)},
+                    timeout=5.0,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    executions = data.get("executions", [])
+                    for e in executions:
+                        e["engineName"] = name
+                        e["engineUrl"] = url
+                    return executions
+            except Exception as exc:
+                logging.warning(f"[Draft-Exec] Failed to reach edge '{name}' ({url}): {exc}")
+            return []
+
+        if engine_map:
+            async with httpx.AsyncClient() as client:
+                tasks = [
+                    _fetch_workflow_logs(client, url, name)
+                    for url, name in engine_map.items()
+                ]
+                results = await asyncio.gather(*tasks)
+                for batch in results:
+                    edge_logs.extend(batch)
     
     # 3. Merge and sort by startedAt desc
     all_logs = test_logs + edge_logs

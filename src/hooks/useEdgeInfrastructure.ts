@@ -27,6 +27,8 @@ export interface EdgeEngine {
     edge_db_name?: string;
     edge_cache_id: string | null;
     edge_cache_name?: string;
+    edge_queue_id: string | null;
+    edge_queue_name?: string;
     engine_config?: any;
     is_active: boolean;
     is_system?: boolean;
@@ -35,6 +37,7 @@ export interface EdgeEngine {
     last_deployed_at?: string | null;
     last_synced_at?: string | null;
     sync_status?: 'synced' | 'stale' | 'unknown';
+    is_outdated?: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -45,6 +48,20 @@ export interface EdgeCache {
     provider: string; // 'upstash', 'redis', 'dragonfly'
     cache_url: string;
     has_token: boolean;
+    is_default: boolean;
+    is_system: boolean;
+    created_at: string;
+    updated_at: string;
+    engine_count: number;
+}
+
+export interface EdgeQueue {
+    id: string;
+    name: string;
+    provider: string; // 'qstash', 'rabbitmq', 'bullmq', 'sqs'
+    queue_url: string;
+    has_token: boolean;
+    has_signing_key: boolean;
     is_default: boolean;
     is_system: boolean;
     created_at: string;
@@ -119,6 +136,14 @@ export const edgeInfrastructureApi = {
     deleteEngine: async (id: string): Promise<void> => {
         const res = await fetch(`${API_BASE}/api/edge-engines/${id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error('Failed to delete engine');
+    },
+    redeployEngine: async (id: string): Promise<any> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/${id}/redeploy/`, { method: 'POST' });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || 'Redeploy failed');
+        }
+        return res.json();
     },
 
     // Batch Operations
@@ -202,6 +227,13 @@ export const edgeInfrastructureApi = {
         if (!res.ok) throw new Error('Failed to test cache connection');
         return res.json();
     },
+
+    // Edge Queues
+    getEdgeQueues: async (): Promise<EdgeQueue[]> => {
+        const res = await fetch(`${API_BASE}/api/edge-queues/`);
+        if (!res.ok) throw new Error('Failed to fetch edge queues');
+        return res.json();
+    },
 };
 
 // ============================================================================
@@ -242,6 +274,16 @@ export function useEdgeCaches() {
     return useQuery({
         queryKey: ['edge-caches'],
         queryFn: edgeInfrastructureApi.getEdgeCaches,
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+}
+
+export function useEdgeQueues() {
+    return useQuery({
+        queryKey: ['edge-queues'],
+        queryFn: edgeInfrastructureApi.getEdgeQueues,
         staleTime: 5 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,

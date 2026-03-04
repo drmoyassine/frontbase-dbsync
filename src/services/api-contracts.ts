@@ -118,7 +118,8 @@ export const ApiContracts = {
         }
 
         if (!wrappedResult.data.success) {
-            return rawData as T; // If success is false, we just return the original (it has error/message)
+            const errorMsg = wrappedResult.data.error || wrappedResult.data.message || 'API returned success: false';
+            throw new Error(`[${endpointName}] ${errorMsg}`);
         }
 
         // Then validate the inner data

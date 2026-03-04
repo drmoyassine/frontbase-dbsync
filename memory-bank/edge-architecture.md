@@ -1,6 +1,6 @@
 # Frontbase Edge Architecture
 
-> Last Updated: 2026-03-01
+> Last Updated: 2026-03-04
 
 This document defines the strategic deployment architecture for the Frontbase Edge Engine (`services/edge`). A single Hono-based codebase supports four distinct deployment modes: **Cloud (BYOE)**, **Self-Hosted (All-in-One)**, **Standalone Edge Node**, and **Distributed Self-Hosted**.
 
@@ -512,3 +512,5 @@ CSS is delivered through three layers:
 | User-Connected Infrastructure | Frontbase is not a managed infra provider. Turso/Upstash are user-owned. Frontbase is an orchestration layer only. |
 | Build-time Tailwind CSS | Eliminated ~300KB Tailwind CDN runtime dependency. Classes extracted at publish time via `@source inline()`. |
 | Modular SSR (R3–R5 refactor) | `PageRenderer.ts` reduced from ~780 to ~430 lines by extracting `styleHelpers.ts`, `baseStyles.ts`, and `tailwind_cli.py`. |
+| EdgeQueue as first-class entity | Decoupled queue credentials from EdgeCache. Provider-agnostic `FRONTBASE_QUEUE_*` env vars. Same attach pattern as DB/Cache. |
+| Bundle versioning (SHA-256 hash) | 12-char hash stored on deploy, compared against dist on list. `⚠ Outdated` badge + one-click redeploy. Pre-existing engines without hash treated as outdated. |

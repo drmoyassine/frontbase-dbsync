@@ -18,7 +18,7 @@ import uuid
 
 from ..database.config import get_db
 from sqlalchemy.orm import Session
-from ..models.models import EdgeEngine, EdgeProviderAccount, EdgeDatabase, EdgeCache
+from ..models.models import EdgeEngine, EdgeProviderAccount, EdgeDatabase, EdgeCache, EdgeQueue
 
 router = APIRouter(prefix="/api/edge-engines", tags=["Edge Engines"])
 
@@ -35,6 +35,7 @@ class EdgeEngineCreate(BaseModel):
     url: str = Field(..., min_length=1, max_length=500)
     edge_db_id: Optional[str] = None
     edge_cache_id: Optional[str] = None
+    edge_queue_id: Optional[str] = None
     engine_config: Optional[dict] = None  # Engine-specific metadata (e.g. worker_name)
     is_active: bool = Field(default=True)
 
@@ -47,6 +48,7 @@ class EdgeEngineUpdate(BaseModel):
     url: Optional[str] = Field(None, min_length=1, max_length=500)
     edge_db_id: Optional[str] = None
     edge_cache_id: Optional[str] = None
+    edge_queue_id: Optional[str] = None
     engine_config: Optional[dict] = None
     is_active: Optional[bool] = None
 
@@ -63,6 +65,8 @@ class EdgeEngineResponse(BaseModel):
     edge_db_name: Optional[str] = None
     edge_cache_id: Optional[str] = None
     edge_cache_name: Optional[str] = None
+    edge_queue_id: Optional[str] = None
+    edge_queue_name: Optional[str] = None
     engine_config: Optional[dict] = None
     is_active: bool
     is_system: bool = False
@@ -71,6 +75,7 @@ class EdgeEngineResponse(BaseModel):
     last_deployed_at: Optional[str] = None
     last_synced_at: Optional[str] = None
     sync_status: Optional[str] = None  # "synced" | "stale" | "unknown"
+    is_outdated: bool = False  # True when deployed bundle_checksum != current dist hash
     created_at: str
     updated_at: str
 
@@ -111,8 +116,11 @@ class BatchResult(BaseModel):
 # Helpers
 # =============================================================================
 
-def _serialize_engine(engine: EdgeEngine) -> dict:
-    """Serialize an EdgeEngine ORM object, parsing engine_config JSON."""
+def _serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) -> dict:
+    """Serialize an EdgeEngine ORM object, parsing engine_config JSON.
+    
+    current_hashes: optional {"lite": "abc...", "full": "def..."} to compute is_outdated.
+    """
     config = None
     if engine.engine_config:
         try:
@@ -127,6 +135,10 @@ def _serialize_engine(engine: EdgeEngine) -> dict:
     edge_cache_name = None
     if engine.edge_cache:
         edge_cache_name = str(engine.edge_cache.name)
+
+    edge_queue_name = None
+    if engine.edge_queue:
+        edge_queue_name = str(engine.edge_queue.name)
 
     provider_name = None
     if engine.edge_provider:
@@ -143,6 +155,23 @@ def _serialize_engine(engine: EdgeEngine) -> dict:
     if bundle_checksum_val and last_deployed_at_val:
         sync_status = "synced"  # Assume synced until proven otherwise
 
+    # Compute is_outdated by comparing deployed hash against current dist hash
+    is_outdated = False
+    if current_hashes:
+        adapter = str(engine.adapter_type) if engine.adapter_type else "automations"
+        is_full = adapter == "full"
+        current_hash = current_hashes.get("full" if is_full else "lite")
+
+        if not bundle_checksum_val:
+            # No checksum stored → unknown/pre-existing engine → treat as outdated
+            # (but only for non-system engines that have a provider)
+            if engine.edge_provider_id and not getattr(engine, 'is_system', False):
+                is_outdated = True
+                sync_status = "stale"
+        elif current_hash and current_hash != bundle_checksum_val:
+            is_outdated = True
+            sync_status = "stale"
+
     return {
         "id": str(engine.id),
         "name": str(engine.name),
@@ -154,6 +183,8 @@ def _serialize_engine(engine: EdgeEngine) -> dict:
         "edge_db_name": edge_db_name,
         "edge_cache_id": str(engine.edge_cache_id) if engine.edge_cache_id else None,
         "edge_cache_name": edge_cache_name,
+        "edge_queue_id": str(engine.edge_queue_id) if engine.edge_queue_id else None,
+        "edge_queue_name": edge_queue_name,
         "engine_config": config,
         "is_active": bool(engine.is_active),
         "is_system": bool(engine.is_system),
@@ -162,6 +193,7 @@ def _serialize_engine(engine: EdgeEngine) -> dict:
         "last_deployed_at": last_deployed_at_val,
         "last_synced_at": last_synced_at_val,
         "sync_status": sync_status,
+        "is_outdated": is_outdated,
         "created_at": str(engine.created_at),
         "updated_at": str(engine.updated_at),
     }
@@ -171,20 +203,45 @@ def _serialize_engine(engine: EdgeEngine) -> dict:
 # CRUD Endpoints
 # =============================================================================
 
+# --- Static routes MUST come before /{engine_id} routes ---
+
+@router.get("/bundle-hashes/")
+async def get_bundle_hashes():
+    """Return current bundle hashes from dist/ without rebuilding.
+    
+    Used by the frontend to compare against deployed engine checksums.
+    """
+    from .cloudflare import _get_current_bundle_hash
+    return {
+        "lite": _get_current_bundle_hash("automations"),
+        "full": _get_current_bundle_hash("full"),
+    }
+
+
 @router.get("/", response_model=List[EdgeEngineResponse])
 async def list_edge_engines(db: Session = Depends(get_db)):
-    """List all edge engines."""
+    """List all edge engines with outdated detection."""
+    from .cloudflare import _get_current_bundle_hash
+    current_hashes = {
+        "lite": _get_current_bundle_hash("automations"),
+        "full": _get_current_bundle_hash("full"),
+    }
     engines = db.query(EdgeEngine).order_by(EdgeEngine.created_at.desc()).all()
-    return [_serialize_engine(e) for e in engines]
+    return [_serialize_engine(e, current_hashes) for e in engines]
 
 
 @router.get("/{engine_id}", response_model=EdgeEngineResponse)
 async def get_edge_engine(engine_id: str, db: Session = Depends(get_db)):
     """Get a single edge engine by ID."""
+    from .cloudflare import _get_current_bundle_hash
+    current_hashes = {
+        "lite": _get_current_bundle_hash("automations"),
+        "full": _get_current_bundle_hash("full"),
+    }
     engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
-    return _serialize_engine(engine)
+    return _serialize_engine(engine, current_hashes)
 
 
 @router.post("/", response_model=EdgeEngineResponse, status_code=201)
@@ -205,6 +262,7 @@ async def create_edge_engine(payload: EdgeEngineCreate, db: Session = Depends(ge
         url=payload.url,
         edge_db_id=payload.edge_db_id,
         edge_cache_id=payload.edge_cache_id,
+        edge_queue_id=payload.edge_queue_id,
         engine_config=json.dumps(payload.engine_config) if payload.engine_config else None,
         is_active=payload.is_active,
         created_at=now,
@@ -243,9 +301,10 @@ async def update_edge_engine(engine_id: str, payload: EdgeEngineUpdate, db: Sess
 
 
 class ReconfigureRequest(BaseModel):
-    """Reconfigure an engine's DB/cache bindings and push secrets to the remote."""
+    """Reconfigure an engine's DB/cache/queue bindings and push secrets to the remote."""
     edge_db_id: Optional[str] = None   # null = detach DB
     edge_cache_id: Optional[str] = None  # null = detach cache
+    edge_queue_id: Optional[str] = None  # null = detach queue
 
 
 # Frontbase-managed binding names — only these are touched during reconfigure
@@ -254,6 +313,11 @@ FRONTBASE_BINDING_NAMES = frozenset([
     'FRONTBASE_STATE_DB_TOKEN',
     'FRONTBASE_CACHE_URL',
     'FRONTBASE_CACHE_TOKEN',
+    'FRONTBASE_QUEUE_PROVIDER',
+    'FRONTBASE_QUEUE_URL',
+    'FRONTBASE_QUEUE_TOKEN',
+    'FRONTBASE_QUEUE_SIGNING_KEY',
+    'FRONTBASE_QUEUE_NEXT_SIGNING_KEY',
 ])
 
 
@@ -317,6 +381,21 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
         if edge_cache.cache_token:  # type: ignore[truthy-bool]
             new_bindings['FRONTBASE_CACHE_TOKEN'] = str(edge_cache.cache_token)
     # If no edge_cache_id → these bindings are simply omitted (= removed)
+
+    # Queue (provider-agnostic)
+    if payload.edge_queue_id:
+        edge_queue = db.query(EdgeQueue).filter(EdgeQueue.id == payload.edge_queue_id).first()
+        if not edge_queue:
+            raise HTTPException(400, "Invalid edge_queue_id")
+        new_bindings['FRONTBASE_QUEUE_PROVIDER'] = str(edge_queue.provider)
+        new_bindings['FRONTBASE_QUEUE_URL'] = str(edge_queue.queue_url)
+        if edge_queue.queue_token:  # type: ignore[truthy-bool]
+            new_bindings['FRONTBASE_QUEUE_TOKEN'] = str(edge_queue.queue_token)
+        if edge_queue.signing_key:  # type: ignore[truthy-bool]
+            new_bindings['FRONTBASE_QUEUE_SIGNING_KEY'] = str(edge_queue.signing_key)
+        if edge_queue.next_signing_key:  # type: ignore[truthy-bool]
+            new_bindings['FRONTBASE_QUEUE_NEXT_SIGNING_KEY'] = str(edge_queue.next_signing_key)
+    # If no edge_queue_id → these bindings are simply omitted (= removed)
 
     # --- 3. PATCH CF Worker settings ---
     settings_patched = False
@@ -405,6 +484,7 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
     # --- 4. Update local DB record ---
     engine.edge_db_id = payload.edge_db_id  # type: ignore[assignment]
     engine.edge_cache_id = payload.edge_cache_id  # type: ignore[assignment]
+    engine.edge_queue_id = payload.edge_queue_id  # type: ignore[assignment]
     engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
     db.commit()
     db.refresh(engine)
@@ -430,6 +510,116 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
         "bindings_set": bindings_set,
         "bindings_removed": bindings_removed,
     }
+
+
+@router.post("/{engine_id}/redeploy/")
+async def redeploy_engine(engine_id: str, db: Session = Depends(get_db)):
+    """Redeploy an engine with the latest bundle code + current secrets.
+    
+    Rebuilds the bundle, uploads new code to the existing worker,
+    patches secrets, and updates bundle_checksum and last_deployed_at.
+    """
+    import httpx
+
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if not engine:
+        raise HTTPException(status_code=404, detail="Edge engine not found")
+
+    # Resolve CF credentials
+    provider_id = engine.edge_provider_id
+    if not provider_id:
+        raise HTTPException(400, "Engine has no provider — cannot redeploy remotely")
+    
+    provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id).first()
+    if not provider or str(provider.provider) != 'cloudflare':
+        raise HTTPException(400, "Redeploy is only supported for Cloudflare engines")
+
+    creds = json.loads(str(provider.provider_credentials or '{}'))
+    api_token = creds.get('api_token')
+    account_id = creds.get('account_id')
+    cfg = json.loads(str(engine.engine_config or '{}'))
+    worker_name = cfg.get('worker_name')
+
+    if not api_token or not account_id or not worker_name:
+        raise HTTPException(400, "Missing Cloudflare credentials or worker_name in engine config")
+
+    adapter_type = str(engine.adapter_type) if engine.adapter_type else "automations"
+
+    try:
+        # 1. Build latest bundle
+        from .cloudflare import _build_worker, _upload_worker, _set_secrets, CF_API, _headers
+
+        script_content, bundle_hash = _build_worker(adapter_type)
+        script_filename = "cloudflare.js" if adapter_type == "full" else "cloudflare-lite.js"
+
+        # 2. Upload new code to existing worker
+        await _upload_worker(api_token, account_id, worker_name, script_content, script_filename)
+
+        # 3. Patch secrets (same bindings as current config)
+        secrets: dict[str, str] = {}
+
+        if engine.edge_db_id:
+            edge_db = db.query(EdgeDatabase).filter(EdgeDatabase.id == engine.edge_db_id).first()
+            if edge_db:
+                secrets['FRONTBASE_STATE_DB_URL'] = str(edge_db.db_url)
+                if edge_db.db_token:  # type: ignore[truthy-bool]
+                    secrets['FRONTBASE_STATE_DB_TOKEN'] = str(edge_db.db_token)
+
+        if engine.edge_cache_id:
+            edge_cache = db.query(EdgeCache).filter(EdgeCache.id == engine.edge_cache_id).first()
+            if edge_cache:
+                secrets['FRONTBASE_CACHE_URL'] = str(edge_cache.cache_url)
+                if edge_cache.cache_token:  # type: ignore[truthy-bool]
+                    secrets['FRONTBASE_CACHE_TOKEN'] = str(edge_cache.cache_token)
+
+        if engine.edge_queue_id:
+            edge_queue = db.query(EdgeQueue).filter(EdgeQueue.id == engine.edge_queue_id).first()
+            if edge_queue:
+                secrets['FRONTBASE_QUEUE_PROVIDER'] = str(edge_queue.provider)
+                secrets['FRONTBASE_QUEUE_URL'] = str(edge_queue.queue_url)
+                if edge_queue.queue_token:  # type: ignore[truthy-bool]
+                    secrets['FRONTBASE_QUEUE_TOKEN'] = str(edge_queue.queue_token)
+                if edge_queue.signing_key:  # type: ignore[truthy-bool]
+                    secrets['FRONTBASE_QUEUE_SIGNING_KEY'] = str(edge_queue.signing_key)
+                if edge_queue.next_signing_key:  # type: ignore[truthy-bool]
+                    secrets['FRONTBASE_QUEUE_NEXT_SIGNING_KEY'] = str(edge_queue.next_signing_key)
+
+        if secrets:
+            await _set_secrets(api_token, account_id, worker_name, secrets)
+
+        # 4. Update local record
+        deployed_at = datetime.utcnow().isoformat() + "Z"
+        engine.bundle_checksum = bundle_hash  # type: ignore[assignment]
+        engine.last_deployed_at = deployed_at  # type: ignore[assignment]
+        engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+        db.commit()
+        db.refresh(engine)
+
+        # 5. Flush cache
+        cache_flushed = False
+        engine_url = str(engine.url).rstrip('/')
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(f"{engine_url}/api/cache/flush", timeout=10.0)
+                cache_flushed = resp.status_code in (200, 204)
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "bundle_hash": bundle_hash,
+            "deployed_at": deployed_at,
+            "cache_flushed": cache_flushed,
+            "secrets_count": len(secrets),
+            "engine": _serialize_engine(engine),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Redeploy failed: {str(e)}")
 
 
 @router.delete("/{engine_id}", status_code=204)

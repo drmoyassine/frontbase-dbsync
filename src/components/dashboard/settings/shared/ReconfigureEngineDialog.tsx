@@ -20,6 +20,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
     useEdgeDatabases,
     useEdgeCaches,
+    useEdgeQueues,
     EdgeEngine,
 } from '@/hooks/useEdgeInfrastructure';
 
@@ -33,10 +34,12 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
     const queryClient = useQueryClient();
     const { data: edgeDbs = [] } = useEdgeDatabases();
     const { data: edgeCaches = [] } = useEdgeCaches();
+    const { data: edgeQueues = [] } = useEdgeQueues();
 
     const [open, setOpen] = useState(false);
     const [selectedDbId, setSelectedDbId] = useState<string>(engine.edge_db_id || 'none');
     const [selectedCacheId, setSelectedCacheId] = useState<string>(engine.edge_cache_id || 'none');
+    const [selectedQueueId, setSelectedQueueId] = useState<string>(engine.edge_queue_id || 'none');
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -47,11 +50,12 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
         if (open) {
             setSelectedDbId(engine.edge_db_id || 'none');
             setSelectedCacheId(engine.edge_cache_id || 'none');
+            setSelectedQueueId(engine.edge_queue_id || 'none');
             setSaved(false);
             setError(null);
             setStatusMsg(null);
         }
-    }, [open, engine.edge_db_id, engine.edge_cache_id]);
+    }, [open, engine.edge_db_id, engine.edge_cache_id, engine.edge_queue_id]);
 
     const handleSave = async () => {
         setSaving(true);
@@ -64,6 +68,7 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
                 body: JSON.stringify({
                     edge_db_id: selectedDbId === 'none' ? null : selectedDbId,
                     edge_cache_id: selectedCacheId === 'none' ? null : selectedCacheId,
+                    edge_queue_id: selectedQueueId === 'none' ? null : selectedQueueId,
                 }),
             });
             const data = await res.json();
@@ -94,7 +99,8 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
 
     const hasChanges =
         (selectedDbId !== (engine.edge_db_id || 'none')) ||
-        (selectedCacheId !== (engine.edge_cache_id || 'none'));
+        (selectedCacheId !== (engine.edge_cache_id || 'none')) ||
+        (selectedQueueId !== (engine.edge_queue_id || 'none'));
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -107,7 +113,7 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
                 <DialogHeader>
                     <DialogTitle>Reconfigure "{engine.name}"</DialogTitle>
                     <DialogDescription>
-                        Change the database and cache attached to this engine. Secrets will be pushed to the remote Worker and its cache will be flushed.
+                        Change the database, cache, and queue attached to this engine. Secrets will be pushed to the remote Worker and its cache will be flushed.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -142,6 +148,21 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
                                 {edgeCaches.map(cache => (
                                     <SelectItem key={cache.id} value={cache.id}>
                                         {cache.name} ({cache.provider})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Edge Queue</Label>
+                        <Select value={selectedQueueId} onValueChange={setSelectedQueueId}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                {edgeQueues.map(queue => (
+                                    <SelectItem key={queue.id} value={queue.id}>
+                                        {queue.name} ({queue.provider})
                                     </SelectItem>
                                 ))}
                             </SelectContent>

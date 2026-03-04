@@ -248,6 +248,32 @@ class EdgeCache(Base):
     edge_engines = relationship("EdgeEngine", back_populates="edge_cache")
 
 
+class EdgeQueue(Base):
+    """Named edge queue connection — credentials for message queue providers.
+    
+    Each row represents a configured queue service (QStash, RabbitMQ, etc.)
+    that edge engines can reference for durable workflow execution.
+    Mirrors the EdgeDatabase / EdgeCache pattern.
+    """
+    __tablename__ = 'edge_queues'
+    
+    id = Column(String, primary_key=True)
+    name = Column(String(100), nullable=False)           # "Production QStash"
+    provider = Column(String(50), nullable=False)         # "qstash", "rabbitmq", "bullmq", "sqs"
+    queue_url = Column(String(500), nullable=False)      # "https://qstash.upstash.io"
+    queue_token = Column(String(1000), nullable=True)    # Auth token / API key
+    signing_key = Column(String(500), nullable=True)     # Provider-specific signing key
+    next_signing_key = Column(String(500), nullable=True) # Key rotation (QStash)
+    provider_config = Column(Text, nullable=True)        # JSON — extra provider-specific config
+    is_default = Column(Boolean, default=False)
+    is_system = Column(Boolean, default=False)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    
+    # Relationship
+    edge_engines = relationship("EdgeEngine", back_populates="edge_queue")
+
+
 class EdgeProviderAccount(Base):
     """Authenticated account for an edge provider (e.g., Cloudflare, Vercel).
     
@@ -283,6 +309,7 @@ class EdgeEngine(Base):
     url = Column(String(500), nullable=False)           # "https://my-site.pages.dev"
     edge_db_id = Column(String, ForeignKey('edge_databases.id'), nullable=True)
     edge_cache_id = Column(String, ForeignKey('edge_caches.id'), nullable=True)
+    edge_queue_id = Column(String, ForeignKey('edge_queues.id'), nullable=True)
     engine_config = Column(Text, nullable=True)         # JSON — e.g., {"worker_name": "frontbase-edge"}
     is_active = Column(Boolean, default=True)
     is_system = Column(Boolean, default=False)           # True = pre-seeded, cannot be deleted
@@ -296,6 +323,7 @@ class EdgeEngine(Base):
     # Relationships
     edge_database = relationship("EdgeDatabase", back_populates="edge_engines")
     edge_cache = relationship("EdgeCache", back_populates="edge_engines")
+    edge_queue = relationship("EdgeQueue", back_populates="edge_engines")
     edge_provider = relationship("EdgeProviderAccount", back_populates="edge_engines")
     page_deployments = relationship("PageDeployment", back_populates="edge_engine", cascade="all, delete-orphan")
 

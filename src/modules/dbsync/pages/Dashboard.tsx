@@ -69,7 +69,7 @@ export function Dashboard() {
         {
             id: 'pages' as const,
             label: 'Pages',
-            value: pages?.filter(p => p.isPublic).length || 0,
+            value: Array.isArray(pages) ? pages.filter(p => p.isPublic).length : 0,
             icon: FileText,
             color: 'bg-blue-500',
         },

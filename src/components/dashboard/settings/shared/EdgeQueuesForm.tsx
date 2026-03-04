@@ -1,0 +1,628 @@
+/**
+ * EdgeQueuesForm
+ * 
+ * CRUD management for named edge queue connections (QStash, RabbitMQ, etc.).
+ * Mirrors the EdgeCachesForm pattern — Dialog modal for create/edit.
+ */
+
+import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEdgeQueues, EdgeQueue } from '@/hooks/useEdgeInfrastructure';
+import { toast } from 'sonner';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+    Dialog, DialogContent, DialogDescription, DialogFooter,
+    DialogHeader, DialogTitle, DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+    Plus, Trash2, Pencil, Loader2, Check, X,
+    Star, Shield, Zap, AlertTriangle, Cloud, Server, Lock,
+} from 'lucide-react';
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+    AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+
+const API_BASE = '';
+
+interface TestResult {
+    success: boolean;
+    message: string;
+    latency_ms?: number;
+}
+
+interface EdgeQueuesFormProps {
+    withCard?: boolean;
+}
+
+const QUEUE_PROVIDER_OPTIONS = [
+    { value: 'qstash', label: 'QStash', icon: Zap, placeholder: 'https://qstash.upstash.io', active: true },
+    { value: 'rabbitmq', label: 'RabbitMQ', icon: Server, placeholder: 'amqp://host:5672', active: false },
+    { value: 'bullmq', label: 'BullMQ', icon: Server, placeholder: 'redis://host:6379', active: false },
+    { value: 'sqs', label: 'AWS SQS', icon: Cloud, placeholder: 'https://sqs.region.amazonaws.com/...', active: false },
+];
+
+// Queue-specific icon
+const QueueIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M16 3h5v5" /><path d="M8 3H3v5" />
+        <path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3" />
+        <path d="m15 9 6-6" /><path d="M16 21h5v-5" /><path d="M8 21H3v-5" />
+    </svg>
+);
+
+export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false }) => {
+    const queryClient = useQueryClient();
+    const { data: queues = [], isLoading } = useEdgeQueues();
+    const [error, setError] = useState<string | null>(null);
+
+    // Dialog state
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+
+    // Form fields
+    const [selectedProvider, setSelectedProvider] = useState<string>('qstash');
+    const [formName, setFormName] = useState('');
+    const [formUrl, setFormUrl] = useState('');
+    const [formToken, setFormToken] = useState('');
+    const [formSigningKey, setFormSigningKey] = useState('');
+    const [formNextSigningKey, setFormNextSigningKey] = useState('');
+    const [formIsDefault, setFormIsDefault] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+
+    // QStash .env paste mode
+    const [pasteMode, setPasteMode] = useState(true);
+    const [envBlock, setEnvBlock] = useState('');
+
+    // Test connection
+    const [testingId, setTestingId] = useState<string | null>(null);
+
+    // Delete
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+
+    const refetchQueues = () => queryClient.invalidateQueries({ queryKey: ['edge-queues'] });
+
+    const resetForm = () => {
+        setEditingId(null);
+        setSelectedProvider('qstash');
+        setFormName('');
+        setFormUrl('');
+        setFormToken('');
+        setFormSigningKey('');
+        setFormNextSigningKey('');
+        setFormIsDefault(false);
+        setError(null);
+        setPasteMode(true);
+        setEnvBlock('');
+    };
+
+    const openCreate = () => {
+        resetForm();
+        setDialogOpen(true);
+    };
+
+    const openEdit = (queue: EdgeQueue) => {
+        resetForm();
+        setEditingId(queue.id);
+        setSelectedProvider(queue.provider);
+        setFormName(queue.name);
+        setFormUrl(queue.queue_url);
+        setFormIsDefault(queue.is_default);
+        setPasteMode(false); // Show individual fields when editing
+        setDialogOpen(true);
+    };
+
+    // Parse .env block from Upstash QStash quickstart
+    const parseEnvBlock = (block: string) => {
+        const lines = block.split('\n');
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
+            const eqIdx = trimmed.indexOf('=');
+            if (eqIdx === -1) continue;
+            const key = trimmed.substring(0, eqIdx).trim();
+            const val = trimmed.substring(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+            switch (key) {
+                case 'QSTASH_URL': setFormUrl(val); break;
+                case 'QSTASH_TOKEN': setFormToken(val); break;
+                case 'QSTASH_CURRENT_SIGNING_KEY': setFormSigningKey(val); break;
+                case 'QSTASH_NEXT_SIGNING_KEY': setFormNextSigningKey(val); break;
+            }
+        }
+    };
+
+    // Save (create or update)
+    const handleSave = async () => {
+        setIsSaving(true);
+        setError(null);
+        try {
+            const payload: any = {
+                name: formName,
+                provider: selectedProvider,
+                queue_url: formUrl,
+                is_default: formIsDefault,
+            };
+            if (formToken) payload.queue_token = formToken;
+            if (formSigningKey) payload.signing_key = formSigningKey;
+            if (formNextSigningKey) payload.next_signing_key = formNextSigningKey;
+
+            const url = editingId
+                ? `${API_BASE}/api/edge-queues/${editingId}`
+                : `${API_BASE}/api/edge-queues/`;
+            const method = editingId ? 'PUT' : 'POST';
+
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.detail || `HTTP ${res.status}`);
+            }
+            setDialogOpen(false);
+            resetForm();
+            refetchQueues();
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // Delete
+    const handleDelete = async (id: string) => {
+        setDeletingId(id);
+        try {
+            const res = await fetch(`${API_BASE}/api/edge-queues/${id}`, { method: 'DELETE' });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.detail || `HTTP ${res.status}`);
+            }
+            refetchQueues();
+        } catch (e: any) { setError(e.message); }
+        finally { setDeletingId(null); }
+    };
+
+    // Toast for test result
+    const showTestToast = (result: TestResult, label: string) => {
+        toast.custom((id) => (
+            <div
+                className="w-[356px] rounded-lg border bg-background shadow-lg p-3 space-y-2"
+                style={{ pointerEvents: 'auto' }}
+            >
+                <div className="flex items-center gap-2.5">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${result.success ? 'bg-emerald-500' : 'bg-red-500'
+                        }`}>
+                        {result.success
+                            ? <Check className="h-3 w-3 text-white" />
+                            : <X className="h-3 w-3 text-white" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium">{label}</span>
+                        <span className="text-xs text-muted-foreground ml-2">{result.message}</span>
+                    </div>
+                </div>
+            </div>
+        ), { duration: result.success ? 4000 : 8000 });
+    };
+
+    // Test saved queue
+    const handleTest = async (id: string) => {
+        setTestingId(id);
+        try {
+            const res = await fetch(`${API_BASE}/api/edge-queues/${id}/test`, { method: 'POST' });
+            const data: TestResult = await res.json();
+            const queue = queues.find(q => q.id === id);
+            const label = QUEUE_PROVIDER_OPTIONS.find(p => p.value === queue?.provider)?.label || 'Queue';
+            showTestToast(data, label);
+        } catch (e: any) {
+            toast.error('Test failed', { description: e.message });
+        } finally { setTestingId(null); }
+    };
+
+    // Test inline (before saving, inside dialog)
+    const handleTestInline = async () => {
+        setTestingId('inline');
+        try {
+            const providerLabel = QUEUE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.label || 'Queue';
+
+            if (editingId && !formToken) {
+                // Token not re-entered — use saved test endpoint
+                const res = await fetch(`${API_BASE}/api/edge-queues/${editingId}/test`, { method: 'POST' });
+                const data: TestResult = await res.json();
+                showTestToast(data, providerLabel);
+            } else {
+                const res = await fetch(`${API_BASE}/api/edge-queues/test-connection`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider: selectedProvider,
+                        queue_url: formUrl,
+                        queue_token: formToken || null,
+                    }),
+                });
+                const data: TestResult = await res.json();
+                showTestToast(data, providerLabel);
+            }
+        } catch (e: any) {
+            toast.error('Test failed', { description: e.message });
+        } finally { setTestingId(null); }
+    };
+
+    const getProviderIcon = (provider: string) => {
+        const opt = QUEUE_PROVIDER_OPTIONS.find(p => p.value === provider);
+        const Icon = opt?.icon || QueueIcon;
+        return <Icon className="h-4 w-4" />;
+    };
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center p-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
+
+    // ─── Modal dialog for create / edit ───
+    const queueDialog = (
+        <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetForm(); } setDialogOpen(open); }}>
+            <DialogTrigger asChild>
+                <Button size="sm" onClick={openCreate}>
+                    <Plus className="w-4 h-4 mr-2" /> Connect Queue
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle>{editingId ? 'Edit Queue' : 'Connect Edge Queue'}</DialogTitle>
+                    <DialogDescription>
+                        {editingId
+                            ? 'Update your queue connection settings.'
+                            : 'Add a message queue for durable workflow execution.'}
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+                    {error && (
+                        <Alert variant="destructive">
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    )}
+
+                    {/* Provider selector */}
+                    <div className="space-y-2">
+                        <Label>Provider</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {QUEUE_PROVIDER_OPTIONS.map(opt => {
+                                const Icon = opt.icon;
+                                return (
+                                    <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={() => opt.active && setSelectedProvider(opt.value)}
+                                        disabled={!opt.active}
+                                        className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm transition-colors text-left relative
+                                            ${selectedProvider === opt.value
+                                                ? 'border-primary bg-primary/5 text-primary'
+                                                : opt.active
+                                                    ? 'border-border hover:bg-accent'
+                                                    : 'border-border opacity-50 cursor-not-allowed'
+                                            }`}
+                                    >
+                                        <Icon className="h-4 w-4 shrink-0" />
+                                        <span className="truncate">{opt.label}</span>
+                                        {!opt.active && (
+                                            <Badge variant="outline" className="text-[10px] ml-auto px-1.5 py-0">Soon</Badge>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* QStash .env paste mode */}
+                    {selectedProvider === 'qstash' && !editingId && (
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Label className="text-xs text-muted-foreground">Input mode:</Label>
+                                <button
+                                    type="button"
+                                    onClick={() => setPasteMode(true)}
+                                    className={`text-xs px-2 py-1 rounded transition-colors ${pasteMode ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'
+                                        }`}
+                                >
+                                    Paste .env
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPasteMode(false)}
+                                    className={`text-xs px-2 py-1 rounded transition-colors ${!pasteMode ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'
+                                        }`}
+                                >
+                                    Individual fields
+                                </button>
+                            </div>
+
+                            {pasteMode && (
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Paste your QStash .env block</Label>
+                                    <textarea
+                                        className="w-full h-24 p-2 text-xs font-mono rounded border bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+                                        placeholder={'QSTASH_URL="https://qstash-..."\nQSTASH_TOKEN="..."\nQSTASH_CURRENT_SIGNING_KEY="..."\nQSTASH_NEXT_SIGNING_KEY="..."'}
+                                        value={envBlock}
+                                        onChange={e => {
+                                            setEnvBlock(e.target.value);
+                                            parseEnvBlock(e.target.value);
+                                        }}
+                                    />
+                                    {formToken && (
+                                        <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                                            <Check className="h-3 w-3" /> Parsed {[formUrl && 'URL', formToken && 'token', formSigningKey && 'signing key', formNextSigningKey && 'next key'].filter(Boolean).join(', ')}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Individual fields (always shown when not in paste mode) */}
+                    {(!pasteMode || selectedProvider !== 'qstash' || editingId) && (
+                        <>
+                            {/* Name + URL */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                    <Label>Name</Label>
+                                    <Input
+                                        placeholder={`e.g. Production ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}`}
+                                        value={formName}
+                                        onChange={e => setFormName(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label>Queue URL</Label>
+                                    <Input
+                                        placeholder={QUEUE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.placeholder}
+                                        value={formUrl}
+                                        onChange={e => setFormUrl(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Auth Token */}
+                            <div className="space-y-1">
+                                <Label>API Token</Label>
+                                <Input
+                                    type="password"
+                                    placeholder={editingId ? '(leave blank to keep existing)' : 'Queue API token'}
+                                    value={formToken}
+                                    onChange={e => setFormToken(e.target.value)}
+                                />
+                            </div>
+
+                            {/* Signing keys — only for QStash */}
+                            {selectedProvider === 'qstash' && (
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Current Signing Key</Label>
+                                        <Input
+                                            type="password"
+                                            placeholder={editingId ? '(keep existing)' : 'Signing key'}
+                                            value={formSigningKey}
+                                            onChange={e => setFormSigningKey(e.target.value)}
+                                            className="h-8 text-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Next Signing Key</Label>
+                                        <Input
+                                            type="password"
+                                            placeholder={editingId ? '(keep existing)' : 'Next signing key'}
+                                            value={formNextSigningKey}
+                                            onChange={e => setFormNextSigningKey(e.target.value)}
+                                            className="h-8 text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {/* Name field when in paste mode (still needed) */}
+                    {pasteMode && selectedProvider === 'qstash' && !editingId && (
+                        <div className="space-y-1">
+                            <Label>Connection Name</Label>
+                            <Input
+                                placeholder="e.g. Production QStash"
+                                value={formName}
+                                onChange={e => setFormName(e.target.value)}
+                            />
+                        </div>
+                    )}
+
+                    {/* Default toggle */}
+                    <div className="flex items-center gap-2">
+                        <Switch
+                            id="edge-queue-default-modal"
+                            checked={formIsDefault}
+                            onCheckedChange={setFormIsDefault}
+                        />
+                        <Label htmlFor="edge-queue-default-modal" className="text-sm cursor-pointer">
+                            Set as default queue
+                        </Label>
+                    </div>
+                </div>
+
+                <DialogFooter className="gap-2 sm:gap-0">
+                    <Button
+                        variant="outline"
+                        onClick={handleTestInline}
+                        disabled={!(formUrl || (editingId && !formToken)) || testingId === 'inline'}
+                    >
+                        {testingId === 'inline' ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Testing...</>
+                        ) : (
+                            <><Zap className="mr-2 h-4 w-4" /> Test Connection</>
+                        )}
+                    </Button>
+                    <Button onClick={handleSave} disabled={!formName || !formUrl || isSaving}>
+                        {isSaving ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
+                        ) : (
+                            <><Check className="mr-2 h-4 w-4" /> {editingId ? 'Update' : 'Add Queue'}</>
+                        )}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+
+    // ─── Queue list ───
+    const queueList = (
+        <div className="space-y-4">
+            {queues.length === 0 ? (
+                <div className="text-center p-8 border border-dashed rounded-lg bg-muted/20">
+                    <QueueIcon className="h-8 w-8 text-muted-foreground mx-auto mb-3 opacity-50" />
+                    <h3 className="text-sm font-medium">No Queues Connected</h3>
+                    <p className="text-sm text-muted-foreground mt-1">Add a message queue for durable workflow execution.</p>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {queues.map((queue) => (
+                        <div key={queue.id} className="flex items-center justify-between p-4 border rounded-lg bg-card hover:border-primary/50 transition-colors">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
+                                    {getProviderIcon(queue.provider)}
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h4 className="font-medium text-sm">{queue.name}</h4>
+                                        <Badge variant="outline" className="text-xs">{queue.provider}</Badge>
+                                        {queue.is_default && (
+                                            <Badge variant="secondary" className="text-xs gap-1">
+                                                <Star className="h-3 w-3" /> Default
+                                            </Badge>
+                                        )}
+                                        {queue.is_system && (
+                                            <Badge variant="outline" className="text-xs gap-1 border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400">
+                                                <Shield className="h-3 w-3" /> System
+                                            </Badge>
+                                        )}
+                                        {queue.has_signing_key && (
+                                            <Badge variant="outline" className="text-xs gap-1 border-green-300 text-green-600 dark:border-green-700 dark:text-green-400">
+                                                <Lock className="h-3 w-3" /> Signed
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[300px]">{queue.queue_url}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {queue.engine_count > 0 && (
+                                    <Badge variant="secondary" className="text-xs">
+                                        {queue.engine_count} engine{queue.engine_count > 1 ? 's' : ''}
+                                    </Badge>
+                                )}
+                                <Button
+                                    variant="ghost" size="icon"
+                                    onClick={() => handleTest(queue.id)}
+                                    disabled={testingId === queue.id}
+                                    title="Test connection"
+                                >
+                                    {testingId === queue.id
+                                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                                        : <Zap className="h-4 w-4" />}
+                                </Button>
+                                {!queue.is_system && (
+                                    <>
+                                        <Button variant="ghost" size="icon" onClick={() => openEdit(queue)} title="Edit">
+                                            <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button
+                                                    variant="ghost" size="icon"
+                                                    disabled={deletingId === queue.id}
+                                                >
+                                                    {deletingId === queue.id
+                                                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                                                        : <Trash2 className="h-4 w-4 text-destructive" />}
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Delete "{queue.name}"?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        This removes the queue connection from Frontbase. The actual queue service is not affected.
+                                                        {queue.engine_count > 0 && (
+                                                            <span className="block mt-2 font-medium text-destructive">
+                                                                ⚠ {queue.engine_count} edge engine{queue.engine_count > 1 ? 's' : ''} use this queue and will need to be reconfigured.
+                                                            </span>
+                                                        )}
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction
+                                                        onClick={() => handleDelete(queue.id)}
+                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                    >
+                                                        Delete
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+
+    if (withCard) {
+        return (
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <div>
+                        <CardTitle className="flex items-center gap-2">
+                            <QueueIcon className="h-5 w-5" />
+                            Edge Queues
+                        </CardTitle>
+                        <CardDescription>
+                            Manage message queue connections for durable workflow execution
+                        </CardDescription>
+                    </div>
+                    {queueDialog}
+                </CardHeader>
+                <CardContent>{queueList}</CardContent>
+            </Card>
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h3 className="font-medium flex items-center gap-2">
+                        <QueueIcon className="h-5 w-5" /> Edge Queues
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                        Manage message queue connections for durable workflow execution
+                    </p>
+                </div>
+                {queueDialog}
+            </div>
+            {queueList}
+        </div>
+    );
+};

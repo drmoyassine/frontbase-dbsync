@@ -1,5 +1,12 @@
 /**
  * Webhook Route - Handle external webhook triggers
+ * 
+ * Features:
+ *   - Per-webhook authentication (header, basic, none)
+ *   - Rate limiting (60/min per workflow, via Redis INCR)
+ *   - Debouncing (configurable window, via Redis SET NX EX)
+ *   - QStash durable execution (auto-retry on Worker failure)
+ *   - Sync mode (http_response node) vs async fire-and-forget
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
@@ -7,6 +14,9 @@ import { stateProvider } from '../storage/index.js';
 import { WebhookPayloadSchema, ExecuteResponseSchema, ErrorResponseSchema } from '../schemas';
 import { v4 as uuidv4 } from 'uuid';
 import { executeWorkflow } from '../engine/runtime';
+import { rateLimit } from '../cache/redis.js';
+import { shouldDebounce } from '../engine/debounce.js';
+import { isQStashEnabled, publishExecution } from '../engine/qstash.js';
 
 const webhookRoute = new OpenAPIHono();
 
@@ -39,6 +49,14 @@ const route = createRoute({
         },
         404: {
             description: 'Workflow not found',
+            content: {
+                'application/json': {
+                    schema: ErrorResponseSchema,
+                },
+            },
+        },
+        429: {
+            description: 'Rate limited',
             content: {
                 'application/json': {
                     schema: ErrorResponseSchema,
@@ -111,6 +129,33 @@ webhookRoute.openapi(route, async (c) => {
             // authMode === 'none' → no validation needed
         }
 
+        // ── Rate limiting (60 executions/minute per workflow) ────────────
+        try {
+            const { allowed, remaining } = await rateLimit(
+                `wf:${id}:rate:${Math.floor(Date.now() / 60000)}`,
+                60,
+                60
+            );
+            if (!allowed) {
+                return c.json({
+                    error: 'RateLimited',
+                    message: `Workflow ${id} rate limit exceeded (60/min). Retry after 1 minute.`,
+                }, 429);
+            }
+            c.header('X-RateLimit-Remaining', String(remaining));
+        } catch {
+            // Redis unavailable — allow execution
+        }
+
+        // ── Debouncing (skip if triggered within window) ────────────────
+        if (await shouldDebounce(id, 5)) {
+            return c.json({
+                executionId: null,
+                status: 'debounced' as any,
+                message: 'Execution skipped (debounced within 5s window)',
+            }, 200);
+        }
+
         // Create execution record via provider
         const executionId = uuidv4();
         const now = new Date().toISOString();
@@ -130,6 +175,7 @@ webhookRoute.openapi(route, async (c) => {
 
         if (hasResponseNode) {
             // Sync execution — wait and return user-defined response
+            // (cannot use QStash for sync — caller is waiting)
             try {
                 const execResult = await executeWorkflow(executionId, workflow, payload.data);
 
@@ -161,7 +207,30 @@ webhookRoute.openapi(route, async (c) => {
             }
         }
 
-        // No response node — fire and forget (async, original behavior)
+        // ── Async execution (fire-and-forget) ───────────────────────────
+        // If QStash is enabled, route through QStash for durable retry
+        if (isQStashEnabled()) {
+            const publicUrl = process.env.PUBLIC_URL || process.env.EDGE_URL || '';
+            const destUrl = `${publicUrl}/api/execute/${id}`;
+            const msgId = await publishExecution(destUrl, {
+                executionId,
+                workflowId: id,
+                parameters: payload.data,
+                triggerType: 'http_webhook',
+                triggerPayload: JSON.stringify(payload),
+            });
+
+            if (msgId) {
+                return c.json({
+                    executionId,
+                    status: 'started' as const,
+                    message: 'Execution queued via QStash (durable)',
+                }, 200);
+            }
+            // QStash publish failed — fall through to direct execution
+        }
+
+        // Direct execution (no QStash or QStash failed)
         executeWorkflow(executionId, workflow, payload.data)
             .catch(err => console.error(`Webhook execution ${executionId} failed:`, err));
 

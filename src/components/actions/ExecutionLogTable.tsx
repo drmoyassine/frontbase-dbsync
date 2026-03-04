@@ -10,6 +10,7 @@ import { ChevronDown, ChevronRight, CheckCircle2, XCircle, Loader2, Clock } from
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { ExecutionLog } from '@/stores/actions/useActionsQuery';
+import { useExecutionDetail } from '@/stores/actions/useActionsQuery';
 
 interface ExecutionLogTableProps {
     executions: ExecutionLog[];
@@ -122,16 +123,47 @@ export function ExecutionLogTable({ executions, showWorkflowName = false, classN
     );
 }
 
-/** Expanded detail view showing per-node execution results */
+/** Expanded detail view — lazy-fetches full execution data (nodeExecutions, triggerPayload) */
 function ExecutionDetail({ execution }: { execution: ExecutionLog }) {
-    const nodes = execution.nodeExecutions || [];
+    const { data: detail, isLoading, error: fetchError } = useExecutionDetail(execution.id, execution.engineUrl);
+
+    // Use fetched detail if available, fall back to list data
+    const nodes = detail?.nodeExecutions || execution.nodeExecutions || [];
+    const triggerPayload = detail?.triggerPayload || execution.triggerPayload;
+    const result = detail?.result || execution.result;
+    const executionError = detail?.error || execution.error;
 
     return (
         <div className="space-y-3">
+            {/* Loading state */}
+            {isLoading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading execution details…
+                </div>
+            )}
+
+            {/* Fetch error */}
+            {fetchError && (
+                <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-3 text-sm text-yellow-700 dark:text-yellow-400">
+                    Could not load details: {fetchError.message}
+                </div>
+            )}
+
             {/* Error message */}
-            {execution.error && (
+            {executionError && (
                 <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-md p-3 text-sm text-red-700 dark:text-red-400">
-                    <strong>Error:</strong> {execution.error}
+                    <strong>Error:</strong> {executionError}
+                </div>
+            )}
+
+            {/* Trigger payload */}
+            {triggerPayload && Object.keys(triggerPayload).length > 0 && (
+                <div>
+                    <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Trigger Payload</h4>
+                    <pre className="bg-background border rounded-md p-2 text-xs font-mono overflow-x-auto max-h-24">
+                        {JSON.stringify(triggerPayload, null, 2)}
+                    </pre>
                 </div>
             )}
 
@@ -174,15 +206,15 @@ function ExecutionDetail({ execution }: { execution: ExecutionLog }) {
                     </div>
                 </div>
             ) : (
-                <p className="text-xs text-muted-foreground">No node execution details available.</p>
+                !isLoading && <p className="text-xs text-muted-foreground">No node execution details available.</p>
             )}
 
             {/* Final result */}
-            {execution.result && Object.keys(execution.result).length > 0 && (
+            {result && Object.keys(result).length > 0 && (
                 <div className="mt-2">
                     <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Result</h4>
                     <pre className="bg-background border rounded-md p-2 text-xs font-mono overflow-x-auto max-h-32">
-                        {JSON.stringify(execution.result, null, 2)}
+                        {JSON.stringify(result, null, 2)}
                     </pre>
                 </div>
             )}

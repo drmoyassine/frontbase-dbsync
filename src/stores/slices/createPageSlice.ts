@@ -338,9 +338,10 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
             setLoading(true);
             try {
                 const pagesRaw = await getPages(includeDeleted);
+                const safePages = Array.isArray(pagesRaw) ? pagesRaw : [];
 
                 // Deserialize containerStyles from layoutData.root to top-level
-                const pages = (pagesRaw || []).map((page: any) => {
+                const pages = safePages.map((page: any) => {
                     const layoutData = page.layoutData ?? page.layout_data ?? { content: [], root: {} };
 
                     // Extract containerStyles from layoutData.root

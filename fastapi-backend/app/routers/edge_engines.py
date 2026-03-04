@@ -207,24 +207,27 @@ def _serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) ->
 
 @router.get("/bundle-hashes/")
 async def get_bundle_hashes():
-    """Return current bundle hashes from dist/ without rebuilding.
+    """Return current source hash for drift detection.
     
-    Used by the frontend to compare against deployed engine checksums.
+    Now uses source file hashing (not build output) for immediate staleness
+    detection after any .ts edit — no build step required.
     """
-    from .cloudflare import _get_current_bundle_hash
+    from .cloudflare import _get_source_hash
+    source_hash = _get_source_hash()
     return {
-        "lite": _get_current_bundle_hash("automations"),
-        "full": _get_current_bundle_hash("full"),
+        "lite": source_hash,
+        "full": source_hash,
     }
 
 
 @router.get("/", response_model=List[EdgeEngineResponse])
 async def list_edge_engines(db: Session = Depends(get_db)):
     """List all edge engines with outdated detection."""
-    from .cloudflare import _get_current_bundle_hash
+    from .cloudflare import _get_source_hash
+    source_hash = _get_source_hash()
     current_hashes = {
-        "lite": _get_current_bundle_hash("automations"),
-        "full": _get_current_bundle_hash("full"),
+        "lite": source_hash,
+        "full": source_hash,
     }
     engines = db.query(EdgeEngine).order_by(EdgeEngine.created_at.desc()).all()
     return [_serialize_engine(e, current_hashes) for e in engines]
@@ -233,10 +236,11 @@ async def list_edge_engines(db: Session = Depends(get_db)):
 @router.get("/{engine_id}", response_model=EdgeEngineResponse)
 async def get_edge_engine(engine_id: str, db: Session = Depends(get_db)):
     """Get a single edge engine by ID."""
-    from .cloudflare import _get_current_bundle_hash
+    from .cloudflare import _get_source_hash
+    source_hash = _get_source_hash()
     current_hashes = {
-        "lite": _get_current_bundle_hash("automations"),
-        "full": _get_current_bundle_hash("full"),
+        "lite": source_hash,
+        "full": source_hash,
     }
     engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
     if not engine:
@@ -516,8 +520,9 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
 async def redeploy_engine(engine_id: str, db: Session = Depends(get_db)):
     """Redeploy an engine with the latest bundle code + current secrets.
     
-    Rebuilds the bundle, uploads new code to the existing worker,
-    patches secrets, and updates bundle_checksum and last_deployed_at.
+    Supports two deployment modes:
+    - Cloudflare: rebuilds bundle → uploads via CF API → patches secrets
+    - Docker/Node: rebuilds bundle → POSTs to engine /api/update → engine restarts
     """
     import httpx
 
@@ -525,79 +530,127 @@ async def redeploy_engine(engine_id: str, db: Session = Depends(get_db)):
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
-    # Resolve CF credentials
-    provider_id = engine.edge_provider_id
-    if not provider_id:
-        raise HTTPException(400, "Engine has no provider — cannot redeploy remotely")
-    
-    provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id).first()
-    if not provider or str(provider.provider) != 'cloudflare':
-        raise HTTPException(400, "Redeploy is only supported for Cloudflare engines")
-
-    creds = json.loads(str(provider.provider_credentials or '{}'))
-    api_token = creds.get('api_token')
-    account_id = creds.get('account_id')
-    cfg = json.loads(str(engine.engine_config or '{}'))
-    worker_name = cfg.get('worker_name')
-
-    if not api_token or not account_id or not worker_name:
-        raise HTTPException(400, "Missing Cloudflare credentials or worker_name in engine config")
-
+    engine_url = str(engine.url).rstrip('/')
     adapter_type = str(engine.adapter_type) if engine.adapter_type else "automations"
+
+    from .cloudflare import _build_worker, _get_source_hash
+
+    # Determine deployment mode
+    provider_id = engine.edge_provider_id
+    provider = None
+    is_cloudflare = False
+
+    if provider_id:
+        provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id).first()
+        is_cloudflare = provider and str(provider.provider) == 'cloudflare'
 
     try:
         # 1. Build latest bundle
-        from .cloudflare import _build_worker, _upload_worker, _set_secrets, CF_API, _headers
-
         script_content, bundle_hash = _build_worker(adapter_type)
-        script_filename = "cloudflare.js" if adapter_type == "full" else "cloudflare-lite.js"
+        source_hash = _get_source_hash() or bundle_hash
 
-        # 2. Upload new code to existing worker
-        await _upload_worker(api_token, account_id, worker_name, script_content, script_filename)
+        if is_cloudflare:
+            # ── Cloudflare Path ──────────────────────────────────────────
+            from .cloudflare import _upload_worker, _set_secrets, CF_API, _headers
 
-        # 3. Patch secrets (same bindings as current config)
-        secrets: dict[str, str] = {}
+            creds = json.loads(str(provider.provider_credentials or '{}'))
+            api_token = creds.get('api_token')
+            account_id = creds.get('account_id')
+            cfg = json.loads(str(engine.engine_config or '{}'))
+            worker_name = cfg.get('worker_name')
 
-        if engine.edge_db_id:
-            edge_db = db.query(EdgeDatabase).filter(EdgeDatabase.id == engine.edge_db_id).first()
-            if edge_db:
-                secrets['FRONTBASE_STATE_DB_URL'] = str(edge_db.db_url)
-                if edge_db.db_token:  # type: ignore[truthy-bool]
-                    secrets['FRONTBASE_STATE_DB_TOKEN'] = str(edge_db.db_token)
+            if not api_token or not account_id or not worker_name:
+                raise HTTPException(400, "Missing Cloudflare credentials or worker_name in engine config")
 
-        if engine.edge_cache_id:
-            edge_cache = db.query(EdgeCache).filter(EdgeCache.id == engine.edge_cache_id).first()
-            if edge_cache:
-                secrets['FRONTBASE_CACHE_URL'] = str(edge_cache.cache_url)
-                if edge_cache.cache_token:  # type: ignore[truthy-bool]
-                    secrets['FRONTBASE_CACHE_TOKEN'] = str(edge_cache.cache_token)
+            script_filename = "cloudflare.js" if adapter_type == "full" else "cloudflare-lite.js"
+            await _upload_worker(api_token, account_id, worker_name, script_content, script_filename)
 
-        if engine.edge_queue_id:
-            edge_queue = db.query(EdgeQueue).filter(EdgeQueue.id == engine.edge_queue_id).first()
-            if edge_queue:
-                secrets['FRONTBASE_QUEUE_PROVIDER'] = str(edge_queue.provider)
-                secrets['FRONTBASE_QUEUE_URL'] = str(edge_queue.queue_url)
-                if edge_queue.queue_token:  # type: ignore[truthy-bool]
-                    secrets['FRONTBASE_QUEUE_TOKEN'] = str(edge_queue.queue_token)
-                if edge_queue.signing_key:  # type: ignore[truthy-bool]
-                    secrets['FRONTBASE_QUEUE_SIGNING_KEY'] = str(edge_queue.signing_key)
-                if edge_queue.next_signing_key:  # type: ignore[truthy-bool]
-                    secrets['FRONTBASE_QUEUE_NEXT_SIGNING_KEY'] = str(edge_queue.next_signing_key)
+            # Patch secrets
+            secrets: dict[str, str] = {}
 
-        if secrets:
-            await _set_secrets(api_token, account_id, worker_name, secrets)
+            if engine.edge_db_id:
+                edge_db = db.query(EdgeDatabase).filter(EdgeDatabase.id == engine.edge_db_id).first()
+                if edge_db:
+                    secrets['FRONTBASE_STATE_DB_URL'] = str(edge_db.db_url)
+                    if edge_db.db_token:  # type: ignore[truthy-bool]
+                        secrets['FRONTBASE_STATE_DB_TOKEN'] = str(edge_db.db_token)
 
-        # 4. Update local record
+            if engine.edge_cache_id:
+                edge_cache = db.query(EdgeCache).filter(EdgeCache.id == engine.edge_cache_id).first()
+                if edge_cache:
+                    secrets['FRONTBASE_CACHE_URL'] = str(edge_cache.cache_url)
+                    if edge_cache.cache_token:  # type: ignore[truthy-bool]
+                        secrets['FRONTBASE_CACHE_TOKEN'] = str(edge_cache.cache_token)
+
+            if engine.edge_queue_id:
+                edge_queue = db.query(EdgeQueue).filter(EdgeQueue.id == engine.edge_queue_id).first()
+                if edge_queue:
+                    secrets['FRONTBASE_QUEUE_PROVIDER'] = str(edge_queue.provider)
+                    secrets['FRONTBASE_QUEUE_URL'] = str(edge_queue.queue_url)
+                    if edge_queue.queue_token:  # type: ignore[truthy-bool]
+                        secrets['FRONTBASE_QUEUE_TOKEN'] = str(edge_queue.queue_token)
+                    if edge_queue.signing_key:  # type: ignore[truthy-bool]
+                        secrets['FRONTBASE_QUEUE_SIGNING_KEY'] = str(edge_queue.signing_key)
+                    if edge_queue.next_signing_key:  # type: ignore[truthy-bool]
+                        secrets['FRONTBASE_QUEUE_NEXT_SIGNING_KEY'] = str(edge_queue.next_signing_key)
+
+            if secrets:
+                await _set_secrets(api_token, account_id, worker_name, secrets)
+
+        else:
+            # ── Docker / Node.js Path ────────────────────────────────────
+            # POST the built bundle to the engine's /api/update endpoint
+            async with httpx.AsyncClient() as client:
+                # Health check first
+                try:
+                    health = await client.get(f"{engine_url}/api/health", timeout=5.0)
+                    if health.status_code != 200:
+                        raise HTTPException(503, f"Engine unreachable: health check returned {health.status_code}")
+                except httpx.ConnectError:
+                    raise HTTPException(503, f"Engine unreachable at {engine_url}")
+
+                # Send update
+                update_resp = await client.post(
+                    f"{engine_url}/api/update",
+                    json={
+                        "script_content": script_content,
+                        "source_hash": source_hash,
+                        "version": "latest",
+                    },
+                    timeout=30.0,
+                )
+
+                if update_resp.status_code != 200:
+                    detail = update_resp.text
+                    raise HTTPException(update_resp.status_code, f"Engine update failed: {detail}")
+
+            # Wait for engine to restart and come back healthy
+            import asyncio
+            engine_healthy = False
+            for attempt in range(6):  # 6 attempts × 3s = 18s max wait
+                await asyncio.sleep(3)
+                try:
+                    async with httpx.AsyncClient() as client:
+                        resp = await client.get(f"{engine_url}/api/health", timeout=5.0)
+                        if resp.status_code == 200:
+                            engine_healthy = True
+                            break
+                except Exception:
+                    continue
+
+            if not engine_healthy:
+                print(f"[Redeploy] Warning: Engine {engine_url} did not come back healthy after update")
+
+        # Update local record
         deployed_at = datetime.utcnow().isoformat() + "Z"
-        engine.bundle_checksum = bundle_hash  # type: ignore[assignment]
+        engine.bundle_checksum = source_hash  # type: ignore[assignment]
         engine.last_deployed_at = deployed_at  # type: ignore[assignment]
         engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
         db.commit()
         db.refresh(engine)
 
-        # 5. Flush cache
+        # Flush cache
         cache_flushed = False
-        engine_url = str(engine.url).rstrip('/')
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(f"{engine_url}/api/cache/flush", timeout=10.0)
@@ -607,10 +660,10 @@ async def redeploy_engine(engine_id: str, db: Session = Depends(get_db)):
 
         return {
             "success": True,
-            "bundle_hash": bundle_hash,
+            "mode": "cloudflare" if is_cloudflare else "docker",
+            "source_hash": source_hash,
             "deployed_at": deployed_at,
             "cache_flushed": cache_flushed,
-            "secrets_count": len(secrets),
             "engine": _serialize_engine(engine),
         }
 

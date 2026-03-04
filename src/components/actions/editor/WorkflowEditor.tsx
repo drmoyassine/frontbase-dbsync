@@ -6,7 +6,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { ReactFlowProvider } from 'reactflow';
-import { Save, Play, Rocket, X, Plus, Loader2, ChevronDown, Server, History } from 'lucide-react';
+import { Save, Play, Rocket, X, Plus, Loader2, ChevronDown, Server, History, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -26,6 +26,7 @@ import { NodePalette } from './NodePalette';
 import { PropertiesPane } from './PropertiesPane';
 import { RecordViewer } from './RecordViewer';
 import { ExecutionLogTable } from '@/components/actions/ExecutionLogTable';
+import { WorkflowSettingsPanel, type WorkflowSettings } from './WorkflowSettingsPanel';
 import { useActionsStore } from '@/stores/actions';
 import {
     useWorkflowDraft,
@@ -100,11 +101,15 @@ export function WorkflowEditor({
     // Description state (initialized from draft)
     const [description, setDescription] = useState<string>('');
 
+    // Workflow settings state
+    const [workflowSettings, setWorkflowSettings] = useState<WorkflowSettings | null>(null);
+
     // Load draft data when available
     useEffect(() => {
         if (draft) {
             setCurrentDraft(draft.id, draft.name);
             setDescription(draft.description || '');
+            setWorkflowSettings(draft.settings as WorkflowSettings || null);
             setNodes(draft.nodes.map((n, i) => ({
                 id: n.id,
                 type: n.type === 'manual_trigger' ? 'trigger' : n.type,
@@ -192,6 +197,7 @@ export function WorkflowEditor({
                 sourceOutput: e.sourceHandle || 'output',
                 targetInput: e.targetHandle || 'input',
             })),
+            ...(workflowSettings ? { settings: workflowSettings } : {}),
         };
 
         try {
@@ -546,6 +552,16 @@ export function WorkflowEditor({
                                 </DropdownMenu>
                             </div>
                         )}
+
+                        {/* Workflow Settings */}
+                        <WorkflowSettingsPanel
+                            settings={workflowSettings}
+                            onSettingsChange={(s) => {
+                                setWorkflowSettings(s);
+                                useActionsStore.setState({ isDirty: true });
+                            }}
+                            hasDraft={!!currentDraftId}
+                        />
 
                         {onClose && (
                             <Button variant="ghost" size="icon" onClick={handleClose}>

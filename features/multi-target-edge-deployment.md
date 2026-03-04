@@ -41,17 +41,34 @@ When you hit **Publish**, the backend:
 
 **No redeployment needed** — Edge Workers pick up new content automatically.
 
-## Bundle Versioning
+## Bundle Versioning (Source-Based)
 
-Each deploy stores a **12-char SHA-256 hash** of the uploaded JS bundle. When the local source changes:
+Each deploy stores a **12-char SHA-256 hash** of the **source files** (`services/edge/src/**/*.ts`). Staleness is detected immediately after any `.ts` edit — no build step required.
 
 | State | Badge | Action |
 |-------|-------|--------|
-| Hash matches dist | `✓ Synced` | None |
-| Hash doesn't match | `⚠ Outdated` | One-click **Redeploy** button appears |
+| Source hash matches | `✓ Synced` | None |
+| Source hash differs | `⚠ Outdated` | One-click **Redeploy** button appears |
 | No hash stored (pre-existing) | `⚠ Outdated` | Treated as outdated until first redeploy |
 
-Redeploy rebuilds the bundle, uploads to the existing worker, patches secrets, and flushes cache — all in one click.
+Redeploy auto-detects the engine type and routes accordingly:
+
+| Engine Type | Redeploy Flow |
+|---|---|
+| **Cloudflare** | Build → CF API upload → patch secrets → flush cache |
+| **Docker** | Build → POST `/api/update` → engine restarts → health check |
+
+## Docker Self-Update
+
+Docker/Node.js engines expose `POST /api/update` for remote code updates:
+
+1. Backend builds the latest bundle
+2. POSTs `{ script_content, source_hash }` to the engine
+3. Engine writes bundle atomically to `dist/index.js`
+4. Engine exits gracefully → Docker `restart: always` brings it back
+5. Backend waits for health check (up to 18s) → marks as Synced
+
+Same UX as Cloudflare — user clicks Redeploy, backend handles the rest.
 
 ## Edge Queue Integration
 
@@ -65,3 +82,17 @@ FRONTBASE_QUEUE_SIGNING_KEY=sig_6c...
 ```
 
 Queues are configured in Settings → Edge Queues, then attached to engines in both the Deploy and Reconfigure dialogs.
+
+## Per-Workflow Settings
+
+Each workflow can be configured with runtime settings via the Settings panel (gear icon in editor toolbar):
+
+| Setting | Default | Description |
+|---|---|---|
+| Rate Limit | 60/min | Max executions per window |
+| Debounce | 0 ms | Deduplicate rapid triggers |
+| Execution Timeout | 29000 ms | Max runtime before abort |
+| Queue Enabled | false | Use durable queue for retries |
+| Max Retries | 3 | Queue retry attempts |
+
+Settings are stored as JSON on the workflow draft, deployed to edge engines, and applied at runtime in both `/api/execute` and `/api/webhook` routes. QStash signature verification activates when `Upstash-Signature` header is present.

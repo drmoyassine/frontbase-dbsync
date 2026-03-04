@@ -23,6 +23,62 @@
 
 ### Backend (Python)
 
+#### 🔴 `routers/edge_engines.py` — **974 lines** (Highest Priority)
+
+**Concern audit (6 distinct responsibilities):**
+
+| Concern | Lines | Functions |
+|---|---|---|
+| Pydantic schemas (8 models) | 30–112 | `EdgeEngineCreate`, `Update`, `Response`, `TestConnectionResult`, `BatchRequest`, `BatchDeleteRequest`, `BatchToggleRequest`, `BatchResult` |
+| Serializer + staleness | 119–199 | `_serialize_engine` |
+| CRUD endpoints | 208–304 | `get_bundle_hashes`, `list`, `get`, `create`, `update` |
+| Reconfigure (CF binding mgmt) | 307–516 | `ReconfigureRequest`, `FRONTBASE_BINDING_NAMES`, `reconfigure_engine` (190 lines!) |
+| Redeploy (CF + Docker dual-mode) | 519–675 | `redeploy_engine` (157 lines!) |
+| Test, Delete, Batch ops, Scope | 678–973 | `delete`, `test`, `_test_target_connection`, `_extract_cf_creds`, `_delete_cloudflare_worker*`, batch CRUD (3), `list_active_engines_by_scope` |
+
+**Proposed split:**
+
+| New File | Lines | Contains |
+|---|---|---|
+| `schemas/edge_engines.py` | ~90 | All 8 Pydantic schemas + `_serialize_engine` |
+| `services/engine_deploy.py` | ~200 | `redeploy_engine` logic (CF + Docker paths), `_build_secrets_dict()` |
+| `services/engine_reconfigure.py` | ~200 | `reconfigure_engine` logic, `FRONTBASE_BINDING_NAMES`, CF PATCH calls |
+| `services/engine_test.py` | ~60 | `_test_target_connection`, `_delete_cloudflare_worker*`, `_extract_cf_creds` |
+| `routers/edge_engines.py` | ~200 | Thin router: CRUD, batch endpoints, scope query — all delegating to services |
+
+---
+
+#### 🔴 `routers/cloudflare.py` — **880 lines** (High Priority)
+
+**Concern audit (5 distinct responsibilities):**
+
+| Concern | Lines | Functions |
+|---|---|---|
+| Pydantic schemas (5 models) | 45–74 | `ConnectRequest`, `DeployRequest`, `StatusRequest`, `TeardownRequest`, `InspectRequest` |
+| CF API helpers (low-level HTTP) | 81–242 | `_get_provider_credentials`, `_headers`, `_list_workers`, `_detect_account_id`, `_upload_worker`, `_enable_workers_dev`, `_set_secrets` |
+| Bundle hash & build utilities | 245–365 | `_compute_bundle_hash`, `_get_current_bundle_hash`, `_get_source_hash`, `_build_worker` |
+| Deploy/status/teardown endpoints | 372–707 | `connect_cloudflare`, `deploy_to_cloudflare` (177 lines!), `cloudflare_status`, `teardown_cloudflare` |
+| Inspector endpoints | 714–878 | `_inspect_content_sync`, `_inspect_settings_sync`, `inspect_worker_content`, `inspect_worker_settings`, `inspect_worker_secrets` |
+
+**Proposed split:**
+
+| New File | Lines | Contains |
+|---|---|---|
+| `schemas/cloudflare.py` | ~30 | `ConnectRequest`, `DeployRequest`, `StatusRequest`, `TeardownRequest`, `InspectRequest` |
+| `services/cloudflare_api.py` | ~180 | All CF API v4 helpers: `_headers`, `_list_workers`, `_detect_account_id`, `_upload_worker`, `_enable_workers_dev`, `_set_secrets`, `_get_provider_credentials` |
+| `services/bundle_hash.py` | ~60 | `_compute_bundle_hash`, `_get_source_hash`, `_get_current_bundle_hash` (shared by `edge_engines.py` too) |
+| `services/bundle_builder.py` | ~80 | `_build_worker` — delegates to edge `/api/build-bundle` or local `npx tsup` |
+| `routers/cloudflare.py` | ~250 | Thin router: `connect`, `deploy`, `status`, `teardown` — delegating to services |
+| `routers/cloudflare_inspector.py` | ~170 | Inspector endpoints: `inspect_content`, `inspect_settings`, `inspect_secrets` + sync helpers |
+
+---
+
+#### ⚠️ Shared Extraction: `services/bundle_hash.py`
+
+Both `cloudflare.py` and `edge_engines.py` import `_get_source_hash`. After refactoring, this should live in a shared `services/bundle_hash.py` to avoid circular imports. The `edge_engines.py` redeploy also calls `_build_worker` — it should import from `services/bundle_builder.py`.
+
+---
+
 | File | Lines | Issue | Proposed Split |
 |------|-------|-------|----------------|
 | `services/sync/adapters/supabase_adapter.py` | **800** | Supabase adapter handles schema introspection, query building, and data fetching in one file | Split into `supabase_schema.py` (introspection), `supabase_query.py` (query builder), `supabase_adapter.py` (thin orchestrator) |
@@ -78,9 +134,11 @@
 - ~~`edge-migrations.ts` marks version applied before SQL~~ → Fixed: version record now inserted AFTER SQL succeeds
 - Added `ensureInitialized()` init gate in `storage/index.ts` Proxy — prevents CF Worker race condition where DB operations run before migrations complete
 
-### 3.6 QStash Coupling (Planned Fix — 2026-03-04)
-- QStash credentials are currently on `EdgeCache` model — wrong domain
-- **Action**: Extract into new `EdgeQueue` entity (peer to EdgeDB + EdgeCache) per `memory-bank/tomorrows-session.md`
+### 3.6 QStash Coupling (Resolved ✅ — 2026-03-04)
+- ~~QStash credentials on `EdgeCache` model~~ → Extracted into `EdgeQueue` entity (peer to EdgeDB + EdgeCache)
+- `engine/queue.ts` replaces `qstash.ts` — reads `FRONTBASE_QUEUE_*` with `QSTASH_*` fallback
+- Per-workflow rate limiting + debounce via `workflow.settings` (no longer hardcoded)
+- QStash signature verification on `/api/execute/:id` when `Upstash-Signature` header present
 
 ---
 
@@ -102,21 +160,23 @@
 
 | # | Item | Effort | Impact | Status |
 |---|------|--------|--------|--------|
-| 1 | ~~Archive `publish_strategy.py`~~ | 5 min | Removes 93 lines of dead code | ✅ Done |
-| 2 | ~~Archive `db/pages-store.ts`~~ (kept `project-settings.ts`) | 5 min | Removes ~60 lines of dead code | ✅ Done |
-| 3 | Extract shared Drizzle schema from providers | 30 min | Prevents future schema drift | Pending |
-| 4 | ~~Remove double `stateProvider.init()`~~ | 5 min | Removes redundant DB init | ✅ Done |
-| 5 | ~~Fix migration runner version tracking~~ | 15 min | Prevents phantom migrations | ✅ Done |
-| 6 | Split `publish.py` into router + services | 30 min | AGENTS.md compliance | Pending |
-| 7 | Split `models/models.py` by domain | 45 min | Maintainability | Pending |
-| 8 | Split `nodeSchemas.ts` by node category | 30 min | Reduces cognitive load | Pending |
-| 9 | Split `FileBrowser/index.tsx` into subcomponents | 1 hr | React best practices | Pending |
-| 10 | Split `runtime.ts` data-fetching logic | 45 min | Separation of concerns | Pending |
-| 11 | Split `WorkflowEditor.tsx` into subcomponents | 45 min | Extracts massive inline toolbars/state | Pending |
-| 12 | Split `AutomationsContentPanel.tsx` into subcomponents | 45 min | Extracts analytics, filters, tables | Pending |
-| 13 | Fix stale `advanced-query` 404 on VPS (no Supabase) | 30 min | Prevents noisy 404s in logs | Low Priority |
-| 14 | **Split `EdgeCachesForm.tsx` (635→~200 + 250 + 150)** | 45 min | Extract `EdgeCacheDialog.tsx`, `useEdgeCacheForm.ts` hook | Pending |
-| 15 | **Extract `edge_caches.py` test helpers (383→~200 + 180)** | 20 min | Move `_test_cache`, `_test_upstash`, `_test_qstash` into `services/cache_tester.py` | Pending |
+| 1 | **Split `edge_engines.py` (974→5 files)** | 2 hr | 🔴 Highest — 6 concerns in 1 file, blocks clean maintenance | Pending |
+| 2 | **Split `cloudflare.py` (880→6 files)** | 1.5 hr | 🔴 High — 5 concerns, shared bundle utils need extraction | Pending |
+| 3 | ~~Archive `publish_strategy.py`~~ | 5 min | Removes 93 lines of dead code | ✅ Done |
+| 4 | ~~Archive `db/pages-store.ts`~~ (kept `project-settings.ts`) | 5 min | Removes ~60 lines of dead code | ✅ Done |
+| 5 | Extract shared Drizzle schema from providers | 30 min | Prevents future schema drift | Pending |
+| 6 | ~~Remove double `stateProvider.init()`~~ | 5 min | Removes redundant DB init | ✅ Done |
+| 7 | ~~Fix migration runner version tracking~~ | 15 min | Prevents phantom migrations | ✅ Done |
+| 8 | Split `publish.py` into router + services | 30 min | AGENTS.md compliance | Pending |
+| 9 | Split `models/models.py` by domain | 45 min | Maintainability | Pending |
+| 10 | Split `nodeSchemas.ts` by node category | 30 min | Reduces cognitive load | Pending |
+| 11 | Split `FileBrowser/index.tsx` into subcomponents | 1 hr | React best practices | Pending |
+| 12 | Split `runtime.ts` data-fetching logic | 45 min | Separation of concerns | Pending |
+| 13 | Split `WorkflowEditor.tsx` into subcomponents | 45 min | Extracts massive inline toolbars/state | Pending |
+| 14 | Split `AutomationsContentPanel.tsx` into subcomponents | 45 min | Extracts analytics, filters, tables | Pending |
+| 15 | Fix stale `advanced-query` 404 on VPS (no Supabase) | 30 min | Prevents noisy 404s in logs | Low Priority |
+| 16 | **Split `EdgeCachesForm.tsx` (635→~200 + 250 + 150)** | 45 min | Extract `EdgeCacheDialog.tsx`, `useEdgeCacheForm.ts` hook | Pending |
+| 17 | **Extract `edge_caches.py` test helpers (383→~200 + 180)** | 20 min | Move `_test_cache`, `_test_upstash`, `_test_qstash` into `services/cache_tester.py` | Pending |
 
 ### Item 11: Stale `advanced-query` 404 Details
 

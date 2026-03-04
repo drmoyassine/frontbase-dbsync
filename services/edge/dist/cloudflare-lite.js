@@ -412,6 +412,48 @@ var require_promise_limit = __commonJS({
     };
   }
 });
+
+// src/cache/NullCacheProvider.ts
+var NullCacheProvider;
+var init_NullCacheProvider = __esm({
+  "src/cache/NullCacheProvider.ts"() {
+    NullCacheProvider = class {
+      async get(_key) {
+        return null;
+      }
+      async set(_key, _value) {
+      }
+      async setex(_key, _seconds, _value) {
+      }
+      async del(..._keys) {
+        return 0;
+      }
+      async keys(_pattern) {
+        return [];
+      }
+      async ping() {
+        return "PONG (null-cache)";
+      }
+      // Queue ops
+      async lpush(_key, ..._elements) {
+        return 0;
+      }
+      async rpop(_key) {
+        return null;
+      }
+      async llen(_key) {
+        return 0;
+      }
+      // Rate limiting — always allow
+      async incr(_key) {
+        return 1;
+      }
+      async expire(_key, _seconds) {
+        return 1;
+      }
+    };
+  }
+});
 var subtle;
 var init_crypto_node = __esm({
   "node_modules/uncrypto/dist/crypto.node.mjs"() {
@@ -15200,6 +15242,59 @@ var init_redis = __esm({
   }
 });
 
+// src/cache/index.ts
+function createInitialProvider2() {
+  const cacheUrl = process.env.FRONTBASE_CACHE_URL;
+  const cacheToken = process.env.FRONTBASE_CACHE_TOKEN;
+  if (cacheUrl && cacheUrl.startsWith("http") && cacheToken) {
+    try {
+      const { initRedis: initRedis2 } = (init_redis(), __toCommonJS(redis_exports));
+      console.log("\u{1F534} Cache: HTTP provider");
+      return initRedis2({ url: cacheUrl, token: cacheToken });
+    } catch {
+      console.warn("\u26A0\uFE0F Failed to init HTTP cache adapter, falling back to NullCache");
+      return new NullCacheProvider();
+    }
+  }
+  if (cacheUrl && !cacheUrl.startsWith("http")) {
+    try {
+      const { initRedis: initRedis2 } = (init_redis(), __toCommonJS(redis_exports));
+      console.log("\u{1F534} Cache: IoRedis TCP provider");
+      return initRedis2({ url: cacheUrl });
+    } catch {
+      console.warn("\u26A0\uFE0F Failed to init IoRedis adapter, falling back to NullCache");
+      return new NullCacheProvider();
+    }
+  }
+  console.log("\u2B1C Cache: NullCacheProvider (no cache configured)");
+  return new NullCacheProvider();
+}
+function getCacheProvider() {
+  if (!_provider2) {
+    _provider2 = createInitialProvider2();
+  }
+  return _provider2;
+}
+var _provider2, cacheProvider;
+var init_cache = __esm({
+  "src/cache/index.ts"() {
+    init_NullCacheProvider();
+    init_NullCacheProvider();
+    init_redis();
+    _provider2 = null;
+    cacheProvider = new Proxy({}, {
+      get(_target, prop) {
+        const provider = getCacheProvider();
+        const value = provider[prop];
+        if (typeof value === "function") {
+          return value.bind(provider);
+        }
+        return value;
+      }
+    });
+  }
+});
+
 // node_modules/jose/dist/node/cjs/runtime/digest.js
 var require_digest = __commonJS({
   "node_modules/jose/dist/node/cjs/runtime/digest.js"(exports$1) {
@@ -26738,10 +26833,10 @@ var require_qstash = __commonJS({
         }
       }
     }
-    function updateProviderInfo(providerInfo, baseUrl, route5) {
+    function updateProviderInfo(providerInfo, baseUrl, route6) {
       providerInfo.baseUrl = baseUrl;
-      providerInfo.route = route5;
-      providerInfo.url = `${baseUrl}/${route5.join("/")}`;
+      providerInfo.route = route6;
+      providerInfo.url = `${baseUrl}/${route6.join("/")}`;
     }
     var RATELIMIT_STATUS = 429;
     var QstashError = class extends Error {
@@ -28181,6 +28276,31 @@ var require_qstash = __commonJS({
   }
 });
 
+// src/engine/debounce.ts
+var debounce_exports = {};
+__export(debounce_exports, {
+  shouldDebounce: () => shouldDebounce
+});
+async function shouldDebounce(workflowId, windowSeconds = 0) {
+  if (windowSeconds <= 0) return false;
+  try {
+    const key = `wf:${workflowId}:debounce`;
+    const existing = await cacheProvider.get(key);
+    if (existing) {
+      return true;
+    }
+    await cacheProvider.setex(key, windowSeconds, "1");
+    return false;
+  } catch {
+    return false;
+  }
+}
+var init_debounce = __esm({
+  "src/engine/debounce.ts"() {
+    init_cache();
+  }
+});
+
 // node_modules/@asteasolutions/zod-to-openapi/dist/index.mjs
 function __rest(s, e) {
   var t = {};
@@ -28429,10 +28549,10 @@ var OpenAPIRegistry = class {
   /**
    * Registers a new path that would be generated under paths:
    */
-  registerPath(route5) {
+  registerPath(route6) {
     this._definitions.push({
       type: "route",
-      route: route5
+      route: route6
     });
   }
   /**
@@ -29209,8 +29329,8 @@ var OpenAPIGenerator = class {
     }
     return isZodType(schema, "ZodEffects") ? this.cleanParameter(schema._def.schema) : schema;
   }
-  generatePath(route5) {
-    const { method, path, request, responses } = route5, pathItemConfig = __rest(route5, ["method", "path", "request", "responses"]);
+  generatePath(route6) {
+    const { method, path, request, responses } = route6, pathItemConfig = __rest(route6, ["method", "path", "request", "responses"]);
     const generatedResponses = mapValues(responses, (response) => {
       return this.getResponse(response);
     });
@@ -29223,9 +29343,9 @@ var OpenAPIGenerator = class {
     };
     return routeDoc;
   }
-  generateSingleRoute(route5) {
-    const routeDoc = this.generatePath(route5);
-    this.pathRefs[route5.path] = Object.assign(Object.assign({}, this.pathRefs[route5.path]), routeDoc);
+  generateSingleRoute(route6) {
+    const routeDoc = this.generatePath(route6);
+    this.pathRefs[route6.path] = Object.assign(Object.assign({}, this.pathRefs[route6.path]), routeDoc);
     return routeDoc;
   }
   getResponse(response) {
@@ -29372,9 +29492,9 @@ var OpenApiGeneratorV31 = class {
   generateComponents() {
     return this.generator.generateComponents();
   }
-  generateSingleWebhook(route5) {
-    const routeDoc = this.generator.generatePath(route5);
-    this.webhookRefs[route5.path] = Object.assign(Object.assign({}, this.webhookRefs[route5.path]), routeDoc);
+  generateSingleWebhook(route6) {
+    const routeDoc = this.generator.generatePath(route6);
+    this.webhookRefs[route6.path] = Object.assign(Object.assign({}, this.webhookRefs[route6.path]), routeDoc);
     return routeDoc;
   }
 };
@@ -34172,7 +34292,7 @@ var HonoRequest = class {
    * ```
    */
   get matchedRoutes() {
-    return this.#matchResult[0].map(([[, route5]]) => route5);
+    return this.#matchResult[0].map(([[, route6]]) => route6);
   }
   /**
    * `routePath()` can retrieve the path registered within the handler
@@ -34191,7 +34311,7 @@ var HonoRequest = class {
    * ```
    */
   get routePath() {
-    return this.#matchResult[0].map(([[, route5]]) => route5)[this.routeIndex].path;
+    return this.#matchResult[0].map(([[, route6]]) => route6)[this.routeIndex].path;
   }
 };
 
@@ -35300,7 +35420,7 @@ function buildMatcherFromPreprocessedRoutes(routes) {
     return nullMatcher;
   }
   const routesWithStaticPathFlag = routes.map(
-    (route5) => [!/\*|\/:/.test(route5[0]), ...route5]
+    (route6) => [!/\*|\/:/.test(route6[0]), ...route6]
   ).sort(
     ([isStaticA, pathA], [isStaticB, pathB]) => isStaticA ? 1 : isStaticB ? -1 : pathA.length - pathB.length
   );
@@ -35747,26 +35867,26 @@ var OpenAPIHono = class _OpenAPIHono extends Hono2 {
    *  }
    *)
    */
-  openapi = ({ middleware: routeMiddleware, ...route5 }, handler, hook = this.defaultHook) => {
-    this.openAPIRegistry.registerPath(route5);
+  openapi = ({ middleware: routeMiddleware, ...route6 }, handler, hook = this.defaultHook) => {
+    this.openAPIRegistry.registerPath(route6);
     const validators = [];
-    if (route5.request?.query) {
-      const validator2 = zValidator("query", route5.request.query, hook);
+    if (route6.request?.query) {
+      const validator2 = zValidator("query", route6.request.query, hook);
       validators.push(validator2);
     }
-    if (route5.request?.params) {
-      const validator2 = zValidator("param", route5.request.params, hook);
+    if (route6.request?.params) {
+      const validator2 = zValidator("param", route6.request.params, hook);
       validators.push(validator2);
     }
-    if (route5.request?.headers) {
-      const validator2 = zValidator("header", route5.request.headers, hook);
+    if (route6.request?.headers) {
+      const validator2 = zValidator("header", route6.request.headers, hook);
       validators.push(validator2);
     }
-    if (route5.request?.cookies) {
-      const validator2 = zValidator("cookie", route5.request.cookies, hook);
+    if (route6.request?.cookies) {
+      const validator2 = zValidator("cookie", route6.request.cookies, hook);
       validators.push(validator2);
     }
-    const bodyContent = route5.request?.body?.content;
+    const bodyContent = route6.request?.body?.content;
     if (bodyContent) {
       for (const mediaType of Object.keys(bodyContent)) {
         if (!bodyContent[mediaType]) {
@@ -35778,7 +35898,7 @@ var OpenAPIHono = class _OpenAPIHono extends Hono2 {
         }
         if (isJSONContentType(mediaType)) {
           const validator2 = zValidator("json", schema, hook);
-          if (route5.request?.body?.required) {
+          if (route6.request?.body?.required) {
             validators.push(validator2);
           } else {
             const mw = async (c, next) => {
@@ -35795,7 +35915,7 @@ var OpenAPIHono = class _OpenAPIHono extends Hono2 {
         }
         if (isFormContentType(mediaType)) {
           const validator2 = zValidator("form", schema, hook);
-          if (route5.request?.body?.required) {
+          if (route6.request?.body?.required) {
             validators.push(validator2);
           } else {
             const mw = async (c, next) => {
@@ -35814,8 +35934,8 @@ var OpenAPIHono = class _OpenAPIHono extends Hono2 {
     }
     const middleware2 = routeMiddleware ? Array.isArray(routeMiddleware) ? routeMiddleware : [routeMiddleware] : [];
     this.on(
-      [route5.method],
-      route5.path.replaceAll(/\/{(.+?)}/g, "/:$1"),
+      [route6.method],
+      route6.path.replaceAll(/\/{(.+?)}/g, "/:$1"),
       ...middleware2,
       ...validators,
       handler
@@ -35904,13 +36024,13 @@ var OpenAPIHono = class _OpenAPIHono extends Hono2 {
   }
 };
 var createRoute = (routeConfig) => {
-  const route5 = {
+  const route6 = {
     ...routeConfig,
     getRoutingPath() {
       return routeConfig.path.replaceAll(/\/{(.+?)}/g, "/:$1");
     }
   };
-  return Object.defineProperty(route5, "getRoutingPath", { enumerable: false });
+  return Object.defineProperty(route6, "getRoutingPath", { enumerable: false });
 };
 extendZodWithOpenApi(external_exports);
 function addBasePathToDocument(document2, basePath) {
@@ -50560,6 +50680,13 @@ var MIGRATIONS = [
     sql: [
       `ALTER TABLE published_pages ADD COLUMN content_hash TEXT`
     ]
+  },
+  {
+    version: 4,
+    description: "Add settings column to workflows",
+    sql: [
+      `ALTER TABLE workflows ADD COLUMN settings TEXT`
+    ]
   }
 ];
 async function runMigrations(execute, providerName) {
@@ -50633,6 +50760,7 @@ var workflowsTable = sqliteTable("workflows", {
   triggerConfig: text("trigger_config"),
   nodes: text("nodes").notNull(),
   edges: text("edges").notNull(),
+  settings: text("settings"),
   version: integer("version").notNull().default(1),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -50821,6 +50949,7 @@ var TursoHttpProvider = class {
         triggerConfig: workflow.triggerConfig,
         nodes: workflow.nodes,
         edges: workflow.edges,
+        settings: workflow.settings || null,
         version: newVersion,
         updatedAt: now,
         publishedBy: workflow.publishedBy
@@ -50835,6 +50964,7 @@ var TursoHttpProvider = class {
         triggerConfig: workflow.triggerConfig,
         nodes: workflow.nodes,
         edges: workflow.edges,
+        settings: workflow.settings || null,
         version: 1,
         isActive: true,
         createdAt: now,
@@ -51279,90 +51409,8 @@ function v4(options, buf, offset2) {
 }
 var v4_default = v4;
 
-// src/cache/NullCacheProvider.ts
-var NullCacheProvider = class {
-  async get(_key) {
-    return null;
-  }
-  async set(_key, _value) {
-  }
-  async setex(_key, _seconds, _value) {
-  }
-  async del(..._keys) {
-    return 0;
-  }
-  async keys(_pattern) {
-    return [];
-  }
-  async ping() {
-    return "PONG (null-cache)";
-  }
-  // Queue ops
-  async lpush(_key, ..._elements) {
-    return 0;
-  }
-  async rpop(_key) {
-    return null;
-  }
-  async llen(_key) {
-    return 0;
-  }
-  // Rate limiting — always allow
-  async incr(_key) {
-    return 1;
-  }
-  async expire(_key, _seconds) {
-    return 1;
-  }
-};
-
-// src/cache/index.ts
-init_redis();
-var _provider2 = null;
-function createInitialProvider2() {
-  const cacheUrl = process.env.FRONTBASE_CACHE_URL;
-  const cacheToken = process.env.FRONTBASE_CACHE_TOKEN;
-  if (cacheUrl && cacheUrl.startsWith("http") && cacheToken) {
-    try {
-      const { initRedis: initRedis2 } = (init_redis(), __toCommonJS(redis_exports));
-      console.log("\u{1F534} Cache: HTTP provider");
-      return initRedis2({ url: cacheUrl, token: cacheToken });
-    } catch {
-      console.warn("\u26A0\uFE0F Failed to init HTTP cache adapter, falling back to NullCache");
-      return new NullCacheProvider();
-    }
-  }
-  if (cacheUrl && !cacheUrl.startsWith("http")) {
-    try {
-      const { initRedis: initRedis2 } = (init_redis(), __toCommonJS(redis_exports));
-      console.log("\u{1F534} Cache: IoRedis TCP provider");
-      return initRedis2({ url: cacheUrl });
-    } catch {
-      console.warn("\u26A0\uFE0F Failed to init IoRedis adapter, falling back to NullCache");
-      return new NullCacheProvider();
-    }
-  }
-  console.log("\u2B1C Cache: NullCacheProvider (no cache configured)");
-  return new NullCacheProvider();
-}
-function getCacheProvider() {
-  if (!_provider2) {
-    _provider2 = createInitialProvider2();
-  }
-  return _provider2;
-}
-var cacheProvider = new Proxy({}, {
-  get(_target, prop) {
-    const provider = getCacheProvider();
-    const value = provider[prop];
-    if (typeof value === "function") {
-      return value.bind(provider);
-    }
-    return value;
-  }
-});
-
 // src/engine/checkpoint.ts
+init_cache();
 var CHECKPOINT_TTL = 3600;
 function checkpointKey(executionId) {
   return `exec:${executionId}:checkpoint`;
@@ -51783,6 +51831,85 @@ async function updateExecutionStatus(executionId, status, nodeExecutions) {
 
 // src/routes/execute.ts
 init_redis();
+
+// src/engine/queue.ts
+var queueClient = null;
+var queueInitialized = false;
+function getQueueProvider() {
+  return process.env.FRONTBASE_QUEUE_PROVIDER || "qstash";
+}
+function getQueueClient() {
+  if (queueInitialized) return queueClient;
+  queueInitialized = true;
+  const token = process.env.FRONTBASE_QUEUE_TOKEN || process.env.QSTASH_TOKEN;
+  if (!token) {
+    console.log("\u2B1C Queue: not configured (no FRONTBASE_QUEUE_TOKEN)");
+    return null;
+  }
+  const provider = getQueueProvider();
+  if (provider === "qstash") {
+    try {
+      const { Client: Client2 } = require_qstash();
+      queueClient = new Client2({ token });
+      console.log("\u{1F504} Queue: QStash durable execution enabled");
+      return queueClient;
+    } catch {
+      console.warn("\u26A0\uFE0F Queue: @upstash/qstash not installed, durable execution disabled");
+      return null;
+    }
+  }
+  console.warn(`\u26A0\uFE0F Queue: unsupported provider "${provider}", durable execution disabled`);
+  return null;
+}
+function isQueueEnabled() {
+  return getQueueClient() !== null;
+}
+var isQStashEnabled = isQueueEnabled;
+async function publishExecution(destinationUrl, payload) {
+  const client = getQueueClient();
+  if (!client) return null;
+  const provider = getQueueProvider();
+  if (provider === "qstash") {
+    try {
+      const result = await client.publishJSON({
+        url: destinationUrl,
+        body: payload,
+        retries: 3
+      });
+      return result.messageId || null;
+    } catch (error) {
+      console.error("[Queue] Publish failed:", error.message);
+      return null;
+    }
+  }
+  console.warn(`[Queue] Publishing not implemented for provider "${provider}"`);
+  return null;
+}
+async function verifyQueueSignature(signature, _body) {
+  if (!signature) return false;
+  const provider = getQueueProvider();
+  if (provider === "qstash") {
+    const currentKey = process.env.FRONTBASE_QUEUE_SIGNING_KEY || process.env.QSTASH_CURRENT_SIGNING_KEY;
+    const nextKey = process.env.FRONTBASE_QUEUE_NEXT_SIGNING_KEY || process.env.QSTASH_NEXT_SIGNING_KEY;
+    if (!currentKey && !nextKey) {
+      console.warn("[Queue] No signing keys configured, skipping verification");
+      return true;
+    }
+    try {
+      const { Receiver } = require_qstash();
+      const receiver = new Receiver({
+        currentSigningKey: currentKey || "",
+        nextSigningKey: nextKey || ""
+      });
+      return await receiver.verify({ signature, body: _body });
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+// src/routes/execute.ts
 var executeRoute = new OpenAPIHono();
 var route3 = createRoute({
   method: "post",
@@ -51835,12 +51962,31 @@ var route3 = createRoute({
           schema: ErrorResponseSchema
         }
       }
+    },
+    401: {
+      description: "Unauthorized (invalid QStash signature)",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema
+        }
+      }
     }
   }
 });
 executeRoute.openapi(route3, async (c) => {
   const { id } = c.req.valid("param");
-  const body = await c.req.json().catch(() => ({}));
+  const rawBody = await c.req.text();
+  const body = rawBody ? JSON.parse(rawBody) : {};
+  const qstashSignature = c.req.header("Upstash-Signature");
+  if (qstashSignature) {
+    const valid = await verifyQueueSignature(qstashSignature, rawBody);
+    if (!valid) {
+      return c.json({
+        error: "Unauthorized",
+        message: "Invalid QStash signature"
+      }, 401);
+    }
+  }
   const workflow = await stateProvider.getWorkflowById(id);
   if (!workflow) {
     return c.json({
@@ -51854,20 +52000,36 @@ executeRoute.openapi(route3, async (c) => {
       message: `Workflow ${id} is not active`
     }, 400);
   }
-  try {
-    const { allowed, remaining } = await rateLimit(
-      `wf:${id}:rate:${Math.floor(Date.now() / 6e4)}`,
-      60,
-      60
-    );
-    if (!allowed) {
+  const settings = workflow.settings ? JSON.parse(workflow.settings) : {};
+  const rateLimitEnabled = settings.rate_limit_enabled !== false;
+  const rateLimitMax = settings.rate_limit_max || 60;
+  const debounceSec = Math.ceil((settings.debounce_ms || 0) / 1e3);
+  if (debounceSec > 0) {
+    const { shouldDebounce: shouldDebounce2 } = await Promise.resolve().then(() => (init_debounce(), debounce_exports));
+    const debounced = await shouldDebounce2(id, debounceSec);
+    if (debounced) {
       return c.json({
-        error: "RateLimited",
-        message: `Workflow ${id} rate limit exceeded (60/min). Retry after 1 minute.`
+        error: "Debounced",
+        message: `Workflow ${id} was triggered too recently (${settings.debounce_ms}ms window)`
       }, 429);
     }
-    c.header("X-RateLimit-Remaining", String(remaining));
-  } catch {
+  }
+  if (rateLimitEnabled) {
+    try {
+      const { allowed, remaining } = await rateLimit(
+        `wf:${id}:rate:${Math.floor(Date.now() / 6e4)}`,
+        rateLimitMax,
+        60
+      );
+      if (!allowed) {
+        return c.json({
+          error: "RateLimited",
+          message: `Workflow ${id} rate limit exceeded (${rateLimitMax}/min). Retry after 1 minute.`
+        }, 429);
+      }
+      c.header("X-RateLimit-Remaining", String(remaining));
+    } catch {
+    }
   }
   const executionId = v4_default();
   const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -51957,64 +52119,7 @@ executeRoute.openapi(singleNodeRoute, async (c) => {
 
 // src/routes/webhook.ts
 init_redis();
-
-// src/engine/debounce.ts
-async function shouldDebounce(workflowId, windowSeconds = 0) {
-  if (windowSeconds <= 0) return false;
-  try {
-    const key = `wf:${workflowId}:debounce`;
-    const existing = await cacheProvider.get(key);
-    if (existing) {
-      return true;
-    }
-    await cacheProvider.setex(key, windowSeconds, "1");
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-// src/engine/qstash.ts
-var qstashClient = null;
-var qstashInitialized = false;
-function getQStashClient() {
-  if (qstashInitialized) return qstashClient;
-  qstashInitialized = true;
-  const token = process.env.QSTASH_TOKEN;
-  if (!token) {
-    console.log("\u2B1C QStash: not configured (no QSTASH_TOKEN)");
-    return null;
-  }
-  try {
-    const { Client: Client2 } = require_qstash();
-    qstashClient = new Client2({ token });
-    console.log("\u{1F504} QStash: durable execution enabled");
-    return qstashClient;
-  } catch {
-    console.warn("\u26A0\uFE0F QStash: @upstash/qstash not installed, durable execution disabled");
-    return null;
-  }
-}
-function isQStashEnabled() {
-  return getQStashClient() !== null;
-}
-async function publishExecution(destinationUrl, payload) {
-  const client = getQStashClient();
-  if (!client) return null;
-  try {
-    const result = await client.publishJSON({
-      url: destinationUrl,
-      body: payload,
-      retries: 3
-    });
-    return result.messageId || null;
-  } catch (error) {
-    console.error("[QStash] Publish failed:", error.message);
-    return null;
-  }
-}
-
-// src/routes/webhook.ts
+init_debounce();
 var webhookRoute = new OpenAPIHono();
 var route4 = createRoute({
   method: "post",
@@ -52116,26 +52221,32 @@ webhookRoute.openapi(route4, async (c) => {
         }
       }
     }
-    try {
-      const { allowed, remaining } = await rateLimit(
-        `wf:${id}:rate:${Math.floor(Date.now() / 6e4)}`,
-        60,
-        60
-      );
-      if (!allowed) {
-        return c.json({
-          error: "RateLimited",
-          message: `Workflow ${id} rate limit exceeded (60/min). Retry after 1 minute.`
-        }, 429);
+    const settings = workflow.settings ? JSON.parse(workflow.settings) : {};
+    const rateLimitEnabled = settings.rate_limit_enabled !== false;
+    const rateLimitMax = settings.rate_limit_max || 60;
+    const debounceSec = Math.ceil((settings.debounce_ms || 0) / 1e3);
+    if (rateLimitEnabled) {
+      try {
+        const { allowed, remaining } = await rateLimit(
+          `wf:${id}:rate:${Math.floor(Date.now() / 6e4)}`,
+          rateLimitMax,
+          60
+        );
+        if (!allowed) {
+          return c.json({
+            error: "RateLimited",
+            message: `Workflow ${id} rate limit exceeded (${rateLimitMax}/min). Retry after 1 minute.`
+          }, 429);
+        }
+        c.header("X-RateLimit-Remaining", String(remaining));
+      } catch {
       }
-      c.header("X-RateLimit-Remaining", String(remaining));
-    } catch {
     }
-    if (await shouldDebounce(id, 5)) {
+    if (debounceSec > 0 && await shouldDebounce(id, debounceSec)) {
       return c.json({
         executionId: null,
         status: "debounced",
-        message: "Execution skipped (debounced within 5s window)"
+        message: `Execution skipped (debounced within ${settings.debounce_ms || debounceSec * 1e3}ms window)`
       }, 200);
     }
     const executionId = v4_default();
@@ -52396,6 +52507,99 @@ executionsRoute.openapi(listRoute, async (c) => {
   }, 200);
 });
 
+// src/routes/update.ts
+var updateRoute = new OpenAPIHono();
+var route5 = createRoute({
+  method: "post",
+  path: "/",
+  tags: ["System"],
+  summary: "Self-update the Edge Engine bundle",
+  description: "Receives a new compiled bundle, writes to disk, and schedules a graceful restart.",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            script_content: external_exports.string().min(1).openapi({
+              description: "The compiled JS bundle content"
+            }),
+            source_hash: external_exports.string().min(1).openapi({
+              description: "12-char source hash for tracking"
+            }),
+            version: external_exports.string().optional().openapi({
+              description: "Optional version string"
+            })
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Bundle written \u2014 restart scheduled",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema.extend({
+            source_hash: external_exports.string(),
+            restart_in_ms: external_exports.number()
+          })
+        }
+      }
+    },
+    400: {
+      description: "Invalid payload",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema
+        }
+      }
+    },
+    500: {
+      description: "Write failed",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema
+        }
+      }
+    }
+  }
+});
+updateRoute.openapi(route5, async (c) => {
+  try {
+    const { script_content, source_hash, version: version3 } = c.req.valid("json");
+    const path = await Promise.resolve().then(() => (init_path(), path_exports));
+    const fs2 = await Promise.resolve().then(() => (init_fs(), fs_exports));
+    const { fileURLToPath } = await import('node:url');
+    const distDir = path.resolve(process.cwd(), "dist");
+    const entryFile = path.join(distDir, "index.js");
+    if (!fs2.existsSync(distDir)) {
+      fs2.mkdirSync(distDir, { recursive: true });
+    }
+    const tmpFile = `${entryFile}.tmp.${Date.now()}`;
+    fs2.writeFileSync(tmpFile, script_content, "utf-8");
+    fs2.renameSync(tmpFile, entryFile);
+    const sizeKB = Math.round(script_content.length / 1024);
+    console.log(`[Update] New bundle written: ${sizeKB} KB, hash=${source_hash}, version=${version3 || "N/A"}`);
+    const restartDelayMs = 1500;
+    setTimeout(() => {
+      console.log("[Update] Restarting with new bundle...");
+      process.exit(0);
+    }, restartDelayMs);
+    return c.json({
+      success: true,
+      message: `Bundle updated (${sizeKB} KB). Restarting in ${restartDelayMs}ms.`,
+      source_hash,
+      restart_in_ms: restartDelayMs
+    }, 200);
+  } catch (err2) {
+    console.error("[Update] Failed:", err2);
+    return c.json({
+      error: "UpdateFailed",
+      message: err2.message || "Failed to write bundle"
+    }, 500);
+  }
+});
+
 // node_modules/hono/dist/utils/jwt/jwa.js
 var AlgorithmTypes = /* @__PURE__ */ ((AlgorithmTypes2) => {
   AlgorithmTypes2["HS256"] = "HS256";
@@ -52501,6 +52705,7 @@ function createLiteApp() {
   app.route("/api/execute", executeRoute);
   app.route("/api/webhook", webhookRoute);
   app.route("/api/executions", executionsRoute);
+  app.route("/api/update", updateRoute);
   app.doc("/api/openapi.json", {
     openapi: "3.1.0",
     info: {

@@ -16,7 +16,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { executeWorkflow } from '../engine/runtime';
 import { rateLimit } from '../cache/redis.js';
 import { shouldDebounce } from '../engine/debounce.js';
-import { isQStashEnabled, publishExecution } from '../engine/qstash.js';
+import { isQStashEnabled, publishExecution } from '../engine/queue.js';
 
 const webhookRoute = new OpenAPIHono();
 
@@ -129,30 +129,38 @@ webhookRoute.openapi(route, async (c) => {
             // authMode === 'none' → no validation needed
         }
 
-        // ── Rate limiting (60 executions/minute per workflow) ────────────
-        try {
-            const { allowed, remaining } = await rateLimit(
-                `wf:${id}:rate:${Math.floor(Date.now() / 60000)}`,
-                60,
-                60
-            );
-            if (!allowed) {
-                return c.json({
-                    error: 'RateLimited',
-                    message: `Workflow ${id} rate limit exceeded (60/min). Retry after 1 minute.`,
-                }, 429);
+        // ── Parse per-workflow settings ─────────────────────────────────
+        const settings = workflow.settings ? JSON.parse(workflow.settings) : {};
+        const rateLimitEnabled = settings.rate_limit_enabled !== false; // default: true
+        const rateLimitMax = settings.rate_limit_max || 60;
+        const debounceSec = Math.ceil((settings.debounce_ms || 0) / 1000);
+
+        // ── Rate limiting ───────────────────────────────────────────────
+        if (rateLimitEnabled) {
+            try {
+                const { allowed, remaining } = await rateLimit(
+                    `wf:${id}:rate:${Math.floor(Date.now() / 60000)}`,
+                    rateLimitMax,
+                    60
+                );
+                if (!allowed) {
+                    return c.json({
+                        error: 'RateLimited',
+                        message: `Workflow ${id} rate limit exceeded (${rateLimitMax}/min). Retry after 1 minute.`,
+                    }, 429);
+                }
+                c.header('X-RateLimit-Remaining', String(remaining));
+            } catch {
+                // Redis unavailable — allow execution
             }
-            c.header('X-RateLimit-Remaining', String(remaining));
-        } catch {
-            // Redis unavailable — allow execution
         }
 
         // ── Debouncing (skip if triggered within window) ────────────────
-        if (await shouldDebounce(id, 5)) {
+        if (debounceSec > 0 && await shouldDebounce(id, debounceSec)) {
             return c.json({
                 executionId: null,
                 status: 'debounced' as any,
-                message: 'Execution skipped (debounced within 5s window)',
+                message: `Execution skipped (debounced within ${settings.debounce_ms || debounceSec * 1000}ms window)`,
             }, 200);
         }
 

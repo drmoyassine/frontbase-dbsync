@@ -31,6 +31,7 @@ export interface WorkflowDraft {
     trigger_config?: Record<string, any>;
     nodes: WorkflowNode[];
     edges: WorkflowEdge[];
+    settings?: Record<string, any> | null;
     is_published: boolean;
     is_active: boolean;
     published_version?: number;
@@ -56,6 +57,7 @@ export interface UpdateDraftInput {
     trigger_config?: Record<string, any>;
     nodes?: WorkflowNode[];
     edges?: WorkflowEdge[];
+    settings?: Record<string, any> | null;
 }
 
 const API_BASE = '/api/actions';

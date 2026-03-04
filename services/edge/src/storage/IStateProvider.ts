@@ -51,6 +51,7 @@ export interface WorkflowData {
     triggerConfig: string | null;  // JSON string
     nodes: string;         // JSON string
     edges: string;         // JSON string
+    settings: string | null;  // JSON string — per-workflow settings (rate limit, debounce, etc.)
     version: number;
     isActive: boolean;
     createdAt: string;

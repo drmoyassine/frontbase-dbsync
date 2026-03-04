@@ -104,6 +104,7 @@
 - [ ] 🔧 **Edge CORS Origin Configuration** — Configurable per deployment target via project settings.
 - [ ] 🔧 **Edge Request Logging** — Structured logs with timestamp, slug, response time, cache hit/miss.
 - [ ] ✨ **Engine Type Selector in Deploy Dialog** — Full vs Lite bundle type picker when deploying to a new engine.
+- [ ] 🔧 **Git Tree Hash for CI/CD Staleness Detection** — Use `git rev-parse HEAD:services/edge` as an alternative source hash for CI/CD pipelines where all changes are committed. Faster than direct file hashing, ignores `.gitignore`d files. Complements the current direct file hash approach which is better for local dev (detects uncommitted changes).
 
 ### Inspector & DX
 - [ ] ✨ **Edge Inspector Dialog** — Provider-agnostic inspector popup with split-pane layout: files + secrets + bindings (left), Monaco Editor (right). Dependencies available: `@monaco-editor/react`, `@radix-ui/react-dialog`, FileBrowser pattern. Needs: backend endpoints per provider, component, icon button on target rows.

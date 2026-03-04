@@ -118,6 +118,13 @@ export const MIGRATIONS: Migration[] = [
             `ALTER TABLE published_pages ADD COLUMN content_hash TEXT`,
         ],
     },
+    {
+        version: 4,
+        description: 'Add settings column to workflows',
+        sql: [
+            `ALTER TABLE workflows ADD COLUMN settings TEXT`,
+        ],
+    },
 ];
 
 // =============================================================================

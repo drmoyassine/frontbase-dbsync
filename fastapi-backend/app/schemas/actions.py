@@ -75,6 +75,7 @@ class WorkflowDraftBase(BaseModel):
     trigger_config: Optional[Dict[str, Any]] = None
     nodes: List[WorkflowNode] = Field(default_factory=list)
     edges: List[WorkflowEdge] = Field(default_factory=list)
+    settings: Optional[Dict[str, Any]] = None
 
 
 class WorkflowDraftCreate(WorkflowDraftBase):
@@ -90,6 +91,7 @@ class WorkflowDraftUpdate(BaseModel):
     trigger_config: Optional[Dict[str, Any]] = None
     nodes: Optional[List[WorkflowNode]] = None
     edges: Optional[List[WorkflowEdge]] = None
+    settings: Optional[Dict[str, Any]] = None
 
 
 class WorkflowDraftResponse(WorkflowDraftBase):

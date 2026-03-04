@@ -248,17 +248,44 @@ def _compute_bundle_hash(content: str) -> str:
 
 
 def _get_current_bundle_hash(adapter_type: str = "automations") -> str | None:
-    """Read the current dist bundle and return its hash WITHOUT rebuilding.
+    """DEPRECATED — use _get_source_hash() instead.
     
-    Returns None if the dist file doesn't exist (hasn't been built yet).
+    Kept for backward compat; now delegates to source hash.
     """
-    is_full = adapter_type == "full"
-    output_file = "cloudflare.js" if is_full else "cloudflare-lite.js"
-    dist_file = EDGE_DIR / "dist" / output_file
-    if dist_file.exists():
-        content = dist_file.read_text(encoding="utf-8")
-        return _compute_bundle_hash(content)
-    return None
+    return _get_source_hash()
+
+
+# In-memory cache to avoid re-hashing on every request
+_source_hash_cache: dict[str, tuple[float, str]] = {}  # path → (mtime, hash)
+
+
+def _get_source_hash() -> str | None:
+    """Hash all .ts source files in services/edge/src/ for drift detection.
+    
+    Returns a 12-char SHA-256 digest, or None if the source dir doesn't exist.
+    Changes to ANY .ts file in the source tree will produce a different hash,
+    immediately marking deployed engines as outdated — no build step required.
+    """
+    src_dir = EDGE_DIR / "src"
+    if not src_dir.exists():
+        return None
+
+    hasher = hashlib.sha256()
+    # Sort for determinism across OS/filesystem orderings
+    ts_files = sorted(src_dir.rglob("*.ts"))
+    if not ts_files:
+        return None
+
+    for filepath in ts_files:
+        # Include the relative path so that renames/moves change the hash
+        rel = str(filepath.relative_to(src_dir)).replace("\\", "/")
+        hasher.update(rel.encode("utf-8"))
+        try:
+            hasher.update(filepath.read_bytes())
+        except (OSError, IOError):
+            continue
+
+    return hasher.hexdigest()[:12]
 
 
 def _build_worker(adapter_type: str = "automations") -> tuple[str, str]:
@@ -530,6 +557,8 @@ async def deploy_to_cloudflare(payload: DeployRequest):
         # Register as Edge Engine
         engine_id = None
         db = SessionLocal()
+        # Use source hash for staleness detection (not build output hash)
+        source_hash = _get_source_hash() or bundle_hash
         try:
             existing = db.query(EdgeEngine).filter(EdgeEngine.url == worker_url).first()
             now = datetime.utcnow().isoformat()
@@ -547,7 +576,7 @@ async def deploy_to_cloudflare(payload: DeployRequest):
                 existing.edge_cache_id = edge_cache_id_to_attach  # type: ignore[assignment]
                 existing.edge_queue_id = edge_queue_id_to_attach  # type: ignore[assignment]
                 existing.engine_config = engine_cfg  # type: ignore[assignment]
-                existing.bundle_checksum = bundle_hash  # type: ignore[assignment]
+                existing.bundle_checksum = source_hash  # type: ignore[assignment]
                 existing.last_deployed_at = deployed_at  # type: ignore[assignment]
                 existing.updated_at = now  # type: ignore[assignment]
                 engine_id = str(existing.id)
@@ -563,7 +592,7 @@ async def deploy_to_cloudflare(payload: DeployRequest):
                     edge_cache_id=edge_cache_id_to_attach,
                     edge_queue_id=edge_queue_id_to_attach,
                     engine_config=engine_cfg,
-                    bundle_checksum=bundle_hash,
+                    bundle_checksum=source_hash,
                     last_deployed_at=deployed_at,
                     is_active=True,
                     created_at=now,

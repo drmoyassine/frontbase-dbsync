@@ -62,6 +62,7 @@ const workflowsTable = sqliteTable('workflows', {
     triggerConfig: text('trigger_config'),
     nodes: text('nodes').notNull(),
     edges: text('edges').notNull(),
+    settings: text('settings'),
     version: integer('version').notNull().default(1),
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
     createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -291,6 +292,7 @@ export class TursoHttpProvider implements IStateProvider {
                     name: workflow.name, description: workflow.description,
                     triggerType: workflow.triggerType, triggerConfig: workflow.triggerConfig,
                     nodes: workflow.nodes, edges: workflow.edges,
+                    settings: workflow.settings || null,
                     version: newVersion, updatedAt: now, publishedBy: workflow.publishedBy,
                 })
                 .where(eq(workflowsTable.id, workflow.id));
@@ -300,6 +302,7 @@ export class TursoHttpProvider implements IStateProvider {
                 id: workflow.id, name: workflow.name, description: workflow.description,
                 triggerType: workflow.triggerType, triggerConfig: workflow.triggerConfig,
                 nodes: workflow.nodes, edges: workflow.edges,
+                settings: workflow.settings || null,
                 version: 1, isActive: true, createdAt: now, updatedAt: now,
                 publishedBy: workflow.publishedBy,
             });

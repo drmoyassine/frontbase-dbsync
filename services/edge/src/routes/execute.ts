@@ -8,6 +8,7 @@ import { ExecuteRequestSchema, ExecuteResponseSchema, ErrorResponseSchema } from
 import { v4 as uuidv4 } from 'uuid';
 import { executeWorkflow, executeSingleNode } from '../engine/runtime';
 import { rateLimit } from '../cache/redis.js';
+import { verifyQueueSignature } from '../engine/queue.js';
 
 const executeRoute = new OpenAPIHono();
 
@@ -63,13 +64,36 @@ const route = createRoute({
                 },
             },
         },
+        401: {
+            description: 'Unauthorized (invalid QStash signature)',
+            content: {
+                'application/json': {
+                    schema: ErrorResponseSchema,
+                },
+            },
+        },
 
     },
 });
 
 executeRoute.openapi(route, async (c) => {
     const { id } = c.req.valid('param');
-    const body = await c.req.json().catch(() => ({}));
+    const rawBody = await c.req.text();
+    const body = rawBody ? JSON.parse(rawBody) : {};
+
+    // ── QStash signature verification ───────────────────────────────
+    // If the request has an Upstash-Signature header, it came from QStash
+    // and must be verified before executing.
+    const qstashSignature = c.req.header('Upstash-Signature');
+    if (qstashSignature) {
+        const valid = await verifyQueueSignature(qstashSignature, rawBody);
+        if (!valid) {
+            return c.json({
+                error: 'Unauthorized',
+                message: 'Invalid QStash signature',
+            }, 401);
+        }
+    }
 
     // Fetch workflow via provider
     const workflow = await stateProvider.getWorkflowById(id);
@@ -88,22 +112,42 @@ executeRoute.openapi(route, async (c) => {
         }, 400);
     }
 
-    // ── Rate limiting (60 executions/minute per workflow) ────────────
-    try {
-        const { allowed, remaining } = await rateLimit(
-            `wf:${id}:rate:${Math.floor(Date.now() / 60000)}`,
-            60,
-            60
-        );
-        if (!allowed) {
+    // ── Parse per-workflow settings ─────────────────────────────────
+    const settings = workflow.settings ? JSON.parse(workflow.settings) : {};
+    const rateLimitEnabled = settings.rate_limit_enabled !== false; // default: true
+    const rateLimitMax = settings.rate_limit_max || 60;
+    const debounceSec = Math.ceil((settings.debounce_ms || 0) / 1000);
+
+    // ── Debounce check ──────────────────────────────────────────────
+    if (debounceSec > 0) {
+        const { shouldDebounce } = await import('../engine/debounce.js');
+        const debounced = await shouldDebounce(id, debounceSec);
+        if (debounced) {
             return c.json({
-                error: 'RateLimited',
-                message: `Workflow ${id} rate limit exceeded (60/min). Retry after 1 minute.`,
+                error: 'Debounced',
+                message: `Workflow ${id} was triggered too recently (${settings.debounce_ms}ms window)`,
             }, 429);
         }
-        c.header('X-RateLimit-Remaining', String(remaining));
-    } catch {
-        // Redis unavailable — allow execution
+    }
+
+    // ── Rate limiting ───────────────────────────────────────────────
+    if (rateLimitEnabled) {
+        try {
+            const { allowed, remaining } = await rateLimit(
+                `wf:${id}:rate:${Math.floor(Date.now() / 60000)}`,
+                rateLimitMax,
+                60
+            );
+            if (!allowed) {
+                return c.json({
+                    error: 'RateLimited',
+                    message: `Workflow ${id} rate limit exceeded (${rateLimitMax}/min). Retry after 1 minute.`,
+                }, 429);
+            }
+            c.header('X-RateLimit-Remaining', String(remaining));
+        } catch {
+            // Redis unavailable — allow execution
+        }
     }
 
     // Create execution record via provider

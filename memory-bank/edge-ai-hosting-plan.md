@@ -101,6 +101,10 @@ User → Edge Worker (cache check) → FastAPI GPU inference → Edge Worker (ca
 - ✅ Workflow/automation engine in Edge Engine
 - ✅ Turso state persistence
 - ✅ Deployment targets + fan-out publish pipeline
+- ✅ Provider-agnostic Queue module (`engine/queue.ts`) with `FRONTBASE_QUEUE_*` env vars
+- ✅ Per-workflow rate limiting, debounce, and queue settings
+- ✅ Source-based bundle checksums (immediate Outdated detection)
+- ✅ Docker self-update via `/api/update` endpoint (build → POST → restart)
 
 ## Open Questions
 

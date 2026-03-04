@@ -43,6 +43,7 @@ EDGE_URL = os.getenv("EDGE_URL", "http://localhost:3002")
 
 def _build_deploy_payload(draft: AutomationDraft, name_prefix: str = "", override_is_active: Optional[bool] = None) -> dict:
     """Build the deploy payload for the Edge /api/deploy endpoint."""
+    import json
     return {
         "id": str(draft.id),
         "name": f"{name_prefix}{draft.name}",
@@ -51,6 +52,7 @@ def _build_deploy_payload(draft: AutomationDraft, name_prefix: str = "", overrid
         "triggerConfig": draft.trigger_config or {},
         "nodes": draft.nodes,
         "edges": draft.edges,
+        "settings": json.dumps(draft.settings) if draft.settings else None,
         "isActive": override_is_active if override_is_active is not None else draft.is_active,
         "publishedBy": str(draft.created_by) if str(draft.created_by or "") else None,
     }

@@ -326,6 +326,33 @@ class EdgeEngine(Base):
     edge_queue = relationship("EdgeQueue", back_populates="edge_engines")
     edge_provider = relationship("EdgeProviderAccount", back_populates="edge_engines")
     page_deployments = relationship("PageDeployment", back_populates="edge_engine", cascade="all, delete-orphan")
+    gpu_models = relationship("EdgeGPUModel", back_populates="edge_engine", cascade="all, delete-orphan")
+
+
+class EdgeGPUModel(Base):
+    """Edge GPU Model — a configured AI inference endpoint on an edge engine.
+    
+    Each row represents a specific AI model deployed to an edge engine.
+    Provider-agnostic: the `provider` field selects the adapter (workers_ai, 
+    huggingface, ollama, modal, etc.) while the router uses gpu_adapters.py.
+    """
+    __tablename__ = 'edge_gpu_models'
+    
+    id = Column(String, primary_key=True)
+    name = Column(String(100), nullable=False)            # "Llama 3.1 Chat"
+    slug = Column(String(100), nullable=False)             # "llama-3-1-chat" (URL-safe)
+    model_type = Column(String(50), nullable=False)        # "llm", "embedder", "stt", etc.
+    provider = Column(String(50), nullable=False)          # "workers_ai", "huggingface", ...
+    model_id = Column(String(200), nullable=False)         # "@cf/meta/llama-3.1-8b-instruct"
+    endpoint_url = Column(String(500), nullable=True)      # Auto: "{engine_url}/api/ai/{slug}"
+    provider_config = Column(Text, nullable=True)          # JSON — defaults (temperature, etc.)
+    edge_engine_id = Column(String, ForeignKey('edge_engines.id'), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    
+    # Relationship
+    edge_engine = relationship("EdgeEngine", back_populates="gpu_models")
 
 
 class PageDeployment(Base):

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
-from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, edge_databases, edge_caches, edge_queues
+from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, edge_databases, edge_caches, edge_queues, edge_gpu
 from app.middleware.test_mode import TestModeMiddleware
 
 logger = logging.getLogger(__name__)
@@ -141,6 +141,8 @@ class TrailingSlashMiddleware:
         "/api/edge-providers",
         "/api/edge-caches",
         "/api/edge-databases",
+        "/api/edge-queues",
+        "/api/edge-gpu",
         "/api/cloudflare",
         "/api/settings",
     ]
@@ -181,6 +183,7 @@ app.include_router(edge_caches.router)  # Edge cache connections
 app.include_router(edge_queues.router)  # Edge queue connections
 app.include_router(cloudflare.router)  # One-click Cloudflare deploy
 app.include_router(cloudflare_inspector.router)  # CF Worker inspector
+app.include_router(edge_gpu.router)  # Edge GPU AI inference models
 
 # Mount DB-Synchronizer Service
 from app.services.sync.main import sync_app

@@ -366,7 +366,7 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
 # Redeploy — delegates to engine_deploy service
 # =============================================================================
 
-@router.post("/{engine_id}/redeploy/")
+@router.post("/{engine_id}/redeploy")
 async def redeploy_engine(engine_id: str, db: Session = Depends(get_db)):
     """Redeploy an engine with the latest bundle code + current secrets."""
     engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()

@@ -6,7 +6,8 @@ import {
   Users,
   HardDrive,
   Settings,
-  Palette
+  Palette,
+  Server
 } from 'lucide-react';
 import {
   Sidebar,
@@ -26,6 +27,7 @@ const menuItems = [
   { title: 'Database', url: '/data-studio', icon: Database },
   { title: 'Users', url: '/users', icon: Users },
   { title: 'Storage', url: '/storage', icon: HardDrive },
+  { title: 'Edge Infrastructure', url: '/edge', icon: Server },
   { title: 'Settings', url: '/settings', icon: Settings },
 ];
 

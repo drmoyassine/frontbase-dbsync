@@ -8,7 +8,8 @@ import {
     FileText,
     Users,
     HardDrive,
-    Workflow
+    Workflow,
+    Server
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -19,6 +20,7 @@ const navItems = [
     { path: '/automations', label: 'Automations', icon: Workflow },
     { path: '/users', label: 'Users', icon: Users },
     { path: '/storage', label: 'Storage', icon: HardDrive },
+    { path: '/edge', label: 'Edge Infrastructure', icon: Server },
     { path: '/settings', label: 'Settings', icon: Settings },
 ]
 

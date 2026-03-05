@@ -50780,7 +50780,7 @@ async function runMigrations(execute, providerName) {
   console.log(`[${providerName}:Migration] Schema at v${latestVersion} (${appliedCount} migrations checked)`);
 }
 
-// src/storage/TursoHttpProvider.ts
+// src/storage/schema.ts
 var publishedPages = sqliteTable("published_pages", {
   id: text("id").primaryKey(),
   slug: text("slug").notNull().unique(),
@@ -50836,6 +50836,8 @@ var executionsTable = sqliteTable("executions", {
   startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   endedAt: text("ended_at")
 });
+
+// src/storage/TursoHttpProvider.ts
 var DEFAULT_FAVICON = "/static/icon.png";
 var TursoHttpProvider = class {
   _db = null;

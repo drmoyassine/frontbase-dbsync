@@ -1,26 +1,41 @@
 /**
  * SettingsPanel
  * 
- * Dashboard settings page with tabs for General, Cache, and Privacy settings.
- * Uses shared form components for consistency with Module settings.
+ * Dashboard settings page with tabs for General, Team & Emails, and Privacy.
+ * Edge Infrastructure tabs have been moved to /edge (EdgeInfrastructurePanel).
+ * 
+ * Supports deep linking via URL search params:
+ *   /settings?tab=general
+ *   /settings?tab=team
+ *   /settings?tab=privacy
  */
 
 import React from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Users } from 'lucide-react';
-import { EdgeCachesForm } from './settings/shared/EdgeCachesForm';
-import { EdgeDatabasesForm } from './settings/shared/EdgeDatabasesForm';
 import { PrivacySettingsForm } from './settings/shared/PrivacySettingsForm';
 import { ProjectDetailsForm } from './settings/shared/ProjectDetailsForm';
 import { EmailProviderSettingsForm } from './settings/shared/EmailProviderSettingsForm';
 import { AdminInviteForm } from './settings/shared/AdminInviteForm';
-import { EdgeEnginesPanel } from './settings/shared/EdgeEnginesPanel';
-import { EdgeQueuesForm } from './settings/shared/EdgeQueuesForm';
+
+const VALID_TABS = ['general', 'team', 'privacy'] as const;
+type SettingsTab = typeof VALID_TABS[number];
 
 export const SettingsPanel: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawTab = searchParams.get('tab');
+  const activeTab: SettingsTab = VALID_TABS.includes(rawTab as SettingsTab)
+    ? (rawTab as SettingsTab)
+    : 'general';
+
+  const handleTabChange = (value: string) => {
+    setSearchParams({ tab: value }, { replace: true });
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -30,14 +45,10 @@ export const SettingsPanel: React.FC = () => {
         </p>
       </div>
 
-      <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-7 lg:w-[1100px]">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="grid w-full grid-cols-3 lg:w-[500px]">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="team">Team & Emails</TabsTrigger>
-          <TabsTrigger value="cache">Edge Caching</TabsTrigger>
-          <TabsTrigger value="edge-db">Edge Database</TabsTrigger>
-          <TabsTrigger value="queues">Edge Queues</TabsTrigger>
-          <TabsTrigger value="deployment">Deployment</TabsTrigger>
           <TabsTrigger value="privacy">Privacy & Tracking</TabsTrigger>
         </TabsList>
 
@@ -82,26 +93,6 @@ export const SettingsPanel: React.FC = () => {
               <EmailProviderSettingsForm />
             </CardContent>
           </Card>
-        </TabsContent>
-
-        {/* Edge Caching Tab */}
-        <TabsContent value="cache" className="space-y-6 mt-6">
-          <EdgeCachesForm withCard />
-        </TabsContent>
-
-        {/* Edge Database Tab */}
-        <TabsContent value="edge-db" className="space-y-6 mt-6">
-          <EdgeDatabasesForm withCard />
-        </TabsContent>
-
-        {/* Edge Queues Tab */}
-        <TabsContent value="queues" className="space-y-6 mt-6">
-          <EdgeQueuesForm withCard />
-        </TabsContent>
-
-        {/* Deployment Targets Tab */}
-        <TabsContent value="deployment" className="space-y-6 mt-6">
-          <EdgeEnginesPanel withCard />
         </TabsContent>
 
         {/* Privacy & Tracking Tab */}

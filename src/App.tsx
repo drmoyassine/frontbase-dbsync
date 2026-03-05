@@ -26,6 +26,7 @@ import { PagesPanel } from "@/components/dashboard/PagesPanel";
 import { UsersPanel } from "@/components/dashboard/UsersPanel";
 import { StoragePanel } from "@/components/dashboard/StoragePanel";
 import { SettingsPanel } from "@/components/dashboard/SettingsPanel";
+import { EdgeInfrastructurePanel } from "@/components/dashboard/EdgeInfrastructurePanel";
 
 // Auth Pages
 import LoginPage from "./pages/auth/LoginPage";
@@ -137,6 +138,7 @@ const App = () => {
 
                   <Route path="/users" element={<UsersPanel />} />
                   <Route path="/storage" element={<StoragePanel />} />
+                  <Route path="/edge" element={<EdgeInfrastructurePanel />} />
                   <Route path="/settings" element={<SettingsPanel />} />
                 </Route>
 

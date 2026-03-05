@@ -101,16 +101,23 @@ async def detect_account_id(api_token: str) -> str:
 
 async def upload_worker(
     api_token: str, account_id: str, worker_name: str,
-    script_content: str, script_filename: str = "cloudflare-lite.js"
+    script_content: str, script_filename: str = "cloudflare-lite.js",
+    bindings: list[dict] | None = None,
 ) -> dict:
     """Upload a Worker script via Cloudflare API v4 (ES module format)."""
+    import re
+    # CF requires lowercase, alphanumeric, dashes only
+    worker_name = re.sub(r'[^a-z0-9-]', '-', worker_name.lower()).strip('-')
     url = f"{CF_API}/accounts/{account_id}/workers/scripts/{worker_name}"
 
-    metadata = {
+    metadata: dict = {
         "main_module": script_filename,
         "compatibility_date": "2024-12-01",
         "compatibility_flags": ["nodejs_compat"],
     }
+    # Inject bindings (e.g., AI binding for GPU models)
+    if bindings:
+        metadata["bindings"] = bindings
 
     files = {
         "metadata": (None, json.dumps(metadata), "application/json"),
@@ -125,7 +132,20 @@ async def upload_worker(
             timeout=30.0,
         )
         if resp.status_code not in (200, 201):
-            raise HTTPException(400, f"Worker upload failed: {resp.text[:500]}")
+            # Parse CF error into a friendly message
+            try:
+                err_data = resp.json()
+                errors = err_data.get("errors", [])
+                if errors:
+                    msg = errors[0].get("message", resp.text[:300])
+                else:
+                    msg = resp.text[:300]
+            except Exception:
+                msg = resp.text[:300]
+            raise HTTPException(
+                400,
+                f"Cloudflare rejected the worker '{worker_name}': {msg}"
+            )
         return resp.json()
 
 

@@ -11,6 +11,7 @@
  */
 
 import { liteApp } from '../engine/lite.js';
+import { setAIBinding } from '../routes/ai.js';
 
 // Cloudflare Workers types (inlined to avoid @cloudflare/workers-types dependency)
 interface CFExecutionContext {
@@ -19,7 +20,7 @@ interface CFExecutionContext {
 }
 
 export default {
-    async fetch(request: Request, env: Record<string, string>, ctx: CFExecutionContext): Promise<Response> {
+    async fetch(request: Request, env: Record<string, any>, ctx: CFExecutionContext): Promise<Response> {
         // Bridge Cloudflare env bindings → process.env for existing code compatibility
         for (const [key, value] of Object.entries(env)) {
             if (typeof value === 'string') {
@@ -30,6 +31,11 @@ export default {
 
         // Set adapter platform for health endpoint identification
         (globalThis as any).process.env.FRONTBASE_ADAPTER_PLATFORM = 'cloudflare-lite';
+
+        // Pass CF Workers AI binding (non-string, can't go in process.env)
+        if (env.AI) {
+            setAIBinding(env.AI);
+        }
 
         return liteApp.fetch(request);
     },

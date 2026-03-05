@@ -126,13 +126,16 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 class TrailingSlashMiddleware:
     """
     Middleware that adds trailing slash to paths internally.
-    This prevents 307 redirects that can cause mixed-content issues.
     
-    Routers that define routes WITHOUT trailing slashes must be excluded
-    here, otherwise the middleware creates infinite 307 redirect loops.
+    Prevents 307 redirect loops: the excluded routers define routes
+    WITHOUT trailing slashes, so the middleware must not add one.
+    Non-excluded routes get a trailing slash added to match their
+    route definitions, preventing a 307 from FastAPI.
+    
+    Note: some excluded routes may still produce a single benign 307
+    redirect (e.g., /api/edge-engines → /api/edge-engines/). This is
+    harmless — the client follows it once.
     """
-    # Paths that should NOT have trailing slashes added
-    # (these routers define routes without trailing slashes)
     EXCLUDE_PREFIXES = [
         "/api/auth",
         "/api/actions",
@@ -153,9 +156,7 @@ class TrailingSlashMiddleware:
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
         if scope["type"] == "http":
             path = scope["path"]
-            # Skip excluded paths
             should_skip = any(path.startswith(prefix) for prefix in self.EXCLUDE_PREFIXES)
-            # Add trailing slash if missing and not a file path (no extension)
             if not should_skip and not path.endswith("/") and "." not in path.split("/")[-1]:
                 scope["path"] = path + "/"
         await self.app(scope, receive, send)

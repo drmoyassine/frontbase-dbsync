@@ -608,30 +608,28 @@ export function EdgeEnginesSection() {
                                                 {!engine.is_system && (
                                                     <>
                                                         <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
-                                                        {engine.is_outdated && (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                title="Redeploy with latest code"
-                                                                disabled={redeployingId === engine.id}
-                                                                onClick={async () => {
-                                                                    setRedeployingId(engine.id);
-                                                                    try {
-                                                                        await edgeInfrastructureApi.redeployEngine(engine.id);
-                                                                        await refetchEngines();
-                                                                    } catch (e: any) {
-                                                                        setError(e.message);
-                                                                    } finally {
-                                                                        setRedeployingId(null);
-                                                                    }
-                                                                }}
-                                                            >
-                                                                {redeployingId === engine.id
-                                                                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                                                                    : <Upload className="h-4 w-4 text-orange-400" />
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            title="Redeploy with latest code"
+                                                            disabled={redeployingId === engine.id}
+                                                            onClick={async () => {
+                                                                setRedeployingId(engine.id);
+                                                                try {
+                                                                    await edgeInfrastructureApi.redeployEngine(engine.id);
+                                                                    await refetchEngines();
+                                                                } catch (e: any) {
+                                                                    setError(e.message);
+                                                                } finally {
+                                                                    setRedeployingId(null);
                                                                 }
-                                                            </Button>
-                                                        )}
+                                                            }}
+                                                        >
+                                                            {redeployingId === engine.id
+                                                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                                                : <Upload className={`h-4 w-4 ${engine.is_outdated ? 'text-orange-400' : 'text-muted-foreground'}`} />
+                                                            }
+                                                        </Button>
                                                         <ReconfigureEngineDialog engine={engine} />
                                                         <DeleteEngineDialog
                                                             engine={engine}

@@ -21,7 +21,7 @@ from ..models.models import EdgeGPUModel, EdgeEngine, EdgeProviderAccount
 from ..services.gpu_adapters import get_adapter, get_schema_for_model_type, IO_SCHEMAS, available_providers
 from ..services.cloudflare_api import get_provider_credentials
 
-router = APIRouter(prefix="/api/edge-gpu", tags=["edge-gpu"], redirect_slashes=False)
+router = APIRouter(prefix="/api/edge-gpu", tags=["edge-gpu"])
 
 
 # =============================================================================
@@ -29,6 +29,7 @@ router = APIRouter(prefix="/api/edge-gpu", tags=["edge-gpu"], redirect_slashes=F
 # =============================================================================
 
 class GPUModelCreate(BaseModel):
+    model_config = {"protected_namespaces": ()}
     name: str
     model_type: str
     provider: str                  # "workers_ai", "huggingface", etc.
@@ -44,6 +45,7 @@ class GPUModelUpdate(BaseModel):
 
 
 class GPUModelResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
     id: str
     name: str
     slug: str

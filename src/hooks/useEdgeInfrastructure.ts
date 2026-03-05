@@ -111,7 +111,7 @@ export const edgeInfrastructureApi = {
 
     // Engines
     getEngines: async (): Promise<EdgeEngine[]> => {
-        const res = await fetch(`${API_BASE}/api/edge-engines`);
+        const res = await fetch(`${API_BASE}/api/edge-engines/`);
         if (!res.ok) throw new Error('Failed to fetch edge engines');
         return res.json();
     },

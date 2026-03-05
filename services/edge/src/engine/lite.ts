@@ -40,6 +40,7 @@ import { executeRoute } from '../routes/execute.js';
 import { webhookRoute } from '../routes/webhook.js';
 import { executionsRoute } from '../routes/executions.js';
 import { updateRoute } from '../routes/update.js';
+import { aiRoute } from '../routes/ai.js';
 import { apiKeyAuth } from '../middleware/auth.js';
 
 // =============================================================================
@@ -125,6 +126,7 @@ export function createLiteApp() {
     app.route('/api/webhook', webhookRoute);
     app.route('/api/executions', executionsRoute);
     app.route('/api/update', updateRoute);
+    app.route('/api/ai', aiRoute);
 
     // ── OpenAPI Docs ───────────────────────────────────────────────────
     app.doc('/api/openapi.json', {

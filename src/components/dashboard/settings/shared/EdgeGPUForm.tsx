@@ -251,10 +251,34 @@ export const EdgeGPUForm: React.FC<{ withCard?: boolean }> = ({ withCard }) => {
         setTestingId(model.id);
         try {
             const result = await testModel(model.id);
+
+            // Parse response intelligently by model type
+            let displayText = '';
+            if (result.success) {
+                const out = result.sample_output;
+                // CF Workers AI text generation → choices[].message.content or result.response
+                if (out?.choices?.[0]?.message?.content) {
+                    displayText = out.choices[0].message.content;
+                } else if (out?.choices?.[0]?.text) {
+                    displayText = out.choices[0].text;
+                } else if (out?.response) {
+                    displayText = out.response;
+                } else if (out?.result?.response) {
+                    displayText = out.result.response;
+                    // Embeddings → show shape
+                } else if (out?.data?.[0]?.embedding || Array.isArray(out?.[0])) {
+                    const vec = out?.data?.[0]?.embedding || out[0];
+                    displayText = `Embedding: ${vec.length} dimensions`;
+                    // Fallback
+                } else {
+                    displayText = JSON.stringify(out).slice(0, 120);
+                }
+            }
+
             toast({
                 title: result.success ? '✅ Inference OK' : '❌ Inference Failed',
                 description: result.success
-                    ? `${result.latency_ms}ms — ${JSON.stringify(result.sample_output).slice(0, 100)}`
+                    ? `${result.latency_ms}ms — "${displayText.slice(0, 150)}"`
                     : result.message,
                 variant: result.success ? 'default' : 'destructive',
             });

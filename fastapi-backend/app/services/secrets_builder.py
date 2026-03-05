@@ -30,13 +30,31 @@ def build_engine_secrets(
     edge_db_id: str | None,
     edge_cache_id: str | None,
     edge_queue_id: str | None,
+    engine_id: str | None = None,
 ) -> dict[str, str]:
-    """Build FRONTBASE_* env vars from DB/cache/queue records.
+    """Build FRONTBASE_* env vars from DB/cache/queue/GPU records.
     
     Returns a dict of secret_name → secret_value.
     Only includes non-None values.
     """
+    import json
     secrets: dict[str, str] = {}
+
+    # GPU Models — serialize model registry for the AI route
+    if engine_id:
+        from ..models.models import EdgeGPUModel
+        gpu_models = db.query(EdgeGPUModel).filter(
+            EdgeGPUModel.edge_engine_id == engine_id,
+            EdgeGPUModel.is_active == True,
+        ).all()
+        if gpu_models:
+            models_data = [{
+                "slug": str(m.slug),
+                "model_id": str(m.model_id),
+                "model_type": str(m.model_type),
+                "provider": str(m.provider),
+            } for m in gpu_models]
+            secrets['FRONTBASE_GPU_MODELS'] = json.dumps(models_data)
 
     # Database
     if edge_db_id:

@@ -101,7 +101,18 @@ async def _deploy_cloudflare(
         raise HTTPException(400, "Missing Cloudflare credentials or worker_name in engine config")
 
     script_filename = "cloudflare.js" if adapter_type == "full" else "cloudflare-lite.js"
-    await cloudflare_api.upload_worker(api_token, account_id, worker_name, script_content, script_filename)
+
+    # Check if engine has GPU models — inject AI binding if so
+    from ..models.models import EdgeGPUModel
+    gpu_models = db.query(EdgeGPUModel).filter(
+        EdgeGPUModel.edge_engine_id == str(engine.id)
+    ).all()
+    bindings = [{"type": "ai", "name": "AI"}] if gpu_models else None
+
+    await cloudflare_api.upload_worker(
+        api_token, account_id, worker_name, script_content,
+        script_filename, bindings=bindings,
+    )
 
     # Build and push secrets
     secrets = build_engine_secrets(
@@ -109,6 +120,7 @@ async def _deploy_cloudflare(
         edge_db_id=str(engine.edge_db_id) if engine.edge_db_id else None,
         edge_cache_id=str(engine.edge_cache_id) if engine.edge_cache_id else None,
         edge_queue_id=str(engine.edge_queue_id) if engine.edge_queue_id else None,
+        engine_id=str(engine.id),
     )
     if secrets:
         await cloudflare_api.set_secrets(api_token, account_id, worker_name, secrets)

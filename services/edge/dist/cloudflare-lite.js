@@ -22335,20 +22335,20 @@ var require_ripemd160 = __commonJS({
             return clone;
           }
         });
-        function f1(x, y, z) {
-          return x ^ y ^ z;
+        function f1(x, y, z2) {
+          return x ^ y ^ z2;
         }
-        function f2(x, y, z) {
-          return x & y | ~x & z;
+        function f2(x, y, z2) {
+          return x & y | ~x & z2;
         }
-        function f3(x, y, z) {
-          return (x | ~y) ^ z;
+        function f3(x, y, z2) {
+          return (x | ~y) ^ z2;
         }
-        function f4(x, y, z) {
-          return x & z | y & ~z;
+        function f4(x, y, z2) {
+          return x & z2 | y & ~z2;
         }
-        function f5(x, y, z) {
-          return x ^ (y | ~z);
+        function f5(x, y, z2) {
+          return x ^ (y | ~z2);
         }
         function rotl(x, n) {
           return x << n | x >>> 32 - n;
@@ -52817,6 +52817,78 @@ updateRoute.openapi(route5, async (c) => {
   }
 });
 
+// src/routes/ai.ts
+var _aiBinding = null;
+function setAIBinding(ai) {
+  _aiBinding = ai;
+}
+var aiRoute = new OpenAPIHono();
+var _gpuModels = [];
+aiRoute.get("/", (c) => {
+  return c.json({
+    models: _gpuModels.map((m) => ({
+      slug: m.slug,
+      model_id: m.model_id,
+      model_type: m.model_type,
+      provider: m.provider,
+      endpoint: `/api/ai/${m.slug}`
+    })),
+    total: _gpuModels.length
+  });
+});
+aiRoute.post("/:slug", async (c) => {
+  const slug = c.req.param("slug");
+  const model = _gpuModels.find((m) => m.slug === slug);
+  if (!model) {
+    return c.json({
+      success: false,
+      error: `No GPU model found for slug '${slug}'`,
+      available: _gpuModels.map((m) => m.slug)
+    }, 404);
+  }
+  let payload;
+  try {
+    payload = await c.req.json();
+  } catch {
+    return c.json({ success: false, error: "Invalid JSON body" }, 400);
+  }
+  if (model.provider_config) {
+    const defaults = typeof model.provider_config === "string" ? JSON.parse(model.provider_config) : model.provider_config;
+    payload = { ...defaults, ...payload };
+  }
+  try {
+    let result;
+    if (model.provider === "workers_ai") {
+      if (!_aiBinding) {
+        return c.json({
+          success: false,
+          error: "AI binding not available. Ensure the Worker has an AI binding configured."
+        }, 503);
+      }
+      result = await _aiBinding.run(model.model_id, payload);
+    } else {
+      return c.json({
+        success: false,
+        error: `Provider '${model.provider}' not yet supported on edge. Available: workers_ai`
+      }, 400);
+    }
+    return c.json({
+      success: true,
+      model_type: model.model_type,
+      model_id: model.model_id,
+      slug: model.slug,
+      result
+    });
+  } catch (err2) {
+    console.error(`[AI] Inference error for ${slug}:`, err2);
+    return c.json({
+      success: false,
+      error: err2.message || "Inference failed",
+      model_id: model.model_id
+    }, 500);
+  }
+});
+
 // node_modules/hono/dist/utils/jwt/jwa.js
 var AlgorithmTypes = /* @__PURE__ */ ((AlgorithmTypes2) => {
   AlgorithmTypes2["HS256"] = "HS256";
@@ -52923,6 +52995,7 @@ function createLiteApp() {
   app.route("/api/webhook", webhookRoute);
   app.route("/api/executions", executionsRoute);
   app.route("/api/update", updateRoute);
+  app.route("/api/ai", aiRoute);
   app.doc("/api/openapi.json", {
     openapi: "3.1.0",
     info: {
@@ -52956,6 +53029,9 @@ var cloudflare_lite_default = {
       }
     }
     globalThis.process.env.FRONTBASE_ADAPTER_PLATFORM = "cloudflare-lite";
+    if (env2.AI) {
+      setAIBinding(env2.AI);
+    }
     return liteApp.fetch(request);
   }
 };

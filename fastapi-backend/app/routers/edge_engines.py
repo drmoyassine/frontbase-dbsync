@@ -1,16 +1,22 @@
 """
-Edge Engines API Router
+Edge Engines API Router — Thin Router.
 
 CRUD endpoints for managing edge engines.
 Each target represents an Edge Engine deployment on a specific provider
 (Cloudflare Workers, Vercel Edge, Docker, etc.).
 
 The publish pipeline uses active engines to push pages to each endpoint.
+
+All business logic delegated to:
+- services/engine_deploy.py (redeploy)
+- services/engine_test.py (connectivity testing, CF delete)
+- services/secrets_builder.py (binding construction)
+- services/cloudflare_api.py (CF API calls)
+- services/bundle.py (source hashing)
 """
 
 from fastapi import APIRouter, HTTPException, Query, Depends
-from pydantic import BaseModel, Field
-from typing import Optional, List, Literal
+from typing import List, Literal
 from datetime import datetime
 import asyncio
 import json
@@ -18,98 +24,18 @@ import uuid
 
 from ..database.config import get_db
 from sqlalchemy.orm import Session
-from ..models.models import EdgeEngine, EdgeProviderAccount, EdgeDatabase, EdgeCache, EdgeQueue
+from ..models.models import EdgeEngine, EdgeProviderAccount
+
+from ..schemas.edge_engines import (
+    EdgeEngineCreate, EdgeEngineUpdate, EdgeEngineResponse,
+    TestConnectionResult, ReconfigureRequest,
+    BatchRequest, BatchDeleteRequest, BatchToggleRequest, BatchResult,
+)
+from ..services.bundle import get_source_hash
+from ..services import engine_deploy, engine_test
+from ..services.secrets_builder import build_engine_secrets, FRONTBASE_BINDING_NAMES
 
 router = APIRouter(prefix="/api/edge-engines", tags=["Edge Engines"])
-
-
-# =============================================================================
-# Pydantic Schemas
-# =============================================================================
-
-class EdgeEngineCreate(BaseModel):
-    """Create a new edge engine."""
-    name: str = Field(..., min_length=1, max_length=100)
-    edge_provider_id: Optional[str] = None
-    adapter_type: Literal["edge", "pages", "automations", "full"] = Field(default="full")
-    url: str = Field(..., min_length=1, max_length=500)
-    edge_db_id: Optional[str] = None
-    edge_cache_id: Optional[str] = None
-    edge_queue_id: Optional[str] = None
-    engine_config: Optional[dict] = None  # Engine-specific metadata (e.g. worker_name)
-    is_active: bool = Field(default=True)
-
-
-class EdgeEngineUpdate(BaseModel):
-    """Update an existing edge engine."""
-    name: Optional[str] = Field(None, min_length=1, max_length=100)
-    edge_provider_id: Optional[str] = None
-    adapter_type: Optional[Literal["edge", "pages", "automations", "full"]] = None
-    url: Optional[str] = Field(None, min_length=1, max_length=500)
-    edge_db_id: Optional[str] = None
-    edge_cache_id: Optional[str] = None
-    edge_queue_id: Optional[str] = None
-    engine_config: Optional[dict] = None
-    is_active: Optional[bool] = None
-
-
-class EdgeEngineResponse(BaseModel):
-    """Edge engine response."""
-    id: str
-    name: str
-    edge_provider_id: Optional[str] = None
-    provider: Optional[str] = None  # From the joined provider account
-    adapter_type: str
-    url: str
-    edge_db_id: Optional[str] = None
-    edge_db_name: Optional[str] = None
-    edge_cache_id: Optional[str] = None
-    edge_cache_name: Optional[str] = None
-    edge_queue_id: Optional[str] = None
-    edge_queue_name: Optional[str] = None
-    engine_config: Optional[dict] = None
-    is_active: bool
-    is_system: bool = False
-    bundle_checksum: Optional[str] = None
-    config_checksum: Optional[str] = None
-    last_deployed_at: Optional[str] = None
-    last_synced_at: Optional[str] = None
-    sync_status: Optional[str] = None  # "synced" | "stale" | "unknown"
-    is_outdated: bool = False  # True when deployed bundle_checksum != current dist hash
-    created_at: str
-    updated_at: str
-
-    class Config:
-        from_attributes = True
-
-
-class TestConnectionResult(BaseModel):
-    """Result of testing an engine connection."""
-    success: bool
-    message: str
-    latency_ms: Optional[float] = None
-
-
-class BatchRequest(BaseModel):
-    """Base batch request with engine IDs."""
-    engine_ids: List[str] = Field(..., min_length=1)
-
-
-class BatchDeleteRequest(BatchRequest):
-    """Batch delete with optional remote teardown."""
-    delete_remote: bool = False
-
-
-class BatchToggleRequest(BatchRequest):
-    """Batch toggle active status."""
-    is_active: bool
-
-
-class BatchResult(BaseModel):
-    """Result of a batch operation."""
-    success: List[str] = []  # IDs that succeeded
-    failed: List[dict] = []  # [{ id, error }]
-    total: int = 0
 
 
 # =============================================================================
@@ -163,8 +89,6 @@ def _serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) ->
         current_hash = current_hashes.get("full" if is_full else "lite")
 
         if not bundle_checksum_val:
-            # No checksum stored → unknown/pre-existing engine → treat as outdated
-            # (but only for non-system engines that have a provider)
             if engine.edge_provider_id and not getattr(engine, 'is_system', False):
                 is_outdated = True
                 sync_status = "stale"
@@ -199,6 +123,12 @@ def _serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) ->
     }
 
 
+def _get_current_hashes() -> dict:
+    """Get current source hashes for drift detection."""
+    source_hash = get_source_hash()
+    return {"lite": source_hash, "full": source_hash}
+
+
 # =============================================================================
 # CRUD Endpoints
 # =============================================================================
@@ -207,28 +137,15 @@ def _serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) ->
 
 @router.get("/bundle-hashes/")
 async def get_bundle_hashes():
-    """Return current source hash for drift detection.
-    
-    Now uses source file hashing (not build output) for immediate staleness
-    detection after any .ts edit — no build step required.
-    """
-    from .cloudflare import _get_source_hash
-    source_hash = _get_source_hash()
-    return {
-        "lite": source_hash,
-        "full": source_hash,
-    }
+    """Return current source hash for drift detection."""
+    source_hash = get_source_hash()
+    return {"lite": source_hash, "full": source_hash}
 
 
 @router.get("/", response_model=List[EdgeEngineResponse])
 async def list_edge_engines(db: Session = Depends(get_db)):
     """List all edge engines with outdated detection."""
-    from .cloudflare import _get_source_hash
-    source_hash = _get_source_hash()
-    current_hashes = {
-        "lite": source_hash,
-        "full": source_hash,
-    }
+    current_hashes = _get_current_hashes()
     engines = db.query(EdgeEngine).order_by(EdgeEngine.created_at.desc()).all()
     return [_serialize_engine(e, current_hashes) for e in engines]
 
@@ -236,12 +153,7 @@ async def list_edge_engines(db: Session = Depends(get_db)):
 @router.get("/{engine_id}", response_model=EdgeEngineResponse)
 async def get_edge_engine(engine_id: str, db: Session = Depends(get_db)):
     """Get a single edge engine by ID."""
-    from .cloudflare import _get_source_hash
-    source_hash = _get_source_hash()
-    current_hashes = {
-        "lite": source_hash,
-        "full": source_hash,
-    }
+    current_hashes = _get_current_hashes()
     engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
@@ -251,7 +163,6 @@ async def get_edge_engine(engine_id: str, db: Session = Depends(get_db)):
 @router.post("/", response_model=EdgeEngineResponse, status_code=201)
 async def create_edge_engine(payload: EdgeEngineCreate, db: Session = Depends(get_db)):
     """Create a new edge engine."""
-    # Verify provider if given
     if payload.edge_provider_id:
         provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.edge_provider_id).first()
         if not provider:
@@ -304,26 +215,9 @@ async def update_edge_engine(engine_id: str, payload: EdgeEngineUpdate, db: Sess
     return _serialize_engine(engine)
 
 
-class ReconfigureRequest(BaseModel):
-    """Reconfigure an engine's DB/cache/queue bindings and push secrets to the remote."""
-    edge_db_id: Optional[str] = None   # null = detach DB
-    edge_cache_id: Optional[str] = None  # null = detach cache
-    edge_queue_id: Optional[str] = None  # null = detach queue
-
-
-# Frontbase-managed binding names — only these are touched during reconfigure
-FRONTBASE_BINDING_NAMES = frozenset([
-    'FRONTBASE_STATE_DB_URL',
-    'FRONTBASE_STATE_DB_TOKEN',
-    'FRONTBASE_CACHE_URL',
-    'FRONTBASE_CACHE_TOKEN',
-    'FRONTBASE_QUEUE_PROVIDER',
-    'FRONTBASE_QUEUE_URL',
-    'FRONTBASE_QUEUE_TOKEN',
-    'FRONTBASE_QUEUE_SIGNING_KEY',
-    'FRONTBASE_QUEUE_NEXT_SIGNING_KEY',
-])
-
+# =============================================================================
+# Reconfigure
+# =============================================================================
 
 @router.post("/{engine_id}/reconfigure")
 async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Session = Depends(get_db)):
@@ -332,13 +226,6 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
     
     Uses the CF Settings API PATCH to update bindings without full redeployment.
     Only touches Frontbase-managed bindings — all other bindings are preserved.
-    
-    Flow:
-    1. Looks up credentials from EdgeDatabase / EdgeCache tables
-    2. GETs current worker settings (preserves non-Frontbase bindings)
-    3. PATCHes settings with merged bindings (triggers new Worker version)
-    4. Updates the local engine record
-    5. Flushes the target's cache so stale data is cleared
     """
     import httpx
 
@@ -346,7 +233,7 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
-    # --- 1. Resolve CF credentials (Release-Before-IO: read DB first) ---
+    # --- 1. Resolve CF credentials ---
     provider_id = engine.edge_provider_id
     is_cloudflare = False
     api_token = None
@@ -363,51 +250,21 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
             cfg = json.loads(str(engine.engine_config or '{}'))
             worker_name = cfg.get('worker_name')
 
-    # --- 2. Build NEW bindings from DB/cache selections ---
-    new_bindings: dict[str, str] = {}
-
-    # Database
-    if payload.edge_db_id:
-        edge_db = db.query(EdgeDatabase).filter(EdgeDatabase.id == payload.edge_db_id).first()
-        if not edge_db:
-            raise HTTPException(400, "Invalid edge_db_id")
-        new_bindings['FRONTBASE_STATE_DB_URL'] = str(edge_db.db_url)
-        if edge_db.db_token:  # type: ignore[truthy-bool]
-            new_bindings['FRONTBASE_STATE_DB_TOKEN'] = str(edge_db.db_token)
-    # If no edge_db_id → these bindings are simply omitted (= removed)
-
-    # Cache
-    if payload.edge_cache_id:
-        edge_cache = db.query(EdgeCache).filter(EdgeCache.id == payload.edge_cache_id).first()
-        if not edge_cache:
-            raise HTTPException(400, "Invalid edge_cache_id")
-        new_bindings['FRONTBASE_CACHE_URL'] = str(edge_cache.cache_url)
-        if edge_cache.cache_token:  # type: ignore[truthy-bool]
-            new_bindings['FRONTBASE_CACHE_TOKEN'] = str(edge_cache.cache_token)
-    # If no edge_cache_id → these bindings are simply omitted (= removed)
-
-    # Queue (provider-agnostic)
-    if payload.edge_queue_id:
-        edge_queue = db.query(EdgeQueue).filter(EdgeQueue.id == payload.edge_queue_id).first()
-        if not edge_queue:
-            raise HTTPException(400, "Invalid edge_queue_id")
-        new_bindings['FRONTBASE_QUEUE_PROVIDER'] = str(edge_queue.provider)
-        new_bindings['FRONTBASE_QUEUE_URL'] = str(edge_queue.queue_url)
-        if edge_queue.queue_token:  # type: ignore[truthy-bool]
-            new_bindings['FRONTBASE_QUEUE_TOKEN'] = str(edge_queue.queue_token)
-        if edge_queue.signing_key:  # type: ignore[truthy-bool]
-            new_bindings['FRONTBASE_QUEUE_SIGNING_KEY'] = str(edge_queue.signing_key)
-        if edge_queue.next_signing_key:  # type: ignore[truthy-bool]
-            new_bindings['FRONTBASE_QUEUE_NEXT_SIGNING_KEY'] = str(edge_queue.next_signing_key)
-    # If no edge_queue_id → these bindings are simply omitted (= removed)
+    # --- 2. Build NEW bindings from DB/cache selections (DRY) ---
+    new_bindings = build_engine_secrets(
+        db,
+        edge_db_id=payload.edge_db_id,
+        edge_cache_id=payload.edge_cache_id,
+        edge_queue_id=payload.edge_queue_id,
+    )
 
     # --- 3. PATCH CF Worker settings ---
     settings_patched = False
-    bindings_set: list[str] = []
+    bindings_set: list[str] = list(new_bindings.keys())
     bindings_removed: list[str] = []
 
     if is_cloudflare and api_token and account_id and worker_name:
-        from .cloudflare import CF_API, _headers
+        from ..services.cloudflare_api import CF_API, headers as cf_headers
         settings_url = f"{CF_API}/accounts/{account_id}/workers/scripts/{worker_name}/settings"
 
         try:
@@ -415,7 +272,7 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
                 # GET current settings to preserve non-Frontbase bindings
                 get_resp = await client.get(
                     settings_url,
-                    headers={**_headers(api_token), "Content-Type": "application/json"},
+                    headers={**cf_headers(api_token), "Content-Type": "application/json"},
                     timeout=15.0,
                 )
 
@@ -445,13 +302,12 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
                         "name": name,
                         "text": value,
                     })
-                    bindings_set.append(name)
 
                 # PATCH settings — CF API requires multipart/form-data
                 settings_payload = json.dumps({"bindings": preserved_bindings})
                 patch_resp = await client.patch(
                     settings_url,
-                    headers=_headers(api_token),
+                    headers=cf_headers(api_token),
                     files={
                         "settings": (None, settings_payload, "application/json"),
                     },
@@ -472,7 +328,7 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
                     try:
                         del_resp = await client.delete(
                             f"{secrets_url}/{secret_name}",
-                            headers=_headers(api_token),
+                            headers=cf_headers(api_token),
                             timeout=15.0,
                         )
                         if del_resp.status_code in (200, 204):
@@ -494,17 +350,7 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
     db.refresh(engine)
 
     # --- 5. Flush edge cache on the target ---
-    cache_flushed = False
-    engine_url = str(engine.url).rstrip('/')
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{engine_url}/api/cache/flush",
-                timeout=10.0
-            )
-            cache_flushed = resp.status_code in (200, 204)
-    except Exception as e:
-        print(f"[Reconfigure] Cache flush failed for {engine_url}: {e}")
+    cache_flushed = await engine_deploy._flush_cache(str(engine.url).rstrip('/'))
 
     return {
         "success": True,
@@ -516,164 +362,25 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
     }
 
 
+# =============================================================================
+# Redeploy — delegates to engine_deploy service
+# =============================================================================
+
 @router.post("/{engine_id}/redeploy/")
 async def redeploy_engine(engine_id: str, db: Session = Depends(get_db)):
-    """Redeploy an engine with the latest bundle code + current secrets.
-    
-    Supports two deployment modes:
-    - Cloudflare: rebuilds bundle → uploads via CF API → patches secrets
-    - Docker/Node: rebuilds bundle → POSTs to engine /api/update → engine restarts
-    """
-    import httpx
-
+    """Redeploy an engine with the latest bundle code + current secrets."""
     engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
-    engine_url = str(engine.url).rstrip('/')
-    adapter_type = str(engine.adapter_type) if engine.adapter_type else "automations"
+    result = await engine_deploy.redeploy(engine, db)
+    result["engine"] = _serialize_engine(engine)
+    return result
 
-    from .cloudflare import _build_worker, _get_source_hash
 
-    # Determine deployment mode
-    provider_id = engine.edge_provider_id
-    provider = None
-    is_cloudflare = False
-
-    if provider_id:
-        provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id).first()
-        is_cloudflare = provider and str(provider.provider) == 'cloudflare'
-
-    try:
-        # 1. Build latest bundle
-        script_content, bundle_hash = _build_worker(adapter_type)
-        source_hash = _get_source_hash() or bundle_hash
-
-        if is_cloudflare:
-            # ── Cloudflare Path ──────────────────────────────────────────
-            from .cloudflare import _upload_worker, _set_secrets, CF_API, _headers
-
-            creds = json.loads(str(provider.provider_credentials or '{}'))
-            api_token = creds.get('api_token')
-            account_id = creds.get('account_id')
-            cfg = json.loads(str(engine.engine_config or '{}'))
-            worker_name = cfg.get('worker_name')
-
-            if not api_token or not account_id or not worker_name:
-                raise HTTPException(400, "Missing Cloudflare credentials or worker_name in engine config")
-
-            script_filename = "cloudflare.js" if adapter_type == "full" else "cloudflare-lite.js"
-            await _upload_worker(api_token, account_id, worker_name, script_content, script_filename)
-
-            # Patch secrets
-            secrets: dict[str, str] = {}
-
-            if engine.edge_db_id:
-                edge_db = db.query(EdgeDatabase).filter(EdgeDatabase.id == engine.edge_db_id).first()
-                if edge_db:
-                    secrets['FRONTBASE_STATE_DB_URL'] = str(edge_db.db_url)
-                    if edge_db.db_token:  # type: ignore[truthy-bool]
-                        secrets['FRONTBASE_STATE_DB_TOKEN'] = str(edge_db.db_token)
-
-            if engine.edge_cache_id:
-                edge_cache = db.query(EdgeCache).filter(EdgeCache.id == engine.edge_cache_id).first()
-                if edge_cache:
-                    secrets['FRONTBASE_CACHE_URL'] = str(edge_cache.cache_url)
-                    if edge_cache.cache_token:  # type: ignore[truthy-bool]
-                        secrets['FRONTBASE_CACHE_TOKEN'] = str(edge_cache.cache_token)
-
-            if engine.edge_queue_id:
-                edge_queue = db.query(EdgeQueue).filter(EdgeQueue.id == engine.edge_queue_id).first()
-                if edge_queue:
-                    secrets['FRONTBASE_QUEUE_PROVIDER'] = str(edge_queue.provider)
-                    secrets['FRONTBASE_QUEUE_URL'] = str(edge_queue.queue_url)
-                    if edge_queue.queue_token:  # type: ignore[truthy-bool]
-                        secrets['FRONTBASE_QUEUE_TOKEN'] = str(edge_queue.queue_token)
-                    if edge_queue.signing_key:  # type: ignore[truthy-bool]
-                        secrets['FRONTBASE_QUEUE_SIGNING_KEY'] = str(edge_queue.signing_key)
-                    if edge_queue.next_signing_key:  # type: ignore[truthy-bool]
-                        secrets['FRONTBASE_QUEUE_NEXT_SIGNING_KEY'] = str(edge_queue.next_signing_key)
-
-            if secrets:
-                await _set_secrets(api_token, account_id, worker_name, secrets)
-
-        else:
-            # ── Docker / Node.js Path ────────────────────────────────────
-            # POST the built bundle to the engine's /api/update endpoint
-            async with httpx.AsyncClient() as client:
-                # Health check first
-                try:
-                    health = await client.get(f"{engine_url}/api/health", timeout=5.0)
-                    if health.status_code != 200:
-                        raise HTTPException(503, f"Engine unreachable: health check returned {health.status_code}")
-                except httpx.ConnectError:
-                    raise HTTPException(503, f"Engine unreachable at {engine_url}")
-
-                # Send update
-                update_resp = await client.post(
-                    f"{engine_url}/api/update",
-                    json={
-                        "script_content": script_content,
-                        "source_hash": source_hash,
-                        "version": "latest",
-                    },
-                    timeout=30.0,
-                )
-
-                if update_resp.status_code != 200:
-                    detail = update_resp.text
-                    raise HTTPException(update_resp.status_code, f"Engine update failed: {detail}")
-
-            # Wait for engine to restart and come back healthy
-            import asyncio
-            engine_healthy = False
-            for attempt in range(6):  # 6 attempts × 3s = 18s max wait
-                await asyncio.sleep(3)
-                try:
-                    async with httpx.AsyncClient() as client:
-                        resp = await client.get(f"{engine_url}/api/health", timeout=5.0)
-                        if resp.status_code == 200:
-                            engine_healthy = True
-                            break
-                except Exception:
-                    continue
-
-            if not engine_healthy:
-                print(f"[Redeploy] Warning: Engine {engine_url} did not come back healthy after update")
-
-        # Update local record
-        deployed_at = datetime.utcnow().isoformat() + "Z"
-        engine.bundle_checksum = source_hash  # type: ignore[assignment]
-        engine.last_deployed_at = deployed_at  # type: ignore[assignment]
-        engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
-        db.commit()
-        db.refresh(engine)
-
-        # Flush cache
-        cache_flushed = False
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.post(f"{engine_url}/api/cache/flush", timeout=10.0)
-                cache_flushed = resp.status_code in (200, 204)
-        except Exception:
-            pass
-
-        return {
-            "success": True,
-            "mode": "cloudflare" if is_cloudflare else "docker",
-            "source_hash": source_hash,
-            "deployed_at": deployed_at,
-            "cache_flushed": cache_flushed,
-            "engine": _serialize_engine(engine),
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(500, f"Redeploy failed: {str(e)}")
-
+# =============================================================================
+# Delete
+# =============================================================================
 
 @router.delete("/{engine_id}", status_code=204)
 async def delete_edge_engine(
@@ -692,19 +399,17 @@ async def delete_edge_engine(
     # Release-Before-IO: extract creds BEFORE slow HTTP call (AGENTS.md §4.3)
     cf_creds = None
     if delete_remote and engine.edge_provider and str(engine.edge_provider.provider) == "cloudflare":
-        cf_creds = _extract_cf_creds(engine)
+        cf_creds = engine_test.extract_cf_creds(engine)
 
     if cf_creds:
-        # DB session is released by FastAPI's Depends(get_db) generator at request end,
-        # but we call the slow I/O here BEFORE any further DB writes.
-        await _delete_cloudflare_worker_from_creds(cf_creds)
+        await engine_test.delete_cloudflare_worker_from_creds(cf_creds)
 
     db.delete(engine)
     db.commit()
 
 
 # =============================================================================
-# Test Connection
+# Test Connection — delegates to engine_test service
 # =============================================================================
 
 @router.post("/{engine_id}/test", response_model=TestConnectionResult)
@@ -717,112 +422,7 @@ async def test_edge_engine(engine_id: str, db: Session = Depends(get_db)):
     url = engine.url
     provider_name = engine.edge_provider.provider if engine.edge_provider else "unknown"
 
-    return await _test_target_connection(str(url), str(provider_name))
-
-
-async def _test_target_connection(url: str, provider: str) -> TestConnectionResult:
-    """Test connectivity to an edge engine."""
-    import httpx
-    import time
-
-    health_url = f"{url.rstrip('/')}/api/health"
-
-    try:
-        start = time.monotonic()
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(health_url)
-        latency_ms = round((time.monotonic() - start) * 1000, 1)
-
-        if response.is_success:
-            return TestConnectionResult(
-                success=True,
-                message=f"{provider.title()} engine is reachable",
-                latency_ms=latency_ms,
-            )
-        else:
-            return TestConnectionResult(
-                success=False,
-                message=f"Engine returned HTTP {response.status_code}",
-                latency_ms=latency_ms,
-            )
-    except httpx.ConnectError:
-        return TestConnectionResult(
-            success=False,
-            message="Connection refused — is the engine running?",
-        )
-    except httpx.TimeoutException:
-        return TestConnectionResult(
-            success=False,
-            message="Connection timed out after 5s",
-        )
-    except Exception as e:
-        return TestConnectionResult(
-            success=False,
-            message=f"Connection failed: {str(e)}",
-        )
-
-
-# =============================================================================
-# Remote Delete Helpers
-# =============================================================================
-
-async def _delete_cloudflare_worker(engine: EdgeEngine):
-    """Delete a Cloudflare Worker — convenience wrapper for endpoints not yet split."""
-    creds = _extract_cf_creds(engine)
-    await _delete_cloudflare_worker_from_creds(creds)
-
-
-def _extract_cf_creds(engine: EdgeEngine) -> dict:
-    """Extract Cloudflare credentials and worker name from an EdgeEngine (DB-only, no I/O)."""
-    import json
-
-    if not engine.edge_provider or not engine.edge_provider.provider_credentials:
-        raise HTTPException(400, "No Cloudflare API token stored on the associated provider account")
-
-    credentials = json.loads(str(engine.edge_provider.provider_credentials))
-    api_token = credentials.get("api_token")
-    account_id = credentials.get("account_id")
-
-    if not api_token or not account_id:
-        raise HTTPException(400, "Invalid Cloudflare provider credentials missing api_token or account_id")
-
-    # Extract worker name from engine_config or URL
-    worker_name = str(engine.name)  # Fallback
-    if engine.engine_config:
-        conf = json.loads(str(engine.engine_config))
-        worker_name = conf.get("worker_name", worker_name)
-
-    target_url = str(engine.url or "")
-    if target_url and "workers.dev" in target_url:
-        from urllib.parse import urlparse
-        parsed = urlparse(target_url)
-        parts = (parsed.hostname or "").split(".")
-        if len(parts) >= 3:
-            worker_name = parts[0]
-
-    return {
-        "api_token": api_token,
-        "account_id": account_id,
-        "worker_name": worker_name,
-    }
-
-
-async def _delete_cloudflare_worker_from_creds(creds: dict):
-    """Delete a Cloudflare Worker using pre-extracted credentials (pure HTTP, no DB)."""
-    import httpx
-
-    delete_url = f"https://api.cloudflare.com/client/v4/accounts/{creds['account_id']}/workers/scripts/{creds['worker_name']}"
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.delete(
-            delete_url,
-            headers={"Authorization": f"Bearer {creds['api_token']}"}
-        )
-
-    if not response.is_success:
-        result = response.json()
-        errors = result.get("errors", [{}])
-        err_msg = errors[0].get("message", response.text) if errors else response.text
-        raise HTTPException(502, f"Failed to delete CF Worker: {err_msg}")
+    return await engine_test.test_connection(str(url), str(provider_name))
 
 
 # =============================================================================
@@ -832,79 +432,71 @@ async def _delete_cloudflare_worker_from_creds(creds: dict):
 @router.post("/batch/delete", response_model=BatchResult)
 async def batch_delete_engines(payload: BatchDeleteRequest, db: Session = Depends(get_db)):
     """Batch delete engines. Optionally delete remote resources in parallel via asyncio.gather."""
-    engines = db.query(EdgeEngine).filter(EdgeEngine.id.in_(payload.engine_ids)).all()
-    found_ids = {str(e.id) for e in engines}
     result = BatchResult(total=len(payload.engine_ids))
 
-    # Separate system engines (cannot delete)
-    deletable = [e for e in engines if not e.is_system]
-    system_blocked = [e for e in engines if e.is_system]
-    for e in system_blocked:
-        result.failed.append({"id": str(e.id), "error": "Cannot delete system engine"})
-
-    # Not found
+    # Phase 1: extract CF creds BEFORE any I/O (Release-Before-IO)
+    engines_to_delete: list[tuple[EdgeEngine, dict | None]] = []
     for eid in payload.engine_ids:
-        if eid not in found_ids:
-            result.failed.append({"id": eid, "error": "Engine not found"})
+        engine = db.query(EdgeEngine).filter(EdgeEngine.id == eid).first()
+        if not engine:
+            result.failed.append({"id": eid, "error": "Not found"})
+            continue
+        if engine.is_system:  # type: ignore[truthy-bool]
+            result.failed.append({"id": eid, "error": "Cannot delete system engine"})
+            continue
 
-    # Release-Before-IO: extract all CF creds from DB first, then do I/O
-    cf_jobs: list[tuple[str, dict]] = []
+        cf_creds = None
+        if payload.delete_remote and engine.edge_provider and str(engine.edge_provider.provider) == "cloudflare":
+            try:
+                cf_creds = engine_test.extract_cf_creds(engine)
+            except Exception as e:
+                result.failed.append({"id": eid, "error": f"CF creds error: {e}"})
+                continue
+        engines_to_delete.append((engine, cf_creds))
+
+    # Phase 2: Delete remote resources in parallel
     if payload.delete_remote:
-        for engine in deletable:
-            if engine.edge_provider and str(engine.edge_provider.provider) == "cloudflare":
-                try:
-                    creds = _extract_cf_creds(engine)
-                    cf_jobs.append((str(engine.id), creds))
-                except Exception as ex:
-                    result.failed.append({"id": str(engine.id), "error": str(ex)})
-
-    # Parallel CF teardown via asyncio.gather
-    if cf_jobs:
         async def _safe_delete(engine_id: str, creds: dict):
             try:
-                await _delete_cloudflare_worker_from_creds(creds)
-                return engine_id, None
-            except Exception as ex:
-                return engine_id, str(ex)
+                await engine_test.delete_cloudflare_worker_from_creds(creds)
+            except Exception as e:
+                result.failed.append({"id": engine_id, "error": f"Remote delete failed: {e}"})
 
-        outcomes = await asyncio.gather(*[_safe_delete(eid, c) for eid, c in cf_jobs])
-        failed_remote_ids = set()
-        for eid, err in outcomes:
-            if err:
-                result.failed.append({"id": eid, "error": f"Remote delete failed: {err}"})
-                failed_remote_ids.add(eid)
+        tasks = [
+            _safe_delete(str(eng.id), creds)
+            for eng, creds in engines_to_delete
+            if creds
+        ]
+        if tasks:
+            await asyncio.gather(*tasks)
 
-        # Only DB-delete engines whose remote teardown succeeded (or had no remote)
-        deletable = [e for e in deletable if str(e.id) not in failed_remote_ids]
+    # Phase 3: Delete from DB
+    for engine, _ in engines_to_delete:
+        eid = str(engine.id)
+        if any(f.get("id") == eid for f in result.failed):
+            continue
+        try:
+            db.delete(engine)
+            result.success.append(eid)
+        except Exception as e:
+            result.failed.append({"id": eid, "error": str(e)})
 
-    # Batch DB delete
-    for engine in deletable:
-        db.delete(engine)
-        result.success.append(str(engine.id))
     db.commit()
-
     return result
 
 
 @router.post("/batch/toggle", response_model=BatchResult)
 async def batch_toggle_engines(payload: BatchToggleRequest, db: Session = Depends(get_db)):
     """Batch toggle active status for multiple engines. Single SQL update."""
-    engines = db.query(EdgeEngine).filter(EdgeEngine.id.in_(payload.engine_ids)).all()
-    found_ids = {str(e.id) for e in engines}
     result = BatchResult(total=len(payload.engine_ids))
-
-    now = datetime.utcnow().isoformat()
-    for engine in engines:
-        # System engines CAN be toggled active/inactive, they just can't be deleted.
-        # This fixes a bug where the Local Edge got stuck in an inactive state.
-        engine.is_active = payload.is_active  # type: ignore[assignment]
-        engine.updated_at = now  # type: ignore[assignment]
-        result.success.append(str(engine.id))
-
     for eid in payload.engine_ids:
-        if eid not in found_ids:
-            result.failed.append({"id": eid, "error": "Engine not found"})
-
+        engine = db.query(EdgeEngine).filter(EdgeEngine.id == eid).first()
+        if not engine:
+            result.failed.append({"id": eid, "error": "Not found"})
+            continue
+        engine.is_active = payload.is_active  # type: ignore[assignment]
+        engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+        result.success.append(eid)
     db.commit()
     return result
 
@@ -912,62 +504,52 @@ async def batch_toggle_engines(payload: BatchToggleRequest, db: Session = Depend
 @router.post("/batch/sync-check", response_model=BatchResult)
 async def batch_sync_check(payload: BatchRequest, db: Session = Depends(get_db)):
     """Batch sync-check: verify engines are reachable and update last_synced_at."""
-    engines = db.query(EdgeEngine).filter(EdgeEngine.id.in_(payload.engine_ids)).all()
-    found_ids = {str(e.id) for e in engines}
     result = BatchResult(total=len(payload.engine_ids))
 
-    for eid in payload.engine_ids:
-        if eid not in found_ids:
-            result.failed.append({"id": eid, "error": "Engine not found"})
-
-    # Parallel health checks via asyncio.gather
     async def _check_engine(engine: EdgeEngine):
-        import httpx
         eid = str(engine.id)
-        url = str(engine.url or "").rstrip("/")
-        if not url:
-            return eid, False, "No URL configured"
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{url}/api/health")
-            if resp.is_success:
-                return eid, True, None
-            else:
-                return eid, False, f"HTTP {resp.status_code}"
-        except Exception as ex:
-            return eid, False, str(ex)
-
-    outcomes = await asyncio.gather(*[_check_engine(e) for e in engines])
-
-    now = datetime.utcnow().isoformat()
-    for eid, ok, err in outcomes:
-        if ok:
-            # Update last_synced_at
-            engine = next((e for e in engines if str(e.id) == eid), None)
-            if engine:
-                engine.last_synced_at = now  # type: ignore[assignment]
-                engine.updated_at = now  # type: ignore[assignment]
+        url = str(engine.url)
+        provider_name = engine.edge_provider.provider if engine.edge_provider else "unknown"
+        test_result = await engine_test.test_connection(url, str(provider_name))
+        if test_result.success:
+            engine.last_synced_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+            engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
             result.success.append(eid)
         else:
-            result.failed.append({"id": eid, "error": err or "Unknown"})
+            result.failed.append({"id": eid, "error": test_result.message})
 
+    engines = []
+    for eid in payload.engine_ids:
+        engine = db.query(EdgeEngine).filter(EdgeEngine.id == eid).first()
+        if not engine:
+            result.failed.append({"id": eid, "error": "Not found"})
+            continue
+        engines.append(engine)
+
+    await asyncio.gather(*[_check_engine(e) for e in engines])
     db.commit()
     return result
 
 
-@router.get("/active/by-scope/{scope}", response_model=List[EdgeEngineResponse])
+# =============================================================================
+# Scope Query
+# =============================================================================
+
+@router.get("/active/by-scope/{scope}")
 async def list_active_engines_by_scope(scope: Literal["pages", "automations", "full"], db: Session = Depends(get_db)):
     """List active edge engines filtered by adapter scope.
     
     Used by the publish pipeline to determine where to push pages/automations.
     'full' scope targets match both 'pages' and 'automations' queries.
     """
-    query = db.query(EdgeEngine).filter(EdgeEngine.is_active == True)
-    
-    if scope == "pages":
-        query = query.filter(EdgeEngine.adapter_type.in_(["pages", "full"]))
-    elif scope == "automations":
-        query = query.filter(EdgeEngine.adapter_type.in_(["automations", "full"]))
+    query = db.query(EdgeEngine).filter(EdgeEngine.is_active == True)  # noqa: E712
+    if scope == "full":
+        query = query.filter(EdgeEngine.adapter_type.in_(["full", "pages", "automations"]))
+    else:
+        query = query.filter(EdgeEngine.adapter_type.in_([scope, "full"]))
 
-    engines = query.order_by(EdgeEngine.created_at.desc()).all()
-    return [_serialize_engine(e) for e in engines]
+    engines = query.all()
+    return [
+        {"id": str(e.id), "url": str(e.url), "name": str(e.name), "adapter_type": str(e.adapter_type)}
+        for e in engines
+    ]

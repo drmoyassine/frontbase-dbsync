@@ -67,6 +67,26 @@ export class UpstashAdapter implements ICacheProvider {
     async expire(key: string, seconds: number) {
         return this.client.expire(key, seconds);
     }
+
+    async decr(key: string) {
+        return this.client.decr(key);
+    }
+
+    async zadd(key: string, score: number, member: string): Promise<number> {
+        const result = await this.client.zadd(key, { score, member });
+        return result ?? 0;
+    }
+
+    async zpopmax(key: string): Promise<{ member: string; score: number } | null> {
+        const result = await this.client.zpopmax<string>(key, 1);
+        if (!result || result.length === 0) return null;
+        // Upstash returns [{member, score}] for zpopmax
+        const first = result[0] as any;
+        if (first && typeof first === 'object' && 'member' in first) {
+            return { member: first.member, score: first.score };
+        }
+        return null;
+    }
 }
 
 // Adapter for IORedis (TCP)
@@ -156,6 +176,24 @@ export class IoRedisAdapter implements ICacheProvider {
     async expire(key: string, seconds: number) {
         await this.ensureClient();
         return this.client.expire(key, seconds);
+    }
+
+    async decr(key: string) {
+        await this.ensureClient();
+        return this.client.decr(key);
+    }
+
+    async zadd(key: string, score: number, member: string) {
+        await this.ensureClient();
+        return this.client.zadd(key, score, member);
+    }
+
+    async zpopmax(key: string): Promise<{ member: string; score: number } | null> {
+        await this.ensureClient();
+        // ioredis zpopmax returns [member, score] or empty array
+        const result = await this.client.zpopmax(key, 1);
+        if (!result || result.length < 2) return null;
+        return { member: result[0], score: parseFloat(result[1]) };
     }
 }
 

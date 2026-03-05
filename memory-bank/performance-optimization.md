@@ -1,7 +1,7 @@
 # Performance & Code Health Optimization Backlog
 
 > Audit date: 2026-03-02
-> Last updated: 2026-03-03
+> Last updated: 2026-03-05
 > Generated from full codebase scan across FastAPI backend, Vite/React frontend, and Hono Edge service.
 
 ---
@@ -23,7 +23,7 @@
 
 ### Backend (Python)
 
-#### 🔴 `routers/edge_engines.py` — **974 lines** (Highest Priority)
+#### ~~🔴 `routers/edge_engines.py` — **974 lines** → **330 lines** ✅ DONE (2026-03-05)~~
 
 **Concern audit (6 distinct responsibilities):**
 
@@ -48,7 +48,7 @@
 
 ---
 
-#### 🔴 `routers/cloudflare.py` — **880 lines** (High Priority)
+#### ~~🔴 `routers/cloudflare.py` — **880 lines** → **270 lines** ✅ DONE (2026-03-05)~~
 
 **Concern audit (5 distinct responsibilities):**
 
@@ -73,9 +73,9 @@
 
 ---
 
-#### ⚠️ Shared Extraction: `services/bundle_hash.py`
+#### ~~⚠️ Shared Extraction: `services/bundle.py`~~ ✅ DONE
 
-Both `cloudflare.py` and `edge_engines.py` import `_get_source_hash`. After refactoring, this should live in a shared `services/bundle_hash.py` to avoid circular imports. The `edge_engines.py` redeploy also calls `_build_worker` — it should import from `services/bundle_builder.py`.
+Both `cloudflare.py` and `edge_engines.py` now import from `services/bundle.py` (hash + build), `services/secrets_builder.py` (DRY secrets), and `services/cloudflare_api.py` (CF HTTP helpers). Secret-building deduplication eliminated 3x copy-paste.
 
 ---
 
@@ -106,8 +106,8 @@ Both `cloudflare.py` and `edge_engines.py` import `_get_source_hash`. After refa
 | `engine/runtime.ts` | **540** | Runtime engine: request routing + SSR + data fetching | Extract data fetching into `engine/data-fetcher.ts`; keep routing in `runtime.ts` |
 | `routes/pages.ts` | **536** | Page serving route with SSR rendering inline | Extract SSR template assembly into `ssr/template.ts` |
 | `components/datatable/DataTable.tsx` | **498** | DataTable SSR component | Review — may be acceptable as single rendering component |
-| `storage/TursoHttpProvider.ts` | **383** | Turso state provider — all CRUD in one file | Acceptable (single-concern provider) but monitor growth |
-| `storage/LocalSqliteProvider.ts` | **354** | Local SQLite state provider | Same as above |
+| `storage/TursoHttpProvider.ts` | **365** | Turso state provider — all CRUD in one file | ✅ Schema extracted to `schema.ts` |
+| `storage/LocalSqliteProvider.ts` | **340** | Local SQLite state provider | ✅ Schema extracted to `schema.ts` |
 
 ---
 
@@ -120,15 +120,15 @@ Both `cloudflare.py` and `edge_engines.py` import `_get_source_hash`. After refa
 - ~~`db/pages-store.ts` duplicates `storage/LocalSqliteProvider.ts`~~ → **Archived**
 - `db/project-settings.ts` — **Retained** (active import from `PageRenderer.ts` for `getFaviconUrl()`)
 
-### 3.3 Edge Schema Duplication
-- `publishedPages` table schema is defined in **both** `TursoHttpProvider.ts` (line 28) and `LocalSqliteProvider.ts` (line 28)
-- If a column is added to one but not the other → schema drift
-- **Action**: Extract shared schema into `storage/schema.ts` and import from both providers
+### 3.3 Edge Schema Duplication (Resolved ✅ — 2026-03-05)
+- ~~`publishedPages` table schema defined in both providers~~ → Extracted to shared `storage/schema.ts`
+- Both `TursoHttpProvider.ts` and `LocalSqliteProvider.ts` now import from single source
+- `LocalSqliteProvider` re-exports for backward compatibility
 
-### 3.4 Pydantic/Zod Schema Sync
-- `fastapi-backend/app/schemas/publish.py` (Pydantic) and `services/edge/src/schemas/publish.ts` (Zod) must stay in sync
-- No automated validation exists — drift is caught only by runtime errors
-- **Action (Future)**: Consider generating Zod from Pydantic via codegen, or add a CI test that validates shape parity
+### 3.4 Pydantic/Zod Schema Sync (Partial ✅ — 2026-03-05)
+- Created `tests/test_schema_sync.py` — automated field parity checks between `api-contracts.ts` Zod schemas and backend models
+- 5 sync tests: `PageSchema` fields, `ColumnSchema` fields, `EdgeEngine` TS interface shape
+- **Future**: Consider generating Zod from Pydantic via codegen for full automation
 
 ### 3.5 Migration Runner Safety (Resolved ✅)
 - ~~`edge-migrations.ts` marks version applied before SQL~~ → Fixed: version record now inserted AFTER SQL succeeds
@@ -160,11 +160,11 @@ Both `cloudflare.py` and `edge_engines.py` import `_get_source_hash`. After refa
 
 | # | Item | Effort | Impact | Status |
 |---|------|--------|--------|--------|
-| 1 | **Split `edge_engines.py` (974→5 files)** | 2 hr | 🔴 Highest — 6 concerns in 1 file, blocks clean maintenance | Pending |
-| 2 | **Split `cloudflare.py` (880→6 files)** | 1.5 hr | 🔴 High — 5 concerns, shared bundle utils need extraction | Pending |
+| 1 | ~~**Split `edge_engines.py` (974→5 files)**~~ | 2 hr | 🔴 Highest — 6 concerns in 1 file | ✅ Done (2026-03-05) |
+| 2 | ~~**Split `cloudflare.py` (880→6 files)**~~ | 1.5 hr | 🔴 High — 5 concerns, shared bundle utils | ✅ Done (2026-03-05) |
 | 3 | ~~Archive `publish_strategy.py`~~ | 5 min | Removes 93 lines of dead code | ✅ Done |
 | 4 | ~~Archive `db/pages-store.ts`~~ (kept `project-settings.ts`) | 5 min | Removes ~60 lines of dead code | ✅ Done |
-| 5 | Extract shared Drizzle schema from providers | 30 min | Prevents future schema drift | Pending |
+| 5 | ~~Extract shared Drizzle schema from providers~~ | 30 min | Prevents future schema drift | ✅ Done (2026-03-05) |
 | 6 | ~~Remove double `stateProvider.init()`~~ | 5 min | Removes redundant DB init | ✅ Done |
 | 7 | ~~Fix migration runner version tracking~~ | 15 min | Prevents phantom migrations | ✅ Done |
 | 8 | Split `publish.py` into router + services | 30 min | AGENTS.md compliance | Pending |
@@ -193,3 +193,61 @@ Both `cloudflare.py` and `edge_engines.py` import `_get_source_hash`. After refa
 **Recommended full fix (two-layer):**
 - **Frontend:** Don't persist `connections` in dashboard store, OR guard `fetchGlobalSchema` with a try/catch that silently handles 404
 - **Backend:** Change `advanced_query` endpoint to return `{"success": false, "error": "Database not configured", "rows": []}` instead of HTTP 404 when Supabase isn't configured
+
+---
+
+## 6. Future Test Plan (Prioritized by Risk)
+
+> [!IMPORTANT]
+> Current test coverage: Edge 64, Backend 43, Frontend 10 = **117 total**.
+> The items below are ordered by **risk of silent breakage** × **frequency of change**.
+
+### 🔴 P0 — Critical (Untested paths that touch production deploys)
+
+| # | Test Area | Codebase | Est. Tests | Why Critical |
+|---|---|---|---|---|
+| 1 | **`edge_engines.py` redeploy** (157 lines) | Backend (pytest) | 8–10 | Dual-mode CF+Docker redeploy, bundle hash comparison, secret injection — **zero test coverage, touches prod infra** |
+| 2 | **`cloudflare.py` deploy** (177 lines) | Backend (pytest) | 8–10 | CF API calls, bundle upload, secret injection, workers.dev toggle — **untested, one wrong header = broken deploy** |
+| 3 | **Publish pipeline** (`pages/publish.py`) | Backend (pytest) | 6–8 | `compute_page_hash`, `convert_to_publish_schema`, fan-out to targets — **if publish breaks, all pages go stale** |
+| 4 | **Edge `/api/import` route** | Edge (vitest) | 4–5 | Import endpoint receives published pages, writes to storage — **if this breaks, no deploys land** |
+
+### 🟡 P1 — High (Schema drift & contract validation)
+
+| # | Test Area | Codebase | Est. Tests | Why Important |
+|---|---|---|---|---|
+| 5 | **Pydantic ↔ Zod schema parity** | CI script | 3–5 | `publish.py` (Pydantic) vs `publish.ts` (Zod) — **no automated check, drift caught only by runtime** |
+| 6 | **Drizzle schema consistency** | Edge (vitest) | 2–3 | `TursoHttpProvider` vs `LocalSqliteProvider` table definitions — **if they drift, data goes missing per-provider** |
+| 7 | **Bundle hash correctness** | Backend (pytest) | 3–4 | `_compute_bundle_hash`, `_get_source_hash` shared between CF and Docker deploys — **wrong hash = unnecessary redeploys or missed updates** |
+| 8 | **`reconfigure_engine`** (190 lines) | Backend (pytest) | 5–6 | CF binding management — **untested, modifies live worker bindings** |
+
+### 🟢 P2 — Medium (UI + state management coverage)
+
+| # | Test Area | Codebase | Est. Tests | Why Useful |
+|---|---|---|---|---|
+| 9 | **Auth flows** (login/logout/session) | Backend (pytest) | 4–5 | Session cookie handling, redirect logic |
+| 10 | **Edge storage providers** (CRUD) | Edge (vitest) | 6–8 | `TursoHttpProvider` + `LocalSqliteProvider` — getPage, setPage, deletePage |
+| 11 | **WorkflowEditor component** | Frontend (vitest) | 5–6 | Toolbar rendering, node selection, test execution state |
+| 12 | **EdgeCachesForm** (635 lines) | Frontend (vitest) | 4–5 | Provider selection, QStash env paste, dual test toasts |
+| 13 | **DataTable SSR** | Edge (vitest) | 3–4 | Ensure DataTable renders correct HTML for hydration |
+| 14 | **FileBrowser component** | Frontend (vitest) | 3–4 | File tree rendering, upload/delete actions |
+
+### ⚪ P3 — Low (Nice-to-have / code health)
+
+| # | Test Area | Codebase | Est. Tests | Why |
+|---|---|---|---|---|
+| 15 | **CSS bundler** (`css_bundler.py`) | Backend (pytest) | 3–4 | Tree-shaking correctness |
+| 16 | **LiquidJS variable resolution** | Edge (vitest) | 3–4 | Page/session/query scope rendering |
+| 17 | **Schema comparison engine** | Backend (pytest) | 2–3 | Diff algorithm correctness |
+| 18 | **`nodeSchemas.ts` validation** | Frontend (vitest) | 2–3 | Verify all node types have required fields |
+
+### Total Future Tests: ~70–90
+
+> [!CAUTION]
+> **Stressing items:**
+> - **P0 #1 & #2** (`edge_engines.py` redeploy + `cloudflare.py` deploy) are the **highest risk untested code in the entire codebase**. These functions modify live production infrastructure (CF workers, Docker containers) with zero automated guard rails. A regression here silently breaks all deployments. *(Code now refactored into `services/engine_deploy.py` and `services/cloudflare_api.py` — easier to test.)*
+> - **P1 #5** (Pydantic ↔ Zod parity) — initial `test_schema_sync.py` added (5 tests). Covers `PageSchema`, `ColumnSchema`, `EdgeEngine` interface.
+> - ~~**P1 #6** (Drizzle schema consistency)~~ — **Resolved.** Both providers now import from shared `storage/schema.ts`.
+
+---
+
+*Last updated: 2026-03-05*

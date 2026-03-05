@@ -1,11 +1,15 @@
 /**
  * Webhook Route - Handle external webhook triggers
- * 
+ *
  * Features:
  *   - Per-webhook authentication (header, basic, none)
  *   - Rate limiting (60/min per workflow, via Redis INCR)
  *   - Debouncing (configurable window, via Redis SET NX EX)
+ *   - Cooldown (Option C: block during execution + rest after completion)
+ *   - Concurrency limit (INCR/DECR semaphore via Redis)
  *   - QStash durable execution (auto-retry on Worker failure)
+ *   - Queue routing from settings (settings.queue_enabled)
+ *   - Retry count & backoff passthrough to QStash
  *   - Sync mode (http_response node) vs async fire-and-forget
  */
 
@@ -13,10 +17,12 @@ import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { stateProvider } from '../storage/index.js';
 import { WebhookPayloadSchema, ExecuteResponseSchema, ErrorResponseSchema } from '../schemas';
 import { v4 as uuidv4 } from 'uuid';
-import { executeWorkflow } from '../engine/runtime';
+import { executeWorkflow, type WorkflowSettings } from '../engine/runtime';
 import { rateLimit } from '../cache/redis.js';
 import { shouldDebounce } from '../engine/debounce.js';
 import { isQStashEnabled, publishExecution } from '../engine/queue.js';
+import { acquireConcurrency, releaseConcurrency } from '../engine/concurrency.js';
+import { cacheProvider } from '../cache/index.js';
 
 const webhookRoute = new OpenAPIHono();
 
@@ -56,7 +62,7 @@ const route = createRoute({
             },
         },
         429: {
-            description: 'Rate limited',
+            description: 'Rate limited / concurrency exceeded / cooldown',
             content: {
                 'application/json': {
                     schema: ErrorResponseSchema,
@@ -130,10 +136,30 @@ webhookRoute.openapi(route, async (c) => {
         }
 
         // ── Parse per-workflow settings ─────────────────────────────────
-        const settings = workflow.settings ? JSON.parse(workflow.settings) : {};
+        const settings: WorkflowSettings = workflow.settings ? JSON.parse(workflow.settings) : {};
         const rateLimitEnabled = settings.rate_limit_enabled !== false; // default: true
         const rateLimitMax = settings.rate_limit_max || 60;
         const debounceSec = Math.ceil((settings.debounce_ms || 0) / 1000);
+        const cooldownMs = settings.cooldown_ms || 0;
+        const concurrencyLimit = settings.concurrency_limit || 0;
+
+        // ── Cooldown check (Option C: trigger + completion) ─────────────
+        if (cooldownMs > 0) {
+            try {
+                const existing = await cacheProvider.get<string>(`wf:${id}:cooldown`);
+                if (existing) {
+                    return c.json({
+                        error: 'CoolDown',
+                        message: `Workflow ${id} is cooling down. Try again later.`,
+                    }, 429);
+                }
+                // Set a temporary cooldown for the duration of execution
+                const timeoutSec = Math.ceil((settings.execution_timeout_ms || 30000) / 1000);
+                await cacheProvider.setex(`wf:${id}:cooldown`, timeoutSec, 'running');
+            } catch {
+                // Redis unavailable — skip cooldown
+            }
+        }
 
         // ── Rate limiting ───────────────────────────────────────────────
         if (rateLimitEnabled) {
@@ -164,6 +190,17 @@ webhookRoute.openapi(route, async (c) => {
             }, 200);
         }
 
+        // ── Concurrency check ───────────────────────────────────────────
+        if (concurrencyLimit > 0) {
+            const acquired = await acquireConcurrency(id, concurrencyLimit);
+            if (!acquired) {
+                return c.json({
+                    error: 'ConcurrencyLimitExceeded',
+                    message: `Workflow ${id} has reached its concurrency limit (${concurrencyLimit}). Try again later.`,
+                }, 429);
+            }
+        }
+
         // Create execution record via provider
         const executionId = uuidv4();
         const now = new Date().toISOString();
@@ -185,7 +222,7 @@ webhookRoute.openapi(route, async (c) => {
             // Sync execution — wait and return user-defined response
             // (cannot use QStash for sync — caller is waiting)
             try {
-                const execResult = await executeWorkflow(executionId, workflow, payload.data);
+                const execResult = await executeWorkflow(executionId, workflow, payload.data, settings);
 
                 if (execResult.httpResponse) {
                     const { statusCode, body, headers: respHeaders, contentType } = execResult.httpResponse;
@@ -212,12 +249,14 @@ webhookRoute.openapi(route, async (c) => {
                     status: 'error',
                     error: err.message,
                 }, 500);
+            } finally {
+                if (concurrencyLimit > 0) releaseConcurrency(id);
             }
         }
 
         // ── Async execution (fire-and-forget) ───────────────────────────
-        // If QStash is enabled, route through QStash for durable retry
-        if (isQStashEnabled()) {
+        // Queue routing: only use QStash if BOTH settings.queue_enabled AND env configured
+        if (settings.queue_enabled && isQStashEnabled()) {
             const publicUrl = process.env.PUBLIC_URL || process.env.EDGE_URL || '';
             const destUrl = `${publicUrl}/api/execute/${id}`;
             const msgId = await publishExecution(destUrl, {
@@ -226,9 +265,14 @@ webhookRoute.openapi(route, async (c) => {
                 parameters: payload.data,
                 triggerType: 'http_webhook',
                 triggerPayload: JSON.stringify(payload),
+            }, {
+                retries: settings.retry_count ?? 3,
+                backoff: settings.retry_backoff ?? 'exponential',
             });
 
             if (msgId) {
+                // Release concurrency — QStash will re-acquire on execute route
+                if (concurrencyLimit > 0) releaseConcurrency(id);
                 return c.json({
                     executionId,
                     status: 'started' as const,
@@ -239,8 +283,11 @@ webhookRoute.openapi(route, async (c) => {
         }
 
         // Direct execution (no QStash or QStash failed)
-        executeWorkflow(executionId, workflow, payload.data)
-            .catch(err => console.error(`Webhook execution ${executionId} failed:`, err));
+        executeWorkflow(executionId, workflow, payload.data, settings)
+            .catch(err => console.error(`Webhook execution ${executionId} failed:`, err))
+            .finally(() => {
+                if (concurrencyLimit > 0) releaseConcurrency(id);
+            });
 
         return c.json({
             executionId,

@@ -75,9 +75,10 @@ export const isQStashEnabled = isQueueEnabled;
 /**
  * Publish a workflow execution to the queue for durable delivery.
  * The queue will call the destination URL and auto-retry on failure.
- * 
+ *
  * @param destinationUrl - The internal execute URL
  * @param payload - Execution payload
+ * @param options - Optional retry/backoff overrides from workflow settings
  * @returns Queue message ID, or null if publishing failed
  */
 export async function publishExecution(
@@ -88,6 +89,10 @@ export async function publishExecution(
         parameters: Record<string, any>;
         triggerType: string;
         triggerPayload?: string;
+    },
+    options?: {
+        retries?: number;
+        backoff?: 'linear' | 'exponential';
     }
 ): Promise<string | null> {
     const client = getQueueClient();
@@ -100,7 +105,7 @@ export async function publishExecution(
             const result = await client.publishJSON({
                 url: destinationUrl,
                 body: payload,
-                retries: 3,
+                retries: options?.retries ?? 3,
             });
             return result.messageId || null;
         } catch (error: any) {

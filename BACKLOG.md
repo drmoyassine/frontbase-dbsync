@@ -75,6 +75,8 @@
 ### Execution Engine
 - [ ] ✨ **Version History & Rollback (Workflows)** — Snapshot table (`automation_draft_versions`) with rollback, diff view, and audit trail.
 - [ ] ✨ **Durable Workflow Execution (Phase 3 remnants)** — ~~Checkpointing~~, ~~rate limiting~~, ~~debouncing~~, ~~QStash retry wiring~~ done. Remaining: spike leveling (queue buffer), idempotency keys, cross-execution shared variables.
+- [ ] ✨ **Node-level Output Caching** — Cache individual node outputs (HTTP request, data query) with configurable TTL. Repeat executions reuse cached results instead of re-fetching. Requires per-node config panel + cache key generation from input hash.
+- [ ] ✨ **Manual Checkpoint Node** — User-placeable Checkpoint node type for explicit state saves inside loops or before expensive operations. Pass-through node (data in → data out) that forces `saveCheckpoint()` at that point in the graph.
 - [ ] ✨ **Custom WebSockets** — Real-time workflow execution streaming (replacing Supabase Realtime).
 
 ---

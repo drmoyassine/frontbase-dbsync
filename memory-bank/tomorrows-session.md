@@ -59,24 +59,41 @@
 - [x] `api-contracts.ts`: `validate()` now throws on `success: false`
 - [x] 500 error on `/api/actions/drafts` (ran missing Alembic migrations)
 
+### 9. DRY Refactoring — edge_engines.py + cloudflare.py (2026-03-05)
+- [x] `edge_engines.py` **974 → 330 lines** — thin router delegating to services
+- [x] `cloudflare.py` **880 → 270 lines** — thin router delegating to services
+- [x] 8 new service/schema files: `schemas/edge_engines.py`, `schemas/cloudflare.py`, `services/bundle.py`, `services/secrets_builder.py`, `services/cloudflare_api.py`, `services/engine_deploy.py`, `services/engine_test.py`, `routers/cloudflare_inspector.py`
+- [x] Eliminated 3x secret-building duplication → single `secrets_builder.py`
+- [x] Fixed 2 trailing slashes in `useEdgeInfrastructure.ts`
+
+### 10. Drizzle Schema Dedup (2026-03-05)
+- [x] Created `storage/schema.ts` — single source of truth for 4 SQLite tables
+- [x] `TursoHttpProvider.ts` 430 → 365 lines, `LocalSqliteProvider.ts` 402 → 340 lines
+
+### 11. Pydantic ↔ Zod Schema Sync (2026-03-05)
+- [x] Created `test_schema_sync.py` — 5 automated field parity tests
+- [x] 48/48 total tests pass
+
 ---
 
 ## Next Session Priorities
 
 ### 1. Distributed Deployment Testing
-- [ ] Test multi-machine deployment with `docker-compose.distributed`
-- [ ] Verify Docker self-update redeploy flow end-to-end
-- [ ] Test queue env vars flow correctly across machines
+- [ x] Test multi-machine deployment with `docker-compose.distributed`
+- [ x] Verify Docker self-update redeploy flow end-to-end
+- [ x] Test queue env vars flow correctly across machines
 
 ### 2. Auth on /api/update
-- [ ] Add `apiKeyAuth` middleware to `/api/update` route
-- [ ] Ensure backend sends API key header when POSTing to Docker engines
+- [ x] Add `apiKeyAuth` middleware to `/api/update` route
+- [ x] Ensure backend sends API key header when POSTing to Docker engines
 
 ### 3. Queue Trigger Node (Backlog)
 - [ ] Add `queue_trigger` to `nodeSchemas.ts` with channel + filter config
 - [ ] Add `/api/queue/:workflowId` route to edge runtime (push receiver)
 - [ ] Register push callback URL on publish (QStash: create topic subscription)
 
-### 4. Performance Optimization
-- [ ] Split `WorkflowEditor.tsx` (now 599+ lines with settings integration)
-- [ ] Extract shared Drizzle schema from `LocalSqliteProvider` + `TursoHttpProvider`
+### 4. Remaining Refactoring (see performance-optimization.md §5)
+- [ ] Split `publish.py` into router + services
+- [ ] Split `models/models.py` by domain
+- [ ] Split `WorkflowEditor.tsx` into subcomponents
+- [ ] Split `EdgeCachesForm.tsx` into dialog + hook

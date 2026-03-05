@@ -1,14 +1,22 @@
 /**
  * Execute Route - Trigger workflow execution
+ *
+ * Settings enforcement at route level:
+ * - Cooldown check (Option C: block during execution + rest after completion)
+ * - Concurrency limit (INCR/DECR semaphore via Redis)
+ * - Rate limiting (existing)
+ * - Debounce (existing)
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { stateProvider } from '../storage/index.js';
 import { ExecuteRequestSchema, ExecuteResponseSchema, ErrorResponseSchema } from '../schemas';
 import { v4 as uuidv4 } from 'uuid';
-import { executeWorkflow, executeSingleNode } from '../engine/runtime';
+import { executeWorkflow, executeSingleNode, type WorkflowSettings } from '../engine/runtime';
 import { rateLimit } from '../cache/redis.js';
 import { verifyQueueSignature } from '../engine/queue.js';
+import { acquireConcurrency, releaseConcurrency } from '../engine/concurrency.js';
+import { cacheProvider } from '../cache/index.js';
 
 const executeRoute = new OpenAPIHono();
 
@@ -57,7 +65,7 @@ const route = createRoute({
             },
         },
         429: {
-            description: 'Rate limited',
+            description: 'Rate limited / concurrency exceeded / cooldown',
             content: {
                 'application/json': {
                     schema: ErrorResponseSchema,
@@ -82,8 +90,6 @@ executeRoute.openapi(route, async (c) => {
     const body = rawBody ? JSON.parse(rawBody) : {};
 
     // ── QStash signature verification ───────────────────────────────
-    // If the request has an Upstash-Signature header, it came from QStash
-    // and must be verified before executing.
     const qstashSignature = c.req.header('Upstash-Signature');
     if (qstashSignature) {
         const valid = await verifyQueueSignature(qstashSignature, rawBody);
@@ -113,10 +119,31 @@ executeRoute.openapi(route, async (c) => {
     }
 
     // ── Parse per-workflow settings ─────────────────────────────────
-    const settings = workflow.settings ? JSON.parse(workflow.settings) : {};
+    const settings: WorkflowSettings = workflow.settings ? JSON.parse(workflow.settings) : {};
     const rateLimitEnabled = settings.rate_limit_enabled !== false; // default: true
     const rateLimitMax = settings.rate_limit_max || 60;
     const debounceSec = Math.ceil((settings.debounce_ms || 0) / 1000);
+    const cooldownMs = settings.cooldown_ms || 0;
+    const concurrencyLimit = settings.concurrency_limit || 0; // 0 = unlimited
+
+    // ── Cooldown check (Option C: trigger + completion) ─────────────
+    if (cooldownMs > 0) {
+        try {
+            const existing = await cacheProvider.get<string>(`wf:${id}:cooldown`);
+            if (existing) {
+                return c.json({
+                    error: 'CoolDown',
+                    message: `Workflow ${id} is cooling down. Try again later.`,
+                }, 429);
+            }
+            // Set a temporary cooldown for the duration of execution (prevent re-trigger while running)
+            // Runtime will extend this with the actual cooldown_ms after successful completion
+            const timeoutSec = Math.ceil((settings.execution_timeout_ms || 30000) / 1000);
+            await cacheProvider.setex(`wf:${id}:cooldown`, timeoutSec, 'running');
+        } catch {
+            // Redis unavailable — skip cooldown
+        }
+    }
 
     // ── Debounce check ──────────────────────────────────────────────
     if (debounceSec > 0) {
@@ -150,6 +177,17 @@ executeRoute.openapi(route, async (c) => {
         }
     }
 
+    // ── Concurrency check ───────────────────────────────────────────
+    if (concurrencyLimit > 0) {
+        const acquired = await acquireConcurrency(id, concurrencyLimit);
+        if (!acquired) {
+            return c.json({
+                error: 'ConcurrencyLimitExceeded',
+                message: `Workflow ${id} has reached its concurrency limit (${concurrencyLimit}). Try again later.`,
+            }, 429);
+        }
+    }
+
     // Create execution record via provider
     const executionId = uuidv4();
     const now = new Date().toISOString();
@@ -164,9 +202,12 @@ executeRoute.openapi(route, async (c) => {
         startedAt: now,
     });
 
-    // Execute workflow asynchronously
-    executeWorkflow(executionId, workflow, body.parameters || {})
-        .catch(err => console.error(`Execution ${executionId} failed:`, err));
+    // Execute workflow asynchronously, release concurrency in finally
+    executeWorkflow(executionId, workflow, body.parameters || {}, settings)
+        .catch(err => console.error(`Execution ${executionId} failed:`, err))
+        .finally(() => {
+            if (concurrencyLimit > 0) releaseConcurrency(id);
+        });
 
     return c.json({
         executionId,

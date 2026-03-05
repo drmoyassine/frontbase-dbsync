@@ -23,7 +23,12 @@ export interface ICacheProvider {
     rpop(key: string): Promise<string | null>;
     llen(key: string): Promise<number>;
 
-    // Rate limiting
+    // Rate limiting / concurrency
     incr(key: string): Promise<number>;
+    decr(key: string): Promise<number>;
     expire(key: string, seconds: number): Promise<number>;
+
+    // Sorted set (priority queue)
+    zadd(key: string, score: number, member: string): Promise<number>;
+    zpopmax(key: string): Promise<{ member: string; score: number } | null>;
 }

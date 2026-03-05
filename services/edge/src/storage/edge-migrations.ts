@@ -125,6 +125,22 @@ export const MIGRATIONS: Migration[] = [
             `ALTER TABLE workflows ADD COLUMN settings TEXT`,
         ],
     },
+    {
+        version: 5,
+        description: 'Add dead_letters table for DLQ',
+        sql: [
+            `CREATE TABLE IF NOT EXISTS dead_letters (
+                id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                execution_id TEXT NOT NULL,
+                error TEXT,
+                payload TEXT,
+                retry_count INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            )`,
+            `CREATE INDEX IF NOT EXISTS idx_dead_letters_workflow ON dead_letters(workflow_id)`,
+        ],
+    },
 ];
 
 // =============================================================================

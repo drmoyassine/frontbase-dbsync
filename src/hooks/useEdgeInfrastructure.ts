@@ -111,7 +111,7 @@ export const edgeInfrastructureApi = {
 
     // Engines
     getEngines: async (): Promise<EdgeEngine[]> => {
-        const res = await fetch(`${API_BASE}/api/edge-engines/`);
+        const res = await fetch(`${API_BASE}/api/edge-engines`);
         if (!res.ok) throw new Error('Failed to fetch edge engines');
         return res.json();
     },
@@ -138,7 +138,7 @@ export const edgeInfrastructureApi = {
         if (!res.ok) throw new Error('Failed to delete engine');
     },
     redeployEngine: async (id: string): Promise<any> => {
-        const res = await fetch(`${API_BASE}/api/edge-engines/${id}/redeploy/`, { method: 'POST' });
+        const res = await fetch(`${API_BASE}/api/edge-engines/${id}/redeploy`, { method: 'POST' });
         if (!res.ok) {
             const data = await res.json().catch(() => ({}));
             throw new Error(data.detail || 'Redeploy failed');

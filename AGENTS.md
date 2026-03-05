@@ -582,6 +582,74 @@ npm run dev
 docker-compose up -d
 ```
 
+### Verification Chain (MANDATORY after code changes)
+
+> [!IMPORTANT]
+> After any code change, run the verification chain in this order. **Do not skip steps.**
+
+```
+1. Type checking    →  pyright (backend) / tsc (edge + frontend)
+2. Automated tests  →  vitest (edge + frontend) / pytest (backend)
+3. Manual smoke     →  (only if touching UI or integration paths)
+```
+
+```bash
+# Step 1: Type checking
+cd fastapi-backend && pyright .            # Backend types
+cd services/edge && npx tsc --noEmit       # Edge types
+npx tsc --noEmit                            # Frontend types
+
+# Step 2: Automated tests
+cd services/edge && npm test               # Edge: 64 tests (Vitest)
+npm test                                    # Frontend: 10 tests (Vitest)
+cd fastapi-backend && python -m pytest tests/ -v  # Backend: 43 tests (pytest)
+```
+
+### Testing Conventions
+
+| Convention | Details |
+|---|---|
+| **Edge tests** | `services/edge/src/__tests__/*.test.ts` — Vitest with vi.mock for Redis/DB |
+| **Backend tests** | `fastapi-backend/tests/test_*.py` — pytest with TestClient + in-memory SQLite |
+| **Frontend tests** | `src/tests/*.test.ts` — Vitest with jsdom + @testing-library |
+| **Test isolation** | Backend uses `clean_drafts_table` autouse fixture; each test gets clean state |
+| **Backend conftest** | Uses `sys.modules` injection to mock `app.services.sync.*` modules (async engine incompatible with test SQLite) |
+| **Trailing slash guard** | All 3 codebases have automated tests scanning for trailing slash violations |
+
+### When to Run Tests
+
+| Scenario | Run |
+|---|---|
+| Modified a backend router / schema | `pytest` |
+| Modified an edge route / engine module | `vitest` (edge) |
+| Modified a frontend service / store / hook | `vitest` (frontend) |
+| Modified an API URL anywhere | All 3 trailing slash guards |
+| Before any PR / merge | Full verification chain |
+
+### Trailing Slash Disease — Prevention Protocol
+
+> [!CAUTION]
+> Trailing slashes cause 307 redirect loops between frontend → backend → edge.
+> This is a **recurring issue** that has caused production bugs multiple times.
+
+**Rules:**
+1. **API URLs in frontend services** — NEVER use trailing slashes: `'/api/project'` ✅ not `'/api/project/'` ❌
+2. **FastAPI routes** — Define WITHOUT trailing slashes. The `TrailingSlashMiddleware` handles normalization for non-excluded prefixes
+3. **Hono routes (edge)** — NEVER use trailing slashes in route `path` definitions
+4. **Automated guards** — The trailing slash tests in all 3 codebases will catch violations. NEVER skip them.
+
+### Testing Lessons Learned
+
+| Lesson | Context |
+|---|---|
+| FastAPI uses `PATCH` for partial updates, not `PUT` | `@router.patch("/drafts/{draft_id}")` |
+| FastAPI DELETE returns `204 No Content` | Not `200 OK` |
+| `list_drafts` returns paginated `{drafts: [], total: N}` | Not a raw array |
+| `WorkflowNode` schema requires `name` + `position` fields | Test payloads must match Pydantic models exactly |
+| `app.services.sync.database` creates async engine at module load | Must pre-inject mocks into `sys.modules` before importing `main.py` |
+| Zustand stores need Supabase mock in test context | `vi.mock('@supabase/supabase-js')` |
+| `isQStashEnabled` evaluates env at module load time | Cannot test dynamically; mock the function instead |
+
 ---
 
 ## 12. Documentation Discipline
@@ -777,5 +845,5 @@ Env vars or settings needed to enable the feature.
 
 ---
 
-*Last Updated: 2026-03-03*
+*Last Updated: 2026-03-05*
 

@@ -90,6 +90,15 @@ export interface ExecutionStats {
     failedRuns: number;
 }
 
+export interface DeadLetterData {
+    id: string;
+    workflowId: string;
+    executionId: string;
+    error: string | null;
+    payload: string | null;
+    retryCount?: number;
+}
+
 // =============================================================================
 // State Provider Interface
 // =============================================================================
@@ -150,4 +159,8 @@ export interface IStateProvider {
     }): Promise<ExecutionData[]>;
     /** Get execution stats (counts) for all workflows */
     getExecutionStats(): Promise<ExecutionStats[]>;
+
+    // --- Dead Letter Queue ---
+    /** Write a failed execution to the dead letters table (optional) */
+    createDeadLetter?(deadLetter: DeadLetterData): Promise<void>;
 }

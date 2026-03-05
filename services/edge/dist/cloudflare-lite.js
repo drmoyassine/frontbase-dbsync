@@ -444,12 +444,22 @@ var init_NullCacheProvider = __esm({
       async llen(_key) {
         return 0;
       }
-      // Rate limiting — always allow
+      // Rate limiting / concurrency — always allow
       async incr(_key) {
         return 1;
       }
+      async decr(_key) {
+        return 0;
+      }
       async expire(_key, _seconds) {
         return 1;
+      }
+      // Sorted set (priority queue) — no-op
+      async zadd(_key, _score, _member) {
+        return 1;
+      }
+      async zpopmax(_key) {
+        return null;
       }
     };
   }
@@ -15163,6 +15173,22 @@ var init_redis = __esm({
       async expire(key, seconds) {
         return this.client.expire(key, seconds);
       }
+      async decr(key) {
+        return this.client.decr(key);
+      }
+      async zadd(key, score, member) {
+        const result = await this.client.zadd(key, { score, member });
+        return result ?? 0;
+      }
+      async zpopmax(key) {
+        const result = await this.client.zpopmax(key, 1);
+        if (!result || result.length === 0) return null;
+        const first2 = result[0];
+        if (first2 && typeof first2 === "object" && "member" in first2) {
+          return { member: first2.member, score: first2.score };
+        }
+        return null;
+      }
     };
     IoRedisAdapter = class {
       client;
@@ -15236,6 +15262,20 @@ var init_redis = __esm({
       async expire(key, seconds) {
         await this.ensureClient();
         return this.client.expire(key, seconds);
+      }
+      async decr(key) {
+        await this.ensureClient();
+        return this.client.decr(key);
+      }
+      async zadd(key, score, member) {
+        await this.ensureClient();
+        return this.client.zadd(key, score, member);
+      }
+      async zpopmax(key) {
+        await this.ensureClient();
+        const result = await this.client.zpopmax(key, 1);
+        if (!result || result.length < 2) return null;
+        return { member: result[0], score: parseFloat(result[1]) };
       }
     };
     redisInstance = null;
@@ -50687,6 +50727,22 @@ var MIGRATIONS = [
     sql: [
       `ALTER TABLE workflows ADD COLUMN settings TEXT`
     ]
+  },
+  {
+    version: 5,
+    description: "Add dead_letters table for DLQ",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS dead_letters (
+                id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                execution_id TEXT NOT NULL,
+                error TEXT,
+                payload TEXT,
+                retry_count INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            )`,
+      `CREATE INDEX IF NOT EXISTS idx_dead_letters_workflow ON dead_letters(workflow_id)`
+    ]
   }
 ];
 async function runMigrations(execute, providerName) {
@@ -51054,6 +51110,16 @@ var TursoHttpProvider = class {
     }
     return Array.from(statsMap.values());
   }
+  // =========================================================================
+  // Dead Letter Queue
+  // =========================================================================
+  async createDeadLetter(deadLetter) {
+    await this.getDb().run(sql`
+            INSERT INTO dead_letters (id, workflow_id, execution_id, error, payload, retry_count)
+            VALUES (${deadLetter.id}, ${deadLetter.workflowId}, ${deadLetter.executionId},
+                    ${deadLetter.error}, ${deadLetter.payload}, ${deadLetter.retryCount || 0})
+        `);
+  }
 };
 
 // shims/LocalSqliteProvider.js
@@ -51342,6 +51408,7 @@ deployRoute.openapi(route2, async (c) => {
       triggerConfig: JSON.stringify(body.triggerConfig || {}),
       nodes: JSON.stringify(body.nodes),
       edges: JSON.stringify(body.edges),
+      settings: body.settings ? JSON.stringify(body.settings) : null,
       version: 1,
       isActive: body.isActive ?? true,
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -51442,8 +51509,36 @@ async function clearCheckpoint(executionId) {
   }
 }
 
+// src/engine/logger.ts
+function createWorkflowLogger(level = "all", prefix = "[Workflow]") {
+  return {
+    info: (msg, ...args) => {
+      if (level === "all") console.log(prefix, msg, ...args);
+    },
+    error: (msg, ...args) => {
+      if (level !== "none") console.error(prefix, msg, ...args);
+    },
+    warn: (msg, ...args) => {
+      if (level !== "none") console.warn(prefix, msg, ...args);
+    }
+  };
+}
+
 // src/engine/runtime.ts
-async function executeWorkflow(executionId, workflow, inputParameters) {
+init_cache();
+async function executeWorkflow(executionId, workflow, inputParameters, settings) {
+  const s = settings || (workflow.settings ? JSON.parse(workflow.settings) : {});
+  const timeoutMs = s.execution_timeout_ms || 3e4;
+  const cooldownMs = s.cooldown_ms || 0;
+  const tz = s.timezone || "UTC";
+  const log2 = createWorkflowLogger(s.log_level || "all", `[Workflow:${executionId.slice(0, 8)}]`);
+  const formatTime = () => {
+    try {
+      return (/* @__PURE__ */ new Date()).toLocaleString("sv-SE", { timeZone: tz }).replace(" ", "T");
+    } catch {
+      return (/* @__PURE__ */ new Date()).toISOString();
+    }
+  };
   const nodes = JSON.parse(workflow.nodes);
   const edges = JSON.parse(workflow.edges);
   const context = {
@@ -51456,108 +51551,139 @@ async function executeWorkflow(executionId, workflow, inputParameters) {
       status: "idle"
     }))
   };
-  try {
-    const checkpoint = await loadCheckpoint(executionId);
-    const executed = /* @__PURE__ */ new Set();
-    if (checkpoint) {
-      console.log(`[Runtime] Resuming execution ${executionId} from checkpoint (${checkpoint.completedNodes.length} nodes done)`);
-      for (const nodeId of checkpoint.completedNodes) {
-        executed.add(nodeId);
+  async function coreExecute() {
+    try {
+      const checkpoint = await loadCheckpoint(executionId);
+      const executed = /* @__PURE__ */ new Set();
+      if (checkpoint) {
+        log2.info(`Resuming from checkpoint (${checkpoint.completedNodes.length} nodes done)`);
+        for (const nodeId of checkpoint.completedNodes) {
+          executed.add(nodeId);
+        }
+        Object.assign(context.nodeOutputs, checkpoint.nodeOutputs);
+        context.nodeExecutions = checkpoint.nodeExecutions;
       }
-      Object.assign(context.nodeOutputs, checkpoint.nodeOutputs);
-      context.nodeExecutions = checkpoint.nodeExecutions;
-    }
-    await updateExecutionStatus(executionId, "executing", context.nodeExecutions);
-    const targetNodeIds = new Set(edges.map((e) => e.target));
-    const startNodes = nodes.filter((n) => !targetNodeIds.has(n.id));
-    const queue = [...startNodes.map((n) => n.id)];
-    while (queue.length > 0) {
-      const nodeId = queue.shift();
-      if (executed.has(nodeId)) {
-        const outgoingEdges = edges.filter((e) => e.source === nodeId);
-        for (const edge of outgoingEdges) {
-          if (!executed.has(edge.target)) {
-            queue.push(edge.target);
+      await updateExecutionStatus(executionId, "executing", context.nodeExecutions);
+      const targetNodeIds = new Set(edges.map((e) => e.target));
+      const startNodes = nodes.filter((n) => !targetNodeIds.has(n.id));
+      const queue = [...startNodes.map((n) => n.id)];
+      while (queue.length > 0) {
+        const nodeId = queue.shift();
+        if (executed.has(nodeId)) {
+          const outgoingEdges = edges.filter((e) => e.source === nodeId);
+          for (const edge of outgoingEdges) {
+            if (!executed.has(edge.target)) {
+              queue.push(edge.target);
+            }
+          }
+          continue;
+        }
+        const node = nodes.find((n) => n.id === nodeId);
+        if (!node) continue;
+        const incomingEdges = edges.filter((e) => e.target === nodeId);
+        const dependenciesMet = incomingEdges.every((e) => executed.has(e.source));
+        if (!dependenciesMet) {
+          queue.push(nodeId);
+          continue;
+        }
+        const inputs = {};
+        for (const edge of incomingEdges) {
+          const sourceOutputs = context.nodeOutputs[edge.source] || {};
+          if (edge.targetInput && edge.sourceOutput) {
+            inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
           }
         }
-        continue;
-      }
-      const node = nodes.find((n) => n.id === nodeId);
-      if (!node) continue;
-      const incomingEdges = edges.filter((e) => e.target === nodeId);
-      const dependenciesMet = incomingEdges.every((e) => executed.has(e.source));
-      if (!dependenciesMet) {
-        queue.push(nodeId);
-        continue;
-      }
-      const inputs = {};
-      for (const edge of incomingEdges) {
-        const sourceOutputs = context.nodeOutputs[edge.source] || {};
-        if (edge.targetInput && edge.sourceOutput) {
-          inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
+        if (startNodes.some((n) => n.id === nodeId)) {
+          Object.assign(inputs, context.parameters);
         }
-      }
-      if (startNodes.some((n) => n.id === nodeId)) {
-        Object.assign(inputs, context.parameters);
-      }
-      try {
-        updateNodeStatus(context, nodeId, "executing");
-        const outputs = await executeNode(node, inputs, context);
-        context.nodeOutputs[nodeId] = outputs;
-        updateNodeStatus(context, nodeId, "completed", outputs);
-        executed.add(nodeId);
-        await saveCheckpoint({
-          executionId,
-          workflowId: workflow.id,
-          completedNodes: Array.from(executed),
-          nodeOutputs: context.nodeOutputs,
-          nodeExecutions: context.nodeExecutions
-        });
-        const outgoingEdges = edges.filter((e) => e.source === nodeId);
-        for (const edge of outgoingEdges) {
-          if (!executed.has(edge.target)) {
-            queue.push(edge.target);
+        try {
+          updateNodeStatus(context, nodeId, "executing");
+          const outputs = await executeNode(node, inputs, context);
+          context.nodeOutputs[nodeId] = outputs;
+          updateNodeStatus(context, nodeId, "completed", outputs);
+          executed.add(nodeId);
+          log2.info(`Node ${node.type || nodeId} completed`);
+          await saveCheckpoint({
+            executionId,
+            workflowId: workflow.id,
+            completedNodes: Array.from(executed),
+            nodeOutputs: context.nodeOutputs,
+            nodeExecutions: context.nodeExecutions
+          });
+          const outgoingEdges = edges.filter((e) => e.source === nodeId);
+          for (const edge of outgoingEdges) {
+            if (!executed.has(edge.target)) {
+              queue.push(edge.target);
+            }
           }
+        } catch (error) {
+          updateNodeStatus(context, nodeId, "error", void 0, error.message);
+          log2.error(`Node ${node?.type || nodeId} failed: ${error.message}`);
+          throw error;
         }
-      } catch (error) {
-        updateNodeStatus(context, nodeId, "error", void 0, error.message);
-        throw error;
       }
+      const sourceNodeIds = new Set(edges.map((e) => e.source));
+      const endNodes = nodes.filter((n) => !sourceNodeIds.has(n.id));
+      const result = {};
+      for (const node of endNodes) {
+        result[node.id] = context.nodeOutputs[node.id];
+      }
+      const responseNode = endNodes.find((n) => n.type === "http_response");
+      let httpResponse = void 0;
+      if (responseNode && context.nodeOutputs[responseNode.id]) {
+        const out = context.nodeOutputs[responseNode.id];
+        httpResponse = {
+          statusCode: out.statusCode || 200,
+          body: out.body,
+          headers: out.headers,
+          contentType: out.contentType || "application/json"
+        };
+      }
+      await stateProvider.updateExecution(executionId, {
+        status: "completed",
+        nodeExecutions: JSON.stringify(context.nodeExecutions),
+        result: JSON.stringify(result),
+        endedAt: formatTime()
+      });
+      await clearCheckpoint(executionId);
+      if (cooldownMs > 0) {
+        try {
+          const cooldownSec = Math.ceil(cooldownMs / 1e3);
+          await cacheProvider.setex(`wf:${workflow.id}:cooldown`, cooldownSec, "1");
+        } catch {
+        }
+      }
+      log2.info(`Execution completed (${executed.size} nodes)`);
+      return { status: "completed", result, httpResponse };
+    } catch (error) {
+      if (s.dlq_enabled) {
+        try {
+          await stateProvider.createDeadLetter?.({
+            id: crypto.randomUUID?.() || executionId + "-dlq",
+            workflowId: workflow.id,
+            executionId,
+            error: error.message,
+            payload: JSON.stringify(inputParameters)
+          });
+        } catch {
+        }
+      }
+      await stateProvider.updateExecution(executionId, {
+        status: "error",
+        nodeExecutions: JSON.stringify(context.nodeExecutions),
+        error: error.message,
+        endedAt: formatTime()
+      });
+      log2.error(`Execution failed: ${error.message}`);
+      return { status: "error", result: {}, error: error.message };
     }
-    const sourceNodeIds = new Set(edges.map((e) => e.source));
-    const endNodes = nodes.filter((n) => !sourceNodeIds.has(n.id));
-    const result = {};
-    for (const node of endNodes) {
-      result[node.id] = context.nodeOutputs[node.id];
-    }
-    const responseNode = endNodes.find((n) => n.type === "http_response");
-    let httpResponse = void 0;
-    if (responseNode && context.nodeOutputs[responseNode.id]) {
-      const out = context.nodeOutputs[responseNode.id];
-      httpResponse = {
-        statusCode: out.statusCode || 200,
-        body: out.body,
-        headers: out.headers,
-        contentType: out.contentType || "application/json"
-      };
-    }
-    await stateProvider.updateExecution(executionId, {
-      status: "completed",
-      nodeExecutions: JSON.stringify(context.nodeExecutions),
-      result: JSON.stringify(result),
-      endedAt: (/* @__PURE__ */ new Date()).toISOString()
-    });
-    await clearCheckpoint(executionId);
-    return { status: "completed", result, httpResponse };
-  } catch (error) {
-    await stateProvider.updateExecution(executionId, {
-      status: "error",
-      nodeExecutions: JSON.stringify(context.nodeExecutions),
-      error: error.message,
-      endedAt: (/* @__PURE__ */ new Date()).toISOString()
-    });
-    return { status: "error", result: {}, error: error.message };
   }
+  const timeoutPromise = new Promise(
+    (_, reject2) => setTimeout(() => reject2(new Error(
+      `Execution timed out after ${timeoutMs}ms`
+    )), timeoutMs)
+  );
+  return Promise.race([coreExecute(), timeoutPromise]);
 }
 async function executeSingleNode(executionId, workflow, targetNodeId, inputParameters) {
   const nodes = JSON.parse(workflow.nodes);
@@ -51865,7 +51991,7 @@ function isQueueEnabled() {
   return getQueueClient() !== null;
 }
 var isQStashEnabled = isQueueEnabled;
-async function publishExecution(destinationUrl, payload) {
+async function publishExecution(destinationUrl, payload, options) {
   const client = getQueueClient();
   if (!client) return null;
   const provider = getQueueProvider();
@@ -51874,7 +52000,7 @@ async function publishExecution(destinationUrl, payload) {
       const result = await client.publishJSON({
         url: destinationUrl,
         body: payload,
-        retries: 3
+        retries: options?.retries ?? 3
       });
       return result.messageId || null;
     } catch (error) {
@@ -51909,7 +52035,35 @@ async function verifyQueueSignature(signature, _body) {
   return false;
 }
 
+// src/engine/concurrency.ts
+init_cache();
+async function acquireConcurrency(workflowId, limit2) {
+  if (limit2 <= 0) return true;
+  try {
+    const key = `wf:${workflowId}:concurrency`;
+    const current = await cacheProvider.incr(key);
+    if (current === 1) {
+      await cacheProvider.expire(key, 300);
+    }
+    if (current > limit2) {
+      await cacheProvider.decr(key);
+      return false;
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+async function releaseConcurrency(workflowId) {
+  try {
+    const key = `wf:${workflowId}:concurrency`;
+    await cacheProvider.decr(key);
+  } catch {
+  }
+}
+
 // src/routes/execute.ts
+init_cache();
 var executeRoute = new OpenAPIHono();
 var route3 = createRoute({
   method: "post",
@@ -51956,7 +52110,7 @@ var route3 = createRoute({
       }
     },
     429: {
-      description: "Rate limited",
+      description: "Rate limited / concurrency exceeded / cooldown",
       content: {
         "application/json": {
           schema: ErrorResponseSchema
@@ -52004,6 +52158,22 @@ executeRoute.openapi(route3, async (c) => {
   const rateLimitEnabled = settings.rate_limit_enabled !== false;
   const rateLimitMax = settings.rate_limit_max || 60;
   const debounceSec = Math.ceil((settings.debounce_ms || 0) / 1e3);
+  const cooldownMs = settings.cooldown_ms || 0;
+  const concurrencyLimit = settings.concurrency_limit || 0;
+  if (cooldownMs > 0) {
+    try {
+      const existing = await cacheProvider.get(`wf:${id}:cooldown`);
+      if (existing) {
+        return c.json({
+          error: "CoolDown",
+          message: `Workflow ${id} is cooling down. Try again later.`
+        }, 429);
+      }
+      const timeoutSec = Math.ceil((settings.execution_timeout_ms || 3e4) / 1e3);
+      await cacheProvider.setex(`wf:${id}:cooldown`, timeoutSec, "running");
+    } catch {
+    }
+  }
   if (debounceSec > 0) {
     const { shouldDebounce: shouldDebounce2 } = await Promise.resolve().then(() => (init_debounce(), debounce_exports));
     const debounced = await shouldDebounce2(id, debounceSec);
@@ -52031,6 +52201,15 @@ executeRoute.openapi(route3, async (c) => {
     } catch {
     }
   }
+  if (concurrencyLimit > 0) {
+    const acquired = await acquireConcurrency(id, concurrencyLimit);
+    if (!acquired) {
+      return c.json({
+        error: "ConcurrencyLimitExceeded",
+        message: `Workflow ${id} has reached its concurrency limit (${concurrencyLimit}). Try again later.`
+      }, 429);
+    }
+  }
   const executionId = v4_default();
   const now = (/* @__PURE__ */ new Date()).toISOString();
   await stateProvider.createExecution({
@@ -52042,7 +52221,9 @@ executeRoute.openapi(route3, async (c) => {
     nodeExecutions: JSON.stringify([]),
     startedAt: now
   });
-  executeWorkflow(executionId, workflow, body.parameters || {}).catch((err2) => console.error(`Execution ${executionId} failed:`, err2));
+  executeWorkflow(executionId, workflow, body.parameters || {}, settings).catch((err2) => console.error(`Execution ${executionId} failed:`, err2)).finally(() => {
+    if (concurrencyLimit > 0) releaseConcurrency(id);
+  });
   return c.json({
     executionId,
     status: "started",
@@ -52120,6 +52301,7 @@ executeRoute.openapi(singleNodeRoute, async (c) => {
 // src/routes/webhook.ts
 init_redis();
 init_debounce();
+init_cache();
 var webhookRoute = new OpenAPIHono();
 var route4 = createRoute({
   method: "post",
@@ -52157,7 +52339,7 @@ var route4 = createRoute({
       }
     },
     429: {
-      description: "Rate limited",
+      description: "Rate limited / concurrency exceeded / cooldown",
       content: {
         "application/json": {
           schema: ErrorResponseSchema
@@ -52225,6 +52407,22 @@ webhookRoute.openapi(route4, async (c) => {
     const rateLimitEnabled = settings.rate_limit_enabled !== false;
     const rateLimitMax = settings.rate_limit_max || 60;
     const debounceSec = Math.ceil((settings.debounce_ms || 0) / 1e3);
+    const cooldownMs = settings.cooldown_ms || 0;
+    const concurrencyLimit = settings.concurrency_limit || 0;
+    if (cooldownMs > 0) {
+      try {
+        const existing = await cacheProvider.get(`wf:${id}:cooldown`);
+        if (existing) {
+          return c.json({
+            error: "CoolDown",
+            message: `Workflow ${id} is cooling down. Try again later.`
+          }, 429);
+        }
+        const timeoutSec = Math.ceil((settings.execution_timeout_ms || 3e4) / 1e3);
+        await cacheProvider.setex(`wf:${id}:cooldown`, timeoutSec, "running");
+      } catch {
+      }
+    }
     if (rateLimitEnabled) {
       try {
         const { allowed, remaining } = await rateLimit(
@@ -52249,6 +52447,15 @@ webhookRoute.openapi(route4, async (c) => {
         message: `Execution skipped (debounced within ${settings.debounce_ms || debounceSec * 1e3}ms window)`
       }, 200);
     }
+    if (concurrencyLimit > 0) {
+      const acquired = await acquireConcurrency(id, concurrencyLimit);
+      if (!acquired) {
+        return c.json({
+          error: "ConcurrencyLimitExceeded",
+          message: `Workflow ${id} has reached its concurrency limit (${concurrencyLimit}). Try again later.`
+        }, 429);
+      }
+    }
     const executionId = v4_default();
     const now = (/* @__PURE__ */ new Date()).toISOString();
     await stateProvider.createExecution({
@@ -52263,7 +52470,7 @@ webhookRoute.openapi(route4, async (c) => {
     const hasResponseNode = wfNodes.some((n) => n.type === "http_response");
     if (hasResponseNode) {
       try {
-        const execResult = await executeWorkflow(executionId, workflow, payload.data);
+        const execResult = await executeWorkflow(executionId, workflow, payload.data, settings);
         if (execResult.httpResponse) {
           const { statusCode, body, headers: respHeaders, contentType } = execResult.httpResponse;
           const responseBody = typeof body === "string" ? body : JSON.stringify(body);
@@ -52287,9 +52494,11 @@ webhookRoute.openapi(route4, async (c) => {
           status: "error",
           error: err2.message
         }, 500);
+      } finally {
+        if (concurrencyLimit > 0) releaseConcurrency(id);
       }
     }
-    if (isQStashEnabled()) {
+    if (settings.queue_enabled && isQStashEnabled()) {
       const publicUrl = process.env.PUBLIC_URL || process.env.EDGE_URL || "";
       const destUrl = `${publicUrl}/api/execute/${id}`;
       const msgId = await publishExecution(destUrl, {
@@ -52298,8 +52507,12 @@ webhookRoute.openapi(route4, async (c) => {
         parameters: payload.data,
         triggerType: "http_webhook",
         triggerPayload: JSON.stringify(payload)
+      }, {
+        retries: settings.retry_count ?? 3,
+        backoff: settings.retry_backoff ?? "exponential"
       });
       if (msgId) {
+        if (concurrencyLimit > 0) releaseConcurrency(id);
         return c.json({
           executionId,
           status: "started",
@@ -52307,7 +52520,9 @@ webhookRoute.openapi(route4, async (c) => {
         }, 200);
       }
     }
-    executeWorkflow(executionId, workflow, payload.data).catch((err2) => console.error(`Webhook execution ${executionId} failed:`, err2));
+    executeWorkflow(executionId, workflow, payload.data, settings).catch((err2) => console.error(`Webhook execution ${executionId} failed:`, err2)).finally(() => {
+      if (concurrencyLimit > 0) releaseConcurrency(id);
+    });
     return c.json({
       executionId,
       status: "started",

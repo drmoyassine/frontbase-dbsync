@@ -15,75 +15,13 @@
 import { drizzle } from 'drizzle-orm/libsql';
 import { createClient } from '@libsql/client';
 import { sql, eq, and, desc } from 'drizzle-orm';
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
 import type { PublishPage, PageLayout, SeoData, DatasourceConfig } from '../schemas/publish';
-import type { IStateProvider, ProjectSettingsData, PublishedPageSummary, WorkflowData, ExecutionData, NewExecutionData, ExecutionStats } from './IStateProvider';
+import type { IStateProvider, ProjectSettingsData, PublishedPageSummary, WorkflowData, ExecutionData, NewExecutionData, ExecutionStats, DeadLetterData } from './IStateProvider';
 import { runMigrations } from './edge-migrations';
+import { publishedPages, projectSettings, workflowsTable, executionsTable, type NewPublishedPage } from './schema';
 
-// =============================================================================
-// Schema Definitions
-// =============================================================================
-
-export const publishedPages = sqliteTable('published_pages', {
-    id: text('id').primaryKey(),
-    slug: text('slug').notNull().unique(),
-    name: text('name').notNull(),
-    title: text('title'),
-    description: text('description'),
-    layoutData: text('layout_data').notNull(),
-    seoData: text('seo_data'),
-    datasources: text('datasources'),
-    cssBundle: text('css_bundle'),
-    version: integer('version').notNull().default(1),
-    publishedAt: text('published_at').notNull(),
-    isPublic: integer('is_public', { mode: 'boolean' }).notNull().default(true),
-    isHomepage: integer('is_homepage', { mode: 'boolean' }).notNull().default(false),
-    contentHash: text('content_hash'),
-    createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-    updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-});
-
-export const projectSettings = sqliteTable('project_settings', {
-    id: text('id').primaryKey().default('default'),
-    faviconUrl: text('favicon_url'),
-    logoUrl: text('logo_url'),
-    siteName: text('site_name'),
-    siteDescription: text('site_description'),
-    appUrl: text('app_url'),
-    updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-});
-
-const workflowsTable = sqliteTable('workflows', {
-    id: text('id').primaryKey(),
-    name: text('name').notNull(),
-    description: text('description'),
-    triggerType: text('trigger_type').notNull(),
-    triggerConfig: text('trigger_config'),
-    nodes: text('nodes').notNull(),
-    edges: text('edges').notNull(),
-    settings: text('settings'),
-    version: integer('version').notNull().default(1),
-    isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
-    createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-    updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-    publishedBy: text('published_by'),
-});
-
-const executionsTable = sqliteTable('executions', {
-    id: text('id').primaryKey(),
-    workflowId: text('workflow_id').notNull(),
-    status: text('status').notNull(),
-    triggerType: text('trigger_type').notNull(),
-    triggerPayload: text('trigger_payload'),
-    nodeExecutions: text('node_executions'),
-    result: text('result'),
-    error: text('error'),
-    usage: real('usage').default(0),
-    startedAt: text('started_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-    endedAt: text('ended_at'),
-});
-
-type NewPublishedPage = typeof publishedPages.$inferInsert;
+// Re-export for backward compatibility (some files may import from here)
+export { publishedPages, projectSettings };
 
 /** Default favicon path (Frontbase logo) */
 const DEFAULT_FAVICON = '/static/icon.png';
@@ -385,5 +323,17 @@ export class LocalSqliteProvider implements IStateProvider {
         }
 
         return Array.from(statsMap.values());
+    }
+
+    // =========================================================================
+    // Dead Letter Queue
+    // =========================================================================
+
+    async createDeadLetter(deadLetter: DeadLetterData): Promise<void> {
+        await this.getDb().run(sql`
+            INSERT INTO dead_letters (id, workflow_id, execution_id, error, payload, retry_count)
+            VALUES (${deadLetter.id}, ${deadLetter.workflowId}, ${deadLetter.executionId},
+                    ${deadLetter.error}, ${deadLetter.payload}, ${deadLetter.retryCount || 0})
+        `);
     }
 }

@@ -22,7 +22,12 @@ export class NullCacheProvider implements ICacheProvider {
     async rpop(_key: string) { return null; }
     async llen(_key: string) { return 0; }
 
-    // Rate limiting — always allow
+    // Rate limiting / concurrency — always allow
     async incr(_key: string) { return 1; }
+    async decr(_key: string) { return 0; }
     async expire(_key: string, _seconds: number) { return 1; }
+
+    // Sorted set (priority queue) — no-op
+    async zadd(_key: string, _score: number, _member: string) { return 1; }
+    async zpopmax(_key: string) { return null; }
 }

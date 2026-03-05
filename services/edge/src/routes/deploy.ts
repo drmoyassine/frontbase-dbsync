@@ -59,6 +59,7 @@ deployRoute.openapi(route, async (c) => {
             triggerConfig: JSON.stringify(body.triggerConfig || {}),
             nodes: JSON.stringify(body.nodes),
             edges: JSON.stringify(body.edges),
+            settings: (body as any).settings ? JSON.stringify((body as any).settings) : null,
             version: 1,
             isActive: body.isActive ?? true,
             createdAt: new Date().toISOString(),

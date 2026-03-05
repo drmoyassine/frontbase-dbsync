@@ -352,6 +352,20 @@ async def publish_draft_to_engine(
     if not engine_url:
         raise HTTPException(status_code=400, detail="Engine URL is missing")
     
+    # Pre-flight: check if workflow settings require infrastructure the engine doesn't have
+    wf_settings = draft.settings if isinstance(draft.settings, dict) else {}
+    needs_queue = wf_settings.get('queue_enabled') or wf_settings.get('dlq_enabled')
+    engine_queue_id = getattr(engine, 'edge_queue_id', None)
+    if needs_queue and not engine_queue_id:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Workflow uses queue features (Durable Execution / DLQ) but engine "
+                f"'{engine_name}' has no Queue provider configured. "
+                f"Configure a Queue in Settings → Edge Engines → Reconfigure."
+            )
+        )
+    
     # Force-load attributes before detaching
     deploy_payload = _build_deploy_payload(draft)
     draft_id_str = str(draft.id)

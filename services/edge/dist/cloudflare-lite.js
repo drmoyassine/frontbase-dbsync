@@ -41452,6 +41452,93 @@ healthRoute.openapi(route, (c) => {
   });
 });
 
+// src/routes/ai.ts
+var _aiBinding = null;
+function setAIBinding(ai) {
+  _aiBinding = ai;
+}
+function getAIBinding() {
+  return _aiBinding;
+}
+var _gpuModels = [];
+function getGPUModels() {
+  if (_gpuModels.length === 0) {
+    const envModels = globalThis.process?.env?.FRONTBASE_GPU_MODELS;
+    if (envModels) {
+      try {
+        const parsed = JSON.parse(envModels);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          _gpuModels = parsed;
+          console.log(`[AI] Auto-loaded ${parsed.length} GPU model(s) from env:`, parsed.map((m) => m.slug).join(", "));
+        }
+      } catch (e) {
+        console.error("[AI] Failed to parse FRONTBASE_GPU_MODELS:", e);
+      }
+    }
+  }
+  return _gpuModels;
+}
+
+// src/routes/manifest.ts
+var manifestRoute = new OpenAPIHono();
+function getAdapterType() {
+  const platform2 = process.env.FRONTBASE_ADAPTER_PLATFORM || "docker";
+  if (platform2 === "cloudflare-lite") return "lite";
+  return "full";
+}
+function getCapabilities() {
+  const caps = ["workflows"];
+  const adapterType = getAdapterType();
+  if (adapterType === "full") caps.push("ssr");
+  if (getGPUModels().length > 0) caps.push("ai");
+  return caps;
+}
+function getBindings() {
+  const bindings = {};
+  const dbUrl = process.env.FRONTBASE_STATE_DB_URL || "";
+  if (dbUrl.startsWith("libsql://") || dbUrl.startsWith("https://")) {
+    bindings.db = "turso";
+  } else if (dbUrl.includes("sqlite") || dbUrl.endsWith(".db")) {
+    bindings.db = "sqlite";
+  } else if (dbUrl) {
+    bindings.db = "custom";
+  } else {
+    bindings.db = "none";
+  }
+  const cacheUrl = process.env.FRONTBASE_CACHE_URL || "";
+  if (cacheUrl.includes("upstash")) {
+    bindings.cache = "upstash";
+  } else if (cacheUrl.includes("redis")) {
+    bindings.cache = "redis";
+  } else if (cacheUrl) {
+    bindings.cache = "custom";
+  } else {
+    bindings.cache = "none";
+  }
+  const qstashToken = process.env.QSTASH_TOKEN || "";
+  bindings.queue = qstashToken ? "qstash" : "none";
+  return bindings;
+}
+manifestRoute.get("/", (c) => {
+  const gpuModels = getGPUModels();
+  return c.json({
+    engine_name: process.env.FRONTBASE_ENGINE_NAME || "frontbase-edge",
+    frontbase_version: "0.1.0",
+    adapter_type: getAdapterType(),
+    platform: process.env.FRONTBASE_ADAPTER_PLATFORM || "docker",
+    deployed_at: process.env.FRONTBASE_DEPLOYED_AT || null,
+    bundle_checksum: process.env.FRONTBASE_BUNDLE_CHECKSUM || null,
+    capabilities: getCapabilities(),
+    gpu_models: gpuModels.map((m) => ({
+      slug: m.slug,
+      model_id: m.model_id,
+      model_type: m.model_type,
+      provider: m.provider
+    })),
+    bindings: getBindings()
+  });
+});
+
 // node_modules/@libsql/core/lib-esm/api.js
 var LibsqlError = class extends Error {
   /** Machine-readable error code. */
@@ -52817,33 +52904,6 @@ updateRoute.openapi(route5, async (c) => {
   }
 });
 
-// src/routes/ai.ts
-var _aiBinding = null;
-function setAIBinding(ai) {
-  _aiBinding = ai;
-}
-function getAIBinding() {
-  return _aiBinding;
-}
-var _gpuModels = [];
-function getGPUModels() {
-  if (_gpuModels.length === 0) {
-    const envModels = globalThis.process?.env?.FRONTBASE_GPU_MODELS;
-    if (envModels) {
-      try {
-        const parsed = JSON.parse(envModels);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          _gpuModels = parsed;
-          console.log(`[AI] Auto-loaded ${parsed.length} GPU model(s) from env:`, parsed.map((m) => m.slug).join(", "));
-        }
-      } catch (e) {
-        console.error("[AI] Failed to parse FRONTBASE_GPU_MODELS:", e);
-      }
-    }
-  }
-  return _gpuModels;
-}
-
 // src/routes/openai.ts
 var openaiRoute = new OpenAPIHono();
 function resolveModel(modelSlug, c) {
@@ -53295,6 +53355,7 @@ function createLiteApp() {
   app.use("*", cors({ origin: "*" }));
   app.use("/api/webhook/*", apiKeyAuth);
   app.route("/api/health", healthRoute);
+  app.route("/api/manifest", manifestRoute);
   app.route("/api/deploy", deployRoute);
   app.route("/api/execute", executeRoute);
   app.route("/api/webhook", webhookRoute);

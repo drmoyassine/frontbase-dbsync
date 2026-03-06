@@ -57342,6 +57342,93 @@ healthRoute.openapi(route, (c) => {
   });
 });
 
+// src/routes/ai.ts
+var _aiBinding = null;
+function setAIBinding(ai) {
+  _aiBinding = ai;
+}
+function getAIBinding() {
+  return _aiBinding;
+}
+var _gpuModels = [];
+function getGPUModels() {
+  if (_gpuModels.length === 0) {
+    const envModels = globalThis.process?.env?.FRONTBASE_GPU_MODELS;
+    if (envModels) {
+      try {
+        const parsed = JSON.parse(envModels);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          _gpuModels = parsed;
+          console.log(`[AI] Auto-loaded ${parsed.length} GPU model(s) from env:`, parsed.map((m2) => m2.slug).join(", "));
+        }
+      } catch (e) {
+        console.error("[AI] Failed to parse FRONTBASE_GPU_MODELS:", e);
+      }
+    }
+  }
+  return _gpuModels;
+}
+
+// src/routes/manifest.ts
+var manifestRoute = new OpenAPIHono();
+function getAdapterType() {
+  const platform2 = process.env.FRONTBASE_ADAPTER_PLATFORM || "docker";
+  if (platform2 === "cloudflare-lite") return "lite";
+  return "full";
+}
+function getCapabilities() {
+  const caps = ["workflows"];
+  const adapterType = getAdapterType();
+  if (adapterType === "full") caps.push("ssr");
+  if (getGPUModels().length > 0) caps.push("ai");
+  return caps;
+}
+function getBindings() {
+  const bindings = {};
+  const dbUrl = process.env.FRONTBASE_STATE_DB_URL || "";
+  if (dbUrl.startsWith("libsql://") || dbUrl.startsWith("https://")) {
+    bindings.db = "turso";
+  } else if (dbUrl.includes("sqlite") || dbUrl.endsWith(".db")) {
+    bindings.db = "sqlite";
+  } else if (dbUrl) {
+    bindings.db = "custom";
+  } else {
+    bindings.db = "none";
+  }
+  const cacheUrl = process.env.FRONTBASE_CACHE_URL || "";
+  if (cacheUrl.includes("upstash")) {
+    bindings.cache = "upstash";
+  } else if (cacheUrl.includes("redis")) {
+    bindings.cache = "redis";
+  } else if (cacheUrl) {
+    bindings.cache = "custom";
+  } else {
+    bindings.cache = "none";
+  }
+  const qstashToken = process.env.QSTASH_TOKEN || "";
+  bindings.queue = qstashToken ? "qstash" : "none";
+  return bindings;
+}
+manifestRoute.get("/", (c) => {
+  const gpuModels = getGPUModels();
+  return c.json({
+    engine_name: process.env.FRONTBASE_ENGINE_NAME || "frontbase-edge",
+    frontbase_version: "0.1.0",
+    adapter_type: getAdapterType(),
+    platform: process.env.FRONTBASE_ADAPTER_PLATFORM || "docker",
+    deployed_at: process.env.FRONTBASE_DEPLOYED_AT || null,
+    bundle_checksum: process.env.FRONTBASE_BUNDLE_CHECKSUM || null,
+    capabilities: getCapabilities(),
+    gpu_models: gpuModels.map((m2) => ({
+      slug: m2.slug,
+      model_id: m2.model_id,
+      model_type: m2.model_type,
+      provider: m2.provider
+    })),
+    bindings: getBindings()
+  });
+});
+
 // src/storage/TursoHttpProvider.ts
 init_libsql();
 init_web();
@@ -59543,33 +59630,6 @@ updateRoute.openapi(route5, async (c) => {
   }
 });
 
-// src/routes/ai.ts
-var _aiBinding = null;
-function setAIBinding(ai) {
-  _aiBinding = ai;
-}
-function getAIBinding() {
-  return _aiBinding;
-}
-var _gpuModels = [];
-function getGPUModels() {
-  if (_gpuModels.length === 0) {
-    const envModels = globalThis.process?.env?.FRONTBASE_GPU_MODELS;
-    if (envModels) {
-      try {
-        const parsed = JSON.parse(envModels);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          _gpuModels = parsed;
-          console.log(`[AI] Auto-loaded ${parsed.length} GPU model(s) from env:`, parsed.map((m2) => m2.slug).join(", "));
-        }
-      } catch (e) {
-        console.error("[AI] Failed to parse FRONTBASE_GPU_MODELS:", e);
-      }
-    }
-  }
-  return _gpuModels;
-}
-
 // src/routes/openai.ts
 var openaiRoute = new OpenAPIHono();
 function resolveModel(modelSlug, c) {
@@ -59625,11 +59685,17 @@ openaiRoute.post("/chat/completions", async (c) => {
   if (body.max_tokens != null) payload.max_tokens = body.max_tokens;
   if (body.temperature != null) payload.temperature = body.temperature;
   if (body.top_p != null) payload.top_p = body.top_p;
+  if (body.top_k != null) payload.top_k = body.top_k;
   if (body.stream != null) payload.stream = body.stream;
   if (body.stop != null) payload.stop = body.stop;
+  if (body.seed != null) payload.seed = body.seed;
   if (body.frequency_penalty != null) payload.frequency_penalty = body.frequency_penalty;
   if (body.presence_penalty != null) payload.presence_penalty = body.presence_penalty;
+  if (body.repetition_penalty != null) payload.repetition_penalty = body.repetition_penalty;
   if (body.tools != null) payload.tools = body.tools;
+  if (body.response_format != null) payload.response_format = body.response_format;
+  if (body.raw != null) payload.raw = body.raw;
+  if (body.lora != null) payload.lora = body.lora;
   mergeDefaults(payload, model);
   try {
     const result = await ai.run(model.model_id, payload);
@@ -59813,6 +59879,50 @@ openaiRoute.post("/audio/speech", async (c) => {
     return c.json({ error: { message: err2.message || "Text-to-speech failed", type: "server_error", code: "inference_error" } }, 500);
   }
 });
+openaiRoute.post("/responses", async (c) => {
+  let body;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: { message: "Invalid JSON body", type: "invalid_request_error", code: "invalid_json" } }, 400);
+  }
+  const resolved = resolveModel(body.model, c);
+  if ("error" in resolved) return resolved.error;
+  const { model, ai } = resolved;
+  if (!body.input) {
+    return c.json({ error: { message: "Missing required field: input", type: "invalid_request_error", code: "missing_field" } }, 400);
+  }
+  const payload = { input: body.input };
+  if (body.reasoning) {
+    payload.reasoning = {};
+    if (body.reasoning.effort) payload.reasoning.effort = body.reasoning.effort;
+    if (body.reasoning.summary) payload.reasoning.summary = body.reasoning.summary;
+  }
+  if (body.instructions) payload.instructions = body.instructions;
+  if (body.max_tokens != null) payload.max_tokens = body.max_tokens;
+  if (body.temperature != null) payload.temperature = body.temperature;
+  if (body.tools != null) payload.tools = body.tools;
+  mergeDefaults(payload, model);
+  try {
+    const result = await ai.run(model.model_id, payload);
+    const responseText = typeof result === "string" ? result : result?.response ?? result?.output?.[0]?.content?.[0]?.text ?? result?.result ?? JSON.stringify(result);
+    return c.json({
+      id: `resp-${crypto.randomUUID().slice(0, 12)}`,
+      object: "response",
+      created_at: Math.floor(Date.now() / 1e3),
+      model: model.slug,
+      output: [{
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: responseText }]
+      }],
+      usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 }
+    });
+  } catch (err2) {
+    console.error(`[OpenAI] Responses API error for ${body.model}:`, err2);
+    return c.json({ error: { message: err2.message || "Response generation failed", type: "server_error", code: "inference_error" } }, 500);
+  }
+});
 
 // node_modules/hono/dist/utils/jwt/jwa.js
 var AlgorithmTypes = /* @__PURE__ */ ((AlgorithmTypes2) => {
@@ -59971,6 +60081,7 @@ function createLiteApp() {
   app2.use("*", cors({ origin: "*" }));
   app2.use("/api/webhook/*", apiKeyAuth);
   app2.route("/api/health", healthRoute);
+  app2.route("/api/manifest", manifestRoute);
   app2.route("/api/deploy", deployRoute);
   app2.route("/api/execute", executeRoute);
   app2.route("/api/webhook", webhookRoute);

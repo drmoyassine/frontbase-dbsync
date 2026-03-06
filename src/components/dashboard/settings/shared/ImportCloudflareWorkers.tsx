@@ -80,7 +80,7 @@ export function ImportCloudflareWorkers({ providerId }: { providerId: string }) 
     const handleImport = async (worker: any) => {
         setImportingId(worker.name);
         try {
-            await edgeInfrastructureApi.createEngine({
+            const created = await edgeInfrastructureApi.createEngine({
                 name: `Cloudflare: ${worker.name}`,
                 provider: 'cloudflare',
                 edge_provider_id: providerId,
@@ -90,6 +90,16 @@ export function ImportCloudflareWorkers({ providerId }: { providerId: string }) 
                 engine_config: { worker_name: worker.name },
                 is_active: true,
             });
+            // Auto-sync manifest to populate GPU model badges + capabilities
+            if (created?.id) {
+                try {
+                    await fetch(`${API_BASE}/api/edge-engines/${created.id}/sync-manifest`, {
+                        method: 'POST',
+                    });
+                } catch {
+                    // Silent — engine might not have manifest (non-Frontbase worker)
+                }
+            }
             await refetch();
         } catch (e: any) {
             setError(e.message || 'Import failed');

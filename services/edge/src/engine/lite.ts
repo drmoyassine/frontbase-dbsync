@@ -35,6 +35,7 @@ import { Liquid } from 'liquidjs';
 
 // ── Automation routes only — NO pages/SSR/React ────────────────────
 import { healthRoute } from '../routes/health.js';
+import { manifestRoute } from '../routes/manifest.js';
 import { deployRoute } from '../routes/deploy.js';
 import { executeRoute } from '../routes/execute.js';
 import { webhookRoute } from '../routes/webhook.js';
@@ -122,6 +123,7 @@ export function createLiteApp() {
 
     // ── Automation Routes ──────────────────────────────────────────────
     app.route('/api/health', healthRoute);
+    app.route('/api/manifest', manifestRoute);
     app.route('/api/deploy', deployRoute);
     app.route('/api/execute', executeRoute);
     app.route('/api/webhook', webhookRoute);

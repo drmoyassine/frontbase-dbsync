@@ -151,6 +151,18 @@ export const edgeInfrastructureApi = {
             const data = await res.json().catch(() => ({}));
             throw new Error(data.detail || 'Redeploy failed');
         }
+        const result = await res.json();
+        // Auto-sync manifest after redeploy to update GPU models + metadata
+        try {
+            await fetch(`${API_BASE}/api/edge-engines/${id}/sync-manifest`, { method: 'POST' });
+        } catch {
+            // Silent — manifest sync is best-effort
+        }
+        return result;
+    },
+    syncManifest: async (id: string): Promise<any> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/${id}/sync-manifest`, { method: 'POST' });
+        if (!res.ok) throw new Error('Manifest sync failed');
         return res.json();
     },
 

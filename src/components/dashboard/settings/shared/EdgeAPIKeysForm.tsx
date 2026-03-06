@@ -9,7 +9,10 @@
 
 import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEdgeAPIKeys, EdgeAPIKey } from '@/hooks/useEdgeInfrastructure';
+import { useEdgeAPIKeys, useEdgeEngines, EdgeAPIKey } from '@/hooks/useEdgeInfrastructure';
+import {
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -39,11 +42,13 @@ interface EdgeAPIKeysFormProps {
 export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = false }) => {
     const queryClient = useQueryClient();
     const { data: keys = [], isLoading } = useEdgeAPIKeys();
+    const { data: engines = [] } = useEdgeEngines();
 
     // Dialog state
     const [dialogOpen, setDialogOpen] = useState(false);
     const [creating, setCreating] = useState(false);
     const [name, setName] = useState('');
+    const [engineId, setEngineId] = useState<string>('all');
 
     // Created key reveal state
     const [revealedKey, setRevealedKey] = useState<string | null>(null);
@@ -55,6 +60,7 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
 
     const resetForm = () => {
         setName('');
+        setEngineId('all');
         setRevealedKey(null);
         setRevealCopied(false);
         setShowKey(true);
@@ -67,7 +73,10 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
             const res = await fetch(`${API_BASE}/api/edge-api-keys`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: name.trim() }),
+                body: JSON.stringify({
+                    name: name.trim(),
+                    edge_engine_id: engineId === 'all' ? null : engineId,
+                }),
             });
             if (!res.ok) {
                 const err = await res.json();
@@ -199,6 +208,25 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
                                         onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
                                     />
                                 </div>
+                                <div className="space-y-2">
+                                    <Label>Assign to Engine</Label>
+                                    <Select value={engineId} onValueChange={setEngineId}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="All Engines" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Engines</SelectItem>
+                                            {engines.map((e: any) => (
+                                                <SelectItem key={e.id} value={e.id}>
+                                                    {e.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-muted-foreground">
+                                        Restrict this key to a specific engine, or allow it on all engines.
+                                    </p>
+                                </div>
                                 <DialogFooter>
                                     <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
                                     <Button onClick={handleCreate} disabled={creating || !name.trim()}>
@@ -244,7 +272,14 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
                                             </Badge>
                                         )}
                                     </div>
-                                    <p className="text-xs text-muted-foreground font-mono">{key.prefix}</p>
+                                    <div className="flex items-center gap-1.5">
+                                        <p className="text-xs text-muted-foreground font-mono">{key.prefix}</p>
+                                        {key.engine_name ? (
+                                            <Badge variant="outline" className="text-[10px] shrink-0">→ {key.engine_name}</Badge>
+                                        ) : (
+                                            <Badge variant="outline" className="text-[10px] text-muted-foreground shrink-0">All Engines</Badge>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">

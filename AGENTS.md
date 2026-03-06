@@ -137,6 +137,7 @@ The Edge Engine has no knowledge of:
 | **Using raw integers (`1 as any`) with Drizzle `mode: 'boolean'` columns** | **Drizzle maps `true`→`1` and `false`→`0` internally. Using `eq(col, 1 as any)` bypasses this mapping and the WHERE clause silently matches nothing. Always use `eq(col, true)` or `eq(col, false)`.** |
 | **Assuming deployed CF Worker bundles reflect local source changes** | **Cloudflare Workers run a built/deployed bundle. Local code fixes only take effect after a rebuild + redeploy (`wrangler deploy`). Always check whether the target is a live service or a deployed artifact before debugging "why isn't my fix working".** |
 | **Deleting code paths without querying dependent infrastructure** | **Before removing an endpoint, strategy, or Zustand action, query the actual database (e.g. `edge_engines`, `edge_databases`) to understand how many targets, providers, and deployment paths exist. Never assume from the UI — always verify with data.** |
+| **Deploying/reconfiguring an engine when same CF account is on multiple Frontbase instances** | **`secrets_builder` pushes `FRONTBASE_API_KEY_HASHES` from the local DB only — this replaces the entire env var on the worker, wiping keys created by other instances. Each CF Worker should be managed by exactly one Frontbase instance.** |
 
 ---
 

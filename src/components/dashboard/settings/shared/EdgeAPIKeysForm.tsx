@@ -133,13 +133,7 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
     const content = (
         <div className="space-y-4">
             {/* Header with Create button */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <Key className="h-4 w-4 text-amber-500" />
-                    <p className="text-sm text-muted-foreground">
-                        API keys for authenticating requests to <code className="text-xs bg-muted px-1 py-0.5 rounded">/v1/*</code> endpoints.
-                    </p>
-                </div>
+            <div className="flex items-center justify-end">
                 <Dialog open={dialogOpen} onOpenChange={(open) => {
                     setDialogOpen(open);
                     if (!open) resetForm();

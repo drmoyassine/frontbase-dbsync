@@ -52824,26 +52824,45 @@ function setAIBinding(ai) {
 }
 var aiRoute = new OpenAPIHono();
 var _gpuModels = [];
+function getGPUModels() {
+  if (_gpuModels.length === 0) {
+    const envModels = globalThis.process?.env?.FRONTBASE_GPU_MODELS;
+    if (envModels) {
+      try {
+        const parsed = JSON.parse(envModels);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          _gpuModels = parsed;
+          console.log(`[AI] Auto-loaded ${parsed.length} GPU model(s) from env:`, parsed.map((m) => m.slug).join(", "));
+        }
+      } catch (e) {
+        console.error("[AI] Failed to parse FRONTBASE_GPU_MODELS:", e);
+      }
+    }
+  }
+  return _gpuModels;
+}
 aiRoute.get("/", (c) => {
+  const models = getGPUModels();
   return c.json({
-    models: _gpuModels.map((m) => ({
+    models: models.map((m) => ({
       slug: m.slug,
       model_id: m.model_id,
       model_type: m.model_type,
       provider: m.provider,
       endpoint: `/api/ai/${m.slug}`
     })),
-    total: _gpuModels.length
+    total: models.length
   });
 });
 aiRoute.post("/:slug", async (c) => {
   const slug = c.req.param("slug");
-  const model = _gpuModels.find((m) => m.slug === slug);
+  const models = getGPUModels();
+  const model = models.find((m) => m.slug === slug);
   if (!model) {
     return c.json({
       success: false,
       error: `No GPU model found for slug '${slug}'`,
-      available: _gpuModels.map((m) => m.slug)
+      available: models.map((m) => m.slug)
     }, 404);
   }
   let payload;

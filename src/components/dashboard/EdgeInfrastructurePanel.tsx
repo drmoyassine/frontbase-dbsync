@@ -2,14 +2,14 @@
  * EdgeInfrastructurePanel
  * 
  * Dedicated page for Edge Infrastructure management.
- * Contains 5 tabs: Edge Compute, Edge Database, Edge Caching, Edge Queues, Edge GPU.
+ * Contains 4 tabs: Edge Compute, Edge Database, Edge Caching, Edge Queues.
+ * GPU/AI model management is integrated into Edge Compute via the deploy wizard.
  * 
  * Supports deep linking via URL search params:
  *   /edge?tab=compute
  *   /edge?tab=database
  *   /edge?tab=caching
  *   /edge?tab=queues
- *   /edge?tab=gpu
  */
 
 import React from 'react';
@@ -19,9 +19,8 @@ import { EdgeCachesForm } from './settings/shared/EdgeCachesForm';
 import { EdgeDatabasesForm } from './settings/shared/EdgeDatabasesForm';
 import { EdgeQueuesForm } from './settings/shared/EdgeQueuesForm';
 import { EdgeEnginesPanel } from './settings/shared/EdgeEnginesPanel';
-import { EdgeGPUForm } from './settings/shared/EdgeGPUForm';
 
-const VALID_TABS = ['compute', 'database', 'caching', 'queues', 'gpu'] as const;
+const VALID_TABS = ['compute', 'database', 'caching', 'queues'] as const;
 type EdgeTab = typeof VALID_TABS[number];
 
 export const EdgeInfrastructurePanel: React.FC = () => {
@@ -40,20 +39,19 @@ export const EdgeInfrastructurePanel: React.FC = () => {
             <div>
                 <h1 className="text-2xl font-bold tracking-tight">Edge Infrastructure</h1>
                 <p className="text-muted-foreground">
-                    Manage your edge compute engines, databases, caches, queues, and GPU inference
+                    Manage your edge compute engines, databases, caches, and queues
                 </p>
             </div>
 
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-5 lg:w-[800px]">
+                <TabsList className="grid w-full grid-cols-4 lg:w-[700px]">
                     <TabsTrigger value="compute">Edge Compute</TabsTrigger>
                     <TabsTrigger value="database">Edge Database</TabsTrigger>
                     <TabsTrigger value="caching">Edge Caching</TabsTrigger>
                     <TabsTrigger value="queues">Edge Queues</TabsTrigger>
-                    <TabsTrigger value="gpu">Edge GPU</TabsTrigger>
                 </TabsList>
 
-                {/* Edge Compute (Engines) Tab */}
+                {/* Edge Compute (Engines + AI) Tab */}
                 <TabsContent value="compute" className="space-y-6 mt-6">
                     <EdgeEnginesPanel withCard />
                 </TabsContent>
@@ -71,11 +69,6 @@ export const EdgeInfrastructurePanel: React.FC = () => {
                 {/* Edge Queues Tab */}
                 <TabsContent value="queues" className="space-y-6 mt-6">
                     <EdgeQueuesForm withCard />
-                </TabsContent>
-
-                {/* Edge GPU (AI Inference) Tab */}
-                <TabsContent value="gpu" className="space-y-6 mt-6">
-                    <EdgeGPUForm withCard />
                 </TabsContent>
             </Tabs>
         </div>

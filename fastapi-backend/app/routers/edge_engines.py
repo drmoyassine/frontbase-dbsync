@@ -96,6 +96,15 @@ def _serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) ->
             is_outdated = True
             sync_status = "stale"
 
+    # GPU model (single model per engine — see edge_gpu.py enforcement)
+    gpu_model_obj = engine.gpu_models[0] if engine.gpu_models else None
+    gpu_model_data = {
+        "id": str(gpu_model_obj.id),
+        "name": str(gpu_model_obj.name),
+        "model_type": str(gpu_model_obj.model_type),
+        "endpoint_url": str(gpu_model_obj.endpoint_url) if gpu_model_obj.endpoint_url else None,
+    } if gpu_model_obj else None
+
     return {
         "id": str(engine.id),
         "name": str(engine.name),
@@ -110,6 +119,7 @@ def _serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) ->
         "edge_queue_id": str(engine.edge_queue_id) if engine.edge_queue_id else None,
         "edge_queue_name": edge_queue_name,
         "engine_config": config,
+        "gpu_model": gpu_model_data,
         "is_active": bool(engine.is_active),
         "is_system": bool(engine.is_system),
         "bundle_checksum": bundle_checksum_val,

@@ -21,7 +21,7 @@ import {
     DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import {
-    Plus, Trash2, Pencil, Loader2, Check, X,
+    Plus, Trash2, Pencil, Loader2, Check,
     Star, Shield, Zap, AlertTriangle, Cloud, Server,
 } from 'lucide-react';
 import {
@@ -29,14 +29,9 @@ import {
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
     AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { showTestToast, TestResult } from './edgeTestToast';
 
 const API_BASE = '';
-
-interface TestResult {
-    success: boolean;
-    message: string;
-    latency_ms?: number;
-}
 
 interface EdgeCachesFormProps {
     withCard?: boolean;
@@ -158,28 +153,7 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
         finally { setDeletingId(null); }
     };
 
-    // ─── Single toast ───
-    const showTestToast = (result: TestResult, label: string) => {
-        toast.custom((id) => (
-            <div
-                className="w-[356px] rounded-lg border bg-background shadow-lg p-3 space-y-2"
-                style={{ pointerEvents: 'auto' }}
-            >
-                <div className="flex items-center gap-2.5">
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${result.success ? 'bg-emerald-500' : 'bg-red-500'
-                        }`}>
-                        {result.success
-                            ? <Check className="h-3 w-3 text-white" />
-                            : <X className="h-3 w-3 text-white" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <span className="text-sm font-medium">{label}</span>
-                        <span className="text-xs text-muted-foreground ml-2">{result.message}</span>
-                    </div>
-                </div>
-            </div>
-        ), { duration: result.success ? 4000 : 8000 });
-    };
+
 
     // Test saved cache
     const handleTest = async (id: string) => {

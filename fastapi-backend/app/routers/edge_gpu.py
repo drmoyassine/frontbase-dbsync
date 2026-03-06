@@ -20,6 +20,7 @@ from ..database.config import get_db
 from ..models.models import EdgeGPUModel, EdgeEngine, EdgeProviderAccount
 from ..services.gpu_adapters import get_adapter, get_schema_for_model_type, IO_SCHEMAS, available_providers
 from ..services.cloudflare_api import get_provider_credentials
+from ..services.engine_deploy import redeploy as _redeploy_engine
 
 router = APIRouter(prefix="/api/edge-gpu", tags=["edge-gpu"])
 
@@ -164,7 +165,11 @@ async def list_gpu_models(db: Session = Depends(get_db)):
 
 @router.post("/")
 async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db)):
-    """Deploy a new GPU model to an edge engine."""
+    """Deploy a new GPU model to an edge engine.
+
+    After saving the model record, auto-redeploys CF engines so the AI
+    binding + FRONTBASE_GPU_MODELS secret are pushed immediately.
+    """
     # Validate engine exists
     engine = db.query(EdgeEngine).filter(EdgeEngine.id == payload.edge_engine_id).first()
     if not engine:
@@ -173,16 +178,18 @@ async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db
     # Validate adapter exists
     get_adapter(payload.provider)
 
+    # Enforce single GPU model per engine
+    existing_model = db.query(EdgeGPUModel).filter(
+        EdgeGPUModel.edge_engine_id == payload.edge_engine_id,
+    ).first()
+    if existing_model:
+        raise HTTPException(
+            409,
+            f"This engine already has an AI model ({existing_model.name}). Remove it first.",
+        )
+
     now = datetime.now(timezone.utc).isoformat()
     slug = _slugify(payload.name)
-
-    # Check slug uniqueness on this engine
-    existing = db.query(EdgeGPUModel).filter(
-        EdgeGPUModel.edge_engine_id == payload.edge_engine_id,
-        EdgeGPUModel.slug == slug,
-    ).first()
-    if existing:
-        raise HTTPException(409, f"Model with slug '{slug}' already exists on this engine")
 
     endpoint_url = f"{str(engine.url).rstrip('/')}/api/ai/{slug}"
 
@@ -204,7 +211,22 @@ async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db
     db.commit()
     db.refresh(model)
 
-    return _serialize(model)
+    # Auto-redeploy CF engines so AI binding + secrets are synced
+    result = _serialize(model)
+    redeployed = False
+    redeploy_error = None
+    if engine.edge_provider_id:
+        try:
+            await _redeploy_engine(engine, db)
+            redeployed = True
+        except Exception as e:
+            redeploy_error = str(e)
+            print(f"[GPU] Auto-redeploy failed for engine {engine.id}: {e}")
+
+    result["redeployed"] = redeployed
+    if redeploy_error:
+        result["redeploy_error"] = redeploy_error
+    return result
 
 
 @router.put("/{model_id}")
@@ -236,14 +258,34 @@ async def update_gpu_model(model_id: str, payload: GPUModelUpdate, db: Session =
 
 @router.delete("/{model_id}")
 async def delete_gpu_model(model_id: str, db: Session = Depends(get_db)):
-    """Delete a GPU model."""
+    """Delete a GPU model.
+
+    After deletion, auto-redeploys CF engines to remove stale AI
+    binding / secrets.
+    """
     model = db.query(EdgeGPUModel).filter(EdgeGPUModel.id == model_id).first()
     if not model:
         raise HTTPException(404, "GPU model not found")
 
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == model.edge_engine_id).first()
     db.delete(model)
     db.commit()
-    return {"detail": "GPU model deleted", "id": model_id}
+
+    # Auto-redeploy CF engines to remove stale binding
+    redeployed = False
+    redeploy_error = None
+    if engine and engine.edge_provider_id:
+        try:
+            await _redeploy_engine(engine, db)
+            redeployed = True
+        except Exception as e:
+            redeploy_error = str(e)
+            print(f"[GPU] Auto-redeploy after delete failed for engine {engine.id}: {e}")
+
+    resp = {"detail": "GPU model deleted", "id": model_id, "redeployed": redeployed}
+    if redeploy_error:
+        resp["redeploy_error"] = redeploy_error
+    return resp
 
 
 # =============================================================================

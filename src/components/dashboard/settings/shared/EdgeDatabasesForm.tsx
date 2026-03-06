@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
-    Database, Plus, Trash2, Pencil, Loader2, Check, X,
+    Database, Plus, Trash2, Pencil, Loader2, Check,
     Star, Shield, Zap, AlertTriangle, HardDrive, Cloud, Globe,
 } from 'lucide-react';
 import {
@@ -25,6 +25,7 @@ import {
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
     AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { showTestToast, TestResult } from './edgeTestToast';
 
 const API_BASE = '';
 
@@ -39,12 +40,6 @@ interface EdgeDatabase {
     created_at: string;
     updated_at: string;
     target_count: number;
-}
-
-interface TestResult {
-    success: boolean;
-    message: string;
-    latency_ms?: number;
 }
 
 interface EdgeDatabasesFormProps {
@@ -78,7 +73,6 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
 
     // Test connection
     const [testingId, setTestingId] = useState<string | null>(null);
-    const [testResult, setTestResult] = useState<TestResult | null>(null);
 
     // Delete
     const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -93,7 +87,6 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
         setFormUrl('');
         setFormToken('');
         setFormIsDefault(false);
-        setTestResult(null);
     };
 
     const startEdit = (db: EdgeDatabase) => {
@@ -104,7 +97,6 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
         setFormToken('');
         setFormIsDefault(db.is_default);
         setShowAddFlow(true);
-        setTestResult(null);
     };
 
     // Save (create or update)
@@ -160,35 +152,43 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
     // Test saved DB
     const handleTest = async (id: string) => {
         setTestingId(id);
-        setTestResult(null);
         try {
             const res = await fetch(`${API_BASE}/api/edge-databases/${id}/test`, { method: 'POST' });
-            const data = await res.json();
-            setTestResult({ ...data, _dbId: id } as any);
+            const data: TestResult = await res.json();
+            const db = databases.find(d => d.id === id);
+            const label = PROVIDER_OPTIONS.find(p => p.value === db?.provider)?.label || 'Database';
+            showTestToast(data, label);
         } catch (e: any) {
-            setTestResult({ success: false, message: e.message } as any);
+            showTestToast({ success: false, message: e.message }, 'Database');
         } finally { setTestingId(null); }
     };
 
     // Test inline (before saving)
     const handleTestInline = async () => {
         setTestingId('inline');
-        setTestResult(null);
         try {
-            const res = await fetch(`${API_BASE}/api/edge-databases/test-connection`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: formName || 'Test',
-                    provider: selectedProvider,
-                    db_url: formUrl,
-                    db_token: formToken || null,
-                }),
-            });
-            const data = await res.json();
-            setTestResult(data);
+            const providerLabel = PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.label || 'Database';
+
+            if (editingId && !formToken) {
+                const res = await fetch(`${API_BASE}/api/edge-databases/${editingId}/test`, { method: 'POST' });
+                const data: TestResult = await res.json();
+                showTestToast(data, providerLabel);
+            } else {
+                const res = await fetch(`${API_BASE}/api/edge-databases/test-connection`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: formName || 'Test',
+                        provider: selectedProvider,
+                        db_url: formUrl,
+                        db_token: formToken || null,
+                    }),
+                });
+                const data: TestResult = await res.json();
+                showTestToast(data, providerLabel);
+            }
         } catch (e: any) {
-            setTestResult({ success: false, message: e.message });
+            showTestToast({ success: false, message: e.message }, 'Database');
         } finally { setTestingId(null); }
     };
 
@@ -279,16 +279,6 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                         </Label>
                     </div>
 
-                    {/* Test result */}
-                    {testResult && (
-                        <Alert variant={testResult.success ? 'default' : 'destructive'}>
-                            {testResult.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                            <AlertDescription>
-                                {testResult.message}
-                                {testResult.latency_ms != null && ` (${testResult.latency_ms}ms)`}
-                            </AlertDescription>
-                        </Alert>
-                    )}
 
                     <div className="flex gap-2">
                         <Button
@@ -422,20 +412,10 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                 </div>
             )}
 
-            {/* Test result for list items */}
-            {testResult && !showAddFlow && (
-                <Alert variant={testResult.success ? 'default' : 'destructive'}>
-                    {testResult.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                    <AlertDescription>
-                        {testResult.message}
-                        {testResult.latency_ms != null && ` (${testResult.latency_ms}ms)`}
-                    </AlertDescription>
-                </Alert>
-            )}
 
             {/* Add flow or button */}
             {showAddFlow ? providerSelectionStep : (
-                <Button variant="outline" onClick={() => { setShowAddFlow(true); setError(null); setTestResult(null); }} className="w-full">
+                <Button variant="outline" onClick={() => { setShowAddFlow(true); setError(null); }} className="w-full">
                     <Plus className="mr-2 h-4 w-4" />
                     Add Database
                 </Button>

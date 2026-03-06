@@ -34,6 +34,13 @@ class EdgeEngineUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class GPUModelSummary(BaseModel):
+    """Embedded GPU model summary within engine response."""
+    id: str
+    name: str
+    model_type: str
+    endpoint_url: Optional[str] = None
+
 class EdgeEngineResponse(BaseModel):
     """Edge engine response."""
     id: str
@@ -49,6 +56,7 @@ class EdgeEngineResponse(BaseModel):
     edge_queue_id: Optional[str] = None
     edge_queue_name: Optional[str] = None
     engine_config: Optional[dict] = None
+    gpu_model: Optional[GPUModelSummary] = None
     is_active: bool
     is_system: bool = False
     bundle_checksum: Optional[str] = None

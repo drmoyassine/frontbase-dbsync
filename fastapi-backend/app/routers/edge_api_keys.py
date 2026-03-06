@@ -3,20 +3,26 @@ Edge API Keys router — CRUD for tenant-facing API key management.
 
 Keys secure the /v1/* OpenAI-compatible endpoints on edge engines.
 Full key is shown once at creation; only the SHA-256 hash is stored.
+
+After any mutation (create / toggle / delete), key hashes are automatically
+pushed to the affected CF Workers so changes take effect immediately.
 """
 
 import hashlib
+import json
 import secrets
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 
 from ..database.config import get_db
-from ..models.models import EdgeAPIKey, EdgeEngine
+from ..models.models import EdgeAPIKey, EdgeEngine, EdgeProviderAccount
+from ..services.secrets_builder import build_engine_secrets
+from ..services.engine_reconfigure import _resolve_cf_credentials, _patch_cf_settings
 
 
 router = APIRouter(prefix="/api/edge-api-keys", tags=["edge-api-keys"])
@@ -85,6 +91,57 @@ def _serialize(key: EdgeAPIKey, engine: Optional[EdgeEngine] = None) -> dict:
     }
 
 
+async def _sync_keys_to_engines(engine_id: Optional[str]) -> None:
+    """Push updated FRONTBASE_API_KEY_HASHES to affected CF Workers.
+    
+    If engine_id is set, only that engine is updated.
+    If engine_id is None (key scoped to "all engines"), update every CF engine.
+    Runs as a background task — failures are silent (logged, not raised).
+    """
+    from ..database.config import SessionLocal
+
+    db = SessionLocal()
+    try:
+        if engine_id:
+            engines = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).all()
+        else:
+            # "All Engines" key — push to every engine that has a CF provider
+            engines = db.query(EdgeEngine).filter(
+                EdgeEngine.edge_provider_id.isnot(None)
+            ).all()
+
+        for engine in engines:
+            try:
+                cf_creds = _resolve_cf_credentials(engine, db)
+                if not cf_creds:
+                    continue  # Not a CF engine or missing creds
+
+                # Build only the API key hashes secret for this engine
+                key_secrets = {}
+                api_keys = db.query(EdgeAPIKey).filter(
+                    EdgeAPIKey.is_active == True,
+                    (EdgeAPIKey.edge_engine_id == str(engine.id)) | (EdgeAPIKey.edge_engine_id == None),
+                ).all()
+                if api_keys:
+                    keys_data = [{
+                        "prefix": str(k.prefix),
+                        "hash": str(k.key_hash),
+                        "expires_at": str(k.expires_at) if k.expires_at else None,  # type: ignore[truthy-bool]
+                    } for k in api_keys]
+                    key_secrets['FRONTBASE_API_KEY_HASHES'] = json.dumps(keys_data)
+
+                if key_secrets:
+                    patched, _, _ = await _patch_cf_settings(cf_creds, key_secrets)
+                    if patched:
+                        print(f"[KeySync] Pushed {len(api_keys)} key(s) to engine '{engine.name}'")
+                    else:
+                        print(f"[KeySync] Failed to push keys to engine '{engine.name}'")
+            except Exception as e:
+                print(f"[KeySync] Error syncing keys to engine '{engine.name}': {e}")
+    finally:
+        db.close()
+
+
 # =============================================================================
 # CRUD
 # =============================================================================
@@ -105,7 +162,11 @@ def list_api_keys(db: Session = Depends(get_db)):
 
 
 @router.post("", status_code=201)
-def create_api_key(payload: APIKeyCreate, db: Session = Depends(get_db)):
+def create_api_key(
+    payload: APIKeyCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     """Create a new API key. Returns the full key ONCE."""
     # Validate engine if specified
     if payload.edge_engine_id:
@@ -133,6 +194,9 @@ def create_api_key(payload: APIKeyCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(api_key)
 
+    # Push updated key hashes to affected engine(s)
+    background_tasks.add_task(_sync_keys_to_engines, payload.edge_engine_id)
+
     engine = None
     if api_key.edge_engine_id:  # type: ignore[truthy-bool]
         engine = db.query(EdgeEngine).filter(
@@ -148,12 +212,19 @@ def create_api_key(payload: APIKeyCreate, db: Session = Depends(get_db)):
 def update_api_key(
     key_id: str,
     payload: APIKeyUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     """Update an API key's name, active status, or expiry."""
     api_key = db.query(EdgeAPIKey).filter(EdgeAPIKey.id == key_id).first()
     if not api_key:
         raise HTTPException(404, "API key not found")
+
+    # Track whether we need to sync (only if active status or expiry changed)
+    needs_sync = (
+        (payload.is_active is not None and payload.is_active != api_key.is_active)
+        or (payload.expires_at is not None and payload.expires_at != str(api_key.expires_at))
+    )
 
     if payload.name is not None:
         api_key.name = payload.name  # type: ignore[assignment]
@@ -166,6 +237,11 @@ def update_api_key(
     db.commit()
     db.refresh(api_key)
 
+    # Push updated key hashes if auth-relevant fields changed
+    if needs_sync:
+        edge_engine_id = str(api_key.edge_engine_id) if api_key.edge_engine_id else None  # type: ignore[truthy-bool]
+        background_tasks.add_task(_sync_keys_to_engines, edge_engine_id)
+
     engine = None
     if api_key.edge_engine_id:  # type: ignore[truthy-bool]
         engine = db.query(EdgeEngine).filter(
@@ -176,10 +252,21 @@ def update_api_key(
 
 
 @router.delete("/{key_id}", status_code=204)
-def delete_api_key(key_id: str, db: Session = Depends(get_db)):
+def delete_api_key(
+    key_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     """Revoke and delete an API key."""
     api_key = db.query(EdgeAPIKey).filter(EdgeAPIKey.id == key_id).first()
     if not api_key:
         raise HTTPException(404, "API key not found")
+
+    # Capture engine scope before deletion
+    edge_engine_id = str(api_key.edge_engine_id) if api_key.edge_engine_id else None  # type: ignore[truthy-bool]
+
     db.delete(api_key)
     db.commit()
+
+    # Push updated key hashes (now excluding the deleted key)
+    background_tasks.add_task(_sync_keys_to_engines, edge_engine_id)

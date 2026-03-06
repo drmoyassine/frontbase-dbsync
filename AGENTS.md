@@ -551,8 +551,11 @@ frontbase/
 | Route | Purpose |
 |-------|---------|
 | `GET /api/health` | Health check |
+| `GET /api/manifest` | Self-describing engine metadata (GPU models, capabilities, bindings) |
 | `POST /api/import` | Receive published page |
 | `POST /api/data/execute` | Execute DataRequest |
+| `POST /v1/chat/completions` | OpenAI-compatible chat inference |
+| `POST /v1/responses` | OpenAI Responses API (reasoning control) |
 | `GET /{slug}` | Render SSR page |
 | `GET /api/docs` | Swagger UI |
 
@@ -602,7 +605,7 @@ npx tsc --noEmit                            # Frontend types
 # Step 2: Automated tests
 cd services/edge && npm test               # Edge: 64 tests (Vitest)
 npm test                                    # Frontend: 10 tests (Vitest)
-cd fastapi-backend && python -m pytest tests/ -v  # Backend: 43 tests (pytest)
+cd fastapi-backend && python -m pytest tests/ -v  # Backend: 67 tests (pytest)
 ```
 
 ### Testing Conventions
@@ -842,8 +845,10 @@ Env vars or settings needed to enable the feature.
 - `features/edge-native-workflow-engine.md`
 - `features/global-execution-observability.md`
 - `features/multi-target-edge-deployment.md`
+- `features/self-describing-engine-bundles.md`
+- `features/ai-inference-gateway.md`
 
 ---
 
-*Last Updated: 2026-03-05*
+*Last Updated: 2026-03-07*
 

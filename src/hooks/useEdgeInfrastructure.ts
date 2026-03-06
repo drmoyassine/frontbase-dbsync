@@ -33,6 +33,8 @@ export interface EdgeEngine {
     gpu_model?: {
         id: string;
         name: string;
+        slug?: string;
+        model_id?: string;
         model_type: string;
         endpoint_url: string | null;
     } | null;
@@ -290,6 +292,40 @@ export function useEdgeQueues() {
     return useQuery({
         queryKey: ['edge-queues'],
         queryFn: edgeInfrastructureApi.getEdgeQueues,
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+}
+
+
+// ============================================================================
+// API Keys
+// ============================================================================
+
+export interface EdgeAPIKey {
+    id: string;
+    name: string;
+    prefix: string;
+    edge_engine_id: string | null;
+    engine_name: string | null;
+    is_active: boolean;
+    expires_at: string | null;
+    last_used_at: string | null;
+    created_at: string;
+    updated_at: string;
+    key?: string;  // Only present at creation
+}
+
+export function useEdgeAPIKeys() {
+    return useQuery({
+        queryKey: ['edge-api-keys'],
+        queryFn: async (): Promise<EdgeAPIKey[]> => {
+            const res = await fetch(`${API_BASE}/api/edge-api-keys`);
+            if (!res.ok) throw new Error('Failed to fetch API keys');
+            const data = await res.json();
+            return data.keys;
+        },
         staleTime: 5 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,

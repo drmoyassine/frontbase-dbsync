@@ -192,7 +192,7 @@ class WorkersAIAdapter(GPUAdapter):
 
     async def test_inference(self, model_id: str, model_type: str,
                              engine_url: str, slug: str) -> dict:
-        """Test inference by calling the engine's /api/ai/:slug endpoint."""
+        """Test inference by calling the engine's /v1/chat/completions endpoint."""
         import time
 
         # Build sample payload by model type
@@ -211,21 +211,29 @@ class WorkersAIAdapter(GPUAdapter):
 
         start = time.time()
         try:
+            # Build OpenAI-compatible request
+            openai_payload = {
+                "model": slug,
+                "messages": [{"role": "user", "content": payload.get("prompt", payload.get("text", "test"))}],
+                "max_tokens": payload.get("max_tokens", 10),
+            }
+
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    f"{engine_url.rstrip('/')}/api/ai/{slug}",
-                    json=payload,
+                    f"{engine_url.rstrip('/')}/v1/chat/completions",
+                    json=openai_payload,
                     timeout=30.0,
                 )
             latency = round((time.time() - start) * 1000, 1)
 
             if resp.status_code == 200:
                 result = resp.json()
+                output = result.get("choices", [{}])[0].get("message", {}).get("content", str(result))
                 return {
                     "success": True,
                     "message": "Inference successful",
                     "latency_ms": latency,
-                    "sample_output": result.get("result", result),
+                    "sample_output": output,
                 }
             return {
                 "success": False,

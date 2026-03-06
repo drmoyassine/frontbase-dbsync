@@ -191,7 +191,7 @@ async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db
     now = datetime.now(timezone.utc).isoformat()
     slug = _slugify(payload.name)
 
-    endpoint_url = f"{str(engine.url).rstrip('/')}/api/ai/{slug}"
+    endpoint_url = f"{str(engine.url).rstrip('/')}/v1/chat/completions"
 
     model = EdgeGPUModel(
         id=str(uuid.uuid4()),
@@ -241,7 +241,7 @@ async def update_gpu_model(model_id: str, payload: GPUModelUpdate, db: Session =
         model.slug = _slugify(payload.name)  # type: ignore[assignment]
         engine = db.query(EdgeEngine).filter(EdgeEngine.id == model.edge_engine_id).first()
         if engine:
-            model.endpoint_url = f"{str(engine.url).rstrip('/')}/api/ai/{model.slug}"  # type: ignore[assignment]
+            model.endpoint_url = f"{str(engine.url).rstrip('/')}/v1/chat/completions"  # type: ignore[assignment]
 
     if payload.provider_config is not None:
         model.provider_config = json.dumps(payload.provider_config)  # type: ignore[assignment]

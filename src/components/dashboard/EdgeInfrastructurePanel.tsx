@@ -2,7 +2,7 @@
  * EdgeInfrastructurePanel
  * 
  * Dedicated page for Edge Infrastructure management.
- * Contains 4 tabs: Edge Compute, Edge Database, Edge Caching, Edge Queues.
+ * Contains 5 tabs: Edge Compute, Edge Database, Edge Caching, Edge Queues, API Keys.
  * GPU/AI model management is integrated into Edge Compute via the deploy wizard.
  * 
  * Supports deep linking via URL search params:
@@ -19,8 +19,9 @@ import { EdgeCachesForm } from './settings/shared/EdgeCachesForm';
 import { EdgeDatabasesForm } from './settings/shared/EdgeDatabasesForm';
 import { EdgeQueuesForm } from './settings/shared/EdgeQueuesForm';
 import { EdgeEnginesPanel } from './settings/shared/EdgeEnginesPanel';
+import { EdgeAPIKeysForm } from './settings/shared/EdgeAPIKeysForm';
 
-const VALID_TABS = ['compute', 'database', 'caching', 'queues'] as const;
+const VALID_TABS = ['compute', 'database', 'caching', 'queues', 'keys'] as const;
 type EdgeTab = typeof VALID_TABS[number];
 
 export const EdgeInfrastructurePanel: React.FC = () => {
@@ -44,11 +45,12 @@ export const EdgeInfrastructurePanel: React.FC = () => {
             </div>
 
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-4 lg:w-[700px]">
+                <TabsList className="grid w-full grid-cols-5 lg:w-[850px]">
                     <TabsTrigger value="compute">Edge Compute</TabsTrigger>
                     <TabsTrigger value="database">Edge Database</TabsTrigger>
                     <TabsTrigger value="caching">Edge Caching</TabsTrigger>
                     <TabsTrigger value="queues">Edge Queues</TabsTrigger>
+                    <TabsTrigger value="keys">API Keys</TabsTrigger>
                 </TabsList>
 
                 {/* Edge Compute (Engines + AI) Tab */}
@@ -69,6 +71,11 @@ export const EdgeInfrastructurePanel: React.FC = () => {
                 {/* Edge Queues Tab */}
                 <TabsContent value="queues" className="space-y-6 mt-6">
                     <EdgeQueuesForm withCard />
+                </TabsContent>
+
+                {/* API Keys Tab */}
+                <TabsContent value="keys" className="space-y-6 mt-6">
+                    <EdgeAPIKeysForm withCard />
                 </TabsContent>
             </Tabs>
         </div>

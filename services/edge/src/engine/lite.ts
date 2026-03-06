@@ -40,8 +40,9 @@ import { executeRoute } from '../routes/execute.js';
 import { webhookRoute } from '../routes/webhook.js';
 import { executionsRoute } from '../routes/executions.js';
 import { updateRoute } from '../routes/update.js';
-import { aiRoute } from '../routes/ai.js';
-import { apiKeyAuth } from '../middleware/auth.js';
+// ai.ts still provides setAIBinding/setGPUModels/getGPUModels used by adapters + openai.ts
+import { openaiRoute } from '../routes/openai.js';
+import { apiKeyAuth, aiApiKeyAuth } from '../middleware/auth.js';
 
 // =============================================================================
 // Liquid Engine (shared singleton for template rendering)
@@ -126,7 +127,10 @@ export function createLiteApp() {
     app.route('/api/webhook', webhookRoute);
     app.route('/api/executions', executionsRoute);
     app.route('/api/update', updateRoute);
-    app.route('/api/ai', aiRoute);
+
+    // OpenAI-compatible AI routes (secured by API key auth)
+    app.use('/v1/*', aiApiKeyAuth);
+    app.route('/v1', openaiRoute);
 
     // ── OpenAPI Docs ───────────────────────────────────────────────────
     app.doc('/api/openapi.json', {

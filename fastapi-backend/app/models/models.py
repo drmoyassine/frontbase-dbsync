@@ -327,6 +327,7 @@ class EdgeEngine(Base):
     edge_provider = relationship("EdgeProviderAccount", back_populates="edge_engines")
     page_deployments = relationship("PageDeployment", back_populates="edge_engine", cascade="all, delete-orphan")
     gpu_models = relationship("EdgeGPUModel", back_populates="edge_engine", cascade="all, delete-orphan")
+    api_keys = relationship("EdgeAPIKey", back_populates="edge_engine", cascade="all, delete-orphan")
 
 
 class EdgeGPUModel(Base):
@@ -353,6 +354,30 @@ class EdgeGPUModel(Base):
     
     # Relationship
     edge_engine = relationship("EdgeEngine", back_populates="gpu_models")
+
+
+class EdgeAPIKey(Base):
+    """API key for securing tenant-facing edge endpoints (e.g. /v1/chat/completions).
+    
+    Keys are stored as SHA-256 hashes. The full key (fb_sk_<hex>) is shown
+    once at creation and never stored. The prefix (first 10 chars) is kept
+    for display purposes (e.g. 'fb_sk_a1b2...').
+    """
+    __tablename__ = 'edge_api_keys'
+    
+    id = Column(String, primary_key=True)
+    name = Column(String(100), nullable=False)            # "Production Key"
+    prefix = Column(String(20), nullable=False)            # "fb_sk_a1b2..." (for display)
+    key_hash = Column(String(128), nullable=False, unique=True)  # SHA-256 of full key
+    edge_engine_id = Column(String, ForeignKey('edge_engines.id'), nullable=True)  # null = all engines
+    is_active = Column(Boolean, default=True)
+    expires_at = Column(String, nullable=True)             # ISO datetime or null = never
+    last_used_at = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    
+    # Relationship
+    edge_engine = relationship("EdgeEngine", back_populates="api_keys")
 
 
 class PageDeployment(Base):

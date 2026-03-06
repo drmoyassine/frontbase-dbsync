@@ -38,6 +38,8 @@ class GPUModelSummary(BaseModel):
     """Embedded GPU model summary within engine response."""
     id: str
     name: str
+    slug: Optional[str] = None
+    model_id: Optional[str] = None
     model_type: str
     endpoint_url: Optional[str] = None
 

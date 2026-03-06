@@ -101,6 +101,8 @@ def _serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) ->
     gpu_model_data = {
         "id": str(gpu_model_obj.id),
         "name": str(gpu_model_obj.name),
+        "slug": str(gpu_model_obj.slug),
+        "model_id": str(gpu_model_obj.model_id),
         "model_type": str(gpu_model_obj.model_type),
         "endpoint_url": str(gpu_model_obj.endpoint_url) if gpu_model_obj.endpoint_url else None,
     } if gpu_model_obj else None

@@ -48,6 +48,92 @@ export const apiKeyAuth = async (c: Context, next: Next) => {
 };
 
 // =============================================================================
+// AI API Key Authentication (for /v1/* OpenAI-compatible endpoints)
+// =============================================================================
+
+interface APIKeyHashEntry {
+    prefix: string;
+    hash: string;
+    expires_at: string | null;
+}
+
+/**
+ * API key middleware for OpenAI-compatible endpoints.
+ * Validates Bearer token against FRONTBASE_API_KEY_HASHES (synced from backend).
+ * 
+ * If no API key hashes are configured, all requests are allowed (dev mode).
+ * Returns OpenAI-compatible error format on auth failure.
+ */
+export const aiApiKeyAuth = async (c: Context, next: Next) => {
+    const envHashes = process.env.FRONTBASE_API_KEY_HASHES;
+
+    if (!envHashes) {
+        // No API keys configured — allow all (dev mode)
+        console.warn('⚠️ No FRONTBASE_API_KEY_HASHES configured - AI auth disabled');
+        return next();
+    }
+
+    let keyEntries: APIKeyHashEntry[];
+    try {
+        keyEntries = JSON.parse(envHashes);
+    } catch {
+        console.error('[AI Auth] Failed to parse FRONTBASE_API_KEY_HASHES');
+        return next(); // Degrade gracefully — allow through
+    }
+
+    if (keyEntries.length === 0) {
+        return next(); // No keys configured — allow all
+    }
+
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return c.json({
+            error: {
+                message: 'Missing or invalid Authorization header. Use: Authorization: Bearer <api_key>',
+                type: 'invalid_request_error',
+                code: 'missing_api_key',
+            },
+        }, 401);
+    }
+
+    const token = authHeader.slice(7).trim();
+
+    // Hash the provided token and compare against stored hashes
+    const encoder = new TextEncoder();
+    const data = encoder.encode(token);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const tokenHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const matchedKey = keyEntries.find(k => k.hash === tokenHash);
+    if (!matchedKey) {
+        return c.json({
+            error: {
+                message: 'Invalid API key.',
+                type: 'invalid_request_error',
+                code: 'invalid_api_key',
+            },
+        }, 401);
+    }
+
+    // Check expiry
+    if (matchedKey.expires_at) {
+        const expiresAt = new Date(matchedKey.expires_at);
+        if (expiresAt < new Date()) {
+            return c.json({
+                error: {
+                    message: 'API key has expired.',
+                    type: 'invalid_request_error',
+                    code: 'expired_api_key',
+                },
+            }, 401);
+        }
+    }
+
+    return next();
+};
+
+// =============================================================================
 // JWT Authentication (for Edge-deployed End User Routes)
 // =============================================================================
 

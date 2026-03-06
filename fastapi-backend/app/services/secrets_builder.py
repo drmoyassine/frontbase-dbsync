@@ -22,6 +22,7 @@ FRONTBASE_BINDING_NAMES = frozenset([
     'FRONTBASE_QUEUE_TOKEN',
     'FRONTBASE_QUEUE_SIGNING_KEY',
     'FRONTBASE_QUEUE_NEXT_SIGNING_KEY',
+    'FRONTBASE_API_KEY_HASHES',
 ])
 
 
@@ -55,6 +56,21 @@ def build_engine_secrets(
                 "provider": str(m.provider),
             } for m in gpu_models]
             secrets['FRONTBASE_GPU_MODELS'] = json.dumps(models_data)
+
+    # API Keys — serialize key hashes for edge auth middleware
+    if engine_id:
+        from ..models.models import EdgeAPIKey
+        api_keys = db.query(EdgeAPIKey).filter(
+            EdgeAPIKey.is_active == True,
+            (EdgeAPIKey.edge_engine_id == engine_id) | (EdgeAPIKey.edge_engine_id == None),
+        ).all()
+        if api_keys:
+            keys_data = [{
+                "prefix": str(k.prefix),
+                "hash": str(k.key_hash),
+                "expires_at": str(k.expires_at) if k.expires_at else None,  # type: ignore[truthy-bool]
+            } for k in api_keys]
+            secrets['FRONTBASE_API_KEY_HASHES'] = json.dumps(keys_data)
 
     # Database
     if edge_db_id:

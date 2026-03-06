@@ -130,109 +130,109 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
         }
     };
 
+    const createKeyDialog = (
+        <Dialog open={dialogOpen} onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) resetForm();
+        }}>
+            <DialogTrigger asChild>
+                <Button size="sm" variant="outline" className="gap-1.5">
+                    <Plus className="h-3.5 w-3.5" /> Create Key
+                </Button>
+            </DialogTrigger>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Create API Key</DialogTitle>
+                    <DialogDescription>
+                        {revealedKey
+                            ? 'Copy your API key now. You won\'t be able to see it again.'
+                            : 'Create a new API key for authenticating AI endpoint requests.'
+                        }
+                    </DialogDescription>
+                </DialogHeader>
+
+                {revealedKey ? (
+                    /* Key reveal view */
+                    <div className="space-y-4 py-2">
+                        <div className="space-y-2">
+                            <Label>Your API Key</Label>
+                            <div className="relative">
+                                <Input
+                                    readOnly
+                                    value={showKey ? revealedKey : '•'.repeat(revealedKey.length)}
+                                    className="pr-20 font-mono text-xs"
+                                />
+                                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-1">
+                                    <Button
+                                        variant="ghost" size="icon" className="h-7 w-7"
+                                        onClick={() => setShowKey(!showKey)}
+                                    >
+                                        {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                    </Button>
+                                    <Button
+                                        variant="ghost" size="icon" className="h-7 w-7"
+                                        onClick={handleCopyKey}
+                                    >
+                                        {revealCopied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                                    </Button>
+                                </div>
+                            </div>
+                            <p className="text-xs text-amber-500 flex items-center gap-1">
+                                ⚠️ Store this key securely. It won't be shown again.
+                            </p>
+                        </div>
+                        <DialogFooter>
+                            <Button onClick={() => { setDialogOpen(false); resetForm(); }}>
+                                Done
+                            </Button>
+                        </DialogFooter>
+                    </div>
+                ) : (
+                    /* Create form */
+                    <div className="space-y-4 py-2">
+                        <div className="space-y-2">
+                            <Label>Key Name</Label>
+                            <Input
+                                placeholder="e.g. Production, CI/CD, Development"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Assign to Engine</Label>
+                            <Select value={engineId} onValueChange={setEngineId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="All Engines" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Engines</SelectItem>
+                                    {engines.map((e: any) => (
+                                        <SelectItem key={e.id} value={e.id}>
+                                            {e.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                                Restrict this key to a specific engine, or allow it on all engines.
+                            </p>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                            <Button onClick={handleCreate} disabled={creating || !name.trim()}>
+                                {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                Create Key
+                            </Button>
+                        </DialogFooter>
+                    </div>
+                )}
+            </DialogContent>
+        </Dialog>
+    );
+
     const content = (
         <div className="space-y-4">
-            {/* Header with Create button */}
-            <div className="flex items-center justify-end">
-                <Dialog open={dialogOpen} onOpenChange={(open) => {
-                    setDialogOpen(open);
-                    if (!open) resetForm();
-                }}>
-                    <DialogTrigger asChild>
-                        <Button size="sm" variant="outline" className="gap-1.5">
-                            <Plus className="h-3.5 w-3.5" /> Create Key
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Create API Key</DialogTitle>
-                            <DialogDescription>
-                                {revealedKey
-                                    ? 'Copy your API key now. You won\'t be able to see it again.'
-                                    : 'Create a new API key for authenticating AI endpoint requests.'
-                                }
-                            </DialogDescription>
-                        </DialogHeader>
-
-                        {revealedKey ? (
-                            /* Key reveal view */
-                            <div className="space-y-4 py-2">
-                                <div className="space-y-2">
-                                    <Label>Your API Key</Label>
-                                    <div className="relative">
-                                        <Input
-                                            readOnly
-                                            value={showKey ? revealedKey : '•'.repeat(revealedKey.length)}
-                                            className="pr-20 font-mono text-xs"
-                                        />
-                                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-1">
-                                            <Button
-                                                variant="ghost" size="icon" className="h-7 w-7"
-                                                onClick={() => setShowKey(!showKey)}
-                                            >
-                                                {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                                            </Button>
-                                            <Button
-                                                variant="ghost" size="icon" className="h-7 w-7"
-                                                onClick={handleCopyKey}
-                                            >
-                                                {revealCopied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
-                                            </Button>
-                                        </div>
-                                    </div>
-                                    <p className="text-xs text-amber-500 flex items-center gap-1">
-                                        ⚠️ Store this key securely. It won't be shown again.
-                                    </p>
-                                </div>
-                                <DialogFooter>
-                                    <Button onClick={() => { setDialogOpen(false); resetForm(); }}>
-                                        Done
-                                    </Button>
-                                </DialogFooter>
-                            </div>
-                        ) : (
-                            /* Create form */
-                            <div className="space-y-4 py-2">
-                                <div className="space-y-2">
-                                    <Label>Key Name</Label>
-                                    <Input
-                                        placeholder="e.g. Production, CI/CD, Development"
-                                        value={name}
-                                        onChange={(e) => setName(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Assign to Engine</Label>
-                                    <Select value={engineId} onValueChange={setEngineId}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="All Engines" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Engines</SelectItem>
-                                            {engines.map((e: any) => (
-                                                <SelectItem key={e.id} value={e.id}>
-                                                    {e.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <p className="text-xs text-muted-foreground">
-                                        Restrict this key to a specific engine, or allow it on all engines.
-                                    </p>
-                                </div>
-                                <DialogFooter>
-                                    <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                                    <Button onClick={handleCreate} disabled={creating || !name.trim()}>
-                                        {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                                        Create Key
-                                    </Button>
-                                </DialogFooter>
-                            </div>
-                        )}
-                    </DialogContent>
-                </Dialog>
-            </div>
 
             {/* Keys list */}
             {isLoading ? (
@@ -319,19 +319,22 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
     if (withCard) {
         return (
             <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-base">
-                        <Key className="h-4 w-4 text-amber-500" />
-                        API Keys
-                    </CardTitle>
-                    <CardDescription>
-                        Manage API keys for authenticating requests to AI endpoints.
-                    </CardDescription>
+                <CardHeader className="flex flex-row items-start justify-between space-y-0">
+                    <div>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                            <Key className="h-4 w-4 text-amber-500" />
+                            API Keys
+                        </CardTitle>
+                        <CardDescription>
+                            Manage API keys for authenticating requests to AI endpoints.
+                        </CardDescription>
+                    </div>
+                    {createKeyDialog}
                 </CardHeader>
                 <CardContent>{content}</CardContent>
             </Card>
         );
     }
 
-    return content;
+    return <>{createKeyDialog}{content}</>;
 };

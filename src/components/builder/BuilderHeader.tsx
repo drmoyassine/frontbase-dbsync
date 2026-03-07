@@ -131,13 +131,31 @@ export const BuilderHeader: React.FC<{
     };
 
     // Single-target: publish and auto-preview
+    const getPreviewOrigin = (target: EdgeTarget) => {
+      try {
+        const host = new URL(target.url).hostname;
+        const isInternal = !host.includes('.') || host === 'localhost' || host === '0.0.0.0';
+        if (isInternal) {
+          // Local/system edge in single-tenant self-host → same app URL
+          return window.location.origin;
+        }
+        // Cloud edge → use its public URL
+        return target.url.replace(/\/$/, '');
+      } catch { return null; }
+    };
+
     const handleSingleTargetPublish = async (target: EdgeTarget) => {
       if (!currentPageId || !currentPage) return;
       setIsPublishing(true);
       try {
         await publishPageToTarget(currentPageId, target.id);
         const pagePath = currentPage.isHomepage ? '' : currentPage.slug;
-        window.open(getPreviewUrl(target.url, pagePath), '_blank');
+        const origin = getPreviewOrigin(target);
+        if (origin) {
+          window.open(`${origin}/${pagePath}`, '_blank');
+        } else {
+          toast.success(`Published to ${target.name}`);
+        }
       } finally {
         setIsPublishing(false);
         setPublishOpen(false);

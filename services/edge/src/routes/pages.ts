@@ -5,21 +5,12 @@
  * Route: /p/:slug
  */
 
-// Cache-busting version - update this when hydration scripts change
-const HYDRATE_VERSION = '20260205h';
-
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { html } from 'hono/html';
-import { getCookie } from 'hono/cookie';
 import { renderPage } from '../ssr/PageRenderer.js';
-import { createVariableStore, VariableStore } from '../ssr/store.js';
 import { buildTemplateContext, PageData as ContextPageData } from '../ssr/lib/context.js';
 import { getDefaultTrackingConfig, TrackingConfig } from '../ssr/lib/tracking.js';
 import { stateProvider } from '../storage/index.js';
-import { FALLBACK_CSS } from '../ssr/baseStyles.js';
-
-// Default favicon path constant (for generateHtmlDocument fallback)
-const DEFAULT_FAVICON = '/static/icon.png';
+import { generateHtmlDocument, type HtmlPageData } from '../ssr/htmlDocument.js';
 
 // Type definitions for page data
 interface PageComponent {
@@ -91,6 +82,7 @@ const renderPageRoute = createRoute({
 
 
 // Note: Storage init is handled by import.ts module load
+
 
 async function fetchPage(slug: string): Promise<PageData | null> {
     const cacheKey = `page:${slug}`;
@@ -184,119 +176,6 @@ async function fetchTrackingConfig(): Promise<TrackingConfig> {
         console.warn('[SSR] Failed to fetch tracking config:', error);
     }
     return getDefaultTrackingConfig();
-}
-
-// Generate the full HTML document
-function generateHtmlDocument(
-    page: PageData,
-    bodyHtml: string,
-    initialState: Record<string, unknown>,
-    trackingConfig: TrackingConfig,
-    faviconUrl: string = DEFAULT_FAVICON
-): string {
-    const title = page.title || page.name;
-    const description = page.description || '';
-    const keywords = page.keywords || '';
-
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${escapeHtml(title)}</title>
-    ${description ? `<meta name="description" content="${escapeHtml(description)}">` : ''}
-    ${keywords ? `<meta name="keywords" content="${escapeHtml(keywords)}">` : ''}
-    <meta name="generator" content="Frontbase">
-    
-    <!-- Favicon -->
-    <link rel="icon" type="image/png" href="${faviconUrl}">
-    <link rel="apple-touch-icon" href="${faviconUrl}">
-    
-    <!-- Prefetch hydration bundle -->
-    <link rel="modulepreload" href="/static/react/hydrate.js?v=${HYDRATE_VERSION}">
-
-    <!-- Client-Side Visitor Context Enhancement -->
-    <script>
-    (function() {
-        if (sessionStorage.getItem('visitor-enhanced')) return;
-        
-        // Configuration from advancedVariables
-        const adv = ${JSON.stringify(trackingConfig.advancedVariables || {})};
-        const data = {};
-
-        // Timezone as UTC offset (+3, -5.5)
-        if (adv.timezone?.collect !== false) {
-            const offset = -new Date().getTimezoneOffset() / 60;
-            data.tz = (offset >= 0 ? '+' : '') + offset;
-        }
-
-        // Viewport only
-        if (adv.viewport?.collect !== false) {
-            data.vp = innerWidth + 'x' + innerHeight;
-        }
-
-        // Theme preference
-        if (adv.themePreference?.collect !== false) {
-            data.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        }
-
-        // Connection type
-        if (adv.connectionType?.collect !== false && navigator.connection) {
-            data.conn = navigator.connection.effectiveType;
-        }
-
-        if (Object.keys(data).length > 0) {
-            document.cookie = "visitor-enhanced=" + encodeURIComponent(JSON.stringify(data)) + "; path=/; max-age=31536000; SameSite=Lax";
-            sessionStorage.setItem('visitor-enhanced', '1');
-        }
-    })();
-    </script>
-    
-    <!-- Tailwind CSS Bundle (injected below via cssBundle) -->
-    
-    <!-- Base styles (from CSS Bundle or fallback) -->
-    <style>
-        ${page.cssBundle || FALLBACK_CSS}
-    </style>
-</head>
-<body>
-    <div id="root">${bodyHtml}</div>
-    
-    <!-- Initial state for hydration -->
-    <script>
-        window.__INITIAL_STATE__ = ${safeJsonStringify(initialState)};
-        window.__PAGE_DATA__ = ${safeJsonStringify({
-        id: page.id,
-        slug: page.slug,
-        layoutData: page.layoutData,  // Include for hydration access to bindings with dataRequest
-        datasources: page.datasources
-    })};
-    </script>
-    
-    <!-- Hydration bundle (all interactive components) -->
-    <script type="module" src="/static/react/hydrate.js?v=${HYDRATE_VERSION}"></script>
-</body>
-</html>`;
-}
-
-/**
- * Safely stringify JSON for embedding in <script> tags.
- * Escapes </script> sequences to prevent user content from breaking the page.
- */
-function safeJsonStringify(obj: unknown): string {
-    return JSON.stringify(obj)
-        .replace(/<\/script>/gi, '<\\/script>')
-        .replace(/<!--/g, '<\\!--');
-}
-
-// Escape HTML special characters
-function escapeHtml(str: string): string {
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
 }
 
 // Route handler

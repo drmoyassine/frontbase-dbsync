@@ -3,6 +3,10 @@ Publish Serializer — Converts Page models to publish-safe schemas.
 
 Extracted from publish.py for single-responsibility compliance.
 Contains: datasource fetching, component conversion, and schema assembly.
+
+NOTE: Imports from app.routers.pages.transforms and app.routers.pages.enrichment
+are done lazily (inside functions) to avoid a circular import:
+  publish_serializer → pages.transforms → pages/__init__ → pages.publish → publish_serializer
 """
 
 import json
@@ -16,16 +20,6 @@ from app.schemas.publish import (
 )
 from app.services.sync.models.datasource import Datasource, DatasourceType
 from app.services.data_request import compute_data_request
-from app.routers.pages.transforms import (
-    normalize_binding_location,
-    map_styles_schema,
-    process_component_children,
-    find_datasource,
-    collect_icons_from_component,
-    fetch_icons_batch,
-    inject_icon_svg
-)
-from app.routers.pages.enrichment import enrich_binding_with_data_request, remove_nulls
 from app.models.models import Page
 
 
@@ -81,7 +75,14 @@ def convert_component(c: dict, datasources_list: list | None = None) -> dict:
     Returns new component dict.
     """
     datasources = datasources_list or []
-    
+
+    # Lazy imports to avoid circular: publish_serializer → pages.transforms → pages/__init__ → pages.publish → publish_serializer
+    from app.routers.pages.transforms import (
+        normalize_binding_location, map_styles_schema,
+        process_component_children, find_datasource,
+    )
+    from app.routers.pages.enrichment import enrich_binding_with_data_request, remove_nulls
+
     # Step 1: Normalize binding location (props.binding → binding)
     result = normalize_binding_location(c)
     
@@ -214,6 +215,11 @@ def convert_component(c: dict, datasources_list: list | None = None) -> dict:
 
 async def convert_to_publish_schema(page: Page, datasources: list) -> PublishPageRequest:
     """Convert Page model to PublishPageRequest schema."""
+    # Lazy imports to avoid circular import
+    from app.routers.pages.transforms import (
+        collect_icons_from_component, fetch_icons_batch, inject_icon_svg,
+    )
+
     # Parse layout_data
     layout_data = page.layout_data
     if isinstance(layout_data, str):

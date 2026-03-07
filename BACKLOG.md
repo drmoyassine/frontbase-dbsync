@@ -58,7 +58,7 @@
 - [ ] ✨ **Email Received Trigger** — `email_trigger` node. Uses email service (SendGrid Inbound Parse / Mailgun / Postmark / Resend) to forward emails as POST to `/api/webhook/:id`. Typed outputs: `from`, `to`, `subject`, `bodyPlain`, `bodyHtml`, `attachments`. Auto-registers/deregisters on publish/unpublish.
 
 **Edge bundle changes needed (minimal):**
-1. Add trigger aliases in `runtime.ts` `executeNode` switch (`webhook_trigger`, `data_change_trigger`, `schedule_trigger`, `ui_event_trigger`, `email_trigger`)
+1. Add trigger aliases in `node-executors.ts` `executeNode` switch (`webhook_trigger`, `data_change_trigger`, `schedule_trigger`, `ui_event_trigger`, `email_trigger`)
 2. No new routes needed — all invoke via existing `/api/webhook/:id` or `/api/execute/:id`
 
 ### Action Nodes
@@ -141,6 +141,23 @@
 
 ## ✅ Completed
 
+### 2026-03-07 — Refactoring & Testing Batch
+- [x] Split `publish.py` 469→140L — `services/page_hash.py` (50L) + `services/publish_serializer.py` (260L)
+- [x] Extract `edge_caches.py` test helpers — `services/cache_tester.py` (90L)
+- [x] Split `models/models.py` 408→30L re-export hub — `auth.py`, `sync.py`, `edge.py`, `page.py`
+- [x] Split `EdgeCachesForm.tsx` 474→200L — `EdgeCacheDialog.tsx` (170L) + `useEdgeCacheForm.ts` (180L)
+- [x] Split `nodeSchemas.ts` 1006→8 files — `nodeSchemas/` dir with domain files
+- [x] Split `WorkflowEditor.tsx` 649→380L — `WorkflowEditorToolbar.tsx` (250L) + `WorkflowTestStatus.tsx` (45L)
+- [x] Split `runtime.ts` 694→420L — `engine/node-executors.ts` (270L)
+- [x] Split `AutomationsContentPanel.tsx` 310→65L — `AutomationsStatsCards.tsx` (55L) + `AutomationsTable.tsx` (190L)
+- [x] `test_engine_deploy.py` — 11 tests (CF/Docker redeploy, GPU bindings, flush cache)
+- [x] `test_cloudflare_api.py` — 19 tests (headers, creds, upload, secrets, delete)
+- [x] `test_publish_pipeline.py` — 12 tests (page hash, component conversion, datasources)
+- [x] `test_engine_reconfigure.py` — 10 tests (credential resolution, CF PATCH, orchestrator)
+- [x] `import.test.ts` — 10 tests (POST import, DELETE, settings, status)
+- [x] `test_bundle_hash.py` — 10 tests (compute_bundle_hash, get_source_hash)
+
+### Earlier
 - [x] **Multi-trigger publish fails for non-webhook triggers** — Fixed Zod validation error on the edge.
 - [x] **Replace Tailwind CDN with build-time CSS generation** — Implemented via `tailwind_cli.py` + `@source inline()` in `css_bundler.py`.
 - [x] **Conditional Service Deployment** — `docker-compose.standalone-edge.yml` and `docker-compose.distributed/` tier-based compose files.

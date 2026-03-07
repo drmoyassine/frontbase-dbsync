@@ -3,10 +3,28 @@
 ## 🎯 Current Status: EDGE-NATIVE PLATFORM
 
 **Date**: 2026-03-07  
-**Phase**: AI Inference Gateway & Self-Describing Manifests  
-**Status**: ✅ **ALL SYSTEMS OPERATIONAL — AI Gateway, Manifest Sync, Refactored Services**
+**Phase**: AI Inference Gateway & Code Health  
+**Status**: ✅ **ALL SYSTEMS OPERATIONAL — 213+ tests (129 pytest + 74+ edge vitest + 10 frontend)**
 
 ## 🏆 Major Achievements
+
+### Refactoring & Testing Batch ✅ (2026-03-07)
+
+- **PUBLISH SPLIT**: `publish.py` 469→140L — extracted `services/page_hash.py` (50L) + `services/publish_serializer.py` (260L)
+- **CACHE TESTER**: `edge_caches.py` 330→247L — extracted `services/cache_tester.py` (90L)
+- **MODELS SPLIT**: `models.py` 408→30L re-export hub — split into `models/auth.py`, `sync.py`, `edge.py`, `page.py` (zero import changes)
+- **EDGE CACHES UI**: `EdgeCachesForm.tsx` 474→200L — extracted `EdgeCacheDialog.tsx` (170L) + `useEdgeCacheForm.ts` hook (180L)
+- **DEPLOY TESTS**: `test_engine_deploy.py` (11 tests) — CF/Docker paths, GPU AI bindings, flush cache, error handling
+- **CF API TESTS**: `test_cloudflare_api.py` (19 tests) — upload, secrets, delete, enable_workers_dev, timeout→504
+- **PUBLISH TESTS**: `test_publish_pipeline.py` (12 tests) — page hash, component conversion, datasource injection. Fixed circular import in `publish_serializer.py`
+- **RECONFIGURE TESTS**: `test_engine_reconfigure.py` (10 tests) — CF credential resolution (5), CF PATCH (3), orchestrator (2)
+- **nodeSchemas SPLIT**: `nodeSchemas.ts` 1006→8 domain files — `types.ts`, `triggers.ts`, `actions.ts`, `logic.ts`, `integrations.ts`, `interface.ts`, `output.ts`, `index.ts`
+- **WorkflowEditor SPLIT**: `WorkflowEditor.tsx` 649→380L — extracted `WorkflowEditorToolbar.tsx` (250L) + `WorkflowTestStatus.tsx` (45L)
+- **RUNTIME SPLIT**: `runtime.ts` 694→420L — extracted `engine/node-executors.ts` (270L) with all node executor functions
+- **AUTOMATIONS SPLIT**: `AutomationsContentPanel.tsx` 310→65L — extracted `AutomationsStatsCards.tsx` (55L) + `AutomationsTable.tsx` (190L)
+- **IMPORT TESTS**: `import.test.ts` (10 tests) — POST import (valid, invalid, version conflict, force), DELETE, settings, status
+- **BUNDLE TESTS**: `test_bundle_hash.py` (10 tests) — compute_bundle_hash (5) + get_source_hash (5)
+- **Total tests**: 67→129 pytest (+62 new), edge vitest 9 files (74+), zero regressions
 
 ### Phase 13: AI Inference Gateway & Self-Describing Manifests ✅ (March 2026)
 

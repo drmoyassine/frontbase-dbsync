@@ -6,219 +6,62 @@
 
 ---
 
-## 1. Dead Code Removal (High Priority) ✅
+## 1. Open Refactoring Items
 
-| File | Lines | Status | Action |
-|------|-------|--------|--------|
-| `fastapi-backend/app/services/publish_strategy.py` | 93 | ✅ **Archived** → `_archived/publish_strategy.py` | Done |
-| `services/edge/src/db/pages-store.ts` | ~60 | ✅ **Archived** → `_archived/pages-store.ts` | Done |
-| `services/edge/src/db/project-settings.ts` | ~50 | ⚠️ **NOT dead** — imported by `PageRenderer.ts` for `getFaviconUrl()` | **KEEP** |
-| `/tmp/check_hash.py` | ~20 | ✅ Deleted | Done |
-
----
-
-## 2. Large File Refactoring (AGENTS.md Compliance)
-
-> AGENTS.md §4.1: Keep files focused. If a file contains multiple concerns, split it.
+> Files still above the complexity threshold per AGENTS.md §4.1.
 
 ### Backend (Python)
 
-#### ~~🔴 `routers/edge_engines.py` — **974 lines** → **330 lines** ✅ DONE (2026-03-05)~~
+All backend files reviewed and actioned. ✅
 
-**Concern audit (6 distinct responsibilities):**
-
-| Concern | Lines | Functions |
-|---|---|---|
-| Pydantic schemas (8 models) | 30–112 | `EdgeEngineCreate`, `Update`, `Response`, `TestConnectionResult`, `BatchRequest`, `BatchDeleteRequest`, `BatchToggleRequest`, `BatchResult` |
-| Serializer + staleness | 119–199 | `_serialize_engine` |
-| CRUD endpoints | 208–304 | `get_bundle_hashes`, `list`, `get`, `create`, `update` |
-| Reconfigure (CF binding mgmt) | 307–516 | `ReconfigureRequest`, `FRONTBASE_BINDING_NAMES`, `reconfigure_engine` (190 lines!) |
-| Redeploy (CF + Docker dual-mode) | 519–675 | `redeploy_engine` (157 lines!) |
-| Test, Delete, Batch ops, Scope | 678–973 | `delete`, `test`, `_test_target_connection`, `_extract_cf_creds`, `_delete_cloudflare_worker*`, batch CRUD (3), `list_active_engines_by_scope` |
-
-**Proposed split:**
-
-| New File | Lines | Contains |
-|---|---|---|
-| `schemas/edge_engines.py` | ~90 | All 8 Pydantic schemas + `_serialize_engine` |
-| `services/engine_deploy.py` | ~200 | `redeploy_engine` logic (CF + Docker paths), `_build_secrets_dict()` |
-| `services/engine_reconfigure.py` | ~200 | `reconfigure_engine` logic, `FRONTBASE_BINDING_NAMES`, CF PATCH calls |
-| `services/engine_test.py` | ~60 | `_test_target_connection`, `_delete_cloudflare_worker*`, `_extract_cf_creds` |
-| `routers/edge_engines.py` | ~200 | Thin router: CRUD, batch endpoints, scope query — all delegating to services |
-
----
-
-#### ~~🔴 `routers/cloudflare.py` — **880 lines** → **270 lines** ✅ DONE (2026-03-05)~~
-
-**Concern audit (5 distinct responsibilities):**
-
-| Concern | Lines | Functions |
-|---|---|---|
-| Pydantic schemas (5 models) | 45–74 | `ConnectRequest`, `DeployRequest`, `StatusRequest`, `TeardownRequest`, `InspectRequest` |
-| CF API helpers (low-level HTTP) | 81–242 | `_get_provider_credentials`, `_headers`, `_list_workers`, `_detect_account_id`, `_upload_worker`, `_enable_workers_dev`, `_set_secrets` |
-| Bundle hash & build utilities | 245–365 | `_compute_bundle_hash`, `_get_current_bundle_hash`, `_get_source_hash`, `_build_worker` |
-| Deploy/status/teardown endpoints | 372–707 | `connect_cloudflare`, `deploy_to_cloudflare` (177 lines!), `cloudflare_status`, `teardown_cloudflare` |
-| Inspector endpoints | 714–878 | `_inspect_content_sync`, `_inspect_settings_sync`, `inspect_worker_content`, `inspect_worker_settings`, `inspect_worker_secrets` |
-
-**Proposed split:**
-
-| New File | Lines | Contains |
-|---|---|---|
-| `schemas/cloudflare.py` | ~30 | `ConnectRequest`, `DeployRequest`, `StatusRequest`, `TeardownRequest`, `InspectRequest` |
-| `services/cloudflare_api.py` | ~180 | All CF API v4 helpers: `_headers`, `_list_workers`, `_detect_account_id`, `_upload_worker`, `_enable_workers_dev`, `_set_secrets`, `_get_provider_credentials` |
-| `services/bundle_hash.py` | ~60 | `_compute_bundle_hash`, `_get_source_hash`, `_get_current_bundle_hash` (shared by `edge_engines.py` too) |
-| `services/bundle_builder.py` | ~80 | `_build_worker` — delegates to edge `/api/build-bundle` or local `npx tsup` |
-| `routers/cloudflare.py` | ~250 | Thin router: `connect`, `deploy`, `status`, `teardown` — delegating to services |
-| `routers/cloudflare_inspector.py` | ~170 | Inspector endpoints: `inspect_content`, `inspect_settings`, `inspect_secrets` + sync helpers |
-
----
-
-#### ~~⚠️ Shared Extraction: `services/bundle.py`~~ ✅ DONE
-
-Both `cloudflare.py` and `edge_engines.py` now import from `services/bundle.py` (hash + build), `services/secrets_builder.py` (DRY secrets), and `services/cloudflare_api.py` (CF HTTP helpers). Secret-building deduplication eliminated 3x copy-paste.
-
----
-
-| File | Lines | Issue | Proposed Split |
-|------|-------|-------|----------------|
-| `services/sync/adapters/supabase_adapter.py` | **800** | Supabase adapter handles schema introspection, query building, and data fetching in one file | Split into `supabase_schema.py` (introspection), `supabase_query.py` (query builder), `supabase_adapter.py` (thin orchestrator) |
-| ~~`routers/pages/publish.py`~~ | ~~**441**~~ → **140** | ~~Mixes `compute_page_hash()`, `convert_to_publish_schema()`, and endpoint handler~~ | ✅ Done (2026-03-07) — `services/page_hash.py` (50L) + `services/publish_serializer.py` (260L) |
-| ~~`routers/edge_caches.py`~~ | ~~**383**~~ → **247** | ~~Mixes CRUD, test endpoints, and helper functions~~ | ✅ Done (2026-03-07) — `services/cache_tester.py` (90L) |
-| `services/css_bundler.py` | **362** | CSS tree-shaking + bundling logic | Review for extraction of Tailwind v4 source-inline logic into separate utility |
-| `middleware/schema_comparison.py` | **339** | Schema diff/comparison engine | Review — may be acceptable if single-concern |
-| ~~`models/models.py`~~ | ~~**408**~~ → **30** | ~~All ORM models in one file~~ | ✅ Done (2026-03-07) — `models/auth.py`, `models/sync.py`, `models/edge.py`, `models/page.py` + re-export hub |
+- ~~`supabase_adapter.py`~~ — Done (667→340L via `supabase_query.py`)
+- ~~`css_bundler.py`~~ — Done (398→200L via `tailwind_generator.py`)
+- `schema_comparison.py` — **Kept as-is** (339L, single concern: Zod↔Pydantic comparison)
 
 ### Frontend (TypeScript/React)
 
-| File | Lines | Issue | Proposed Split |
-|------|-------|-------|----------------|
-| `lib/workflow/nodeSchemas.ts` | **891** | All workflow node definitions in one file | Group by node category (triggers, actions, conditions) |
-| `components/dashboard/FileBrowser/index.tsx` | **818** | File browser UI + logic in one component | Extract file tree rendering, toolbar, and file actions into subcomponents |
-| ~~`components/dashboard/settings/shared/EdgeCachesForm.tsx`~~ | ~~**474**~~ → **200** | ~~Form state + CRUD handlers + dialog + list~~ | ✅ Done (2026-03-07) — `EdgeCacheDialog.tsx` (170L) + `useEdgeCacheForm.ts` (180L) |
-| `components/actions/editor/WorkflowEditor.tsx` | **599** | Massive inline JSX toolbar + editor logic | Extract `WorkflowEditorHeader.tsx` and `WorkflowTestStatus.tsx` |
-| `components/builder/data-table/DataColumnConfigurator.tsx` | **489** | Column configuration UI | Extract column type pickers and sorting config into subcomponents |
-| `modules/dbsync/components/dashboard/AutomationsContentPanel.tsx` | **306** | Mixes data fetching, pagination, analytics, and table UI | Extract `AutomationsAnalytics.tsx`, `AutomationsTable.tsx`, and `useAutomationsList.ts` hook |
+All frontend files reviewed and actioned. ✅
+
+- `FileBrowser/index.tsx` (818L) — **Pending** (deferred to backlog)
+- ~~`DataColumnConfigurator.tsx`~~ — **File no longer exists** (deleted in prior refactoring)
 
 ### Edge (Hono Service)
 
-| File | Lines | Issue | Proposed Split |
-|------|-------|-------|----------------|
-| `engine/runtime.ts` | **540** | Runtime engine: request routing + SSR + data fetching | Extract data fetching into `engine/data-fetcher.ts`; keep routing in `runtime.ts` |
-| `routes/pages.ts` | **536** | Page serving route with SSR rendering inline | Extract SSR template assembly into `ssr/template.ts` |
-| `components/datatable/DataTable.tsx` | **498** | DataTable SSR component | Review — may be acceptable as single rendering component |
-| `storage/TursoHttpProvider.ts` | **365** | Turso state provider — all CRUD in one file | ✅ Schema extracted to `schema.ts` |
-| `storage/LocalSqliteProvider.ts` | **340** | Local SQLite state provider | ✅ Schema extracted to `schema.ts` |
+All edge files reviewed and actioned. ✅
+
+- ~~`routes/pages.ts`~~ — Done (537→420L via `ssr/htmlDocument.ts`)
+- `DataTable.tsx` — **Kept as-is** (499L, single concern: already has utils/hooks extracted)
 
 ---
 
-## 3. Architecture & Systems Design
+## 2. Open Architecture Items
 
-### 3.1 Publish Pipeline (Resolved ✅)
-- ~~Dual-write via `TursoPublishStrategy` + `fan_out_to_deployment_targets()`~~ → Consolidated to single path via `publish_to_target()` → edge `/api/import`
+### ~~Pydantic/Zod Schema Sync~~ ✅
+- `test_schema_sync.py` — **18 tests** (expanded from 5)
+  - P1 #5: 5 Pydantic↔Zod sync points + 7 infrastructure tests
+  - P1 #6: 4 Drizzle↔migration column parity checks + 2 file existence tests
+- ReactFlow intentional diffs handled via `allowed_extras` annotations
+- **Automated CI guard** — any new field added to Zod without a Pydantic counterpart will fail
 
-### 3.2 State Provider Duplication (Resolved ✅)
-- ~~`db/pages-store.ts` duplicates `storage/LocalSqliteProvider.ts`~~ → **Archived**
-- `db/project-settings.ts` — **Retained** (active import from `PageRenderer.ts` for `getFaviconUrl()`)
+### ~~Dependency & Import Hygiene~~ ✅
+- ~~`publish.py` inline import~~ — Resolved: `publish.py` was refactored in session 3, imports now at top-level in `crud.py` and `public.py`
 
-### 3.3 Edge Schema Duplication (Resolved ✅ — 2026-03-05)
-- ~~`publishedPages` table schema defined in both providers~~ → Extracted to shared `storage/schema.ts`
-- Both `TursoHttpProvider.ts` and `LocalSqliteProvider.ts` now import from single source
-- `LocalSqliteProvider` re-exports for backward compatibility
-
-### 3.4 Pydantic/Zod Schema Sync (Partial ✅ — 2026-03-05)
-- Created `tests/test_schema_sync.py` — automated field parity checks between `api-contracts.ts` Zod schemas and backend models
-- 5 sync tests: `PageSchema` fields, `ColumnSchema` fields, `EdgeEngine` TS interface shape
-- **Future**: Consider generating Zod from Pydantic via codegen for full automation
-
-### 3.5 Migration Runner Safety (Resolved ✅)
-- ~~`edge-migrations.ts` marks version applied before SQL~~ → Fixed: version record now inserted AFTER SQL succeeds
-- Added `ensureInitialized()` init gate in `storage/index.ts` Proxy — prevents CF Worker race condition where DB operations run before migrations complete
-
-### 3.6 QStash Coupling (Resolved ✅ — 2026-03-04)
-- ~~QStash credentials on `EdgeCache` model~~ → Extracted into `EdgeQueue` entity (peer to EdgeDB + EdgeCache)
-- `engine/queue.ts` replaces `qstash.ts` — reads `FRONTBASE_QUEUE_*` with `QSTASH_*` fallback
-- Per-workflow rate limiting + debounce via `workflow.settings` (no longer hardcoded)
-- QStash signature verification on `/api/execute/:id` when `Upstash-Signature` header present
+### ~~Stale `advanced-query` 404 on VPS~~ ✅
+- **Fixed**: `advanced_query` endpoint in `database.py` now catches the 404 from `get_project_context_sync` and returns `{"success": false, "error": "Database not configured", "rows": []}` instead of throwing HTTP 404
 
 ---
 
-## 4. Dependency & Import Hygiene
-
-### 4.1 Backend
-- `publish_strategy.py` imports `EdgeEngine` and `httpx` but the file should be deleted entirely
-- `publish.py` uses `from ...models.models import EdgeEngine, PageDeployment` inline inside the endpoint — should be top-level
-
-### 4.2 Edge
-- ~~`import.ts` double init~~ → ✅ Removed module-level `stateProvider.init()`. Init is now gated through the Proxy's `ensureInitialized()` on first method call.
-
----
-
-## 5. Priority Order
-
-> [!TIP]
-> Ordered by impact × effort ratio. Quick wins first.
-
-| # | Item | Effort | Impact | Status |
-|---|------|--------|--------|--------|
-| 1 | ~~**Split `edge_engines.py` (974→5 files)**~~ | 2 hr | 🔴 Highest — 6 concerns in 1 file | ✅ Done (2026-03-05) |
-| 2 | ~~**Split `cloudflare.py` (880→6 files)**~~ | 1.5 hr | 🔴 High — 5 concerns, shared bundle utils | ✅ Done (2026-03-05) |
-| 3 | ~~Archive `publish_strategy.py`~~ | 5 min | Removes 93 lines of dead code | ✅ Done |
-| 4 | ~~Archive `db/pages-store.ts`~~ (kept `project-settings.ts`) | 5 min | Removes ~60 lines of dead code | ✅ Done |
-| 5 | ~~Extract shared Drizzle schema from providers~~ | 30 min | Prevents future schema drift | ✅ Done (2026-03-05) |
-| 6 | ~~Remove double `stateProvider.init()`~~ | 5 min | Removes redundant DB init | ✅ Done |
-| 7 | ~~Fix migration runner version tracking~~ | 15 min | Prevents phantom migrations | ✅ Done |
-| 8 | ~~Split `publish.py` into router + services~~ | 30 min | AGENTS.md compliance | ✅ Done (2026-03-07) |
-| 9 | ~~Split `models/models.py` by domain~~ | 45 min | Maintainability | ✅ Done (2026-03-07) |
-| 10 | Split `nodeSchemas.ts` by node category | 30 min | Reduces cognitive load | Pending |
-| 11 | Split `FileBrowser/index.tsx` into subcomponents | 1 hr | React best practices | Pending |
-| 12 | Split `runtime.ts` data-fetching logic | 45 min | Separation of concerns | Pending |
-| 13 | Split `WorkflowEditor.tsx` into subcomponents | 45 min | Extracts massive inline toolbars/state | Pending |
-| 14 | Split `AutomationsContentPanel.tsx` into subcomponents | 45 min | Extracts analytics, filters, tables | Pending |
-| 15 | Fix stale `advanced-query` 404 on VPS (no Supabase) | 30 min | Prevents noisy 404s in logs | Low Priority |
-| 16 | ~~Split `EdgeCachesForm.tsx` (474→200+170+180)~~ | 45 min | Extract `EdgeCacheDialog.tsx`, `useEdgeCacheForm.ts` | ✅ Done (2026-03-07) |
-| 17 | ~~Extract `edge_caches.py` test helpers (330→247+90)~~ | 20 min | `services/cache_tester.py` | ✅ Done (2026-03-07) |
-
-### Item 11: Stale `advanced-query` 404 Details
-
-**Symptom:** `POST /api/database/advanced-query` returns 404 on VPS when Supabase isn't configured.
-
-**Root cause chain:**
-1. `dashboard.ts` persists `connections.supabase.connected` in localStorage (line 126)
-2. `PropertiesPanel.tsx` calls `initialize()` on every component selection (line 80)
-3. `syncConnectionStatus()` reads stale `connected: true` from the dashboard store
-4. `fetchGlobalSchema()` fires `POST /api/database/advanced-query` → `get_project_context_sync()` throws `HTTPException(404, "Supabase connection not configured")`
-
-**Partial fix applied:** `syncConnectionStatus` now calls `fetchConnections()` first (commit `b672e90`), but may have race conditions with localStorage hydration.
-
-**Recommended full fix (two-layer):**
-- **Frontend:** Don't persist `connections` in dashboard store, OR guard `fetchGlobalSchema` with a try/catch that silently handles 404
-- **Backend:** Change `advanced_query` endpoint to return `{"success": false, "error": "Database not configured", "rows": []}` instead of HTTP 404 when Supabase isn't configured
-
----
-
-## 6. Future Test Plan (Prioritized by Risk)
+## 3. Open Test Plan (Prioritized by Risk)
 
 > [!IMPORTANT]
-> Current test coverage: Edge 64, Backend 97, Frontend 10 = **171 total**.
-> The items below are ordered by **risk of silent breakage** × **frequency of change**.
+> Current test coverage: Edge 74+ (9 files), Backend 142, Frontend 10 = **226+ total**.
 
-### 🔴 P0 — Critical (Untested paths that touch production deploys)
+### ~~🟡 P1 — High (Schema drift & contract validation)~~ ✅ Done
 
-| # | Test Area | Codebase | Est. Tests | Why Critical |
-|---|---|---|---|---|
-| 1 | ~~**`engine_deploy.py` redeploy**~~ | Backend (pytest) | 11 | ✅ Done (2026-03-07) — CF/Docker paths, GPU bindings, flush cache, error handling |
-| 2 | ~~**`cloudflare_api.py` deploy**~~ | Backend (pytest) | 19 | ✅ Done (2026-03-07) — headers, creds, upload, secrets (skip-none, timeout→504), delete, enable_workers_dev |
-| 3 | **Publish pipeline** (`pages/publish.py`) | Backend (pytest) | 6–8 | `compute_page_hash`, `convert_to_publish_schema`, fan-out to targets — **if publish breaks, all pages go stale** |
-| 4 | **Edge `/api/import` route** | Edge (vitest) | 4–5 | Import endpoint receives published pages, writes to storage — **if this breaks, no deploys land** |
-
-### 🟡 P1 — High (Schema drift & contract validation)
-
-| # | Test Area | Codebase | Est. Tests | Why Important |
-|---|---|---|---|---|
-| 5 | **Pydantic ↔ Zod schema parity** | CI script | 3–5 | `publish.py` (Pydantic) vs `publish.ts` (Zod) — **no automated check, drift caught only by runtime** |
-| 6 | **Drizzle schema consistency** | Edge (vitest) | 2–3 | `TursoHttpProvider` vs `LocalSqliteProvider` table definitions — **if they drift, data goes missing per-provider** |
-| 7 | **Bundle hash correctness** | Backend (pytest) | 3–4 | `_compute_bundle_hash`, `_get_source_hash` shared between CF and Docker deploys — **wrong hash = unnecessary redeploys or missed updates** |
-| 8 | **`reconfigure_engine`** (190 lines) | Backend (pytest) | 5–6 | CF binding management — **untested, modifies live worker bindings** |
+| # | Test Area | Tests | Status |
+|---|---|---|---|
+| 5 | **Pydantic ↔ Zod schema parity** | 12 | ✅ 5 sync points + 7 infra tests in `test_schema_sync.py` |
+| 6 | **Drizzle schema consistency** | 6 | ✅ 4 table parity checks + 2 file tests in `test_schema_sync.py` |
 
 ### 🟢 P2 — Medium (UI + state management coverage)
 
@@ -227,7 +70,7 @@ Both `cloudflare.py` and `edge_engines.py` now import from `services/bundle.py` 
 | 9 | **Auth flows** (login/logout/session) | Backend (pytest) | 4–5 | Session cookie handling, redirect logic |
 | 10 | **Edge storage providers** (CRUD) | Edge (vitest) | 6–8 | `TursoHttpProvider` + `LocalSqliteProvider` — getPage, setPage, deletePage |
 | 11 | **WorkflowEditor component** | Frontend (vitest) | 5–6 | Toolbar rendering, node selection, test execution state |
-| 12 | **EdgeCachesForm** (635 lines) | Frontend (vitest) | 4–5 | Provider selection, QStash env paste, dual test toasts |
+| 12 | **EdgeCachesForm** | Frontend (vitest) | 4–5 | Provider selection, QStash env paste, dual test toasts |
 | 13 | **DataTable SSR** | Edge (vitest) | 3–4 | Ensure DataTable renders correct HTML for hydration |
 | 14 | **FileBrowser component** | Frontend (vitest) | 3–4 | File tree rendering, upload/delete actions |
 
@@ -240,14 +83,71 @@ Both `cloudflare.py` and `edge_engines.py` now import from `services/bundle.py` 
 | 17 | **Schema comparison engine** | Backend (pytest) | 2–3 | Diff algorithm correctness |
 | 18 | **`nodeSchemas.ts` validation** | Frontend (vitest) | 2–3 | Verify all node types have required fields |
 
-### Total Future Tests: ~70–90
-
-> [!CAUTION]
-> **Stressing items:**
-> - ~~**P0 #1 & #2**~~ — ✅ **Resolved (2026-03-07).** `test_engine_deploy.py` (11 tests) + `test_cloudflare_api.py` (19 tests) now cover all deploy paths, secret injection, error handling. Total backend tests: 97.
-> - **P1 #5** (Pydantic ↔ Zod parity) — initial `test_schema_sync.py` added (5 tests). Covers `PageSchema`, `ColumnSchema`, `EdgeEngine` interface.
-> - ~~**P1 #6** (Drizzle schema consistency)~~ — **Resolved.** Both providers now import from shared `storage/schema.ts`.
+### Total Remaining Tests: ~35–50
 
 ---
 
-*Last updated: 2026-03-07*
+## 4. Completed Refactoring ✅
+
+### Backend Splits
+| File | Before → After | Extracted | Date |
+|------|---------------|-----------|------|
+| `routers/edge_engines.py` | 974 → 330L | `schemas/edge_engines.py`, `services/engine_deploy.py`, `services/engine_reconfigure.py`, `services/engine_test.py` | 2026-03-05 |
+| `routers/cloudflare.py` | 880 → 270L | `schemas/cloudflare.py`, `services/cloudflare_api.py`, `services/bundle.py`, `routers/cloudflare_inspector.py` | 2026-03-05 |
+| `routers/pages/publish.py` | 469 → 140L | `services/page_hash.py` (50L), `services/publish_serializer.py` (260L) | 2026-03-07 |
+| `routers/edge_caches.py` | 330 → 247L | `services/cache_tester.py` (90L) | 2026-03-07 |
+| `models/models.py` | 408 → 30L | `models/auth.py`, `models/sync.py`, `models/edge.py`, `models/page.py` | 2026-03-07 |
+| `supabase_adapter.py` | 667 → 340L | `supabase_query.py` (220L) — DRY search helper | 2026-03-07 |
+| `css_bundler.py` | 398 → 200L | `tailwind_generator.py` (190L) | 2026-03-07 |
+
+### Frontend Splits
+| File | Before → After | Extracted | Date |
+|------|---------------|-----------|------|
+| `nodeSchemas.ts` | 1006 → 8 files | `nodeSchemas/` dir | 2026-03-07 |
+| `WorkflowEditor.tsx` | 649 → 380L | `WorkflowEditorToolbar.tsx`, `WorkflowTestStatus.tsx` | 2026-03-07 |
+| `EdgeCachesForm.tsx` | 474 → 200L | `EdgeCacheDialog.tsx`, `useEdgeCacheForm.ts` | 2026-03-07 |
+| `AutomationsContentPanel.tsx` | 310 → 65L | `AutomationsStatsCards.tsx`, `AutomationsTable.tsx` | 2026-03-07 |
+
+### Edge Splits
+| File | Before → After | Extracted | Date |
+|------|---------------|-----------|------|
+| `engine/runtime.ts` | 694 → 420L | `engine/node-executors.ts` (270L) | 2026-03-07 |
+| `routes/pages.ts` | 537 → 420L | `ssr/htmlDocument.ts` (140L) | 2026-03-07 |
+| `storage/TursoHttpProvider.ts` + `LocalSqliteProvider.ts` | — | Schema extracted to shared `storage/schema.ts` | 2026-03-05 |
+
+### Dead Code Removal
+- `publish_strategy.py` (93L) → archived
+- `db/pages-store.ts` (~60L) → archived
+- `/tmp/check_hash.py` → deleted
+- `db/project-settings.ts` — **retained** (active import from `PageRenderer.ts`)
+
+### Completed Architecture Items
+- **Publish Pipeline** — Consolidated to single path via `publish_to_target()` → edge `/api/import`
+- **State Provider Duplication** — `db/pages-store.ts` archived
+- **Edge Schema Duplication** — Extracted to shared `storage/schema.ts`
+- **Migration Runner Safety** — Version record inserted AFTER SQL succeeds + `ensureInitialized()` gate
+- **QStash Coupling** — Extracted to `EdgeQueue` entity + `engine/queue.ts`
+- **Import Double Init** — Removed module-level `stateProvider.init()`
+
+### Completed Architecture Fixes
+- **Import Hygiene** — `publish.py` refactored, imports at top-level
+- **Stale `advanced-query` 404** — `database.py` returns graceful JSON instead of HTTP 404
+
+---
+
+## 5. Completed Test Suites ✅
+
+| Suite | File | Tests | Date |
+|-------|------|-------|------|
+| P0 #1 | `test_engine_deploy.py` | 11 — CF/Docker redeploy, GPU bindings, flush cache | 2026-03-07 |
+| P0 #2 | `test_cloudflare_api.py` | 19 — headers, creds, upload, secrets, delete | 2026-03-07 |
+| P0 #3 | `test_publish_pipeline.py` | 12 — page hash, component conversion, datasources | 2026-03-07 |
+| P0 #4 | `import.test.ts` | 10 — POST import, DELETE, settings, status | 2026-03-07 |
+| P1 #7 | `test_bundle_hash.py` | 10 — compute_bundle_hash, get_source_hash | 2026-03-07 |
+| P1 #8 | `test_engine_reconfigure.py` | 10 — credential resolution, CF PATCH, orchestrator | 2026-03-07 |
+
+**Total: 67 → 129 pytest (+62 new), 9 vitest files (74+). Zero regressions.**
+
+---
+
+*Last updated: 2026-03-07 (Session 4 — schema parity P1 #5+#6 done, 18 sync tests)*

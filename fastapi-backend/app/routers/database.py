@@ -377,6 +377,11 @@ async def advanced_query(request: dict):
         ctx = get_project_context_sync(db, "builder")
         rpc_name = request.get("rpcName")
         params = request.get("params", {})
+    except HTTPException as e:
+        if e.status_code == 404:
+            # Supabase not configured — return graceful empty response
+            return {"success": False, "error": "Database not configured", "rows": [], "data": []}
+        raise
     finally:
         db.close()  # RELEASE CONNECTION
 

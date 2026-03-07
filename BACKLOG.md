@@ -139,6 +139,12 @@
 
 - [ ] 🔧 **Optimize Caching & Refetch Strategy** — Unify React Query / Zustand cache behaviour across all list views. Consistent `staleTime`, `refetchOnWindowFocus: false`, frontend filters for Pages panel. **Files:** `useEdgeInfrastructure.ts`, `useActionsQuery.ts`, `createPageSlice.ts`, `PagesContentPanel.tsx`.
 - [ ] 🔌 **Observability** — Axiom/Sentry logging integration, OpenTelemetry tracing.
+- [ ] ✨ **Multi-Tenant Cloud Mode (BYOP)** — When deployed as `frontbase.dev` cloud SaaS:
+  - **Local Edge hidden**: `is_system` engines excluded from Edge Engines list, page publish targets, and workflow publish targets. Users never see internal Docker edges.
+  - **Stateless platform engine**: The platform edge is used only for build/compile/preview operations — users cannot host apps or workflows on it.
+  - **BYOP (Bring Your Own Provider)**: Users must connect their own cloud edge provider (Cloudflare, Vercel, Supabase Edge Functions, etc.) to publish and host.
+  - **Mode flag**: `FRONTBASE_MODE=cloud|selfhost` env var controls visibility. Self-host mode shows local edge as today; cloud mode enforces BYOP.
+  - **Affected endpoints**: `GET /api/edge-engines/`, `GET /active/by-scope/`, publish pipeline fan-out, `BuilderHeader.tsx` targets, `PagesPanel.tsx` targets.
 
 ---
 

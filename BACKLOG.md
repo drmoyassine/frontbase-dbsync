@@ -24,6 +24,8 @@
 
 - [ ] 🐛 **Better error toasts** — Parse and display structured error details from backend (currently shows `[object Object]` for some errors).
 
+- [ ] 🔧 **Split `FileBrowser/index.tsx`** (818L) — Extract file tree rendering, toolbar, and file actions into subcomponents (`FileTree.tsx`, `FileActions.tsx`, `FileUploader.tsx`). Single component currently handles tree state, upload logic, delete actions, and toolbar rendering. See `performance-optimization.md` §1.
+
 ---
 
 ## ⚡ Automations
@@ -74,7 +76,7 @@
 
 ### Execution Engine
 - [ ] ✨ **Version History & Rollback (Workflows)** — Snapshot table (`automation_draft_versions`) with rollback, diff view, and audit trail.
-- [ ] ✨ **Durable Workflow Execution (Phase 3 remnants)** — ~~Checkpointing~~, ~~rate limiting~~, ~~debouncing~~, ~~QStash retry wiring~~ done. Remaining: spike leveling (queue buffer), idempotency keys, cross-execution shared variables.
+- [ ] ✨ **Durable Workflow Execution (remaining)** — ~~Checkpointing~~ ✅ (`engine/checkpoint.ts`), ~~rate limiting~~ ✅ (`engine/qstash.ts`), ~~debouncing~~ ✅ (`engine/debounce.ts`), ~~DLQ wiring~~ ✅ (`dead_letters` table + `runtime.ts`). **Remaining:** spike leveling (queue buffer), idempotency keys, cross-execution shared variables.
 - [ ] ✨ **Node-level Output Caching** — Cache individual node outputs (HTTP request, data query) with configurable TTL. Repeat executions reuse cached results instead of re-fetching. Requires per-node config panel + cache key generation from input hash.
 - [ ] ✨ **Manual Checkpoint Node** — User-placeable Checkpoint node type for explicit state saves inside loops or before expensive operations. Pass-through node (data in → data out) that forces `saveCheckpoint()` at that point in the graph.
 - [ ] ✨ **Custom WebSockets** — Real-time workflow execution streaming (replacing Supabase Realtime).
@@ -86,7 +88,7 @@
 ### Resilience & Status
 - [ ] 🔧 **Auto-migrate on Turso connect** — Bulk-push all previously published pages from backend → Turso when first enabled.
 - [ ] 🔧 **Publish-state sync check** — On Settings save, compare backend vs Turso rows, warn about drift.
-- [ ] 🔧 **Skip redundant publishes (content hash)** — Hash `layoutData + cssBundle`, skip Turso write + Upstash invalidation if unchanged.
+- [x] ~~**Skip redundant publishes (content hash)**~~ — ✅ Implemented via `page_hash.py`, Drizzle schema `content_hash` column, migration v3. Hash `layoutData + cssBundle`, skip writes if unchanged.
 - [ ] 🔧 **Turso quota guard** — Monitor row reads/writes, warn in UI, auto-fallback to local SQLite.
 - [ ] 🔧 **Upstash quota guard** — Monitor commands/month, reduce TTL or disable L2 cache gracefully.
 - [ ] 🔧 **Graceful provider downgrade** — Fall back to local SQLite/no-cache on Turso/Upstash failure. Log and surface in status panel.
@@ -103,10 +105,11 @@
 - [ ] 🔌 **Netlify Edge Adapter** — New `IEdgeAdapter` for Netlify Edge Functions.
 - [ ] 🔧 **Extract Shared Edge Core** — Refactor into `shared/edge-core.ts` + thin adapter wrappers per provider.
 - [ ] ✨ **Edge `/api/config` Endpoint** — Receive settings updates without redeploying the Worker.
-- [ ] 🔧 **Edge CORS Origin Configuration** — Configurable per deployment target via project settings.
+- [x] ~~**Edge CORS Origin Configuration**~~ — ✅ Implemented in `engine/lite.ts` CORS middleware.
 - [ ] 🔧 **Edge Request Logging** — Structured logs with timestamp, slug, response time, cache hit/miss.
 - [ ] ✨ **Engine Type Selector in Deploy Dialog** — Full vs Lite bundle type picker when deploying to a new engine.
 - [ ] 🔧 **Git Tree Hash for CI/CD Staleness Detection** — Use `git rev-parse HEAD:services/edge` as an alternative source hash for CI/CD pipelines where all changes are committed. Faster than direct file hashing, ignores `.gitignore`d files. Complements the current direct file hash approach which is better for local dev (detects uncommitted changes).
+- [ ] 🔧 **`build_worker()` mocked integration tests** — Mock the CF API and Docker update endpoint, verify `engine_deploy.py` orchestration logic handles error paths (partial deploy failures, timeout, secret injection failures). Estimated: 5–8 tests.
 
 ### Inspector & DX
 - [ ] ✨ **Edge Inspector Dialog** — Provider-agnostic inspector popup with split-pane layout: files + secrets + bindings (left), Monaco Editor (right). Dependencies available: `@monaco-editor/react`, `@radix-ui/react-dialog`, FileBrowser pattern. Needs: backend endpoints per provider, component, icon button on target rows.
@@ -167,3 +170,9 @@
 - [x] **Description field** — Editable description textarea in WorkflowEditor.
 - [x] **Automation card improvements** — `is_active` badge, trigger type icons, last execution time.
 - [x] **Persistent endpoint URL on automation card** — Webhook URL shown directly on card.
+- [x] **Skip redundant publishes (content hash)** — `page_hash.py`, Drizzle `content_hash` column, migration v3.
+- [x] **Edge CORS Origin Configuration** — CORS middleware in `engine/lite.ts`.
+- [x] **Durable Workflow: Checkpointing** — `engine/checkpoint.ts`
+- [x] **Durable Workflow: Rate limiting** — `engine/qstash.ts`
+- [x] **Durable Workflow: Debouncing** — `engine/debounce.ts`
+- [x] **Durable Workflow: DLQ wiring** — `dead_letters` table, `runtime.ts`, both storage providers

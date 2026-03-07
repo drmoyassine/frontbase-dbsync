@@ -528,6 +528,13 @@ async def list_active_engines_by_scope(scope: Literal["pages", "automations", "f
 
     engines = query.all()
     return [
-        {"id": str(e.id), "url": str(e.url), "name": str(e.name), "adapter_type": str(e.adapter_type)}
+        {
+            "id": str(e.id),
+            "url": str(e.url),
+            "name": str(e.name),
+            "adapter_type": str(e.adapter_type),
+            "edge_db_id": str(e.edge_db_id) if e.edge_db_id else None,
+            "is_active": bool(e.is_active),
+        }
         for e in engines
     ]

@@ -117,3 +117,120 @@ async def delete_provider(provider_id: str, db: Session = Depends(get_db)):
     db.delete(provider)
     db.commit()
     return None
+
+
+# =============================================================================
+# Test Connection — validate credentials against provider API before saving
+# =============================================================================
+
+class TestConnectionRequest(BaseModel):
+    provider: str = Field(..., description="Provider type (cloudflare, supabase, vercel, netlify, deno, upstash)")
+    credentials: Dict[str, Any] = Field(..., description="Provider credentials to validate")
+
+
+@router.post("/test-connection")
+async def test_connection(payload: TestConnectionRequest):
+    """Validate provider credentials by making a lightweight API call.
+
+    Does NOT create a record — just verifies the credentials work.
+    Called before saving to prevent storing invalid tokens.
+    """
+    import httpx
+
+    provider = payload.provider
+    creds = payload.credentials
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+
+            if provider == "cloudflare":
+                token = creds.get("api_token", "")
+                resp = await client.get(
+                    "https://api.cloudflare.com/client/v4/accounts",
+                    headers={"Authorization": f"Bearer {token}"},
+                    params={"page": 1, "per_page": 1},
+                )
+                data = resp.json()
+                if not data.get("success"):
+                    errors = data.get("errors", [{}])
+                    msg = errors[0].get("message", "Invalid API token") if errors else "Invalid API token"
+                    return {"success": False, "detail": msg}
+                accounts = data.get("result", [])
+                name = accounts[0].get("name", "Cloudflare Account") if accounts else "Cloudflare Account"
+                return {"success": True, "detail": f"Connected as {name}"}
+
+            elif provider == "supabase":
+                token = creds.get("access_token", "")
+                project_ref = creds.get("project_ref", "")
+                if not token or not project_ref:
+                    return {"success": False, "detail": "Both access_token and project_ref are required"}
+                resp = await client.get(
+                    f"https://api.supabase.com/v1/projects/{project_ref}",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                if resp.status_code == 401:
+                    return {"success": False, "detail": "Invalid access token"}
+                if resp.status_code == 404:
+                    return {"success": False, "detail": f"Project '{project_ref}' not found"}
+                if resp.status_code != 200:
+                    return {"success": False, "detail": f"Supabase API error: {resp.status_code}"}
+                data = resp.json()
+                name = data.get("name", project_ref)
+                return {"success": True, "detail": f"Connected to project: {name}"}
+
+            elif provider == "vercel":
+                token = creds.get("api_token", "")
+                team_id = creds.get("team_id", "")
+                headers = {"Authorization": f"Bearer {token}"}
+                url = "https://api.vercel.com/v2/user"
+                resp = await client.get(url, headers=headers)
+                if resp.status_code != 200:
+                    return {"success": False, "detail": "Invalid Vercel API token"}
+                data = resp.json()
+                name = data.get("user", {}).get("username", "Vercel User")
+                return {"success": True, "detail": f"Connected as {name}"}
+
+            elif provider == "netlify":
+                token = creds.get("api_token", "")
+                resp = await client.get(
+                    "https://api.netlify.com/api/v1/user",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                if resp.status_code != 200:
+                    return {"success": False, "detail": "Invalid Netlify token"}
+                data = resp.json()
+                name = data.get("full_name", data.get("email", "Netlify User"))
+                return {"success": True, "detail": f"Connected as {name}"}
+
+            elif provider == "deno":
+                token = creds.get("api_token", "")
+                resp = await client.get(
+                    "https://api.deno.com/v1/organizations",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                if resp.status_code != 200:
+                    return {"success": False, "detail": "Invalid Deno Deploy token"}
+                orgs = resp.json()
+                name = orgs[0].get("name", "Deno Deploy") if isinstance(orgs, list) and orgs else "Deno Deploy"
+                return {"success": True, "detail": f"Connected to {name}"}
+
+            elif provider == "upstash":
+                token = creds.get("api_token", "")
+                email = creds.get("email", "")
+                resp = await client.get(
+                    "https://api.upstash.com/v2/team",
+                    headers={"Authorization": f"Basic {__import__('base64').b64encode(f'{email}:{token}'.encode()).decode()}"},
+                )
+                if resp.status_code != 200:
+                    return {"success": False, "detail": "Invalid Upstash credentials"}
+                data = resp.json()
+                name = data.get("team_name", "Upstash Account") if isinstance(data, dict) else "Upstash Account"
+                return {"success": True, "detail": f"Connected as {name}"}
+
+            else:
+                return {"success": False, "detail": f"Unsupported provider: {provider}"}
+
+    except httpx.TimeoutException:
+        return {"success": False, "detail": "Connection timed out — check your network"}
+    except Exception as e:
+        return {"success": False, "detail": f"Connection failed: {str(e)}"}

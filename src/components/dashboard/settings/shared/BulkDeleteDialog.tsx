@@ -65,10 +65,10 @@ export function BulkDeleteDialog({ open, onOpenChange, selectedCount, onConfirm 
                             />
                             <div className="grid gap-1.5 leading-none">
                                 <label htmlFor="bulk-delete-remote" className="text-sm font-medium leading-none cursor-pointer">
-                                    Also delete Workers from Cloudflare
+                                    Also delete from remote providers
                                 </label>
                                 <p className="text-xs text-muted-foreground">
-                                    Permanently removes the selected scripts from your Cloudflare account.
+                                    Permanently removes the selected deployments from their provider accounts.
                                 </p>
                             </div>
                         </div>
@@ -78,7 +78,7 @@ export function BulkDeleteDialog({ open, onOpenChange, selectedCount, onConfirm 
                                 <Alert variant="destructive" className="py-2">
                                     <AlertTriangle className="h-4 w-4" />
                                     <AlertDescription className="text-xs">
-                                        This is <strong>irreversible</strong>. All {selectedCount} Workers and their data will be permanently deleted from Cloudflare.
+                                        This is <strong>irreversible</strong>. All {selectedCount} deployments and their data will be permanently deleted from their providers.
                                     </AlertDescription>
                                 </Alert>
                                 <div className="space-y-1.5">

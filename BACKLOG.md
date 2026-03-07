@@ -112,9 +112,9 @@
 - [ ] 🔧 **`build_worker()` mocked integration tests** — Mock the CF API and Docker update endpoint, verify `engine_deploy.py` orchestration logic handles error paths (partial deploy failures, timeout, secret injection failures). Estimated: 5–8 tests.
 
 ### Inspector & DX
-- [ ] ✨ **Edge Inspector Dialog** — Provider-agnostic inspector popup with split-pane layout: files + secrets + bindings (left), Monaco Editor (right). Dependencies available: `@monaco-editor/react`, `@radix-ui/react-dialog`, FileBrowser pattern. Needs: backend endpoints per provider, component, icon button on target rows.
+- [x] ~~**Edge Inspector Dialog**~~ — ✅ Provider-agnostic inspector with split-pane layout: files + secrets + bindings (left), Monaco Editor (right). Source snapshot from backend DB.
 - [ ] ✨ **Inspector Health & Resource Metrics Panel** — Metrics tab: Worker CPU, memory, request count, error rate, Turso/Upstash usage. Data from provider APIs.
-- [ ] ✨ **Edge Code Editor (Inspector IDE)** — Turn Inspector into a code editor. View/edit source TS files from local `services/edge/src/`. "Compile & Deploy" action. Primary consumer: AI coding agent. No paid plan needed.
+- [x] ~~**Edge Code Editor (Inspector IDE)**~~ — ✅ Monaco editor for source `.ts` files. Save All writes to disk, Compile & Deploy triggers redeploy. Dirty state tracking with amber dots.
 
 ### Security & Compliance
 - [ ] 🔌 **Enterprise Secrets Management** — Infisical integration for deploy-time secrets injection, E2E encrypted storage, audit logs.
@@ -149,6 +149,15 @@
 ---
 
 ## ✅ Completed
+
+### 2026-03-07 — Inspector IDE & Test Fixes
+- [x] Source snapshot storage (`source_snapshot` column + `capture_source_snapshot()` + `GET /source` endpoint)
+- [x] Inspector refactor — 860→260 lines, 6 sub-components (`inspector/` dir)
+- [x] Monaco editor integration (`@monaco-editor/react` in `SourceViewer.tsx`)
+- [x] IDE toolbar — Save All (`PUT /source`) + Compile & Deploy, dirty state tracking
+- [x] `write_source_files()` with path traversal protection
+- [x] Fixed 11 pytest failures (stale test DB schema + `test_edge_gpu.py` fixture)
+- [x] Fixed 1 vitest failure (Jest→Vitest migration in `fastapi-integration.test.ts`)
 
 ### 2026-03-07 — Refactoring & Testing Batch
 - [x] Split `publish.py` 469→140L — `services/page_hash.py` (50L) + `services/publish_serializer.py` (260L)

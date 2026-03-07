@@ -105,6 +105,7 @@ User → Edge Worker (cache check) → FastAPI GPU inference → Edge Worker (ca
 - ✅ Per-workflow rate limiting, debounce, and queue settings
 - ✅ Source-based bundle checksums (immediate Outdated detection)
 - ✅ Docker self-update via `/api/update` endpoint (build → POST → restart)
+- ✅ Inspector IDE — Monaco editor for `.ts` source files, Save All + Compile & Deploy, source snapshots stored in DB
 
 ## Open Questions
 

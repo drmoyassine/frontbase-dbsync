@@ -121,6 +121,7 @@ class EdgeEngine(Base):
     config_checksum = Column(String(64), nullable=True)  # SHA-256 of local config (db+cache+adapter+secrets)
     last_deployed_at = Column(String, nullable=True)     # ISO timestamp of last successful deploy
     last_synced_at = Column(String, nullable=True)       # ISO timestamp of last drift verification
+    source_snapshot = Column(Text, nullable=True)        # JSON — { "path": "content", ... } captured on deploy
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     

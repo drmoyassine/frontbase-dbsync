@@ -15,7 +15,7 @@ export type HonoApp = InstanceType<typeof OpenAPIHono>;
 
 export interface IEdgeAdapter {
     /** Platform identifier — stored in deployment_targets.provider */
-    readonly platform: 'cloudflare' | 'vercel' | 'netlify' | 'docker';
+    readonly platform: 'cloudflare' | 'supabase' | 'upstash' | 'vercel' | 'netlify' | 'deno' | 'docker';
 
     /** Adapter scope — which subset of routes this adapter serves */
     readonly scope: 'pages' | 'automations' | 'full';

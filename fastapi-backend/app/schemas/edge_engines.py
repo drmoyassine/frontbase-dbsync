@@ -36,6 +36,8 @@ class EdgeEngineUpdate(BaseModel):
 
 class GPUModelSummary(BaseModel):
     """Embedded GPU model summary within engine response."""
+    model_config = {"protected_namespaces": ()}
+
     id: str
     name: str
     slug: Optional[str] = None
@@ -108,3 +110,19 @@ class BatchResult(BaseModel):
     success: List[str] = []  # IDs that succeeded
     failed: List[dict] = []  # [{ id, error }]
     total: int = 0
+
+
+class GenericDeployRequest(BaseModel):
+    """Provider-agnostic deploy request for the Deploy Engine Wizard.
+
+    The endpoint resolves the provider type from provider_id and routes
+    to the correct deployer. `worker_name` is the resource name
+    (CF worker, Supabase function, Vercel project, etc.).
+    """
+    provider_id: str
+    worker_name: str = Field(..., min_length=1, max_length=200)
+    adapter_type: Literal["edge", "pages", "automations", "full"] = Field(default="automations")
+    edge_db_id: Optional[str] = None
+    edge_cache_id: Optional[str] = None
+    edge_queue_id: Optional[str] = None
+

@@ -105,6 +105,12 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+const KNOWN_EDGE_PROVIDERS = new Set(['cloudflare', 'supabase', 'upstash', 'vercel', 'netlify', 'deno']);
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -123,11 +129,13 @@ export function DeployEngineWizard() {
     const [isDeploying, setIsDeploying] = useState(false);
 
     // Step 1: Provider
+    const [selectedProviderId, setSelectedProviderId] = useState('');
     const validProviders = useMemo(
-        () => providers.filter(p => p.is_active && p.provider === 'cloudflare'),
+        () => providers.filter(p => p.is_active && KNOWN_EDGE_PROVIDERS.has(p.provider)),
         [providers]
     );
-    const [selectedProviderId, setSelectedProviderId] = useState('');
+    const selectedProvider = validProviders.find(p => p.id === selectedProviderId);
+    const selectedProviderType = selectedProvider?.provider || 'cloudflare';
 
     // Step 2: Compute type
     const [computeType, setComputeType] = useState<ComputeType>('cpu');
@@ -246,7 +254,7 @@ export function DeployEngineWizard() {
 
             // ----- New Engine path (CPU or GPU-New) -------------------------
             if (computeType === 'cpu' || gpuMode === 'new') {
-                const res = await fetch(`${API_BASE}/api/cloudflare/deploy`, {
+                const res = await fetch(`${API_BASE}/api/edge-engines/deploy`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -381,7 +389,9 @@ export function DeployEngineWizard() {
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     {validProviders.map(p => (
-                                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                        <SelectItem key={p.id} value={p.id}>
+                                            {p.name} <span className="text-xs text-muted-foreground ml-1">({p.provider})</span>
+                                        </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
@@ -447,7 +457,7 @@ export function DeployEngineWizard() {
                                                 <Plus className="w-4 h-4" />
                                                 <span className="font-medium">New Engine</span>
                                             </div>
-                                            <p className="text-[10px] text-muted-foreground mt-0.5">Deploy a new CF worker</p>
+                                            <p className="text-[10px] text-muted-foreground mt-0.5">Deploy a new edge engine</p>
                                         </button>
                                         <button
                                             type="button"
@@ -485,7 +495,7 @@ export function DeployEngineWizard() {
                                         </SelectContent>
                                     </Select>
                                     {cfEngines.length === 0 && (
-                                        <p className="text-xs text-destructive">No Cloudflare engines found. Use "New Engine" instead.</p>
+                                        <p className="text-xs text-destructive">No deployed engines found. Use "New Engine" instead.</p>
                                     )}
                                 </div>
                             ) : (
@@ -532,12 +542,23 @@ export function DeployEngineWizard() {
                                         </div>
                                     </div>
 
-                                    {/* Worker Name */}
+                                    {/* Resource Name — provider-aware label */}
                                     <div className="space-y-2">
-                                        <Label>Worker Name</Label>
+                                        <Label>
+                                            {selectedProviderType === 'supabase' ? 'Function Name' :
+                                                selectedProviderType === 'vercel' || selectedProviderType === 'deno' ? 'Project Name' :
+                                                    selectedProviderType === 'netlify' ? 'Site Name' :
+                                                        'Worker Name'}
+                                        </Label>
                                         <div className="flex gap-2 items-center">
                                             <Input value={workerName} onChange={e => setWorkerName(e.target.value)} />
-                                            <span className="text-sm text-muted-foreground whitespace-nowrap">.workers.dev</span>
+                                            <span className="text-sm text-muted-foreground whitespace-nowrap">
+                                                {selectedProviderType === 'cloudflare' ? '.workers.dev' :
+                                                    selectedProviderType === 'supabase' ? '' :
+                                                        selectedProviderType === 'vercel' ? '.vercel.app' :
+                                                            selectedProviderType === 'netlify' ? '.netlify.app' :
+                                                                selectedProviderType === 'deno' ? '.deno.dev' : ''}
+                                            </span>
                                         </div>
                                     </div>
 
@@ -689,7 +710,7 @@ export function DeployEngineWizard() {
                             <p className="text-sm text-muted-foreground">
                                 {computeType === 'gpu' && gpuMode === 'existing'
                                     ? 'Attaching AI model & redeploying engine...'
-                                    : 'Deploying engine to Cloudflare...'}
+                                    : `Deploying engine to ${selectedProvider?.name || selectedProviderType}...`}
                             </p>
                         </div>
                     )}

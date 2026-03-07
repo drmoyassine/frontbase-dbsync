@@ -176,6 +176,15 @@ async def reconfigure(
         settings_patched, bindings_set, bindings_removed = await _patch_cf_settings(
             cf_creds, new_bindings
         )
+    elif engine.edge_provider_id:
+        # Non-CF providers: trigger redeploy to push new secrets
+        # (Supabase, Vercel, Netlify, Deno, Upstash all set secrets during deploy)
+        try:
+            await engine_deploy.redeploy(engine, db)
+            settings_patched = True
+            print(f"[Reconfigure] Redeployed non-CF engine to push new bindings")
+        except Exception as e:
+            print(f"[Reconfigure] Redeploy failed for non-CF engine: {e}")
 
     # 4. Update local DB record
     engine.edge_db_id = payload.edge_db_id  # type: ignore[assignment]

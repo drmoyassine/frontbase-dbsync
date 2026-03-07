@@ -1,11 +1,17 @@
 """
-Engine Deploy Service — Provider-Agnostic Deploy via Factory Pattern.
+Engine Deploy Service — Provider-Agnostic Router.
 
 Routes deploy/redeploy operations to the correct provider strategy:
 - Cloudflare: upload bundle → set secrets via CF API
+- Supabase/Upstash/Vercel/Netlify/Deno: delegated to *_deploy_api.deploy()
 - Docker/Node: POST bundle to engine /api/update → wait for restart
 
 Uses secrets_builder.build_engine_secrets() — no duplication.
+
+To add a new provider:
+  1. Create <provider>_deploy_api.py with a deploy() function
+  2. Add to PROVIDER_DEPLOYERS below
+  3. Add adapters + tsup configs in services/edge/
 """
 
 import json
@@ -17,22 +23,42 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..models.models import EdgeEngine, EdgeProviderAccount
-from ..services.bundle import build_worker, get_source_hash
+from ..services.bundle import build_worker, get_source_hash, capture_source_snapshot
 from ..services.secrets_builder import build_engine_secrets
 from ..services import cloudflare_api
+from ..services import supabase_deploy_api
+from ..services import upstash_deploy_api
+from ..services import vercel_deploy_api
+from ..services import netlify_deploy_api
+from ..services import deno_deploy_api
+
+
+# ── Provider Registry ─────────────────────────────────────────────────
+# Each entry maps a provider name → async deploy(engine, db, script_content, adapter_type)
+PROVIDER_DEPLOYERS = {
+    'supabase': supabase_deploy_api.deploy,
+    'upstash':  upstash_deploy_api.deploy,
+    'vercel':   vercel_deploy_api.deploy,
+    'netlify':  netlify_deploy_api.deploy,
+    'deno':     deno_deploy_api.deploy,
+}
+
+KNOWN_PROVIDERS = frozenset({'cloudflare', *PROVIDER_DEPLOYERS.keys()})
 
 
 def _resolve_provider(engine: EdgeEngine, db: Session) -> str:
     """Determine the deployment provider for an engine.
     
-    Returns 'cloudflare' or 'docker'.
+    Returns a known provider name or 'docker' as fallback.
     """
-    if engine.edge_provider_id:
+    if engine.edge_provider_id is not None:
         provider = db.query(EdgeProviderAccount).filter(
             EdgeProviderAccount.id == engine.edge_provider_id
         ).first()
-        if provider and str(provider.provider) == 'cloudflare':
-            return 'cloudflare'
+        if provider:
+            name = str(provider.provider)
+            if name in KNOWN_PROVIDERS:
+                return name
     return 'docker'
 
 
@@ -42,16 +68,19 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
     Routes to provider-specific strategy based on engine's provider.
     """
     engine_url = str(engine.url).rstrip('/')
-    adapter_type = str(engine.adapter_type) if engine.adapter_type else "automations"
+    adapter_type = str(engine.adapter_type) if engine.adapter_type is not None else "automations"
     provider = _resolve_provider(engine, db)
 
     try:
-        # 1. Build latest bundle
-        script_content, bundle_hash = build_worker(adapter_type)
+        # 1. Build latest bundle (provider-specific tsup config)
+        script_content, bundle_hash = build_worker(adapter_type, provider=provider)
         source_hash = get_source_hash() or bundle_hash
 
+        # 2. Route to provider-specific deployer
         if provider == 'cloudflare':
             await _deploy_cloudflare(engine, db, script_content, adapter_type)
+        elif provider in PROVIDER_DEPLOYERS:
+            await PROVIDER_DEPLOYERS[provider](engine, db, script_content, adapter_type)
         else:
             await _deploy_docker(engine_url, script_content, source_hash)
 
@@ -60,6 +89,12 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
         engine.bundle_checksum = source_hash  # type: ignore[assignment]
         engine.last_deployed_at = deployed_at  # type: ignore[assignment]
         engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+
+        # Capture source snapshot (readable TS files, not compiled JS)
+        snapshot = capture_source_snapshot(provider=provider, adapter_type=adapter_type)
+        if snapshot:
+            engine.source_snapshot = json.dumps(snapshot)  # type: ignore[assignment]
+
         db.commit()
         db.refresh(engine)
 
@@ -117,9 +152,9 @@ async def _deploy_cloudflare(
     # Build and push secrets
     secrets = build_engine_secrets(
         db,
-        edge_db_id=str(engine.edge_db_id) if engine.edge_db_id else None,
-        edge_cache_id=str(engine.edge_cache_id) if engine.edge_cache_id else None,
-        edge_queue_id=str(engine.edge_queue_id) if engine.edge_queue_id else None,
+        edge_db_id=str(engine.edge_db_id) if engine.edge_db_id is not None else None,
+        edge_cache_id=str(engine.edge_cache_id) if engine.edge_cache_id is not None else None,
+        edge_queue_id=str(engine.edge_queue_id) if engine.edge_queue_id is not None else None,
         engine_id=str(engine.id),
     )
     if secrets:

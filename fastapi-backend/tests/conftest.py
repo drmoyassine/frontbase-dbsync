@@ -91,7 +91,8 @@ from app.database.config import Base, engine
 import app.models.models  # noqa
 import app.models.actions  # noqa
 
-# Create core tables
+# Create core tables (drop first to ensure schema freshness with model changes)
+Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
 
 

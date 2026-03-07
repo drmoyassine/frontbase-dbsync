@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Cloud, Plus, Trash2, Loader2, AlertTriangle, Shield, Server } from 'lucide-react';
+import { Cloud, Plus, Trash2, Loader2, AlertTriangle, Shield, Server, CheckCircle2, XCircle, Zap } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -20,60 +20,157 @@ import { useEdgeProviders, edgeInfrastructureApi } from '@/hooks/useEdgeInfrastr
 import { API_BASE, PROVIDER_ICONS } from './edgeConstants';
 import { ImportCloudflareWorkers } from './ImportCloudflareWorkers';
 
+// ── Provider credential form configs ─────────────────────────────────
+const PROVIDER_CONFIGS: Record<string, {
+    label: string;
+    defaultName: string;
+    fields: { key: string; label: string; placeholder: string; type?: string; required?: boolean }[];
+    helpText?: React.ReactNode;
+}> = {
+    cloudflare: {
+        label: 'Cloudflare Workers',
+        defaultName: 'Cloudflare Account',
+        fields: [
+            { key: 'api_token', label: 'API Token', placeholder: 'Cloudflare API Token', type: 'password', required: true },
+        ],
+        helpText: <>Requires "Workers Scripts: Edit" and "Account Settings: Read". <a href="https://dash.cloudflare.com/profile/api-tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a></>,
+    },
+    supabase: {
+        label: 'Supabase Edge Functions',
+        defaultName: 'Supabase Project',
+        fields: [
+            { key: 'access_token', label: 'Access Token', placeholder: 'sbp_...', type: 'password', required: true },
+            { key: 'project_ref', label: 'Project Ref', placeholder: 'abcdefghij', required: true },
+        ],
+        helpText: <><a href="https://supabase.com/dashboard/account/tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Generate access token →</a> Project ref is in Settings → General.</>,
+    },
+    upstash: {
+        label: 'Upstash Workflows',
+        defaultName: 'Upstash Account',
+        fields: [
+            { key: 'api_token', label: 'API Token', placeholder: 'Upstash API Token', type: 'password', required: true },
+            { key: 'email', label: 'Email', placeholder: 'you@example.com', required: true },
+        ],
+        helpText: <><a href="https://console.upstash.com/account/api?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Get API key →</a> Found in Console → Account → Management API.</>,
+    },
+    vercel: {
+        label: 'Vercel Edge Functions',
+        defaultName: 'Vercel Account',
+        fields: [
+            { key: 'api_token', label: 'API Token', placeholder: 'Vercel API Token', type: 'password', required: true },
+            { key: 'team_id', label: 'Team ID', placeholder: 'team_... (optional)' },
+        ],
+        helpText: <><a href="https://vercel.com/account/tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a> Team ID is optional for personal accounts.</>,
+    },
+    netlify: {
+        label: 'Netlify Edge Functions',
+        defaultName: 'Netlify Account',
+        fields: [
+            { key: 'api_token', label: 'API Token', placeholder: 'nfp_...', type: 'password', required: true },
+            { key: 'site_id', label: 'Site ID', placeholder: 'Your Netlify site ID', required: true },
+        ],
+        helpText: <><a href="https://app.netlify.com/user/applications#personal-access-tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a> Site ID is in Site Settings → General.</>,
+    },
+    deno: {
+        label: 'Deno Deploy',
+        defaultName: 'Deno Deploy Project',
+        fields: [
+            { key: 'access_token', label: 'Access Token', placeholder: 'ddp_...', type: 'password', required: true },
+            { key: 'project_name', label: 'Project Name', placeholder: 'my-frontbase-edge', required: true },
+        ],
+        helpText: <><a href="https://dash.deno.com/account#access-tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a> Project name from your Deno Deploy dashboard.</>,
+    },
+};
+
 export function EdgeProvidersSection() {
     const { data: providers = [], isLoading, refetch } = useEdgeProviders();
     const [isConnecting, setIsConnecting] = useState(false);
+    const [isTesting, setIsTesting] = useState(false);
+    const [testResult, setTestResult] = useState<{ success: boolean; detail: string } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [open, setOpen] = useState(false);
 
     // Form state
     const [providerType, setProviderType] = useState('cloudflare');
-    const [apiToken, setApiToken] = useState('');
+    const [credFields, setCredFields] = useState<Record<string, string>>({});
     const [name, setName] = useState('Cloudflare Account');
 
-    const handleConnect = async () => {
+    const currentConfig = PROVIDER_CONFIGS[providerType] || PROVIDER_CONFIGS.cloudflare;
+
+    const handleProviderChange = (value: string) => {
+        setProviderType(value);
+        setCredFields({});
+        setTestResult(null);
+        setError(null);
+        const cfg = PROVIDER_CONFIGS[value];
+        if (cfg) setName(cfg.defaultName);
+    };
+
+    const handleTestConnection = async () => {
+        setIsTesting(true);
+        setTestResult(null);
+        setError(null);
+        try {
+            const res = await fetch(`${API_BASE}/api/edge-providers/test-connection`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider: providerType, credentials: credFields }),
+            });
+            const data = await res.json();
+            setTestResult(data);
+            // Auto-name on success
+            if (data.success && data.detail) {
+                const detailName = data.detail.replace(/^Connected (as |to (project: )?)/, '');
+                if (detailName) setName(`${currentConfig.label}: ${detailName}`);
+            }
+        } catch (e: any) {
+            setTestResult({ success: false, detail: e.message || 'Connection failed' });
+        } finally {
+            setIsTesting(false);
+        }
+    };
+    const handleSave = async () => {
         setIsConnecting(true);
         setError(null);
         try {
-            // 1. Create the Provider in the DB
             const newProvider = await edgeInfrastructureApi.createProvider({
                 name,
                 provider: providerType,
-                provider_credentials: {
-                    api_token: apiToken,
-                },
+                provider_credentials: credFields,
                 is_active: true,
             });
 
-            // 2. Call /api/cloudflare/connect to verify + list workers
-            const res = await fetch(`${API_BASE}/api/cloudflare/connect`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ provider_id: newProvider.id }),
-            });
-            const data = await res.json();
-            if (!res.ok || !data.success) {
-                throw new Error(data.detail || data.error || 'Connection failed');
-            }
-
-            // 3. Update the provider with account name from Cloudflare
-            if (data.account_name) {
-                await edgeInfrastructureApi.updateProvider({
-                    id: newProvider.id,
-                    data: { name: `Cloudflare: ${data.account_name}` },
-                });
+            // For Cloudflare, also call /connect to auto-detect account_id
+            if (providerType === 'cloudflare') {
+                try {
+                    const res = await fetch(`${API_BASE}/api/cloudflare/connect`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ provider_id: newProvider.id }),
+                    });
+                    const data = await res.json();
+                    if (data.success && data.account_name) {
+                        await edgeInfrastructureApi.updateProvider({
+                            id: newProvider.id,
+                            data: { name: `Cloudflare: ${data.account_name}` },
+                        });
+                    }
+                } catch { /* non-fatal — creds already tested */ }
             }
 
             await refetch();
             setOpen(false);
-            setApiToken('');
-            setName('Cloudflare Account');
+            setCredFields({});
+            setTestResult(null);
+            setName(PROVIDER_CONFIGS.cloudflare.defaultName);
         } catch (e: any) {
             setError(e.message);
         } finally {
             setIsConnecting(false);
         }
     };
+
+    const requiredFieldsFilled = currentConfig.fields.filter(f => f.required).every(f => credFields[f.key]);
 
     const handleDelete = async (id: string) => {
         try {
@@ -110,11 +207,12 @@ export function EdgeProvidersSection() {
                             )}
                             <div className="space-y-2">
                                 <Label>Provider</Label>
-                                <Select value={providerType} onValueChange={setProviderType}>
+                                <Select value={providerType} onValueChange={handleProviderChange}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="cloudflare">Cloudflare Workers</SelectItem>
-                                        <SelectItem value="vercel" disabled>Vercel Edge (Coming Soon)</SelectItem>
+                                        {Object.entries(PROVIDER_CONFIGS).map(([key, cfg]) => (
+                                            <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -124,28 +222,55 @@ export function EdgeProvidersSection() {
                                 <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. My Prod Account" />
                             </div>
 
-                            <div className="space-y-2">
-                                <Label>API Token</Label>
-                                <div className="space-y-1">
+                            {currentConfig.fields.map(field => (
+                                <div key={field.key} className="space-y-2">
+                                    <Label>{field.label}{field.required && ' *'}</Label>
                                     <Input
-                                        type="password"
-                                        value={apiToken}
-                                        onChange={e => setApiToken(e.target.value)}
-                                        placeholder="Cloudflare API Token"
+                                        type={field.type || 'text'}
+                                        value={credFields[field.key] || ''}
+                                        onChange={e => setCredFields(prev => ({ ...prev, [field.key]: e.target.value }))}
+                                        placeholder={field.placeholder}
                                     />
-                                    <p className="text-xs text-muted-foreground flex items-center mt-1">
-                                        <Shield className="w-3 h-3 mr-1" />
-                                        Requires "Workers Scripts: Edit" and "Account Settings: Read"
-                                    </p>
                                 </div>
-                            </div>
+                            ))}
+                            {currentConfig.helpText && (
+                                <p className="text-xs text-muted-foreground flex items-center mt-1">
+                                    <Shield className="w-3 h-3 mr-1" />
+                                    {currentConfig.helpText}
+                                </p>
+                            )}
                         </div>
 
-                        <DialogFooter>
+                        {/* Test connection result */}
+                        {testResult && (
+                            <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm ${testResult.success
+                                    ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                                    : 'bg-red-500/10 text-red-600 dark:text-red-400'
+                                }`}>
+                                {testResult.success
+                                    ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                                    : <XCircle className="w-4 h-4 flex-shrink-0" />
+                                }
+                                <span>{testResult.detail}</span>
+                            </div>
+                        )}
+
+                        <DialogFooter className="gap-2 sm:gap-0">
                             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                            <Button onClick={handleConnect} disabled={!apiToken || isConnecting}>
+                            <Button
+                                variant="outline"
+                                onClick={handleTestConnection}
+                                disabled={!requiredFieldsFilled || isTesting}
+                            >
+                                {isTesting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
+                                Test Connection
+                            </Button>
+                            <Button
+                                onClick={handleSave}
+                                disabled={!testResult?.success || isConnecting}
+                            >
                                 {isConnecting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Cloud className="w-4 h-4 mr-2" />}
-                                Authenticate Token
+                                Save Connection
                             </Button>
                         </DialogFooter>
                     </DialogContent>

@@ -1,10 +1,13 @@
 """
 Bundle Hash & Build Utilities.
 
-Shared by both cloudflare.py and edge_engines.py routers.
+Shared by all provider deploy modules.
 Single source of truth for:
 - Source hash computation (drift detection)
-- Bundle building (CF worker output)
+- Bundle building (provider-specific tsup config selection)
+
+To add a new provider:
+  Add entries to PROVIDER_TSUP_CONFIGS (lite + full).
 """
 
 import os
@@ -19,6 +22,31 @@ from fastapi import HTTPException
 EDGE_DIR = Path(os.getcwd()).parent / "services" / "edge"
 if not EDGE_DIR.exists():
     EDGE_DIR = Path(__file__).parent.parent.parent.parent / "services" / "edge"
+
+
+# ── Provider → tsup config map ────────────────────────────────────────
+# Each entry: {"config": tsup config filename, "output": built JS filename}
+# Key format: "{provider}" for lite, "{provider}-full" for full bundle.
+PROVIDER_TSUP_CONFIGS = {
+    # Cloudflare (existing)
+    "cloudflare":      {"config": "tsup.cloudflare-lite.ts",        "output": "cloudflare-lite.js"},
+    "cloudflare-full": {"config": "tsup.cloudflare.ts",             "output": "cloudflare.js"},
+    # Supabase Edge Functions
+    "supabase":        {"config": "tsup.supabase-edge-lite.ts",     "output": "supabase-edge-lite.js"},
+    "supabase-full":   {"config": "tsup.supabase-edge.ts",          "output": "supabase-edge.js"},
+    # Upstash Workflows
+    "upstash":         {"config": "tsup.upstash-workflow-lite.ts",  "output": "upstash-workflow-lite.js"},
+    "upstash-full":    {"config": "tsup.upstash-workflow.ts",       "output": "upstash-workflow.js"},
+    # Vercel Edge Functions
+    "vercel":          {"config": "tsup.vercel-edge-lite.ts",       "output": "vercel-edge-lite.js"},
+    "vercel-full":     {"config": "tsup.vercel-edge.ts",            "output": "vercel-edge.js"},
+    # Netlify Edge Functions
+    "netlify":         {"config": "tsup.netlify-edge-lite.ts",      "output": "netlify-edge-lite.js"},
+    "netlify-full":    {"config": "tsup.netlify-edge.ts",           "output": "netlify-edge.js"},
+    # Deno Deploy
+    "deno":            {"config": "tsup.deno-deploy-lite.ts",       "output": "deno-deploy-lite.js"},
+    "deno-full":       {"config": "tsup.deno-deploy.ts",            "output": "deno-deploy.js"},
+}
 
 
 def compute_bundle_hash(content: str) -> str:
@@ -59,14 +87,139 @@ def get_source_hash() -> str | None:
     return hasher.hexdigest()[:12]
 
 
-def build_worker(adapter_type: str = "automations") -> tuple[str, str]:
-    """Build the Cloudflare Worker bundle and return (script_content, bundle_hash).
+def capture_source_snapshot(provider: str = "", adapter_type: str = "") -> dict[str, str] | None:
+    """Capture provider-relevant .ts source files as { relative_path: content }.
+
+    Filters by:
+    - provider: excludes adapter files for OTHER providers
+    - adapter_type: excludes ssr/, components/ for lite bundles (automations-only)
+    Excludes __tests__/, backup files, and type declaration stubs.
+    All paths are prefixed with 'frontbase-edge/' for branding.
+    Injects a README.md at the root for DX context.
+    Returns None if src/ directory doesn't exist.
+    """
+    src_dir = EDGE_DIR / "src"
+    if not src_dir.exists():
+        return None
+
+    # Build exclusion list: adapters for OTHER providers
+    all_providers = {"cloudflare", "supabase", "vercel", "netlify", "deno", "upstash", "docker"}
+    other_providers = all_providers - {provider} if provider else set()
+
+    # Folders only used by full bundles (SSR/pages) — exclude from lite
+    is_lite = adapter_type in ("automations", "lite", "")
+    full_only_dirs = {"ssr/", "components/", "db/_archived/"}
+
+    # Branding prefix
+    PREFIX = "frontbase-edge"
+
+    snapshot: dict[str, str] = {}
+    for filepath in sorted(src_dir.rglob("*.ts")):
+        rel = str(filepath.relative_to(src_dir)).replace("\\", "/")
+        # Skip test files, backups, and declaration stubs
+        if rel.startswith("__tests__/") or ".bak" in rel:
+            continue
+        # Skip other providers' adapter files
+        if rel.startswith("adapters/") and other_providers:
+            basename = filepath.stem.lower()
+            if any(p in basename for p in other_providers):
+                continue
+        # Skip SSR-only folders for lite bundles
+        if is_lite and any(rel.startswith(d) for d in full_only_dirs):
+            continue
+        try:
+            snapshot[f"{PREFIX}/{rel}"] = filepath.read_text(encoding="utf-8")
+        except (OSError, IOError):
+            continue
+
+    if not snapshot:
+        return None
+
+    # Inject README.md at root
+    bundle_mode = "Full (SSR + Automations)" if not is_lite else "Lite (Automations only)"
+    provider_label = provider.capitalize() if provider else "Unknown"
+    readme = f"""# Frontbase Edge Engine
+
+**Provider**: {provider_label}
+**Bundle**: {bundle_mode}
+**Adapter**: {adapter_type or "automations"}
+
+## Folder Structure
+
+| Folder | Description |
+|:-------|:------------|
+| `adapters/` | Platform entry point — wires the Hono app to the runtime |
+| `engine/` | Core Hono app creation, middleware, route registration |
+| `routes/` | API routes: health, deploy, execute, webhook, executions |
+| `cache/` | Redis/Upstash cache adapter with ICacheProvider interface |
+| `middleware/` | Auth (API key, JWT), rate limiting |
+| `db/` | State provider (SQLite/Turso), datasource adapters |
+| `schemas/` | Zod validation schemas for API payloads |
+| `startup/` | Backend sync on boot (Redis, Turso, JWT settings) |
+| `lib/` | Shared utilities |
+{"| `ssr/` | Server-side page rendering (React/Hono) |" if not is_lite else ""}
+## Data vs Code
+
+This Inspector shows the **engine source code** — how the runtime works.
+
+Published **pages and workflows** are stored in the attached state database
+(SQLite or Turso), not in these source files. They are deployed via the
+`/api/deploy` endpoint and served by the routes defined here.
+"""
+    snapshot[f"{PREFIX}/README.md"] = readme
+
+    return snapshot
+
+
+def write_source_files(files: dict[str, str]) -> int:
+    """Write modified source files to EDGE_DIR/src/.
+
+    Returns count of files written.
+    Strips 'frontbase-edge/' branding prefix if present.
+    Skips README.md (virtual Inspector file, not a real source).
+    Path traversal protection: all resolved paths must stay inside src_dir.
+    """
+    src_dir = EDGE_DIR / "src"
+    if not src_dir.exists():
+        raise HTTPException(500, f"Edge source directory not found: {src_dir}")
+
+    written = 0
+    for rel_path, content in files.items():
+        # Skip virtual README
+        if rel_path.endswith("README.md"):
+            continue
+        # Strip branding prefix
+        clean_path = rel_path
+        if clean_path.startswith("frontbase-edge/"):
+            clean_path = clean_path[len("frontbase-edge/"):]
+        target = (src_dir / clean_path).resolve()
+        # Block path traversal
+        if not str(target).startswith(str(src_dir.resolve())):
+            raise HTTPException(400, f"Path traversal blocked: {rel_path}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        written += 1
+
+    return written
+
+
+def build_worker(adapter_type: str = "automations", provider: str = "cloudflare") -> tuple[str, str]:
+    """Build a provider-specific bundle and return (script_content, bundle_hash).
     
-    In Docker/VPS: delegates to the edge container's /api/build-bundle endpoint.
-    In local dev: runs npx tsup directly (edge source is available locally).
+    Uses PROVIDER_TSUP_CONFIGS to select the correct tsup config and output
+    filename. In Docker/VPS: delegates to edge container. In dev: runs locally.
     """
     is_full = adapter_type == "full"
-    label = "Full" if is_full else "Lite"
+    label = f"{provider.capitalize()} {'Full' if is_full else 'Lite'}"
+
+    # Resolve tsup config + output from the registry
+    config_key = f"{provider}-full" if is_full else provider
+    cfg = PROVIDER_TSUP_CONFIGS.get(config_key)
+    if not cfg:
+        raise HTTPException(400, f"Unknown provider/adapter_type: {config_key}")
+    config_file = cfg["config"]
+    output_file = cfg["output"]
+    dist_file = EDGE_DIR / "dist" / output_file
 
     # --- Strategy 1: Delegate to edge container (Docker/VPS) ---
     edge_url = os.environ.get("EDGE_URL", os.environ.get("EDGE_SSR_URL", ""))
@@ -77,7 +230,7 @@ def build_worker(adapter_type: str = "automations") -> tuple[str, str]:
         try:
             resp = req.post(
                 build_url,
-                json={"adapter_type": adapter_type},
+                json={"adapter_type": adapter_type, "provider": provider},
                 timeout=120 if is_full else 60,
             )
             data = resp.json()
@@ -97,10 +250,6 @@ def build_worker(adapter_type: str = "automations") -> tuple[str, str]:
     # --- Strategy 2: Local build (development) ---
     if not EDGE_DIR.exists():
         raise HTTPException(500, f"Edge service not available for building. EDGE_DIR={EDGE_DIR} does not exist and EDGE_URL is not set.")
-
-    config_file = "tsup.cloudflare.ts" if is_full else "tsup.cloudflare-lite.ts"
-    output_file = "cloudflare.js" if is_full else "cloudflare-lite.js"
-    dist_file = EDGE_DIR / "dist" / output_file
 
     if dist_file.exists():
         dist_file.unlink()

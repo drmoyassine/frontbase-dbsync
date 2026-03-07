@@ -2,7 +2,8 @@
  * ReconfigureEngineDialog
  *
  * Gear icon → dialog that lets users reassign the Edge Database and Edge Cache
- * attached to a deployed engine. Pushes secrets to Cloudflare and flushes target cache.
+ * attached to a deployed engine. For CF engines, pushes secrets via Settings API.
+ * For other providers, triggers a redeploy to push new secrets.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -79,7 +80,7 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
             if (data.settings_patched) {
                 parts.push(`Bindings updated (${data.bindings_set?.length || 0} set, ${data.bindings_removed?.length || 0} removed)`);
             } else if (data.bindings_set?.length === 0 && data.bindings_removed?.length === 0) {
-                parts.push('Local record updated (no remote push — non-Cloudflare engine)');
+                parts.push('Local record updated');
             }
             if (data.cache_flushed) {
                 parts.push('Cache flushed ✓');
@@ -113,7 +114,7 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
                 <DialogHeader>
                     <DialogTitle>Reconfigure "{engine.name}"</DialogTitle>
                     <DialogDescription>
-                        Change the database, cache, and queue attached to this engine. Secrets will be pushed to the remote Worker and its cache will be flushed.
+                        Change the database, cache, and queue attached to this engine. Secrets will be pushed to the remote engine and its cache will be flushed.
                     </DialogDescription>
                 </DialogHeader>
 

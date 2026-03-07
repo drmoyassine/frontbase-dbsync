@@ -5,19 +5,16 @@
  * Serves SSR pages + automation APIs. Static assets (hydrate.js, CSS)
  * are served by Cloudflare Pages CDN.
  * 
- * Build: npm run build:cf
- * Deploy: npm run deploy:cf
- * 
- * Required secrets (set via `wrangler secret put`):
- *   FRONTBASE_STATE_DB_URL   — Turso libsql:// URL
- *   FRONTBASE_STATE_DB_TOKEN — Turso auth token
- *   FRONTBASE_CACHE_URL         — Cache REST URL (optional, for caching)
- *   FRONTBASE_CACHE_TOKEN       — Cache REST token (optional)
+ * CF-specific concerns (kept inline, not in shared.ts):
+ *   - env bridging loop (CF passes env as 2nd arg to fetch)
+ *   - ctx.waitUntil() for non-blocking startup sync
+ *   - setAIBinding(env.AI) for Workers AI binding
  */
 
 import { fullApp } from '../engine/full.js';
 import { runStartupSync } from '../startup/sync.js';
 import { setAIBinding } from '../routes/ai.js';
+import { setPlatform } from './shared.js';
 
 // Cloudflare Workers types (inlined to avoid @cloudflare/workers-types dependency)
 interface CFExecutionContext {
@@ -25,15 +22,11 @@ interface CFExecutionContext {
     passThroughOnException(): void;
 }
 
-// =============================================================================
-// Worker Entry Point
-// =============================================================================
-
 let syncStarted = false;
 
 export default {
     async fetch(request: Request, env: Record<string, any>, ctx: CFExecutionContext): Promise<Response> {
-        // Bridge Cloudflare env bindings → process.env (strings only)
+        // CF-specific: bridge env bindings → process.env
         for (const [key, value] of Object.entries(env)) {
             if (typeof value === 'string') {
                 (globalThis as any).process ??= { env: {} };
@@ -41,14 +34,14 @@ export default {
             }
         }
 
-        (globalThis as any).process.env.FRONTBASE_ADAPTER_PLATFORM = 'cloudflare';
+        setPlatform('cloudflare');                         // Shared
 
-        // Pass CF Workers AI binding (non-string, can't go in process.env)
+        // CF-specific: Workers AI binding
         if (env.AI) {
             setAIBinding(env.AI);
         }
 
-        // Run startup sync once (non-blocking)
+        // CF-specific: ctx.waitUntil for non-blocking startup sync
         if (!syncStarted) {
             syncStarted = true;
             ctx.waitUntil(

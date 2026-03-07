@@ -11,13 +11,23 @@ import {
 } from '@/components/ui/dialog';
 import type { EdgeEngine } from '@/hooks/useEdgeInfrastructure';
 
+const PROVIDER_LABELS: Record<string, string> = {
+    cloudflare: 'Cloudflare',
+    supabase: 'Supabase',
+    vercel: 'Vercel',
+    netlify: 'Netlify',
+    deno: 'Deno Deploy',
+    upstash: 'Upstash',
+};
+
 export function DeleteEngineDialog({ engine, onDelete }: { engine: EdgeEngine; onDelete: (engine: EdgeEngine, alsoDeleteRemote: boolean) => void }) {
     const [open, setOpen] = useState(false);
     const [deleteRemote, setDeleteRemote] = useState(false);
     const [confirmText, setConfirmText] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const isCloudflare = engine.provider === 'cloudflare' || engine.name.toLowerCase().includes('cloudflare');
+    const hasProvider = !!engine.provider && engine.provider !== 'unknown';
+    const providerLabel = PROVIDER_LABELS[engine.provider || ''] || engine.provider || 'provider';
     const engineDisplayName = engine.name;
     const confirmValid = !deleteRemote || confirmText === engineDisplayName;
 
@@ -49,7 +59,7 @@ export function DeleteEngineDialog({ engine, onDelete }: { engine: EdgeEngine; o
                 </DialogHeader>
 
                 <div className="space-y-4 py-2">
-                    {isCloudflare && (
+                    {hasProvider && (
                         <div className="rounded-lg border p-4 space-y-3">
                             <div className="flex items-start space-x-3">
                                 <Checkbox
@@ -59,10 +69,10 @@ export function DeleteEngineDialog({ engine, onDelete }: { engine: EdgeEngine; o
                                 />
                                 <div className="grid gap-1.5 leading-none">
                                     <label htmlFor={`delete-remote-${engine.id}`} className="text-sm font-medium leading-none cursor-pointer">
-                                        Also delete the Worker from Cloudflare
+                                        Also delete from {providerLabel}
                                     </label>
                                     <p className="text-xs text-muted-foreground">
-                                        Permanently removes the <code className="bg-muted px-1 rounded text-[11px]">{engineDisplayName}</code> script from your account.
+                                        Permanently removes the <code className="bg-muted px-1 rounded text-[11px]">{engineDisplayName}</code> deployment from your {providerLabel} account.
                                     </p>
                                 </div>
                             </div>
@@ -72,7 +82,7 @@ export function DeleteEngineDialog({ engine, onDelete }: { engine: EdgeEngine; o
                                     <Alert variant="destructive" className="py-2">
                                         <AlertTriangle className="h-4 w-4" />
                                         <AlertDescription className="text-xs">
-                                            This is <strong>irreversible</strong>. The Worker and all its data will be permanently deleted from Cloudflare.
+                                            This is <strong>irreversible</strong>. The deployment and all its data will be permanently deleted from {providerLabel}.
                                         </AlertDescription>
                                     </Alert>
                                     <div className="space-y-1.5">
@@ -92,7 +102,7 @@ export function DeleteEngineDialog({ engine, onDelete }: { engine: EdgeEngine; o
                         </div>
                     )}
 
-                    {!isCloudflare && (
+                    {!hasProvider && (
                         <p className="text-sm text-muted-foreground">
                             The engine will be removed from Frontbase. You may need to manually clean up the deployment on your provider's dashboard.
                         </p>
@@ -114,3 +124,4 @@ export function DeleteEngineDialog({ engine, onDelete }: { engine: EdgeEngine; o
         </Dialog>
     );
 }
+

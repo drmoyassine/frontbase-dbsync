@@ -30,7 +30,7 @@ let _provider: ICacheProvider | null = null;
 /**
  * Create the initial cache provider from environment variables.
  */
-function createInitialProvider(): ICacheProvider {
+async function createInitialProvider(): Promise<ICacheProvider> {
     const cacheUrl = process.env.FRONTBASE_CACHE_URL;
     const cacheToken = process.env.FRONTBASE_CACHE_TOKEN;
 
@@ -49,9 +49,9 @@ function createInitialProvider(): ICacheProvider {
     if (cacheUrl && !cacheUrl.startsWith('http')) {
         // TCP cache (redis://, rediss://) — Docker/Node.js only
         try {
-            const { initRedis } = require('./redis.js');
+            const { initRedisAsync } = require('./redis.js');
             console.log('🔴 Cache: IoRedis TCP provider');
-            return initRedis({ url: cacheUrl });
+            return await initRedisAsync({ url: cacheUrl });
         } catch {
             console.warn('⚠️ Failed to init IoRedis adapter, falling back to NullCache');
             return new NullCacheProvider();
@@ -62,12 +62,21 @@ function createInitialProvider(): ICacheProvider {
     return new NullCacheProvider();
 }
 
+let _initPromise: Promise<ICacheProvider> | null = null;
+
 /**
  * Get the current cache provider. Lazy-initializes on first access.
  */
 export function getCacheProvider(): ICacheProvider {
     if (!_provider) {
-        _provider = createInitialProvider();
+        // Start async init, return NullCacheProvider until ready
+        if (!_initPromise) {
+            _initPromise = createInitialProvider().then(p => {
+                _provider = p;
+                return p;
+            });
+        }
+        return new NullCacheProvider(); // Temporary until async init completes
     }
     return _provider;
 }

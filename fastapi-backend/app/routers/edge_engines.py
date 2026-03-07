@@ -31,6 +31,7 @@ from ..schemas.edge_engines import (
     EdgeEngineCreate, EdgeEngineUpdate, EdgeEngineResponse,
     TestConnectionResult, ReconfigureRequest,
     BatchRequest, BatchDeleteRequest, BatchToggleRequest, BatchResult,
+    GenericDeployRequest,
 )
 from ..services.bundle import get_source_hash
 from ..services import engine_deploy, engine_test, engine_reconfigure
@@ -153,6 +154,167 @@ async def get_bundle_hashes():
     """Return current source hash for drift detection."""
     source_hash = get_source_hash()
     return {"lite": source_hash, "full": source_hash}
+
+
+# ── Provider-specific URL builders ────────────────────────────────────
+
+def _build_engine_url(provider_type: str, creds: dict, worker_name: str) -> str:
+    """Construct the public URL for a deployed engine by provider type.
+
+    For providers where the URL isn't known until after deploy (e.g. Vercel),
+    a predictable URL is constructed and may be updated after deploy.
+    """
+    if provider_type == "cloudflare":
+        return f"https://{worker_name}.workers.dev"
+    elif provider_type == "supabase":
+        project_ref = creds.get("project_ref", "")
+        return f"https://{project_ref}.supabase.co/functions/v1/{worker_name}"
+    elif provider_type == "vercel":
+        return f"https://{worker_name}.vercel.app"
+    elif provider_type == "netlify":
+        return f"https://{worker_name}.netlify.app"
+    elif provider_type == "deno":
+        return f"https://{worker_name}.deno.dev"
+    elif provider_type == "upstash":
+        return f"https://{worker_name}.upstash.app"
+    return f"https://{worker_name}"
+
+
+PROVIDER_LABELS = {
+    "cloudflare": "Cloudflare",
+    "supabase": "Supabase",
+    "vercel": "Vercel",
+    "netlify": "Netlify",
+    "deno": "Deno Deploy",
+    "upstash": "Upstash",
+}
+
+# ── Provider config key name — stored in engine_config ────────────────
+
+PROVIDER_CONFIG_KEY = {
+    "cloudflare": "worker_name",
+    "supabase": "function_name",
+    "vercel": "project_name",
+    "netlify": "site_name",
+    "deno": "project_name",
+    "upstash": "resource_name",
+}
+
+
+@router.post("/deploy")
+async def deploy_engine(payload: GenericDeployRequest, db: Session = Depends(get_db)):
+    """Provider-agnostic one-click deploy.
+
+    1. Resolve provider type from provider_id
+    2. Construct engine URL + config
+    3. Register EdgeEngine record
+    4. Delegate to engine_deploy.redeploy() (builds bundle + calls provider API)
+    """
+    from ..services.bundle import build_worker
+    from ..models.models import EdgeDatabase
+
+    # --- Resolve provider ---
+    provider = db.query(EdgeProviderAccount).filter(
+        EdgeProviderAccount.id == payload.provider_id
+    ).first()
+    if not provider:
+        raise HTTPException(400, "Provider account not found")
+
+    provider_type = str(provider.provider)
+    if provider_type not in PROVIDER_LABELS:
+        raise HTTPException(400, f"Unsupported provider type: {provider_type}")
+
+    creds = json.loads(str(provider.provider_credentials or "{}"))
+    label = PROVIDER_LABELS[provider_type]
+
+    # --- For CF, delegate to existing /api/cloudflare/deploy (kept for backward compat) ---
+    # The generic endpoint handles all providers including CF.
+
+    # --- Resolve edge IDs (handle '__none__' sentinel) ---
+    edge_db_id = payload.edge_db_id if payload.edge_db_id != "__none__" else None
+    edge_cache_id = payload.edge_cache_id if payload.edge_cache_id != "__none__" else None
+    edge_queue_id = payload.edge_queue_id if payload.edge_queue_id != "__none__" else None
+
+    # Default DB if none specified
+    if not edge_db_id and payload.edge_db_id != "__none__":
+        default_db = db.query(EdgeDatabase).filter(EdgeDatabase.is_default == True).first()  # noqa: E712
+        if default_db:
+            edge_db_id = str(default_db.id)
+
+    # --- Construct engine URL ---
+    engine_url = _build_engine_url(provider_type, creds, payload.worker_name)
+
+    # --- For CF, enable workers.dev subdomain (makes URL routable) ---
+    if provider_type == "cloudflare":
+        from ..services import cloudflare_api
+        account_id = creds.get("account_id")
+        api_token = creds.get("api_token")
+        if not account_id:
+            account_id = await cloudflare_api.detect_account_id(api_token)
+            creds["account_id"] = account_id
+            provider.provider_credentials = json.dumps(creds)  # type: ignore[assignment]
+            db.commit()
+        engine_url = await cloudflare_api.enable_workers_dev(api_token, account_id, payload.worker_name)
+
+    # --- Engine config (provider-specific key name) ---
+    config_key = PROVIDER_CONFIG_KEY.get(provider_type, "worker_name")
+    engine_cfg = json.dumps({config_key: payload.worker_name})
+
+    # --- Create or update engine record ---
+    now = datetime.utcnow().isoformat()
+    existing = db.query(EdgeEngine).filter(EdgeEngine.url == engine_url).first()
+    engine_id = None
+
+    if existing:
+        existing.is_active = True  # type: ignore[assignment]
+        existing.edge_provider_id = payload.provider_id  # type: ignore[assignment]
+        existing.adapter_type = payload.adapter_type  # type: ignore[assignment]
+        existing.edge_db_id = edge_db_id  # type: ignore[assignment]
+        existing.edge_cache_id = edge_cache_id  # type: ignore[assignment]
+        existing.edge_queue_id = edge_queue_id  # type: ignore[assignment]
+        existing.engine_config = engine_cfg  # type: ignore[assignment]
+        existing.updated_at = now  # type: ignore[assignment]
+        engine_id = str(existing.id)
+        db.commit()
+        engine = existing
+    else:
+        engine = EdgeEngine(
+            id=str(uuid.uuid4()),
+            name=f"{label}: {payload.worker_name}",
+            edge_provider_id=payload.provider_id,
+            adapter_type=payload.adapter_type,
+            url=engine_url,
+            edge_db_id=edge_db_id,
+            edge_cache_id=edge_cache_id,
+            edge_queue_id=edge_queue_id,
+            engine_config=engine_cfg,
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(engine)
+        db.commit()
+        db.refresh(engine)
+        engine_id = str(engine.id)
+
+    # --- Deploy via shared engine_deploy.redeploy() ---
+    try:
+        result = await engine_deploy.redeploy(engine, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Deploy failed: {str(e)}")
+
+    return {
+        "success": True,
+        "url": engine_url,
+        "worker_name": payload.worker_name,
+        "engine_id": engine_id,
+        "provider": provider_type,
+        "deploy_result": result,
+    }
 
 
 @router.get("/", response_model=List[EdgeEngineResponse])
@@ -363,7 +525,7 @@ async def sync_manifest(engine_id: str, db: Session = Depends(get_db)):
 @router.delete("/{engine_id}", status_code=204)
 async def delete_edge_engine(
     engine_id: str,
-    delete_remote: bool = Query(False, description="Also delete the remote resource (e.g. CF Worker)"),
+    delete_remote: bool = Query(False, description="Also delete the remote resource"),
     db: Session = Depends(get_db)
 ):
     """Delete an edge engine. Optionally delete the remote resource too."""
@@ -374,13 +536,9 @@ async def delete_edge_engine(
     if engine.is_system:  # type: ignore[truthy-bool]
         raise HTTPException(status_code=403, detail="Cannot delete a system edge engine")
 
-    # Release-Before-IO: extract creds BEFORE slow HTTP call (AGENTS.md §4.3)
-    cf_creds = None
-    if delete_remote and engine.edge_provider and str(engine.edge_provider.provider) == "cloudflare":
-        cf_creds = engine_test.extract_cf_creds(engine)
-
-    if cf_creds:
-        await engine_test.delete_cloudflare_worker_from_creds(cf_creds)
+    # Delete remote resource (works for all providers)
+    if delete_remote and engine.edge_provider_id:
+        await engine_test.delete_remote_resource(engine, db)
 
     db.delete(engine)
     db.commit()
@@ -404,6 +562,76 @@ async def test_edge_engine(engine_id: str, db: Session = Depends(get_db)):
 
 
 # =============================================================================
+# Source Snapshot — serves the pre-compilation source tree for the Inspector
+# =============================================================================
+
+@router.get("/{engine_id}/source")
+async def get_engine_source(engine_id: str, db: Session = Depends(get_db)):
+    """Return the TypeScript source snapshot captured at last deploy.
+
+    Provider-agnostic — works for any engine that has been deployed.
+    """
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if not engine:
+        raise HTTPException(status_code=404, detail="Engine not found")
+    if not engine.source_snapshot:
+        raise HTTPException(
+            status_code=404,
+            detail="No source snapshot — engine may not have been deployed yet"
+        )
+
+    snapshot = json.loads(str(engine.source_snapshot))
+    return {
+        "success": True,
+        "files": snapshot,
+        "file_count": len(snapshot),
+        "total_size": sum(len(v) for v in snapshot.values()),
+    }
+
+
+from ..services.bundle import write_source_files
+
+
+@router.put("/{engine_id}/source")
+async def update_engine_source(engine_id: str, payload: dict, db: Session = Depends(get_db)):
+    """Write modified source files to disk and update the snapshot.
+
+    Payload: { files: { "relative/path.ts": "content", ... } }
+    Only updates the files provided — other snapshot files remain untouched.
+    """
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if not engine:
+        raise HTTPException(status_code=404, detail="Engine not found")
+
+    files = payload.get("files", {})
+    if not files:
+        raise HTTPException(status_code=400, detail="No files to update")
+
+    # Validate paths: .ts only, no path traversal, no absolute paths
+    for path in files:
+        if ".." in path or path.startswith("/") or path.startswith("\\"):
+            raise HTTPException(status_code=400, detail=f"Invalid file path: {path}")
+        if not path.endswith(".ts"):
+            raise HTTPException(status_code=400, detail=f"Only .ts files allowed: {path}")
+
+    # Write to disk (path traversal also checked via resolve())
+    written = write_source_files(files)
+
+    # Merge into existing snapshot
+    existing = json.loads(str(engine.source_snapshot)) if engine.source_snapshot else {}
+    existing.update(files)
+    engine.source_snapshot = json.dumps(existing)  # type: ignore[assignment]
+    engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+    db.commit()
+
+    return {
+        "success": True,
+        "files_written": written,
+        "file_count": len(existing),
+    }
+
+
+# =============================================================================
 # Batch Operations
 # =============================================================================
 
@@ -412,8 +640,8 @@ async def batch_delete_engines(payload: BatchDeleteRequest, db: Session = Depend
     """Batch delete engines. Optionally delete remote resources in parallel via asyncio.gather."""
     result = BatchResult(total=len(payload.engine_ids))
 
-    # Phase 1: extract CF creds BEFORE any I/O (Release-Before-IO)
-    engines_to_delete: list[tuple[EdgeEngine, dict | None]] = []
+    # Phase 1: collect engines to delete
+    engines_to_delete: list[EdgeEngine] = []
     for eid in payload.engine_ids:
         engine = db.query(EdgeEngine).filter(EdgeEngine.id == eid).first()
         if not engine:
@@ -422,34 +650,21 @@ async def batch_delete_engines(payload: BatchDeleteRequest, db: Session = Depend
         if engine.is_system:  # type: ignore[truthy-bool]
             result.failed.append({"id": eid, "error": "Cannot delete system engine"})
             continue
+        engines_to_delete.append(engine)
 
-        cf_creds = None
-        if payload.delete_remote and engine.edge_provider and str(engine.edge_provider.provider) == "cloudflare":
-            try:
-                cf_creds = engine_test.extract_cf_creds(engine)
-            except Exception as e:
-                result.failed.append({"id": eid, "error": f"CF creds error: {e}"})
-                continue
-        engines_to_delete.append((engine, cf_creds))
-
-    # Phase 2: Delete remote resources in parallel
+    # Phase 2: Delete remote resources in parallel (all providers)
     if payload.delete_remote:
-        async def _safe_delete(engine_id: str, creds: dict):
+        async def _safe_delete(eng: EdgeEngine):
             try:
-                await engine_test.delete_cloudflare_worker_from_creds(creds)
+                if eng.edge_provider_id:
+                    await engine_test.delete_remote_resource(eng, db)
             except Exception as e:
-                result.failed.append({"id": engine_id, "error": f"Remote delete failed: {e}"})
+                result.failed.append({"id": str(eng.id), "error": f"Remote delete failed: {e}"})
 
-        tasks = [
-            _safe_delete(str(eng.id), creds)
-            for eng, creds in engines_to_delete
-            if creds
-        ]
-        if tasks:
-            await asyncio.gather(*tasks)
+        await asyncio.gather(*[_safe_delete(eng) for eng in engines_to_delete])
 
     # Phase 3: Delete from DB
-    for engine, _ in engines_to_delete:
+    for engine in engines_to_delete:
         eid = str(engine.id)
         if any(f.get("id") == eid for f in result.failed):
             continue

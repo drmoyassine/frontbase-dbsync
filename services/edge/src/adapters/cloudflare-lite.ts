@@ -7,11 +7,14 @@
  * Bundle: ~200-400 KB (no React, no LiquidJS, no SSR).
  * Routes: health, deploy, execute, webhook, executions, cache, data, import.
  * 
- * Original monolithic version archived as cloudflare-lite.ts.bak
+ * CF-specific concerns (kept inline, not in shared.ts):
+ *   - env bridging loop (CF passes env as 2nd arg to fetch)
+ *   - setAIBinding(env.AI) for Workers AI binding
  */
 
 import { liteApp } from '../engine/lite.js';
 import { setAIBinding } from '../routes/ai.js';
+import { setPlatform } from './shared.js';
 
 // Cloudflare Workers types (inlined to avoid @cloudflare/workers-types dependency)
 interface CFExecutionContext {
@@ -21,7 +24,7 @@ interface CFExecutionContext {
 
 export default {
     async fetch(request: Request, env: Record<string, any>, ctx: CFExecutionContext): Promise<Response> {
-        // Bridge Cloudflare env bindings → process.env for existing code compatibility
+        // CF-specific: bridge env bindings → process.env
         for (const [key, value] of Object.entries(env)) {
             if (typeof value === 'string') {
                 (globalThis as any).process ??= { env: {} };
@@ -29,10 +32,9 @@ export default {
             }
         }
 
-        // Set adapter platform for health endpoint identification
-        (globalThis as any).process.env.FRONTBASE_ADAPTER_PLATFORM = 'cloudflare-lite';
+        setPlatform('cloudflare-lite');                    // Shared
 
-        // Pass CF Workers AI binding (non-string, can't go in process.env)
+        // CF-specific: Workers AI binding (non-string, can't go in process.env)
         if (env.AI) {
             setAIBinding(env.AI);
         }

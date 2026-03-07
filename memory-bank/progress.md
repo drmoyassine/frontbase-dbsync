@@ -3,10 +3,21 @@
 ## 🎯 Current Status: EDGE-NATIVE PLATFORM
 
 **Date**: 2026-03-07  
-**Phase**: AI Inference Gateway & Code Health  
-**Status**: ✅ **ALL SYSTEMS OPERATIONAL — 213+ tests (129 pytest + 74+ edge vitest + 10 frontend)**
+**Phase**: Inspector IDE & Code Health  
+**Status**: ✅ **ALL SYSTEMS OPERATIONAL — 247+ tests (160 pytest + 74+ edge vitest + 13 frontend vitest)**
 
 ## 🏆 Major Achievements
+
+### Inspector IDE & Source Snapshots ✅ (2026-03-07)
+
+- **SOURCE SNAPSHOTS**: `source_snapshot` column on `EdgeEngine` model. `capture_source_snapshot()` in `bundle.py` captures all `.ts` source files on deploy. Provider-agnostic `GET /api/edge-engines/{id}/source` endpoint.
+- **INSPECTOR REFACTOR**: `EdgeInspectorDialog.tsx` 860→260 lines. Decomposed into 6 sub-components: `types.ts`, `InspectorNavPanel.tsx`, `SourceViewer.tsx`, `SecretViewer.tsx`, `SettingsPanel.tsx`, `EndpointsPanel.tsx`.
+- **MONACO EDITOR**: `@monaco-editor/react` — TS syntax highlighting, dark/light theme sync, dirty file indicator.
+- **IDE TOOLBAR**: Save All (PUT to backend, writes `.ts` files to disk), Compile & Deploy (save → redeploy → fresh snapshot).
+- **WRITE-BACK**: `PUT /api/edge-engines/{id}/source` endpoint with path traversal protection (`write_source_files()`).
+- **DIRTY STATE**: Modified files tracked with amber dots in nav panel, unsaved count badge, Modified/Saved status.
+- **TEST FIXES**: Fixed 11 pytest failures (stale test DB schema — `drop_all + create_all` in conftest, `test_edge_gpu.py` fixture migration) + 1 vitest failure (Jest→Vitest migration in `fastapi-integration.test.ts`). **160 pytest / 13 vitest all green.**
+- **Key Files**: `inspector/SourceViewer.tsx`, `EdgeInspectorDialog.tsx`, `inspector/InspectorNavPanel.tsx`, `bundle.py`, `edge_engines.py`
 
 ### Refactoring & Testing Batch ✅ (2026-03-07)
 

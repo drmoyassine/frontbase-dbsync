@@ -4,175 +4,84 @@
  * Provider-agnostic inspector for deployed Edge Engines.
  * Split-pane layout: left panel (file tree + secrets + settings), right panel (Monaco editor / detail view).
  *
- * Currently supports Cloudflare Workers. Extensible to Vercel, Netlify, etc.
+ * Phase 2: Full IDE with dirty state tracking, Save All, and Compile & Deploy.
  */
 
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useMemo, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-    Accordion, AccordionItem, AccordionTrigger, AccordionContent,
-} from '@/components/ui/accordion';
-import {
-    Search, FileCode, Lock, Settings2, ChevronDown, ChevronRight,
-    File, Shield, Globe, Clock, Cpu, Loader2, AlertTriangle, ExternalLink, Zap,
+    Search, Loader2, AlertTriangle, ExternalLink, Save, Rocket, Circle, Check,
 } from 'lucide-react';
 import type { EdgeEngine } from '@/hooks/useEdgeInfrastructure';
 
-const API_BASE = '';
+// Sub-components
+import { InspectorNavPanel } from './inspector/InspectorNavPanel';
+import { SourceViewer } from './inspector/SourceViewer';
+import { SecretViewer } from './inspector/SecretViewer';
+import { SettingsPanel } from './inspector/SettingsPanel';
+import { EndpointsPanel } from './inspector/EndpointsPanel';
+import {
+    type NavSection, type SelectedItem,
+    type SourceSnapshotResponse, type InspectSettingsResponse, type InspectSecretsResponse,
+    API_BASE, PROVIDER_LABELS,
+    extractWorkerName, getWorkerBaseUrl, inspectFetch,
+} from './inspector/types';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-interface InspectContentResponse {
-    success: boolean;
-    content: string;
-    filename: string;
-    size_bytes: number;
-}
-
-interface InspectSettingsResponse {
-    success: boolean;
-    settings: {
-        compatibility_date: string;
-        compatibility_flags: string[];
-        usage_model: string;
-        bindings: Array<{ type: string; name: string;[key: string]: any }>;
-        routes: Array<{ type: string; pattern: string }>;
-        cron_triggers: Array<{ cron: string; created_on?: string }>;
-        placement: Record<string, any>;
-        tail_consumers: any[];
-    };
-}
-
-interface InspectSecretsResponse {
-    success: boolean;
-    secrets: string[];
-}
-
-type NavSection = 'files' | 'secrets' | 'settings';
-type SelectedItem = { section: NavSection; key: string };
+// ─── Props ──────────────────────────────────────────────────────────────────
 
 interface EdgeInspectorDialogProps {
     engine: EdgeEngine;
     providerId: string;
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function formatBytes(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-function extractWorkerName(engine: EdgeEngine): string {
-    // engine_config has { worker_name: "..." }
-    try {
-        const cfg = typeof engine.engine_config === 'string'
-            ? JSON.parse(engine.engine_config)
-            : engine.engine_config;
-        if (cfg?.worker_name) return cfg.worker_name;
-    } catch { /* fallback */ }
-    // Fallback: strip "Cloudflare: " prefix
-    return engine.name.replace(/^(Cloudflare|CF):\s*/i, '').trim();
-}
-
-// ─── Static Endpoint Definitions (baked into the bundle per adapter type) ────
-
-interface EndpointDef {
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-    path: string;
-    description: string;
-    dynamic?: boolean; // True if serves user-published content
-}
-
-const LITE_ENDPOINTS: EndpointDef[] = [
-    { method: 'GET', path: '/api/health', description: 'Health check' },
-    { method: 'GET', path: '/api/openapi.json', description: 'OpenAPI 3.1 spec' },
-    { method: 'GET', path: '/api/docs', description: 'Swagger UI' },
-    { method: 'POST', path: '/api/deploy', description: 'Receive deployment config' },
-    { method: 'POST', path: '/api/execute', description: 'Execute workflow action' },
-    { method: 'POST', path: '/api/webhook/:name', description: 'Incoming webhooks (API key auth)' },
-    { method: 'GET', path: '/api/executions', description: 'List workflow executions' },
-];
-
-const FULL_EXTRA_ENDPOINTS: EndpointDef[] = [
-    { method: 'POST', path: '/api/import', description: 'Receive published pages' },
-    { method: 'POST', path: '/api/data/execute', description: 'Data query proxy (DataRequest)' },
-    { method: 'GET', path: '/api/cache/stats', description: 'Cache statistics' },
-    { method: 'POST', path: '/api/cache/invalidate', description: 'Invalidate cached pages' },
-    { method: 'GET', path: '/:slug', description: 'SSR page rendering', dynamic: true },
-];
-
-function getEndpointsForAdapter(adapterType: string): EndpointDef[] {
-    const isFullAdapter = adapterType === 'full';
-    return isFullAdapter ? [...LITE_ENDPOINTS, ...FULL_EXTRA_ENDPOINTS] : LITE_ENDPOINTS;
-}
-
-function getWorkerBaseUrl(engine: EdgeEngine): string {
-    if (!engine.url) return '';
-    const url = engine.url.startsWith('http') ? engine.url : `https://${engine.url}`;
-    return url.replace(/\/$/, '');
-}
-
-// Extract OpenAPI path info for an endpoint
-function getOpenApiInfo(spec: any, path: string, method: string): { summary?: string; requestBody?: any; responses?: any; parameters?: any } | null {
-    if (!spec?.paths) return null;
-    // Try exact match first, then try with parameter normalization
-    const pathObj = spec.paths[path] || spec.paths[path.replace(/:([\w]+)/g, '{$1}')];
-    if (!pathObj) return null;
-    const op = pathObj[method.toLowerCase()];
-    if (!op) return null;
-    return {
-        summary: op.summary || op.description,
-        requestBody: op.requestBody,
-        responses: op.responses,
-        parameters: op.parameters,
-    };
-}
-
-async function inspectFetch<T>(endpoint: string, providerId: string, workerName: string): Promise<T> {
-    const resp = await fetch(`${API_BASE}/api/cloudflare/inspect/${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider_id: providerId, worker_name: workerName }),
-    });
-    const data = await resp.json();
-    if (!resp.ok || !data.success) throw new Error(data.detail || `Failed to fetch ${endpoint}`);
-    return data;
-}
-
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine, providerId }) => {
     const [open, setOpen] = useState(false);
+    const queryClient = useQueryClient();
 
     // Navigation state
     const [expandedSections, setExpandedSections] = useState<Set<NavSection>>(new Set(['files']));
-    const [selectedItem, setSelectedItem] = useState<SelectedItem>({ section: 'files', key: 'source' });
+    const [selectedItem, setSelectedItem] = useState<SelectedItem>({ section: 'files', key: '' });
+    const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+
+    // Edit state
+    const [dirtyFiles, setDirtyFiles] = useState<Map<string, string>>(new Map());
+    const [saving, setSaving] = useState(false);
+    const [deploying, setDeploying] = useState(false);
+    const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     const workerName = extractWorkerName(engine);
     const cacheKey = `${providerId}:${workerName}`;
+    const isCF = (engine.provider || 'cloudflare') === 'cloudflare';
+    const providerLabel = PROVIDER_LABELS[engine.provider || 'cloudflare'] || engine.provider || 'Provider';
 
-    // ─── Cached queries (only fire when dialog is open) ─────────────────
+    // ─── Source snapshot (provider-agnostic — reads from backend DB) ─────
+
     const {
-        data: content,
-        isLoading: loadingContent,
-        error: contentError,
-    } = useQuery<InspectContentResponse>({
-        queryKey: ['edge-inspector', 'content', cacheKey],
-        queryFn: () => inspectFetch<InspectContentResponse>('content', providerId, workerName),
-        enabled: open && !!providerId,
-        staleTime: 5 * 60 * 1000,  // 5 min cache
+        data: sourceData,
+        isLoading: loadingSource,
+        error: sourceError,
+    } = useQuery<SourceSnapshotResponse>({
+        queryKey: ['edge-inspector', 'source', engine.id],
+        queryFn: async () => {
+            const resp = await fetch(`${API_BASE}/api/edge-engines/${engine.id}/source`);
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.detail || 'No source snapshot available');
+            return data;
+        },
+        enabled: open,
+        staleTime: 5 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,
     });
+
+    // ─── CF-only queries (secrets + settings from CF Management API) ─────
 
     const {
         data: settings,
@@ -180,7 +89,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
     } = useQuery<InspectSettingsResponse>({
         queryKey: ['edge-inspector', 'settings', cacheKey],
         queryFn: () => inspectFetch<InspectSettingsResponse>('settings', providerId, workerName),
-        enabled: open && !!providerId,
+        enabled: open && !!providerId && isCF,
         staleTime: 5 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,
@@ -192,13 +101,13 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
     } = useQuery<InspectSecretsResponse>({
         queryKey: ['edge-inspector', 'secrets', cacheKey],
         queryFn: () => inspectFetch<InspectSecretsResponse>('secrets', providerId, workerName),
-        enabled: open && !!providerId,
+        enabled: open && !!providerId && isCF,
         staleTime: 5 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,
     });
 
-    // Fetch live OpenAPI spec from the worker itself
+    // Fetch live OpenAPI spec from the engine itself (provider-agnostic)
     const workerBaseUrl = getWorkerBaseUrl(engine);
     const { data: openApiSpec } = useQuery<any>({
         queryKey: ['edge-inspector', 'openapi', workerBaseUrl],
@@ -213,7 +122,45 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         refetchOnWindowFocus: false,
     });
 
-    const error = contentError ? (contentError as Error).message : null;
+    const error = sourceError ? (sourceError as Error).message : null;
+
+    // ─── Build file tree from snapshot keys ──────────────────────────────
+
+    const fileTree = useMemo(() => {
+        if (!sourceData?.files) return {};
+        const tree: Record<string, string[]> = {};
+        for (const path of Object.keys(sourceData.files).sort()) {
+            const dir = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '.';
+            (tree[dir] ||= []).push(path);
+        }
+        return tree;
+    }, [sourceData]);
+
+    const fileTreeDirs = useMemo(() => Object.keys(fileTree).sort(), [fileTree]);
+
+    // Auto-select first file when source loads
+    const firstFile = useMemo(() => {
+        if (!sourceData?.files) return '';
+        const keys = Object.keys(sourceData.files).sort();
+        return keys[0] || '';
+    }, [sourceData]);
+
+    React.useEffect(() => {
+        if (firstFile && !selectedItem.key) {
+            setSelectedItem({ section: 'files', key: firstFile });
+            const dir = firstFile.includes('/') ? firstFile.substring(0, firstFile.lastIndexOf('/')) : '.';
+            setExpandedDirs(new Set([dir]));
+        }
+    }, [firstFile]);
+
+    const toggleDir = (dir: string) => {
+        setExpandedDirs(prev => {
+            const next = new Set(prev);
+            if (next.has(dir)) next.delete(dir);
+            else next.add(dir);
+            return next;
+        });
+    };
 
     const toggleSection = (section: NavSection) => {
         setExpandedSections(prev => {
@@ -224,473 +171,152 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         });
     };
 
-    const isSelected = (section: NavSection, key: string) =>
-        selectedItem.section === section && selectedItem.key === key;
+    // ─── Edit handlers ──────────────────────────────────────────────────
 
-    // ─── Left Panel: Navigation Tree ────────────────────────────────────────
+    const onContentChange = useCallback((filePath: string, newContent: string) => {
+        // Only mark dirty if content actually differs from saved snapshot
+        const savedContent = sourceData?.files[filePath];
+        setDirtyFiles(prev => {
+            const next = new Map(prev);
+            if (newContent === savedContent) {
+                next.delete(filePath);
+            } else {
+                next.set(filePath, newContent);
+            }
+            return next;
+        });
+    }, [sourceData]);
 
-    const leftPanel = (
-        <div className="w-[220px] min-w-[220px] border-r border-border flex flex-col bg-muted/30">
-            {/* Header */}
-            <div className="px-3 py-2 border-b border-border">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Inspector</div>
-            </div>
+    const hasDirtyFiles = dirtyFiles.size > 0;
+    const dirtyFileSet = useMemo(() => new Set(dirtyFiles.keys()), [dirtyFiles]);
 
-            <ScrollArea className="flex-1">
-                <div className="py-1">
-                    {/* ── Files Section ─────────────────────────────────── */}
-                    <button
-                        onClick={() => toggleSection('files')}
-                        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                        {expandedSections.has('files') ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                        <FileCode className="h-3.5 w-3.5" />
-                        FILES
-                        {loadingContent && <Loader2 className="h-3 w-3 animate-spin ml-auto" />}
-                    </button>
-                    {expandedSections.has('files') && (
-                        <div className="ml-2">
-                            {content ? (
-                                <button
-                                    onClick={() => setSelectedItem({ section: 'files', key: 'source' })}
-                                    className={`w-full flex items-center gap-2 px-3 py-1 text-xs rounded-md transition-colors ${isSelected('files', 'source')
-                                        ? 'bg-primary/10 text-primary font-medium'
-                                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                                        }`}
-                                >
-                                    <File className="h-3 w-3 shrink-0" />
-                                    <span className="truncate">{content.filename}</span>
-                                    <span className="ml-auto text-[10px] opacity-60">
-                                        {formatBytes(content.size_bytes)}
-                                    </span>
-                                </button>
-                            ) : loadingContent ? (
-                                <div className="px-3 py-1"><Skeleton className="h-4 w-full" /></div>
-                            ) : null}
-                        </div>
-                    )}
+    // ─── Save All ───────────────────────────────────────────────────────
 
-                    {/* ── Secrets Section ───────────────────────────────── */}
-                    <button
-                        onClick={() => toggleSection('secrets')}
-                        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors mt-1"
-                    >
-                        {expandedSections.has('secrets') ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                        <Lock className="h-3.5 w-3.5" />
-                        SECRETS
-                        {secrets && (
-                            <Badge variant="secondary" className="ml-auto text-[10px] h-4 px-1.5">{secrets.secrets.length}</Badge>
-                        )}
-                        {loadingSecrets && <Loader2 className="h-3 w-3 animate-spin ml-auto" />}
-                    </button>
-                    {expandedSections.has('secrets') && (
-                        <div className="ml-2">
-                            {secrets?.secrets.map(name => (
-                                <button
-                                    key={name}
-                                    onClick={() => setSelectedItem({ section: 'secrets', key: name })}
-                                    className={`w-full flex items-center gap-2 px-3 py-1 text-xs rounded-md transition-colors ${isSelected('secrets', name)
-                                        ? 'bg-primary/10 text-primary font-medium'
-                                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                                        }`}
-                                >
-                                    <Shield className="h-3 w-3 shrink-0 text-amber-500" />
-                                    <span className="truncate font-mono">{name}</span>
-                                </button>
-                            ))}
-                            {loadingSecrets && (
-                                <div className="px-3 py-1 space-y-1">
-                                    <Skeleton className="h-4 w-full" />
-                                    <Skeleton className="h-4 w-3/4" />
-                                </div>
-                            )}
-                            {secrets && secrets.secrets.length === 0 && (
-                                <div className="px-3 py-1 text-[10px] text-muted-foreground italic">No secrets deployed</div>
-                            )}
-                        </div>
-                    )}
+    const handleSaveAll = useCallback(async () => {
+        if (dirtyFiles.size === 0) return;
+        setSaving(true);
+        setStatusMessage(null);
+        try {
+            const files = Object.fromEntries(dirtyFiles);
+            const resp = await fetch(`${API_BASE}/api/edge-engines/${engine.id}/source`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ files }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.detail || 'Save failed');
 
-                    {/* ── Settings Section ──────────────────────────────── */}
-                    <button
-                        onClick={() => toggleSection('settings')}
-                        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors mt-1"
-                    >
-                        {expandedSections.has('settings') ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                        <Settings2 className="h-3.5 w-3.5" />
-                        SETTINGS
-                        {loadingSettings && <Loader2 className="h-3 w-3 animate-spin ml-auto" />}
-                    </button>
-                    {expandedSections.has('settings') && settings && (
-                        <div className="ml-2">
-                            {[
-                                { key: 'compatibility', icon: Cpu, label: 'Compatibility' },
-                                { key: 'bindings', icon: Settings2, label: `Bindings (${settings.settings.bindings.length})` },
-                                { key: 'endpoints', icon: Zap, label: `Endpoints (${getEndpointsForAdapter(engine.adapter_type || 'automations').length})` },
-                                { key: 'routes', icon: Globe, label: `Routes (${settings.settings.routes.length})` },
-                                { key: 'crons', icon: Clock, label: `Crons (${settings.settings.cron_triggers.length})` },
-                            ].map(item => (
-                                <button
-                                    key={item.key}
-                                    onClick={() => setSelectedItem({ section: 'settings', key: item.key })}
-                                    className={`w-full flex items-center gap-2 px-3 py-1 text-xs rounded-md transition-colors ${isSelected('settings', item.key)
-                                        ? 'bg-primary/10 text-primary font-medium'
-                                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                                        }`}
-                                >
-                                    <item.icon className="h-3 w-3 shrink-0" />
-                                    <span className="truncate">{item.label}</span>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                    {expandedSections.has('settings') && loadingSettings && (
-                        <div className="ml-2 px-3 py-1 space-y-1">
-                            <Skeleton className="h-4 w-full" />
-                            <Skeleton className="h-4 w-3/4" />
-                            <Skeleton className="h-4 w-5/6" />
-                        </div>
-                    )}
-                </div>
-            </ScrollArea>
-        </div>
-    );
+            setDirtyFiles(new Map());
+            queryClient.invalidateQueries({ queryKey: ['edge-inspector', 'source', engine.id] });
+            setStatusMessage({ type: 'success', text: `Saved ${data.files_written} file(s)` });
+            setTimeout(() => setStatusMessage(null), 3000);
+        } catch (e: any) {
+            setStatusMessage({ type: 'error', text: e.message });
+        } finally {
+            setSaving(false);
+        }
+    }, [dirtyFiles, engine.id, queryClient]);
 
-    // ─── Right Panel: Content Viewer ────────────────────────────────────────
+    // ─── Compile & Deploy ───────────────────────────────────────────────
+
+    const handleCompileAndDeploy = useCallback(async () => {
+        setDeploying(true);
+        setStatusMessage(null);
+        try {
+            // Save first if there are dirty files
+            if (dirtyFiles.size > 0) {
+                const files = Object.fromEntries(dirtyFiles);
+                const saveResp = await fetch(`${API_BASE}/api/edge-engines/${engine.id}/source`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ files }),
+                });
+                if (!saveResp.ok) {
+                    const err = await saveResp.json();
+                    throw new Error(err.detail || 'Save failed before deploy');
+                }
+                setDirtyFiles(new Map());
+            }
+
+            // Trigger redeploy
+            const resp = await fetch(`${API_BASE}/api/edge-engines/${engine.id}/redeploy`, {
+                method: 'POST',
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.detail || 'Deploy failed');
+
+            queryClient.invalidateQueries({ queryKey: ['edge-inspector', 'source', engine.id] });
+            setStatusMessage({ type: 'success', text: `Deployed! hash=${data.source_hash}` });
+            setTimeout(() => setStatusMessage(null), 5000);
+        } catch (e: any) {
+            setStatusMessage({ type: 'error', text: e.message });
+        } finally {
+            setDeploying(false);
+        }
+    }, [dirtyFiles, engine.id, queryClient]);
+
+    // ─── Right Panel: Content Viewer (delegated to sub-components) ───────
 
     const renderRightPanel = () => {
         // Loading state
-        if (selectedItem.section === 'files' && loadingContent) {
+        if (selectedItem.section === 'files' && loadingSource) {
             return (
                 <div className="flex-1 flex items-center justify-center">
                     <div className="text-center space-y-3">
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto" />
-                        <p className="text-sm text-muted-foreground">Fetching worker source...</p>
+                        <p className="text-sm text-muted-foreground">Loading source snapshot...</p>
                     </div>
                 </div>
             );
         }
 
-        // Error
-        if (error) {
+        // Error state
+        if (error && selectedItem.section === 'files') {
             return (
                 <div className="flex-1 flex items-center justify-center">
                     <div className="text-center space-y-3 max-w-sm">
-                        <AlertTriangle className="h-8 w-8 text-destructive mx-auto" />
-                        <p className="text-sm text-destructive">{error}</p>
+                        <AlertTriangle className="h-8 w-8 text-muted-foreground mx-auto" />
+                        <p className="text-sm text-muted-foreground">{error}</p>
+                        <p className="text-xs text-muted-foreground">Deploy or redeploy this engine to capture a source snapshot.</p>
                     </div>
                 </div>
             );
         }
 
-        // ── Source Code View ─────────────────────────────────────────────
-        if (selectedItem.section === 'files' && content) {
+        // Source code editor
+        if (selectedItem.section === 'files' && sourceData && selectedItem.key) {
+            // Use dirty version if available, otherwise snapshot version
+            const fileContent = dirtyFiles.get(selectedItem.key) ?? sourceData.files[selectedItem.key];
+            if (fileContent === undefined) {
+                return (
+                    <div className="flex-1 flex items-center justify-center">
+                        <p className="text-sm text-muted-foreground">Select a file to view</p>
+                    </div>
+                );
+            }
             return (
-                <div className="flex-1 flex flex-col min-w-0">
-                    {/* File header */}
-                    <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/50">
-                        <div className="flex items-center gap-2 text-xs">
-                            <FileCode className="h-3.5 w-3.5 text-blue-400" />
-                            <span className="font-mono font-medium">{content.filename}</span>
-                            <Badge variant="outline" className="text-[10px] h-4">{formatBytes(content.size_bytes)}</Badge>
-                        </div>
-                        <Badge variant="secondary" className="text-[10px]">Read-only</Badge>
-                    </div>
-                    {/* Code content */}
-                    <ScrollArea className="flex-1">
-                        <pre className="p-4 text-xs font-mono leading-relaxed whitespace-pre overflow-x-auto text-foreground/90">
-                            <code>{content.content}</code>
-                        </pre>
-                    </ScrollArea>
-                </div>
+                <SourceViewer
+                    filePath={selectedItem.key}
+                    content={fileContent}
+                    isDirty={dirtyFiles.has(selectedItem.key)}
+                    onContentChange={onContentChange}
+                />
             );
         }
 
-        // ── Secret Detail View ───────────────────────────────────────────
+        // Secret detail
         if (selectedItem.section === 'secrets') {
-            return (
-                <div className="flex-1 flex flex-col min-w-0">
-                    <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/50">
-                        <Shield className="h-3.5 w-3.5 text-amber-500" />
-                        <span className="text-xs font-mono font-medium">{selectedItem.key}</span>
-                    </div>
-                    <div className="p-6 space-y-4">
-                        <div className="p-4 rounded-lg border border-amber-500/20 bg-amber-500/5">
-                            <div className="flex items-center gap-2 mb-2">
-                                <Lock className="h-4 w-4 text-amber-500" />
-                                <span className="text-sm font-medium">Encrypted Secret</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                This secret is encrypted by Cloudflare and its value cannot be retrieved.
-                                Secrets are injected as environment variables at runtime.
-                            </p>
-                            <div className="mt-3 p-2 rounded bg-background border font-mono text-xs">
-                                <span className="text-muted-foreground">Value: </span>
-                                <span className="text-amber-500">•••••••••••••••••</span>
-                            </div>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                            <p>To update this secret, redeploy the engine with new credentials or use the Cloudflare Dashboard.</p>
-                        </div>
-                    </div>
-                </div>
-            );
+            return <SecretViewer secretName={selectedItem.key} providerLabel={providerLabel} />;
         }
 
-        // ── Settings Detail Views ────────────────────────────────────────
+        // Endpoints (provider-agnostic)
+        if (selectedItem.section === 'settings' && selectedItem.key === 'endpoints') {
+            return <EndpointsPanel engine={engine} openApiSpec={openApiSpec} />;
+        }
+
+        // Settings (CF-only)
         if (selectedItem.section === 'settings' && settings) {
-            const s = settings.settings;
-
-            if (selectedItem.key === 'compatibility') {
-                return (
-                    <div className="flex-1 flex flex-col min-w-0">
-                        <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/50">
-                            <Cpu className="h-3.5 w-3.5" />
-                            <span className="text-xs font-medium">Compatibility</span>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="p-3 rounded-lg border bg-card">
-                                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Compatibility Date</div>
-                                    <div className="text-sm font-mono font-medium">{s.compatibility_date}</div>
-                                </div>
-                                <div className="p-3 rounded-lg border bg-card">
-                                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Usage Model</div>
-                                    <div className="text-sm font-mono font-medium capitalize">{s.usage_model}</div>
-                                </div>
-                            </div>
-                            {s.compatibility_flags.length > 0 && (
-                                <div className="p-3 rounded-lg border bg-card">
-                                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Compatibility Flags</div>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {s.compatibility_flags.map(flag => (
-                                            <Badge key={flag} variant="outline" className="text-[10px] font-mono">{flag}</Badge>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                            {Object.keys(s.placement).length > 0 && (
-                                <div className="p-3 rounded-lg border bg-card">
-                                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Smart Placement</div>
-                                    <pre className="text-xs font-mono text-muted-foreground">{JSON.stringify(s.placement, null, 2)}</pre>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                );
-            }
-
-            if (selectedItem.key === 'bindings') {
-                return (
-                    <div className="flex-1 flex flex-col min-w-0">
-                        <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/50">
-                            <Settings2 className="h-3.5 w-3.5" />
-                            <span className="text-xs font-medium">Bindings ({s.bindings.length})</span>
-                        </div>
-                        <ScrollArea className="flex-1">
-                            <div className="p-4 space-y-2">
-                                {s.bindings.length === 0 ? (
-                                    <div className="text-center py-8 text-muted-foreground text-sm">No bindings configured</div>
-                                ) : (
-                                    s.bindings.map((binding, i) => (
-                                        <div key={i} className="p-3 rounded-lg border bg-card flex items-center gap-3">
-                                            <Badge variant="outline" className="text-[10px] font-mono shrink-0 uppercase">{binding.type}</Badge>
-                                            <span className="text-sm font-mono font-medium">{binding.name}</span>
-                                            {binding.namespace_id && (
-                                                <span className="text-[10px] text-muted-foreground font-mono ml-auto truncate max-w-[200px]">{binding.namespace_id}</span>
-                                            )}
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </ScrollArea>
-                    </div>
-                );
-            }
-
-            if (selectedItem.key === 'routes') {
-                return (
-                    <div className="flex-1 flex flex-col min-w-0">
-                        <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/50">
-                            <Globe className="h-3.5 w-3.5" />
-                            <span className="text-xs font-medium">Routes ({s.routes.length})</span>
-                        </div>
-                        <div className="p-4 space-y-2">
-                            {s.routes.length === 0 ? (
-                                <div className="text-center py-8 text-muted-foreground text-sm">No routes configured</div>
-                            ) : (
-                                s.routes.map((route, i) => (
-                                    <div key={i} className="p-3 rounded-lg border bg-card flex items-center gap-3">
-                                        <Badge variant="outline" className="text-[10px] font-mono shrink-0">{route.type}</Badge>
-                                        <a
-                                            href={`https://${route.pattern}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-sm font-mono text-primary hover:underline flex items-center gap-1.5 transition-colors"
-                                        >
-                                            {route.pattern}
-                                            <ExternalLink className="h-3 w-3 opacity-60" />
-                                        </a>
-                                    </div>
-                                ))
-                            )}
-                            <p className="text-[10px] text-muted-foreground italic mt-3">
-                                Routes define how traffic reaches this worker. Add custom domains in the Cloudflare Dashboard.
-                            </p>
-                        </div>
-                    </div>
-                );
-            }
-
-            if (selectedItem.key === 'endpoints') {
-                const endpoints = getEndpointsForAdapter(engine.adapter_type || 'automations');
-                const methodColors: Record<string, string> = {
-                    GET: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20',
-                    POST: 'text-blue-500 bg-blue-500/10 border-blue-500/20',
-                    PUT: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
-                    DELETE: 'text-red-500 bg-red-500/10 border-red-500/20',
-                };
-                return (
-                    <div className="flex-1 flex flex-col min-w-0">
-                        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/50">
-                            <div className="flex items-center gap-2">
-                                <Zap className="h-3.5 w-3.5" />
-                                <span className="text-xs font-medium">Endpoints ({endpoints.length})</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-[10px]">{engine.adapter_type || 'automations'}</Badge>
-                                {workerBaseUrl && (
-                                    <a
-                                        href={`${workerBaseUrl}/api/docs`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-[10px] text-primary hover:underline flex items-center gap-1"
-                                    >
-                                        Swagger UI <ExternalLink className="h-2.5 w-2.5" />
-                                    </a>
-                                )}
-                            </div>
-                        </div>
-                        <ScrollArea className="flex-1">
-                            <Accordion type="multiple" className="px-4 py-2">
-                                {endpoints.map((ep, i) => {
-                                    const oaInfo = openApiSpec ? getOpenApiInfo(openApiSpec, ep.path, ep.method) : null;
-                                    const fullUrl = workerBaseUrl ? `${workerBaseUrl}${ep.path}` : null;
-                                    const isClickable = ep.method === 'GET' && fullUrl && !ep.path.includes(':');
-                                    return (
-                                        <AccordionItem key={i} value={`ep-${i}`} className="border-b-0 mb-1">
-                                            <AccordionTrigger className="py-2 px-2.5 rounded-lg border bg-card hover:bg-accent/50 hover:no-underline [&[data-state=open]]:rounded-b-none">
-                                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                                    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${methodColors[ep.method] || ''}`}>
-                                                        {ep.method}
-                                                    </span>
-                                                    {isClickable ? (
-                                                        <a
-                                                            href={fullUrl}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="text-sm font-mono font-medium text-primary hover:underline flex items-center gap-1"
-                                                            onClick={e => e.stopPropagation()}
-                                                        >
-                                                            {ep.path}
-                                                            <ExternalLink className="h-2.5 w-2.5 opacity-60" />
-                                                        </a>
-                                                    ) : (
-                                                        <span className="text-sm font-mono font-medium">{ep.path}</span>
-                                                    )}
-                                                    {ep.dynamic && <Badge variant="secondary" className="text-[10px] h-4">dynamic</Badge>}
-                                                    <span className="text-[10px] text-muted-foreground ml-auto mr-2 hidden sm:inline">{ep.description}</span>
-                                                </div>
-                                            </AccordionTrigger>
-                                            <AccordionContent className="px-2.5 pb-2.5 border border-t-0 rounded-b-lg bg-card">
-                                                <div className="space-y-3 pt-2">
-                                                    <p className="text-xs text-muted-foreground">{oaInfo?.summary || ep.description}</p>
-                                                    {fullUrl && (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-[10px] text-muted-foreground">URL:</span>
-                                                            <code className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded break-all">{fullUrl}</code>
-                                                        </div>
-                                                    )}
-                                                    {oaInfo?.requestBody && (
-                                                        <div>
-                                                            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Request Body</div>
-                                                            <pre className="text-[10px] font-mono bg-muted p-2 rounded overflow-x-auto max-h-32">
-                                                                {JSON.stringify(
-                                                                    oaInfo.requestBody?.content?.['application/json']?.schema || oaInfo.requestBody,
-                                                                    null, 2
-                                                                )}
-                                                            </pre>
-                                                        </div>
-                                                    )}
-                                                    {oaInfo?.parameters && oaInfo.parameters.length > 0 && (
-                                                        <div>
-                                                            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Parameters</div>
-                                                            <div className="space-y-1">
-                                                                {oaInfo.parameters.map((p: any, j: number) => (
-                                                                    <div key={j} className="flex items-center gap-2 text-[10px]">
-                                                                        <Badge variant="outline" className="text-[9px] h-4">{p.in}</Badge>
-                                                                        <code className="font-mono">{p.name}</code>
-                                                                        {p.required && <span className="text-red-400">*</span>}
-                                                                        <span className="text-muted-foreground">{p.schema?.type || ''}</span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    {oaInfo?.responses && (
-                                                        <div>
-                                                            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Responses</div>
-                                                            <div className="space-y-1">
-                                                                {Object.entries(oaInfo.responses).map(([code, resp]: [string, any]) => (
-                                                                    <div key={code} className="flex items-start gap-2 text-[10px]">
-                                                                        <Badge variant={code.startsWith('2') ? 'default' : 'destructive'} className="text-[9px] h-4 shrink-0">{code}</Badge>
-                                                                        <span className="text-muted-foreground">{resp.description || ''}</span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    {!oaInfo && (
-                                                        <p className="text-[10px] text-muted-foreground italic">No OpenAPI documentation available for this endpoint.</p>
-                                                    )}
-                                                </div>
-                                            </AccordionContent>
-                                        </AccordionItem>
-                                    );
-                                })}
-                            </Accordion>
-                            <div className="px-4 pb-4">
-                                <p className="text-[10px] text-muted-foreground italic">
-                                    Endpoints are baked into the bundle at build time. Publishing pages or automations
-                                    uses existing endpoints — no new routes are created.
-                                </p>
-                            </div>
-                        </ScrollArea>
-                    </div>
-                );
-            }
-
-            if (selectedItem.key === 'crons') {
-                return (
-                    <div className="flex-1 flex flex-col min-w-0">
-                        <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/50">
-                            <Clock className="h-3.5 w-3.5" />
-                            <span className="text-xs font-medium">Cron Triggers ({s.cron_triggers.length})</span>
-                        </div>
-                        <div className="p-4 space-y-2">
-                            {s.cron_triggers.length === 0 ? (
-                                <div className="text-center py-8 text-muted-foreground text-sm">No cron triggers configured</div>
-                            ) : (
-                                s.cron_triggers.map((cron, i) => (
-                                    <div key={i} className="p-3 rounded-lg border bg-card flex items-center gap-3">
-                                        <Clock className="h-4 w-4 text-muted-foreground" />
-                                        <span className="text-sm font-mono font-medium">{cron.cron}</span>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
-                );
-            }
+            return <SettingsPanel settingsKey={selectedItem.key} settings={settings} />;
         }
 
         // Default empty state
@@ -704,7 +330,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         );
     };
 
-    // ─── Dialog ─────────────────────────────────────────────────────────────
+    // ─── Dialog ─────────────────────────────────────────────────────────
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -713,7 +339,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
                     <Search className="h-4 w-4" />
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-[900px] w-[90vw] h-[70vh] max-h-[600px] p-0 gap-0 flex flex-col overflow-hidden">
+            <DialogContent className="max-w-[1100px] w-[92vw] h-[80vh] max-h-[700px] p-0 gap-0 flex flex-col overflow-hidden">
                 {/* Header */}
                 <DialogHeader className="px-4 py-3 border-b border-border shrink-0">
                     <div className="flex items-center justify-between">
@@ -738,12 +364,76 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
                                 )}
                             </div>
                         </div>
+
+                        {/* IDE Toolbar — only show when source is loaded */}
+                        {sourceData && (
+                            <div className="flex items-center gap-2">
+                                {/* Status message */}
+                                {statusMessage && (
+                                    <span className={`text-[10px] ${statusMessage.type === 'success' ? 'text-emerald-500' : 'text-destructive'}`}>
+                                        {statusMessage.type === 'success' && <Check className="h-3 w-3 inline mr-1" />}
+                                        {statusMessage.text}
+                                    </span>
+                                )}
+
+                                {/* Dirty count */}
+                                {hasDirtyFiles && (
+                                    <Badge variant="secondary" className="text-[10px] gap-1">
+                                        <Circle className="h-2 w-2 fill-amber-500 text-amber-500" />
+                                        {dirtyFiles.size} unsaved
+                                    </Badge>
+                                )}
+
+                                {/* Save All */}
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs gap-1.5"
+                                    disabled={!hasDirtyFiles || saving}
+                                    onClick={handleSaveAll}
+                                >
+                                    {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                    Save
+                                </Button>
+
+                                {/* Compile & Deploy */}
+                                <Button
+                                    variant="default"
+                                    size="sm"
+                                    className="h-7 text-xs gap-1.5"
+                                    disabled={deploying}
+                                    onClick={handleCompileAndDeploy}
+                                >
+                                    {deploying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />}
+                                    Compile & Deploy
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 </DialogHeader>
 
                 {/* Split pane */}
                 <div className="flex flex-1 min-h-0 overflow-hidden">
-                    {leftPanel}
+                    <InspectorNavPanel
+                        sourceData={sourceData}
+                        loadingSource={loadingSource}
+                        fileTree={fileTree}
+                        fileTreeDirs={fileTreeDirs}
+                        expandedDirs={expandedDirs}
+                        toggleDir={toggleDir}
+                        secrets={secrets}
+                        loadingSecrets={loadingSecrets}
+                        settings={settings}
+                        loadingSettings={loadingSettings}
+                        isCF={isCF}
+                        providerLabel={providerLabel}
+                        adapterType={engine.adapter_type || 'automations'}
+                        expandedSections={expandedSections}
+                        toggleSection={toggleSection}
+                        selectedItem={selectedItem}
+                        setSelectedItem={setSelectedItem}
+                        dirtyFiles={dirtyFileSet}
+                    />
                     {renderRightPanel()}
                 </div>
             </DialogContent>

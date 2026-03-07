@@ -1,47 +1,34 @@
 /**
  * EdgeCachesForm
  * 
- * CRUD management for named edge cache connections (Upstash, Redis, etc.).
- * Uses a Dialog modal for create/edit — mirrors the EdgeProvidersSection pattern.
+ * List + layout for named edge cache connections (Upstash, Redis, etc.).
+ * Dialog and handlers extracted to EdgeCacheDialog + useEdgeCacheForm.
  */
 
-import React, { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useEdgeCaches, EdgeCache } from '@/hooks/useEdgeInfrastructure';
-import { toast } from 'sonner';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import {
-    Dialog, DialogContent, DialogDescription, DialogFooter,
-    DialogHeader, DialogTitle, DialogTrigger,
-} from '@/components/ui/dialog';
-import {
-    Plus, Trash2, Pencil, Loader2, Check,
-    Star, Shield, Zap, AlertTriangle, Cloud, Server,
+    Trash2, Pencil, Loader2, Star, Shield, Zap, Cloud, Server,
 } from 'lucide-react';
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
     AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { showTestToast, TestResult } from './edgeTestToast';
-
-const API_BASE = '';
+import { useEdgeCacheForm } from '@/hooks/useEdgeCacheForm';
+import { EdgeCacheDialog } from './EdgeCacheDialog';
 
 interface EdgeCachesFormProps {
     withCard?: boolean;
 }
 
-const CACHE_PROVIDER_OPTIONS = [
-    { value: 'upstash', label: 'Upstash Redis', icon: Cloud, placeholder: 'https://xxx.upstash.io' },
-    { value: 'redis', label: 'Self-Hosted Redis', icon: Server, placeholder: 'redis://host:6379' },
-    { value: 'dragonfly', label: 'Dragonfly', icon: Server, placeholder: 'redis://host:6379' },
-];
+const PROVIDER_ICONS: Record<string, React.ElementType> = {
+    upstash: Cloud,
+    redis: Server,
+    dragonfly: Server,
+};
 
 // Cache-specific icon
 const CacheIcon = ({ className }: { className?: string }) => (
@@ -53,154 +40,15 @@ const CacheIcon = ({ className }: { className?: string }) => (
 );
 
 export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false }) => {
-    const queryClient = useQueryClient();
-    const { data: caches = [], isLoading } = useEdgeCaches();
-    const [error, setError] = useState<string | null>(null);
-
-    // Dialog state
-    const [dialogOpen, setDialogOpen] = useState(false);
-    const [editingId, setEditingId] = useState<string | null>(null);
-
-    // Form fields
-    const [selectedProvider, setSelectedProvider] = useState<string>('upstash');
-    const [formName, setFormName] = useState('');
-    const [formUrl, setFormUrl] = useState('');
-    const [formToken, setFormToken] = useState('');
-    const [formIsDefault, setFormIsDefault] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
-
-    // Test connection
-    const [testingId, setTestingId] = useState<string | null>(null);
-
-    // Delete
-    const [deletingId, setDeletingId] = useState<string | null>(null);
-
-    const refetchCaches = () => queryClient.invalidateQueries({ queryKey: ['edge-caches'] });
-
-    const resetForm = () => {
-        setEditingId(null);
-        setSelectedProvider('upstash');
-        setFormName('');
-        setFormUrl('');
-        setFormToken('');
-        setFormIsDefault(false);
-        setError(null);
-    };
-
-    const openCreate = () => {
-        resetForm();
-        setDialogOpen(true);
-    };
-
-    const openEdit = (cache: EdgeCache) => {
-        resetForm();
-        setEditingId(cache.id);
-        setSelectedProvider(cache.provider);
-        setFormName(cache.name);
-        setFormUrl(cache.cache_url);
-        setFormIsDefault(cache.is_default);
-        setDialogOpen(true);
-    };
-
-    // Save (create or update)
-    const handleSave = async () => {
-        setIsSaving(true);
-        setError(null);
-        try {
-            const payload: any = {
-                name: formName,
-                provider: selectedProvider,
-                cache_url: formUrl,
-                is_default: formIsDefault,
-            };
-            if (formToken) payload.cache_token = formToken;
-
-            const url = editingId
-                ? `${API_BASE}/api/edge-caches/${editingId}`
-                : `${API_BASE}/api/edge-caches/`;
-            const method = editingId ? 'PUT' : 'POST';
-
-            const res = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data.detail || `HTTP ${res.status}`);
-            }
-            setDialogOpen(false);
-            resetForm();
-            refetchCaches();
-        } catch (e: any) {
-            setError(e.message);
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    // Delete
-    const handleDelete = async (id: string) => {
-        setDeletingId(id);
-        try {
-            const res = await fetch(`${API_BASE}/api/edge-caches/${id}`, { method: 'DELETE' });
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.detail || `HTTP ${res.status}`);
-            }
-            refetchCaches();
-        } catch (e: any) { setError(e.message); }
-        finally { setDeletingId(null); }
-    };
-
-
-
-    // Test saved cache
-    const handleTest = async (id: string) => {
-        setTestingId(id);
-        try {
-            const res = await fetch(`${API_BASE}/api/edge-caches/${id}/test`, { method: 'POST' });
-            const data: TestResult = await res.json();
-            const cache = caches.find(c => c.id === id);
-            const label = CACHE_PROVIDER_OPTIONS.find(p => p.value === cache?.provider)?.label || 'Cache';
-            showTestToast(data, label);
-        } catch (e: any) {
-            toast.error('Test failed', { description: e.message });
-        } finally { setTestingId(null); }
-    };
-
-    // Test inline (before saving, inside dialog)
-    const handleTestInline = async () => {
-        setTestingId('inline');
-        try {
-            const providerLabel = CACHE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.label || 'Cache';
-
-            if (editingId && !formToken) {
-                const res = await fetch(`${API_BASE}/api/edge-caches/${editingId}/test`, { method: 'POST' });
-                const data: TestResult = await res.json();
-                showTestToast(data, providerLabel);
-            } else {
-                const res = await fetch(`${API_BASE}/api/edge-caches/test-connection`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name: formName || 'Test',
-                        provider: selectedProvider,
-                        cache_url: formUrl,
-                        cache_token: formToken || null,
-                    }),
-                });
-                const data: TestResult = await res.json();
-                showTestToast(data, providerLabel);
-            }
-        } catch (e: any) {
-            toast.error('Test failed', { description: e.message });
-        } finally { setTestingId(null); }
-    };
+    const hook = useEdgeCacheForm();
+    const {
+        caches, isLoading,
+        openEdit, handleDelete, handleTest,
+        testingId, deletingId,
+    } = hook;
 
     const getProviderIcon = (provider: string) => {
-        const opt = CACHE_PROVIDER_OPTIONS.find(p => p.value === provider);
-        const Icon = opt?.icon || CacheIcon;
+        const Icon = PROVIDER_ICONS[provider] || CacheIcon;
         return <Icon className="h-4 w-4" />;
     };
 
@@ -212,131 +60,12 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
         );
     }
 
-    // ─── Modal dialog for create / edit ───
-    const cacheDialog = (
-        <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetForm(); } setDialogOpen(open); }}>
-            <DialogTrigger asChild>
-                <Button size="sm" onClick={openCreate}>
-                    <Plus className="w-4 h-4 mr-2" /> Connect Cache
-                </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>{editingId ? 'Edit Cache' : 'Connect Edge Cache'}</DialogTitle>
-                    <DialogDescription>
-                        {editingId
-                            ? 'Update your cache connection settings.'
-                            : 'Add a new cache connection for your edge deployments.'}
-                    </DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-4 py-4">
-                    {error && (
-                        <Alert variant="destructive">
-                            <AlertTriangle className="h-4 w-4" />
-                            <AlertDescription>{error}</AlertDescription>
-                        </Alert>
-                    )}
-
-                    {/* Provider selector */}
-                    <div className="space-y-2">
-                        <Label>Provider</Label>
-                        <div className="grid grid-cols-3 gap-2">
-                            {CACHE_PROVIDER_OPTIONS.map(opt => {
-                                const Icon = opt.icon;
-                                return (
-                                    <button
-                                        key={opt.value}
-                                        type="button"
-                                        onClick={() => setSelectedProvider(opt.value)}
-                                        className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm transition-colors text-left
-                                            ${selectedProvider === opt.value
-                                                ? 'border-primary bg-primary/5 text-primary'
-                                                : 'border-border hover:bg-accent'
-                                            }`}
-                                    >
-                                        <Icon className="h-4 w-4 shrink-0" />
-                                        <span className="truncate">{opt.label}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Name + URL */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                            <Label>Name</Label>
-                            <Input
-                                placeholder={`e.g. Production ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}`}
-                                value={formName}
-                                onChange={e => setFormName(e.target.value)}
-                            />
-                        </div>
-                        <div className="space-y-1">
-                            <Label>Cache URL</Label>
-                            <Input
-                                placeholder={CACHE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.placeholder}
-                                value={formUrl}
-                                onChange={e => setFormUrl(e.target.value)}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Auth Token */}
-                    <div className="space-y-1">
-                        <Label>Auth Token</Label>
-                        <Input
-                            type="password"
-                            placeholder={editingId ? '(leave blank to keep existing)' : 'Cache auth token'}
-                            value={formToken}
-                            onChange={e => setFormToken(e.target.value)}
-                        />
-                    </div>
-
-                    {/* Default toggle */}
-                    <div className="flex items-center gap-2">
-                        <Switch
-                            id="edge-cache-default-modal"
-                            checked={formIsDefault}
-                            onCheckedChange={setFormIsDefault}
-                        />
-                        <Label htmlFor="edge-cache-default-modal" className="text-sm cursor-pointer">
-                            Set as default cache
-                        </Label>
-                    </div>
-
-                </div>
-
-                <DialogFooter className="gap-2 sm:gap-0">
-                    <Button
-                        variant="outline"
-                        onClick={handleTestInline}
-                        disabled={!formUrl || testingId === 'inline'}
-                    >
-                        {testingId === 'inline' ? (
-                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Testing...</>
-                        ) : (
-                            <><Zap className="mr-2 h-4 w-4" /> Test Connection</>
-                        )}
-                    </Button>
-                    <Button onClick={handleSave} disabled={!formName || !formUrl || isSaving}>
-                        {isSaving ? (
-                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
-                        ) : (
-                            <><Check className="mr-2 h-4 w-4" /> {editingId ? 'Update' : 'Add Cache'}</>
-                        )}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
+    // Dialog receives all hook state/handlers as props
+    const cacheDialog = <EdgeCacheDialog {...hook} />;
 
     // ─── Cache list ───
     const cacheList = (
         <div className="space-y-4">
-
-
             {caches.length === 0 ? (
                 <div className="text-center p-8 border border-dashed rounded-lg bg-muted/20">
                     <CacheIcon className="h-8 w-8 text-muted-foreground mx-auto mb-3 opacity-50" />

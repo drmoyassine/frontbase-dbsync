@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from .crud import serialize_page
-from .publish import get_datasources_for_publish, convert_component
+from app.services.publish_serializer import get_datasources_for_publish, convert_component
 from ...models.models import Page
 from ...database.utils import get_db
 

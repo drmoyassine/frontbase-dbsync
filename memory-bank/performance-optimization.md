@@ -1,7 +1,7 @@
 # Performance & Code Health Optimization Backlog
 
 > Audit date: 2026-03-02
-> Last updated: 2026-03-05
+> Last updated: 2026-03-07
 > Generated from full codebase scan across FastAPI backend, Vite/React frontend, and Hono Edge service.
 
 ---
@@ -82,11 +82,11 @@ Both `cloudflare.py` and `edge_engines.py` now import from `services/bundle.py` 
 | File | Lines | Issue | Proposed Split |
 |------|-------|-------|----------------|
 | `services/sync/adapters/supabase_adapter.py` | **800** | Supabase adapter handles schema introspection, query building, and data fetching in one file | Split into `supabase_schema.py` (introspection), `supabase_query.py` (query builder), `supabase_adapter.py` (thin orchestrator) |
-| `routers/pages/publish.py` | **441** | Mixes `compute_page_hash()`, `convert_to_publish_schema()`, and endpoint handler | Extract `services/page_hash.py` (hash util) and `services/publish_serializer.py` (schema conversion); leave `publish.py` as thin router |
-| `routers/edge_caches.py` | **383** | Mixes CRUD, test endpoints, QStash inline test, and helper functions (`_test_cache`, `_test_upstash`, `_test_qstash`) | Extract `services/cache_tester.py` (test helpers), keep `edge_caches.py` as thin router with CRUD + test endpoints |
+| ~~`routers/pages/publish.py`~~ | ~~**441**~~ → **140** | ~~Mixes `compute_page_hash()`, `convert_to_publish_schema()`, and endpoint handler~~ | ✅ Done (2026-03-07) — `services/page_hash.py` (50L) + `services/publish_serializer.py` (260L) |
+| ~~`routers/edge_caches.py`~~ | ~~**383**~~ → **247** | ~~Mixes CRUD, test endpoints, and helper functions~~ | ✅ Done (2026-03-07) — `services/cache_tester.py` (90L) |
 | `services/css_bundler.py` | **362** | CSS tree-shaking + bundling logic | Review for extraction of Tailwind v4 source-inline logic into separate utility |
 | `middleware/schema_comparison.py` | **339** | Schema diff/comparison engine | Review — may be acceptable if single-concern |
-| `models/models.py` | **303** | All ORM models in one file | Split by domain: `models/page.py`, `models/edge.py`, `models/settings.py` |
+| ~~`models/models.py`~~ | ~~**408**~~ → **30** | ~~All ORM models in one file~~ | ✅ Done (2026-03-07) — `models/auth.py`, `models/sync.py`, `models/edge.py`, `models/page.py` + re-export hub |
 
 ### Frontend (TypeScript/React)
 
@@ -94,7 +94,7 @@ Both `cloudflare.py` and `edge_engines.py` now import from `services/bundle.py` 
 |------|-------|-------|----------------|
 | `lib/workflow/nodeSchemas.ts` | **891** | All workflow node definitions in one file | Group by node category (triggers, actions, conditions) |
 | `components/dashboard/FileBrowser/index.tsx` | **818** | File browser UI + logic in one component | Extract file tree rendering, toolbar, and file actions into subcomponents |
-| `components/dashboard/settings/shared/EdgeCachesForm.tsx` | **635** ⚠️ | Was 434 — grew +201 from modal dialog, QStash .env paste, dual test toast logic. Mixes form state (15+ useState), CRUD handlers, provider selection, QStash env parsing, test logic, and 3 render blocks (dialog, list, card) | Extract: `EdgeCacheDialog.tsx` (modal form + QStash section), `useEdgeCacheForm.ts` (form state + handlers), keep `EdgeCachesForm.tsx` as list + layout |
+| ~~`components/dashboard/settings/shared/EdgeCachesForm.tsx`~~ | ~~**474**~~ → **200** | ~~Form state + CRUD handlers + dialog + list~~ | ✅ Done (2026-03-07) — `EdgeCacheDialog.tsx` (170L) + `useEdgeCacheForm.ts` (180L) |
 | `components/actions/editor/WorkflowEditor.tsx` | **599** | Massive inline JSX toolbar + editor logic | Extract `WorkflowEditorHeader.tsx` and `WorkflowTestStatus.tsx` |
 | `components/builder/data-table/DataColumnConfigurator.tsx` | **489** | Column configuration UI | Extract column type pickers and sorting config into subcomponents |
 | `modules/dbsync/components/dashboard/AutomationsContentPanel.tsx` | **306** | Mixes data fetching, pagination, analytics, and table UI | Extract `AutomationsAnalytics.tsx`, `AutomationsTable.tsx`, and `useAutomationsList.ts` hook |
@@ -167,16 +167,16 @@ Both `cloudflare.py` and `edge_engines.py` now import from `services/bundle.py` 
 | 5 | ~~Extract shared Drizzle schema from providers~~ | 30 min | Prevents future schema drift | ✅ Done (2026-03-05) |
 | 6 | ~~Remove double `stateProvider.init()`~~ | 5 min | Removes redundant DB init | ✅ Done |
 | 7 | ~~Fix migration runner version tracking~~ | 15 min | Prevents phantom migrations | ✅ Done |
-| 8 | Split `publish.py` into router + services | 30 min | AGENTS.md compliance | Pending |
-| 9 | Split `models/models.py` by domain | 45 min | Maintainability | Pending |
+| 8 | ~~Split `publish.py` into router + services~~ | 30 min | AGENTS.md compliance | ✅ Done (2026-03-07) |
+| 9 | ~~Split `models/models.py` by domain~~ | 45 min | Maintainability | ✅ Done (2026-03-07) |
 | 10 | Split `nodeSchemas.ts` by node category | 30 min | Reduces cognitive load | Pending |
 | 11 | Split `FileBrowser/index.tsx` into subcomponents | 1 hr | React best practices | Pending |
 | 12 | Split `runtime.ts` data-fetching logic | 45 min | Separation of concerns | Pending |
 | 13 | Split `WorkflowEditor.tsx` into subcomponents | 45 min | Extracts massive inline toolbars/state | Pending |
 | 14 | Split `AutomationsContentPanel.tsx` into subcomponents | 45 min | Extracts analytics, filters, tables | Pending |
 | 15 | Fix stale `advanced-query` 404 on VPS (no Supabase) | 30 min | Prevents noisy 404s in logs | Low Priority |
-| 16 | **Split `EdgeCachesForm.tsx` (635→~200 + 250 + 150)** | 45 min | Extract `EdgeCacheDialog.tsx`, `useEdgeCacheForm.ts` hook | Pending |
-| 17 | **Extract `edge_caches.py` test helpers (383→~200 + 180)** | 20 min | Move `_test_cache`, `_test_upstash`, `_test_qstash` into `services/cache_tester.py` | Pending |
+| 16 | ~~Split `EdgeCachesForm.tsx` (474→200+170+180)~~ | 45 min | Extract `EdgeCacheDialog.tsx`, `useEdgeCacheForm.ts` | ✅ Done (2026-03-07) |
+| 17 | ~~Extract `edge_caches.py` test helpers (330→247+90)~~ | 20 min | `services/cache_tester.py` | ✅ Done (2026-03-07) |
 
 ### Item 11: Stale `advanced-query` 404 Details
 
@@ -199,15 +199,15 @@ Both `cloudflare.py` and `edge_engines.py` now import from `services/bundle.py` 
 ## 6. Future Test Plan (Prioritized by Risk)
 
 > [!IMPORTANT]
-> Current test coverage: Edge 64, Backend 43, Frontend 10 = **117 total**.
+> Current test coverage: Edge 64, Backend 97, Frontend 10 = **171 total**.
 > The items below are ordered by **risk of silent breakage** × **frequency of change**.
 
 ### 🔴 P0 — Critical (Untested paths that touch production deploys)
 
 | # | Test Area | Codebase | Est. Tests | Why Critical |
 |---|---|---|---|---|
-| 1 | **`edge_engines.py` redeploy** (157 lines) | Backend (pytest) | 8–10 | Dual-mode CF+Docker redeploy, bundle hash comparison, secret injection — **zero test coverage, touches prod infra** |
-| 2 | **`cloudflare.py` deploy** (177 lines) | Backend (pytest) | 8–10 | CF API calls, bundle upload, secret injection, workers.dev toggle — **untested, one wrong header = broken deploy** |
+| 1 | ~~**`engine_deploy.py` redeploy**~~ | Backend (pytest) | 11 | ✅ Done (2026-03-07) — CF/Docker paths, GPU bindings, flush cache, error handling |
+| 2 | ~~**`cloudflare_api.py` deploy**~~ | Backend (pytest) | 19 | ✅ Done (2026-03-07) — headers, creds, upload, secrets (skip-none, timeout→504), delete, enable_workers_dev |
 | 3 | **Publish pipeline** (`pages/publish.py`) | Backend (pytest) | 6–8 | `compute_page_hash`, `convert_to_publish_schema`, fan-out to targets — **if publish breaks, all pages go stale** |
 | 4 | **Edge `/api/import` route** | Edge (vitest) | 4–5 | Import endpoint receives published pages, writes to storage — **if this breaks, no deploys land** |
 
@@ -244,10 +244,10 @@ Both `cloudflare.py` and `edge_engines.py` now import from `services/bundle.py` 
 
 > [!CAUTION]
 > **Stressing items:**
-> - **P0 #1 & #2** (`edge_engines.py` redeploy + `cloudflare.py` deploy) are the **highest risk untested code in the entire codebase**. These functions modify live production infrastructure (CF workers, Docker containers) with zero automated guard rails. A regression here silently breaks all deployments. *(Code now refactored into `services/engine_deploy.py` and `services/cloudflare_api.py` — easier to test.)*
+> - ~~**P0 #1 & #2**~~ — ✅ **Resolved (2026-03-07).** `test_engine_deploy.py` (11 tests) + `test_cloudflare_api.py` (19 tests) now cover all deploy paths, secret injection, error handling. Total backend tests: 97.
 > - **P1 #5** (Pydantic ↔ Zod parity) — initial `test_schema_sync.py` added (5 tests). Covers `PageSchema`, `ColumnSchema`, `EdgeEngine` interface.
 > - ~~**P1 #6** (Drizzle schema consistency)~~ — **Resolved.** Both providers now import from shared `storage/schema.ts`.
 
 ---
 
-*Last updated: 2026-03-05*
+*Last updated: 2026-03-07*

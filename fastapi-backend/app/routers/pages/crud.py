@@ -15,7 +15,7 @@ import httpx
 from ...database.utils import get_db, create_page, update_page, get_page_by_slug, get_current_timestamp
 from ...models.schemas import PageCreateRequest, PageUpdateRequest
 from ...models.models import Page, PageDeployment, EdgeEngine
-from .publish import compute_page_hash
+from app.services.page_hash import compute_page_hash
 from sqlalchemy.orm import joinedload
 import asyncio
 

@@ -42,13 +42,36 @@ fullApp.post('/api/build-bundle', async (c) => {
     const { execSync } = await import('child_process');
     const fs = await import('fs');
 
+    // Provider → tsup config map (mirrors backend bundle.py)
+    const PROVIDER_CONFIGS: Record<string, { config: string; output: string }> = {
+        'cloudflare': { config: 'tsup.cloudflare-lite.ts', output: 'cloudflare-lite.js' },
+        'cloudflare-full': { config: 'tsup.cloudflare.ts', output: 'cloudflare.js' },
+        'supabase': { config: 'tsup.supabase-edge-lite.ts', output: 'supabase-edge-lite.js' },
+        'supabase-full': { config: 'tsup.supabase-edge.ts', output: 'supabase-edge.js' },
+        'upstash': { config: 'tsup.upstash-workflow-lite.ts', output: 'upstash-workflow-lite.js' },
+        'upstash-full': { config: 'tsup.upstash-workflow.ts', output: 'upstash-workflow.js' },
+        'vercel': { config: 'tsup.vercel-edge-lite.ts', output: 'vercel-edge-lite.js' },
+        'vercel-full': { config: 'tsup.vercel-edge.ts', output: 'vercel-edge.js' },
+        'netlify': { config: 'tsup.netlify-edge-lite.ts', output: 'netlify-edge-lite.js' },
+        'netlify-full': { config: 'tsup.netlify-edge.ts', output: 'netlify-edge.js' },
+        'deno': { config: 'tsup.deno-deploy-lite.ts', output: 'deno-deploy-lite.js' },
+        'deno-full': { config: 'tsup.deno-deploy.ts', output: 'deno-deploy.js' },
+    };
+
     try {
         const body = await c.req.json().catch(() => ({}));
         const adapterType = (body as any).adapter_type || 'automations';
+        const provider = (body as any).provider || 'cloudflare';
         const isFull = adapterType === 'full';
-        const configFile = isFull ? 'tsup.cloudflare.ts' : 'tsup.cloudflare-lite.ts';
-        const outputFile = isFull ? 'cloudflare.js' : 'cloudflare-lite.js';
-        const label = isFull ? 'Full' : 'Lite';
+
+        const configKey = isFull ? `${provider}-full` : provider;
+        const cfg = PROVIDER_CONFIGS[configKey];
+        if (!cfg) {
+            return c.json({ success: false, error: `Unknown provider/adapter: ${configKey}` }, 400);
+        }
+
+        const { config: configFile, output: outputFile } = cfg;
+        const label = `${provider.charAt(0).toUpperCase() + provider.slice(1)} ${isFull ? 'Full' : 'Lite'}`;
 
         // Resolve edge root (one level up from dist/)
         const edgeRoot = path.resolve(__dirname, '..');
@@ -57,7 +80,7 @@ fullApp.post('/api/build-bundle', async (c) => {
         // Clean previous build
         if (fs.existsSync(distFile)) fs.unlinkSync(distFile);
 
-        console.log(`[Build] Building ${label} CF bundle in ${edgeRoot}...`);
+        console.log(`[Build] Building ${label} bundle in ${edgeRoot}...`);
         const result = execSync(`npx tsup --config ${configFile}`, {
             cwd: edgeRoot,
             encoding: 'utf-8',

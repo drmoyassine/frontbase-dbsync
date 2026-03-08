@@ -34,9 +34,9 @@ RUN npm install
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
 
-# Copy source + configs for CF bundle building via /api/build-bundle
+# Copy source + configs for bundle building via /api/build-bundle (all providers)
 COPY --from=builder /app/src ./src
-COPY tsup.cloudflare.ts tsup.cloudflare-lite.ts tsconfig.json ./
+COPY tsup.*.ts tsup.shared.ts tsconfig.json ./
 COPY shims ./shims
 
 # Copy drizzle config for migrations (if needed at runtime)

@@ -34,9 +34,10 @@ RUN npm install
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
 
-# Copy source + configs for bundle building via /api/build-bundle (all providers)
+# Copy source + all tsup configs for /api/build-bundle (runtime bundle builds).
+# tsup.{provider}.ts configs import tsup.shared.ts, so all must be present.
 COPY --from=builder /app/src ./src
-COPY tsup.*.ts tsup.shared.ts tsconfig.json ./
+COPY tsup.*.ts tsconfig.json ./
 COPY shims ./shims
 
 # Copy drizzle config for migrations (if needed at runtime)

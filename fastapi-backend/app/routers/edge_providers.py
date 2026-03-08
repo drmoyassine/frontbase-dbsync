@@ -203,7 +203,7 @@ async def test_connection(payload: TestConnectionRequest):
                 return {"success": True, "detail": f"Connected as {name}"}
 
             elif provider == "deno":
-                token = creds.get("api_token", "")
+                token = creds.get("access_token", "")
                 resp = await client.get(
                     "https://api.deno.com/v1/organizations",
                     headers={"Authorization": f"Bearer {token}"},

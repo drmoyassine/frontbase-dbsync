@@ -30,10 +30,13 @@ async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_t
 
     creds = json.loads(str(provider.provider_credentials or '{}'))  # type: ignore[union-attr]
     access_token = creds.get('access_token')
-    project_name = creds.get('project_name')
+
+    # project_name (app slug) is stored in engine_config, not provider credentials
+    engine_cfg = json.loads(str(engine.engine_config or '{}'))
+    project_name = engine_cfg.get('project_name')
 
     if not access_token or not project_name:
-        raise HTTPException(400, "Missing Deno Deploy credentials (access_token, project_name)")
+        raise HTTPException(400, "Missing Deno Deploy credentials (access_token) or project_name in engine config")
 
     script_filename = "deno-deploy.js" if adapter_type == "full" else "deno-deploy-lite.js"
 

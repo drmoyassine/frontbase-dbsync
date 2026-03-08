@@ -73,11 +73,10 @@ const PROVIDER_CONFIGS: Record<string, {
     },
     deno: {
         label: 'Deno Deploy',
-        defaultName: 'Deno Deploy Project',
+        defaultName: 'Deno Deploy Account',
         fields: [
             { key: 'access_token', label: 'Access Token', placeholder: 'ddp_...', type: 'password', required: true },
             { key: 'org_id', label: 'Organization ID', placeholder: 'your-org-id', required: true },
-            { key: 'project_name', label: 'Project Name', placeholder: 'my-frontbase-edge', required: true },
         ],
         helpText: <>Org ID is in your dashboard URL: <code>dash.deno.com/orgs/<b>{'<org-id>'}</b></code>. <a href="https://dash.deno.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Open dashboard →</a></>,
     },
@@ -245,8 +244,8 @@ export function EdgeProvidersSection() {
                         {/* Test connection result */}
                         {testResult && (
                             <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm ${testResult.success
-                                    ? 'bg-green-500/10 text-green-600 dark:text-green-400'
-                                    : 'bg-red-500/10 text-red-600 dark:text-red-400'
+                                ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                                : 'bg-red-500/10 text-red-600 dark:text-red-400'
                                 }`}>
                                 {testResult.success
                                     ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" />

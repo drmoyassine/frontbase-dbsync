@@ -76,9 +76,10 @@ const PROVIDER_CONFIGS: Record<string, {
         defaultName: 'Deno Deploy Project',
         fields: [
             { key: 'access_token', label: 'Access Token', placeholder: 'ddp_...', type: 'password', required: true },
+            { key: 'org_id', label: 'Organization ID', placeholder: 'your-org-id', required: true },
             { key: 'project_name', label: 'Project Name', placeholder: 'my-frontbase-edge', required: true },
         ],
-        helpText: <><a href="https://dash.deno.com/account#access-tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a> Project name from your Deno Deploy dashboard.</>,
+        helpText: <>Org ID is in your dashboard URL: <code>dash.deno.com/orgs/<b>{'<org-id>'}</b></code>. <a href="https://dash.deno.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Open dashboard →</a></>,
     },
 };
 

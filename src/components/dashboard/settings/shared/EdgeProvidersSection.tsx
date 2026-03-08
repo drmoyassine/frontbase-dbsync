@@ -76,9 +76,8 @@ const PROVIDER_CONFIGS: Record<string, {
         defaultName: 'Deno Deploy Account',
         fields: [
             { key: 'access_token', label: 'Organization Token', placeholder: 'ddo_...', type: 'password', required: true },
-            { key: 'org_id', label: 'Organization ID', placeholder: 'your-org-id', required: true },
         ],
-        helpText: <>Create an org token at <code>dash.deno.com/{'<org>'}/~/settings</code>. Org ID is in the URL. <a href="https://dash.deno.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Open dashboard →</a></>,
+        helpText: <>Create an org token at your <a href="https://dash.deno.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Deno Deploy dashboard</a> → Organization Settings.</>,
     },
 };
 

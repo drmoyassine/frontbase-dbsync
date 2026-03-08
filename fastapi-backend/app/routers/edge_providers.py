@@ -204,23 +204,21 @@ async def test_connection(payload: TestConnectionRequest):
 
             elif provider == "deno":
                 token = creds.get("access_token", "")
-                org_id = creds.get("org_id", "")
-                if not token or not org_id:
-                    return {"success": False, "detail": "Both access_token and org_id are required"}
-                # Validate token + org by fetching org info
+                if not token:
+                    return {"success": False, "detail": "Organization token is required"}
+                # Use v2 API — token is org-scoped, no org_id needed
                 resp = await client.get(
-                    f"https://api.deno.com/v1/organizations/{org_id}",
+                    "https://api.deno.com/v2/apps",
                     headers={"Authorization": f"Bearer {token}"},
+                    params={"limit": 1},
                 )
                 if resp.status_code == 401:
                     return {"success": False, "detail": "Invalid Deno Deploy token"}
-                if resp.status_code == 404:
-                    return {"success": False, "detail": f"Organization '{org_id}' not found"}
                 if resp.status_code != 200:
                     return {"success": False, "detail": f"Deno API error: {resp.status_code}"}
-                data = resp.json()
-                name = data.get("name", org_id)
-                return {"success": True, "detail": f"Connected to {name}"}
+                apps = resp.json()
+                count = len(apps) if isinstance(apps, list) else 0
+                return {"success": True, "detail": f"Connected — {count} app(s) found"}
 
             elif provider == "upstash":
                 token = creds.get("api_token", "")

@@ -20,8 +20,9 @@ import { EdgeDatabasesForm } from './settings/shared/EdgeDatabasesForm';
 import { EdgeQueuesForm } from './settings/shared/EdgeQueuesForm';
 import { EdgeEnginesPanel } from './settings/shared/EdgeEnginesPanel';
 import { EdgeAPIKeysForm } from './settings/shared/EdgeAPIKeysForm';
+import { EdgeProvidersSection } from './settings/shared/EdgeProvidersSection';
 
-const VALID_TABS = ['compute', 'database', 'caching', 'queues', 'keys'] as const;
+const VALID_TABS = ['compute', 'database', 'caching', 'queues', 'keys', 'accounts'] as const;
 type EdgeTab = typeof VALID_TABS[number];
 
 export const EdgeInfrastructurePanel: React.FC = () => {
@@ -45,12 +46,13 @@ export const EdgeInfrastructurePanel: React.FC = () => {
             </div>
 
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-5 lg:w-[850px]">
+                <TabsList className="grid w-full grid-cols-6 lg:w-[950px]">
                     <TabsTrigger value="compute">Edge Compute</TabsTrigger>
                     <TabsTrigger value="database">Edge Database</TabsTrigger>
                     <TabsTrigger value="caching">Edge Caching</TabsTrigger>
                     <TabsTrigger value="queues">Edge Queues</TabsTrigger>
                     <TabsTrigger value="keys">API Keys</TabsTrigger>
+                    <TabsTrigger value="accounts">Accounts</TabsTrigger>
                 </TabsList>
 
                 {/* Edge Compute (Engines + AI) Tab */}
@@ -76,6 +78,11 @@ export const EdgeInfrastructurePanel: React.FC = () => {
                 {/* API Keys Tab */}
                 <TabsContent value="keys" className="space-y-6 mt-6">
                     <EdgeAPIKeysForm withCard />
+                </TabsContent>
+
+                {/* Connected Accounts Tab */}
+                <TabsContent value="accounts" className="space-y-6 mt-6">
+                    <EdgeProvidersSection />
                 </TabsContent>
             </Tabs>
         </div>

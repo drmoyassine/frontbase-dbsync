@@ -24,7 +24,8 @@ async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_t
     creds_provider = db.query(EdgeProviderAccount).filter(
         EdgeProviderAccount.id == engine.edge_provider_id
     ).first()
-    creds = json.loads(str(creds_provider.provider_credentials or '{}'))  # type: ignore[union-attr]
+    from ..core.security import decrypt_credentials
+    creds = decrypt_credentials(str(creds_provider.provider_credentials or '{}'))  # type: ignore[union-attr]
 
     if not engine_url:
         raise HTTPException(400, "Missing engine URL for Upstash deploy")

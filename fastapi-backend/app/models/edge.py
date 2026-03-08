@@ -89,7 +89,8 @@ class EdgeProviderAccount(Base):
     id = Column(String, primary_key=True)
     name = Column(String(100), nullable=False)          # "Personal Cloudflare", "My Docker Server"
     provider = Column(String(50), nullable=False)       # "cloudflare", "docker", "vercel", "fastapi"
-    provider_credentials = Column(Text, nullable=True)  # JSON — e.g., {"api_token": "...", "account_id": "..."}
+    provider_credentials = Column(Text, nullable=True)  # JSON — encrypted secrets (api_token, etc.)
+    provider_metadata = Column(Text, nullable=True)      # JSON — non-secret info (account_id, org_name) for UI display
     is_active = Column(Boolean, default=True)
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
@@ -122,6 +123,8 @@ class EdgeEngine(Base):
     last_deployed_at = Column(String, nullable=True)     # ISO timestamp of last successful deploy
     last_synced_at = Column(String, nullable=True)       # ISO timestamp of last drift verification
     source_snapshot = Column(Text, nullable=True)        # JSON — { "path": "content", ... } captured on deploy
+    is_forked = Column(Boolean, default=False)            # True when user has custom files outside frontbase-core/
+    modified_core_files = Column(Text, nullable=True)     # JSON list of frontbase-core/ files user edited
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     

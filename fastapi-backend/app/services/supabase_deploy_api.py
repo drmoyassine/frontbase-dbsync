@@ -27,7 +27,8 @@ async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_t
         EdgeProviderAccount.id == engine.edge_provider_id
     ).first()
 
-    creds = json.loads(str(provider.provider_credentials or '{}'))  # type: ignore[union-attr]
+    from ..core.security import decrypt_credentials
+    creds = decrypt_credentials(str(provider.provider_credentials or '{}'))  # type: ignore[union-attr]
     access_token = creds.get('access_token')
     project_ref = creds.get('project_ref')
     cfg = json.loads(str(engine.engine_config or '{}'))

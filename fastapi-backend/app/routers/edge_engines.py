@@ -84,8 +84,10 @@ def _serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) ->
         sync_status = "synced"  # Assume synced until proven otherwise
 
     # Compute is_outdated by comparing deployed hash against current dist hash
+    # Forked engines are NOT outdated — they have custom code
     is_outdated = False
-    if current_hashes:
+    is_engine_forked = bool(engine.is_forked) if hasattr(engine, 'is_forked') else False
+    if current_hashes and not is_engine_forked:
         adapter = str(engine.adapter_type) if engine.adapter_type else "automations"
         is_full = adapter == "full"
         current_hash = current_hashes.get("full" if is_full else "lite")
@@ -132,6 +134,8 @@ def _serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) ->
         "last_synced_at": last_synced_at_val,
         "sync_status": sync_status,
         "is_outdated": is_outdated,
+        "is_forked": is_engine_forked,
+        "modified_core_files": json.loads(str(engine.modified_core_files)) if getattr(engine, 'modified_core_files', None) else [],
         "created_at": str(engine.created_at),
         "updated_at": str(engine.updated_at),
     }
@@ -224,7 +228,8 @@ async def deploy_engine(payload: GenericDeployRequest, db: Session = Depends(get
     if provider_type not in PROVIDER_LABELS:
         raise HTTPException(400, f"Unsupported provider type: {provider_type}")
 
-    creds = json.loads(str(provider.provider_credentials or "{}"))
+    from ..core.security import decrypt_credentials
+    creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
     label = PROVIDER_LABELS[provider_type]
 
     # --- For CF, delegate to existing /api/cloudflare/deploy (kept for backward compat) ---
@@ -589,15 +594,19 @@ async def get_engine_source(engine_id: str, db: Session = Depends(get_db)):
     }
 
 
-from ..services.bundle import write_source_files
+from ..services.bundle import write_source_files, CORE_PREFIX
 
 
 @router.put("/{engine_id}/source")
 async def update_engine_source(engine_id: str, payload: dict, db: Session = Depends(get_db)):
-    """Write modified source files to disk and update the snapshot.
+    """Save modified source files to the engine's DB snapshot (per-engine isolation).
 
     Payload: { files: { "relative/path.ts": "content", ... } }
     Only updates the files provided — other snapshot files remain untouched.
+
+    Core Zone Convention:
+    - Files under frontbase-core/ are tracked in modified_core_files
+    - Files outside frontbase-core/ set is_forked = True
     """
     engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
     if not engine:
@@ -611,23 +620,42 @@ async def update_engine_source(engine_id: str, payload: dict, db: Session = Depe
     for path in files:
         if ".." in path or path.startswith("/") or path.startswith("\\"):
             raise HTTPException(status_code=400, detail=f"Invalid file path: {path}")
-        if not path.endswith(".ts"):
-            raise HTTPException(status_code=400, detail=f"Only .ts files allowed: {path}")
+        if not (path.endswith(".ts") or path.endswith(".tsx") or path.endswith(".md")):
+            raise HTTPException(status_code=400, detail=f"Only .ts/.tsx/.md files allowed: {path}")
 
-    # Write to disk (path traversal also checked via resolve())
-    written = write_source_files(files)
-
-    # Merge into existing snapshot
+    # Merge into existing snapshot (DB only — no filesystem writes)
     existing = json.loads(str(engine.source_snapshot)) if engine.source_snapshot else {}
     existing.update(files)
     engine.source_snapshot = json.dumps(existing)  # type: ignore[assignment]
+
+    # Track forked state and modified core files
+    core_prefix = f"{CORE_PREFIX}/"
+    modified_core = []
+    has_user_files = False
+    for path in files:
+        if path.startswith(core_prefix):
+            modified_core.append(path)
+        elif not path.endswith("README.md"):
+            has_user_files = True
+
+    # Update forked flag if user added files outside frontbase-core/
+    if has_user_files:
+        engine.is_forked = True  # type: ignore[assignment]
+
+    # Merge modified core files list
+    existing_modified = json.loads(str(engine.modified_core_files)) if engine.modified_core_files else []
+    all_modified = list(set(existing_modified + modified_core))
+    engine.modified_core_files = json.dumps(all_modified) if all_modified else None  # type: ignore[assignment]
+
     engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
     db.commit()
 
     return {
         "success": True,
-        "files_written": written,
+        "files_saved": len(files),
         "file_count": len(existing),
+        "is_forked": bool(engine.is_forked),
+        "modified_core_files": all_modified,
     }
 
 

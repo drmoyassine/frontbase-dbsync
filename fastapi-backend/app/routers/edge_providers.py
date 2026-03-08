@@ -29,9 +29,10 @@ class EdgeProviderAccountResponse(BaseModel):
     name: str
     provider: str
     is_active: bool
+    has_credentials: bool = False
+    provider_metadata: Optional[Dict[str, Any]] = None
     created_at: str
     updated_at: str
-    # Omit provider_credentials from the response for security 
 
     class Config:
         from_attributes = True
@@ -46,29 +47,57 @@ async def list_providers(db: Session = Depends(get_db)):
     providers = db.query(EdgeProviderAccount).order_by(EdgeProviderAccount.created_at.desc()).all()
     return providers
 
-@router.get("/{provider_id}", response_model=EdgeProviderAccountResponse)
+@router.get("/{provider_id}")
 async def get_provider(provider_id: str, db: Session = Depends(get_db)):
     """Get a specific edge provider account."""
+    import json
     provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider account not found")
-    return provider
+    metadata = None
+    if provider.provider_metadata:
+        try:
+            metadata = json.loads(str(provider.provider_metadata))
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return {
+        "id": str(provider.id),
+        "name": str(provider.name),
+        "provider": str(provider.provider),
+        "is_active": bool(provider.is_active),
+        "has_credentials": bool(provider.provider_credentials),
+        "provider_metadata": metadata,
+        "created_at": str(provider.created_at),
+        "updated_at": str(provider.updated_at),
+    }
 
-@router.post("/", response_model=EdgeProviderAccountResponse, status_code=201)
+@router.post("/", status_code=201)
 async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depends(get_db)):
-    """Create and connect a new edge provider account."""
-    # In a real scenario, we'd validate the token here (e.g. call Cloudflare verify API)
+    """Create and connect a new edge provider account.
+    
+    Credentials are encrypted with Fernet AES-256 before storage.
+    Non-secret metadata (account_id, project_ref) is stored separately for UI display.
+    """
+    import json
+    from ..core.security import encrypt_credentials, split_credentials
+    
     now = datetime.datetime.utcnow().isoformat()
     
-    # Store credentials as JSON string
-    import json
-    credentials_str = json.dumps(payload.provider_credentials) if payload.provider_credentials else None
+    credentials_str = None
+    metadata_str = None
+    if payload.provider_credentials:
+        secrets, metadata = split_credentials(payload.provider, payload.provider_credentials)
+        if secrets:
+            credentials_str = encrypt_credentials(secrets)
+        if metadata:
+            metadata_str = json.dumps(metadata)
     
     provider = EdgeProviderAccount(
         id=str(uuid.uuid4()),
         name=payload.name,
         provider=payload.provider,
         provider_credentials=credentials_str,
+        provider_metadata=metadata_str,
         is_active=True,
         created_at=now,
         updated_at=now
@@ -77,11 +106,30 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
     db.add(provider)
     db.commit()
     db.refresh(provider)
-    return provider
+    
+    resp_metadata = None
+    if metadata_str:
+        try:
+            resp_metadata = json.loads(metadata_str)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return {
+        "id": str(provider.id),
+        "name": str(provider.name),
+        "provider": str(provider.provider),
+        "is_active": bool(provider.is_active),
+        "has_credentials": bool(provider.provider_credentials),
+        "provider_metadata": resp_metadata,
+        "created_at": str(provider.created_at),
+        "updated_at": str(provider.updated_at),
+    }
 
-@router.put("/{provider_id}", response_model=EdgeProviderAccountResponse)
+@router.put("/{provider_id}")
 async def update_provider(provider_id: str, payload: EdgeProviderAccountUpdate, db: Session = Depends(get_db)):
-    """Update a provider account."""
+    """Update a provider account. Credentials are re-encrypted on change."""
+    import json
+    from ..core.security import encrypt_credentials, split_credentials
+    
     provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider account not found")
@@ -91,13 +139,32 @@ async def update_provider(provider_id: str, payload: EdgeProviderAccountUpdate, 
     if payload.is_active is not None:
         provider.is_active = payload.is_active  # type: ignore[assignment]
     if payload.provider_credentials is not None:
-        import json
-        provider.provider_credentials = json.dumps(payload.provider_credentials)  # type: ignore[assignment]
+        secrets, metadata = split_credentials(str(provider.provider), payload.provider_credentials)
+        if secrets:
+            provider.provider_credentials = encrypt_credentials(secrets)  # type: ignore[assignment]
+        if metadata:
+            provider.provider_metadata = json.dumps(metadata)  # type: ignore[assignment]
         
     provider.updated_at = datetime.datetime.utcnow().isoformat()  # type: ignore[assignment]
     db.commit()
     db.refresh(provider)
-    return provider
+    
+    resp_metadata = None
+    if provider.provider_metadata:
+        try:
+            resp_metadata = json.loads(str(provider.provider_metadata))
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return {
+        "id": str(provider.id),
+        "name": str(provider.name),
+        "provider": str(provider.provider),
+        "is_active": bool(provider.is_active),
+        "has_credentials": bool(provider.provider_credentials),
+        "provider_metadata": resp_metadata,
+        "created_at": str(provider.created_at),
+        "updated_at": str(provider.updated_at),
+    }
 
 @router.delete("/{provider_id}", status_code=204)
 async def delete_provider(provider_id: str, db: Session = Depends(get_db)):

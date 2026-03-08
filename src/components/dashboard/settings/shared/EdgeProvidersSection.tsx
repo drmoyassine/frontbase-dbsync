@@ -96,6 +96,36 @@ export function EdgeProvidersSection() {
 
     const currentConfig = PROVIDER_CONFIGS[providerType] || PROVIDER_CONFIGS.cloudflare;
 
+    // Re-test state for existing providers
+    const [retestingId, setRetestingId] = useState<string | null>(null);
+    const [retestResults, setRetestResults] = useState<Record<string, { success: boolean; detail: string }>>({});
+
+    const handleRetest = async (providerId: string, providerType: string) => {
+        setRetestingId(providerId);
+        setRetestResults(prev => { const n = { ...prev }; delete n[providerId]; return n; });
+        try {
+            // Fetch provider details to get credentials for re-test
+            const provRes = await fetch(`${API_BASE}/api/edge-providers/${providerId}`);
+            const provData = await provRes.json();
+
+            // Use the test-connection endpoint with stored credentials
+            const res = await fetch(`${API_BASE}/api/edge-providers/test-connection`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider: providerType, credentials: provData.provider_metadata || {} }),
+            });
+            const data = await res.json();
+            setRetestResults(prev => ({ ...prev, [providerId]: data }));
+        } catch (e: any) {
+            setRetestResults(prev => ({
+                ...prev,
+                [providerId]: { success: false, detail: e.message || 'Connection test failed' },
+            }));
+        } finally {
+            setRetestingId(null);
+        }
+    };
+
     const handleProviderChange = (value: string) => {
         setProviderType(value);
         setCredFields({});
@@ -288,6 +318,9 @@ export function EdgeProvidersSection() {
                     <div className="space-y-3">
                         {providers.map(p => {
                             const Icon = PROVIDER_ICONS[p.provider] || Server;
+                            const testState = retestResults[p.id];
+                            const metadata = (p as any).provider_metadata;
+                            const hasCredentials = (p as any).has_credentials;
                             return (
                                 <div key={p.id} className="flex items-center justify-between p-4 border rounded-lg bg-card hover:border-primary/50 transition-colors">
                                     <div className="flex items-center gap-3">
@@ -298,11 +331,45 @@ export function EdgeProvidersSection() {
                                             <div className="flex items-center gap-2">
                                                 <h4 className="font-medium text-sm">{p.name}</h4>
                                                 {p.is_active && <Badge variant="secondary" className="bg-green-500/10 text-green-500 hover:bg-green-500/20">Connected</Badge>}
+                                                {hasCredentials && (
+                                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 gap-0.5 border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+                                                        <Shield className="w-2.5 h-2.5" /> Encrypted
+                                                    </Badge>
+                                                )}
                                             </div>
                                             <p className="text-xs text-muted-foreground capitalize mt-0.5">{p.provider}</p>
+                                            {metadata && Object.keys(metadata).length > 0 && (
+                                                <p className="text-[11px] text-muted-foreground/70 mt-0.5 font-mono">
+                                                    {Object.entries(metadata).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                                                </p>
+                                            )}
+                                            {testState && (
+                                                <div className={`flex items-center gap-1 mt-1 text-[11px] ${testState.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                                    }`}>
+                                                    {testState.success
+                                                        ? <CheckCircle2 className="w-3 h-3" />
+                                                        : <XCircle className="w-3 h-3" />
+                                                    }
+                                                    <span>{testState.detail}</span>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
+                                        {/* Re-test connection */}
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-muted-foreground hover:text-primary"
+                                            disabled={retestingId === p.id}
+                                            onClick={() => handleRetest(p.id, p.provider)}
+                                            title="Test connection"
+                                        >
+                                            {retestingId === p.id
+                                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                                : <Zap className="w-4 h-4" />
+                                            }
+                                        </Button>
                                         {p.provider === 'cloudflare' && p.is_active && (
                                             <ImportCloudflareWorkers providerId={p.id} />
                                         )}

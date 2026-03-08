@@ -34,7 +34,8 @@ def get_provider_credentials(provider_id: str, db: Session) -> tuple[str, str | 
     if not provider:
         raise HTTPException(404, "Cloudflare provider account not found")
         
-    creds = json.loads(str(provider.provider_credentials or "{}"))
+    from ..core.security import decrypt_credentials
+    creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
     if "api_token" not in creds:
         raise HTTPException(400, "Provider account missing api_token")
         

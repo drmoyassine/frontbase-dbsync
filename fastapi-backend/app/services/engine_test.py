@@ -61,7 +61,8 @@ def extract_cf_creds(engine: EdgeEngine) -> dict:
     if not engine.edge_provider or not engine.edge_provider.provider_credentials:
         raise HTTPException(400, "No Cloudflare API token stored on the associated provider account")
 
-    credentials = json.loads(str(engine.edge_provider.provider_credentials))
+    from ..core.security import decrypt_credentials
+    credentials = decrypt_credentials(str(engine.edge_provider.provider_credentials))
     api_token = credentials.get("api_token")
     account_id = credentials.get("account_id")
 
@@ -135,7 +136,8 @@ async def delete_remote_resource(engine: EdgeEngine, db: Session) -> None:
         raise HTTPException(400, "Provider account not found")
 
     provider_type = str(provider.provider)
-    creds = json.loads(str(provider.provider_credentials or "{}"))
+    from ..core.security import decrypt_credentials
+    creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
     cfg = json.loads(str(engine.engine_config or "{}"))
 
     if provider_type == "cloudflare":

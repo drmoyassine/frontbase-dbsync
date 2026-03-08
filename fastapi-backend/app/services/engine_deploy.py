@@ -23,7 +23,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..models.models import EdgeEngine, EdgeProviderAccount
-from ..services.bundle import build_worker, get_source_hash, capture_source_snapshot
+from ..services.bundle import build_worker, build_worker_from_snapshot, get_source_hash, capture_source_snapshot, CORE_PREFIX
 from ..services.secrets_builder import build_engine_secrets
 from ..services import cloudflare_api
 from ..services import supabase_deploy_api
@@ -65,16 +65,32 @@ def _resolve_provider(engine: EdgeEngine, db: Session) -> str:
 async def redeploy(engine: EdgeEngine, db: Session) -> dict:
     """Redeploy an engine with the latest bundle code + current secrets.
     
-    Routes to provider-specific strategy based on engine's provider.
+    Core Zone Convention:
+    - If engine has a customized snapshot (is_forked), build from snapshot in temp dir
+    - Otherwise, build from the shared source tree
     """
     engine_url = str(engine.url).rstrip('/')
     adapter_type = str(engine.adapter_type) if engine.adapter_type is not None else "automations"
     provider = _resolve_provider(engine, db)
 
     try:
-        # 1. Build latest bundle (provider-specific tsup config)
-        script_content, bundle_hash = build_worker(adapter_type, provider=provider)
-        source_hash = get_source_hash() or bundle_hash
+        # Check if engine has a customized snapshot (forked)
+        existing_snapshot = json.loads(str(engine.source_snapshot or '{}')) if engine.source_snapshot else {}
+        is_forked = bool(engine.is_forked) or any(
+            not k.startswith(f"{CORE_PREFIX}/") for k in existing_snapshot if not k.endswith("README.md")
+        )
+
+        if is_forked and existing_snapshot:
+            # Build from engine's isolated snapshot (temp dir)
+            print(f"[Redeploy] Engine '{engine.name}' is forked — building from snapshot")
+            script_content, bundle_hash = build_worker_from_snapshot(
+                existing_snapshot, adapter_type, provider=provider
+            )
+            source_hash = bundle_hash
+        else:
+            # Standard build from shared source tree
+            script_content, bundle_hash = build_worker(adapter_type, provider=provider)
+            source_hash = get_source_hash() or bundle_hash
 
         # 2. Route to provider-specific deployer
         if provider == 'cloudflare':
@@ -90,10 +106,11 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
         engine.last_deployed_at = deployed_at  # type: ignore[assignment]
         engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
 
-        # Capture source snapshot (readable TS files, not compiled JS)
-        snapshot = capture_source_snapshot(provider=provider, adapter_type=adapter_type)
-        if snapshot:
-            engine.source_snapshot = json.dumps(snapshot)  # type: ignore[assignment]
+        # Capture source snapshot for non-forked engines (forked engines keep their snapshot)
+        if not is_forked:
+            snapshot = capture_source_snapshot(provider=provider, adapter_type=adapter_type)
+            if snapshot:
+                engine.source_snapshot = json.dumps(snapshot)  # type: ignore[assignment]
 
         db.commit()
         db.refresh(engine)
@@ -126,7 +143,8 @@ async def _deploy_cloudflare(
         EdgeProviderAccount.id == engine.edge_provider_id
     ).first()
 
-    creds = json.loads(str(provider.provider_credentials or '{}'))  # type: ignore[union-attr]
+    from ..core.security import decrypt_credentials
+    creds = decrypt_credentials(str(provider.provider_credentials or '{}'))  # type: ignore[union-attr]
     api_token = creds.get('api_token')
     account_id = creds.get('account_id')
     cfg = json.loads(str(engine.engine_config or '{}'))

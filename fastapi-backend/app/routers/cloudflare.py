@@ -78,9 +78,10 @@ async def connect_cloudflare(payload: ConnectRequest, db: Session = Depends(get_
             # Save detected account ID back to DB
             provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.provider_id).first()
             if provider:
-                creds = json.loads(str(provider.provider_credentials or "{}"))
+                from ..core.security import decrypt_credentials, encrypt_credentials
+                creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
                 creds["account_id"] = account_id
-                provider.provider_credentials = json.dumps(creds)  # type: ignore[assignment]
+                provider.provider_credentials = encrypt_credentials(creds)  # type: ignore[assignment]
                 db.commit()
 
         # Fetch workers
@@ -118,11 +119,11 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
             account_id = await cloudflare_api.detect_account_id(api_token)
             
             # Save it back to DB
-            provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.provider_id).first()
             if provider:
-                creds = json.loads(str(provider.provider_credentials or "{}"))
+                from ..core.security import decrypt_credentials, encrypt_credentials
+                creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
                 creds["account_id"] = account_id
-                provider.provider_credentials = json.dumps(creds)  # type: ignore[assignment]
+                provider.provider_credentials = encrypt_credentials(creds)  # type: ignore[assignment]
                 db.commit()
 
         # Build & upload Worker

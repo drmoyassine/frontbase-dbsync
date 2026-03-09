@@ -13,19 +13,13 @@ import httpx
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from ..models.models import EdgeEngine, EdgeProviderAccount
+from ..models.models import EdgeEngine
 from ..services.secrets_builder import build_engine_secrets
 
 
 async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_type: str) -> None:
     """Deploy bundle to Upstash (Docker-like: POST to /api/update)."""
     engine_url = str(engine.url).rstrip('/')
-
-    creds_provider = db.query(EdgeProviderAccount).filter(
-        EdgeProviderAccount.id == engine.edge_provider_id
-    ).first()
-    from ..core.security import decrypt_credentials
-    creds = decrypt_credentials(str(creds_provider.provider_credentials or '{}'))  # type: ignore[union-attr]
 
     if not engine_url:
         raise HTTPException(400, "Missing engine URL for Upstash deploy")

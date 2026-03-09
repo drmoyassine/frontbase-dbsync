@@ -33,12 +33,12 @@ def _resolve_cf_credentials(engine: EdgeEngine, db: Session) -> dict | None:
     if not provider or str(provider.provider) != 'cloudflare':
         return None
 
-    from ..core.security import decrypt_credentials
-    creds = decrypt_credentials(str(provider.provider_credentials or '{}'))
+    from ..core.credential_resolver import get_provider_context_by_id
+    ctx = get_provider_context_by_id(db, str(provider_id))
     cfg = json.loads(str(engine.engine_config or '{}'))
 
-    api_token = creds.get('api_token')
-    account_id = creds.get('account_id')
+    api_token = ctx.get('api_token')
+    account_id = ctx.get('account_id')
     worker_name = cfg.get('worker_name')
 
     if not all([api_token, account_id, worker_name]):

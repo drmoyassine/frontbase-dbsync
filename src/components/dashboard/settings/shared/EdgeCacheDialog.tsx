@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { Plus, Loader2, Check, Zap, AlertTriangle, Cloud, Server } from 'lucide-react';
 import { CACHE_PROVIDER_OPTIONS } from '@/hooks/useEdgeCacheForm';
+import { AccountResourcePicker, DiscoveredResource } from './AccountResourcePicker';
 
 const PROVIDER_ICONS: Record<string, React.ElementType> = {
     upstash: Cloud,
@@ -46,6 +47,9 @@ interface EdgeCacheDialogProps {
     resetForm: () => void;
     handleSave: () => void;
     handleTestInline: () => void;
+    // Account link (optional)
+    formAccountId?: string | null;
+    setFormAccountId?: (v: string | null) => void;
 }
 
 export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
@@ -55,6 +59,7 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
     formToken, setFormToken, formIsDefault, setFormIsDefault,
     isSaving, testingId, openCreate, resetForm,
     handleSave, handleTestInline,
+    formAccountId, setFormAccountId,
 }) => {
     return (
         <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetForm(); } setDialogOpen(open); }}>
@@ -105,6 +110,30 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
                             })}
                         </div>
                     </div>
+
+                    {/* Account resource picker — select from Upstash accounts */}
+                    {selectedProvider === 'upstash' && !editingId && setFormAccountId && (
+                        <AccountResourcePicker
+                            compatibleProviders={['upstash']}
+                            resourceTypeFilter="redis"
+                            createResourceType="redis"
+                            label="From Connected Upstash Account"
+                            onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
+                                setFormAccountId(accountId);
+                                if (resource.type === 'redis') {
+                                    if (resource.rest_url) setFormUrl(resource.rest_url);
+                                    else if (resource.endpoint) setFormUrl(`https://${resource.endpoint}`);
+                                    if (resource.rest_token) setFormToken(resource.rest_token);
+                                    if (!formName) setFormName(resource.name || '');
+                                }
+                            }}
+                            onClear={() => {
+                                setFormAccountId(null);
+                                setFormUrl('');
+                                setFormToken('');
+                            }}
+                        />
+                    )}
 
                     {/* Name + URL */}
                     <div className="grid grid-cols-2 gap-3">

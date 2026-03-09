@@ -34,7 +34,8 @@ class NeonAdapter(PostgresAdapter):
         """Build Neon connection string with SSL."""
         # Neon requires SSL
         user = self.datasource.username or ""
-        password = self.datasource.password_encrypted or ""  # TODO: decrypt
+        from app.core.security import decrypt_field
+        password = decrypt_field(self.datasource.password_encrypted) or ""
         host = self.datasource.host
         port = self.datasource.port
         database = self.datasource.database

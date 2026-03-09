@@ -40,7 +40,7 @@ async def create_datasource(
             detail=f"Datasource with name '{data.name}' already exists"
         )
 
-    # TODO: Encrypt password and api_key before storing
+    from app.core.security import encrypt_field
     datasource = Datasource(
         name=data.name,
         type=data.type,
@@ -48,10 +48,10 @@ async def create_datasource(
         port=data.port,
         database=data.database,
         username=data.username,
-        password_encrypted=data.password,  # TODO: encrypt
+        password_encrypted=encrypt_field(data.password),
         api_url=data.api_url,
-        api_key_encrypted=data.api_key,  # Service role key
-        anon_key_encrypted=data.anon_key,  # Anon key
+        api_key_encrypted=encrypt_field(data.api_key),
+        anon_key_encrypted=encrypt_field(data.anon_key),
         table_prefix=data.table_prefix,
         extra_config=json.dumps(data.extra_config) if data.extra_config else None,
     )
@@ -165,11 +165,12 @@ async def update_datasource(
     sensitive_fields = ["host", "port", "database", "username", "password", "connection_uri", "api_url", "api_key"]
     should_reset_test = any(field in update_data for field in sensitive_fields)
     
+    from app.core.security import encrypt_field
     for field, value in update_data.items():
         if field == "password" and value:
-            setattr(datasource, "password_encrypted", value)  # TODO: encrypt
+            setattr(datasource, "password_encrypted", encrypt_field(value))
         elif field == "api_key" and value:
-            setattr(datasource, "api_key_encrypted", value)  # TODO: encrypt
+            setattr(datasource, "api_key_encrypted", encrypt_field(value))
         elif hasattr(datasource, field):
             setattr(datasource, field, value)
             

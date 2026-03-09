@@ -795,37 +795,37 @@ var init_chunk_LLI2WIYN = __esm({
       upstashSyncToken = "";
       hasCredentials;
       retry;
-      constructor(config) {
+      constructor(config2) {
         this.options = {
-          backend: config.options?.backend,
-          agent: config.agent,
-          responseEncoding: config.responseEncoding ?? "base64",
+          backend: config2.options?.backend,
+          agent: config2.agent,
+          responseEncoding: config2.responseEncoding ?? "base64",
           // default to base64
-          cache: config.cache,
-          signal: config.signal,
-          keepAlive: config.keepAlive ?? true
+          cache: config2.cache,
+          signal: config2.signal,
+          keepAlive: config2.keepAlive ?? true
         };
         this.upstashSyncToken = "";
-        this.readYourWrites = config.readYourWrites ?? true;
-        this.baseUrl = (config.baseUrl || "").replace(/\/$/, "");
+        this.readYourWrites = config2.readYourWrites ?? true;
+        this.baseUrl = (config2.baseUrl || "").replace(/\/$/, "");
         const urlRegex = /^https?:\/\/[^\s#$./?].\S*$/;
         if (this.baseUrl && !urlRegex.test(this.baseUrl)) {
           throw new UrlError(this.baseUrl);
         }
         this.headers = {
           "Content-Type": "application/json",
-          ...config.headers
+          ...config2.headers
         };
         this.hasCredentials = Boolean(this.baseUrl && this.headers.authorization.split(" ")[1]);
         if (this.options.responseEncoding === "base64") {
           this.headers["Upstash-Encoding"] = "base64";
         }
-        this.retry = typeof config.retry === "boolean" && !config.retry ? {
+        this.retry = typeof config2.retry === "boolean" && !config2.retry ? {
           attempts: 1,
           backoff: () => 0
         } : {
-          attempts: config.retry?.retries ?? 5,
-          backoff: config.retry?.backoff ?? ((retryCount) => Math.exp(retryCount) * 50)
+          attempts: config2.retry?.retries ?? 5,
+          backoff: config2.retry?.backoff ?? ((retryCount) => Math.exp(retryCount) * 50)
         };
       }
       mergeTelemetry(telemetry) {
@@ -4855,7 +4855,7 @@ var init_nodejs = __esm({
        * The fallback variables provide compatibility with Vercel KV and other platforms
        * that may use different naming conventions.
        */
-      static fromEnv(config) {
+      static fromEnv(config2) {
         if (typeof process !== "object" || !process || typeof process.env !== "object" || !process.env) {
           throw new TypeError(
             '[Upstash Redis] Unable to get environment variables, `process.env` is undefined. If you are deploying to cloudflare, please import from "@upstash/redis/cloudflare" instead'
@@ -4871,7 +4871,7 @@ var init_nodejs = __esm({
             "[Upstash Redis] Unable to find environment variable: `UPSTASH_REDIS_REST_TOKEN`"
           );
         }
-        return new _Redis({ ...config, url, token });
+        return new _Redis({ ...config2, url, token });
       }
     };
   }
@@ -12769,14 +12769,14 @@ var require_cluster = __commonJS({
         const configs = await Promise.all(hostnames.map((this.options.useSRVRecords ? this.resolveSrv : this.dnsLookup).bind(this)));
         const hostnameToConfig = (0, utils_1.zipMap)(hostnames, configs);
         return startupNodes.map((node) => {
-          const config = hostnameToConfig.get(node.host);
-          if (!config) {
+          const config2 = hostnameToConfig.get(node.host);
+          if (!config2) {
             return node;
           }
           if (this.options.useSRVRecords) {
-            return Object.assign({}, node, config);
+            return Object.assign({}, node, config2);
           }
-          return Object.assign({}, node, { host: config });
+          return Object.assign({}, node, { host: config2 });
         });
       }
       createScanStream(command, { key, options = {} }) {
@@ -15139,23 +15139,23 @@ __export(redis_exports, {
   set: () => set,
   testConnection: () => testConnection
 });
-function initRedis(config) {
-  if (config.url.startsWith("http")) {
-    if (!config.token) {
+function initRedis(config2) {
+  if (config2.url.startsWith("http")) {
+    if (!config2.token) {
       throw new Error("Redis Token is required for Upstash HTTP connection");
     }
-    redisInstance = new UpstashAdapter(config.url, config.token);
+    redisInstance = new UpstashAdapter(config2.url, config2.token);
   } else {
     throw new Error("TCP Redis (redis://) requires initRedisAsync(). Use initRedisAsync() for non-HTTP URLs.");
   }
   return redisInstance;
 }
-async function initRedisAsync(config) {
-  if (config.url.startsWith("http")) {
-    return initRedis(config);
+async function initRedisAsync(config2) {
+  if (config2.url.startsWith("http")) {
+    return initRedis(config2);
   }
   const { IoRedisAdapter: IoRedisAdapter2 } = await Promise.resolve().then(() => (init_ioredis_adapter(), ioredis_adapter_exports));
-  redisInstance = new IoRedisAdapter2(config.url);
+  redisInstance = new IoRedisAdapter2(config2.url);
   return redisInstance;
 }
 function getRedis() {
@@ -26385,9 +26385,9 @@ var init_index_es = __esm({
     defaultErrorConfig = {
       withStackTrace: false
     };
-    createNeverThrowError = (message, result, config = defaultErrorConfig) => {
+    createNeverThrowError = (message, result, config2 = defaultErrorConfig) => {
       const data = result.isOk() ? { type: "Ok", value: result.value } : { type: "Err", value: result.error };
-      const maybeStack = config.withStackTrace ? new Error().stack : void 0;
+      const maybeStack = config2.withStackTrace ? new Error().stack : void 0;
       return {
         data,
         message,
@@ -26619,8 +26619,8 @@ var init_index_es = __esm({
       _unsafeUnwrap(_) {
         return this.value;
       }
-      _unsafeUnwrapErr(config) {
-        throw createNeverThrowError("Called `_unsafeUnwrapErr` on an Ok", this, config);
+      _unsafeUnwrapErr(config2) {
+        throw createNeverThrowError("Called `_unsafeUnwrapErr` on an Ok", this, config2);
       }
     };
     Err = class {
@@ -26678,8 +26678,8 @@ var init_index_es = __esm({
           throw new Error("Do not use this generator out of `safeTry`");
         })();
       }
-      _unsafeUnwrap(config) {
-        throw createNeverThrowError("Called `_unsafeUnwrap` on an Err", this, config);
+      _unsafeUnwrap(config2) {
+        throw createNeverThrowError("Called `_unsafeUnwrap` on an Err", this, config2);
       }
       _unsafeUnwrapErr(_) {
         return this.error;
@@ -27156,12 +27156,12 @@ var require_qstash = __commonJS({
     var getReceiverSigningKeys = ({
       environment,
       regionFromHeader,
-      config
+      config: config2
     }) => {
-      if (config?.currentSigningKey && config.nextSigningKey) {
+      if (config2?.currentSigningKey && config2.nextSigningKey) {
         return {
-          currentSigningKey: config.currentSigningKey,
-          nextSigningKey: config.nextSigningKey
+          currentSigningKey: config2.currentSigningKey,
+          nextSigningKey: config2.nextSigningKey
         };
       }
       const regionEnvironment = getRegionFromEnvironment(environment);
@@ -27200,12 +27200,12 @@ var require_qstash = __commonJS({
     };
     var resolveCredentials = ({
       environment,
-      config
+      config: config2
     }) => {
-      if (config?.baseUrl && config.token) {
+      if (config2?.baseUrl && config2.token) {
         return {
-          baseUrl: config.baseUrl,
-          token: config.token
+          baseUrl: config2.baseUrl,
+          token: config2.token
         };
       }
       const region = getRegionFromEnvironment(environment);
@@ -27225,8 +27225,8 @@ var require_qstash = __commonJS({
       }
       const defaultCreds = readClientEnvironmentVariables(environment);
       return {
-        baseUrl: config?.baseUrl ?? defaultCreds.QSTASH_URL ?? DEFAULT_QSTASH_URL,
-        token: config?.token ?? defaultCreds.QSTASH_TOKEN ?? ""
+        baseUrl: config2?.baseUrl ?? defaultCreds.QSTASH_URL ?? DEFAULT_QSTASH_URL,
+        token: config2?.token ?? defaultCreds.QSTASH_TOKEN ?? ""
       };
     };
     var verifyCredentials = (credentials) => {
@@ -27252,9 +27252,9 @@ var require_qstash = __commonJS({
     var Receiver = class {
       currentSigningKey;
       nextSigningKey;
-      constructor(config) {
-        this.currentSigningKey = config?.currentSigningKey;
-        this.nextSigningKey = config?.nextSigningKey;
+      constructor(config2) {
+        this.currentSigningKey = config2?.currentSigningKey;
+        this.nextSigningKey = config2?.nextSigningKey;
       }
       /**
        * Verify the signature of a request.
@@ -27376,19 +27376,19 @@ var require_qstash = __commonJS({
       retry;
       headers;
       telemetryHeaders;
-      constructor(config) {
-        this.baseUrl = config.baseUrl.replace(/\/$/, "");
-        this.authorization = config.authorization;
+      constructor(config2) {
+        this.baseUrl = config2.baseUrl.replace(/\/$/, "");
+        this.authorization = config2.authorization;
         this.retry = // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        typeof config.retry === "boolean" && !config.retry ? {
+        typeof config2.retry === "boolean" && !config2.retry ? {
           attempts: 1,
           backoff: () => 0
         } : {
-          attempts: config.retry?.retries ?? 5,
-          backoff: config.retry?.backoff ?? ((retryCount) => Math.exp(retryCount) * 50)
+          attempts: config2.retry?.retries ?? 5,
+          backoff: config2.retry?.backoff ?? ((retryCount) => Math.exp(retryCount) * 50)
         };
-        this.headers = config.headers;
-        this.telemetryHeaders = config.telemetryHeaders;
+        this.headers = config2.headers;
+        this.telemetryHeaders = config2.telemetryHeaders;
       }
       async request(request) {
         const { response } = await this.requestWithBackoff(request);
@@ -28065,10 +28065,10 @@ var require_qstash = __commonJS({
     var Client2 = class {
       http;
       token;
-      constructor(config) {
+      constructor(config2) {
         const environment = getSafeEnvironment();
-        const { baseUrl, token } = getClientCredentials({ environment, config });
-        const enableTelemetry = environment.UPSTASH_DISABLE_TELEMETRY ? false : config?.enableTelemetry ?? true;
+        const { baseUrl, token } = getClientCredentials({ environment, config: config2 });
+        const enableTelemetry = environment.UPSTASH_DISABLE_TELEMETRY ? false : config2?.enableTelemetry ?? true;
         const isCloudflare = typeof caches !== "undefined" && "default" in caches;
         const telemetryHeaders = new Headers(
           enableTelemetry ? {
@@ -28078,11 +28078,11 @@ var require_qstash = __commonJS({
           } : {}
         );
         this.http = new HttpClient4({
-          retry: config?.retry,
+          retry: config2?.retry,
           baseUrl,
           authorization: `Bearer ${token}`,
           //@ts-expect-error caused by undici and bunjs type overlap
-          headers: prefixHeaders(new Headers(config?.headers ?? {})),
+          headers: prefixHeaders(new Headers(config2?.headers ?? {})),
           //@ts-expect-error caused by undici and bunjs type overlap
           telemetryHeaders
         });
@@ -29439,11 +29439,11 @@ var OpenAPIGenerator = class {
     return responseHeaders;
   }
   getBodyContent(content) {
-    return mapValues(content, (config) => {
-      if (!config || !isAnyZodType(config.schema)) {
-        return config;
+    return mapValues(content, (config2) => {
+      if (!config2 || !isAnyZodType(config2.schema)) {
+        return config2;
       }
-      const { schema: configSchema } = config, rest = __rest(config, ["schema"]);
+      const { schema: configSchema } = config2, rest = __rest(config2, ["schema"]);
       const schema = this.generateSchemaWithRef(configSchema);
       return Object.assign({ schema }, rest);
     });
@@ -29491,9 +29491,9 @@ var OpenApiGeneratorV3 = class {
     const specifics = new OpenApiGeneratorV30Specifics();
     this.generator = new OpenAPIGenerator(definitions, specifics);
   }
-  generateDocument(config) {
+  generateDocument(config2) {
     const baseData = this.generator.generateDocumentData();
-    return Object.assign(Object.assign({}, config), baseData);
+    return Object.assign(Object.assign({}, config2), baseData);
   }
   generateComponents() {
     return this.generator.generateComponents();
@@ -29550,10 +29550,10 @@ var OpenApiGeneratorV31 = class {
     const specifics = new OpenApiGeneratorV31Specifics();
     this.generator = new OpenAPIGenerator(this.definitions, specifics);
   }
-  generateDocument(config) {
+  generateDocument(config2) {
     const baseDocument = this.generator.generateDocumentData();
     this.definitions.filter(isWebhookDefinition).forEach((definition) => this.generateSingleWebhook(definition.webhook));
-    return Object.assign(Object.assign(Object.assign({}, config), baseDocument), { webhooks: this.webhookRefs });
+    return Object.assign(Object.assign(Object.assign({}, config2), baseDocument), { webhooks: this.webhookRefs });
   }
   generateComponents() {
     return this.generator.generateComponents();
@@ -36008,21 +36008,21 @@ var OpenAPIHono = class _OpenAPIHono extends Hono2 {
     );
     return this;
   };
-  getOpenAPIDocument = (config) => {
+  getOpenAPIDocument = (config2) => {
     const generator = new OpenApiGeneratorV3(this.openAPIRegistry.definitions);
-    const document2 = generator.generateDocument(config);
+    const document2 = generator.generateDocument(config2);
     return this._basePath ? addBasePathToDocument(document2, this._basePath) : document2;
   };
-  getOpenAPI31Document = (config) => {
+  getOpenAPI31Document = (config2) => {
     const generator = new OpenApiGeneratorV31(this.openAPIRegistry.definitions);
-    const document2 = generator.generateDocument(config);
+    const document2 = generator.generateDocument(config2);
     return this._basePath ? addBasePathToDocument(document2, this._basePath) : document2;
   };
   doc = (path, configure) => {
     return this.get(path, (c) => {
-      const config = typeof configure === "function" ? configure(c) : configure;
+      const config2 = typeof configure === "function" ? configure(c) : configure;
       try {
-        const document2 = this.getOpenAPIDocument(config);
+        const document2 = this.getOpenAPIDocument(config2);
         return c.json(document2);
       } catch (e) {
         return c.json(e, 500);
@@ -36031,9 +36031,9 @@ var OpenAPIHono = class _OpenAPIHono extends Hono2 {
   };
   doc31 = (path, configure) => {
     return this.get(path, (c) => {
-      const config = typeof configure === "function" ? configure(c) : configure;
+      const config2 = typeof configure === "function" ? configure(c) : configure;
       try {
-        const document2 = this.getOpenAPI31Document(config);
+        const document2 = this.getOpenAPI31Document(config2);
         return c.json(document2);
       } catch (e) {
         return c.json(e, 500);
@@ -36768,14 +36768,14 @@ var getTime = () => {
   }
   return Date.now();
 };
-var timing = (config) => {
+var timing = (config2) => {
   const options = {
     total: true,
     enabled: true,
     totalDescription: "Total Response Time",
     autoEnd: true,
     crossOrigin: false,
-    ...config
+    ...config2
   };
   return async function timing2(c, next) {
     const headers = [];
@@ -41477,15 +41477,6 @@ healthRoute.openapi(route, (c) => {
     timestamp: (/* @__PURE__ */ new Date()).toISOString()
   });
 });
-
-// src/routes/ai.ts
-var _aiBinding = null;
-function setAIBinding(ai) {
-  _aiBinding = ai;
-}
-function getAIBinding() {
-  return _aiBinding;
-}
 var _gpuModels = [];
 function getGPUModels() {
   if (_gpuModels.length === 0) {
@@ -41898,11 +41889,11 @@ function valueToJson(value) {
 
 // node_modules/@libsql/core/lib-esm/config.js
 var inMemoryMode = ":memory:";
-function expandConfig(config, preferHttp) {
-  if (typeof config !== "object") {
-    throw new TypeError(`Expected client configuration as object, got ${typeof config}`);
+function expandConfig(config2, preferHttp) {
+  if (typeof config2 !== "object") {
+    throw new TypeError(`Expected client configuration as object, got ${typeof config2}`);
   }
-  let { url, authToken, tls, intMode, concurrency } = config;
+  let { url, authToken, tls, intMode, concurrency } = config2;
   concurrency = Math.max(0, concurrency || 20);
   intMode ??= "number";
   let connectionQueryParams = [];
@@ -41979,9 +41970,9 @@ function expandConfig(config, preferHttp) {
       path,
       intMode,
       concurrency,
-      syncUrl: config.syncUrl,
-      syncInterval: config.syncInterval,
-      fetch: config.fetch,
+      syncUrl: config2.syncUrl,
+      syncInterval: config2.syncInterval,
+      fetch: config2.fetch,
       authToken: void 0,
       encryptionKey: void 0,
       authority: void 0
@@ -41995,10 +41986,10 @@ function expandConfig(config, preferHttp) {
     authToken,
     intMode,
     concurrency,
-    encryptionKey: config.encryptionKey,
-    syncUrl: config.syncUrl,
-    syncInterval: config.syncInterval,
-    fetch: config.fetch
+    encryptionKey: config2.encryptionKey,
+    syncUrl: config2.syncUrl,
+    syncInterval: config2.syncInterval,
+    fetch: config2.fetch
   };
 }
 
@@ -45674,31 +45665,31 @@ var Lru = class {
 
 // node_modules/@libsql/client/lib-esm/ws.js
 var import_promise_limit = __toESM(require_promise_limit());
-function _createClient(config) {
-  if (config.scheme !== "wss" && config.scheme !== "ws") {
-    throw new LibsqlError(`The WebSocket client supports only "libsql:", "wss:" and "ws:" URLs, got ${JSON.stringify(config.scheme + ":")}. For more information, please read ${supportedUrlLink}`, "URL_SCHEME_NOT_SUPPORTED");
+function _createClient(config2) {
+  if (config2.scheme !== "wss" && config2.scheme !== "ws") {
+    throw new LibsqlError(`The WebSocket client supports only "libsql:", "wss:" and "ws:" URLs, got ${JSON.stringify(config2.scheme + ":")}. For more information, please read ${supportedUrlLink}`, "URL_SCHEME_NOT_SUPPORTED");
   }
-  if (config.encryptionKey !== void 0) {
+  if (config2.encryptionKey !== void 0) {
     throw new LibsqlError("Encryption key is not supported by the remote client.", "ENCRYPTION_KEY_NOT_SUPPORTED");
   }
-  if (config.scheme === "ws" && config.tls) {
+  if (config2.scheme === "ws" && config2.tls) {
     throw new LibsqlError(`A "ws:" URL cannot opt into TLS by using ?tls=1`, "URL_INVALID");
-  } else if (config.scheme === "wss" && !config.tls) {
+  } else if (config2.scheme === "wss" && !config2.tls) {
     throw new LibsqlError(`A "wss:" URL cannot opt out of TLS by using ?tls=0`, "URL_INVALID");
   }
-  const url = encodeBaseUrl(config.scheme, config.authority, config.path);
+  const url = encodeBaseUrl(config2.scheme, config2.authority, config2.path);
   let client;
   try {
-    client = openWs(url, config.authToken);
+    client = openWs(url, config2.authToken);
   } catch (e) {
     if (e instanceof WebSocketUnsupportedError) {
-      const suggestedScheme = config.scheme === "wss" ? "https" : "http";
-      const suggestedUrl = encodeBaseUrl(suggestedScheme, config.authority, config.path);
+      const suggestedScheme = config2.scheme === "wss" ? "https" : "http";
+      const suggestedUrl = encodeBaseUrl(suggestedScheme, config2.authority, config2.path);
       throw new LibsqlError(`This environment does not support WebSockets, please switch to the HTTP client by using a "${suggestedScheme}:" URL (${JSON.stringify(suggestedUrl)}). For more information, please read ${supportedUrlLink}`, "WEBSOCKETS_NOT_SUPPORTED");
     }
     throw mapHranaError(e);
   }
-  return new WsClient2(client, url, config.authToken, config.intMode, config.concurrency);
+  return new WsClient2(client, url, config2.authToken, config2.intMode, config2.concurrency);
 }
 var maxConnAgeMillis = 60 * 1e3;
 var sqlCacheCapacity = 100;
@@ -45922,20 +45913,20 @@ var WsTransaction = class extends HranaTransaction {
 
 // node_modules/@libsql/client/lib-esm/http.js
 var import_promise_limit2 = __toESM(require_promise_limit());
-function _createClient2(config) {
-  if (config.scheme !== "https" && config.scheme !== "http") {
-    throw new LibsqlError(`The HTTP client supports only "libsql:", "https:" and "http:" URLs, got ${JSON.stringify(config.scheme + ":")}. For more information, please read ${supportedUrlLink}`, "URL_SCHEME_NOT_SUPPORTED");
+function _createClient2(config2) {
+  if (config2.scheme !== "https" && config2.scheme !== "http") {
+    throw new LibsqlError(`The HTTP client supports only "libsql:", "https:" and "http:" URLs, got ${JSON.stringify(config2.scheme + ":")}. For more information, please read ${supportedUrlLink}`, "URL_SCHEME_NOT_SUPPORTED");
   }
-  if (config.encryptionKey !== void 0) {
+  if (config2.encryptionKey !== void 0) {
     throw new LibsqlError("Encryption key is not supported by the remote client.", "ENCRYPTION_KEY_NOT_SUPPORTED");
   }
-  if (config.scheme === "http" && config.tls) {
+  if (config2.scheme === "http" && config2.tls) {
     throw new LibsqlError(`A "http:" URL cannot opt into TLS by using ?tls=1`, "URL_INVALID");
-  } else if (config.scheme === "https" && !config.tls) {
+  } else if (config2.scheme === "https" && !config2.tls) {
     throw new LibsqlError(`A "https:" URL cannot opt out of TLS by using ?tls=0`, "URL_INVALID");
   }
-  const url = encodeBaseUrl(config.scheme, config.authority, config.path);
-  return new HttpClient2(url, config.authToken, config.intMode, config.fetch, config.concurrency);
+  const url = encodeBaseUrl(config2.scheme, config2.authority, config2.path);
+  return new HttpClient2(url, config2.authToken, config2.intMode, config2.fetch, config2.concurrency);
 }
 var sqlCacheCapacity2 = 30;
 var HttpClient2 = class {
@@ -46085,16 +46076,16 @@ var HttpTransaction = class extends HranaTransaction {
 };
 
 // node_modules/@libsql/client/lib-esm/web.js
-function createClient(config) {
-  return _createClient3(expandConfig(config));
+function createClient(config2) {
+  return _createClient3(expandConfig(config2));
 }
-function _createClient3(config) {
-  if (config.scheme === "ws" || config.scheme === "wss") {
-    return _createClient(config);
-  } else if (config.scheme === "http" || config.scheme === "https") {
-    return _createClient2(config);
+function _createClient3(config2) {
+  if (config2.scheme === "ws" || config2.scheme === "wss") {
+    return _createClient(config2);
+  } else if (config2.scheme === "http" || config2.scheme === "https") {
+    return _createClient2(config2);
   } else {
-    throw new LibsqlError(`The client that uses Web standard APIs supports only "libsql:", "wss:", "ws:", "https:" and "http:" URLs, got ${JSON.stringify(config.scheme + ":")}. For more information, please read ${supportedUrlLink}`, "URL_SCHEME_NOT_SUPPORTED");
+    throw new LibsqlError(`The client that uses Web standard APIs supports only "libsql:", "wss:", "ws:", "https:" and "http:" URLs, got ${JSON.stringify(config2.scheme + ":")}. For more information, please read ${supportedUrlLink}`, "URL_SCHEME_NOT_SUPPORTED");
   }
 }
 
@@ -46126,24 +46117,24 @@ function is(value, type2) {
 
 // node_modules/drizzle-orm/column.js
 var Column = class {
-  constructor(table, config) {
+  constructor(table, config2) {
     this.table = table;
-    this.config = config;
-    this.name = config.name;
-    this.keyAsName = config.keyAsName;
-    this.notNull = config.notNull;
-    this.default = config.default;
-    this.defaultFn = config.defaultFn;
-    this.onUpdateFn = config.onUpdateFn;
-    this.hasDefault = config.hasDefault;
-    this.primary = config.primaryKey;
-    this.isUnique = config.isUnique;
-    this.uniqueName = config.uniqueName;
-    this.uniqueType = config.uniqueType;
-    this.dataType = config.dataType;
-    this.columnType = config.columnType;
-    this.generated = config.generated;
-    this.generatedIdentity = config.generatedIdentity;
+    this.config = config2;
+    this.name = config2.name;
+    this.keyAsName = config2.keyAsName;
+    this.notNull = config2.notNull;
+    this.default = config2.default;
+    this.defaultFn = config2.defaultFn;
+    this.onUpdateFn = config2.onUpdateFn;
+    this.hasDefault = config2.hasDefault;
+    this.primary = config2.primaryKey;
+    this.isUnique = config2.isUnique;
+    this.uniqueName = config2.uniqueName;
+    this.uniqueType = config2.uniqueType;
+    this.dataType = config2.dataType;
+    this.columnType = config2.columnType;
+    this.generated = config2.generated;
+    this.generatedIdentity = config2.generatedIdentity;
   }
   static [entityKind] = "Column";
   name;
@@ -46418,9 +46409,9 @@ var SQL = class _SQL {
     this.queryChunks.push(...query.queryChunks);
     return this;
   }
-  toQuery(config) {
+  toQuery(config2) {
     return tracer.startActiveSpan("drizzle.buildSQL", (span) => {
-      const query = this.buildQueryFromSourceParams(this.queryChunks, config);
+      const query = this.buildQueryFromSourceParams(this.queryChunks, config2);
       span?.setAttributes({
         "drizzle.query.text": query.sql,
         "drizzle.query.params": JSON.stringify(query.params)
@@ -46429,7 +46420,7 @@ var SQL = class _SQL {
     });
   }
   buildQueryFromSourceParams(chunks, _config) {
-    const config = Object.assign({}, _config, {
+    const config2 = Object.assign({}, _config, {
       inlineParams: _config.inlineParams || this.shouldInlineParams,
       paramStartIndex: _config.paramStartIndex || { value: 0 }
     });
@@ -46440,7 +46431,7 @@ var SQL = class _SQL {
       prepareTyping,
       inlineParams,
       paramStartIndex
-    } = config;
+    } = config2;
     return mergeQueries(chunks.map((chunk) => {
       if (is(chunk, StringChunk)) {
         return { sql: chunk.value.join(""), params: [] };
@@ -46460,11 +46451,11 @@ var SQL = class _SQL {
           }
         }
         result.push(new StringChunk(")"));
-        return this.buildQueryFromSourceParams(result, config);
+        return this.buildQueryFromSourceParams(result, config2);
       }
       if (is(chunk, _SQL)) {
         return this.buildQueryFromSourceParams(chunk.queryChunks, {
-          ...config,
+          ...config2,
           inlineParams: inlineParams || chunk.shouldInlineParams
         });
       }
@@ -46501,10 +46492,10 @@ var SQL = class _SQL {
         }
         const mappedValue = chunk.value === null ? null : chunk.encoder.mapToDriverValue(chunk.value);
         if (is(mappedValue, _SQL)) {
-          return this.buildQueryFromSourceParams([mappedValue], config);
+          return this.buildQueryFromSourceParams([mappedValue], config2);
         }
         if (inlineParams) {
-          return { sql: this.mapInlineParam(mappedValue, config), params: [] };
+          return { sql: this.mapInlineParam(mappedValue, config2), params: [] };
         }
         let typings = ["none"];
         if (prepareTyping) {
@@ -46527,7 +46518,7 @@ var SQL = class _SQL {
           chunk._.sql,
           new StringChunk(") "),
           new Name(chunk._.alias)
-        ], config);
+        ], config2);
       }
       if (isPgEnum(chunk)) {
         if (chunk.schema) {
@@ -46537,16 +46528,16 @@ var SQL = class _SQL {
       }
       if (isSQLWrapper(chunk)) {
         if (chunk.shouldOmitSQLParens?.()) {
-          return this.buildQueryFromSourceParams([chunk.getSQL()], config);
+          return this.buildQueryFromSourceParams([chunk.getSQL()], config2);
         }
         return this.buildQueryFromSourceParams([
           new StringChunk("("),
           chunk.getSQL(),
           new StringChunk(")")
-        ], config);
+        ], config2);
       }
       if (inlineParams) {
-        return { sql: this.mapInlineParam(chunk, config), params: [] };
+        return { sql: this.mapInlineParam(chunk, config2), params: [] };
       }
       return { sql: escapeParam(paramStartIndex.value++, chunk), params: [chunk], typings: ["none"] };
     }));
@@ -46927,8 +46918,8 @@ var ConsoleLogWriter = class {
 var DefaultLogger = class {
   static [entityKind] = "DefaultLogger";
   writer;
-  constructor(config) {
-    this.writer = config?.writer ?? new ConsoleLogWriter();
+  constructor(config2) {
+    this.writer = config2?.writer ?? new ConsoleLogWriter();
   }
   logQuery(query, params) {
     const stringifiedParams = params.map((p) => {
@@ -47132,16 +47123,16 @@ var Relation = class {
   fieldName;
 };
 var Relations = class {
-  constructor(table, config) {
+  constructor(table, config2) {
     this.table = table;
-    this.config = config;
+    this.config = config2;
   }
   static [entityKind] = "Relations";
 };
 var One = class _One extends Relation {
-  constructor(sourceTable, referencedTable, config, isNullable) {
-    super(sourceTable, referencedTable, config?.relationName);
-    this.config = config;
+  constructor(sourceTable, referencedTable, config2, isNullable) {
+    super(sourceTable, referencedTable, config2?.relationName);
+    this.config = config2;
     this.isNullable = isNullable;
   }
   static [entityKind] = "One";
@@ -47157,9 +47148,9 @@ var One = class _One extends Relation {
   }
 };
 var Many = class _Many extends Relation {
-  constructor(sourceTable, referencedTable, config) {
-    super(sourceTable, referencedTable, config?.relationName);
-    this.config = config;
+  constructor(sourceTable, referencedTable, config2) {
+    super(sourceTable, referencedTable, config2?.relationName);
+    this.config = config2;
   }
   static [entityKind] = "Many";
   withFieldName(fieldName) {
@@ -47266,18 +47257,18 @@ function extractTablesRelationalConfig(schema, configHelpers) {
   return { tables: tablesConfig, tableNamesMap };
 }
 function createOne(sourceTable) {
-  return function one(table, config) {
+  return function one(table, config2) {
     return new One(
       sourceTable,
       table,
-      config,
-      config?.fields.reduce((res, f) => res && f.notNull, true) ?? false
+      config2,
+      config2?.fields.reduce((res, f) => res && f.notNull, true) ?? false
     );
   };
 }
 function createMany(sourceTable) {
-  return function many(referencedTable, config) {
-    return new Many(sourceTable, referencedTable, config);
+  return function many(referencedTable, config2) {
+    return new Many(sourceTable, referencedTable, config2);
   };
 }
 function normalizeRelation(schema, tableNamesMap, relation) {
@@ -47465,8 +47456,8 @@ function mapColumnsInSQLToAlias(query, alias) {
 var SelectionProxyHandler = class _SelectionProxyHandler {
   static [entityKind] = "SelectionProxyHandler";
   config;
-  constructor(config) {
-    this.config = { ...config };
+  constructor(config2) {
+    this.config = { ...config2 };
   }
   get(subquery, prop) {
     if (prop === "_") {
@@ -47562,9 +47553,9 @@ var ForeignKeyBuilder2 = class {
   _onUpdate;
   /** @internal */
   _onDelete;
-  constructor(config, actions) {
+  constructor(config2, actions) {
     this.reference = () => {
-      const { name, columns, foreignColumns } = config();
+      const { name, columns, foreignColumns } = config2();
       return { name, columns, foreignTable: foreignColumns[0].table, foreignColumns };
     };
     if (actions) {
@@ -47628,11 +47619,11 @@ var SQLiteColumnBuilder = class extends ColumnBuilder {
     this.config.uniqueName = name;
     return this;
   }
-  generatedAlwaysAs(as, config) {
+  generatedAlwaysAs(as, config2) {
     this.config.generated = {
       as,
       type: "always",
-      mode: config?.mode ?? "virtual"
+      mode: config2?.mode ?? "virtual"
     };
     return this;
   }
@@ -47656,11 +47647,11 @@ var SQLiteColumnBuilder = class extends ColumnBuilder {
   }
 };
 var SQLiteColumn = class extends Column {
-  constructor(table, config) {
-    if (!config.uniqueName) {
-      config.uniqueName = uniqueKeyName2(table, [config.name]);
+  constructor(table, config2) {
+    if (!config2.uniqueName) {
+      config2.uniqueName = uniqueKeyName2(table, [config2.name]);
     }
-    super(table, config);
+    super(table, config2);
     this.table = table;
   }
   static [entityKind] = "SQLiteColumn";
@@ -47745,11 +47736,11 @@ var SQLiteBlobBuffer = class extends SQLiteColumn {
   }
 };
 function blob(a, b) {
-  const { name, config } = getColumnNameAndConfig(a, b);
-  if (config?.mode === "json") {
+  const { name, config: config2 } = getColumnNameAndConfig(a, b);
+  if (config2?.mode === "json") {
     return new SQLiteBlobJsonBuilder(name);
   }
-  if (config?.mode === "bigint") {
+  if (config2?.mode === "bigint") {
     return new SQLiteBigIntBuilder(name);
   }
   return new SQLiteBlobBufferBuilder(name);
@@ -47776,11 +47767,11 @@ var SQLiteCustomColumn = class extends SQLiteColumn {
   sqlName;
   mapTo;
   mapFrom;
-  constructor(table, config) {
-    super(table, config);
-    this.sqlName = config.customTypeParams.dataType(config.fieldConfig);
-    this.mapTo = config.customTypeParams.toDriver;
-    this.mapFrom = config.customTypeParams.fromDriver;
+  constructor(table, config2) {
+    super(table, config2);
+    this.sqlName = config2.customTypeParams.dataType(config2.fieldConfig);
+    this.mapTo = config2.customTypeParams.toDriver;
+    this.mapFrom = config2.customTypeParams.fromDriver;
   }
   getSQLType() {
     return this.sqlName;
@@ -47794,10 +47785,10 @@ var SQLiteCustomColumn = class extends SQLiteColumn {
 };
 function customType(customTypeParams) {
   return (a, b) => {
-    const { name, config } = getColumnNameAndConfig(a, b);
+    const { name, config: config2 } = getColumnNameAndConfig(a, b);
     return new SQLiteCustomColumnBuilder(
       name,
-      config,
+      config2,
       customTypeParams
     );
   };
@@ -47810,8 +47801,8 @@ var SQLiteBaseIntegerBuilder = class extends SQLiteColumnBuilder {
     super(name, dataType, columnType);
     this.config.autoIncrement = false;
   }
-  primaryKey(config) {
-    if (config?.autoIncrement) {
+  primaryKey(config2) {
+    if (config2?.autoIncrement) {
       this.config.autoIncrement = true;
     }
     this.config.hasDefault = true;
@@ -47902,12 +47893,12 @@ var SQLiteBoolean = class extends SQLiteBaseInteger {
   }
 };
 function integer(a, b) {
-  const { name, config } = getColumnNameAndConfig(a, b);
-  if (config?.mode === "timestamp" || config?.mode === "timestamp_ms") {
-    return new SQLiteTimestampBuilder(name, config.mode);
+  const { name, config: config2 } = getColumnNameAndConfig(a, b);
+  if (config2?.mode === "timestamp" || config2?.mode === "timestamp_ms") {
+    return new SQLiteTimestampBuilder(name, config2.mode);
   }
-  if (config?.mode === "boolean") {
-    return new SQLiteBooleanBuilder(name, config.mode);
+  if (config2?.mode === "boolean") {
+    return new SQLiteBooleanBuilder(name, config2.mode);
   }
   return new SQLiteIntegerBuilder(name);
 }
@@ -47960,10 +47951,10 @@ function real(name) {
 // node_modules/drizzle-orm/sqlite-core/columns/text.js
 var SQLiteTextBuilder = class extends SQLiteColumnBuilder {
   static [entityKind] = "SQLiteTextBuilder";
-  constructor(name, config) {
+  constructor(name, config2) {
     super(name, "string", "SQLiteText");
-    this.config.enumValues = config.enum;
-    this.config.length = config.length;
+    this.config.enumValues = config2.enum;
+    this.config.length = config2.length;
   }
   /** @internal */
   build(table) {
@@ -47977,8 +47968,8 @@ var SQLiteText = class extends SQLiteColumn {
   static [entityKind] = "SQLiteText";
   enumValues = this.config.enumValues;
   length = this.config.length;
-  constructor(table, config) {
-    super(table, config);
+  constructor(table, config2) {
+    super(table, config2);
   }
   getSQLType() {
     return `text${this.config.length ? `(${this.config.length})` : ""}`;
@@ -48010,11 +48001,11 @@ var SQLiteTextJson = class extends SQLiteColumn {
   }
 };
 function text(a, b = {}) {
-  const { name, config } = getColumnNameAndConfig(a, b);
-  if (config.mode === "json") {
+  const { name, config: config2 } = getColumnNameAndConfig(a, b);
+  if (config2.mode === "json") {
     return new SQLiteTextJsonBuilder(name);
   }
-  return new SQLiteTextBuilder(name, config);
+  return new SQLiteTextBuilder(name, config2);
 }
 
 // node_modules/drizzle-orm/sqlite-core/columns/all.js
@@ -48253,8 +48244,8 @@ var SQLiteDialect = class {
   static [entityKind] = "SQLiteDialect";
   /** @internal */
   casing;
-  constructor(config) {
-    this.casing = new CasingCache(config?.casing);
+  constructor(config2) {
+    this.casing = new CasingCache(config2?.casing);
   }
   escapeName(name) {
     return `"${name}"`;
@@ -48579,7 +48570,7 @@ var SQLiteDialect = class {
     tableNamesMap,
     table,
     tableConfig,
-    queryConfig: config,
+    queryConfig: config2,
     tableAlias,
     nestedQueryRelation,
     joinOn
@@ -48587,7 +48578,7 @@ var SQLiteDialect = class {
     let selection = [];
     let limit2, offset2, orderBy = [], where2;
     const joins = [];
-    if (config === true) {
+    if (config2 === true) {
       const selectionEntries = Object.entries(tableConfig.columns);
       selection = selectionEntries.map(([key, value]) => ({
         dbKey: value.name,
@@ -48601,15 +48592,15 @@ var SQLiteDialect = class {
       const aliasedColumns = Object.fromEntries(
         Object.entries(tableConfig.columns).map(([key, value]) => [key, aliasedTableColumn(value, tableAlias)])
       );
-      if (config.where) {
-        const whereSql = typeof config.where === "function" ? config.where(aliasedColumns, getOperators()) : config.where;
+      if (config2.where) {
+        const whereSql = typeof config2.where === "function" ? config2.where(aliasedColumns, getOperators()) : config2.where;
         where2 = whereSql && mapColumnsInSQLToAlias(whereSql, tableAlias);
       }
       const fieldsSelection = [];
       let selectedColumns = [];
-      if (config.columns) {
+      if (config2.columns) {
         let isIncludeMode = false;
-        for (const [field, value] of Object.entries(config.columns)) {
+        for (const [field, value] of Object.entries(config2.columns)) {
           if (value === void 0) {
             continue;
           }
@@ -48621,7 +48612,7 @@ var SQLiteDialect = class {
           }
         }
         if (selectedColumns.length > 0) {
-          selectedColumns = isIncludeMode ? selectedColumns.filter((c) => config.columns?.[c] === true) : Object.keys(tableConfig.columns).filter((key) => !selectedColumns.includes(key));
+          selectedColumns = isIncludeMode ? selectedColumns.filter((c) => config2.columns?.[c] === true) : Object.keys(tableConfig.columns).filter((key) => !selectedColumns.includes(key));
         }
       } else {
         selectedColumns = Object.keys(tableConfig.columns);
@@ -48631,12 +48622,12 @@ var SQLiteDialect = class {
         fieldsSelection.push({ tsKey: field, value: column });
       }
       let selectedRelations = [];
-      if (config.with) {
-        selectedRelations = Object.entries(config.with).filter((entry) => !!entry[1]).map(([tsKey, queryConfig]) => ({ tsKey, queryConfig, relation: tableConfig.relations[tsKey] }));
+      if (config2.with) {
+        selectedRelations = Object.entries(config2.with).filter((entry) => !!entry[1]).map(([tsKey, queryConfig]) => ({ tsKey, queryConfig, relation: tableConfig.relations[tsKey] }));
       }
       let extras;
-      if (config.extras) {
-        extras = typeof config.extras === "function" ? config.extras(aliasedColumns, { sql }) : config.extras;
+      if (config2.extras) {
+        extras = typeof config2.extras === "function" ? config2.extras(aliasedColumns, { sql }) : config2.extras;
         for (const [tsKey, value] of Object.entries(extras)) {
           fieldsSelection.push({
             tsKey,
@@ -48654,7 +48645,7 @@ var SQLiteDialect = class {
           selection: []
         });
       }
-      let orderByOrig = typeof config.orderBy === "function" ? config.orderBy(aliasedColumns, getOrderByOperators()) : config.orderBy ?? [];
+      let orderByOrig = typeof config2.orderBy === "function" ? config2.orderBy(aliasedColumns, getOrderByOperators()) : config2.orderBy ?? [];
       if (!Array.isArray(orderByOrig)) {
         orderByOrig = [orderByOrig];
       }
@@ -48664,8 +48655,8 @@ var SQLiteDialect = class {
         }
         return mapColumnsInSQLToAlias(orderByValue, tableAlias);
       });
-      limit2 = config.limit;
-      offset2 = config.offset;
+      limit2 = config2.limit;
+      offset2 = config2.offset;
       for (const {
         tsKey: selectedRelationTsKey,
         queryConfig: selectedRelationConfigValue,
@@ -48793,8 +48784,8 @@ var SQLiteDialect = class {
 };
 var SQLiteSyncDialect = class extends SQLiteDialect {
   static [entityKind] = "SQLiteSyncDialect";
-  migrate(migrations, session, config) {
-    const migrationsTable = config === void 0 ? "__drizzle_migrations" : typeof config === "string" ? "__drizzle_migrations" : config.migrationsTable ?? "__drizzle_migrations";
+  migrate(migrations, session, config2) {
+    const migrationsTable = config2 === void 0 ? "__drizzle_migrations" : typeof config2 === "string" ? "__drizzle_migrations" : config2.migrationsTable ?? "__drizzle_migrations";
     const migrationTableCreate = sql`
 			CREATE TABLE IF NOT EXISTS ${sql.identifier(migrationsTable)} (
 				id SERIAL PRIMARY KEY,
@@ -48828,8 +48819,8 @@ var SQLiteSyncDialect = class extends SQLiteDialect {
 };
 var SQLiteAsyncDialect = class extends SQLiteDialect {
   static [entityKind] = "SQLiteAsyncDialect";
-  async migrate(migrations, session, config) {
-    const migrationsTable = config === void 0 ? "__drizzle_migrations" : typeof config === "string" ? "__drizzle_migrations" : config.migrationsTable ?? "__drizzle_migrations";
+  async migrate(migrations, session, config2) {
+    const migrationsTable = config2 === void 0 ? "__drizzle_migrations" : typeof config2 === "string" ? "__drizzle_migrations" : config2.migrationsTable ?? "__drizzle_migrations";
     const migrationTableCreate = sql`
 			CREATE TABLE IF NOT EXISTS ${sql.identifier(migrationsTable)} (
 				id SERIAL PRIMARY KEY,
@@ -48874,12 +48865,12 @@ var SQLiteSelectBuilder = class {
   dialect;
   withList;
   distinct;
-  constructor(config) {
-    this.fields = config.fields;
-    this.session = config.session;
-    this.dialect = config.dialect;
-    this.withList = config.withList;
-    this.distinct = config.distinct;
+  constructor(config2) {
+    this.fields = config2.fields;
+    this.session = config2.session;
+    this.dialect = config2.dialect;
+    this.withList = config2.withList;
+    this.distinct = config2.distinct;
   }
   from(source) {
     const isPartialSelect = !!this.fields;
@@ -49614,12 +49605,12 @@ var SQLiteInsertBase = class extends QueryPromise {
    *   .onConflictDoNothing({ target: cars.id });
    * ```
    */
-  onConflictDoNothing(config = {}) {
-    if (config.target === void 0) {
+  onConflictDoNothing(config2 = {}) {
+    if (config2.target === void 0) {
       this.config.onConflict = sql`do nothing`;
     } else {
-      const targetSql = Array.isArray(config.target) ? sql`${config.target}` : sql`${[config.target]}`;
-      const whereSql = config.where ? sql` where ${config.where}` : sql``;
+      const targetSql = Array.isArray(config2.target) ? sql`${config2.target}` : sql`${[config2.target]}`;
+      const whereSql = config2.where ? sql` where ${config2.where}` : sql``;
       this.config.onConflict = sql`${targetSql} do nothing${whereSql}`;
     }
     return this;
@@ -49653,17 +49644,17 @@ var SQLiteInsertBase = class extends QueryPromise {
    *   });
    * ```
    */
-  onConflictDoUpdate(config) {
-    if (config.where && (config.targetWhere || config.setWhere)) {
+  onConflictDoUpdate(config2) {
+    if (config2.where && (config2.targetWhere || config2.setWhere)) {
       throw new Error(
         'You cannot use both "where" and "targetWhere"/"setWhere" at the same time - "where" is deprecated, use "targetWhere" or "setWhere" instead.'
       );
     }
-    const whereSql = config.where ? sql` where ${config.where}` : void 0;
-    const targetWhereSql = config.targetWhere ? sql` where ${config.targetWhere}` : void 0;
-    const setWhereSql = config.setWhere ? sql` where ${config.setWhere}` : void 0;
-    const targetSql = Array.isArray(config.target) ? sql`${config.target}` : sql`${[config.target]}`;
-    const setSql = this.dialect.buildUpdateSet(this.config.table, mapUpdateSet(this.config.table, config.set));
+    const whereSql = config2.where ? sql` where ${config2.where}` : void 0;
+    const targetWhereSql = config2.targetWhere ? sql` where ${config2.targetWhere}` : void 0;
+    const setWhereSql = config2.setWhere ? sql` where ${config2.setWhere}` : void 0;
+    const targetSql = Array.isArray(config2.target) ? sql`${config2.target}` : sql`${[config2.target]}`;
+    const setSql = this.dialect.buildUpdateSet(this.config.table, mapUpdateSet(this.config.table, config2.set));
     this.config.onConflict = sql`${targetSql}${targetWhereSql} do update set ${setSql}${whereSql}${setWhereSql}`;
     return this;
   }
@@ -49925,7 +49916,7 @@ var RelationalQueryBuilder = class {
     this.session = session;
   }
   static [entityKind] = "SQLiteAsyncRelationalQueryBuilder";
-  findMany(config) {
+  findMany(config2) {
     return this.mode === "sync" ? new SQLiteSyncRelationalQuery(
       this.fullSchema,
       this.schema,
@@ -49934,7 +49925,7 @@ var RelationalQueryBuilder = class {
       this.tableConfig,
       this.dialect,
       this.session,
-      config ? config : {},
+      config2 ? config2 : {},
       "many"
     ) : new SQLiteRelationalQuery(
       this.fullSchema,
@@ -49944,11 +49935,11 @@ var RelationalQueryBuilder = class {
       this.tableConfig,
       this.dialect,
       this.session,
-      config ? config : {},
+      config2 ? config2 : {},
       "many"
     );
   }
-  findFirst(config) {
+  findFirst(config2) {
     return this.mode === "sync" ? new SQLiteSyncRelationalQuery(
       this.fullSchema,
       this.schema,
@@ -49957,7 +49948,7 @@ var RelationalQueryBuilder = class {
       this.tableConfig,
       this.dialect,
       this.session,
-      config ? { ...config, limit: 1 } : { limit: 1 },
+      config2 ? { ...config2, limit: 1 } : { limit: 1 },
       "first"
     ) : new SQLiteRelationalQuery(
       this.fullSchema,
@@ -49967,13 +49958,13 @@ var RelationalQueryBuilder = class {
       this.tableConfig,
       this.dialect,
       this.session,
-      config ? { ...config, limit: 1 } : { limit: 1 },
+      config2 ? { ...config2, limit: 1 } : { limit: 1 },
       "first"
     );
   }
 };
 var SQLiteRelationalQuery = class extends QueryPromise {
-  constructor(fullSchema, schema, tableNamesMap, table, tableConfig, dialect, session, config, mode) {
+  constructor(fullSchema, schema, tableNamesMap, table, tableConfig, dialect, session, config2, mode) {
     super();
     this.fullSchema = fullSchema;
     this.schema = schema;
@@ -49982,7 +49973,7 @@ var SQLiteRelationalQuery = class extends QueryPromise {
     this.tableConfig = tableConfig;
     this.dialect = dialect;
     this.session = session;
-    this.config = config;
+    this.config = config2;
     this.mode = mode;
   }
   static [entityKind] = "SQLiteAsyncRelationalQuery";
@@ -50363,8 +50354,8 @@ var BaseSQLiteDatabase = class {
     }
     return this.session.values(sequel);
   }
-  transaction(transaction, config) {
-    return this.session.transaction(transaction, config);
+  transaction(transaction, config2) {
+    return this.session.transaction(transaction, config2);
   }
 };
 
@@ -50695,22 +50686,22 @@ var LibSQLDatabase = class extends BaseSQLiteDatabase {
     return this.session.batch(batch);
   }
 };
-function construct(client, config = {}) {
-  const dialect = new SQLiteAsyncDialect({ casing: config.casing });
+function construct(client, config2 = {}) {
+  const dialect = new SQLiteAsyncDialect({ casing: config2.casing });
   let logger2;
-  if (config.logger === true) {
+  if (config2.logger === true) {
     logger2 = new DefaultLogger();
-  } else if (config.logger !== false) {
-    logger2 = config.logger;
+  } else if (config2.logger !== false) {
+    logger2 = config2.logger;
   }
   let schema;
-  if (config.schema) {
+  if (config2.schema) {
     const tablesConfig = extractTablesRelationalConfig(
-      config.schema,
+      config2.schema,
       createTableRelationsHelpers
     );
     schema = {
-      fullSchema: config.schema,
+      fullSchema: config2.schema,
       schema: tablesConfig.tables,
       tableNamesMap: tablesConfig.tableNamesMap
     };
@@ -50739,8 +50730,8 @@ function drizzle(...params) {
   return construct(params[0], params[1]);
 }
 ((drizzle2) => {
-  function mock(config) {
-    return construct({}, config);
+  function mock(config2) {
+    return construct({}, config2);
   }
   drizzle2.mock = mock;
 })(drizzle || (drizzle = {}));
@@ -52945,11 +52936,9 @@ function resolveModel(modelSlug, c) {
   if (!model) {
     return { error: c.json({ error: { message: `Model '${modelSlug}' not found. Available: ${models.map((m) => m.slug).join(", ")}`, type: "invalid_request_error", code: "model_not_found" } }, 404) };
   }
-  const ai = getAIBinding();
-  if (!ai) {
+  {
     return { error: c.json({ error: { message: "AI binding not available.", type: "server_error", code: "ai_binding_missing" } }, 503) };
   }
-  return { model, ai };
 }
 function mergeDefaults(payload, model) {
   if (model.provider_config) {
@@ -53416,6 +53405,11 @@ liteApp.get("/", (c) => c.json({
   health: "/api/health"
 }));
 
+// node_modules/hono/dist/adapter/vercel/handler.js
+var handle = (app) => (req) => {
+  return app.fetch(req);
+};
+
 // src/adapters/shared.ts
 function ensureProcessEnv() {
   globalThis.process ??= { env: {} };
@@ -53425,22 +53419,10 @@ function setPlatform(platform2) {
   globalThis.process.env.FRONTBASE_ADAPTER_PLATFORM = platform2;
 }
 
-// src/adapters/cloudflare-lite.ts
-var cloudflare_lite_default = {
-  async fetch(request, env2, ctx) {
-    for (const [key, value] of Object.entries(env2)) {
-      if (typeof value === "string") {
-        globalThis.process ??= { env: {} };
-        globalThis.process.env[key] = value;
-      }
-    }
-    setPlatform("cloudflare-lite");
-    if (env2.AI) {
-      setAIBinding(env2.AI);
-    }
-    return liteApp.fetch(request);
-  }
-};
+// src/adapters/vercel-edge-lite.ts
+setPlatform("vercel-edge-lite");
+var config = { runtime: "edge" };
+var vercel_edge_lite_default = handle(liteApp);
 /*! Bundled license information:
 
 crypto-js/ripemd160.js:
@@ -53463,4 +53445,4 @@ crypto-js/mode-ctr-gladman.js:
    *)
 */
 
-export { cloudflare_lite_default as default };
+export { config, vercel_edge_lite_default as default };

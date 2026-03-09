@@ -30,6 +30,7 @@ class EdgeQueueCreate(BaseModel):
     signing_key: Optional[str] = None
     next_signing_key: Optional[str] = None
     provider_config: Optional[dict] = None
+    provider_account_id: Optional[str] = None  # FK → Connected Account
     is_default: bool = False
 
 class EdgeQueueUpdate(BaseModel):
@@ -40,6 +41,7 @@ class EdgeQueueUpdate(BaseModel):
     signing_key: Optional[str] = None
     next_signing_key: Optional[str] = None
     provider_config: Optional[dict] = None
+    provider_account_id: Optional[str] = None
     is_default: Optional[bool] = None
 
 class EdgeQueueResponse(BaseModel):
@@ -51,6 +53,8 @@ class EdgeQueueResponse(BaseModel):
     has_signing_key: bool
     is_default: bool
     is_system: bool = False
+    provider_account_id: Optional[str] = None
+    account_name: Optional[str] = None
     created_at: str
     updated_at: str
     engine_count: int = 0  # Number of edge engines using this queue
@@ -65,17 +69,27 @@ class TestQueueResult(BaseModel):
 # Helpers
 # =============================================================================
 
-def _serialize_queue(queue, engine_count: int = 0) -> EdgeQueueResponse:
+def _serialize_queue(queue, db, engine_count: int = 0) -> EdgeQueueResponse:
     """Serialize an EdgeQueue ORM object."""
+    from ..models.models import EdgeProviderAccount
+    account_name = None
+    if queue.provider_account_id:
+        acct = db.query(EdgeProviderAccount).filter(
+            EdgeProviderAccount.id == queue.provider_account_id
+        ).first()
+        if acct:
+            account_name = str(acct.name)
     return EdgeQueueResponse(
         id=str(queue.id),
         name=str(queue.name),
         provider=str(queue.provider),
         queue_url=str(queue.queue_url),
-        has_token=bool(queue.queue_token),
+        has_token=bool(queue.queue_token) or bool(queue.provider_account_id),
         has_signing_key=bool(queue.signing_key),
         is_default=bool(queue.is_default),
         is_system=bool(getattr(queue, 'is_system', False)),
+        provider_account_id=str(queue.provider_account_id) if queue.provider_account_id else None,
+        account_name=account_name,
         created_at=str(queue.created_at),
         updated_at=str(queue.updated_at),
         engine_count=engine_count,
@@ -97,7 +111,7 @@ async def list_edge_queues():
             engine_count = db.query(EdgeEngine).filter(
                 EdgeEngine.edge_queue_id == queue.id
             ).count()
-            result.append(_serialize_queue(queue, engine_count))
+            result.append(_serialize_queue(queue, db, engine_count))
         return result
     finally:
         db.close()
@@ -135,15 +149,17 @@ async def create_edge_queue(payload: EdgeQueueCreate):
         count = db.query(EdgeQueue).count()
         is_default = payload.is_default or count == 0
         
+        from ..core.security import encrypt_field
         queue = EdgeQueue(
             id=str(uuid.uuid4()),
             name=payload.name,
             provider=payload.provider,
             queue_url=payload.queue_url,
-            queue_token=payload.queue_token,
-            signing_key=payload.signing_key,
-            next_signing_key=payload.next_signing_key,
+            queue_token=encrypt_field(payload.queue_token),
+            signing_key=encrypt_field(payload.signing_key),
+            next_signing_key=encrypt_field(payload.next_signing_key),
             provider_config=json.dumps(payload.provider_config) if payload.provider_config else None,
+            provider_account_id=payload.provider_account_id,
             is_default=is_default,
             created_at=now,
             updated_at=now,
@@ -152,7 +168,7 @@ async def create_edge_queue(payload: EdgeQueueCreate):
         db.commit()
         db.refresh(queue)
         
-        return _serialize_queue(queue, 0)
+        return _serialize_queue(queue, db, 0)
     finally:
         db.close()
 
@@ -173,14 +189,17 @@ async def update_edge_queue(queue_id: str, payload: EdgeQueueUpdate):
             queue.provider = payload.provider  # type: ignore[assignment]
         if payload.queue_url is not None:
             queue.queue_url = payload.queue_url  # type: ignore[assignment]
+        from ..core.security import encrypt_field
         if payload.queue_token is not None:
-            queue.queue_token = payload.queue_token  # type: ignore[assignment]
+            queue.queue_token = encrypt_field(payload.queue_token)  # type: ignore[assignment]
         if payload.signing_key is not None:
-            queue.signing_key = payload.signing_key  # type: ignore[assignment]
+            queue.signing_key = encrypt_field(payload.signing_key)  # type: ignore[assignment]
         if payload.next_signing_key is not None:
-            queue.next_signing_key = payload.next_signing_key  # type: ignore[assignment]
+            queue.next_signing_key = encrypt_field(payload.next_signing_key)  # type: ignore[assignment]
         if payload.provider_config is not None:
             queue.provider_config = json.dumps(payload.provider_config)  # type: ignore[assignment]
+        if payload.provider_account_id is not None:
+            queue.provider_account_id = payload.provider_account_id  # type: ignore[assignment]
         if payload.is_default is not None:
             if payload.is_default:
                 db.query(EdgeQueue).filter(EdgeQueue.id != queue_id).update(
@@ -196,7 +215,7 @@ async def update_edge_queue(queue_id: str, payload: EdgeQueueUpdate):
             EdgeEngine.edge_queue_id == queue_id
         ).count()
         
-        return _serialize_queue(queue, engine_count)
+        return _serialize_queue(queue, db, engine_count)
     finally:
         db.close()
 
@@ -250,8 +269,9 @@ async def test_edge_queue(queue_id: str):
             raise HTTPException(404, f"Edge queue '{queue_id}' not found")
         
         provider = str(queue.provider)
+        from ..core.security import decrypt_field
         queue_token_raw = queue.queue_token
-        queue_token = str(queue_token_raw) if queue_token_raw else None  # type: ignore[truthy-bool]
+        queue_token = decrypt_field(str(queue_token_raw)) if queue_token_raw else None  # type: ignore[truthy-bool]
         queue_url = str(queue.queue_url)
     finally:
         db.close()

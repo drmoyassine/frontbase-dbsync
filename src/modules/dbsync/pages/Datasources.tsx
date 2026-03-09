@@ -292,6 +292,125 @@ function DatasourceCard({
     )
 }
 
+// ── Supabase: Select from Connected Accounts ─────────────────────────
+function SupabaseConnectedSection({
+    isEditing,
+    formData,
+    setFormData,
+}: {
+    isEditing: boolean
+    formData: any
+    setFormData: (data: any) => void
+}) {
+    const [accounts, setAccounts] = useState<any[]>([])
+    const [loading, setLoading] = useState(true)
+    const [selectedAccountId, setSelectedAccountId] = useState<string>(formData._supabase_account_id || '')
+
+    useEffect(() => {
+        fetch('/api/edge-providers/')
+            .then(r => r.json())
+            .then((data: any[]) => {
+                const supabaseAccounts = data.filter((a: any) => a.provider === 'supabase' && a.is_active)
+                setAccounts(supabaseAccounts)
+                // Auto-select if only one account
+                if (supabaseAccounts.length === 1 && !selectedAccountId) {
+                    const acct = supabaseAccounts[0]
+                    setSelectedAccountId(acct.id)
+                    setFormData({
+                        ...formData,
+                        _supabase_account_id: acct.id,
+                        api_url: acct.provider_metadata?.api_url || '',
+                        name: formData.name || acct.name,
+                    })
+                }
+            })
+            .catch(() => { })
+            .finally(() => setLoading(false))
+    }, [])
+
+    const handleAccountSelect = (accountId: string) => {
+        setSelectedAccountId(accountId)
+        const acct = accounts.find(a => a.id === accountId)
+        if (acct) {
+            setFormData({
+                ...formData,
+                _supabase_account_id: acct.id,
+                api_url: acct.provider_metadata?.api_url || '',
+                name: formData.name || acct.name,
+            })
+        }
+    }
+
+    return (
+        <div className="p-4 bg-green-50 dark:bg-green-900/10 rounded-2xl space-y-4 border border-green-100 dark:border-green-900/30">
+            <div className="flex items-center gap-2 text-green-700 dark:text-green-300 font-bold text-xs uppercase tracking-wider">
+                <Database className="w-4 h-4" />
+                Supabase Connection
+            </div>
+
+            {loading ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading accounts...
+                </div>
+            ) : accounts.length === 0 ? (
+                <div className="text-sm text-gray-600 dark:text-gray-400 space-y-2">
+                    <p>No Supabase Connected Account found.</p>
+                    <a
+                        href="/settings"
+                        className="inline-flex items-center gap-1 text-primary-600 dark:text-primary-400 font-semibold hover:underline text-xs"
+                    >
+                        <Plus className="w-3 h-3" />
+                        Connect in Settings → Accounts
+                    </a>
+                </div>
+            ) : (
+                <>
+                    <div>
+                        <label className="block text-sm font-semibold mb-1.5 text-green-900/70 dark:text-green-300/70">
+                            Connected Account
+                        </label>
+                        <select
+                            value={selectedAccountId}
+                            onChange={(e) => handleAccountSelect(e.target.value)}
+                            className="w-full px-3 py-2 border border-green-200 dark:border-green-800 rounded-xl bg-white dark:bg-gray-800 focus:ring-2 focus:ring-green-500 outline-none text-sm"
+                        >
+                            <option value="">Select an account…</option>
+                            {accounts.map(acct => (
+                                <option key={acct.id} value={acct.id}>
+                                    {acct.name} {acct.provider_metadata?.project_ref ? `(${acct.provider_metadata.project_ref})` : ''}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {selectedAccountId && (
+                        <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            Credentials will be used from this Connected Account
+                        </div>
+                    )}
+                </>
+            )}
+
+            {/* Optional Direct Database Connection */}
+            <div className="pt-3 border-t border-green-100 dark:border-green-800/50">
+                <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-bold text-[10px] uppercase tracking-wider mb-2">
+                    Direct Database Connection (Optional)
+                </div>
+                <input
+                    type="password"
+                    value={formData.connection_uri}
+                    onChange={(e) => setFormData({ ...formData, connection_uri: e.target.value })}
+                    className="w-full px-3 py-2 border border-green-200 dark:border-green-800 rounded-xl bg-white dark:bg-gray-800 focus:ring-2 focus:ring-green-500 outline-none font-mono text-xs"
+                    placeholder="postgresql://postgres:[PASSWORD]@db.xxx.supabase.co:5432/postgres"
+                />
+                <p className="mt-1 text-[10px] text-gray-500">For direct PostgreSQL access. Find in Project Settings → Database → Connection string.</p>
+            </div>
+        </div>
+    )
+}
+
 function DatasourceModal({
     datasource,
     onClose
@@ -534,11 +653,19 @@ function DatasourceModal({
                         )}
                     </div>
 
-                    {(formData.type === 'supabase' || formData.type === 'neon') && (
+                    {formData.type === 'supabase' && (
+                        <SupabaseConnectedSection
+                            isEditing={isEditing}
+                            formData={formData}
+                            setFormData={(data: any) => setFormData(data)}
+                        />
+                    )}
+
+                    {formData.type === 'neon' && (
                         <div className="p-4 bg-primary-50 dark:bg-primary-900/10 rounded-2xl space-y-4 border border-primary-100 dark:border-primary-900/30">
                             <div className="flex items-center gap-2 text-primary-700 dark:text-primary-300 font-bold text-xs uppercase tracking-wider">
                                 <Database className="w-4 h-4" />
-                                {formData.type === 'supabase' ? 'Supabase' : 'Neon'} Configuration
+                                Neon Configuration
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="col-span-2">
@@ -548,7 +675,7 @@ function DatasourceModal({
                                         value={formData.api_url}
                                         onChange={(e) => setFormData({ ...formData, api_url: e.target.value })}
                                         className="w-full px-3 py-2 border border-primary-200 dark:border-primary-800 rounded-xl bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none"
-                                        placeholder="https://your-project.supabase.co"
+                                        placeholder="https://your-project.neon.tech"
                                         required
                                     />
                                 </div>
@@ -561,53 +688,11 @@ function DatasourceModal({
                                         value={formData.anon_key}
                                         onChange={(e) => setFormData({ ...formData, anon_key: e.target.value })}
                                         className="w-full px-3 py-2 border border-primary-200 dark:border-primary-800 rounded-xl bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none"
-                                        placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                                        placeholder="Neon API key..."
                                         required={!isEditing}
                                     />
-                                    <p className="mt-1 text-[10px] text-gray-500">Public anon key from Project Settings → API</p>
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="block text-sm font-semibold mb-1.5 text-primary-900/70 dark:text-primary-300/70">
-                                        {isEditing ? 'New Service Role Key (optional)' : 'Service Role Key (optional)'}
-                                    </label>
-                                    <input
-                                        type="password"
-                                        value={formData.api_key}
-                                        onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                                        className="w-full px-3 py-2 border border-primary-200 dark:border-primary-800 rounded-xl bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none"
-                                        placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                                    />
-                                    <p className="mt-1 text-[10px] text-gray-500">For admin operations. Keep secret!</p>
                                 </div>
                             </div>
-
-                            {/* Optional Direct Database Connection */}
-                            <div className="pt-3 border-t border-primary-100 dark:border-primary-800/50">
-                                <div className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-bold text-[10px] uppercase tracking-wider mb-2">
-                                    Direct Database Connection (Optional)
-                                </div>
-                                <input
-                                    type="text"
-                                    value={formData.connection_uri}
-                                    onChange={(e) => setFormData({ ...formData, connection_uri: e.target.value })}
-                                    className="w-full px-3 py-2 border border-primary-200 dark:border-primary-800 rounded-xl bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none font-mono text-xs"
-                                    placeholder="postgresql://postgres:[PASSWORD]@db.xxx.supabase.co:5432/postgres"
-                                />
-                                <p className="mt-1 text-[10px] text-gray-500">For direct PostgreSQL access. Find in Project Settings → Database → Connection string. Use port 6543 for Connection Pooling.</p>
-                            </div>
-                        </div>
-                    )}
-
-                    {formData.type === 'wordpress' && (
-                        <div className="p-4 bg-purple-50 dark:bg-purple-900/10 rounded-2xl border border-purple-100 dark:border-purple-900/30">
-                            <label className="block text-sm font-semibold mb-1.5 text-purple-900 dark:text-purple-300">Table Prefix</label>
-                            <input
-                                type="text"
-                                value={formData.table_prefix}
-                                onChange={(e) => setFormData({ ...formData, table_prefix: e.target.value })}
-                                className="w-full px-3 py-2 border border-purple-200 dark:border-purple-800 rounded-xl bg-white dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 outline-none"
-                                placeholder="wp_"
-                            />
                         </div>
                     )}
 

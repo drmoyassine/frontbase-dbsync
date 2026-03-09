@@ -20,13 +20,15 @@ class EdgeDatabase(Base):
     provider = Column(String(50), nullable=False)        # "turso", "neon", "planetscale"
     db_url = Column(String(500), nullable=False)         # "libsql://your-db.turso.io"
     db_token = Column(String(1000), nullable=True)       # auth token (encrypted at rest)
+    provider_account_id = Column(String, ForeignKey('edge_providers_accounts.id'), nullable=True)  # FK → Connected Account
     is_default = Column(Boolean, default=False)
     is_system = Column(Boolean, default=False)            # True = pre-seeded, cannot be deleted
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     
-    # Relationship
+    # Relationships
     edge_engines = relationship("EdgeEngine", back_populates="edge_database")
+    provider_account = relationship("EdgeProviderAccount", foreign_keys=[provider_account_id])
 
 
 class EdgeCache(Base):
@@ -43,13 +45,15 @@ class EdgeCache(Base):
     provider = Column(String(50), nullable=False)        # "upstash", "redis", "dragonfly"
     cache_url = Column(String(500), nullable=False)     # "https://xxx.upstash.io"
     cache_token = Column(String(1000), nullable=True)   # auth token (write-only to frontend)
+    provider_account_id = Column(String, ForeignKey('edge_providers_accounts.id'), nullable=True)  # FK → Connected Account
     is_default = Column(Boolean, default=False)
     is_system = Column(Boolean, default=False)      # System caches are undeletable
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     
-    # Relationship
+    # Relationships
     edge_engines = relationship("EdgeEngine", back_populates="edge_cache")
+    provider_account = relationship("EdgeProviderAccount", foreign_keys=[provider_account_id])
 
 
 class EdgeQueue(Base):
@@ -69,13 +73,15 @@ class EdgeQueue(Base):
     signing_key = Column(String(500), nullable=True)     # Provider-specific signing key
     next_signing_key = Column(String(500), nullable=True) # Key rotation (QStash)
     provider_config = Column(Text, nullable=True)        # JSON — extra provider-specific config
+    provider_account_id = Column(String, ForeignKey('edge_providers_accounts.id'), nullable=True)  # FK → Connected Account
     is_default = Column(Boolean, default=False)
     is_system = Column(Boolean, default=False)
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     
-    # Relationship
+    # Relationships
     edge_engines = relationship("EdgeEngine", back_populates="edge_queue")
+    provider_account = relationship("EdgeProviderAccount", foreign_keys=[provider_account_id])
 
 
 class EdgeProviderAccount(Base):

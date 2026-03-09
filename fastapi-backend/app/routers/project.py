@@ -149,23 +149,15 @@ async def get_internal_creds(db: Session = Depends(get_db)):
     Internal endpoint for Edge Service to get decrypted credentials.
     Standard API users should NOT access this.
     """
-    from ..database.utils import decrypt_data
+    from ..core.credential_resolver import get_supabase_context
     
-    project = get_project(db)
-    if not project:
+    try:
+        ctx = get_supabase_context(db, mode="builder")
+    except Exception:
         raise HTTPException(status_code=404, detail="Project not configured")
-        
-    response = {
-        "supabaseUrl": project.supabase_url,
-        "supabaseKey": project.supabase_anon_key,
-        "supabaseServiceKey": None
-    }
     
-    # Decrypt service key if present
-    if project.supabase_service_key_encrypted:  # type: ignore[truthy-bool]
-        try:
-            response["supabaseServiceKey"] = decrypt_data(str(project.supabase_service_key_encrypted))
-        except Exception:
-            pass
-            
-    return response
+    return {
+        "supabaseUrl": ctx["url"],
+        "supabaseKey": ctx["anon_key"],
+        "supabaseServiceKey": ctx["auth_key"] if ctx.get("auth_method") == "service_role" else None
+    }

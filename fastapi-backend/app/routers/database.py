@@ -2,111 +2,54 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from ..models.schemas import DatabaseConnectionRequest, DatabaseConnectionResponse, SuccessResponse, ErrorResponse
-from ..database.config import get_db
+from ..database.config import get_db, SessionLocal
 from ..database.utils import get_project_settings, update_project_settings, decrypt_data, encrypt_data
+from ..core.credential_resolver import get_supabase_context, is_supabase_connected
 import httpx
 import json
 from typing import Optional, List, Dict, Any
-
-from ..database.config import get_db, SessionLocal
 
 router = APIRouter(prefix="/api/database", tags=["database"])
 
 
 def get_project_context_sync(db: Session, mode: str = "builder"):
-    """Get project context SYNCHRONOUSLY (for use with manual SessionLocal).
+    """Get Supabase credentials — delegates to unified credential_resolver.
     
-    For builder mode: Uses service role key if available, falls back to anon key
-    For other modes: Uses anon key
+    Checks Connected Accounts first, falls back to legacy project_settings.
     """
-    project = get_project_settings(db, "default")
-    if not project or not project.get("supabase_url"):
-        raise HTTPException(status_code=404, detail="Supabase connection not configured")
-    
-    url = project["supabase_url"]
-    anon_key = project.get("supabase_anon_key")
-    encrypted_service_key = project.get("supabase_service_key_encrypted")
-    
-    auth_key = None
-    auth_method = "anon"
-    
-    if mode == "builder":
-        # Try service key first, fall back to anon key
-        if encrypted_service_key:
-            try:
-                # Check if it's JSON (Express format)
-                try:
-                    key_data = json.loads(encrypted_service_key)
-                    if isinstance(key_data, dict) and 'encrypted' in key_data:
-                        print("Warning: Credentials encrypted with old Express method. Falling back to anon key.")
-                        auth_key = anon_key
-                        auth_method = "anon_fallback"
-                except (ValueError, TypeError):
-                    pass
-                
-                if not auth_key:
-                    decrypted = decrypt_data(encrypted_service_key)
-                    # decrypt_data silently returns the raw encrypted blob on failure
-                    # Only reject if decryption clearly failed (returned unchanged)
-                    if decrypted and decrypted != encrypted_service_key:
-                        auth_key = decrypted
-                        auth_method = "service_role"
-                    else:
-                        print("Warning: Could not decrypt service key. Falling back to anon key.")
-                        auth_key = anon_key
-                        auth_method = "anon_fallback"
-            except Exception as e:
-                print(f"Decryption error: {e}. Falling back to anon key.")
-                auth_key = anon_key
-                auth_method = "anon_fallback"
-        else:
-            # No service key, use anon key
-            print("No service key configured. Using anon key for builder mode.")
-            auth_key = anon_key
-            auth_method = "anon"
-    else:
-        auth_key = anon_key
-
-    return {
-        "url": url,
-        "anon_key": anon_key,
-        "auth_key": auth_key,
-        "auth_method": auth_method
-    }
+    return get_supabase_context(db, mode)
 
 
-# Keep async version for backward compatibility (should be deprecated later)
+# Keep async version for backward compatibility
 async def get_project_context(db: Session, mode: str = "builder"):
-    """Get project context (Supabase URL and Auth Key) - DEPRECATED: Use get_project_context_sync with manual SessionLocal."""
+    """Async wrapper — DEPRECATED, use get_project_context_sync."""
     return get_project_context_sync(db, mode)
 
 
 @router.get("/connections/", response_model=DatabaseConnectionResponse)
 async def get_connections(db: Session = Depends(get_db)):
-    """Get database connections"""
+    """Get database connections — checks Connected Accounts first, then legacy."""
     try:
-        # Get project-level Supabase settings
-        project = get_project_settings(db, "default")
-        
-        connections_list = [
-            {
-                "name": "supabase",
-                "type": "supabase",
-                "connected": bool(project and project.get("supabase_url") and project.get("supabase_anon_key")),
-                "status": "active" if bool(project and project.get("supabase_url") and project.get("supabase_anon_key")) else "inactive",
-                "url": project.get("supabase_url", "") if project else "",
-                "hasServiceKey": bool(project and project.get("supabase_service_key_encrypted"))
-            }
-        ]
-        
+        connected = is_supabase_connected(db)
+        url = ""
+        has_service_key = False
+
+        if connected:
+            try:
+                ctx = get_supabase_context(db, "builder")
+                url = ctx.get("url", "")
+                has_service_key = ctx.get("auth_method") == "service_role"
+            except Exception:
+                pass
+
         return DatabaseConnectionResponse(
             success=True,
             message="Connections retrieved successfully",
             data={
                 "supabase": {
-                    "connected": bool(project and project.get("supabase_url") and project.get("supabase_anon_key")),
-                    "url": project.get("supabase_url", "") if project else "",
-                    "hasServiceKey": bool(project and project.get("supabase_service_key_encrypted"))
+                    "connected": connected,
+                    "url": url,
+                    "hasServiceKey": has_service_key
                 }
             }
         )

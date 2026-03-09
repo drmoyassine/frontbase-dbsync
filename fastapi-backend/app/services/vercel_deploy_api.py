@@ -10,7 +10,7 @@ import httpx
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from ..models.models import EdgeEngine, EdgeProviderAccount
+from ..models.models import EdgeEngine
 from ..services.secrets_builder import build_engine_secrets
 
 
@@ -23,14 +23,11 @@ def _headers(api_token: str) -> dict:
 
 async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_type: str) -> None:
     """Deploy bundle to Vercel Edge Functions."""
-    provider = db.query(EdgeProviderAccount).filter(
-        EdgeProviderAccount.id == engine.edge_provider_id
-    ).first()
+    from ..core.credential_resolver import get_provider_context_by_id
 
-    from ..core.security import decrypt_credentials
-    creds = decrypt_credentials(str(provider.provider_credentials or '{}'))  # type: ignore[union-attr]
-    api_token = creds.get('api_token')
-    team_id = creds.get('team_id')
+    ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
+    api_token = ctx.get('api_token')
+    team_id = ctx.get('team_id')
     cfg = json.loads(str(engine.engine_config or '{}'))
     project_name = cfg.get('project_name', 'frontbase-edge')
 

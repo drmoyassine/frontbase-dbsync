@@ -1,105 +1,83 @@
-# Next Session — Planning
+# Session Summary — March 9, 2026
 
-> Work continuity file. Completed items are tracked in `progress.md` and `performance-optimization.md`.
+## What Was Done
 
-**Last session**: 2026-03-07 — Provider Test Connection, Supabase deploy fix (ioredis bundle split), Inspector scope filtering + branding  
-**Test coverage**: 160 pytest · 74+ edge vitest (9 files) · 13 frontend vitest = **247+ total**
+### Phase 3B–3D: Backend Unified Accounts Migration (completed prior sessions + early this session)
+- Added `provider_account_id` FK to `EdgeDatabase`, `EdgeCache`, `EdgeQueue`, `Datasource` models
+- Alembic migration `df956eaea66f` applied
+- Added `test_connection` + `discover` handlers for turso, neon, postgres, mysql, wordpress_rest in `edge_providers.py`
+- Extended Upstash discover for Redis + QStash
+- Refactored all 3 CRUD files (`edge_databases.py`, `edge_caches.py`, `edge_queues.py`) to accept `provider_account_id`, serialize with `account_name`
 
----
+### Phase 3E: Frontend Account-Linked Forms (this session)
+- **Created** `AccountResourcePicker.tsx` — shared component: Select Account → Discover → Pick Resource → auto-fill form
+  - Supports `resourceTypeFilter` (e.g. show only `redis` or only `qstash`)
+  - Supports `createResourceType` with inline "Create New" form (name + region)
+- **Created** backend `POST /api/edge-providers/discover-by-account/{account_id}` — decrypts stored creds server-side, calls discover
+- **Created** backend `POST /api/edge-providers/create-resource-by-account/{account_id}` — creates resources via management API (Upstash Redis)
+- **Integrated picker into**:
+  - `EdgeDatabasesForm.tsx` — Neon accounts (Turso removed, see below)
+  - `EdgeCacheDialog.tsx` — Upstash Redis (`resourceTypeFilter='redis'`, `createResourceType='redis'`)
+  - `EdgeQueuesForm.tsx` — Upstash QStash (`resourceTypeFilter='qstash'`)
+- **Updated** `useEdgeCacheForm.ts` with `formAccountId` state + payload
+- **Added** 5 new provider types to `EdgeProvidersSection.tsx` (neon, postgres, mysql, wordpress_rest, + turso was added then removed)
 
-## Priorities
-
-### 0. 🚨 Engine Snapshot Isolation (CRITICAL)
-
-Three related architecture issues discovered during tonight's session:
-
-#### A. Per-Engine Code Isolation
-**Problem**: Inspector "Save" writes edits to the **shared** `services/edge/src/` tree. All engines share one source tree → editing one engine's code affects ALL engines on next deploy.
-
-**Fix**: Save writes to `engine.source_snapshot` (DB column, per-engine). "Compile & Deploy" writes the snapshot to a temp dir, builds there, deploys, cleans up.
-
-```
-Edit → DB (engine.source_snapshot) → temp dir → tsup build → deploy → cleanup
-                   ↑ per-engine, isolated
-```
-
-#### B. Core Update vs Custom Code Conflict
-**Problem**: When Frontbase releases an engine core update, engines show "outdated". If user clicks "Update" → their custom Inspector edits get overwritten with the new core.
-
-**Fix needed**: Three-way merge or layered approach:
-- **Option 1**: Git-style 3-way merge (base snapshot vs user edits vs new core)
-- **Option 2**: Layered snapshots — `core_snapshot` (Frontbase-managed) + `user_overrides` (user edits). Deploy = merge layers.
-- **Option 3**: Treat user-edited engines as "forked" — show "Forked" badge, skip auto-update prompts, let user manually cherry-pick core updates
-
-#### C. False-Positive Drift Detection
-**Problem**: Current drift detection hashes ALL `.ts` source files → `source_hash`. When user edits code in Inspector, their `bundle_checksum` no longer matches the computed `source_hash` → engine shows "outdated" (false positive — it's not outdated, it's *customized*).
-
-**Fix needed**: Separate two concepts:
-- `core_version_hash` — hash of Frontbase's baseline code (for "is there a Frontbase update?")
-- `engine_checksum` — hash of this engine's actual deployed bundle (for "is the deployed code current?")
-
-Engine is outdated only when `core_version_hash` changes AND user hasn't forked.
+### Bug Fixes (this session)
+1. **Upstash "Create New Redis"** — fixed "regional db creation is deprecated" by using `primary_region` + `read_regions: []` (Global Redis)
+2. **QStash discover** — Management API key ≠ QStash token. Wrapped in try/except (best-effort). If auth fails, gracefully returns only Redis resources
+3. **Turso removed from Connected Accounts** — no dashboard API tokens page, no OAuth. Turso stays as per-DB manual entry (URL + auth token) in Edge DB form
 
 ---
 
-### 1. Add More Edge Engine Providers
-Currently only **Cloudflare Workers** and **Docker** deploy paths exist.
+## Current State of Files
 
-**Candidates to add** (categorized):
+### Backend (FastAPI)
+| File | Status |
+|---|---|
+| `app/routers/edge_providers.py` | ✅ Discover + create-resource endpoints added |
+| `app/routers/edge_databases.py` | ✅ `provider_account_id` in schemas/CRUD |
+| `app/routers/edge_caches.py` | ✅ `provider_account_id` in schemas/CRUD |
+| `app/routers/edge_queues.py` | ✅ `provider_account_id` in schemas/CRUD |
+| `app/core/security.py` | ✅ Provider schemas updated |
+| `app/models/edge.py` | ✅ FK columns added |
 
-**Ecosystem partners** (already integrated elsewhere in Frontbase):
-- [ ] **Supabase Edge Functions** — Deno-based, already have Supabase credentials, natural fit
-- [ ] **Upstash Workflows** — durable serverless workflows, already have Upstash creds for cache/queue
+### Frontend (React)
+| File | Status |
+|---|---|
+| `settings/shared/AccountResourcePicker.tsx` | ✅ NEW — shared picker component |
+| `settings/shared/EdgeDatabasesForm.tsx` | ✅ Neon picker integrated |
+| `settings/shared/EdgeCacheDialog.tsx` | ✅ Upstash Redis picker + Create New |
+| `settings/shared/EdgeQueuesForm.tsx` | ✅ Upstash QStash picker |
+| `settings/shared/EdgeProvidersSection.tsx` | ✅ neon/postgres/mysql/wordpress added, turso removed |
+| `hooks/useEdgeCacheForm.ts` | ✅ `formAccountId` state added |
 
-**Serverless edge** (similar to existing Cloudflare path):
-- [ ] **Vercel Edge Functions** — large user base, Hono-compatible
-- [ ] **Deno Deploy** — native Hono support, minimal adaptation
-- [ ] **Netlify Edge Functions** — Deno runtime, simple deploy API
-- [ ] **Fastly Compute** — Wasm-based, high-performance edge
+---
 
-**Container-based** (similar to existing Docker path):
-- [ ] **Fly.io** — global containers, simple CLI/API deploy
-- [ ] **Railway** — simple deploy API, Docker support
-- [ ] **Render** — auto-deploy from Docker, free tier
+## What Still Needs To Be Done
 
-**Hyperscalers**:
-- [ ] **AWS Lambda@Edge / Lambda + CloudFront** — complex but widest reach
-- [ ] **Azure Functions** — enterprise, broad tooling
-- [ ] **Google Cloud Run** — container-based serverless, scales to zero
-- [ ] **IBM Code Engine** — Knative-based, container serverless
-- [ ] **Oracle Cloud Functions** — Fn Project-based, always-free tier
+### Immediate (test what was built)
+- [ ] Test Upstash Cache → "Create New Redis Database" (fixed regional deprecation)
+- [ ] Test QStash Queue → discover (may or may not show QStash depending on API key)
+- [ ] Test Neon Edge DB → account picker → discover projects
 
-**Implementation per provider**:
-- Backend: `services/engine_deploy_<provider>.py` — deploy/redeploy/teardown
-- Backend: Update `adapter_type` Literal in `schemas/edge_engines.py` 
-- Frontend: Add provider card in Edge Infrastructure wizard (Step 1 provider picker)
-- Edge: Provider-specific env vars (API tokens, project IDs)
+### Remaining Migration Items
+- [ ] Datasource form: account selector for postgres/mysql/wordpress/neon (in `Datasources.tsx`)
+- [ ] Show `account_name` badge on DB/cache/queue list items in the UI
+- [ ] `secrets_builder.py`: resolve tokens via FK when inline token is absent
+- [ ] Data Sources (Postgres, MySQL, WordPress API, GraphQL, Neon) — need same unified pattern
 
-**Current adapter_type values**: `"edge" | "pages" | "automations" | "full"`  
-**Current deploy paths**: `_deploy_cloudflare()` in `engine_deploy.py`, Docker `/api/update` endpoint
+### Known Bugs (from bugs.md, separate session)
+- Deno Deploy: `APP_NOT_FOUND` error on deploy
+- Upstash engine deploy (Upstash Workflows): 404
+- Netlify engine deploy: subdomain uniqueness error
+- Vercel: deployed but "No Production Deployment" on dashboard
+- Supabase: deployed with failed request on dashboard
 
-### 2. Connected Accounts Tab in Settings
-New tab in `SettingsPanel` showing all connected 3rd-party accounts in one place.
+---
 
-**Known accounts across Frontbase**:
-| Provider | Where Stored | Scope |
-|----------|-------------|-------|
-| Supabase | `ProjectSettings.supabase_url` + keys | Database, Auth |
-| Cloudflare | `ProjectSettings.cloudflare_*` | Edge Deploy |
-| Upstash Redis | `EdgeCache.cache_url` + token | Caching |
-| Upstash QStash | `EdgeQueue.queue_url` + token | Queues |
-| AI Providers | `ProjectSettings` / env | Inference |
-| Email (Resend/SendGrid) | `ProjectSettings.email_*` | Notifications |
+## Key Architecture Decisions
 
-**Implementation**:
-- [ ] Backend: `GET /api/settings/connected-accounts` — aggregates all provider connection status
-- [ ] Frontend: `ConnectedAccountsTab.tsx` — card per provider with status badge, scope tags, and link to configure
-- [ ] Add `'accounts'` to `VALID_TABS` in `SettingsPanel.tsx`
-- [ ] Each card shows: provider logo, connection status (✅/❌), scope, last verified, actions (disconnect/refresh)
-
-### 3. Inspector IDE Polish (follow-up)
-The core IDE is live (Monaco editor + Save All + Compile & Deploy). Remaining polish:
-- [ ] Inspector Health & Resource Metrics panel
-- [ ] File creation/deletion from within Inspector
-- [ ] Multi-file search (Ctrl+Shift+F)
-- [ ] TypeScript type-checking feedback in editor
+1. **Turso**: No Connected Account — connects per-DB (URL + auth token). Turso has no public OAuth and the dashboard API tokens page doesn't exist at the documented URL
+2. **Upstash**: One Connected Account (email + management API key) serves both Redis (cache) and QStash (queue). QStash discovery is best-effort since the management API key may not work as QStash Bearer token
+3. **All providers**: `provider_account_id` FK on edge infra resources links to `EdgeProviderAccount` table. Backend serialization includes `account_name` for display
+4. **Create New resources**: Only Upstash Redis supported via management API. Uses Global Redis (not regional)

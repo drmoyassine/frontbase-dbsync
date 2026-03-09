@@ -139,14 +139,11 @@ async def _deploy_cloudflare(
     script_content: str, adapter_type: str
 ) -> None:
     """Cloudflare-specific deploy: upload bundle + set secrets."""
-    provider = db.query(EdgeProviderAccount).filter(
-        EdgeProviderAccount.id == engine.edge_provider_id
-    ).first()
+    from ..core.credential_resolver import get_provider_context_by_id
 
-    from ..core.security import decrypt_credentials
-    creds = decrypt_credentials(str(provider.provider_credentials or '{}'))  # type: ignore[union-attr]
-    api_token = creds.get('api_token')
-    account_id = creds.get('account_id')
+    ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
+    api_token = ctx.get('api_token')
+    account_id = ctx.get('account_id')
     cfg = json.loads(str(engine.engine_config or '{}'))
     worker_name = cfg.get('worker_name')
 

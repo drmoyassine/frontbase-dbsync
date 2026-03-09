@@ -233,8 +233,8 @@ def _compute_supabase_request(binding: dict, datasource) -> Optional[dict]:
                 'url': distinct_rpc_url,
                 'method': 'POST',
                 'headers': {
-                    'apikey': anon_key or '{{SUPABASE_ANON_KEY}}',
-                    'Authorization': f"Bearer {anon_key}" if anon_key else 'Bearer {{SUPABASE_ANON_KEY}}',
+                    'apikey': anon_key,
+                    'Authorization': f"Bearer {anon_key}",
                     'Content-Type': 'application/json'
                 },
                 'body': distinct_body,
@@ -245,8 +245,8 @@ def _compute_supabase_request(binding: dict, datasource) -> Optional[dict]:
         'url': rpc_url,
         'method': 'POST',  # RPC uses POST
         'headers': {
-            'apikey': anon_key or '{{SUPABASE_ANON_KEY}}',
-            'Authorization': f"Bearer {anon_key}" if anon_key else 'Bearer {{SUPABASE_ANON_KEY}}',
+            'apikey': anon_key,
+            'Authorization': f"Bearer {anon_key}",
             'Content-Type': 'application/json'
         },
         'body': {

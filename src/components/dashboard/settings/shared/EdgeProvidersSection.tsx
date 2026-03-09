@@ -37,12 +37,11 @@ const PROVIDER_CONFIGS: Record<string, {
     },
     supabase: {
         label: 'Supabase Edge Functions',
-        defaultName: 'Supabase Project',
+        defaultName: 'Supabase Account',
         fields: [
             { key: 'access_token', label: 'Access Token', placeholder: 'sbp_...', type: 'password', required: true },
-            { key: 'project_ref', label: 'Project Ref', placeholder: 'abcdefghij', required: true },
         ],
-        helpText: <><a href="https://supabase.com/dashboard/account/tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Generate access token →</a> Project ref is in Settings → General.</>,
+        helpText: <><a href="https://supabase.com/dashboard/account/tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Generate access token →</a> One token discovers all your projects.</>,
     },
     upstash: {
         label: 'Upstash Workflows',
@@ -58,18 +57,16 @@ const PROVIDER_CONFIGS: Record<string, {
         defaultName: 'Vercel Account',
         fields: [
             { key: 'api_token', label: 'API Token', placeholder: 'Vercel API Token', type: 'password', required: true },
-            { key: 'team_id', label: 'Team ID', placeholder: 'team_... (optional)' },
         ],
-        helpText: <><a href="https://vercel.com/account/tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a> Team ID is optional for personal accounts.</>,
+        helpText: <><a href="https://vercel.com/account/tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a> One token for all your projects.</>,
     },
     netlify: {
         label: 'Netlify Edge Functions',
         defaultName: 'Netlify Account',
         fields: [
             { key: 'api_token', label: 'API Token', placeholder: 'nfp_...', type: 'password', required: true },
-            { key: 'site_id', label: 'Site ID', placeholder: 'Your Netlify site ID', required: true },
         ],
-        helpText: <><a href="https://app.netlify.com/user/applications#personal-access-tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a> Site ID is in Site Settings → General.</>,
+        helpText: <><a href="https://app.netlify.com/user/applications#personal-access-tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a> A site will be created automatically on first deploy.</>,
     },
     deno: {
         label: 'Deno Deploy',
@@ -78,6 +75,46 @@ const PROVIDER_CONFIGS: Record<string, {
             { key: 'access_token', label: 'Organization Token', placeholder: 'ddo_...', type: 'password', required: true },
         ],
         helpText: <>Create an org token at your <a href="https://dash.deno.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Deno Deploy dashboard</a> → Organization Settings.</>,
+    },
+    neon: {
+        label: 'Neon Postgres',
+        defaultName: 'Neon Account',
+        fields: [
+            { key: 'api_key', label: 'API Key', placeholder: 'neon_api_...', type: 'password', required: true },
+        ],
+        helpText: <>Found in <a href="https://console.neon.tech/app/settings/api-keys" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Neon console</a> → Account Settings → API Keys.</>,
+    },
+    postgres: {
+        label: 'PostgreSQL',
+        defaultName: 'PostgreSQL Server',
+        fields: [
+            { key: 'host', label: 'Host', placeholder: 'db.example.com', required: true },
+            { key: 'port', label: 'Port', placeholder: '5432' },
+            { key: 'database', label: 'Database', placeholder: 'mydb', required: true },
+            { key: 'username', label: 'Username', placeholder: 'postgres', required: true },
+            { key: 'password', label: 'Password', placeholder: 'Password', type: 'password', required: true },
+        ],
+    },
+    mysql: {
+        label: 'MySQL',
+        defaultName: 'MySQL Server',
+        fields: [
+            { key: 'host', label: 'Host', placeholder: 'db.example.com', required: true },
+            { key: 'port', label: 'Port', placeholder: '3306' },
+            { key: 'database', label: 'Database', placeholder: 'mydb', required: true },
+            { key: 'username', label: 'Username', placeholder: 'root', required: true },
+            { key: 'password', label: 'Password', placeholder: 'Password', type: 'password', required: true },
+        ],
+    },
+    wordpress_rest: {
+        label: 'WordPress REST',
+        defaultName: 'WordPress Site',
+        fields: [
+            { key: 'base_url', label: 'Site URL', placeholder: 'https://mysite.com', required: true },
+            { key: 'username', label: 'Username', placeholder: 'admin', required: true },
+            { key: 'app_password', label: 'Application Password', placeholder: 'xxxx xxxx xxxx xxxx', type: 'password', required: true },
+        ],
+        helpText: <>Generate an Application Password in WordPress → Users → Profile → Application Passwords.</>,
     },
 };
 
@@ -100,19 +137,17 @@ export function EdgeProvidersSection() {
     const [retestingId, setRetestingId] = useState<string | null>(null);
     const [retestResults, setRetestResults] = useState<Record<string, { success: boolean; detail: string }>>({});
 
-    const handleRetest = async (providerId: string, providerType: string) => {
+    // Supabase project picker state
+    const [discoveredProjects, setDiscoveredProjects] = useState<{ ref: string; name: string; region: string; status: string }[]>([]);
+    const [selectedProjectRef, setSelectedProjectRef] = useState<string>('');
+
+    const handleRetest = async (providerId: string) => {
         setRetestingId(providerId);
         setRetestResults(prev => { const n = { ...prev }; delete n[providerId]; return n; });
         try {
-            // Fetch provider details to get credentials for re-test
-            const provRes = await fetch(`${API_BASE}/api/edge-providers/${providerId}`);
-            const provData = await provRes.json();
-
-            // Use the test-connection endpoint with stored credentials
-            const res = await fetch(`${API_BASE}/api/edge-providers/test-connection`, {
+            // Use server-side /retest endpoint (decrypts stored credentials)
+            const res = await fetch(`${API_BASE}/api/edge-providers/retest/${providerId}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ provider: providerType, credentials: provData.provider_metadata || {} }),
             });
             const data = await res.json();
             setRetestResults(prev => ({ ...prev, [providerId]: data }));
@@ -131,6 +166,8 @@ export function EdgeProvidersSection() {
         setCredFields({});
         setTestResult(null);
         setError(null);
+        setDiscoveredProjects([]);
+        setSelectedProjectRef('');
         const cfg = PROVIDER_CONFIGS[value];
         if (cfg) setName(cfg.defaultName);
     };
@@ -139,6 +176,8 @@ export function EdgeProvidersSection() {
         setIsTesting(true);
         setTestResult(null);
         setError(null);
+        setDiscoveredProjects([]);
+        setSelectedProjectRef('');
         try {
             const res = await fetch(`${API_BASE}/api/edge-providers/test-connection`, {
                 method: 'POST',
@@ -149,8 +188,15 @@ export function EdgeProvidersSection() {
             setTestResult(data);
             // Auto-name on success
             if (data.success && data.detail) {
-                const detailName = data.detail.replace(/^Connected (as |to (project: )?)/, '');
+                const detailName = data.detail.replace(/^Connected (as |to (project: )?)?/, '').replace(/— .*/, '').trim();
                 if (detailName) setName(`${currentConfig.label}: ${detailName}`);
+            }
+            // If Supabase returned projects, populate picker
+            if (data.success && data.projects && data.projects.length > 0) {
+                setDiscoveredProjects(data.projects);
+                // Auto-select first project
+                setSelectedProjectRef(data.projects[0].ref);
+                setName(`Supabase: ${data.projects[0].name}`);
             }
         } catch (e: any) {
             setTestResult({ success: false, detail: e.message || 'Connection failed' });
@@ -162,10 +208,15 @@ export function EdgeProvidersSection() {
         setIsConnecting(true);
         setError(null);
         try {
+            // For Supabase, include selected project_ref
+            const finalCreds = providerType === 'supabase' && selectedProjectRef
+                ? { ...credFields, project_ref: selectedProjectRef }
+                : credFields;
+
             const newProvider = await edgeInfrastructureApi.createProvider({
                 name,
                 provider: providerType,
-                provider_credentials: credFields,
+                provider_credentials: finalCreds,
                 is_active: true,
             });
 
@@ -191,6 +242,8 @@ export function EdgeProvidersSection() {
             setOpen(false);
             setCredFields({});
             setTestResult(null);
+            setDiscoveredProjects([]);
+            setSelectedProjectRef('');
             setName(PROVIDER_CONFIGS.cloudflare.defaultName);
         } catch (e: any) {
             setError(e.message);
@@ -284,6 +337,29 @@ export function EdgeProvidersSection() {
                             </div>
                         )}
 
+                        {/* Supabase project picker */}
+                        {discoveredProjects.length > 0 && (
+                            <div className="space-y-2">
+                                <Label>Select Project</Label>
+                                <Select value={selectedProjectRef} onValueChange={(val) => {
+                                    setSelectedProjectRef(val);
+                                    const proj = discoveredProjects.find(p => p.ref === val);
+                                    if (proj) setName(`Supabase: ${proj.name}`);
+                                }}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Pick a Supabase project" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {discoveredProjects.map(p => (
+                                            <SelectItem key={p.ref} value={p.ref}>
+                                                {p.name} <span className="text-muted-foreground ml-1">({p.region})</span>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+
                         <DialogFooter className="gap-2 sm:gap-0">
                             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
                             <Button
@@ -338,11 +414,7 @@ export function EdgeProvidersSection() {
                                                 )}
                                             </div>
                                             <p className="text-xs text-muted-foreground capitalize mt-0.5">{p.provider}</p>
-                                            {metadata && Object.keys(metadata).length > 0 && (
-                                                <p className="text-[11px] text-muted-foreground/70 mt-0.5 font-mono">
-                                                    {Object.entries(metadata).map(([k, v]) => `${k}: ${v}`).join(' · ')}
-                                                </p>
-                                            )}
+
                                             {testState && (
                                                 <div className={`flex items-center gap-1 mt-1 text-[11px] ${testState.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                                                     }`}>
@@ -362,7 +434,7 @@ export function EdgeProvidersSection() {
                                             size="icon"
                                             className="text-muted-foreground hover:text-primary"
                                             disabled={retestingId === p.id}
-                                            onClick={() => handleRetest(p.id, p.provider)}
+                                            onClick={() => handleRetest(p.id)}
                                             title="Test connection"
                                         >
                                             {retestingId === p.id

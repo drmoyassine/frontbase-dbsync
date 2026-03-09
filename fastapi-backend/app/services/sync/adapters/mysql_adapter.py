@@ -32,12 +32,13 @@ class MySQLAdapter(SQLAdapter):
         host = self._sanitize_host(self.datasource.host)
         port = self.datasource.port
         
+        from app.core.security import decrypt_field
         self._pool = await aiomysql.create_pool(
             host=host,
             port=port,
             db=self.datasource.database,
             user=self.datasource.username,
-            password=self.datasource.password_encrypted or "",  # TODO: decrypt
+            password=decrypt_field(self.datasource.password_encrypted) or "",
             minsize=1,
             maxsize=10,
             autocommit=True,

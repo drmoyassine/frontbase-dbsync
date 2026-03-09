@@ -30,6 +30,7 @@ import {
     AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { showTestToast, TestResult } from './edgeTestToast';
+import { AccountResourcePicker, DiscoveredResource } from './AccountResourcePicker';
 
 const API_BASE = '';
 
@@ -82,6 +83,9 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
     // Delete
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
+    // Account link
+    const [formAccountId, setFormAccountId] = useState<string | null>(null);
+
     const refetchQueues = () => queryClient.invalidateQueries({ queryKey: ['edge-queues'] });
 
     const resetForm = () => {
@@ -96,6 +100,7 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
         setError(null);
         setPasteMode(true);
         setEnvBlock('');
+        setFormAccountId(null);
     };
 
     const openCreate = () => {
@@ -147,6 +152,7 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
             if (formToken) payload.queue_token = formToken;
             if (formSigningKey) payload.signing_key = formSigningKey;
             if (formNextSigningKey) payload.next_signing_key = formNextSigningKey;
+            if (formAccountId) payload.provider_account_id = formAccountId;
 
             const url = editingId
                 ? `${API_BASE}/api/edge-queues/${editingId}`
@@ -301,6 +307,33 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                             })}
                         </div>
                     </div>
+
+                    {/* Account resource picker — select from Upstash accounts for QStash */}
+                    {selectedProvider === 'qstash' && !editingId && (
+                        <AccountResourcePicker
+                            compatibleProviders={['upstash']}
+                            resourceTypeFilter="qstash"
+                            label="From Connected Upstash Account"
+                            onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
+                                setFormAccountId(accountId);
+                                if (resource.type === 'qstash') {
+                                    if (resource.endpoint) setFormUrl(resource.endpoint);
+                                    if ((resource as any).token) setFormToken((resource as any).token);
+                                    if ((resource as any).signing_key) setFormSigningKey((resource as any).signing_key);
+                                    if ((resource as any).next_signing_key) setFormNextSigningKey((resource as any).next_signing_key);
+                                    if (!formName) setFormName('QStash');
+                                    setPasteMode(false);
+                                }
+                            }}
+                            onClear={() => {
+                                setFormAccountId(null);
+                                setFormUrl('');
+                                setFormToken('');
+                                setFormSigningKey('');
+                                setFormNextSigningKey('');
+                            }}
+                        />
+                    )}
 
                     {/* QStash .env paste mode */}
                     {selectedProvider === 'qstash' && !editingId && (

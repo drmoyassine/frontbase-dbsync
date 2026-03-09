@@ -41477,15 +41477,6 @@ healthRoute.openapi(route, (c) => {
     timestamp: (/* @__PURE__ */ new Date()).toISOString()
   });
 });
-
-// src/routes/ai.ts
-var _aiBinding = null;
-function setAIBinding(ai) {
-  _aiBinding = ai;
-}
-function getAIBinding() {
-  return _aiBinding;
-}
 var _gpuModels = [];
 function getGPUModels() {
   if (_gpuModels.length === 0) {
@@ -52945,11 +52936,9 @@ function resolveModel(modelSlug, c) {
   if (!model) {
     return { error: c.json({ error: { message: `Model '${modelSlug}' not found. Available: ${models.map((m) => m.slug).join(", ")}`, type: "invalid_request_error", code: "model_not_found" } }, 404) };
   }
-  const ai = getAIBinding();
-  if (!ai) {
+  {
     return { error: c.json({ error: { message: "AI binding not available.", type: "server_error", code: "ai_binding_missing" } }, 503) };
   }
-  return { model, ai };
 }
 function mergeDefaults(payload, model) {
   if (model.provider_config) {
@@ -53424,23 +53413,17 @@ function setPlatform(platform2) {
   ensureProcessEnv();
   globalThis.process.env.FRONTBASE_ADAPTER_PLATFORM = platform2;
 }
+function createWorkerHandler(app, platform2, options) {
+  return {
+    async fetch(request) {
+      setPlatform(platform2);
+      return app.fetch(request);
+    }
+  };
+}
 
-// src/adapters/cloudflare-lite.ts
-var cloudflare_lite_default = {
-  async fetch(request, env2, ctx) {
-    for (const [key, value] of Object.entries(env2)) {
-      if (typeof value === "string") {
-        globalThis.process ??= { env: {} };
-        globalThis.process.env[key] = value;
-      }
-    }
-    setPlatform("cloudflare-lite");
-    if (env2.AI) {
-      setAIBinding(env2.AI);
-    }
-    return liteApp.fetch(request);
-  }
-};
+// src/adapters/upstash-workflow-lite.ts
+var upstash_workflow_lite_default = createWorkerHandler(liteApp, "upstash-workflow-lite");
 /*! Bundled license information:
 
 crypto-js/ripemd160.js:
@@ -53463,4 +53446,4 @@ crypto-js/mode-ctr-gladman.js:
    *)
 */
 
-export { cloudflare_lite_default as default };
+export { upstash_workflow_lite_default as default };

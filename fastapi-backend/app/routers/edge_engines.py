@@ -228,8 +228,8 @@ async def deploy_engine(payload: GenericDeployRequest, db: Session = Depends(get
     if provider_type not in PROVIDER_LABELS:
         raise HTTPException(400, f"Unsupported provider type: {provider_type}")
 
-    from ..core.security import decrypt_credentials
-    creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
+    from ..core.credential_resolver import get_provider_context_by_id
+    ctx = get_provider_context_by_id(db, payload.provider_id)
     label = PROVIDER_LABELS[provider_type]
 
     # --- For CF, delegate to existing /api/cloudflare/deploy (kept for backward compat) ---
@@ -247,17 +247,20 @@ async def deploy_engine(payload: GenericDeployRequest, db: Session = Depends(get
             edge_db_id = str(default_db.id)
 
     # --- Construct engine URL ---
-    engine_url = _build_engine_url(provider_type, creds, payload.worker_name)
+    engine_url = _build_engine_url(provider_type, ctx, payload.worker_name)
 
     # --- For CF, enable workers.dev subdomain (makes URL routable) ---
     if provider_type == "cloudflare":
         from ..services import cloudflare_api
-        account_id = creds.get("account_id")
-        api_token = creds.get("api_token")
+        from ..core.security import encrypt_credentials
+        account_id = ctx.get("account_id")
+        api_token = ctx.get("api_token")
         if not account_id:
             account_id = await cloudflare_api.detect_account_id(api_token)
-            creds["account_id"] = account_id
-            provider.provider_credentials = json.dumps(creds)  # type: ignore[assignment]
+            # Save detected account_id back to encrypted credentials
+            raw_creds = dict(ctx.get("_creds", {}))
+            raw_creds["account_id"] = account_id
+            provider.provider_credentials = encrypt_credentials(raw_creds)  # type: ignore[assignment]
             db.commit()
         engine_url = await cloudflare_api.enable_workers_dev(api_token, account_id, payload.worker_name)
 

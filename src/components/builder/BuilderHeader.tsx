@@ -136,8 +136,10 @@ export const BuilderHeader: React.FC<{
         const host = new URL(target.url).hostname;
         const isInternal = !host.includes('.') || host === 'localhost' || host === '0.0.0.0';
         if (isInternal) {
-          // Local/system edge in single-tenant self-host → same app URL
-          return window.location.origin;
+          // In dev (Vite on :5173), no Nginx to route — use edge URL directly
+          // In production, Nginx routes /* → edge, so use same origin
+          const isDev = window.location.port === '5173';
+          return isDev ? target.url.replace(/\/$/, '') : window.location.origin;
         }
         // Cloud edge → use its public URL
         return target.url.replace(/\/$/, '');

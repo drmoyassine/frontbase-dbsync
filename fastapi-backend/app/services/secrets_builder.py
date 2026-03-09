@@ -39,6 +39,7 @@ def build_engine_secrets(
     Only includes non-None values.
     """
     import json
+    from ..core.security import decrypt_field
     secrets: dict[str, str] = {}
 
     # GPU Models — serialize model registry for the AI route
@@ -77,16 +78,18 @@ def build_engine_secrets(
         edge_db = db.query(EdgeDatabase).filter(EdgeDatabase.id == edge_db_id).first()
         if edge_db:
             secrets['FRONTBASE_STATE_DB_URL'] = str(edge_db.db_url)
-            if edge_db.db_token:  # type: ignore[truthy-bool]
-                secrets['FRONTBASE_STATE_DB_TOKEN'] = str(edge_db.db_token)
+            token = decrypt_field(str(edge_db.db_token)) if edge_db.db_token else None  # type: ignore[truthy-bool]
+            if token:
+                secrets['FRONTBASE_STATE_DB_TOKEN'] = token
 
     # Cache
     if edge_cache_id:
         edge_cache = db.query(EdgeCache).filter(EdgeCache.id == edge_cache_id).first()
         if edge_cache:
             secrets['FRONTBASE_CACHE_URL'] = str(edge_cache.cache_url)
-            if edge_cache.cache_token:  # type: ignore[truthy-bool]
-                secrets['FRONTBASE_CACHE_TOKEN'] = str(edge_cache.cache_token)
+            token = decrypt_field(str(edge_cache.cache_token)) if edge_cache.cache_token else None  # type: ignore[truthy-bool]
+            if token:
+                secrets['FRONTBASE_CACHE_TOKEN'] = token
 
     # Queue (provider-agnostic)
     if edge_queue_id:
@@ -94,11 +97,14 @@ def build_engine_secrets(
         if edge_queue:
             secrets['FRONTBASE_QUEUE_PROVIDER'] = str(edge_queue.provider)
             secrets['FRONTBASE_QUEUE_URL'] = str(edge_queue.queue_url)
-            if edge_queue.queue_token:  # type: ignore[truthy-bool]
-                secrets['FRONTBASE_QUEUE_TOKEN'] = str(edge_queue.queue_token)
-            if edge_queue.signing_key:  # type: ignore[truthy-bool]
-                secrets['FRONTBASE_QUEUE_SIGNING_KEY'] = str(edge_queue.signing_key)
-            if edge_queue.next_signing_key:  # type: ignore[truthy-bool]
-                secrets['FRONTBASE_QUEUE_NEXT_SIGNING_KEY'] = str(edge_queue.next_signing_key)
+            token = decrypt_field(str(edge_queue.queue_token)) if edge_queue.queue_token else None  # type: ignore[truthy-bool]
+            if token:
+                secrets['FRONTBASE_QUEUE_TOKEN'] = token
+            sk = decrypt_field(str(edge_queue.signing_key)) if edge_queue.signing_key else None  # type: ignore[truthy-bool]
+            if sk:
+                secrets['FRONTBASE_QUEUE_SIGNING_KEY'] = sk
+            nsk = decrypt_field(str(edge_queue.next_signing_key)) if edge_queue.next_signing_key else None  # type: ignore[truthy-bool]
+            if nsk:
+                secrets['FRONTBASE_QUEUE_NEXT_SIGNING_KEY'] = nsk
 
     return secrets

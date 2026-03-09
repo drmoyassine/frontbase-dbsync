@@ -35,6 +35,15 @@ def get_datasources_for_publish(db: Session) -> list:
         db.rollback()
         return []
     
+    # Resolve Supabase anon key via unified credential resolver (DRY)
+    supabase_anon_key = None
+    try:
+        from app.core.credential_resolver import get_supabase_context
+        ctx = get_supabase_context(db, mode="public")
+        supabase_anon_key = ctx.get("anon_key")
+    except Exception:
+        pass  # No Supabase connected — anon_key stays None
+
     result = []
     for ds in datasources:
         # Map sync DatasourceType to publish DatasourceType
@@ -47,14 +56,15 @@ def get_datasources_for_publish(db: Session) -> list:
         
         publish_type = type_map.get(ds.type, PublishDatasourceType.POSTGRES)
         
+        # For Supabase: use resolved anon key, fallback to model field
+        anon_key = supabase_anon_key or ds.anon_key_encrypted
+
         config = DatasourceConfig(
             id=ds.id,
             type=publish_type,
             name=ds.name,
             url=ds.api_url or f"postgresql://{ds.host}:{ds.port}/{ds.database}",
-            # For Supabase: include anon key (safe to expose)
-            anonKey=ds.anon_key_encrypted,  # Decrypt in production
-            # Store secret env var name for API key
+            anonKey=anon_key,
             secretEnvVar=f"DS_{ds.name.upper().replace(' ', '_')}_API_KEY",
         )
         result.append(config)

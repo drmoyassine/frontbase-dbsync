@@ -28,6 +28,7 @@ class EdgeDatabaseCreate(BaseModel):
     provider: str  # "turso", "neon", "planetscale"
     db_url: str
     db_token: Optional[str] = None
+    provider_account_id: Optional[str] = None  # FK → Connected Account
     is_default: bool = False
 
 class EdgeDatabaseUpdate(BaseModel):
@@ -35,6 +36,7 @@ class EdgeDatabaseUpdate(BaseModel):
     provider: Optional[str] = None
     db_url: Optional[str] = None
     db_token: Optional[str] = None
+    provider_account_id: Optional[str] = None
     is_default: Optional[bool] = None
 
 class EdgeDatabaseResponse(BaseModel):
@@ -45,6 +47,8 @@ class EdgeDatabaseResponse(BaseModel):
     has_token: bool  # Never expose the actual token
     is_default: bool
     is_system: bool = False  # True = pre-seeded, cannot be deleted
+    provider_account_id: Optional[str] = None
+    account_name: Optional[str] = None
     created_at: str
     updated_at: str
     target_count: int = 0  # Number of deployment targets using this DB
@@ -59,6 +63,32 @@ class TestConnectionResult(BaseModel):
 # Endpoints
 # =============================================================================
 
+def _serialize_edge_db(edb, db, target_count: int = 0) -> EdgeDatabaseResponse:
+    """Serialize an EdgeDatabase ORM object."""
+    from ..models.models import EdgeProviderAccount
+    account_name = None
+    if edb.provider_account_id:
+        acct = db.query(EdgeProviderAccount).filter(
+            EdgeProviderAccount.id == edb.provider_account_id
+        ).first()
+        if acct:
+            account_name = str(acct.name)
+    return EdgeDatabaseResponse(
+        id=str(edb.id),
+        name=str(edb.name),
+        provider=str(edb.provider),
+        db_url=str(edb.db_url),
+        has_token=bool(edb.db_token) or bool(edb.provider_account_id),
+        is_default=bool(edb.is_default),
+        is_system=bool(edb.is_system),
+        provider_account_id=str(edb.provider_account_id) if edb.provider_account_id else None,
+        account_name=account_name,
+        created_at=str(edb.created_at),
+        updated_at=str(edb.updated_at),
+        target_count=target_count,
+    )
+
+
 @router.get("/", response_model=List[EdgeDatabaseResponse])
 async def list_edge_databases():
     """List all configured edge databases."""
@@ -70,18 +100,7 @@ async def list_edge_databases():
             target_count = db.query(EdgeEngine).filter(
                 EdgeEngine.edge_db_id == edb.id
             ).count()
-            result.append(EdgeDatabaseResponse(
-                id=str(edb.id),
-                name=str(edb.name),
-                provider=str(edb.provider),
-                db_url=str(edb.db_url),
-                has_token=bool(edb.db_token),
-                is_default=bool(edb.is_default),
-                is_system=bool(edb.is_system),
-                created_at=str(edb.created_at),
-                updated_at=str(edb.updated_at),
-                target_count=target_count,
-            ))
+            result.append(_serialize_edge_db(edb, db, target_count))
         return result
     finally:
         db.close()
@@ -89,7 +108,11 @@ async def list_edge_databases():
 
 @router.post("/", response_model=EdgeDatabaseResponse, status_code=201)
 async def create_edge_database(payload: EdgeDatabaseCreate):
-    """Create a new edge database connection."""
+    """Create a new edge database connection.
+    
+    If provider_account_id is provided, db_token is optional — it will be
+    resolved from the Connected Account at deploy time.
+    """
     db = SessionLocal()
     try:
         now = datetime.utcnow().isoformat() + "Z"
@@ -104,12 +127,14 @@ async def create_edge_database(payload: EdgeDatabaseCreate):
         count = db.query(EdgeDatabase).count()
         is_default = payload.is_default or count == 0
         
+        from ..core.security import encrypt_field
         edge_db = EdgeDatabase(
             id=str(uuid.uuid4()),
             name=payload.name,
             provider=payload.provider,
             db_url=payload.db_url,
-            db_token=payload.db_token,
+            db_token=encrypt_field(payload.db_token),
+            provider_account_id=payload.provider_account_id,
             is_default=is_default,
             created_at=now,
             updated_at=now,
@@ -118,18 +143,7 @@ async def create_edge_database(payload: EdgeDatabaseCreate):
         db.commit()
         db.refresh(edge_db)
         
-        return EdgeDatabaseResponse(
-            id=str(edge_db.id),
-            name=str(edge_db.name),
-            provider=str(edge_db.provider),
-            db_url=str(edge_db.db_url),
-            has_token=bool(edge_db.db_token),
-            is_default=bool(edge_db.is_default),
-            is_system=bool(edge_db.is_system),
-            created_at=str(edge_db.created_at),
-            updated_at=str(edge_db.updated_at),
-            target_count=0,
-        )
+        return _serialize_edge_db(edge_db, db, 0)
     finally:
         db.close()
 
@@ -150,10 +164,12 @@ async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate):
         if payload.db_url is not None:
             edge_db.db_url = payload.db_url  # type: ignore[assignment]
         if payload.db_token is not None:
-            edge_db.db_token = payload.db_token  # type: ignore[assignment]
+            from ..core.security import encrypt_field
+            edge_db.db_token = encrypt_field(payload.db_token)  # type: ignore[assignment]
+        if payload.provider_account_id is not None:
+            edge_db.provider_account_id = payload.provider_account_id  # type: ignore[assignment]
         if payload.is_default is not None:
             if payload.is_default:
-                # Unset all others
                 db.query(EdgeDatabase).filter(EdgeDatabase.id != db_id).update(
                     {"is_default": False}
                 )
@@ -167,18 +183,7 @@ async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate):
             EdgeEngine.edge_db_id == db_id
         ).count()
         
-        return EdgeDatabaseResponse(
-            id=str(edge_db.id),
-            name=str(edge_db.name),
-            provider=str(edge_db.provider),
-            db_url=str(edge_db.db_url),
-            has_token=bool(edge_db.db_token),
-            is_default=bool(edge_db.is_default),
-            is_system=bool(edge_db.is_system),
-            created_at=str(edge_db.created_at),
-            updated_at=str(edge_db.updated_at),
-            target_count=target_count,
-        )
+        return _serialize_edge_db(edge_db, db, target_count)
     finally:
         db.close()
 
@@ -235,7 +240,8 @@ async def test_edge_database(db_id: str):
         
         db_token_raw = edge_db.db_token
         db_url = str(edge_db.db_url)
-        db_token = str(db_token_raw) if db_token_raw else None  # type: ignore[truthy-bool]
+        from ..core.security import decrypt_field
+        db_token = decrypt_field(str(db_token_raw)) if db_token_raw else None  # type: ignore[truthy-bool]
         edge_provider = str(edge_db.provider)
     finally:
         db.close()

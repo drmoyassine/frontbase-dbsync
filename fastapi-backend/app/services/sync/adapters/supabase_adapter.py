@@ -42,20 +42,40 @@ class SupabaseAdapter(SQLAdapter):
         return self._has_db_connection
     
     def _get_api_key(self) -> Optional[str]:
-        """Get API key - supports both legacy and new key naming."""
-        return self.datasource.api_key_encrypted  # TODO: decrypt
+        """Get API key — decrypts from storage if encrypted."""
+        from app.core.security import decrypt_field
+        return decrypt_field(self.datasource.api_key_encrypted)
     
     async def connect(self) -> None:
         """Connect to Supabase - REST API required, DB optional."""
         self.logger.info(f"Initializing Supabase adapter for {self.datasource.name}")
         
         api_key = self._get_api_key()
-        
+        api_url = self.datasource.api_url
+
+        # If missing credentials, resolve from Connected Account
+        if not api_key or not api_url:
+            self.logger.info(f"[SUPABASE-RESOLVE] Missing api_key={bool(api_key)}, api_url={bool(api_url)} — resolving from Connected Account")
+            try:
+                from app.database.config import SessionLocal
+                from app.core.credential_resolver import get_supabase_context
+                sync_db = SessionLocal()
+                try:
+                    ctx = get_supabase_context(sync_db, mode="builder")
+                    if ctx:
+                        api_url = api_url or ctx.get("url", "")
+                        api_key = api_key or ctx.get("auth_key", "")
+                        self.logger.info(f"[SUPABASE-RESOLVE] Resolved from {ctx.get('source')}: url={bool(api_url)}, key={bool(api_key)}")
+                finally:
+                    sync_db.close()
+            except Exception as e:
+                self.logger.warning(f"[SUPABASE-RESOLVE] Could not resolve from Connected Account: {e}")
+
         # REST API client (required)
-        if self.datasource.api_url and api_key:
-            self.logger.info(f"Setting up Supabase REST client: {self.datasource.api_url}")
+        if api_url and api_key:
+            self.logger.info(f"Setting up Supabase REST client: {api_url}")
             self._client = httpx.AsyncClient(
-                base_url=self.datasource.api_url,
+                base_url=api_url,
                 headers={
                     "apikey": api_key,
                     "Authorization": f"Bearer {api_key}",

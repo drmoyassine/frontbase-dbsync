@@ -27,6 +27,7 @@ class EdgeCacheCreate(BaseModel):
     provider: str  # "upstash", "redis", "dragonfly"
     cache_url: str
     cache_token: Optional[str] = None
+    provider_account_id: Optional[str] = None  # FK → Connected Account
     is_default: bool = False
 
 class EdgeCacheUpdate(BaseModel):
@@ -34,6 +35,7 @@ class EdgeCacheUpdate(BaseModel):
     provider: Optional[str] = None
     cache_url: Optional[str] = None
     cache_token: Optional[str] = None
+    provider_account_id: Optional[str] = None
     is_default: Optional[bool] = None
 
 class EdgeCacheResponse(BaseModel):
@@ -44,9 +46,41 @@ class EdgeCacheResponse(BaseModel):
     has_token: bool  # Never expose the actual token
     is_default: bool
     is_system: bool = False
+    provider_account_id: Optional[str] = None
+    account_name: Optional[str] = None
     created_at: str
     updated_at: str
     engine_count: int = 0  # Number of edge engines using this cache
+
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+def _serialize_cache(cache, db, engine_count: int = 0) -> EdgeCacheResponse:
+    """Serialize an EdgeCache ORM object."""
+    from ..models.models import EdgeProviderAccount
+    account_name = None
+    if cache.provider_account_id:
+        acct = db.query(EdgeProviderAccount).filter(
+            EdgeProviderAccount.id == cache.provider_account_id
+        ).first()
+        if acct:
+            account_name = str(acct.name)
+    return EdgeCacheResponse(
+        id=str(cache.id),
+        name=str(cache.name),
+        provider=str(cache.provider),
+        cache_url=str(cache.cache_url),
+        has_token=bool(cache.cache_token) or bool(cache.provider_account_id),
+        is_default=bool(cache.is_default),
+        is_system=bool(getattr(cache, 'is_system', False)),
+        provider_account_id=str(cache.provider_account_id) if cache.provider_account_id else None,
+        account_name=account_name,
+        created_at=str(cache.created_at),
+        updated_at=str(cache.updated_at),
+        engine_count=engine_count,
+    )
 
 
 # =============================================================================
@@ -64,18 +98,7 @@ async def list_edge_caches():
             engine_count = db.query(EdgeEngine).filter(
                 EdgeEngine.edge_cache_id == cache.id
             ).count()
-            result.append(EdgeCacheResponse(
-                id=str(cache.id),
-                name=str(cache.name),
-                provider=str(cache.provider),
-                cache_url=str(cache.cache_url),
-                has_token=bool(cache.cache_token),
-                is_default=bool(cache.is_default),
-                is_system=bool(getattr(cache, 'is_system', False)),
-                created_at=str(cache.created_at),
-                updated_at=str(cache.updated_at),
-                engine_count=engine_count,
-            ))
+            result.append(_serialize_cache(cache, db, engine_count))
         return result
     finally:
         db.close()
@@ -98,12 +121,14 @@ async def create_edge_cache(payload: EdgeCacheCreate):
         count = db.query(EdgeCache).count()
         is_default = payload.is_default or count == 0
         
+        from ..core.security import encrypt_field
         cache = EdgeCache(
             id=str(uuid.uuid4()),
             name=payload.name,
             provider=payload.provider,
             cache_url=payload.cache_url,
-            cache_token=payload.cache_token,
+            cache_token=encrypt_field(payload.cache_token),
+            provider_account_id=payload.provider_account_id,
             is_default=is_default,
             created_at=now,
             updated_at=now,
@@ -112,17 +137,7 @@ async def create_edge_cache(payload: EdgeCacheCreate):
         db.commit()
         db.refresh(cache)
         
-        return EdgeCacheResponse(
-            id=str(cache.id),
-            name=str(cache.name),
-            provider=str(cache.provider),
-            cache_url=str(cache.cache_url),
-            has_token=bool(cache.cache_token),
-            is_default=bool(cache.is_default),
-            created_at=str(cache.created_at),
-            updated_at=str(cache.updated_at),
-            engine_count=0,
-        )
+        return _serialize_cache(cache, db, 0)
     finally:
         db.close()
 
@@ -143,10 +158,12 @@ async def update_edge_cache(cache_id: str, payload: EdgeCacheUpdate):
         if payload.cache_url is not None:
             cache.cache_url = payload.cache_url  # type: ignore[assignment]
         if payload.cache_token is not None:
-            cache.cache_token = payload.cache_token  # type: ignore[assignment]
+            from ..core.security import encrypt_field
+            cache.cache_token = encrypt_field(payload.cache_token)  # type: ignore[assignment]
+        if payload.provider_account_id is not None:
+            cache.provider_account_id = payload.provider_account_id  # type: ignore[assignment]
         if payload.is_default is not None:
             if payload.is_default:
-                # Unset all others
                 db.query(EdgeCache).filter(EdgeCache.id != cache_id).update(
                     {"is_default": False}
                 )
@@ -160,17 +177,7 @@ async def update_edge_cache(cache_id: str, payload: EdgeCacheUpdate):
             EdgeEngine.edge_cache_id == cache_id
         ).count()
         
-        return EdgeCacheResponse(
-            id=str(cache.id),
-            name=str(cache.name),
-            provider=str(cache.provider),
-            cache_url=str(cache.cache_url),
-            has_token=bool(cache.cache_token),
-            is_default=bool(cache.is_default),
-            created_at=str(cache.created_at),
-            updated_at=str(cache.updated_at),
-            engine_count=engine_count,
-        )
+        return _serialize_cache(cache, db, engine_count)
     finally:
         db.close()
 
@@ -227,8 +234,9 @@ async def test_edge_cache(cache_id: str):
             raise HTTPException(404, f"Edge cache '{cache_id}' not found")
         
         cache_url = str(cache.cache_url)
+        from ..core.security import decrypt_field
         cache_token_raw = cache.cache_token
-        cache_token = str(cache_token_raw) if cache_token_raw else None  # type: ignore[truthy-bool]
+        cache_token = decrypt_field(str(cache_token_raw)) if cache_token_raw else None  # type: ignore[truthy-bool]
         cache_provider = str(cache.provider)
     finally:
         db.close()

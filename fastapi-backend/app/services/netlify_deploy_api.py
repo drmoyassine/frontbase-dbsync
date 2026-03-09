@@ -11,7 +11,7 @@ import httpx
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from ..models.models import EdgeEngine, EdgeProviderAccount
+from ..models.models import EdgeEngine
 from ..services.secrets_builder import build_engine_secrets
 
 
@@ -24,17 +24,30 @@ def _headers(api_token: str) -> dict:
 
 async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_type: str) -> None:
     """Deploy bundle to Netlify Edge Functions."""
-    provider = db.query(EdgeProviderAccount).filter(
-        EdgeProviderAccount.id == engine.edge_provider_id
-    ).first()
+    from ..core.credential_resolver import get_provider_context_by_id
 
-    from ..core.security import decrypt_credentials
-    creds = decrypt_credentials(str(provider.provider_credentials or '{}'))  # type: ignore[union-attr]
-    api_token = creds.get('api_token')
-    site_id = creds.get('site_id')
+    ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
+    api_token = ctx.get('api_token')
+    site_id = ctx.get('site_id')
 
-    if not api_token or not site_id:
-        raise HTTPException(400, "Missing Netlify credentials (api_token, site_id)")
+    if not api_token:
+        raise HTTPException(400, "Missing Netlify api_token")
+
+    # Auto-create site if not set
+    if not site_id:
+        cfg = json.loads(str(engine.engine_config or '{}'))
+        site_name = cfg.get('site_name', 'frontbase-edge')
+        site_id = await create_site(api_token, site_name)
+        # Save site_id back to provider metadata
+        from ..models.models import EdgeProviderAccount
+        provider = db.query(EdgeProviderAccount).filter(
+            EdgeProviderAccount.id == str(engine.edge_provider_id)
+        ).first()
+        if provider:
+            metadata = json.loads(str(provider.provider_metadata or '{}'))
+            metadata['site_id'] = site_id
+            provider.provider_metadata = json.dumps(metadata)  # type: ignore[assignment]
+            db.commit()
 
     script_filename = "netlify-edge.js" if adapter_type == "full" else "netlify-edge-lite.js"
 
@@ -124,3 +137,24 @@ async def delete_site(api_token: str, site_id: str) -> None:
 def get_site_url(site_data: dict) -> str:
     """Extract the site URL from Netlify site data."""
     return f"https://{site_data.get('subdomain', '')}.netlify.app"
+
+
+async def create_site(api_token: str, site_name: str) -> str:
+    """Create a new Netlify site and return its site_id.
+    
+    Used for auto-provisioning when no site_id is provided at connect time.
+    """
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{NETLIFY_API}/sites",
+            headers=_headers(api_token),
+            json={"name": site_name},
+            timeout=15.0,
+        )
+        if resp.status_code not in (200, 201):
+            raise HTTPException(400, f"Failed to create Netlify site: {resp.text[:300]}")
+        data = resp.json()
+        site_id = data.get("id") or data.get("site_id")
+        if not site_id:
+            raise HTTPException(500, "Netlify site created but no site_id returned")
+        return site_id

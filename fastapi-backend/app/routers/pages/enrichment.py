@@ -149,8 +149,8 @@ def generate_options_request(
         'url': rpc_url,
         'method': 'POST',
         'headers': {
-            'apikey': anon_key or '{{SUPABASE_ANON_KEY}}',
-            'Authorization': f"Bearer {anon_key}" if anon_key else 'Bearer {{SUPABASE_ANON_KEY}}',
+            'apikey': anon_key,
+            'Authorization': f"Bearer {anon_key}",
             'Content-Type': 'application/json'
         },
         'body': {

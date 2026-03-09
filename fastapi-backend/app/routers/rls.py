@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from ..database.config import get_db
-from ..database.utils import get_project_settings, decrypt_data
 import httpx
 import json
 from typing import Optional, List, Dict, Any
@@ -62,29 +61,8 @@ class CreateBatchPolicyRequest(BaseModel):
 
 async def get_rls_context(db: Session):
     """Get project context for RLS operations (requires service key)"""
-    project = get_project_settings(db, "default")
-    if not project or not project.get("supabase_url"):
-        raise HTTPException(status_code=404, detail="Supabase connection not configured")
-    
-    url = project["supabase_url"]
-    anon_key = project.get("supabase_anon_key")
-    encrypted_service_key = project.get("supabase_service_key_encrypted")
-    
-    auth_key = None
-    if encrypted_service_key:
-        try:
-            auth_key = decrypt_data(encrypted_service_key)
-        except Exception as e:
-            print(f"Decryption error: {e}")
-            auth_key = anon_key
-    else:
-        auth_key = anon_key
-    
-    return {
-        "url": url,
-        "anon_key": anon_key,
-        "auth_key": auth_key
-    }
+    from ..core.credential_resolver import get_supabase_context
+    return get_supabase_context(db, mode="builder")
 
 
 async def call_rls_function(function_name: str, params: dict, ctx: dict):

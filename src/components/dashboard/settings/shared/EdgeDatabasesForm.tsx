@@ -26,6 +26,7 @@ import {
     AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { showTestToast, TestResult } from './edgeTestToast';
+import { AccountResourcePicker, DiscoveredResource } from './AccountResourcePicker';
 
 const API_BASE = '';
 
@@ -37,6 +38,8 @@ interface EdgeDatabase {
     has_token: boolean;
     is_default: boolean;
     is_system?: boolean;
+    provider_account_id?: string | null;
+    account_name?: string | null;
     created_at: string;
     updated_at: string;
     target_count: number;
@@ -77,6 +80,9 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
     // Delete
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
+    // Account link
+    const [formAccountId, setFormAccountId] = useState<string | null>(null);
+
     const refetchDatabases = () => queryClient.invalidateQueries({ queryKey: ['edge-databases'] });
 
     const resetAddFlow = () => {
@@ -87,6 +93,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
         setFormUrl('');
         setFormToken('');
         setFormIsDefault(false);
+        setFormAccountId(null);
     };
 
     const startEdit = (db: EdgeDatabase) => {
@@ -111,6 +118,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                 is_default: formIsDefault,
             };
             if (formToken) payload.db_token = formToken;
+            if (formAccountId) payload.provider_account_id = formAccountId;
 
             const url = editingId
                 ? `${API_BASE}/api/edge-databases/${editingId}`
@@ -239,6 +247,24 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
             {/* Connection form (shows after provider selected) */}
             {selectedProvider && (
                 <div className="space-y-4 pt-2 border-t">
+                    {/* Account resource picker — select from Neon connected accounts */}
+                    {selectedProvider === 'neon' && !editingId && (
+                        <AccountResourcePicker
+                            compatibleProviders={['neon']}
+                            label="From Connected Neon Account"
+                            onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
+                                setFormAccountId(accountId);
+                                if (resource.connection_uri) setFormUrl(resource.connection_uri);
+                                else if (resource.db_url) setFormUrl(resource.db_url);
+                                if (!formName) setFormName(resource.name || '');
+                            }}
+                            onClear={() => {
+                                setFormAccountId(null);
+                                setFormUrl('');
+                            }}
+                        />
+                    )}
+
                     <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
                             <Label>Name</Label>

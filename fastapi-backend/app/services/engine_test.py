@@ -56,15 +56,22 @@ async def test_connection(url: str, provider: str) -> TestConnectionResult:
         )
 
 
-def extract_cf_creds(engine: EdgeEngine) -> dict:
+def extract_cf_creds(engine: EdgeEngine, db: Session = None) -> dict:
     """Extract Cloudflare credentials and worker name from an EdgeEngine (DB-only, no I/O)."""
-    if not engine.edge_provider or not engine.edge_provider.provider_credentials:
+    if not engine.edge_provider_id:
         raise HTTPException(400, "No Cloudflare API token stored on the associated provider account")
 
-    from ..core.security import decrypt_credentials
-    credentials = decrypt_credentials(str(engine.edge_provider.provider_credentials))
-    api_token = credentials.get("api_token")
-    account_id = credentials.get("account_id")
+    from ..core.credential_resolver import get_provider_context_by_id
+    ctx = get_provider_context_by_id(db, str(engine.edge_provider_id)) if db else {}
+    if not db:
+        # Fallback for callers without db session (legacy)
+        from ..core.security import decrypt_credentials
+        if not engine.edge_provider or not engine.edge_provider.provider_credentials:
+            raise HTTPException(400, "No Cloudflare API token stored on the associated provider account")
+        ctx = decrypt_credentials(str(engine.edge_provider.provider_credentials))
+
+    api_token = ctx.get("api_token")
+    account_id = ctx.get("account_id")
 
     if not api_token or not account_id:
         raise HTTPException(400, "Invalid Cloudflare provider credentials missing api_token or account_id")
@@ -136,13 +143,13 @@ async def delete_remote_resource(engine: EdgeEngine, db: Session) -> None:
         raise HTTPException(400, "Provider account not found")
 
     provider_type = str(provider.provider)
-    from ..core.security import decrypt_credentials
-    creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
+    from ..core.credential_resolver import get_provider_context_by_id
+    ctx = get_provider_context_by_id(db, str(provider.id))
     cfg = json.loads(str(engine.engine_config or "{}"))
 
     if provider_type == "cloudflare":
-        api_token = creds.get("api_token")
-        account_id = creds.get("account_id")
+        api_token = ctx.get("api_token")
+        account_id = ctx.get("account_id")
         worker_name = cfg.get("worker_name", str(engine.name))
         if not api_token or not account_id:
             raise HTTPException(400, "Missing Cloudflare credentials (api_token, account_id)")
@@ -150,8 +157,8 @@ async def delete_remote_resource(engine: EdgeEngine, db: Session) -> None:
 
     elif provider_type == "supabase":
         from ..services import supabase_deploy_api
-        access_token = creds.get("access_token")
-        project_ref = creds.get("project_ref")
+        access_token = ctx.get("access_token")
+        project_ref = ctx.get("project_ref")
         function_name = cfg.get("function_name")
         if not all([access_token, project_ref, function_name]):
             raise HTTPException(400, "Missing Supabase credentials or function_name")
@@ -159,9 +166,9 @@ async def delete_remote_resource(engine: EdgeEngine, db: Session) -> None:
 
     elif provider_type == "vercel":
         from ..services import vercel_deploy_api
-        api_token = creds.get("api_token")
+        api_token = ctx.get("api_token")
         deployment_id = cfg.get("deployment_id")
-        team_id = creds.get("team_id")
+        team_id = ctx.get("team_id")
         if not api_token:
             raise HTTPException(400, "Missing Vercel api_token")
         if deployment_id:
@@ -171,15 +178,15 @@ async def delete_remote_resource(engine: EdgeEngine, db: Session) -> None:
 
     elif provider_type == "netlify":
         from ..services import netlify_deploy_api
-        api_token = creds.get("api_token")
-        site_id = cfg.get("site_id")
+        api_token = ctx.get("api_token")
+        site_id = ctx.get("site_id")
         if not api_token or not site_id:
             raise HTTPException(400, "Missing Netlify credentials or site_id")
         await netlify_deploy_api.delete_site(api_token, site_id)
 
     elif provider_type == "deno":
         from ..services import deno_deploy_api
-        access_token = creds.get("access_token")
+        access_token = ctx.get("access_token")
         project_name = cfg.get("project_name")
         if not access_token or not project_name:
             raise HTTPException(400, "Missing Deno Deploy credentials or project_name")

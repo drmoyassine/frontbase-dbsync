@@ -134,7 +134,7 @@ export function useSimpleData({
         queryFn: async () => {
             if (!binding?.dataSourceId || !binding?.tableName) return null;
             const response = await fetch(
-                `/api/sync/datasources/${binding.dataSourceId}/tables/${binding.tableName}/schema`
+                `/api/sync/datasources/${binding.dataSourceId}/tables/${binding.tableName}/schema/`
             );
             if (!response.ok) return null;
             return response.json();

@@ -58,6 +58,9 @@ class Datasource(Base):
     # For WordPress
     table_prefix: Mapped[str] = mapped_column(String(50), default="wp_")
     
+    # Connected Account reference (unified credential management)
+    provider_account_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    
     # Metadata
     is_active: Mapped[bool] = mapped_column(default=True)
     last_tested_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

@@ -34,6 +34,7 @@ export function useEdgeCacheForm() {
     const [formToken, setFormToken] = useState('');
     const [formIsDefault, setFormIsDefault] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [formAccountId, setFormAccountId] = useState<string | null>(null);
 
     // Test connection & Delete
     const [testingId, setTestingId] = useState<string | null>(null);
@@ -48,6 +49,7 @@ export function useEdgeCacheForm() {
         setFormUrl('');
         setFormToken('');
         setFormIsDefault(false);
+        setFormAccountId(null);
         setError(null);
     };
 
@@ -77,6 +79,7 @@ export function useEdgeCacheForm() {
                 is_default: formIsDefault,
             };
             if (formToken) payload.cache_token = formToken;
+            if (formAccountId) payload.provider_account_id = formAccountId;
 
             const url = editingId
                 ? `${API_BASE}/api/edge-caches/${editingId}`
@@ -188,5 +191,8 @@ export function useEdgeCacheForm() {
         // Loading states
         testingId,
         deletingId,
+        // Account link
+        formAccountId,
+        setFormAccountId,
     };
 }

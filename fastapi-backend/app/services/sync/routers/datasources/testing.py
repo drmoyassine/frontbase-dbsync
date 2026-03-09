@@ -90,6 +90,26 @@ async def test_new_datasource(data: DatasourceTestRequest):
     """Test a new datasource connection with raw credentials without saving."""
     logger.info(f"Testing raw connection for new datasource: {data.name or 'Unnamed'} (Type: {data.type})")
     try:
+        api_url = data.api_url
+        api_key = data.api_key
+
+        # For Supabase without explicit keys: resolve from Connected Account
+        if data.type.value == "supabase" and not api_key:
+            logger.info(f"[SUPABASE-RESOLVE] No api_key in request, resolving from Connected Account...")
+            try:
+                from app.database.config import SessionLocal
+                from app.core.credential_resolver import get_supabase_context
+                sync_db = SessionLocal()
+                try:
+                    ctx = get_supabase_context(sync_db, mode="builder")
+                    logger.info(f"[SUPABASE-RESOLVE] ctx source={ctx.get('source')}, url={bool(ctx.get('url'))}, auth_key={bool(ctx.get('auth_key'))}")
+                    api_url = api_url or ctx.get("url", "")
+                    api_key = ctx.get("auth_key", "")
+                finally:
+                    sync_db.close()
+            except Exception as e:
+                logger.warning(f"Could not resolve Supabase credentials from Connected Account: {e}")
+
         datasource = Datasource(
             name=data.name,
             type=data.type,
@@ -98,12 +118,16 @@ async def test_new_datasource(data: DatasourceTestRequest):
             database=data.database,
             username=data.username,
             password_encrypted=data.password,
-            api_url=data.api_url,
-            api_key_encrypted=data.api_key,
+            api_url=api_url,
+            api_key_encrypted=api_key,
             table_prefix=data.table_prefix,
             extra_config=str(data.extra_config) if data.extra_config else None,
         )
-        
+
+        # If direct DB URI provided, set it
+        if data.connection_uri:
+            datasource.connection_uri = data.connection_uri
+
         adapter = get_adapter(datasource)
         await adapter.connect()
         tables = await adapter.get_tables()

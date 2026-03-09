@@ -17,6 +17,11 @@ class PostgresAdapter(SQLAdapter):
         self._pool: Optional[asyncpg.Pool] = None
         self.logger = logging.getLogger(f"app.adapters.postgres.{self.datasource.name}")
     
+    def _decrypt_password(self) -> Optional[str]:
+        """Decrypt password from storage — handles legacy plaintext gracefully."""
+        from app.core.security import decrypt_field
+        return decrypt_field(self.datasource.password_encrypted)
+    
     async def connect(self) -> None:
         """Establish connection pool to PostgreSQL."""
         host = self._sanitize_host(self.datasource.host)
@@ -37,7 +42,7 @@ class PostgresAdapter(SQLAdapter):
                 port=port,
                 database=db_name,
                 user=user,
-                password=self.datasource.password_encrypted,  # TODO: decrypt
+                password=self._decrypt_password(),  # Encrypted at rest
                 ssl=True,  # Better negotiation for Supabase/Neon
                 min_size=1,
                 max_size=10,
@@ -63,7 +68,7 @@ class PostgresAdapter(SQLAdapter):
                         port=port,
                         database=db_name,
                         user=user,
-                        password=self.datasource.password_encrypted,
+                        password=self._decrypt_password(),
                         ssl=ctx,
                         min_size=1,
                         max_size=10,

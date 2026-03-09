@@ -1,4 +1,8 @@
 # gpu_model serialization update — force reload
+# Load .env FIRST — before any app imports that may read env vars (e.g. FERNET_KEY)
+from dotenv import load_dotenv
+load_dotenv()
+
 from contextlib import asynccontextmanager
 import logging
 from fastapi import FastAPI
@@ -9,6 +13,104 @@ from app.routers import pages, project, variables, database, rls, actions, auth_
 from app.middleware.test_mode import TestModeMiddleware
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_local_edge():
+    """Seed the Local Edge system records in dev / self-host mode.
+
+    Creates three is_system=True records (idempotent):
+      1. EdgeDatabase  → "Local SQLite"
+      2. EdgeCache     → "Local Redis"
+      3. EdgeEngine    → "Local Edge" (linked to 1 & 2)
+
+    Skipped in cloud (multi-tenant) mode — the edge container still runs
+    for build-time services, but won't appear in the UI or as a publish target.
+    """
+    mode = os.getenv("DEPLOYMENT_MODE", "self-host")
+    if mode == "cloud":
+        return
+
+    from datetime import datetime
+    import uuid
+    from app.database.config import SessionLocal
+    from app.models.models import EdgeEngine, EdgeDatabase, EdgeCache
+
+    edge_url = os.getenv("EDGE_URL", "http://localhost:3002")
+    now = datetime.utcnow().isoformat()
+    db = SessionLocal()
+    try:
+        # --- 1. Local SQLite system database ---
+        sys_db = db.query(EdgeDatabase).filter(EdgeDatabase.is_system == True).first()  # noqa: E712
+        if not sys_db:
+            sys_db = EdgeDatabase(
+                id=str(uuid.uuid4()),
+                name="Local SQLite",
+                provider="sqlite",
+                db_url="file:local.db",
+                is_default=True,
+                is_system=True,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(sys_db)
+            db.flush()
+            logger.info("[Startup] ✅ Local SQLite DB seeded")
+
+        # --- 2. Local Redis system cache ---
+        sys_cache = db.query(EdgeCache).filter(EdgeCache.is_system == True).first()  # noqa: E712
+        if not sys_cache:
+            sys_cache = EdgeCache(
+                id=str(uuid.uuid4()),
+                name="Local Redis",
+                provider="redis",
+                cache_url="redis://localhost:6379",
+                is_default=True,
+                is_system=True,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(sys_cache)
+            db.flush()
+            logger.info("[Startup] ✅ Local Redis cache seeded")
+
+        # --- 3. Local Edge system engine ---
+        sys_engine = db.query(EdgeEngine).filter(EdgeEngine.is_system == True).first()  # noqa: E712
+        if sys_engine:
+            # Update URL and bindings if needed
+            changed = False
+            if str(sys_engine.url) != edge_url:
+                sys_engine.url = edge_url  # type: ignore[assignment]
+                changed = True
+            if str(sys_engine.edge_db_id or "") != str(sys_db.id):
+                sys_engine.edge_db_id = sys_db.id  # type: ignore[assignment]
+                changed = True
+            if str(sys_engine.edge_cache_id or "") != str(sys_cache.id):
+                sys_engine.edge_cache_id = sys_cache.id  # type: ignore[assignment]
+                changed = True
+            if changed:
+                sys_engine.updated_at = now  # type: ignore[assignment]
+                logger.info("[Startup] Local Edge bindings updated")
+        else:
+            sys_engine = EdgeEngine(
+                id=str(uuid.uuid4()),
+                name="Local Edge",
+                edge_provider_id=None,
+                adapter_type="full",
+                url=edge_url,
+                edge_db_id=sys_db.id,
+                edge_cache_id=sys_cache.id,
+                is_active=True,
+                is_system=True,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(sys_engine)
+            logger.info(f"[Startup] ✅ Local Edge seeded at {edge_url}")
+
+        db.commit()
+    finally:
+        db.close()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -43,6 +145,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"[Main App Startup] ❌ Core DB init failed: {e}")
     
+    # Seed the Local Edge system engine (dev / self-host only)
+    try:
+        _ensure_local_edge()
+    except Exception as e:
+        logger.warning(f"[Main App Startup] Local Edge seed failed (non-fatal): {e}")
+
     # Load Redis settings for sync service
     try:
         from app.services.sync.redis_client import load_settings_from_db

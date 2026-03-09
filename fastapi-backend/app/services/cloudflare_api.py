@@ -27,19 +27,13 @@ def get_provider_credentials(provider_id: str, db: Session) -> tuple[str, str | 
     
     Returns (api_token, account_id). account_id may be None if not yet detected.
     """
-    provider = db.query(EdgeProviderAccount).filter(
-        EdgeProviderAccount.id == provider_id,
-        EdgeProviderAccount.provider == "cloudflare"
-    ).first()
-    if not provider:
-        raise HTTPException(404, "Cloudflare provider account not found")
-        
-    from ..core.security import decrypt_credentials
-    creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
-    if "api_token" not in creds:
+    from ..core.credential_resolver import get_provider_context_by_id
+
+    ctx = get_provider_context_by_id(db, provider_id)
+    if "api_token" not in ctx:
         raise HTTPException(400, "Provider account missing api_token")
         
-    return creds["api_token"], creds.get("account_id")
+    return ctx["api_token"], ctx.get("account_id")
 
 
 def list_workers(api_token: str, account_id: str) -> list:

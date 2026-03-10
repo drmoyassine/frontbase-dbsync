@@ -73,9 +73,6 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
     const [formIsDefault, setFormIsDefault] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
-    // QStash .env paste mode
-    const [pasteMode, setPasteMode] = useState(true);
-    const [envBlock, setEnvBlock] = useState('');
 
     // Test connection
     const [testingId, setTestingId] = useState<string | null>(null);
@@ -98,8 +95,6 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
         setFormNextSigningKey('');
         setFormIsDefault(false);
         setError(null);
-        setPasteMode(true);
-        setEnvBlock('');
         setFormAccountId(null);
     };
 
@@ -115,28 +110,9 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
         setFormName(queue.name);
         setFormUrl(queue.queue_url);
         setFormIsDefault(queue.is_default);
-        setPasteMode(false); // Show individual fields when editing
         setDialogOpen(true);
     };
 
-    // Parse .env block from Upstash QStash quickstart
-    const parseEnvBlock = (block: string) => {
-        const lines = block.split('\n');
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith('#')) continue;
-            const eqIdx = trimmed.indexOf('=');
-            if (eqIdx === -1) continue;
-            const key = trimmed.substring(0, eqIdx).trim();
-            const val = trimmed.substring(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
-            switch (key) {
-                case 'QSTASH_URL': setFormUrl(val); break;
-                case 'QSTASH_TOKEN': setFormToken(val); break;
-                case 'QSTASH_CURRENT_SIGNING_KEY': setFormSigningKey(val); break;
-                case 'QSTASH_NEXT_SIGNING_KEY': setFormNextSigningKey(val); break;
-            }
-        }
-    };
 
     // Save (create or update)
     const handleSave = async () => {
@@ -314,6 +290,7 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                             compatibleProviders={['upstash']}
                             resourceTypeFilter="qstash"
                             label="From Connected Upstash Account"
+                            existingUrls={queues.map(q => q.queue_url).filter(Boolean)}
                             onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
                                 setFormAccountId(accountId);
                                 if (resource.type === 'qstash') {
@@ -322,7 +299,6 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                                     if ((resource as any).signing_key) setFormSigningKey((resource as any).signing_key);
                                     if ((resource as any).next_signing_key) setFormNextSigningKey((resource as any).next_signing_key);
                                     if (!formName) setFormName('QStash');
-                                    setPasteMode(false);
                                 }
                             }}
                             onClear={() => {
@@ -335,125 +311,26 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                         />
                     )}
 
-                    {/* QStash .env paste mode */}
-                    {selectedProvider === 'qstash' && !editingId && (
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                                <Label className="text-xs text-muted-foreground">Input mode:</Label>
-                                <button
-                                    type="button"
-                                    onClick={() => setPasteMode(true)}
-                                    className={`text-xs px-2 py-1 rounded transition-colors ${pasteMode ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'
-                                        }`}
-                                >
-                                    Paste .env
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setPasteMode(false)}
-                                    className={`text-xs px-2 py-1 rounded transition-colors ${!pasteMode ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'
-                                        }`}
-                                >
-                                    Individual fields
-                                </button>
+                    {/* Auto-discovered summary — show when account picked */}
+                    {formAccountId && (
+                        <div className="space-y-3">
+                            <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-3">
+                                <p className="text-sm text-green-700 dark:text-green-400 flex items-center gap-2">
+                                    <Check className="h-4 w-4" />
+                                    Credentials auto-filled from connected account
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">URL, token, and signing keys are configured automatically.</p>
                             </div>
-
-                            {pasteMode && (
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Paste your QStash .env block</Label>
-                                    <textarea
-                                        className="w-full h-24 p-2 text-xs font-mono rounded border bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-                                        placeholder={'QSTASH_URL="https://qstash-..."\nQSTASH_TOKEN="..."\nQSTASH_CURRENT_SIGNING_KEY="..."\nQSTASH_NEXT_SIGNING_KEY="..."'}
-                                        value={envBlock}
-                                        onChange={e => {
-                                            setEnvBlock(e.target.value);
-                                            parseEnvBlock(e.target.value);
-                                        }}
-                                    />
-                                    {formToken && (
-                                        <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-                                            <Check className="h-3 w-3" /> Parsed {[formUrl && 'URL', formToken && 'token', formSigningKey && 'signing key', formNextSigningKey && 'next key'].filter(Boolean).join(', ')}
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Individual fields (always shown when not in paste mode) */}
-                    {(!pasteMode || selectedProvider !== 'qstash' || editingId) && (
-                        <>
-                            {/* Name + URL */}
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1">
-                                    <Label>Name</Label>
-                                    <Input
-                                        placeholder={`e.g. Production ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}`}
-                                        value={formName}
-                                        onChange={e => setFormName(e.target.value)}
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>Queue URL</Label>
-                                    <Input
-                                        placeholder={QUEUE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.placeholder}
-                                        value={formUrl}
-                                        onChange={e => setFormUrl(e.target.value)}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Auth Token */}
                             <div className="space-y-1">
-                                <Label>API Token</Label>
+                                <Label>Connection Name</Label>
                                 <Input
-                                    type="password"
-                                    placeholder={editingId ? '(leave blank to keep existing)' : 'Queue API token'}
-                                    value={formToken}
-                                    onChange={e => setFormToken(e.target.value)}
+                                    placeholder="e.g. Production QStash"
+                                    value={formName}
+                                    onChange={e => setFormName(e.target.value)}
                                 />
                             </div>
-
-                            {/* Signing keys — only for QStash */}
-                            {selectedProvider === 'qstash' && (
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="space-y-1">
-                                        <Label className="text-xs">Current Signing Key</Label>
-                                        <Input
-                                            type="password"
-                                            placeholder={editingId ? '(keep existing)' : 'Signing key'}
-                                            value={formSigningKey}
-                                            onChange={e => setFormSigningKey(e.target.value)}
-                                            className="h-8 text-sm"
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <Label className="text-xs">Next Signing Key</Label>
-                                        <Input
-                                            type="password"
-                                            placeholder={editingId ? '(keep existing)' : 'Next signing key'}
-                                            value={formNextSigningKey}
-                                            onChange={e => setFormNextSigningKey(e.target.value)}
-                                            className="h-8 text-sm"
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                        </>
-                    )}
-
-                    {/* Name field when in paste mode (still needed) */}
-                    {pasteMode && selectedProvider === 'qstash' && !editingId && (
-                        <div className="space-y-1">
-                            <Label>Connection Name</Label>
-                            <Input
-                                placeholder="e.g. Production QStash"
-                                value={formName}
-                                onChange={e => setFormName(e.target.value)}
-                            />
                         </div>
                     )}
-
                     {/* Default toggle */}
                     <div className="flex items-center gap-2">
                         <Switch
@@ -488,7 +365,7 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                     </Button>
                 </DialogFooter>
             </DialogContent>
-        </Dialog>
+        </Dialog >
     );
 
     // ─── Queue list ───
@@ -528,7 +405,6 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                                             </Badge>
                                         )}
                                     </div>
-                                    <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[300px]">{queue.queue_url}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">

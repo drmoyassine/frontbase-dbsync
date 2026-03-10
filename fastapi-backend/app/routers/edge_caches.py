@@ -12,7 +12,7 @@ from datetime import datetime
 import uuid
 
 from ..database.config import SessionLocal
-from ..models.models import EdgeCache, EdgeEngine
+from ..models.models import EdgeCache, EdgeEngine, EdgeProviderAccount
 from ..services.cache_tester import test_cache, TestCacheResult
 
 router = APIRouter(prefix="/api/edge-caches", tags=["edge-caches"])
@@ -109,6 +109,16 @@ async def create_edge_cache(payload: EdgeCacheCreate):
     """Create a new edge cache connection."""
     db = SessionLocal()
     try:
+        # Prevent duplicate cache URLs
+        existing = db.query(EdgeCache).filter(
+            EdgeCache.cache_url == payload.cache_url
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"A cache with this URL already exists ('{existing.name}')"
+            )
+
         now = datetime.utcnow().isoformat() + "Z"
         
         # If this is set as default, unset all others
@@ -183,10 +193,11 @@ async def update_edge_cache(cache_id: str, payload: EdgeCacheUpdate):
 
 
 @router.delete("/{cache_id}")
-async def delete_edge_cache(cache_id: str):
+async def delete_edge_cache(cache_id: str, delete_remote: bool = False):
     """Delete an edge cache connection.
     
-    Fails if any edge engines still reference this cache.
+    If delete_remote=True and the cache was created from a connected Upstash account,
+    also delete the Redis database at Upstash via Management API.
     """
     db = SessionLocal()
     try:
@@ -209,7 +220,47 @@ async def delete_edge_cache(cache_id: str):
                 f"Reassign them first."
             )
         
+        remote_deleted = False
+        # If delete_remote requested and cache linked to a provider account
+        if delete_remote and getattr(cache, 'provider_account_id', None):
+            try:
+                from ..core.security import get_provider_creds
+                account = db.query(EdgeProviderAccount).filter(
+                    EdgeProviderAccount.id == cache.provider_account_id
+                ).first()
+                if account and str(account.provider) == "upstash":
+                    import httpx, base64
+                    creds = get_provider_creds(str(account.id), db)
+                    if creds:
+                        token = creds.get("api_token", "")
+                        email = creds.get("email", "")
+                        auth = base64.b64encode(f"{email}:{token}".encode()).decode()
+                        cache_url = str(cache.cache_url)
+                        # List all Redis DBs and find matching one by endpoint URL
+                        async with httpx.AsyncClient(timeout=15.0) as client:
+                            list_resp = await client.get(
+                                "https://api.upstash.com/v2/redis/databases",
+                                headers={"Authorization": f"Basic {auth}"},
+                            )
+                            if list_resp.status_code == 200:
+                                dbs = list_resp.json()
+                                for rdb in (dbs if isinstance(dbs, list) else []):
+                                    rest_url = rdb.get("rest_url", "")
+                                    endpoint = rdb.get("endpoint", "")
+                                    if (rest_url and rest_url in cache_url) or (endpoint and endpoint in cache_url):
+                                        db_id = rdb.get("database_id")
+                                        if db_id:
+                                            del_resp = await client.delete(
+                                                f"https://api.upstash.com/v2/redis/database/{db_id}",
+                                                headers={"Authorization": f"Basic {auth}"},
+                                            )
+                                            remote_deleted = del_resp.status_code in (200, 204)
+                                        break
+            except Exception:
+                pass  # Remote delete is best-effort; local delete proceeds
+        
         was_default = bool(cache.is_default)
+        cache_name = str(cache.name)
         db.delete(cache)
         
         # If we deleted the default, promote the next one
@@ -219,7 +270,10 @@ async def delete_edge_cache(cache_id: str):
                 next_cache.is_default = True  # type: ignore[assignment]
         
         db.commit()
-        return {"success": True, "message": f"Edge cache '{cache.name}' deleted"}
+        msg = f"Edge cache '{cache_name}' deleted"
+        if remote_deleted:
+            msg += " (also removed from Upstash)"
+        return {"success": True, "message": msg, "remote_deleted": remote_deleted}
     finally:
         db.close()
 

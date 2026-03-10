@@ -81,3 +81,23 @@
 2. **Upstash**: One Connected Account (email + management API key) serves both Redis (cache) and QStash (queue). QStash discovery is best-effort since the management API key may not work as QStash Bearer token
 3. **All providers**: `provider_account_id` FK on edge infra resources links to `EdgeProviderAccount` table. Backend serialization includes `account_name` for display
 4. **Create New resources**: Only Upstash Redis supported via management API. Uses Global Redis (not regional)
+
+---
+
+# Session Plan — March 10, 2026
+
+## 1. Refactoring & Optimization
+- Code cleanup across Edge Resource components
+- Remove debug prints, consolidate patterns
+- Review and optimize backend endpoints
+
+## 2. Engine Lifecycle (End-to-End on All Providers)
+- Deploy engines on all providers (Cloudflare, Deno, Netlify, Vercel, Docker)
+- Reconfigure running engines
+- Delete / teardown engines
+- Fetch / list engines from remote providers
+
+## 3. Full Publish Pipeline (All Providers)
+- Deploy a page to each provider's engine
+- SSR rendering validation per provider
+- Automation execution on each provider's engine

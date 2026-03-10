@@ -58,6 +58,8 @@ export interface EdgeCache {
     has_token: boolean;
     is_default: boolean;
     is_system: boolean;
+    provider_account_id?: string | null;
+    account_name?: string | null;
     created_at: string;
     updated_at: string;
     engine_count: number;

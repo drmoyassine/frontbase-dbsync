@@ -273,10 +273,7 @@ async def _test_connection(provider: str, db_url: str, db_token: Optional[str]) 
             latency_ms=0,
         )
     elif provider == "neon":
-        return TestConnectionResult(
-            success=False,
-            message="Neon HTTP testing not yet implemented. Connection saved.",
-        )
+        return await _test_neon(db_url, db_token)
     else:
         return TestConnectionResult(
             success=False,
@@ -327,6 +324,35 @@ async def _test_turso(db_url: str, db_token: Optional[str]) -> TestConnectionRes
                 success=False,
                 message=f"Turso returned HTTP {resp.status_code}: {resp.text[:200]}",
             )
+    except Exception as e:
+        return TestConnectionResult(
+            success=False,
+            message=f"Connection failed: {str(e)}",
+        )
+
+
+async def _test_neon(db_url: str, db_token: Optional[str]) -> TestConnectionResult:
+    """Test Neon connectivity via asyncpg (standard PostgreSQL connection)."""
+    import time
+    import asyncpg
+
+    if not db_url:
+        return TestConnectionResult(success=False, message="No connection URI provided")
+
+    start = time.time()
+    try:
+        conn = await asyncpg.connect(db_url, timeout=10)
+        try:
+            await conn.fetchval("SELECT 1")
+        finally:
+            await conn.close()
+
+        latency = round((time.time() - start) * 1000, 1)
+        return TestConnectionResult(
+            success=True,
+            message=f"Connected to Neon in {latency}ms",
+            latency_ms=latency,
+        )
     except Exception as e:
         return TestConnectionResult(
             success=False,

@@ -21,8 +21,10 @@ import { PrivacySettingsForm } from './settings/shared/PrivacySettingsForm';
 import { ProjectDetailsForm } from './settings/shared/ProjectDetailsForm';
 import { EmailProviderSettingsForm } from './settings/shared/EmailProviderSettingsForm';
 import { AdminInviteForm } from './settings/shared/AdminInviteForm';
+import { EdgeAPIKeysForm } from './settings/shared/EdgeAPIKeysForm';
+import { EdgeProvidersSection } from './settings/shared/EdgeProvidersSection';
 
-const VALID_TABS = ['general', 'team', 'privacy'] as const;
+const VALID_TABS = ['general', 'team', 'privacy', 'keys', 'accounts'] as const;
 type SettingsTab = typeof VALID_TABS[number];
 
 export const SettingsPanel: React.FC = () => {
@@ -46,10 +48,12 @@ export const SettingsPanel: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 lg:w-[500px]">
+        <TabsList className="grid w-full grid-cols-5 lg:w-[750px]">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="team">Team & Emails</TabsTrigger>
           <TabsTrigger value="privacy">Privacy & Tracking</TabsTrigger>
+          <TabsTrigger value="keys">API Keys</TabsTrigger>
+          <TabsTrigger value="accounts">Connected Accounts</TabsTrigger>
         </TabsList>
 
         {/* General Tab */}
@@ -98,6 +102,16 @@ export const SettingsPanel: React.FC = () => {
         {/* Privacy & Tracking Tab */}
         <TabsContent value="privacy" className="space-y-6 mt-6">
           <PrivacySettingsForm withCard />
+        </TabsContent>
+
+        {/* API Keys Tab */}
+        <TabsContent value="keys" className="space-y-6 mt-6">
+          <EdgeAPIKeysForm withCard />
+        </TabsContent>
+
+        {/* Connected Accounts Tab */}
+        <TabsContent value="accounts" className="space-y-6 mt-6">
+          <EdgeProvidersSection />
         </TabsContent>
       </Tabs>
     </div>

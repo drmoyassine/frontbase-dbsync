@@ -123,7 +123,7 @@ PROVIDER_SECRET_KEYS: dict[str, set[str]] = {
     "wordpress_rest":    {"app_password"},
     "wordpress_graphql": {"app_password"},
     # ── Edge Infrastructure (Connected Account = management API token) ──
-    "turso":         {"api_token"},
+    "turso":         {"databases"},     # manual registry: JSON blob of DB entries
     "upstash_redis": {"cache_token"},
     "qstash":        {"queue_token", "signing_key", "next_signing_key"},
 }
@@ -145,7 +145,7 @@ PROVIDER_METADATA_KEYS: dict[str, set[str]] = {
     "wordpress_rest":    {"base_url", "username"},
     "wordpress_graphql": {"base_url"},
     # ── Edge Infrastructure ──
-    "turso":         {"db_url"},
+    "turso":         set(),             # all data in encrypted blob
     "upstash_redis": {"cache_url"},
     "qstash":        {"queue_url"},
 }

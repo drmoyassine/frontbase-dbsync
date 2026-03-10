@@ -2,9 +2,9 @@
  * AccountResourcePicker
  * 
  * Shared component for Edge DB/Cache/Queue forms.
- * Flow: Select Connected Account → Discover resources → Pick resource → auto-fill form fields
- * Falls back to manual entry if no matching accounts exist.
+ * Flow: Select Connected Account (or Connect New) → Discover resources → Pick resource (or Create New)
  * 
+ * No manual entry — all resources come from connected accounts.
  * Supports filtering resources by type (e.g. only 'redis' or only 'qstash')
  * and creating new resources via the management API.
  */
@@ -15,8 +15,13 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Cloud, Link2, RefreshCw, Plus } from 'lucide-react';
+import {
+    Dialog, DialogContent, DialogDescription, DialogFooter,
+    DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { Loader2, Link2, RefreshCw, Plus } from 'lucide-react';
 import { useEdgeProviders } from '@/hooks/useEdgeInfrastructure';
+import { ConnectProviderDialog } from './ConnectProviderDialog';
 
 const API_BASE = '';
 
@@ -71,8 +76,14 @@ interface AccountResourcePickerProps {
     selectedAccountId?: string | null;
     /** Label override */
     label?: string;
-    /** Show "or enter manually" hint */
-    showManualHint?: boolean;
+    /** URLs already imported — matching resources shown as "Already connected" */
+    existingUrls?: string[];
+    /** Auto-select single account and hide account dropdown (e.g. Turso container) */
+    autoSelectSingle?: boolean;
+    /** Label for the resource dropdown (e.g. 'Select Database') */
+    resourceLabel?: string;
+    /** Hide Display Name in the ConnectProviderDialog (e.g. Turso) */
+    hideConnectDisplayName?: boolean;
 }
 
 export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
@@ -83,25 +94,38 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
     onClear,
     selectedAccountId,
     label = 'Connected Account',
-    showManualHint = true,
+    existingUrls = [],
+    autoSelectSingle,
+    resourceLabel,
+    hideConnectDisplayName,
 }) => {
-    const { data: allProviders = [] } = useEdgeProviders();
+    const { data: allProviders = [], refetch: refetchProviders } = useEdgeProviders();
     const [selectedAccount, setSelectedAccount] = useState<string>(selectedAccountId || '');
     const [resources, setResources] = useState<DiscoveredResource[]>([]);
     const [isDiscovering, setIsDiscovering] = useState(false);
     const [discoverError, setDiscoverError] = useState<string | null>(null);
 
-    // Create new state
-    const [showCreateForm, setShowCreateForm] = useState(false);
+    // Create new resource dialog state
+    const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [createName, setCreateName] = useState('');
     const [createRegion, setCreateRegion] = useState('us-east-1');
     const [isCreating, setIsCreating] = useState(false);
     const [createError, setCreateError] = useState<string | null>(null);
 
+    // Stacked "Connect New Account" dialog
+    const [showConnectDialog, setShowConnectDialog] = useState(false);
+
     // Filter providers to only compatible types
     const compatibleAccounts = allProviders.filter(
         (p: any) => compatibleProviders.includes(p.provider) && p.is_active
     );
+
+    // Auto-select single account when autoSelectSingle is on
+    useEffect(() => {
+        if (autoSelectSingle && compatibleAccounts.length === 1 && !selectedAccount) {
+            setSelectedAccount(compatibleAccounts[0].id);
+        }
+    }, [autoSelectSingle, compatibleAccounts.length]);
 
     // Auto-discover when account is selected
     useEffect(() => {
@@ -117,7 +141,6 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
         setIsDiscovering(true);
         setDiscoverError(null);
         setResources([]);
-        setShowCreateForm(false);
         try {
             const res = await fetch(`${API_BASE}/api/edge-providers/discover-by-account/${accountId}`, {
                 method: 'POST',
@@ -144,19 +167,44 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
     };
 
     const handleAccountChange = (value: string) => {
-        if (value === '__none__') {
-            setSelectedAccount('');
-            setResources([]);
-            setShowCreateForm(false);
-            onClear?.();
+        if (value === '__connect_new__') {
+            setShowConnectDialog(true);
             return;
         }
         setSelectedAccount(value);
     };
 
+    /** Check if a discovered resource is already imported */
+    const isAlreadyImported = (resource: DiscoveredResource): boolean => {
+        if (existingUrls.length === 0) return false;
+        const candidates = [
+            resource.rest_url,
+            resource.endpoint ? `https://${resource.endpoint}` : undefined,
+            resource.endpoint,
+            resource.db_url,
+            resource.hostname ? `libsql://${resource.hostname}` : undefined,
+            resource.type === 'qstash' ? 'https://qstash.upstash.io' : undefined,
+        ].filter(Boolean) as string[];
+        return candidates.some(url =>
+            existingUrls.some(existing => existing.includes(url) || url.includes(existing))
+        );
+    };
+
     const handleResourceSelect = (resourceId: string) => {
+        if (resourceId === '__create_new__') {
+            if (hideConnectDisplayName) {
+                // Turso: open the connect modal directly (it's the DB form)
+                setShowConnectDialog(true);
+            } else {
+                setCreateName('');
+                setCreateRegion('us-east-1');
+                setCreateError(null);
+                setShowCreateDialog(true);
+            }
+            return;
+        }
         const resource = resources.find(r => r.id === resourceId);
-        if (resource) {
+        if (resource && !isAlreadyImported(resource)) {
             onResourceSelected(resource, selectedAccount);
         }
     };
@@ -179,7 +227,7 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
             if (data.success && data.resource) {
                 // Auto-select the newly created resource
                 onResourceSelected(data.resource, selectedAccount);
-                setShowCreateForm(false);
+                setShowCreateDialog(false);
                 setCreateName('');
                 // Refresh discover list
                 discoverResources(selectedAccount);
@@ -193,45 +241,78 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
         }
     };
 
+    // No compatible accounts → show "Connect Account" button
     if (compatibleAccounts.length === 0) {
-        return showManualHint ? (
-            <div className="text-xs text-muted-foreground flex items-center gap-1.5 py-1">
-                <Cloud className="h-3 w-3" />
-                <span>No matching accounts connected.</span>
-                <a href="/frontbase-admin/settings" className="underline hover:text-foreground">
-                    Connect one in Settings →
-                </a>
+        const providerName = compatibleProviders[0]?.charAt(0).toUpperCase() + (compatibleProviders[0]?.slice(1) || '');
+        const buttonLabel = autoSelectSingle
+            ? `Add ${providerName} Database`
+            : `Connect ${providerName} Account`;
+        return (
+            <div className="space-y-2">
+                <Label className="text-sm">{autoSelectSingle ? (resourceLabel || label) : label}</Label>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start gap-2 text-muted-foreground"
+                    onClick={() => setShowConnectDialog(true)}
+                >
+                    <Plus className="h-3.5 w-3.5" />
+                    {buttonLabel}
+                </Button>
+                <ConnectProviderDialog
+                    provider={compatibleProviders[0]}
+                    open={showConnectDialog}
+                    onOpenChange={setShowConnectDialog}
+                    hideDisplayName={hideConnectDisplayName}
+                    onConnected={async (newAccountId) => {
+                        await refetchProviders();
+                        setSelectedAccount(newAccountId);
+                        // Force re-discover even if account ID is the same (Turso adds DB to existing account)
+                        discoverResources(newAccountId);
+                    }}
+                />
             </div>
-        ) : null;
+        );
     }
+
+    const createResourceLabel = createResourceType === 'redis'
+        ? 'Redis Database'
+        : createResourceType === 'turso_db'
+            ? 'Turso Database'
+            : 'Resource';
 
     return (
         <div className="space-y-3">
-            {/* Account selector */}
-            <div className="space-y-1.5">
-                <Label className="text-sm">{label}</Label>
-                <Select value={selectedAccount || '__none__'} onValueChange={handleAccountChange}>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Select a connected account..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="__none__">
-                            <span className="text-muted-foreground">Manual entry</span>
-                        </SelectItem>
-                        {compatibleAccounts.map((account: any) => (
-                            <SelectItem key={account.id} value={account.id}>
-                                <span className="flex items-center gap-2">
-                                    <Link2 className="h-3 w-3" />
-                                    {account.name}
-                                    <Badge variant="outline" className="text-[10px] px-1 py-0 ml-1">
-                                        {account.provider}
-                                    </Badge>
+            {/* Account selector — hidden when autoSelectSingle with 1 account */}
+            {!(autoSelectSingle && compatibleAccounts.length === 1) && (
+                <div className="space-y-1.5">
+                    <Label className="text-sm">{label}</Label>
+                    <Select value={selectedAccount || undefined} onValueChange={handleAccountChange}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select a connected account..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {compatibleAccounts.map((account: any) => (
+                                <SelectItem key={account.id} value={account.id}>
+                                    <span className="flex items-center gap-2">
+                                        <Link2 className="h-3 w-3" />
+                                        {account.name}
+                                        <Badge variant="outline" className="text-[10px] px-1 py-0 ml-1">
+                                            {account.provider}
+                                        </Badge>
+                                    </span>
+                                </SelectItem>
+                            ))}
+                            <SelectItem value="__connect_new__">
+                                <span className="flex items-center gap-2 text-primary">
+                                    <Plus className="h-3 w-3" />
+                                    Connect New Account
                                 </span>
                             </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
+                        </SelectContent>
+                    </Select>
+                </div>
+            )}
 
             {/* Discover results */}
             {selectedAccount && (
@@ -253,110 +334,128 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
                             </Button>
                         </div>
                     ) : (
-                        <div className="space-y-2">
-                            {resources.length > 0 && (
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs text-muted-foreground">
-                                        Select a resource ({resources.length} found)
-                                    </Label>
-                                    <Select onValueChange={handleResourceSelect}>
+                        <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground">
+                                {resourceLabel || `Select a resource`} ({resources.length} found)
+                            </Label>
+                            <Select onValueChange={handleResourceSelect}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Pick a resource..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {resources.map(r => {
+                                        const imported = isAlreadyImported(r);
+                                        return (
+                                            <SelectItem
+                                                key={r.id}
+                                                value={r.id}
+                                                disabled={imported}
+                                            >
+                                                <span className={`flex items-center gap-2 ${imported ? 'opacity-50' : ''}`}>
+                                                    {r.name}
+                                                    <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                                        {r.type}
+                                                    </Badge>
+                                                    {imported && (
+                                                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                                            Already connected
+                                                        </Badge>
+                                                    )}
+                                                    {!imported && r.region && (
+                                                        <span className="text-[10px] text-muted-foreground">
+                                                            {r.region}
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </SelectItem>
+                                        );
+                                    })}
+                                    {/* Create New option inside the dropdown */}
+                                    {createResourceType && (
+                                        <SelectItem value="__create_new__">
+                                            <span className="flex items-center gap-2 text-primary">
+                                                <Plus className="h-3 w-3" />
+                                                Create New {createResourceLabel}
+                                            </span>
+                                        </SelectItem>
+                                    )}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            <ConnectProviderDialog
+                provider={compatibleProviders[0]}
+                open={showConnectDialog}
+                onOpenChange={setShowConnectDialog}
+                hideDisplayName={hideConnectDisplayName}
+                onConnected={async (newAccountId) => {
+                    await refetchProviders();
+                    setSelectedAccount(newAccountId);
+                    // Force re-discover even if account ID is the same
+                    discoverResources(newAccountId);
+                }}
+            />
+
+            {/* Create New Resource dialog */}
+            {createResourceType && (
+                <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>Create New {createResourceLabel}</DialogTitle>
+                            <DialogDescription>
+                                This will create a new {createResourceLabel.toLowerCase()} in your connected account.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-3 py-2">
+                            <div className="space-y-1">
+                                <Label className="text-sm">Name</Label>
+                                <Input
+                                    placeholder={`e.g. my-${createResourceType}`}
+                                    value={createName}
+                                    onChange={e => setCreateName(e.target.value)}
+                                />
+                            </div>
+                            {createResourceType === 'redis' && (
+                                <div className="space-y-1">
+                                    <Label className="text-sm">Region</Label>
+                                    <Select value={createRegion} onValueChange={setCreateRegion}>
                                         <SelectTrigger>
-                                            <SelectValue placeholder="Pick a resource..." />
+                                            <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {resources.map(r => (
-                                                <SelectItem key={r.id} value={r.id}>
-                                                    <span className="flex items-center gap-2">
-                                                        {r.name}
-                                                        <Badge variant="outline" className="text-[10px] px-1 py-0">
-                                                            {r.type}
-                                                        </Badge>
-                                                        {r.region && (
-                                                            <span className="text-[10px] text-muted-foreground">
-                                                                {r.region}
-                                                            </span>
-                                                        )}
-                                                    </span>
+                                            {UPSTASH_REGIONS.map(r => (
+                                                <SelectItem key={r.value} value={r.value}>
+                                                    {r.label}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
                             )}
-
-                            {/* Create New button */}
-                            {createResourceType && !showCreateForm && (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full"
-                                    onClick={() => setShowCreateForm(true)}
-                                >
-                                    <Plus className="h-3 w-3 mr-1.5" />
-                                    Create New {createResourceType === 'redis' ? 'Redis Database' : 'Resource'}
-                                </Button>
-                            )}
-
-                            {/* Create new form */}
-                            {showCreateForm && (
-                                <div className="p-3 border border-dashed rounded-lg space-y-3 bg-muted/30">
-                                    <Label className="text-xs font-medium">
-                                        Create New {createResourceType === 'redis' ? 'Redis Database' : 'Resource'}
-                                    </Label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">Name</Label>
-                                            <Input
-                                                placeholder="e.g. my-cache"
-                                                value={createName}
-                                                onChange={e => setCreateName(e.target.value)}
-                                                className="h-8 text-sm"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">Region</Label>
-                                            <Select value={createRegion} onValueChange={setCreateRegion}>
-                                                <SelectTrigger className="h-8 text-sm">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {UPSTASH_REGIONS.map(r => (
-                                                        <SelectItem key={r.value} value={r.value}>
-                                                            {r.label}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    </div>
-                                    {createError && (
-                                        <p className="text-xs text-destructive">{createError}</p>
-                                    )}
-                                    <div className="flex gap-2">
-                                        <Button
-                                            size="sm"
-                                            onClick={handleCreateNew}
-                                            disabled={!createName.trim() || isCreating}
-                                        >
-                                            {isCreating ? (
-                                                <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Creating...</>
-                                            ) : (
-                                                <><Plus className="h-3 w-3 mr-1" /> Create</>
-                                            )}
-                                        </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => { setShowCreateForm(false); setCreateError(null); }}
-                                        >
-                                            Cancel
-                                        </Button>
-                                    </div>
-                                </div>
+                            {createError && (
+                                <p className="text-sm text-destructive">{createError}</p>
                             )}
                         </div>
-                    )}
-                </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleCreateNew}
+                                disabled={!createName.trim() || isCreating}
+                            >
+                                {isCreating ? (
+                                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating...</>
+                                ) : (
+                                    <><Plus className="h-4 w-4 mr-2" /> Create</>
+                                )}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             )}
         </div>
     );

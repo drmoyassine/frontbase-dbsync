@@ -7,6 +7,7 @@
 import React from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -50,6 +51,8 @@ interface EdgeCacheDialogProps {
     // Account link (optional)
     formAccountId?: string | null;
     setFormAccountId?: (v: string | null) => void;
+    /** URLs already imported — for duplicate prevention */
+    existingUrls?: string[];
 }
 
 export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
@@ -60,6 +63,7 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
     isSaving, testingId, openCreate, resetForm,
     handleSave, handleTestInline,
     formAccountId, setFormAccountId,
+    existingUrls = [],
 }) => {
     return (
         <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetForm(); } setDialogOpen(open); }}>
@@ -96,15 +100,21 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
                                     <button
                                         key={opt.value}
                                         type="button"
-                                        onClick={() => setSelectedProvider(opt.value)}
-                                        className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm transition-colors text-left
+                                        onClick={() => opt.active && setSelectedProvider(opt.value)}
+                                        disabled={!opt.active}
+                                        className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm transition-colors text-left relative
                                             ${selectedProvider === opt.value
                                                 ? 'border-primary bg-primary/5 text-primary'
-                                                : 'border-border hover:bg-accent'
+                                                : opt.active
+                                                    ? 'border-border hover:bg-accent'
+                                                    : 'border-border opacity-50 cursor-not-allowed'
                                             }`}
                                     >
                                         <Icon className="h-4 w-4 shrink-0" />
                                         <span className="truncate">{opt.label}</span>
+                                        {!opt.active && (
+                                            <Badge variant="outline" className="text-[10px] ml-auto px-1.5 py-0">Soon</Badge>
+                                        )}
                                     </button>
                                 );
                             })}
@@ -118,6 +128,7 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
                             resourceTypeFilter="redis"
                             createResourceType="redis"
                             label="From Connected Upstash Account"
+                            existingUrls={existingUrls}
                             onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
                                 setFormAccountId(accountId);
                                 if (resource.type === 'redis') {
@@ -135,36 +146,26 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
                         />
                     )}
 
-                    {/* Name + URL */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                            <Label>Name</Label>
-                            <Input
-                                placeholder={`e.g. Production ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}`}
-                                value={formName}
-                                onChange={e => setFormName(e.target.value)}
-                            />
+                    {/* Auto-discovered summary — show when account picked */}
+                    {formAccountId && (
+                        <div className="space-y-3">
+                            <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-3">
+                                <p className="text-sm text-green-700 dark:text-green-400 flex items-center gap-2">
+                                    <Check className="h-4 w-4" />
+                                    Credentials auto-filled from connected account
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">URL and auth token are configured automatically.</p>
+                            </div>
+                            <div className="space-y-1">
+                                <Label>Connection Name</Label>
+                                <Input
+                                    placeholder="e.g. Production Redis"
+                                    value={formName}
+                                    onChange={e => setFormName(e.target.value)}
+                                />
+                            </div>
                         </div>
-                        <div className="space-y-1">
-                            <Label>Cache URL</Label>
-                            <Input
-                                placeholder={CACHE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.placeholder}
-                                value={formUrl}
-                                onChange={e => setFormUrl(e.target.value)}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Auth Token */}
-                    <div className="space-y-1">
-                        <Label>Auth Token</Label>
-                        <Input
-                            type="password"
-                            placeholder={editingId ? '(leave blank to keep existing)' : 'Cache auth token'}
-                            value={formToken}
-                            onChange={e => setFormToken(e.target.value)}
-                        />
-                    </div>
+                    )}
 
                     {/* Default toggle */}
                     <div className="flex items-center gap-2">

@@ -19,10 +19,8 @@ import { EdgeCachesForm } from './settings/shared/EdgeCachesForm';
 import { EdgeDatabasesForm } from './settings/shared/EdgeDatabasesForm';
 import { EdgeQueuesForm } from './settings/shared/EdgeQueuesForm';
 import { EdgeEnginesPanel } from './settings/shared/EdgeEnginesPanel';
-import { EdgeAPIKeysForm } from './settings/shared/EdgeAPIKeysForm';
-import { EdgeProvidersSection } from './settings/shared/EdgeProvidersSection';
 
-const VALID_TABS = ['compute', 'database', 'caching', 'queues', 'keys', 'accounts'] as const;
+const VALID_TABS = ['compute', 'database', 'caching', 'queues'] as const;
 type EdgeTab = typeof VALID_TABS[number];
 
 export const EdgeInfrastructurePanel: React.FC = () => {
@@ -39,20 +37,18 @@ export const EdgeInfrastructurePanel: React.FC = () => {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold tracking-tight">Edge Infrastructure</h1>
+                <h1 className="text-2xl font-bold tracking-tight">Edge Resources</h1>
                 <p className="text-muted-foreground">
                     Manage your edge compute engines, databases, caches, and queues
                 </p>
             </div>
 
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-6 lg:w-[950px]">
+                <TabsList className="grid w-full grid-cols-4 lg:w-[650px]">
                     <TabsTrigger value="compute">Edge Compute</TabsTrigger>
                     <TabsTrigger value="database">Edge Database</TabsTrigger>
                     <TabsTrigger value="caching">Edge Caching</TabsTrigger>
                     <TabsTrigger value="queues">Edge Queues</TabsTrigger>
-                    <TabsTrigger value="keys">API Keys</TabsTrigger>
-                    <TabsTrigger value="accounts">Accounts</TabsTrigger>
                 </TabsList>
 
                 {/* Edge Compute (Engines + AI) Tab */}
@@ -75,15 +71,6 @@ export const EdgeInfrastructurePanel: React.FC = () => {
                     <EdgeQueuesForm withCard />
                 </TabsContent>
 
-                {/* API Keys Tab */}
-                <TabsContent value="keys" className="space-y-6 mt-6">
-                    <EdgeAPIKeysForm withCard />
-                </TabsContent>
-
-                {/* Connected Accounts Tab */}
-                <TabsContent value="accounts" className="space-y-6 mt-6">
-                    <EdgeProvidersSection />
-                </TabsContent>
             </Tabs>
         </div>
     );

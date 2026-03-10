@@ -1,151 +1,55 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Cloud, Plus, Trash2, Loader2, AlertTriangle, Shield, Server, CheckCircle2, XCircle, Zap } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Cloud, Plus, Trash2, Loader2, Shield, Server, Zap, ChevronDown, ChevronRight, Database, CheckCircle2, XCircle } from 'lucide-react';
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
     AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import {
-    Dialog, DialogContent, DialogDescription, DialogFooter,
-    DialogHeader, DialogTitle, DialogTrigger,
-} from '@/components/ui/dialog';
 import { useEdgeProviders, edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
 import { API_BASE, PROVIDER_ICONS } from './edgeConstants';
 import { ImportCloudflareWorkers } from './ImportCloudflareWorkers';
-
-// ── Provider credential form configs ─────────────────────────────────
-const PROVIDER_CONFIGS: Record<string, {
-    label: string;
-    defaultName: string;
-    fields: { key: string; label: string; placeholder: string; type?: string; required?: boolean }[];
-    helpText?: React.ReactNode;
-}> = {
-    cloudflare: {
-        label: 'Cloudflare Workers',
-        defaultName: 'Cloudflare Account',
-        fields: [
-            { key: 'api_token', label: 'API Token', placeholder: 'Cloudflare API Token', type: 'password', required: true },
-        ],
-        helpText: <>Requires "Workers Scripts: Edit" and "Account Settings: Read". <a href="https://dash.cloudflare.com/profile/api-tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a></>,
-    },
-    supabase: {
-        label: 'Supabase Edge Functions',
-        defaultName: 'Supabase Account',
-        fields: [
-            { key: 'access_token', label: 'Access Token', placeholder: 'sbp_...', type: 'password', required: true },
-        ],
-        helpText: <><a href="https://supabase.com/dashboard/account/tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Generate access token →</a> One token discovers all your projects.</>,
-    },
-    upstash: {
-        label: 'Upstash Workflows',
-        defaultName: 'Upstash Account',
-        fields: [
-            { key: 'api_token', label: 'API Token', placeholder: 'Upstash API Token', type: 'password', required: true },
-            { key: 'email', label: 'Email', placeholder: 'you@example.com', required: true },
-        ],
-        helpText: <><a href="https://console.upstash.com/account/api?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Get API key →</a> Found in Console → Account → Management API.</>,
-    },
-    vercel: {
-        label: 'Vercel Edge Functions',
-        defaultName: 'Vercel Account',
-        fields: [
-            { key: 'api_token', label: 'API Token', placeholder: 'Vercel API Token', type: 'password', required: true },
-        ],
-        helpText: <><a href="https://vercel.com/account/tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a> One token for all your projects.</>,
-    },
-    netlify: {
-        label: 'Netlify Edge Functions',
-        defaultName: 'Netlify Account',
-        fields: [
-            { key: 'api_token', label: 'API Token', placeholder: 'nfp_...', type: 'password', required: true },
-        ],
-        helpText: <><a href="https://app.netlify.com/user/applications#personal-access-tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a> A site will be created automatically on first deploy.</>,
-    },
-    deno: {
-        label: 'Deno Deploy',
-        defaultName: 'Deno Deploy Account',
-        fields: [
-            { key: 'access_token', label: 'Organization Token', placeholder: 'ddo_...', type: 'password', required: true },
-        ],
-        helpText: <>Create an org token at your <a href="https://dash.deno.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Deno Deploy dashboard</a> → Organization Settings.</>,
-    },
-    neon: {
-        label: 'Neon Postgres',
-        defaultName: 'Neon Account',
-        fields: [
-            { key: 'api_key', label: 'API Key', placeholder: 'neon_api_...', type: 'password', required: true },
-        ],
-        helpText: <>Found in <a href="https://console.neon.tech/app/settings/api-keys" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Neon console</a> → Account Settings → API Keys.</>,
-    },
-    postgres: {
-        label: 'PostgreSQL',
-        defaultName: 'PostgreSQL Server',
-        fields: [
-            { key: 'host', label: 'Host', placeholder: 'db.example.com', required: true },
-            { key: 'port', label: 'Port', placeholder: '5432' },
-            { key: 'database', label: 'Database', placeholder: 'mydb', required: true },
-            { key: 'username', label: 'Username', placeholder: 'postgres', required: true },
-            { key: 'password', label: 'Password', placeholder: 'Password', type: 'password', required: true },
-        ],
-    },
-    mysql: {
-        label: 'MySQL',
-        defaultName: 'MySQL Server',
-        fields: [
-            { key: 'host', label: 'Host', placeholder: 'db.example.com', required: true },
-            { key: 'port', label: 'Port', placeholder: '3306' },
-            { key: 'database', label: 'Database', placeholder: 'mydb', required: true },
-            { key: 'username', label: 'Username', placeholder: 'root', required: true },
-            { key: 'password', label: 'Password', placeholder: 'Password', type: 'password', required: true },
-        ],
-    },
-    wordpress_rest: {
-        label: 'WordPress REST',
-        defaultName: 'WordPress Site',
-        fields: [
-            { key: 'base_url', label: 'Site URL', placeholder: 'https://mysite.com', required: true },
-            { key: 'username', label: 'Username', placeholder: 'admin', required: true },
-            { key: 'app_password', label: 'Application Password', placeholder: 'xxxx xxxx xxxx xxxx', type: 'password', required: true },
-        ],
-        helpText: <>Generate an Application Password in WordPress → Users → Profile → Application Passwords.</>,
-    },
-};
+import { ConnectProviderDialog } from './ConnectProviderDialog';
 
 export function EdgeProvidersSection() {
     const { data: providers = [], isLoading, refetch } = useEdgeProviders();
-    const [isConnecting, setIsConnecting] = useState(false);
-    const [isTesting, setIsTesting] = useState(false);
-    const [testResult, setTestResult] = useState<{ success: boolean; detail: string } | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [open, setOpen] = useState(false);
-
-    // Form state
-    const [providerType, setProviderType] = useState('cloudflare');
-    const [credFields, setCredFields] = useState<Record<string, string>>({});
-    const [name, setName] = useState('Cloudflare Account');
-
-    const currentConfig = PROVIDER_CONFIGS[providerType] || PROVIDER_CONFIGS.cloudflare;
+    const [connectDialogOpen, setConnectDialogOpen] = useState(false);
 
     // Re-test state for existing providers
     const [retestingId, setRetestingId] = useState<string | null>(null);
     const [retestResults, setRetestResults] = useState<Record<string, { success: boolean; detail: string }>>({});
 
-    // Supabase project picker state
-    const [discoveredProjects, setDiscoveredProjects] = useState<{ ref: string; name: string; region: string; status: string }[]>([]);
-    const [selectedProjectRef, setSelectedProjectRef] = useState<string>('');
+    // Turso account expansion + per-DB management
+    const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
+    const [tursoTestingDb, setTursoTestingDb] = useState<string | null>(null);
+    const [tursoDbResults, setTursoDbResults] = useState<Record<string, { success: boolean; detail: string }>>({});
+    const [tursoDatabases, setTursoDatabases] = useState<Record<string, any[]>>({});
+
+    // Auto-fetch Turso databases on mount (card starts expanded for Turso)
+    useEffect(() => {
+        providers.filter(p => p.provider === 'turso').forEach(async (p) => {
+            if (!tursoDatabases[p.id]) {
+                try {
+                    const res = await fetch(`${API_BASE}/api/edge-providers/discover-by-account/${p.id}`, { method: 'POST' });
+                    const data = await res.json();
+                    if (data.success) {
+                        setTursoDatabases(prev => ({ ...prev, [p.id]: data.resources || [] }));
+                    } else {
+                        setTursoDatabases(prev => ({ ...prev, [p.id]: [] }));
+                    }
+                } catch {
+                    setTursoDatabases(prev => ({ ...prev, [p.id]: [] }));
+                }
+            }
+        });
+    }, [providers]);
 
     const handleRetest = async (providerId: string) => {
         setRetestingId(providerId);
         setRetestResults(prev => { const n = { ...prev }; delete n[providerId]; return n; });
         try {
-            // Use server-side /retest endpoint (decrypts stored credentials)
             const res = await fetch(`${API_BASE}/api/edge-providers/retest/${providerId}`, {
                 method: 'POST',
             });
@@ -160,99 +64,6 @@ export function EdgeProvidersSection() {
             setRetestingId(null);
         }
     };
-
-    const handleProviderChange = (value: string) => {
-        setProviderType(value);
-        setCredFields({});
-        setTestResult(null);
-        setError(null);
-        setDiscoveredProjects([]);
-        setSelectedProjectRef('');
-        const cfg = PROVIDER_CONFIGS[value];
-        if (cfg) setName(cfg.defaultName);
-    };
-
-    const handleTestConnection = async () => {
-        setIsTesting(true);
-        setTestResult(null);
-        setError(null);
-        setDiscoveredProjects([]);
-        setSelectedProjectRef('');
-        try {
-            const res = await fetch(`${API_BASE}/api/edge-providers/test-connection`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ provider: providerType, credentials: credFields }),
-            });
-            const data = await res.json();
-            setTestResult(data);
-            // Auto-name on success
-            if (data.success && data.detail) {
-                const detailName = data.detail.replace(/^Connected (as |to (project: )?)?/, '').replace(/— .*/, '').trim();
-                if (detailName) setName(`${currentConfig.label}: ${detailName}`);
-            }
-            // If Supabase returned projects, populate picker
-            if (data.success && data.projects && data.projects.length > 0) {
-                setDiscoveredProjects(data.projects);
-                // Auto-select first project
-                setSelectedProjectRef(data.projects[0].ref);
-                setName(`Supabase: ${data.projects[0].name}`);
-            }
-        } catch (e: any) {
-            setTestResult({ success: false, detail: e.message || 'Connection failed' });
-        } finally {
-            setIsTesting(false);
-        }
-    };
-    const handleSave = async () => {
-        setIsConnecting(true);
-        setError(null);
-        try {
-            // For Supabase, include selected project_ref
-            const finalCreds = providerType === 'supabase' && selectedProjectRef
-                ? { ...credFields, project_ref: selectedProjectRef }
-                : credFields;
-
-            const newProvider = await edgeInfrastructureApi.createProvider({
-                name,
-                provider: providerType,
-                provider_credentials: finalCreds,
-                is_active: true,
-            });
-
-            // For Cloudflare, also call /connect to auto-detect account_id
-            if (providerType === 'cloudflare') {
-                try {
-                    const res = await fetch(`${API_BASE}/api/cloudflare/connect`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ provider_id: newProvider.id }),
-                    });
-                    const data = await res.json();
-                    if (data.success && data.account_name) {
-                        await edgeInfrastructureApi.updateProvider({
-                            id: newProvider.id,
-                            data: { name: `Cloudflare: ${data.account_name}` },
-                        });
-                    }
-                } catch { /* non-fatal — creds already tested */ }
-            }
-
-            await refetch();
-            setOpen(false);
-            setCredFields({});
-            setTestResult(null);
-            setDiscoveredProjects([]);
-            setSelectedProjectRef('');
-            setName(PROVIDER_CONFIGS.cloudflare.defaultName);
-        } catch (e: any) {
-            setError(e.message);
-        } finally {
-            setIsConnecting(false);
-        }
-    };
-
-    const requiredFieldsFilled = currentConfig.fields.filter(f => f.required).every(f => credFields[f.key]);
 
     const handleDelete = async (id: string) => {
         try {
@@ -270,116 +81,16 @@ export function EdgeProvidersSection() {
                     <CardTitle>Edge Providers</CardTitle>
                     <CardDescription>Accounts connected to deploy edge infrastructure.</CardDescription>
                 </div>
-                <Dialog open={open} onOpenChange={setOpen}>
-                    <DialogTrigger asChild>
-                        <Button size="sm"><Plus className="w-4 h-4 mr-2" /> Connect Provider</Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Connect Edge Provider</DialogTitle>
-                            <DialogDescription>Authorize Frontbase to deploy workers on your behalf.</DialogDescription>
-                        </DialogHeader>
-
-                        <div className="space-y-4 py-4">
-                            {error && (
-                                <Alert variant="destructive">
-                                    <AlertTriangle className="h-4 w-4" />
-                                    <AlertDescription>{error}</AlertDescription>
-                                </Alert>
-                            )}
-                            <div className="space-y-2">
-                                <Label>Provider</Label>
-                                <Select value={providerType} onValueChange={handleProviderChange}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        {Object.entries(PROVIDER_CONFIGS).map(([key, cfg]) => (
-                                            <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Display Name</Label>
-                                <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. My Prod Account" />
-                            </div>
-
-                            {currentConfig.fields.map(field => (
-                                <div key={field.key} className="space-y-2">
-                                    <Label>{field.label}{field.required && ' *'}</Label>
-                                    <Input
-                                        type={field.type || 'text'}
-                                        value={credFields[field.key] || ''}
-                                        onChange={e => setCredFields(prev => ({ ...prev, [field.key]: e.target.value }))}
-                                        placeholder={field.placeholder}
-                                    />
-                                </div>
-                            ))}
-                            {currentConfig.helpText && (
-                                <p className="text-xs text-muted-foreground flex items-center mt-1">
-                                    <Shield className="w-3 h-3 mr-1" />
-                                    {currentConfig.helpText}
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Test connection result */}
-                        {testResult && (
-                            <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm ${testResult.success
-                                ? 'bg-green-500/10 text-green-600 dark:text-green-400'
-                                : 'bg-red-500/10 text-red-600 dark:text-red-400'
-                                }`}>
-                                {testResult.success
-                                    ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-                                    : <XCircle className="w-4 h-4 flex-shrink-0" />
-                                }
-                                <span>{testResult.detail}</span>
-                            </div>
-                        )}
-
-                        {/* Supabase project picker */}
-                        {discoveredProjects.length > 0 && (
-                            <div className="space-y-2">
-                                <Label>Select Project</Label>
-                                <Select value={selectedProjectRef} onValueChange={(val) => {
-                                    setSelectedProjectRef(val);
-                                    const proj = discoveredProjects.find(p => p.ref === val);
-                                    if (proj) setName(`Supabase: ${proj.name}`);
-                                }}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Pick a Supabase project" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {discoveredProjects.map(p => (
-                                            <SelectItem key={p.ref} value={p.ref}>
-                                                {p.name} <span className="text-muted-foreground ml-1">({p.region})</span>
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        )}
-
-                        <DialogFooter className="gap-2 sm:gap-0">
-                            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                            <Button
-                                variant="outline"
-                                onClick={handleTestConnection}
-                                disabled={!requiredFieldsFilled || isTesting}
-                            >
-                                {isTesting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
-                                Test Connection
-                            </Button>
-                            <Button
-                                onClick={handleSave}
-                                disabled={!testResult?.success || isConnecting}
-                            >
-                                {isConnecting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Cloud className="w-4 h-4 mr-2" />}
-                                Save Connection
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                <Button size="sm" onClick={() => setConnectDialogOpen(true)}>
+                    <Plus className="w-4 h-4 mr-2" /> Connect Provider
+                </Button>
+                <ConnectProviderDialog
+                    open={connectDialogOpen}
+                    onOpenChange={setConnectDialogOpen}
+                    onConnected={() => {
+                        refetch();
+                    }}
+                />
             </CardHeader>
             <CardContent>
                 {isLoading ? (
@@ -397,76 +108,211 @@ export function EdgeProvidersSection() {
                             const testState = retestResults[p.id];
                             const metadata = (p as any).provider_metadata;
                             const hasCredentials = (p as any).has_credentials;
-                            return (
-                                <div key={p.id} className="flex items-center justify-between p-4 border rounded-lg bg-card hover:border-primary/50 transition-colors">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
-                                            <Icon className="w-5 h-5" />
-                                        </div>
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <h4 className="font-medium text-sm">{p.name}</h4>
-                                                {p.is_active && <Badge variant="secondary" className="bg-green-500/10 text-green-500 hover:bg-green-500/20">Connected</Badge>}
-                                                {hasCredentials && (
-                                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 gap-0.5 border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
-                                                        <Shield className="w-2.5 h-2.5" /> Encrypted
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                            <p className="text-xs text-muted-foreground capitalize mt-0.5">{p.provider}</p>
+                            const isTurso = p.provider === 'turso';
+                            const isExpanded = expandedAccounts[p.id] ?? isTurso;
+                            const childDbs: any[] = tursoDatabases[p.id] || [];
 
-                                            {testState && (
-                                                <div className={`flex items-center gap-1 mt-1 text-[11px] ${testState.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                                                    }`}>
-                                                    {testState.success
-                                                        ? <CheckCircle2 className="w-3 h-3" />
-                                                        : <XCircle className="w-3 h-3" />
-                                                    }
-                                                    <span>{testState.detail}</span>
+                            // Auto-fetch Turso child databases on first expand
+                            const handleToggle = async () => {
+                                const newExpanded = !isExpanded;
+                                setExpandedAccounts(prev => ({ ...prev, [p.id]: newExpanded }));
+                                if (newExpanded && isTurso && !tursoDatabases[p.id]) {
+                                    try {
+                                        const res = await fetch(`${API_BASE}/api/edge-providers/discover-by-account/${p.id}`, { method: 'POST' });
+                                        const data = await res.json();
+                                        if (data.success) {
+                                            setTursoDatabases(prev => ({ ...prev, [p.id]: data.resources || [] }));
+                                        }
+                                    } catch { /* silent */ }
+                                }
+                            };
+
+                            // Test a specific Turso DB
+                            const handleTestTursoDb = async (dbId: string) => {
+                                setTursoTestingDb(dbId);
+                                try {
+                                    const res = await fetch(`${API_BASE}/api/edge-providers/${p.id}/turso-databases/${dbId}/test`, { method: 'POST' });
+                                    const data = await res.json();
+                                    setTursoDbResults(prev => ({ ...prev, [dbId]: data }));
+                                    // Refresh to update test_ok badges
+                                    const discRes = await fetch(`${API_BASE}/api/edge-providers/discover-by-account/${p.id}`, { method: 'POST' });
+                                    const discData = await discRes.json();
+                                    if (discData.success) setTursoDatabases(prev => ({ ...prev, [p.id]: discData.resources || [] }));
+                                } catch (e: any) {
+                                    setTursoDbResults(prev => ({ ...prev, [dbId]: { success: false, detail: e.message } }));
+                                } finally {
+                                    setTursoTestingDb(null);
+                                }
+                            };
+
+                            // Delete a specific Turso DB
+                            const handleDeleteTursoDb = async (dbId: string) => {
+                                try {
+                                    await fetch(`${API_BASE}/api/edge-providers/${p.id}/turso-databases/${dbId}`, { method: 'DELETE' });
+                                    setTursoDatabases(prev => ({
+                                        ...prev,
+                                        [p.id]: (prev[p.id] || []).filter(d => d.id !== dbId),
+                                    }));
+                                } catch { /* silent */ }
+                            };
+
+                            return (
+                                <div key={p.id} className="border rounded-lg bg-card hover:border-primary/50 transition-colors">
+                                    <div className="flex items-center justify-between p-4">
+                                        <div className="flex items-center gap-3">
+                                            {isTurso ? (
+                                                <button onClick={handleToggle} className="w-10 h-10 rounded-md bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors">
+                                                    {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                                </button>
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
+                                                    <Icon className="w-5 h-5" />
                                                 </div>
                                             )}
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <h4 className="font-medium text-sm">{p.name}</h4>
+                                                    {p.is_active && <Badge variant="secondary" className="bg-green-500/10 text-green-500 hover:bg-green-500/20">Connected</Badge>}
+                                                    {hasCredentials && (
+                                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 gap-0.5 border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+                                                            <Shield className="w-2.5 h-2.5" /> Encrypted
+                                                        </Badge>
+                                                    )}
+                                                    {isTurso && childDbs.length > 0 && (
+                                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                                            {childDbs.length} {childDbs.length === 1 ? 'database' : 'databases'}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-muted-foreground capitalize mt-0.5">{p.provider}</p>
+
+                                                {testState && (
+                                                    <div className={`flex items-center gap-1 mt-1 text-[11px] ${testState.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                                        }`}>
+                                                        {testState.success
+                                                            ? <CheckCircle2 className="w-3 h-3" />
+                                                            : <XCircle className="w-3 h-3" />
+                                                        }
+                                                        <span>{testState.detail}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {/* Re-test connection (non-Turso) */}
+                                            {!isTurso && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="text-muted-foreground hover:text-primary"
+                                                    disabled={retestingId === p.id}
+                                                    onClick={() => handleRetest(p.id)}
+                                                    title="Test connection"
+                                                >
+                                                    {retestingId === p.id
+                                                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                                                        : <Zap className="w-4 h-4" />
+                                                    }
+                                                </Button>
+                                            )}
+                                            {p.provider === 'cloudflare' && p.is_active && (
+                                                <ImportCloudflareWorkers providerId={p.id} />
+                                            )}
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Remove Provider?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            {isTurso
+                                                                ? 'This will remove all registered Turso databases and their credentials from Frontbase.'
+                                                                : 'This will remove the credentials from Frontbase. Existing deployed Edge Engines will continue to run, but Frontbase won\'t be able to update them.'
+                                                            }
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => handleDelete(p.id)} className="bg-destructive hover:bg-destructive/90">
+                                                            Remove
+                                                        </AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        {/* Re-test connection */}
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="text-muted-foreground hover:text-primary"
-                                            disabled={retestingId === p.id}
-                                            onClick={() => handleRetest(p.id)}
-                                            title="Test connection"
-                                        >
-                                            {retestingId === p.id
-                                                ? <Loader2 className="w-4 h-4 animate-spin" />
-                                                : <Zap className="w-4 h-4" />
-                                            }
-                                        </Button>
-                                        {p.provider === 'cloudflare' && p.is_active && (
-                                            <ImportCloudflareWorkers providerId={p.id} />
-                                        )}
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive">
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>Remove Provider?</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        This will remove the credentials from Frontbase. Existing deployed Edge Engines will continue to run, but Frontbase won't be able to update them.
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                    <AlertDialogAction onClick={() => handleDelete(p.id)} className="bg-destructive hover:bg-destructive/90">
-                                                        Remove
-                                                    </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    </div>
+
+                                    {/* Turso: child databases list */}
+                                    {isTurso && isExpanded && (
+                                        <div className="border-t px-4 pb-4 pt-3 space-y-2">
+                                            {childDbs.length === 0 && !tursoDatabases[p.id] && (
+                                                <p className="text-xs text-muted-foreground">Loading databases...</p>
+                                            )}
+                                            {childDbs.map(d => {
+                                                const dbTest = tursoDbResults[d.id];
+                                                return (
+                                                    <div key={d.id} className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/30 border border-transparent hover:border-muted-foreground/20">
+                                                        <div className="flex items-center gap-2">
+                                                            <Database className="w-3.5 h-3.5 text-muted-foreground" />
+                                                            <div>
+                                                                <span className="text-sm font-medium">{d.name}</span>
+                                                                <span className="text-xs text-muted-foreground ml-2">{d.db_url}</span>
+                                                            </div>
+                                                            {d.test_ok === true && <CheckCircle2 className="w-3 h-3 text-green-500" />}
+                                                            {d.test_ok === false && <XCircle className="w-3 h-3 text-red-500" />}
+                                                            {dbTest && (
+                                                                <span className={`text-[11px] ${dbTest.success ? 'text-green-600' : 'text-red-600'}`}>
+                                                                    {dbTest.detail}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-7 w-7 text-muted-foreground hover:text-primary"
+                                                                disabled={tursoTestingDb === d.id}
+                                                                onClick={() => handleTestTursoDb(d.id)}
+                                                                title="Test database"
+                                                            >
+                                                                {tursoTestingDb === d.id
+                                                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                                    : <Zap className="w-3.5 h-3.5" />
+                                                                }
+                                                            </Button>
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive">
+                                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                                    </Button>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent>
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>Remove Database?</AlertDialogTitle>
+                                                                        <AlertDialogDescription>
+                                                                            Remove "{d.name}" from this Turso account? This only removes the reference — the actual database on Turso is not affected.
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                        <AlertDialogAction onClick={() => handleDeleteTursoDb(d.id)} className="bg-destructive hover:bg-destructive/90">
+                                                                            Remove
+                                                                        </AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                            {childDbs.length === 0 && tursoDatabases[p.id] && (
+                                                <p className="text-xs text-muted-foreground">No databases yet. Use "Connect Provider → Turso" to add one.</p>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}

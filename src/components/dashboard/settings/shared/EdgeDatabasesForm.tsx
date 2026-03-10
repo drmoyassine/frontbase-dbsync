@@ -2,29 +2,32 @@
  * EdgeDatabasesForm
  * 
  * CRUD management for named edge database connections.
- * Follows the same UX pattern as DeploymentTargetsForm:
- *   List → "Add Database" button → Provider selection → Connection form
+ * Uses Dialog modal for create/edit (same pattern as EdgeCachesForm/EdgeQueuesForm).
  */
 
 import React, { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useEdgeDatabases } from '@/hooks/useEdgeInfrastructure';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
-    Database, Plus, Trash2, Pencil, Loader2, Check,
-    Star, Shield, Zap, AlertTriangle, HardDrive, Cloud, Globe,
+    Plus, Database, Cloud, Globe, HardDrive, Loader2, Trash2,
+    Pencil, AlertTriangle, Star, Shield, Zap, Check,
 } from 'lucide-react';
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
     AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+    Dialog, DialogContent, DialogDescription, DialogFooter,
+    DialogHeader, DialogTitle, DialogTrigger,
+} from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useEdgeDatabases } from '@/hooks/useEdgeInfrastructure';
+import { useQueryClient } from '@tanstack/react-query';
 import { showTestToast, TestResult } from './edgeTestToast';
 import { AccountResourcePicker, DiscoveredResource } from './AccountResourcePicker';
 
@@ -52,7 +55,7 @@ interface EdgeDatabasesFormProps {
 const PROVIDER_OPTIONS = [
     { value: 'turso', label: 'Turso', icon: Cloud, placeholder: 'libsql://your-db.turso.io' },
     { value: 'neon', label: 'Neon Postgres', icon: Globe, placeholder: 'postgresql://...' },
-    { value: 'sqlite', label: 'Local SQLite', icon: HardDrive, placeholder: 'file:local' },
+    { value: 'sqlite', label: 'Local SQLite', icon: HardDrive, placeholder: 'file:local', soon: true },
 ];
 
 export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard = false }) => {
@@ -60,19 +63,17 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
     const { data: databases = [], isLoading } = useEdgeDatabases();
     const [error, setError] = useState<string | null>(null);
 
-    // Add flow state (mirrors DeploymentTargetsForm pattern)
-    const [showAddFlow, setShowAddFlow] = useState(false);
-    const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+    // Dialog state
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
 
     // Form fields
+    const [selectedProvider, setSelectedProvider] = useState<string>('turso');
     const [formName, setFormName] = useState('');
     const [formUrl, setFormUrl] = useState('');
     const [formToken, setFormToken] = useState('');
     const [formIsDefault, setFormIsDefault] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-
-    // Edit mode
-    const [editingId, setEditingId] = useState<string | null>(null);
 
     // Test connection
     const [testingId, setTestingId] = useState<string | null>(null);
@@ -85,25 +86,31 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
 
     const refetchDatabases = () => queryClient.invalidateQueries({ queryKey: ['edge-databases'] });
 
-    const resetAddFlow = () => {
-        setShowAddFlow(false);
-        setSelectedProvider(null);
+    const resetForm = () => {
         setEditingId(null);
+        setSelectedProvider('turso');
         setFormName('');
         setFormUrl('');
         setFormToken('');
         setFormIsDefault(false);
         setFormAccountId(null);
+        setError(null);
     };
 
-    const startEdit = (db: EdgeDatabase) => {
+    const openCreate = () => {
+        resetForm();
+        setDialogOpen(true);
+    };
+
+    const openEdit = (db: EdgeDatabase) => {
         setEditingId(db.id);
         setSelectedProvider(db.provider);
         setFormName(db.name);
         setFormUrl(db.db_url);
         setFormToken('');
         setFormIsDefault(db.is_default);
-        setShowAddFlow(true);
+        setFormAccountId(db.provider_account_id || null);
+        setDialogOpen(true);
     };
 
     // Save (create or update)
@@ -134,7 +141,8 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
             if (!res.ok) {
                 throw new Error(data.detail || `HTTP ${res.status}`);
             }
-            resetAddFlow();
+            resetForm();
+            setDialogOpen(false);
             refetchDatabases();
         } catch (e: any) {
             setError(e.message);
@@ -214,85 +222,152 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
         );
     }
 
-    // ─── Provider selection + connection form (shown when adding) ───
-    const providerSelectionStep = (
-        <div className="p-4 rounded-lg border border-dashed space-y-4">
-            <Label className="text-sm font-medium">
-                {editingId ? 'Edit Database' : 'Select a provider'}
-            </Label>
+    // ─── Dialog modal for create / edit ───
+    const dbDialog = (
+        <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetForm(); } setDialogOpen(open); }}>
+            <DialogTrigger asChild>
+                <Button size="sm" onClick={openCreate}>
+                    <Plus className="w-4 h-4 mr-2" /> Connect Database
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle>{editingId ? 'Edit Database' : 'Connect Edge Database'}</DialogTitle>
+                    <DialogDescription>
+                        {editingId
+                            ? 'Update your database connection settings.'
+                            : 'Add a database connection for your edge deployments.'}
+                    </DialogDescription>
+                </DialogHeader>
 
-            {/* Provider buttons */}
-            {!editingId && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {PROVIDER_OPTIONS.map(opt => {
-                        const Icon = opt.icon;
-                        return (
-                            <button
-                                key={opt.value}
-                                onClick={() => setSelectedProvider(opt.value)}
-                                className={`flex items-center gap-2 p-3 rounded-lg border text-sm transition-colors text-left
-                                    ${selectedProvider === opt.value
-                                        ? 'border-primary bg-primary/5 text-primary'
-                                        : 'border-border hover:bg-accent'
-                                    }`}
-                            >
-                                <Icon className="h-4 w-4 shrink-0" />
-                                {opt.label}
-                            </button>
-                        );
-                    })}
-                </div>
-            )}
+                <div className="space-y-4 py-4">
+                    {error && (
+                        <Alert variant="destructive">
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    )}
 
-            {/* Connection form (shows after provider selected) */}
-            {selectedProvider && (
-                <div className="space-y-4 pt-2 border-t">
-                    {/* Account resource picker — select from Neon connected accounts */}
-                    {selectedProvider === 'neon' && !editingId && (
+                    {/* Provider buttons */}
+                    {!editingId && (
+                        <div className="space-y-2">
+                            <Label>Provider</Label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {PROVIDER_OPTIONS.map(opt => {
+                                    const Icon = opt.icon;
+                                    return (
+                                        <button
+                                            key={opt.value}
+                                            type="button"
+                                            disabled={opt.soon}
+                                            onClick={() => !opt.soon && setSelectedProvider(opt.value)}
+                                            className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm transition-colors text-left
+                                                ${opt.soon
+                                                    ? 'border-border opacity-50 cursor-not-allowed'
+                                                    : selectedProvider === opt.value
+                                                        ? 'border-primary bg-primary/5 text-primary'
+                                                        : 'border-border hover:bg-accent'
+                                                }`}
+                                        >
+                                            <Icon className="h-4 w-4 shrink-0" />
+                                            <span className="truncate">{opt.label}</span>
+                                            {opt.soon && (
+                                                <span className="ml-auto text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">Soon</span>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Account resource picker — select from Turso or Neon accounts */}
+                    {(selectedProvider === 'turso' || selectedProvider === 'neon') && !editingId && (
                         <AccountResourcePicker
-                            compatibleProviders={['neon']}
-                            label="From Connected Neon Account"
+                            compatibleProviders={[selectedProvider]}
+                            label={selectedProvider === 'turso'
+                                ? 'From Connected Turso Account'
+                                : `From Connected Neon Account`}
+                            existingUrls={databases.map(d => d.db_url).filter(Boolean)}
+                            // Turso-specific: auto-select the container account, label as "Select Database", hide Display Name in connect modal
+                            autoSelectSingle={selectedProvider === 'turso'}
+                            resourceLabel={selectedProvider === 'turso' ? 'Select Database' : undefined}
+                            hideConnectDisplayName={selectedProvider === 'turso'}
+                            createResourceType={selectedProvider === 'turso' ? 'turso_db' : undefined}
                             onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
                                 setFormAccountId(accountId);
-                                if (resource.connection_uri) setFormUrl(resource.connection_uri);
-                                else if (resource.db_url) setFormUrl(resource.db_url);
-                                if (!formName) setFormName(resource.name || '');
+                                if (selectedProvider === 'turso') {
+                                    if (resource.db_url) setFormUrl(resource.db_url);
+                                    else if (resource.hostname) setFormUrl(`libsql://${resource.hostname}`);
+                                    if ((resource as any).token) setFormToken((resource as any).token);
+                                    if (!formName) setFormName(resource.name || '');
+                                } else if (selectedProvider === 'neon') {
+                                    if (resource.connection_uri) setFormUrl(resource.connection_uri);
+                                    else if (resource.db_url) setFormUrl(resource.db_url);
+                                    if (!formName) setFormName(resource.name || '');
+                                }
                             }}
                             onClear={() => {
                                 setFormAccountId(null);
                                 setFormUrl('');
+                                setFormToken('');
                             }}
                         />
                     )}
-
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                            <Label>Name</Label>
-                            <Input
-                                placeholder={`e.g. Production ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}`}
-                                value={formName}
-                                onChange={e => setFormName(e.target.value)}
-                            />
+                    {/* Auto-discovered summary — show when resource picked from account */}
+                    {formAccountId && (
+                        <div className="space-y-3">
+                            <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-3">
+                                <p className="text-sm text-green-700 dark:text-green-400 flex items-center gap-2">
+                                    <Check className="h-4 w-4" />
+                                    Credentials auto-filled from connected account
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">URL and auth token are configured automatically.</p>
+                            </div>
+                            <div className="space-y-1">
+                                <Label>Connection Name</Label>
+                                <Input
+                                    placeholder={`e.g. Production ${selectedProvider?.charAt(0).toUpperCase()}${selectedProvider?.slice(1) || ''}`}
+                                    value={formName}
+                                    onChange={e => setFormName(e.target.value)}
+                                />
+                            </div>
                         </div>
-                        <div className="space-y-1">
-                            <Label>Database URL</Label>
-                            <Input
-                                placeholder={PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.placeholder}
-                                value={formUrl}
-                                onChange={e => setFormUrl(e.target.value)}
-                            />
-                        </div>
-                    </div>
+                    )}
 
-                    <div className="space-y-1">
-                        <Label>Auth Token</Label>
-                        <Input
-                            type="password"
-                            placeholder={editingId ? '(leave blank to keep existing)' : 'Database auth token'}
-                            value={formToken}
-                            onChange={e => setFormToken(e.target.value)}
-                        />
-                    </div>
+                    {/* Manual fields — only for sqlite (no accounts) and edit mode */}
+                    {(selectedProvider === 'sqlite' || editingId) && !formAccountId && (
+                        <>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                    <Label>Name</Label>
+                                    <Input
+                                        placeholder={`e.g. Production ${selectedProvider?.charAt(0).toUpperCase()}${selectedProvider?.slice(1) || ''}`}
+                                        value={formName}
+                                        onChange={e => setFormName(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label>Database URL</Label>
+                                    <Input
+                                        placeholder={PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.placeholder}
+                                        value={formUrl}
+                                        onChange={e => setFormUrl(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <Label>Auth Token</Label>
+                                <Input
+                                    type="password"
+                                    placeholder={editingId ? '(leave blank to keep existing)' : 'Database auth token'}
+                                    value={formToken}
+                                    onChange={e => setFormToken(e.target.value)}
+                                />
+                            </div>
+                        </>
+                    )}
 
                     <div className="flex items-center gap-2">
                         <Switch
@@ -304,37 +379,31 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                             Set as default database
                         </Label>
                     </div>
-
-
-                    <div className="flex gap-2">
-                        <Button
-                            variant="outline"
-                            onClick={handleTestInline}
-                            disabled={!formUrl || testingId === 'inline'}
-                        >
-                            {testingId === 'inline' ? (
-                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Testing...</>
-                            ) : (
-                                <><Zap className="mr-2 h-4 w-4" /> Test Connection</>
-                            )}
-                        </Button>
-                        <Button onClick={handleSave} disabled={!formName || !formUrl || isSaving}>
-                            {isSaving ? (
-                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
-                            ) : (
-                                <><Check className="mr-2 h-4 w-4" /> {editingId ? 'Update' : 'Add Database'}</>
-                            )}
-                        </Button>
-                        <Button variant="ghost" onClick={resetAddFlow}>Cancel</Button>
-                    </div>
                 </div>
-            )}
 
-            {/* Cancel if no provider selected yet */}
-            {!selectedProvider && !editingId && (
-                <Button variant="ghost" onClick={resetAddFlow} className="w-full">Cancel</Button>
-            )}
-        </div>
+                <DialogFooter className="gap-2 sm:gap-0">
+                    <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                    <Button
+                        variant="outline"
+                        onClick={handleTestInline}
+                        disabled={(!formUrl && !formAccountId) || testingId === 'inline'}
+                    >
+                        {testingId === 'inline' ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Testing...</>
+                        ) : (
+                            <><Zap className="mr-2 h-4 w-4" /> Test Connection</>
+                        )}
+                    </Button>
+                    <Button onClick={handleSave} disabled={!formName || (!formUrl && !formAccountId) || isSaving}>
+                        {isSaving ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
+                        ) : (
+                            <><Check className="mr-2 h-4 w-4" /> {editingId ? 'Update' : 'Add Database'}</>
+                        )}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 
     const formContent = (
@@ -347,7 +416,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
             )}
 
             {/* Existing databases list */}
-            {databases.length === 0 && !showAddFlow ? (
+            {databases.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                     <Database className="h-10 w-10 mx-auto mb-3 opacity-50" />
                     <p>No edge databases configured</p>
@@ -373,9 +442,6 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                 )}
                             </div>
                             <div className="flex items-center gap-3">
-                                <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                                    {db.db_url}
-                                </span>
                                 {db.target_count > 0 && (
                                     <Badge variant="secondary" className="text-xs">
                                         {db.target_count} target{db.target_count > 1 ? 's' : ''}
@@ -393,7 +459,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                 </Button>
                                 {!db.is_system && (
                                     <>
-                                        <Button variant="ghost" size="icon" onClick={() => startEdit(db)} title="Edit">
+                                        <Button variant="ghost" size="icon" onClick={() => openEdit(db)} title="Edit">
                                             <Pencil className="h-4 w-4" />
                                         </Button>
                                         <AlertDialog>
@@ -437,29 +503,23 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                     ))}
                 </div>
             )}
-
-
-            {/* Add flow or button */}
-            {showAddFlow ? providerSelectionStep : (
-                <Button variant="outline" onClick={() => { setShowAddFlow(true); setError(null); }} className="w-full">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Database
-                </Button>
-            )}
         </div>
     );
 
     if (withCard) {
         return (
             <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Database className="h-5 w-5" />
-                        Edge Databases
-                    </CardTitle>
-                    <CardDescription>
-                        Manage edge database connections for your deployment targets
-                    </CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <div>
+                        <CardTitle className="flex items-center gap-2">
+                            <Database className="h-5 w-5" />
+                            Edge Databases
+                        </CardTitle>
+                        <CardDescription>
+                            Manage edge database connections for your deployment targets
+                        </CardDescription>
+                    </div>
+                    {dbDialog}
                 </CardHeader>
                 <CardContent>{formContent}</CardContent>
             </Card>

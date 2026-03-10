@@ -124,7 +124,7 @@ class TestQueueInline(BaseModel):
     queue_url: str
     queue_token: Optional[str] = None
 
-@router.post("/test-connection/", response_model=TestQueueResult)
+@router.post("/test-connection", response_model=TestQueueResult)
 async def test_connection_inline(payload: TestQueueInline):
     """Test a queue connection before saving it."""
     return await _test_queue(payload.provider, payload.queue_url, payload.queue_token)
@@ -137,6 +137,16 @@ async def create_edge_queue(payload: EdgeQueueCreate):
     db = SessionLocal()
     try:
         import json
+        # Prevent duplicate queue URLs
+        existing = db.query(EdgeQueue).filter(
+            EdgeQueue.queue_url == payload.queue_url
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"A queue with this URL already exists ('{existing.name}')"
+            )
+
         now = datetime.utcnow().isoformat() + "Z"
         
         # If this is set as default, unset all others

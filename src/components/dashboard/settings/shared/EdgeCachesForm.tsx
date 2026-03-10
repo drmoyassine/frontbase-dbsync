@@ -5,7 +5,7 @@
  * Dialog and handlers extracted to EdgeCacheDialog + useEdgeCacheForm.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import {
     AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useEdgeCacheForm } from '@/hooks/useEdgeCacheForm';
+import { EdgeCache } from '@/hooks/useEdgeInfrastructure';
 import { EdgeCacheDialog } from './EdgeCacheDialog';
 
 interface EdgeCachesFormProps {
@@ -38,6 +39,55 @@ const CacheIcon = ({ className }: { className?: string }) => (
         <path d="M4 12h4" /><path d="m7.76 7.76 2.12 2.12" />
     </svg>
 );
+
+/** Sub-component for delete dialog body — needs its own state for checkbox */
+const DeleteCacheDialogBody: React.FC<{
+    cache: EdgeCache;
+    onDelete: (deleteRemote: boolean) => void;
+}> = ({ cache, onDelete }) => {
+    const isUpstashLinked = cache.provider === 'upstash' && !!cache.provider_account_id;
+    const [deleteRemote, setDeleteRemote] = useState(false);
+
+    return (
+        <>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Delete "{cache.name}"?</AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                    <div>
+                        <p>This removes the cache connection from Frontbase.</p>
+                        {cache.engine_count > 0 && (
+                            <p className="mt-2 font-medium text-destructive">
+                                ⚠ {cache.engine_count} edge engine{cache.engine_count > 1 ? 's' : ''} use this cache and will need to be reconfigured.
+                            </p>
+                        )}
+                        {isUpstashLinked && (
+                            <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={deleteRemote}
+                                    onChange={(e) => setDeleteRemote(e.target.checked)}
+                                    className="rounded border-destructive text-destructive focus:ring-destructive"
+                                />
+                                <span className="text-sm text-destructive font-medium">
+                                    Also delete the Redis database from Upstash
+                                </span>
+                            </label>
+                        )}
+                    </div>
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                    onClick={() => onDelete(deleteRemote)}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                    {deleteRemote ? 'Delete Everywhere' : 'Delete'}
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </>
+    );
+};
 
 export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false }) => {
     const hook = useEdgeCacheForm();
@@ -61,7 +111,8 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
     }
 
     // Dialog receives all hook state/handlers as props
-    const cacheDialog = <EdgeCacheDialog {...hook} />;
+    const existingCacheUrls = caches.map((c: any) => c.cache_url).filter(Boolean);
+    const cacheDialog = <EdgeCacheDialog {...hook} existingUrls={existingCacheUrls} />;
 
     // ─── Cache list ───
     const cacheList = (
@@ -95,7 +146,6 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
                                             </Badge>
                                         )}
                                     </div>
-                                    <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[300px]">{cache.cache_url}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -131,26 +181,10 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
                                                 </Button>
                                             </AlertDialogTrigger>
                                             <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>Delete "{cache.name}"?</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        This removes the cache connection from Frontbase. The actual cache is not affected.
-                                                        {cache.engine_count > 0 && (
-                                                            <span className="block mt-2 font-medium text-destructive">
-                                                                ⚠ {cache.engine_count} edge engine{cache.engine_count > 1 ? 's' : ''} use this cache and will need to be reconfigured.
-                                                            </span>
-                                                        )}
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                    <AlertDialogAction
-                                                        onClick={() => handleDelete(cache.id)}
-                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                    >
-                                                        Delete
-                                                    </AlertDialogAction>
-                                                </AlertDialogFooter>
+                                                <DeleteCacheDialogBody
+                                                    cache={cache}
+                                                    onDelete={(deleteRemote) => handleDelete(cache.id, deleteRemote)}
+                                                />
                                             </AlertDialogContent>
                                         </AlertDialog>
                                     </>

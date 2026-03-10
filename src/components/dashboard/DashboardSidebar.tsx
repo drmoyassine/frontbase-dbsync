@@ -7,7 +7,8 @@ import {
   HardDrive,
   Settings,
   Palette,
-  Server
+  Server,
+  Workflow
 } from 'lucide-react';
 import {
   Sidebar,
@@ -25,9 +26,10 @@ import {
 const menuItems = [
   { title: 'Builder Studio', url: '/pages', icon: FileText },
   { title: 'Database', url: '/data-studio', icon: Database },
-  { title: 'Users', url: '/users', icon: Users },
-  { title: 'Storage', url: '/storage', icon: HardDrive },
-  { title: 'Edge Infrastructure', url: '/edge', icon: Server },
+  { title: 'App Users', url: '/users', icon: Users },
+  { title: 'File Storage', url: '/storage', icon: HardDrive },
+  { title: 'Automations', url: '/automations', icon: Workflow },
+  { title: 'Edge Resources', url: '/edge', icon: Server },
   { title: 'Settings', url: '/settings', icon: Settings },
 ];
 

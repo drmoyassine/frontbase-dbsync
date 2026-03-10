@@ -13,9 +13,9 @@ import { showTestToast, TestResult } from '@/components/dashboard/settings/share
 const API_BASE = '';
 
 export const CACHE_PROVIDER_OPTIONS = [
-    { value: 'upstash', label: 'Upstash Redis', placeholder: 'https://xxx.upstash.io' },
-    { value: 'redis', label: 'Self-Hosted Redis', placeholder: 'redis://host:6379' },
-    { value: 'dragonfly', label: 'Dragonfly', placeholder: 'redis://host:6379' },
+    { value: 'upstash', label: 'Upstash Redis', placeholder: 'https://xxx.upstash.io', active: true },
+    { value: 'redis', label: 'Self-Hosted Redis', placeholder: 'redis://host:6379', active: false },
+    { value: 'dragonfly', label: 'Dragonfly', placeholder: 'redis://host:6379', active: false },
 ] as const;
 
 export function useEdgeCacheForm() {
@@ -105,13 +105,20 @@ export function useEdgeCacheForm() {
         }
     };
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = async (id: string, deleteRemote: boolean = false) => {
         setDeletingId(id);
         try {
-            const res = await fetch(`${API_BASE}/api/edge-caches/${id}`, { method: 'DELETE' });
+            const url = deleteRemote
+                ? `${API_BASE}/api/edge-caches/${id}?delete_remote=true`
+                : `${API_BASE}/api/edge-caches/${id}`;
+            const res = await fetch(url, { method: 'DELETE' });
             if (!res.ok) {
                 const data = await res.json();
                 throw new Error(data.detail || `HTTP ${res.status}`);
+            }
+            const result = await res.json();
+            if (result.remote_deleted) {
+                toast.success('Deleted from Upstash', { description: result.message });
             }
             refetchCaches();
         } catch (e: any) { setError(e.message); }

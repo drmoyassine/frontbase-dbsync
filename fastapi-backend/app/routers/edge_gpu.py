@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..database.config import get_db
@@ -46,7 +46,7 @@ class GPUModelUpdate(BaseModel):
 
 
 class GPUModelResponse(BaseModel):
-    model_config = {"protected_namespaces": ()}
+    model_config = {"protected_namespaces": (), "populate_by_name": True}
     id: str
     name: str
     slug: str
@@ -58,7 +58,7 @@ class GPUModelResponse(BaseModel):
     edge_engine_id: str
     engine_name: Optional[str] = None
     is_active: bool
-    schema: Optional[dict] = None
+    io_schema: Optional[dict] = Field(default=None, alias="schema")
     created_at: str
     updated_at: str
 

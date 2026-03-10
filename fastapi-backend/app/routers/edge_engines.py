@@ -5,13 +5,14 @@ CRUD endpoints for managing edge engines.
 Each target represents an Edge Engine deployment on a specific provider
 (Cloudflare Workers, Vercel Edge, Docker, etc.).
 
-The publish pipeline uses active engines to push pages to each endpoint.
-
 All business logic delegated to:
+- services/engine_serializer.py (ORM → API dict, drift detection)
+- services/engine_provisioner.py (one-click deploy with per-provider hooks)
 - services/engine_deploy.py (redeploy)
-- services/engine_test.py (connectivity testing, CF delete)
-- services/secrets_builder.py (binding construction)
-- services/cloudflare_api.py (CF API calls)
+- services/engine_test.py (connectivity testing, remote delete)
+- services/engine_reconfigure.py (live-reconfigure bindings)
+- services/engine_manifest.py (manifest sync + GPU model upsert)
+- services/provider_registry.py (provider labels, URL builders)
 - services/bundle.py (source hashing)
 """
 
@@ -24,8 +25,7 @@ import uuid
 
 from ..database.config import get_db
 from sqlalchemy.orm import Session
-from ..models.models import EdgeEngine, EdgeProviderAccount, EdgeGPUModel
-import httpx
+from ..models.models import EdgeEngine
 
 from ..schemas.edge_engines import (
     EdgeEngineCreate, EdgeEngineUpdate, EdgeEngineResponse,
@@ -33,118 +33,12 @@ from ..schemas.edge_engines import (
     BatchRequest, BatchDeleteRequest, BatchToggleRequest, BatchResult,
     GenericDeployRequest,
 )
-from ..services.bundle import get_source_hash
 from ..services import engine_deploy, engine_test, engine_reconfigure
-from ..services.secrets_builder import build_engine_secrets, FRONTBASE_BINDING_NAMES
+from ..services.engine_manifest import sync_engine_manifest
+from ..services.engine_serializer import serialize_engine, get_current_hashes
+from ..services.engine_provisioner import provision_and_deploy
 
 router = APIRouter(prefix="/api/edge-engines", tags=["Edge Engines"])
-
-
-# =============================================================================
-# Helpers
-# =============================================================================
-
-def _serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) -> dict:
-    """Serialize an EdgeEngine ORM object, parsing engine_config JSON.
-    
-    current_hashes: optional {"lite": "abc...", "full": "def..."} to compute is_outdated.
-    """
-    config = None
-    if engine.engine_config:
-        try:
-            config = json.loads(str(engine.engine_config))
-        except (json.JSONDecodeError, TypeError):
-            config = None
-
-    edge_db_name = None
-    if engine.edge_database:
-        edge_db_name = str(engine.edge_database.name)
-
-    edge_cache_name = None
-    if engine.edge_cache:
-        edge_cache_name = str(engine.edge_cache.name)
-
-    edge_queue_name = None
-    if engine.edge_queue:
-        edge_queue_name = str(engine.edge_queue.name)
-
-    provider_name = None
-    if engine.edge_provider:
-        provider_name = str(engine.edge_provider.provider)
-
-    # Drift detection fields
-    bundle_checksum_val = str(engine.bundle_checksum) if engine.bundle_checksum else None
-    config_checksum_val = str(engine.config_checksum) if engine.config_checksum else None
-    last_deployed_at_val = str(engine.last_deployed_at) if engine.last_deployed_at else None
-    last_synced_at_val = str(engine.last_synced_at) if engine.last_synced_at else None
-
-    # Compute sync_status
-    sync_status = "unknown"
-    if bundle_checksum_val and last_deployed_at_val:
-        sync_status = "synced"  # Assume synced until proven otherwise
-
-    # Compute is_outdated by comparing deployed hash against current dist hash
-    # Forked engines are NOT outdated — they have custom code
-    is_outdated = False
-    is_engine_forked = bool(engine.is_forked) if hasattr(engine, 'is_forked') else False
-    if current_hashes and not is_engine_forked:
-        adapter = str(engine.adapter_type) if engine.adapter_type else "automations"
-        is_full = adapter == "full"
-        current_hash = current_hashes.get("full" if is_full else "lite")
-
-        if not bundle_checksum_val:
-            if engine.edge_provider_id and not getattr(engine, 'is_system', False):
-                is_outdated = True
-                sync_status = "stale"
-        elif current_hash and current_hash != bundle_checksum_val:
-            is_outdated = True
-            sync_status = "stale"
-
-    # GPU model (single model per engine — see edge_gpu.py enforcement)
-    gpu_model_obj = engine.gpu_models[0] if engine.gpu_models else None
-    gpu_model_data = {
-        "id": str(gpu_model_obj.id),
-        "name": str(gpu_model_obj.name),
-        "slug": str(gpu_model_obj.slug),
-        "model_id": str(gpu_model_obj.model_id),
-        "model_type": str(gpu_model_obj.model_type),
-        "endpoint_url": str(gpu_model_obj.endpoint_url) if gpu_model_obj.endpoint_url else None,
-    } if gpu_model_obj else None
-
-    return {
-        "id": str(engine.id),
-        "name": str(engine.name),
-        "edge_provider_id": str(engine.edge_provider_id) if engine.edge_provider_id else None,
-        "provider": provider_name,
-        "adapter_type": str(engine.adapter_type),
-        "url": str(engine.url),
-        "edge_db_id": str(engine.edge_db_id) if engine.edge_db_id else None,
-        "edge_db_name": edge_db_name,
-        "edge_cache_id": str(engine.edge_cache_id) if engine.edge_cache_id else None,
-        "edge_cache_name": edge_cache_name,
-        "edge_queue_id": str(engine.edge_queue_id) if engine.edge_queue_id else None,
-        "edge_queue_name": edge_queue_name,
-        "engine_config": config,
-        "gpu_model": gpu_model_data,
-        "is_active": bool(engine.is_active),
-        "is_system": bool(engine.is_system),
-        "bundle_checksum": bundle_checksum_val,
-        "config_checksum": config_checksum_val,
-        "last_deployed_at": last_deployed_at_val,
-        "last_synced_at": last_synced_at_val,
-        "sync_status": sync_status,
-        "is_outdated": is_outdated,
-        "is_forked": is_engine_forked,
-        "modified_core_files": json.loads(str(engine.modified_core_files)) if getattr(engine, 'modified_core_files', None) else [],
-        "created_at": str(engine.created_at),
-        "updated_at": str(engine.updated_at),
-    }
-
-
-def _get_current_hashes() -> dict:
-    """Get current source hashes for drift detection."""
-    source_hash = get_source_hash()
-    return {"lite": source_hash, "full": source_hash}
 
 
 # =============================================================================
@@ -156,191 +50,31 @@ def _get_current_hashes() -> dict:
 @router.get("/bundle-hashes/")
 async def get_bundle_hashes():
     """Return current source hash for drift detection."""
-    source_hash = get_source_hash()
-    return {"lite": source_hash, "full": source_hash}
-
-
-# ── Provider-specific URL builders ────────────────────────────────────
-
-def _build_engine_url(provider_type: str, creds: dict, worker_name: str) -> str:
-    """Construct the public URL for a deployed engine by provider type.
-
-    For providers where the URL isn't known until after deploy (e.g. Vercel),
-    a predictable URL is constructed and may be updated after deploy.
-    """
-    if provider_type == "cloudflare":
-        return f"https://{worker_name}.workers.dev"
-    elif provider_type == "supabase":
-        project_ref = creds.get("project_ref", "")
-        return f"https://{project_ref}.supabase.co/functions/v1/{worker_name}"
-    elif provider_type == "vercel":
-        return f"https://{worker_name}.vercel.app"
-    elif provider_type == "netlify":
-        return f"https://{worker_name}.netlify.app"
-    elif provider_type == "deno":
-        return f"https://{worker_name}.deno.dev"
-    elif provider_type == "upstash":
-        return f"https://{worker_name}.upstash.app"
-    return f"https://{worker_name}"
-
-
-PROVIDER_LABELS = {
-    "cloudflare": "Cloudflare",
-    "supabase": "Supabase",
-    "vercel": "Vercel",
-    "netlify": "Netlify",
-    "deno": "Deno Deploy",
-    "upstash": "Upstash",
-}
-
-# ── Provider config key name — stored in engine_config ────────────────
-
-PROVIDER_CONFIG_KEY = {
-    "cloudflare": "worker_name",
-    "supabase": "function_name",
-    "vercel": "project_name",
-    "netlify": "site_name",
-    "deno": "project_name",
-    "upstash": "resource_name",
-}
+    return get_current_hashes()
 
 
 @router.post("/deploy")
 async def deploy_engine(payload: GenericDeployRequest, db: Session = Depends(get_db)):
-    """Provider-agnostic one-click deploy.
-
-    1. Resolve provider type from provider_id
-    2. Construct engine URL + config
-    3. Register EdgeEngine record
-    4. Delegate to engine_deploy.redeploy() (builds bundle + calls provider API)
-    """
-    from ..services.bundle import build_worker
-    from ..models.models import EdgeDatabase
-
-    # --- Resolve provider ---
-    provider = db.query(EdgeProviderAccount).filter(
-        EdgeProviderAccount.id == payload.provider_id
-    ).first()
-    if not provider:
-        raise HTTPException(400, "Provider account not found")
-
-    provider_type = str(provider.provider)
-    if provider_type not in PROVIDER_LABELS:
-        raise HTTPException(400, f"Unsupported provider type: {provider_type}")
-
-    from ..core.credential_resolver import get_provider_context_by_id
-    ctx = get_provider_context_by_id(db, payload.provider_id)
-    label = PROVIDER_LABELS[provider_type]
-
-    # --- For CF, delegate to existing /api/cloudflare/deploy (kept for backward compat) ---
-    # The generic endpoint handles all providers including CF.
-
-    # --- Resolve edge IDs (handle '__none__' sentinel) ---
-    edge_db_id = payload.edge_db_id if payload.edge_db_id != "__none__" else None
-    edge_cache_id = payload.edge_cache_id if payload.edge_cache_id != "__none__" else None
-    edge_queue_id = payload.edge_queue_id if payload.edge_queue_id != "__none__" else None
-
-    # Default DB if none specified
-    if not edge_db_id and payload.edge_db_id != "__none__":
-        default_db = db.query(EdgeDatabase).filter(EdgeDatabase.is_default == True).first()  # noqa: E712
-        if default_db:
-            edge_db_id = str(default_db.id)
-
-    # --- Construct engine URL ---
-    engine_url = _build_engine_url(provider_type, ctx, payload.worker_name)
-
-    # --- For CF, enable workers.dev subdomain (makes URL routable) ---
-    if provider_type == "cloudflare":
-        from ..services import cloudflare_api
-        from ..core.security import encrypt_credentials
-        account_id = ctx.get("account_id")
-        api_token = ctx.get("api_token")
-        if not account_id:
-            account_id = await cloudflare_api.detect_account_id(api_token)
-            # Save detected account_id back to encrypted credentials
-            raw_creds = dict(ctx.get("_creds", {}))
-            raw_creds["account_id"] = account_id
-            provider.provider_credentials = encrypt_credentials(raw_creds)  # type: ignore[assignment]
-            db.commit()
-        engine_url = await cloudflare_api.enable_workers_dev(api_token, account_id, payload.worker_name)
-
-    # --- Engine config (provider-specific key name) ---
-    config_key = PROVIDER_CONFIG_KEY.get(provider_type, "worker_name")
-    engine_cfg = json.dumps({config_key: payload.worker_name})
-
-    # --- Create or update engine record ---
-    now = datetime.utcnow().isoformat()
-    existing = db.query(EdgeEngine).filter(EdgeEngine.url == engine_url).first()
-    engine_id = None
-
-    if existing:
-        existing.is_active = True  # type: ignore[assignment]
-        existing.edge_provider_id = payload.provider_id  # type: ignore[assignment]
-        existing.adapter_type = payload.adapter_type  # type: ignore[assignment]
-        existing.edge_db_id = edge_db_id  # type: ignore[assignment]
-        existing.edge_cache_id = edge_cache_id  # type: ignore[assignment]
-        existing.edge_queue_id = edge_queue_id  # type: ignore[assignment]
-        existing.engine_config = engine_cfg  # type: ignore[assignment]
-        existing.updated_at = now  # type: ignore[assignment]
-        engine_id = str(existing.id)
-        db.commit()
-        engine = existing
-    else:
-        engine = EdgeEngine(
-            id=str(uuid.uuid4()),
-            name=f"{label}: {payload.worker_name}",
-            edge_provider_id=payload.provider_id,
-            adapter_type=payload.adapter_type,
-            url=engine_url,
-            edge_db_id=edge_db_id,
-            edge_cache_id=edge_cache_id,
-            edge_queue_id=edge_queue_id,
-            engine_config=engine_cfg,
-            is_active=True,
-            created_at=now,
-            updated_at=now,
-        )
-        db.add(engine)
-        db.commit()
-        db.refresh(engine)
-        engine_id = str(engine.id)
-
-    # --- Deploy via shared engine_deploy.redeploy() ---
-    try:
-        result = await engine_deploy.redeploy(engine, db)
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(500, f"Deploy failed: {str(e)}")
-
-    return {
-        "success": True,
-        "url": engine_url,
-        "worker_name": payload.worker_name,
-        "engine_id": engine_id,
-        "provider": provider_type,
-        "deploy_result": result,
-    }
+    """Provider-agnostic one-click deploy. Delegates to engine_provisioner."""
+    return await provision_and_deploy(payload, db)
 
 
 @router.get("/", response_model=List[EdgeEngineResponse])
 async def list_edge_engines(db: Session = Depends(get_db)):
     """List all edge engines with outdated detection."""
-    current_hashes = _get_current_hashes()
+    current_hashes = get_current_hashes()
     engines = db.query(EdgeEngine).order_by(EdgeEngine.created_at.desc()).all()
-    return [_serialize_engine(e, current_hashes) for e in engines]
+    return [serialize_engine(e, current_hashes) for e in engines]
 
 
 @router.get("/{engine_id}", response_model=EdgeEngineResponse)
 async def get_edge_engine(engine_id: str, db: Session = Depends(get_db)):
     """Get a single edge engine by ID."""
-    current_hashes = _get_current_hashes()
+    current_hashes = get_current_hashes()
     engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
-    return _serialize_engine(engine, current_hashes)
+    return serialize_engine(engine, current_hashes)
 
 
 @router.post("/", response_model=EdgeEngineResponse, status_code=201)
@@ -369,7 +103,7 @@ async def create_edge_engine(payload: EdgeEngineCreate, db: Session = Depends(ge
     db.add(engine)
     db.commit()
     db.refresh(engine)
-    return _serialize_engine(engine)
+    return serialize_engine(engine)
 
 
 @router.put("/{engine_id}", response_model=EdgeEngineResponse)
@@ -395,7 +129,7 @@ async def update_edge_engine(engine_id: str, payload: EdgeEngineUpdate, db: Sess
 
     db.commit()
     db.refresh(engine)
-    return _serialize_engine(engine)
+    return serialize_engine(engine)
 
 
 # =============================================================================
@@ -413,7 +147,7 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
     result = await engine_reconfigure.reconfigure(engine, payload, db)
-    result["engine"] = _serialize_engine(engine)
+    result["engine"] = serialize_engine(engine)
     return result
 
 
@@ -429,7 +163,7 @@ async def redeploy_engine(engine_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
     result = await engine_deploy.redeploy(engine, db)
-    result["engine"] = _serialize_engine(engine)
+    result["engine"] = serialize_engine(engine)
     return result
 
 
@@ -440,90 +174,15 @@ async def redeploy_engine(engine_id: str, db: Session = Depends(get_db)):
 @router.post("/{engine_id}/sync-manifest")
 async def sync_manifest(engine_id: str, db: Session = Depends(get_db)):
     """Fetch /api/manifest from a running engine and sync GPU models + metadata.
-    
-    This is called:
-    - After importing a worker (auto-populate GPU model badges)
-    - After deploy/redeploy (update manifest-derived metadata)
-    - Manually via the UI (re-sync)
-    
+
+    Delegates to services/engine_manifest.py.
     Silent on failure — engine might not be a Frontbase engine.
     """
     engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
-    engine_url = str(engine.url or "").rstrip("/")
-    if not engine_url:
-        return {"synced": False, "reason": "No engine URL configured"}
-
-    # Fetch manifest from the running engine
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(f"{engine_url}/api/manifest")
-            if resp.status_code != 200:
-                return {"synced": False, "reason": f"Manifest returned {resp.status_code}"}
-            manifest = resp.json()
-    except Exception as e:
-        return {"synced": False, "reason": f"Could not reach engine: {str(e)}"}
-
-    now = datetime.utcnow().isoformat()
-    synced_models = []
-
-    # --- Update engine metadata from manifest ---
-    if manifest.get("adapter_type"):
-        engine.adapter_type = manifest["adapter_type"]  # type: ignore[assignment]
-    if manifest.get("deployed_at"):
-        engine.last_deployed_at = manifest["deployed_at"]  # type: ignore[assignment]
-    if manifest.get("bundle_checksum"):
-        engine.content_hash = manifest["bundle_checksum"]  # type: ignore[assignment]
-
-    # --- Sync GPU models ---
-    for m in manifest.get("gpu_models", []):
-        slug = m.get("slug")
-        model_id = m.get("model_id")
-        if not slug or not model_id:
-            continue
-
-        # Check if this GPU model already exists on this engine
-        existing = db.query(EdgeGPUModel).filter(
-            EdgeGPUModel.edge_engine_id == engine_id,
-            EdgeGPUModel.model_id == model_id,
-        ).first()
-
-        if existing:
-            # Update existing
-            existing.slug = slug  # type: ignore[assignment]
-            existing.model_type = m.get("model_type", existing.model_type)  # type: ignore[assignment]
-            existing.provider = m.get("provider", existing.provider)  # type: ignore[assignment]
-            existing.updated_at = now  # type: ignore[assignment]
-            synced_models.append(slug)
-        else:
-            # Create new GPU model from manifest
-            gpu_model = EdgeGPUModel(
-                id=str(uuid.uuid4()),
-                name=slug,
-                slug=slug,
-                model_type=m.get("model_type", "Text Generation"),
-                provider=m.get("provider", "workers_ai"),
-                model_id=model_id,
-                endpoint_url=f"{engine_url}/v1/chat/completions",
-                edge_engine_id=engine_id,
-                is_active=True,
-                created_at=now,
-                updated_at=now,
-            )
-            db.add(gpu_model)
-            synced_models.append(slug)
-
-    db.commit()
-
-    return {
-        "synced": True,
-        "adapter_type": manifest.get("adapter_type"),
-        "capabilities": manifest.get("capabilities", []),
-        "gpu_models_synced": synced_models,
-        "bindings": manifest.get("bindings", {}),
-    }
+    return await sync_engine_manifest(engine, db)
 
 
 # =============================================================================

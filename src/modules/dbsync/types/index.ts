@@ -128,17 +128,6 @@ export interface RedisTestResult {
     message: string
 }
 
-export interface TursoSettings {
-    turso_enabled: boolean
-    turso_url: string | null
-    turso_token: string | null
-}
-
-export interface TursoTestResult {
-    success: boolean
-    message: string
-}
-
 export interface SupabaseSettings {
     supabase_jwt_secret: string | null
 }

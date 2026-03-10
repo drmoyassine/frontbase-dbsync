@@ -20,9 +20,11 @@ All backend files reviewed and actioned. ✅
 
 ### Frontend (TypeScript/React)
 
-All frontend files reviewed and actioned. ✅
-
 - `FileBrowser/index.tsx` (818L) — **Pending** (deferred to backlog)
+- `BuilderHeader.tsx` (525L, 18KB) — **Pending** — Single component with 18 functions mixing publish logic, preview URLs, navigation, unsaved-changes handling, and UI rendering. Extract into:
+  - `usePublishFlow.ts` — publish handlers (`handleSingleTargetPublish`, `handleMultiTargetPublish`, `handlePublishClick`, `toggleTarget`, `isTargetSynced`)
+  - `useBuilderNavigation.ts` — navigation/save guards (`handleBackToDashboard`, `handleSaveAndNavigate`, `handleDiscardAndNavigate`)
+  - `BuilderHeaderActions.tsx` — action buttons (publish dropdown, preview, save)
 - ~~`DataColumnConfigurator.tsx`~~ — **File no longer exists** (deleted in prior refactoring)
 
 ### Edge (Hono Service)

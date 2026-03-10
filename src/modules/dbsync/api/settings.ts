@@ -3,8 +3,6 @@ import { getFastApiBaseUrl } from '../../../lib/portConfig'
 import {
     RedisSettings,
     RedisTestResult,
-    TursoSettings,
-    TursoTestResult,
     SupabaseSettings,
     PrivacySettings,
     EmailProviderSettings,
@@ -25,10 +23,6 @@ export const settingsApi = {
     updateRedis: (data: Partial<RedisSettings>) => mainApi.put<RedisSettings>('/settings/redis/', data),
     testRedis: (data: Partial<RedisSettings>) => mainApi.post<RedisTestResult>('/settings/redis/test/', data),
 
-    // Turso Edge DB
-    getTurso: () => mainApi.get<TursoSettings>('/settings/turso/'),
-    updateTurso: (data: Partial<TursoSettings>) => mainApi.put<TursoSettings>('/settings/turso/', data),
-    testTurso: (data: Partial<TursoSettings>) => mainApi.post<TursoTestResult>('/settings/turso/test/', data),
 
     // Supabase JWT
     getSupabase: () => mainApi.get<SupabaseSettings>('/settings/supabase/'),

@@ -4,6 +4,7 @@ import { datasourcesApi, Datasource, viewsApi } from '../api'
 import DataPreviewModal from '../components/DataPreviewModal'
 import { Plus, Database, Trash2, TestTube, CheckCircle, XCircle, Loader2, Edit2, Filter } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
+import { AccountResourcePicker, DiscoveredResource } from '@/components/dashboard/settings/shared/AccountResourcePicker'
 
 const TYPE_LABELS: Record<string, string> = {
     supabase: 'Supabase',
@@ -23,6 +24,17 @@ const TYPE_COLORS: Record<string, string> = {
     wordpress_graphql: 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-400',
     neon: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400',
     mysql: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+}
+
+/** Maps datasource types to their compatible connected account provider types. */
+const DATASOURCE_PROVIDER_MAP: Record<string, string[]> = {
+    supabase: ['supabase'],
+    neon: ['neon'],
+    postgres: ['postgres'],
+    mysql: ['mysql'],
+    wordpress_rest: ['wordpress', 'wordpress_rest'],
+    wordpress_graphql: ['wordpress', 'wordpress_rest'],
+    wordpress: ['mysql'],
 }
 
 export function Datasources() {
@@ -292,125 +304,6 @@ function DatasourceCard({
     )
 }
 
-// ── Supabase: Select from Connected Accounts ─────────────────────────
-function SupabaseConnectedSection({
-    isEditing,
-    formData,
-    setFormData,
-}: {
-    isEditing: boolean
-    formData: any
-    setFormData: (data: any) => void
-}) {
-    const [accounts, setAccounts] = useState<any[]>([])
-    const [loading, setLoading] = useState(true)
-    const [selectedAccountId, setSelectedAccountId] = useState<string>(formData._supabase_account_id || '')
-
-    useEffect(() => {
-        fetch('/api/edge-providers/')
-            .then(r => r.json())
-            .then((data: any[]) => {
-                const supabaseAccounts = data.filter((a: any) => a.provider === 'supabase' && a.is_active)
-                setAccounts(supabaseAccounts)
-                // Auto-select if only one account
-                if (supabaseAccounts.length === 1 && !selectedAccountId) {
-                    const acct = supabaseAccounts[0]
-                    setSelectedAccountId(acct.id)
-                    setFormData({
-                        ...formData,
-                        _supabase_account_id: acct.id,
-                        api_url: acct.provider_metadata?.api_url || '',
-                        name: formData.name || acct.name,
-                    })
-                }
-            })
-            .catch(() => { })
-            .finally(() => setLoading(false))
-    }, [])
-
-    const handleAccountSelect = (accountId: string) => {
-        setSelectedAccountId(accountId)
-        const acct = accounts.find(a => a.id === accountId)
-        if (acct) {
-            setFormData({
-                ...formData,
-                _supabase_account_id: acct.id,
-                api_url: acct.provider_metadata?.api_url || '',
-                name: formData.name || acct.name,
-            })
-        }
-    }
-
-    return (
-        <div className="p-4 bg-green-50 dark:bg-green-900/10 rounded-2xl space-y-4 border border-green-100 dark:border-green-900/30">
-            <div className="flex items-center gap-2 text-green-700 dark:text-green-300 font-bold text-xs uppercase tracking-wider">
-                <Database className="w-4 h-4" />
-                Supabase Connection
-            </div>
-
-            {loading ? (
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading accounts...
-                </div>
-            ) : accounts.length === 0 ? (
-                <div className="text-sm text-gray-600 dark:text-gray-400 space-y-2">
-                    <p>No Supabase Connected Account found.</p>
-                    <a
-                        href="/settings"
-                        className="inline-flex items-center gap-1 text-primary-600 dark:text-primary-400 font-semibold hover:underline text-xs"
-                    >
-                        <Plus className="w-3 h-3" />
-                        Connect in Settings → Accounts
-                    </a>
-                </div>
-            ) : (
-                <>
-                    <div>
-                        <label className="block text-sm font-semibold mb-1.5 text-green-900/70 dark:text-green-300/70">
-                            Connected Account
-                        </label>
-                        <select
-                            value={selectedAccountId}
-                            onChange={(e) => handleAccountSelect(e.target.value)}
-                            className="w-full px-3 py-2 border border-green-200 dark:border-green-800 rounded-xl bg-white dark:bg-gray-800 focus:ring-2 focus:ring-green-500 outline-none text-sm"
-                        >
-                            <option value="">Select an account…</option>
-                            {accounts.map(acct => (
-                                <option key={acct.id} value={acct.id}>
-                                    {acct.name} {acct.provider_metadata?.project_ref ? `(${acct.provider_metadata.project_ref})` : ''}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {selectedAccountId && (
-                        <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            Credentials will be used from this Connected Account
-                        </div>
-                    )}
-                </>
-            )}
-
-            {/* Optional Direct Database Connection */}
-            <div className="pt-3 border-t border-green-100 dark:border-green-800/50">
-                <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-bold text-[10px] uppercase tracking-wider mb-2">
-                    Direct Database Connection (Optional)
-                </div>
-                <input
-                    type="password"
-                    value={formData.connection_uri}
-                    onChange={(e) => setFormData({ ...formData, connection_uri: e.target.value })}
-                    className="w-full px-3 py-2 border border-green-200 dark:border-green-800 rounded-xl bg-white dark:bg-gray-800 focus:ring-2 focus:ring-green-500 outline-none font-mono text-xs"
-                    placeholder="postgresql://postgres:[PASSWORD]@db.xxx.supabase.co:5432/postgres"
-                />
-                <p className="mt-1 text-[10px] text-gray-500">For direct PostgreSQL access. Find in Project Settings → Database → Connection string.</p>
-            </div>
-        </div>
-    )
-}
-
 function DatasourceModal({
     datasource,
     onClose
@@ -428,15 +321,14 @@ function DatasourceModal({
         port: datasource?.port || (datasource?.type === 'mysql' || datasource?.type === 'wordpress' ? 3306 : 5432),
         database: datasource?.database || '',
         username: datasource?.username || '',
-        password: '', // Don't pre-fill password for security
+        password: '',
         connection_uri: '',
         api_url: datasource?.api_url || '',
-        anon_key: '', // Supabase anon key - don't pre-fill for security
-        api_key: '', // Service role key - don't pre-fill for security
+        anon_key: '',
+        api_key: '',
         table_prefix: datasource?.table_prefix || 'wp_',
+        provider_account_id: (datasource as any)?.provider_account_id || '',
     })
-
-    const [configMode, setConfigMode] = useState<'uri' | 'manual'>(datasource ? 'manual' : 'uri')
 
     const mutation = useMutation({
         mutationFn: (data: typeof formData) =>
@@ -517,184 +409,45 @@ function DatasourceModal({
                     </div>
 
                     <div className="space-y-4">
-                        {formData.type !== 'wordpress_rest' && formData.type !== 'wordpress_graphql' && formData.type !== 'supabase' && formData.type !== 'neon' && (
-                            <div className="flex p-1 bg-gray-100 dark:bg-gray-900 rounded-xl">
-                                <button
-                                    type="button"
-                                    onClick={() => setConfigMode('uri')}
-                                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${configMode === 'uri' ? 'bg-white dark:bg-gray-700 shadow-sm text-primary-600 dark:text-primary-400' : 'text-gray-500 hover:text-gray-700'
-                                        }`}
-                                >
-                                    Connection URI
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setConfigMode('manual')}
-                                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${configMode === 'manual' ? 'bg-white dark:bg-gray-700 shadow-sm text-primary-600 dark:text-primary-400' : 'text-gray-500 hover:text-gray-700'
-                                        }`}
-                                >
-                                    Manual Fields
-                                </button>
+                        {/* Connected Account Picker — replaces all inline credential fields */}
+                        <AccountResourcePicker
+                            compatibleProviders={DATASOURCE_PROVIDER_MAP[formData.type] || [formData.type]}
+                            label="Connected Account"
+                            autoSelectSingle
+                            selectedAccountId={formData.provider_account_id || undefined}
+                            onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
+                                setFormData({
+                                    ...formData,
+                                    provider_account_id: accountId,
+                                    name: formData.name || resource.name || '',
+                                })
+                            }}
+                            onClear={() => {
+                                setFormData({ ...formData, provider_account_id: '' })
+                            }}
+                        />
+
+                        {formData.provider_account_id && (
+                            <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                Credentials will be resolved from this Connected Account
                             </div>
                         )}
 
-                        {formData.type !== 'wordpress_rest' && formData.type !== 'wordpress_graphql' && formData.type !== 'supabase' && formData.type !== 'neon' && (
-                            <>
-                                {configMode === 'uri' ? (
-                                    <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                        <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
-                                            {isEditing ? 'New Connection URI (optional)' : 'Connection URI'}
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={formData.connection_uri}
-                                            onChange={(e) => setFormData({ ...formData, connection_uri: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 font-mono text-xs focus:ring-2 focus:ring-primary-500 outline-none"
-                                            placeholder="postgresql://user:password@host:port/database"
-                                            required={!isEditing && configMode === 'uri'}
-                                        />
-                                        <div className="mt-2 text-[10px] text-gray-500 flex items-center gap-1">
-                                            <Database className="w-3 h-3" />
-                                            Format: {formData.type === 'mysql' || formData.type === 'wordpress'
-                                                ? 'mysql://user:pass@host:port/db'
-                                                : 'postgresql://user:pass@host:port/db'}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="grid grid-cols-6 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                        <div className="col-span-4">
-                                            <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">Host</label>
-                                            <input
-                                                type="text"
-                                                value={formData.host}
-                                                onChange={(e) => setFormData({ ...formData, host: e.target.value })}
-                                                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                                                placeholder="db.example.com"
-                                                required={configMode === 'manual'}
-                                            />
-                                        </div>
-                                        <div className="col-span-2">
-                                            <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">Port</label>
-                                            <input
-                                                type="number"
-                                                value={formData.port}
-                                                onChange={(e) => setFormData({ ...formData, port: parseInt(e.target.value) })}
-                                                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                                                required={configMode === 'manual'}
-                                            />
-                                        </div>
-                                        <div className="col-span-6 sm:col-span-3">
-                                            <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">Database</label>
-                                            <input
-                                                type="text"
-                                                value={formData.database}
-                                                onChange={(e) => setFormData({ ...formData, database: e.target.value })}
-                                                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                                                placeholder="postgres"
-                                                required={configMode === 'manual'}
-                                            />
-                                        </div>
-                                        <div className="col-span-6 sm:col-span-3">
-                                            <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">Username</label>
-                                            <input
-                                                type="text"
-                                                value={formData.username}
-                                                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                                                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                                                placeholder="postgres"
-                                                required={configMode === 'manual'}
-                                            />
-                                        </div>
-                                        <div className="col-span-6">
-                                            <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
-                                                {isEditing ? 'New Password (leave empty to keep current)' : 'Password'}
-                                            </label>
-                                            <input
-                                                type="password"
-                                                value={formData.password}
-                                                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                                                required={!isEditing && configMode === 'manual'}
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-                            </>
-                        )}
-
-                        {(formData.type === 'wordpress_rest' || formData.type === 'wordpress_graphql') && (
-                            <div className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-4">
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">WordPress Base URL</label>
-                                    <input
-                                        type="url"
-                                        value={formData.api_url}
-                                        onChange={(e) => setFormData({ ...formData, api_url: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                                        placeholder="https://mysite.com"
-                                        required
-                                    />
-                                    <p className="mt-1 text-[10px] text-gray-500">The root URL where WordPress is installed.</p>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
-                                        {isEditing ? 'New Application Password (optional)' : 'Application Password'}
-                                    </label>
-                                    <input
-                                        type="password"
-                                        value={formData.api_key}
-                                        onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                                        placeholder="user:xxxx xxxx xxxx xxxx"
-                                    />
-                                    <p className="mt-1 text-[10px] text-gray-500">Format: <code>username:application-password</code></p>
-                                </div>
+                        {/* WordPress table_prefix — only shown for WordPress types */}
+                        {(formData.type === 'wordpress' || formData.type === 'wordpress_rest' || formData.type === 'wordpress_graphql') && (
+                            <div>
+                                <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">Table Prefix</label>
+                                <input
+                                    type="text"
+                                    value={formData.table_prefix}
+                                    onChange={(e) => setFormData({ ...formData, table_prefix: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
+                                    placeholder="wp_"
+                                />
                             </div>
                         )}
                     </div>
-
-                    {formData.type === 'supabase' && (
-                        <SupabaseConnectedSection
-                            isEditing={isEditing}
-                            formData={formData}
-                            setFormData={(data: any) => setFormData(data)}
-                        />
-                    )}
-
-                    {formData.type === 'neon' && (
-                        <div className="p-4 bg-primary-50 dark:bg-primary-900/10 rounded-2xl space-y-4 border border-primary-100 dark:border-primary-900/30">
-                            <div className="flex items-center gap-2 text-primary-700 dark:text-primary-300 font-bold text-xs uppercase tracking-wider">
-                                <Database className="w-4 h-4" />
-                                Neon Configuration
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="col-span-2">
-                                    <label className="block text-sm font-semibold mb-1.5 text-primary-900/70 dark:text-primary-300/70">API URL</label>
-                                    <input
-                                        type="url"
-                                        value={formData.api_url}
-                                        onChange={(e) => setFormData({ ...formData, api_url: e.target.value })}
-                                        className="w-full px-3 py-2 border border-primary-200 dark:border-primary-800 rounded-xl bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none"
-                                        placeholder="https://your-project.neon.tech"
-                                        required
-                                    />
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="block text-sm font-semibold mb-1.5 text-primary-900/70 dark:text-primary-300/70">
-                                        {isEditing ? 'New Anon Key (leave empty to keep current)' : 'Anon Key'}
-                                    </label>
-                                    <input
-                                        type="password"
-                                        value={formData.anon_key}
-                                        onChange={(e) => setFormData({ ...formData, anon_key: e.target.value })}
-                                        className="w-full px-3 py-2 border border-primary-200 dark:border-primary-800 rounded-xl bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none"
-                                        placeholder="Neon API key..."
-                                        required={!isEditing}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
                     {testRawMutation.data && (
                         <div className={`p-4 rounded-2xl text-sm flex items-start gap-3 animate-in slide-in-from-top-2 duration-300 border ${testRawMutation.data.data.success

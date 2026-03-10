@@ -3,13 +3,17 @@
  * 
  * Architecture:
  *   - CF Workers / Cloud: TursoHttpProvider (always)
- *   - Docker / local dev:  LocalSqliteProvider → optionally upgrade to Turso via startup sync
+ *   - Docker / local dev:  LocalSqliteProvider (uses local SQLite file)
  * 
  * TursoHttpProvider uses lazy init (getDb()) — safe to instantiate even
  * before env vars are available (CF module evaluation).
  * 
  * LocalSqliteProvider is ONLY used in Docker. On CF builds, it's replaced
  * by an inert stub via esbuild plugin (see tsup.cloudflare-*.ts).
+ *
+ * NOTE: Turso/edge DB credentials are now managed via EdgeDatabase table +
+ * connected accounts. The secrets_builder pushes FRONTBASE_STATE_DB_URL and
+ * FRONTBASE_STATE_DB_TOKEN as env vars during deploy.
  */
 
 import type { IStateProvider } from './IStateProvider';
@@ -46,7 +50,7 @@ function createInitialProvider(): IStateProvider {
         return new TursoHttpProvider();
     }
 
-    console.log('💾 Starting with LocalSqliteProvider (may upgrade to Turso after sync)');
+    console.log('💾 Using LocalSqliteProvider');
     return new LocalSqliteProvider();
 }
 
@@ -61,20 +65,6 @@ export function getStateProvider(): IStateProvider {
     if (!_provider) {
         _provider = createInitialProvider();
     }
-    return _provider;
-}
-
-/**
- * Hot-swap the state provider to Turso.
- * Called by sync.ts when Turso credentials are fetched from the backend.
- */
-export async function upgradeToTurso(): Promise<IStateProvider> {
-    console.log('🔄 Upgrading state provider to TursoHttpProvider...');
-    const turso = new TursoHttpProvider();
-    await turso.init();
-    _provider = turso;
-    _initPromise = Promise.resolve(); // Already initialized
-    console.log('☁️ State provider upgraded to TursoHttpProvider');
     return _provider;
 }
 

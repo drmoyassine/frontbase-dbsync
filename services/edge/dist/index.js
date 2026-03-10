@@ -1,14 +1,20 @@
 import {
+  cacheProvider,
+  shouldDebounce
+} from "./chunk-KZFI6UZV.js";
+import {
   cached,
   getRedis,
   initRedis,
+  init_redis,
   invalidate,
   invalidatePattern,
+  rateLimit,
   testConnection
-} from "./chunk-7UNFST42.js";
+} from "./chunk-2T6KJ3IO.js";
 import {
-  __export
-} from "./chunk-MLKGABMK.js";
+  __require
+} from "./chunk-KFQGP6VL.js";
 
 // src/index.ts
 import { serve } from "@hono/node-server";
@@ -17,8 +23,8 @@ import { compress } from "hono/compress";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// src/adapters/shared.ts
-import { OpenAPIHono as OpenAPIHono8 } from "@hono/zod-openapi";
+// src/engine/lite.ts
+import { OpenAPIHono as OpenAPIHono9 } from "@hono/zod-openapi";
 import { swaggerUI } from "@hono/swagger-ui";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
@@ -26,16 +32,20 @@ import { secureHeaders } from "hono/secure-headers";
 import { requestId } from "hono/request-id";
 import { timeout } from "hono/timeout";
 import { bodyLimit } from "hono/body-limit";
+import { etag } from "hono/etag";
+import { timing } from "hono/timing";
+import { Liquid } from "liquidjs";
 
 // src/routes/health.ts
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
+var startedAt = Date.now();
 var healthRoute = new OpenAPIHono();
 var route = createRoute({
   method: "get",
   path: "/",
   tags: ["System"],
   summary: "Health check",
-  description: "Returns service health status and version info",
+  description: "Returns service health status, version, and provider info",
   responses: {
     200: {
       description: "Service is healthy",
@@ -45,6 +55,8 @@ var route = createRoute({
             status: z.string(),
             service: z.string(),
             version: z.string(),
+            provider: z.string(),
+            uptime_seconds: z.number(),
             timestamp: z.string()
           })
         }
@@ -55,84 +67,937 @@ var route = createRoute({
 healthRoute.openapi(route, (c) => {
   return c.json({
     status: "ok",
-    service: "frontbase-actions",
+    service: "frontbase-edge",
     version: "0.1.0",
+    provider: process.env.FRONTBASE_ADAPTER_PLATFORM || "docker",
+    uptime_seconds: Math.floor((Date.now() - startedAt) / 1e3),
     timestamp: (/* @__PURE__ */ new Date()).toISOString()
   });
 });
 
-// src/routes/deploy.ts
-import { OpenAPIHono as OpenAPIHono2, createRoute as createRoute2, z as z3 } from "@hono/zod-openapi";
+// src/routes/manifest.ts
+import { OpenAPIHono as OpenAPIHono2 } from "@hono/zod-openapi";
 
-// src/db/index.ts
+// src/routes/ai.ts
+var _aiBinding = null;
+function getAIBinding() {
+  return _aiBinding;
+}
+var _gpuModels = [];
+function getGPUModels() {
+  if (_gpuModels.length === 0) {
+    const envModels = globalThis.process?.env?.FRONTBASE_GPU_MODELS;
+    if (envModels) {
+      try {
+        const parsed = JSON.parse(envModels);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          _gpuModels = parsed;
+          console.log(`[AI] Auto-loaded ${parsed.length} GPU model(s) from env:`, parsed.map((m) => m.slug).join(", "));
+        }
+      } catch (e) {
+        console.error("[AI] Failed to parse FRONTBASE_GPU_MODELS:", e);
+      }
+    }
+  }
+  return _gpuModels;
+}
+
+// src/routes/manifest.ts
+var manifestRoute = new OpenAPIHono2();
+function getAdapterType() {
+  const platform = process.env.FRONTBASE_ADAPTER_PLATFORM || "docker";
+  if (platform === "cloudflare-lite") return "lite";
+  return "full";
+}
+function getCapabilities() {
+  const caps = ["workflows"];
+  const adapterType = getAdapterType();
+  if (adapterType === "full") caps.push("ssr");
+  if (getGPUModels().length > 0) caps.push("ai");
+  return caps;
+}
+function getBindings() {
+  const bindings = {};
+  const dbUrl = process.env.FRONTBASE_STATE_DB_URL || "";
+  if (dbUrl.startsWith("libsql://") || dbUrl.startsWith("https://")) {
+    bindings.db = "turso";
+  } else if (dbUrl.includes("sqlite") || dbUrl.endsWith(".db")) {
+    bindings.db = "sqlite";
+  } else if (dbUrl) {
+    bindings.db = "custom";
+  } else {
+    bindings.db = "none";
+  }
+  const cacheUrl = process.env.FRONTBASE_CACHE_URL || "";
+  if (cacheUrl.includes("upstash")) {
+    bindings.cache = "upstash";
+  } else if (cacheUrl.includes("redis")) {
+    bindings.cache = "redis";
+  } else if (cacheUrl) {
+    bindings.cache = "custom";
+  } else {
+    bindings.cache = "none";
+  }
+  const qstashToken = process.env.QSTASH_TOKEN || "";
+  bindings.queue = qstashToken ? "qstash" : "none";
+  return bindings;
+}
+manifestRoute.get("/", (c) => {
+  const gpuModels = getGPUModels();
+  return c.json({
+    engine_name: process.env.FRONTBASE_ENGINE_NAME || "frontbase-edge",
+    frontbase_version: "0.1.0",
+    adapter_type: getAdapterType(),
+    platform: process.env.FRONTBASE_ADAPTER_PLATFORM || "docker",
+    deployed_at: process.env.FRONTBASE_DEPLOYED_AT || null,
+    bundle_checksum: process.env.FRONTBASE_BUNDLE_CHECKSUM || null,
+    capabilities: getCapabilities(),
+    gpu_models: gpuModels.map((m) => ({
+      slug: m.slug,
+      model_id: m.model_id,
+      model_type: m.model_type,
+      provider: m.provider
+    })),
+    bindings: getBindings()
+  });
+});
+
+// src/routes/deploy.ts
+import { OpenAPIHono as OpenAPIHono3, createRoute as createRoute2, z as z3 } from "@hono/zod-openapi";
+
+// src/storage/TursoHttpProvider.ts
 import { drizzle } from "drizzle-orm/libsql";
 import { createClient } from "@libsql/client";
+import { sql as sql2, eq, and, desc } from "drizzle-orm";
 
-// src/db/schema.ts
-var schema_exports = {};
-__export(schema_exports, {
-  executions: () => executions,
-  workflows: () => workflows
-});
+// src/storage/edge-migrations.ts
+var MIGRATIONS = [
+  {
+    version: 1,
+    description: "Initial schema \u2014 published_pages + project_settings",
+    sql: [
+      // Schema version tracking
+      `CREATE TABLE IF NOT EXISTS _schema_version (
+                version INTEGER PRIMARY KEY,
+                description TEXT,
+                applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )`,
+      // Published pages
+      `CREATE TABLE IF NOT EXISTS published_pages (
+                id TEXT PRIMARY KEY,
+                slug TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                title TEXT,
+                description TEXT,
+                layout_data TEXT NOT NULL,
+                seo_data TEXT,
+                datasources TEXT,
+                css_bundle TEXT,
+                version INTEGER NOT NULL DEFAULT 1,
+                published_at TEXT NOT NULL,
+                is_public INTEGER NOT NULL DEFAULT 1,
+                is_homepage INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )`,
+      // Indexes
+      `CREATE INDEX IF NOT EXISTS idx_published_pages_slug ON published_pages(slug)`,
+      `CREATE INDEX IF NOT EXISTS idx_published_pages_homepage ON published_pages(is_homepage)`,
+      // Project settings
+      `CREATE TABLE IF NOT EXISTS project_settings (
+                id TEXT PRIMARY KEY DEFAULT 'default',
+                favicon_url TEXT,
+                logo_url TEXT,
+                site_name TEXT,
+                site_description TEXT,
+                app_url TEXT,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )`,
+      // Default settings row
+      `INSERT OR IGNORE INTO project_settings (id, updated_at) VALUES ('default', datetime('now'))`
+    ]
+  },
+  {
+    version: 2,
+    description: "Add workflows + executions tables",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS workflows (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                trigger_type TEXT NOT NULL,
+                trigger_config TEXT,
+                nodes TEXT NOT NULL,
+                edges TEXT NOT NULL,
+                version INTEGER NOT NULL DEFAULT 1,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                published_by TEXT
+            )`,
+      `CREATE TABLE IF NOT EXISTS executions (
+                id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL REFERENCES workflows(id),
+                status TEXT NOT NULL,
+                trigger_type TEXT NOT NULL,
+                trigger_payload TEXT,
+                node_executions TEXT,
+                result TEXT,
+                error TEXT,
+                usage REAL DEFAULT 0,
+                started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ended_at TEXT
+            )`,
+      `CREATE INDEX IF NOT EXISTS idx_executions_workflow ON executions(workflow_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_executions_started ON executions(started_at)`
+    ]
+  },
+  {
+    version: 3,
+    description: "Add content_hash column to published_pages",
+    sql: [
+      `ALTER TABLE published_pages ADD COLUMN content_hash TEXT`
+    ]
+  },
+  {
+    version: 4,
+    description: "Add settings column to workflows",
+    sql: [
+      `ALTER TABLE workflows ADD COLUMN settings TEXT`
+    ]
+  },
+  {
+    version: 5,
+    description: "Add dead_letters table for DLQ",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS dead_letters (
+                id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                execution_id TEXT NOT NULL,
+                error TEXT,
+                payload TEXT,
+                retry_count INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            )`,
+      `CREATE INDEX IF NOT EXISTS idx_dead_letters_workflow ON dead_letters(workflow_id)`
+    ]
+  }
+];
+async function runMigrations(execute, providerName) {
+  await execute(`CREATE TABLE IF NOT EXISTS _schema_version (
+        version INTEGER PRIMARY KEY,
+        description TEXT,
+        applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+  let appliedCount = 0;
+  for (const migration of MIGRATIONS) {
+    try {
+      for (const sqlStmt of migration.sql) {
+        try {
+          await execute(sqlStmt);
+        } catch (sqlError) {
+          const msg = String(sqlError?.message || sqlError || "");
+          if (msg.includes("duplicate column")) {
+            console.log(`[${providerName}:Migration] Column already exists (v${migration.version}), skipping.`);
+          } else {
+            throw sqlError;
+          }
+        }
+      }
+      await execute(
+        `INSERT OR IGNORE INTO _schema_version (version, description) 
+                 VALUES (${migration.version}, '${migration.description.replace(/'/g, "''")}')`
+      );
+      appliedCount++;
+    } catch (error) {
+      console.error(`[${providerName}:Migration] Failed at v${migration.version}: ${error}`);
+      throw error;
+    }
+  }
+  const latestVersion = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
+  console.log(`[${providerName}:Migration] Schema at v${latestVersion} (${appliedCount} migrations checked)`);
+}
+
+// src/storage/schema.ts
+import { sql } from "drizzle-orm";
 import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
-var workflows = sqliteTable("workflows", {
+var publishedPages = sqliteTable("published_pages", {
+  id: text("id").primaryKey(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  title: text("title"),
+  description: text("description"),
+  layoutData: text("layout_data").notNull(),
+  seoData: text("seo_data"),
+  datasources: text("datasources"),
+  cssBundle: text("css_bundle"),
+  version: integer("version").notNull().default(1),
+  publishedAt: text("published_at").notNull(),
+  isPublic: integer("is_public", { mode: "boolean" }).notNull().default(true),
+  isHomepage: integer("is_homepage", { mode: "boolean" }).notNull().default(false),
+  contentHash: text("content_hash"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+});
+var projectSettings = sqliteTable("project_settings", {
+  id: text("id").primaryKey().default("default"),
+  faviconUrl: text("favicon_url"),
+  logoUrl: text("logo_url"),
+  siteName: text("site_name"),
+  siteDescription: text("site_description"),
+  appUrl: text("app_url"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+});
+var workflowsTable = sqliteTable("workflows", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
   triggerType: text("trigger_type").notNull(),
-  // manual, http_webhook, scheduled, data_change
   triggerConfig: text("trigger_config"),
-  // JSON: cron, table, etc.
   nodes: text("nodes").notNull(),
-  // JSON array of nodes
   edges: text("edges").notNull(),
-  // JSON array of edges
+  settings: text("settings"),
   version: integer("version").notNull().default(1),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  createdAt: text("created_at").notNull().$defaultFn(() => (/* @__PURE__ */ new Date()).toISOString()),
-  updatedAt: text("updated_at").notNull().$defaultFn(() => (/* @__PURE__ */ new Date()).toISOString()),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   publishedBy: text("published_by")
 });
-var executions = sqliteTable("executions", {
+var executionsTable = sqliteTable("executions", {
   id: text("id").primaryKey(),
-  workflowId: text("workflow_id").notNull().references(() => workflows.id),
+  workflowId: text("workflow_id").notNull(),
   status: text("status").notNull(),
-  // started, executing, completed, error, cancelled
   triggerType: text("trigger_type").notNull(),
   triggerPayload: text("trigger_payload"),
-  // JSON: input data
   nodeExecutions: text("node_executions"),
-  // JSON: per-node status
   result: text("result"),
-  // JSON: final output
   error: text("error"),
   usage: real("usage").default(0),
-  // compute credits
-  startedAt: text("started_at").notNull().$defaultFn(() => (/* @__PURE__ */ new Date()).toISOString()),
+  startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   endedAt: text("ended_at")
 });
 
-// src/db/index.ts
-var dbType = process.env.DB_TYPE || "sqlite";
-var connectionUrl;
-var authToken;
-if (dbType === "turso") {
-  connectionUrl = process.env.TURSO_DATABASE_URL || "";
-  authToken = process.env.TURSO_AUTH_TOKEN;
-  if (!connectionUrl) {
-    throw new Error("TURSO_DATABASE_URL is required for Turso connection");
+// src/storage/TursoHttpProvider.ts
+var DEFAULT_FAVICON = "/static/icon.png";
+var TursoHttpProvider = class {
+  _db = null;
+  /**
+   * Lazy DB accessor — creates client on first use.
+   * On CF Workers, env vars aren't available at module eval time.
+   * They're bridged in the fetch() handler BEFORE any provider method runs.
+   */
+  getDb() {
+    if (!this._db) {
+      const url = process.env.FRONTBASE_STATE_DB_URL;
+      const authToken = process.env.FRONTBASE_STATE_DB_TOKEN;
+      if (!url) {
+        throw new Error(
+          "[TursoHttpProvider] FRONTBASE_STATE_DB_URL is required. Set this as a Worker secret or env var."
+        );
+      }
+      const client = createClient({ url, authToken });
+      this._db = drizzle(client);
+      console.log(`\u2601\uFE0F TursoHttpProvider connected to: ${url.substring(0, 40)}...`);
+    }
+    return this._db;
   }
-  console.log("\u{1F4E6} Connected to Turso SQLite (HTTP)");
-} else {
-  const sqlitePath = process.env.SQLITE_PATH || "./data/actions.db";
-  connectionUrl = `file:${sqlitePath}`;
-  console.log(`\u{1F4E6} Connected to SQLite: ${sqlitePath}`);
+  // =========================================================================
+  // Lifecycle
+  // =========================================================================
+  async init() {
+    await runMigrations(
+      async (sqlStr) => {
+        await this.getDb().run(sql2.raw(sqlStr));
+      },
+      "Turso"
+    );
+    console.log("\u2601\uFE0F State DB initialized (Turso)");
+  }
+  async initSettings() {
+    console.log("\u2601\uFE0F Project settings table initialized (Turso)");
+  }
+  // =========================================================================
+  // Pages CRUD
+  // =========================================================================
+  async upsertPage(page) {
+    const record = {
+      id: page.id,
+      slug: page.slug,
+      name: page.name,
+      title: page.title || null,
+      description: page.description || null,
+      layoutData: JSON.stringify(page.layoutData),
+      seoData: page.seoData ? JSON.stringify(page.seoData) : null,
+      datasources: page.datasources ? JSON.stringify(page.datasources) : null,
+      cssBundle: page.cssBundle || null,
+      version: page.version,
+      publishedAt: page.publishedAt,
+      isPublic: page.isPublic,
+      isHomepage: page.isHomepage,
+      contentHash: page.contentHash || null
+    };
+    if (page.isHomepage) {
+      await this.getDb().update(publishedPages).set({ isHomepage: false }).where(eq(publishedPages.isHomepage, true));
+      console.log(`\u2601\uFE0F Cleared old homepage flag(s) before setting new homepage: ${page.slug}`);
+    }
+    await this.getDb().insert(publishedPages).values(record).onConflictDoUpdate({
+      target: publishedPages.id,
+      set: { ...record, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }
+    });
+    console.log(`\u2601\uFE0F Upserted page (Turso): ${page.slug} (v${page.version})`);
+    return { success: true, version: page.version };
+  }
+  async getPageBySlug(slug) {
+    const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.slug, slug)).get();
+    if (!record) return null;
+    return {
+      id: record.id,
+      slug: record.slug,
+      name: record.name,
+      title: record.title || void 0,
+      description: record.description || void 0,
+      layoutData: JSON.parse(record.layoutData),
+      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
+      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
+      cssBundle: record.cssBundle || void 0,
+      version: record.version,
+      publishedAt: record.publishedAt,
+      isPublic: record.isPublic,
+      isHomepage: record.isHomepage
+    };
+  }
+  async getHomepage() {
+    const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.isHomepage, true)).get();
+    if (!record) return null;
+    return {
+      id: record.id,
+      slug: record.slug,
+      name: record.name,
+      title: record.title || void 0,
+      description: record.description || void 0,
+      layoutData: JSON.parse(record.layoutData),
+      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
+      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
+      cssBundle: record.cssBundle || void 0,
+      version: record.version,
+      publishedAt: record.publishedAt,
+      isPublic: record.isPublic,
+      isHomepage: record.isHomepage
+    };
+  }
+  async deletePage(slug) {
+    await this.getDb().delete(publishedPages).where(eq(publishedPages.slug, slug));
+    return true;
+  }
+  async listPages() {
+    return await this.getDb().select({
+      slug: publishedPages.slug,
+      name: publishedPages.name,
+      version: publishedPages.version
+    }).from(publishedPages);
+  }
+  // =========================================================================
+  // Project Settings CRUD
+  // =========================================================================
+  async getProjectSettings() {
+    const record = await this.getDb().select().from(projectSettings).where(eq(projectSettings.id, "default")).get();
+    if (!record) {
+      return {
+        id: "default",
+        faviconUrl: null,
+        logoUrl: null,
+        siteName: null,
+        siteDescription: null,
+        appUrl: null,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+    return record;
+  }
+  async getFaviconUrl() {
+    const settings = await this.getProjectSettings();
+    return settings.faviconUrl || DEFAULT_FAVICON;
+  }
+  async updateProjectSettings(updates) {
+    const existing = await this.getDb().select().from(projectSettings).where(eq(projectSettings.id, "default")).get();
+    if (existing) {
+      await this.getDb().update(projectSettings).set({ ...updates, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(eq(projectSettings.id, "default"));
+    } else {
+      await this.getDb().insert(projectSettings).values({
+        id: "default",
+        ...updates,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      });
+    }
+    console.log("\u2601\uFE0F Project settings updated (Turso)");
+    return this.getProjectSettings();
+  }
+  // =========================================================================
+  // Workflows CRUD
+  // =========================================================================
+  async upsertWorkflow(workflow) {
+    const existing = await this.getDb().select().from(workflowsTable).where(eq(workflowsTable.id, workflow.id)).get();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    if (existing) {
+      const newVersion = (existing.version || 1) + 1;
+      await this.getDb().update(workflowsTable).set({
+        name: workflow.name,
+        description: workflow.description,
+        triggerType: workflow.triggerType,
+        triggerConfig: workflow.triggerConfig,
+        nodes: workflow.nodes,
+        edges: workflow.edges,
+        settings: workflow.settings || null,
+        version: newVersion,
+        updatedAt: now,
+        publishedBy: workflow.publishedBy
+      }).where(eq(workflowsTable.id, workflow.id));
+      return { version: newVersion };
+    } else {
+      await this.getDb().insert(workflowsTable).values({
+        id: workflow.id,
+        name: workflow.name,
+        description: workflow.description,
+        triggerType: workflow.triggerType,
+        triggerConfig: workflow.triggerConfig,
+        nodes: workflow.nodes,
+        edges: workflow.edges,
+        settings: workflow.settings || null,
+        version: 1,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+        publishedBy: workflow.publishedBy
+      });
+      return { version: 1 };
+    }
+  }
+  async getWorkflowById(id) {
+    const row = await this.getDb().select().from(workflowsTable).where(eq(workflowsTable.id, id)).get();
+    return row ? { ...row, isActive: !!row.isActive } : null;
+  }
+  async getActiveWebhookWorkflow(id) {
+    const row = await this.getDb().select().from(workflowsTable).where(and(eq(workflowsTable.id, id), eq(workflowsTable.isActive, true))).get();
+    return row ? { ...row, isActive: !!row.isActive } : null;
+  }
+  // =========================================================================
+  // Executions CRUD
+  // =========================================================================
+  async createExecution(execution) {
+    await this.getDb().insert(executionsTable).values({
+      id: execution.id,
+      workflowId: execution.workflowId,
+      status: execution.status,
+      triggerType: execution.triggerType,
+      triggerPayload: execution.triggerPayload || null,
+      nodeExecutions: execution.nodeExecutions || null,
+      startedAt: execution.startedAt
+    });
+  }
+  async getExecutionById(id) {
+    const row = await this.getDb().select().from(executionsTable).where(eq(executionsTable.id, id)).get();
+    return row;
+  }
+  async updateExecution(id, updates) {
+    const setValues = {};
+    if (updates.status !== void 0) setValues.status = updates.status;
+    if (updates.result !== void 0) setValues.result = updates.result;
+    if (updates.error !== void 0) setValues.error = updates.error;
+    if (updates.nodeExecutions !== void 0) setValues.nodeExecutions = updates.nodeExecutions;
+    if (updates.usage !== void 0) setValues.usage = updates.usage;
+    if (updates.endedAt !== void 0) setValues.endedAt = updates.endedAt;
+    if (Object.keys(setValues).length > 0) {
+      await this.getDb().update(executionsTable).set(setValues).where(eq(executionsTable.id, id));
+    }
+  }
+  async listExecutionsByWorkflow(workflowId, limit = 20) {
+    const rows = await this.getDb().select().from(executionsTable).where(eq(executionsTable.workflowId, workflowId)).orderBy(desc(executionsTable.startedAt)).limit(limit);
+    return rows;
+  }
+  async listAllExecutions(filters) {
+    const conditions = [];
+    if (filters?.workflowId) {
+      conditions.push(eq(executionsTable.workflowId, filters.workflowId));
+    }
+    if (filters?.since) {
+      conditions.push(sql2`${executionsTable.startedAt} >= ${filters.since}`);
+    }
+    if (filters?.until) {
+      conditions.push(sql2`${executionsTable.startedAt} <= ${filters.until}`);
+    }
+    let query = this.getDb().select().from(executionsTable);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    let rows = await query.orderBy(desc(executionsTable.startedAt)).limit(filters?.limit || 100);
+    if (filters?.status && filters.status.length > 0) {
+      rows = rows.filter((r) => filters.status.includes(r.status));
+    }
+    return rows;
+  }
+  async getExecutionStats() {
+    const allExecutions = await this.getDb().select().from(executionsTable);
+    const statsMap = /* @__PURE__ */ new Map();
+    for (const exec of allExecutions) {
+      const current = statsMap.get(exec.workflowId) || {
+        workflowId: exec.workflowId,
+        totalRuns: 0,
+        successfulRuns: 0,
+        failedRuns: 0
+      };
+      current.totalRuns++;
+      if (exec.status === "completed") current.successfulRuns++;
+      else if (exec.status === "error") current.failedRuns++;
+      statsMap.set(exec.workflowId, current);
+    }
+    return Array.from(statsMap.values());
+  }
+  // =========================================================================
+  // Dead Letter Queue
+  // =========================================================================
+  async createDeadLetter(deadLetter) {
+    await this.getDb().run(sql2`
+            INSERT INTO dead_letters (id, workflow_id, execution_id, error, payload, retry_count)
+            VALUES (${deadLetter.id}, ${deadLetter.workflowId}, ${deadLetter.executionId},
+                    ${deadLetter.error}, ${deadLetter.payload}, ${deadLetter.retryCount || 0})
+        `);
+  }
+};
+
+// src/storage/LocalSqliteProvider.ts
+import { drizzle as drizzle2 } from "drizzle-orm/libsql";
+import { createClient as createClient2 } from "@libsql/client";
+import { sql as sql3, eq as eq2, and as and2, desc as desc2 } from "drizzle-orm";
+var DEFAULT_FAVICON2 = "/static/icon.png";
+var LocalSqliteProvider = class {
+  db = null;
+  /** Get or create the database connection */
+  getDb() {
+    if (!this.db) {
+      const client = createClient2({
+        url: process.env.PAGES_DB_URL || "file:./data/pages.db"
+      });
+      this.db = drizzle2(client);
+    }
+    return this.db;
+  }
+  // =========================================================================
+  // Lifecycle
+  // =========================================================================
+  async init() {
+    const database = this.getDb();
+    await runMigrations(
+      async (sqlStr) => {
+        await database.run(sql3.raw(sqlStr));
+      },
+      "LocalSqlite"
+    );
+    console.log("\u{1F4C4} State DB initialized (local SQLite)");
+  }
+  async initSettings() {
+    console.log("\u2699\uFE0F Project settings database initialized");
+  }
+  // =========================================================================
+  // Pages CRUD
+  // =========================================================================
+  async upsertPage(page) {
+    const database = this.getDb();
+    const record = {
+      id: page.id,
+      slug: page.slug,
+      name: page.name,
+      title: page.title || null,
+      description: page.description || null,
+      layoutData: JSON.stringify(page.layoutData),
+      seoData: page.seoData ? JSON.stringify(page.seoData) : null,
+      datasources: page.datasources ? JSON.stringify(page.datasources) : null,
+      cssBundle: page.cssBundle || null,
+      version: page.version,
+      publishedAt: page.publishedAt,
+      isPublic: page.isPublic,
+      isHomepage: page.isHomepage,
+      contentHash: page.contentHash || null
+    };
+    if (page.isHomepage) {
+      await database.update(publishedPages).set({ isHomepage: false }).where(eq2(publishedPages.isHomepage, true));
+      console.log(`\u{1F4DD} Cleared old homepage flag(s) before setting new homepage: ${page.slug}`);
+    }
+    await database.insert(publishedPages).values(record).onConflictDoUpdate({
+      target: publishedPages.slug,
+      set: { ...record, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }
+    });
+    console.log(`\u{1F4DD} Upserted published page: ${page.slug} (v${page.version})`);
+    return { success: true, version: page.version };
+  }
+  async getPageBySlug(slug) {
+    const record = await this.getDb().select().from(publishedPages).where(eq2(publishedPages.slug, slug)).get();
+    if (!record) return null;
+    return {
+      id: record.id,
+      slug: record.slug,
+      name: record.name,
+      title: record.title || void 0,
+      description: record.description || void 0,
+      layoutData: JSON.parse(record.layoutData),
+      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
+      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
+      cssBundle: record.cssBundle || void 0,
+      version: record.version,
+      publishedAt: record.publishedAt,
+      isPublic: record.isPublic,
+      isHomepage: record.isHomepage
+    };
+  }
+  async getHomepage() {
+    const record = await this.getDb().select().from(publishedPages).where(eq2(publishedPages.isHomepage, true)).get();
+    if (!record) return null;
+    return {
+      id: record.id,
+      slug: record.slug,
+      name: record.name,
+      title: record.title || void 0,
+      description: record.description || void 0,
+      layoutData: JSON.parse(record.layoutData),
+      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
+      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
+      cssBundle: record.cssBundle || void 0,
+      version: record.version,
+      publishedAt: record.publishedAt,
+      isPublic: record.isPublic,
+      isHomepage: record.isHomepage
+    };
+  }
+  async deletePage(slug) {
+    await this.getDb().delete(publishedPages).where(eq2(publishedPages.slug, slug));
+    return true;
+  }
+  async listPages() {
+    return await this.getDb().select({
+      slug: publishedPages.slug,
+      name: publishedPages.name,
+      version: publishedPages.version
+    }).from(publishedPages);
+  }
+  // =========================================================================
+  // Project Settings CRUD
+  // =========================================================================
+  async getProjectSettings() {
+    const record = await this.getDb().select().from(projectSettings).where(eq2(projectSettings.id, "default")).get();
+    if (!record) {
+      return {
+        id: "default",
+        faviconUrl: null,
+        logoUrl: null,
+        siteName: null,
+        siteDescription: null,
+        appUrl: null,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+    return record;
+  }
+  async getFaviconUrl() {
+    const settings = await this.getProjectSettings();
+    return settings.faviconUrl || DEFAULT_FAVICON2;
+  }
+  async updateProjectSettings(updates) {
+    const database = this.getDb();
+    const existing = await database.select().from(projectSettings).where(eq2(projectSettings.id, "default")).get();
+    if (existing) {
+      await database.update(projectSettings).set({ ...updates, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(eq2(projectSettings.id, "default"));
+    } else {
+      await database.insert(projectSettings).values({
+        id: "default",
+        ...updates,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      });
+    }
+    console.log("\u2699\uFE0F Project settings updated");
+    return this.getProjectSettings();
+  }
+  // =========================================================================
+  // Workflows CRUD
+  // =========================================================================
+  async upsertWorkflow(workflow) {
+    const database = this.getDb();
+    const existing = await database.select().from(workflowsTable).where(eq2(workflowsTable.id, workflow.id)).get();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    if (existing) {
+      const newVersion = (existing.version || 1) + 1;
+      await database.update(workflowsTable).set({
+        name: workflow.name,
+        description: workflow.description,
+        triggerType: workflow.triggerType,
+        triggerConfig: workflow.triggerConfig,
+        nodes: workflow.nodes,
+        edges: workflow.edges,
+        settings: workflow.settings || null,
+        version: newVersion,
+        updatedAt: now,
+        publishedBy: workflow.publishedBy
+      }).where(eq2(workflowsTable.id, workflow.id));
+      return { version: newVersion };
+    } else {
+      await database.insert(workflowsTable).values({
+        id: workflow.id,
+        name: workflow.name,
+        description: workflow.description,
+        triggerType: workflow.triggerType,
+        triggerConfig: workflow.triggerConfig,
+        nodes: workflow.nodes,
+        edges: workflow.edges,
+        settings: workflow.settings || null,
+        version: 1,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+        publishedBy: workflow.publishedBy
+      });
+      return { version: 1 };
+    }
+  }
+  async getWorkflowById(id) {
+    const row = await this.getDb().select().from(workflowsTable).where(eq2(workflowsTable.id, id)).get();
+    return row ? { ...row, isActive: !!row.isActive } : null;
+  }
+  async getActiveWebhookWorkflow(id) {
+    const row = await this.getDb().select().from(workflowsTable).where(and2(eq2(workflowsTable.id, id), eq2(workflowsTable.isActive, true))).get();
+    return row ? { ...row, isActive: !!row.isActive } : null;
+  }
+  // =========================================================================
+  // Executions CRUD
+  // =========================================================================
+  async createExecution(execution) {
+    await this.getDb().insert(executionsTable).values({
+      id: execution.id,
+      workflowId: execution.workflowId,
+      status: execution.status,
+      triggerType: execution.triggerType,
+      triggerPayload: execution.triggerPayload || null,
+      nodeExecutions: execution.nodeExecutions || null,
+      startedAt: execution.startedAt
+    });
+  }
+  async getExecutionById(id) {
+    const row = await this.getDb().select().from(executionsTable).where(eq2(executionsTable.id, id)).get();
+    return row;
+  }
+  async updateExecution(id, updates) {
+    const setValues = {};
+    if (updates.status !== void 0) setValues.status = updates.status;
+    if (updates.result !== void 0) setValues.result = updates.result;
+    if (updates.error !== void 0) setValues.error = updates.error;
+    if (updates.nodeExecutions !== void 0) setValues.nodeExecutions = updates.nodeExecutions;
+    if (updates.usage !== void 0) setValues.usage = updates.usage;
+    if (updates.endedAt !== void 0) setValues.endedAt = updates.endedAt;
+    if (Object.keys(setValues).length > 0) {
+      await this.getDb().update(executionsTable).set(setValues).where(eq2(executionsTable.id, id));
+    }
+  }
+  async listExecutionsByWorkflow(workflowId, limit = 20) {
+    const rows = await this.getDb().select().from(executionsTable).where(eq2(executionsTable.workflowId, workflowId)).orderBy(desc2(executionsTable.startedAt)).limit(limit);
+    return rows;
+  }
+  async listAllExecutions(filters) {
+    const conditions = [];
+    if (filters?.workflowId) {
+      conditions.push(eq2(executionsTable.workflowId, filters.workflowId));
+    }
+    if (filters?.since) {
+      conditions.push(sql3`${executionsTable.startedAt} >= ${filters.since}`);
+    }
+    if (filters?.until) {
+      conditions.push(sql3`${executionsTable.startedAt} <= ${filters.until}`);
+    }
+    let query = this.getDb().select().from(executionsTable);
+    if (conditions.length > 0) {
+      query = query.where(and2(...conditions));
+    }
+    let rows = await query.orderBy(desc2(executionsTable.startedAt)).limit(filters?.limit || 100);
+    if (filters?.status && filters.status.length > 0) {
+      rows = rows.filter((r) => filters.status.includes(r.status));
+    }
+    return rows;
+  }
+  async getExecutionStats() {
+    const allExecutions = await this.getDb().select().from(executionsTable);
+    const statsMap = /* @__PURE__ */ new Map();
+    for (const exec of allExecutions) {
+      const current = statsMap.get(exec.workflowId) || {
+        workflowId: exec.workflowId,
+        totalRuns: 0,
+        successfulRuns: 0,
+        failedRuns: 0
+      };
+      current.totalRuns++;
+      if (exec.status === "completed") current.successfulRuns++;
+      else if (exec.status === "error") current.failedRuns++;
+      statsMap.set(exec.workflowId, current);
+    }
+    return Array.from(statsMap.values());
+  }
+  // =========================================================================
+  // Dead Letter Queue
+  // =========================================================================
+  async createDeadLetter(deadLetter) {
+    await this.getDb().run(sql3`
+            INSERT INTO dead_letters (id, workflow_id, execution_id, error, payload, retry_count)
+            VALUES (${deadLetter.id}, ${deadLetter.workflowId}, ${deadLetter.executionId},
+                    ${deadLetter.error}, ${deadLetter.payload}, ${deadLetter.retryCount || 0})
+        `);
+  }
+};
+
+// src/storage/index.ts
+var _provider = null;
+function isCloudRuntime() {
+  return process.env.FRONTBASE_ADAPTER_PLATFORM === "cloudflare" || process.env.FRONTBASE_DEPLOYMENT_MODE === "cloud" || !!process.env.FRONTBASE_STATE_DB_URL;
 }
-var client = createClient({
-  url: connectionUrl,
-  authToken
+function createInitialProvider() {
+  if (isCloudRuntime()) {
+    console.log("\u2601\uFE0F Using TursoHttpProvider");
+    return new TursoHttpProvider();
+  }
+  console.log("\u{1F4BE} Using LocalSqliteProvider");
+  return new LocalSqliteProvider();
+}
+function getStateProvider() {
+  if (_provider && _provider._isStub && isCloudRuntime()) {
+    console.log("\u{1F504} Auto-upgrading from stub to TursoHttpProvider (env vars now available)");
+    _provider = new TursoHttpProvider();
+  }
+  if (!_provider) {
+    _provider = createInitialProvider();
+  }
+  return _provider;
+}
+var _initPromise = null;
+function ensureInitialized() {
+  if (!_initPromise) {
+    const provider = getStateProvider();
+    _initPromise = provider.init().catch((err) => {
+      _initPromise = null;
+      throw err;
+    });
+  }
+  return _initPromise;
+}
+var stateProvider = new Proxy({}, {
+  get(_target, prop) {
+    if (prop === "init") {
+      return () => ensureInitialized();
+    }
+    return async (...args) => {
+      await ensureInitialized();
+      const provider = getStateProvider();
+      const value = provider[prop];
+      if (typeof value === "function") {
+        return value.apply(provider, args);
+      }
+      return value;
+    };
+  }
 });
-var db = drizzle(client, { schema: schema_exports });
 
 // src/schemas/workflow.ts
 import { z as z2 } from "@hono/zod-openapi";
@@ -201,7 +1066,7 @@ var WorkflowSchema = z2.object({
   id: z2.string().uuid(),
   name: z2.string().min(1).max(255),
   description: z2.string().optional(),
-  triggerType: TriggerTypeSchema,
+  triggerType: z2.string().openapi({ description: "Trigger type(s), comma-separated for multi-trigger" }),
   triggerConfig: z2.record(z2.any()).optional().nullable(),
   nodes: z2.array(WorkflowNodeSchema),
   edges: z2.array(WorkflowEdgeSchema),
@@ -212,10 +1077,11 @@ var DeployWorkflowSchema = z2.object({
   id: z2.string().uuid(),
   name: z2.string().min(1),
   description: z2.string().optional().nullable(),
-  triggerType: TriggerTypeSchema,
+  triggerType: z2.string().openapi({ description: "Trigger type(s), comma-separated for multi-trigger" }),
   triggerConfig: z2.record(z2.any()).optional().nullable(),
   nodes: z2.array(WorkflowNodeSchema),
   edges: z2.array(WorkflowEdgeSchema),
+  isActive: z2.boolean().optional(),
   publishedBy: z2.string().optional().nullable()
 }).openapi("DeployWorkflow");
 var NodeExecutionSchema = z2.object({
@@ -262,8 +1128,7 @@ var SuccessResponseSchema = z2.object({
 }).openapi("SuccessResponse");
 
 // src/routes/deploy.ts
-import { eq } from "drizzle-orm";
-var deployRoute = new OpenAPIHono2();
+var deployRoute = new OpenAPIHono3();
 var route2 = createRoute2({
   method: "post",
   path: "/",
@@ -304,49 +1169,28 @@ var route2 = createRoute2({
 deployRoute.openapi(route2, async (c) => {
   try {
     const body = c.req.valid("json");
-    const existing = await db.select().from(workflows).where(eq(workflows.id, body.id)).limit(1);
-    const now = (/* @__PURE__ */ new Date()).toISOString();
-    if (existing.length > 0) {
-      const newVersion = (existing[0].version || 1) + 1;
-      await db.update(workflows).set({
-        name: body.name,
-        description: body.description,
-        triggerType: body.triggerType,
-        triggerConfig: JSON.stringify(body.triggerConfig || {}),
-        nodes: JSON.stringify(body.nodes),
-        edges: JSON.stringify(body.edges),
-        version: newVersion,
-        updatedAt: now,
-        publishedBy: body.publishedBy
-      }).where(eq(workflows.id, body.id));
-      return c.json({
-        success: true,
-        message: "Workflow updated successfully",
-        workflowId: body.id,
-        version: newVersion
-      }, 200);
-    } else {
-      await db.insert(workflows).values({
-        id: body.id,
-        name: body.name,
-        description: body.description,
-        triggerType: body.triggerType,
-        triggerConfig: JSON.stringify(body.triggerConfig || {}),
-        nodes: JSON.stringify(body.nodes),
-        edges: JSON.stringify(body.edges),
-        version: 1,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-        publishedBy: body.publishedBy
-      });
-      return c.json({
-        success: true,
-        message: "Workflow deployed successfully",
-        workflowId: body.id,
-        version: 1
-      }, 200);
-    }
+    const workflow = {
+      id: body.id,
+      name: body.name,
+      description: body.description || null,
+      triggerType: body.triggerType,
+      triggerConfig: JSON.stringify(body.triggerConfig || {}),
+      nodes: JSON.stringify(body.nodes),
+      edges: JSON.stringify(body.edges),
+      settings: body.settings ? JSON.stringify(body.settings) : null,
+      version: 1,
+      isActive: body.isActive ?? true,
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      publishedBy: body.publishedBy || null
+    };
+    const { version } = await stateProvider.upsertWorkflow(workflow);
+    return c.json({
+      success: true,
+      message: version > 1 ? "Workflow updated successfully" : "Workflow deployed successfully",
+      workflowId: body.id,
+      version
+    }, 200);
   } catch (error) {
     return c.json({
       error: "DeploymentError",
@@ -357,187 +1201,57 @@ deployRoute.openapi(route2, async (c) => {
 });
 
 // src/routes/execute.ts
-import { OpenAPIHono as OpenAPIHono3, createRoute as createRoute3, z as z4 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono4, createRoute as createRoute3, z as z4 } from "@hono/zod-openapi";
 import { v4 as uuidv4 } from "uuid";
-import { eq as eq3 } from "drizzle-orm";
 
-// src/engine/runtime.ts
-import { eq as eq2 } from "drizzle-orm";
-async function executeWorkflow(executionId, workflow, inputParameters) {
-  const nodes = JSON.parse(workflow.nodes);
-  const edges = JSON.parse(workflow.edges);
-  const context = {
-    executionId,
-    workflowId: workflow.id,
-    parameters: inputParameters,
-    nodeOutputs: {},
-    nodeExecutions: nodes.map((n) => ({
-      nodeId: n.id,
-      status: "idle"
-    }))
-  };
+// src/engine/checkpoint.ts
+var CHECKPOINT_TTL = 3600;
+function checkpointKey(executionId) {
+  return `exec:${executionId}:checkpoint`;
+}
+async function saveCheckpoint(cp) {
   try {
-    await updateExecutionStatus(executionId, "executing", context.nodeExecutions);
-    const targetNodeIds = new Set(edges.map((e) => e.target));
-    const startNodes = nodes.filter((n) => !targetNodeIds.has(n.id));
-    const executed = /* @__PURE__ */ new Set();
-    const queue = [...startNodes.map((n) => n.id)];
-    while (queue.length > 0) {
-      const nodeId = queue.shift();
-      if (executed.has(nodeId)) continue;
-      const node = nodes.find((n) => n.id === nodeId);
-      if (!node) continue;
-      const incomingEdges = edges.filter((e) => e.target === nodeId);
-      const dependenciesMet = incomingEdges.every((e) => executed.has(e.source));
-      if (!dependenciesMet) {
-        queue.push(nodeId);
-        continue;
-      }
-      const inputs = {};
-      for (const edge of incomingEdges) {
-        const sourceOutputs = context.nodeOutputs[edge.source] || {};
-        if (edge.targetInput && edge.sourceOutput) {
-          inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
-        }
-      }
-      if (startNodes.some((n) => n.id === nodeId)) {
-        Object.assign(inputs, context.parameters);
-      }
-      try {
-        updateNodeStatus(context, nodeId, "executing");
-        await updateExecutionStatus(executionId, "executing", context.nodeExecutions);
-        const outputs = await executeNode(node, inputs, context);
-        context.nodeOutputs[nodeId] = outputs;
-        updateNodeStatus(context, nodeId, "completed", outputs);
-        executed.add(nodeId);
-        const outgoingEdges = edges.filter((e) => e.source === nodeId);
-        for (const edge of outgoingEdges) {
-          if (!executed.has(edge.target)) {
-            queue.push(edge.target);
-          }
-        }
-      } catch (error) {
-        updateNodeStatus(context, nodeId, "error", void 0, error.message);
-        throw error;
-      }
-    }
-    const sourceNodeIds = new Set(edges.map((e) => e.source));
-    const endNodes = nodes.filter((n) => !sourceNodeIds.has(n.id));
-    const result = {};
-    for (const node of endNodes) {
-      result[node.id] = context.nodeOutputs[node.id];
-    }
-    await db.update(executions).set({
-      status: "completed",
-      nodeExecutions: JSON.stringify(context.nodeExecutions),
-      result: JSON.stringify(result),
-      endedAt: (/* @__PURE__ */ new Date()).toISOString()
-    }).where(eq2(executions.id, executionId));
-  } catch (error) {
-    await db.update(executions).set({
-      status: "error",
-      nodeExecutions: JSON.stringify(context.nodeExecutions),
-      error: error.message,
-      endedAt: (/* @__PURE__ */ new Date()).toISOString()
-    }).where(eq2(executions.id, executionId));
+    await cacheProvider.setex(
+      checkpointKey(cp.executionId),
+      CHECKPOINT_TTL,
+      JSON.stringify(cp)
+    );
+  } catch {
   }
 }
-async function executeSingleNode(executionId, workflow, targetNodeId, inputParameters) {
-  const nodes = JSON.parse(workflow.nodes);
-  const edges = JSON.parse(workflow.edges);
-  const targetNode = nodes.find((n) => n.id === targetNodeId);
-  if (!targetNode) {
-    throw new Error(`Node ${targetNodeId} not found in workflow`);
-  }
-  const context = {
-    executionId,
-    workflowId: workflow.id,
-    parameters: inputParameters,
-    nodeOutputs: {},
-    nodeExecutions: []
-  };
+async function loadCheckpoint(executionId) {
   try {
-    await updateExecutionStatus(executionId, "executing", context.nodeExecutions);
-    const upstreamNodes = getUpstreamNodes(targetNodeId, nodes, edges);
-    const nodesToExecute = [...upstreamNodes, targetNodeId];
-    context.nodeExecutions = nodesToExecute.map((nodeId) => ({
-      nodeId,
-      status: "idle"
-    }));
-    const executed = /* @__PURE__ */ new Set();
-    const queue = [...nodesToExecute];
-    while (queue.length > 0) {
-      const nodeId = queue.shift();
-      if (executed.has(nodeId)) continue;
-      const node = nodes.find((n) => n.id === nodeId);
-      if (!node) continue;
-      const incomingEdges = edges.filter((e) => e.target === nodeId);
-      const dependenciesMet = incomingEdges.every(
-        (e) => !nodesToExecute.includes(e.source) || executed.has(e.source)
-      );
-      if (!dependenciesMet) {
-        queue.push(nodeId);
-        continue;
-      }
-      const inputs = {};
-      for (const edge of incomingEdges) {
-        const sourceOutputs = context.nodeOutputs[edge.source] || {};
-        if (edge.targetInput && edge.sourceOutput) {
-          inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
-        }
-      }
-      const targetNodeIds = new Set(edges.map((e) => e.target));
-      if (!targetNodeIds.has(nodeId)) {
-        Object.assign(inputs, context.parameters);
-      }
-      try {
-        updateNodeStatus(context, nodeId, "executing");
-        await updateExecutionStatus(executionId, "executing", context.nodeExecutions);
-        const outputs = await executeNode(node, inputs, context);
-        context.nodeOutputs[nodeId] = outputs;
-        updateNodeStatus(context, nodeId, "completed", outputs);
-        executed.add(nodeId);
-      } catch (error) {
-        updateNodeStatus(context, nodeId, "error", void 0, error.message);
-        throw error;
-      }
-    }
-    const result = {
-      [targetNodeId]: context.nodeOutputs[targetNodeId]
-    };
-    await db.update(executions).set({
-      status: "completed",
-      nodeExecutions: JSON.stringify(context.nodeExecutions),
-      result: JSON.stringify(result),
-      endedAt: (/* @__PURE__ */ new Date()).toISOString()
-    }).where(eq2(executions.id, executionId));
-  } catch (error) {
-    await db.update(executions).set({
-      status: "error",
-      nodeExecutions: JSON.stringify(context.nodeExecutions),
-      error: error.message,
-      endedAt: (/* @__PURE__ */ new Date()).toISOString()
-    }).where(eq2(executions.id, executionId));
+    const data = await cacheProvider.get(checkpointKey(executionId));
+    if (!data) return null;
+    if (typeof data === "string") return JSON.parse(data);
+    return data;
+  } catch {
+    return null;
   }
 }
-function getUpstreamNodes(targetNodeId, nodes, edges) {
-  const upstream = [];
-  const visited = /* @__PURE__ */ new Set();
-  const queue = [targetNodeId];
-  while (queue.length > 0) {
-    const nodeId = queue.shift();
-    if (visited.has(nodeId)) continue;
-    visited.add(nodeId);
-    const incomingEdges = edges.filter((e) => e.target === nodeId);
-    for (const edge of incomingEdges) {
-      if (!visited.has(edge.source)) {
-        upstream.push(edge.source);
-        queue.push(edge.source);
-      }
-    }
+async function clearCheckpoint(executionId) {
+  try {
+    await cacheProvider.del(checkpointKey(executionId));
+  } catch {
   }
-  return upstream;
 }
+
+// src/engine/logger.ts
+function createWorkflowLogger(level = "all", prefix = "[Workflow]") {
+  return {
+    info: (msg, ...args) => {
+      if (level === "all") console.log(prefix, msg, ...args);
+    },
+    error: (msg, ...args) => {
+      if (level !== "none") console.error(prefix, msg, ...args);
+    },
+    warn: (msg, ...args) => {
+      if (level !== "none") console.warn(prefix, msg, ...args);
+    }
+  };
+}
+
+// src/engine/node-executors.ts
 async function executeNode(node, inputs, context) {
   switch (node.type) {
     case "trigger":
@@ -557,6 +1271,19 @@ async function executeNode(node, inputs, context) {
     case "console":
       console.log(`[Node ${node.id}]:`, inputs);
       return { logged: true, data: inputs };
+    case "http_response": {
+      const nodeInputs = node.inputs || [];
+      const getVal = (name) => {
+        const inp = nodeInputs.find((i) => i.name === name);
+        return inp?.value !== void 0 ? inp.value : inputs[name];
+      };
+      return {
+        statusCode: getVal("statusCode") || 200,
+        body: getVal("body") ?? inputs,
+        headers: getVal("headers"),
+        contentType: getVal("contentType") || "application/json"
+      };
+    }
     default:
       console.warn(`Unknown node type: ${node.type}`);
       return { ...inputs };
@@ -692,15 +1419,378 @@ function updateNodeStatus(context, nodeId, status, outputs, error) {
     if (error) execution.error = error;
   }
 }
-async function updateExecutionStatus(executionId, status, nodeExecutions) {
-  await db.update(executions).set({
+async function updateExecutionStatus(executionId, status, nodeExecutions, stateProvider2) {
+  await stateProvider2.updateExecution(executionId, {
     status,
     nodeExecutions: JSON.stringify(nodeExecutions)
-  }).where(eq2(executions.id, executionId));
+  });
+}
+
+// src/engine/runtime.ts
+async function executeWorkflow(executionId, workflow, inputParameters, settings) {
+  const s = settings || (workflow.settings ? JSON.parse(workflow.settings) : {});
+  const timeoutMs = s.execution_timeout_ms || 3e4;
+  const cooldownMs = s.cooldown_ms || 0;
+  const tz = s.timezone || "UTC";
+  const log = createWorkflowLogger(s.log_level || "all", `[Workflow:${executionId.slice(0, 8)}]`);
+  const formatTime = () => {
+    try {
+      return (/* @__PURE__ */ new Date()).toLocaleString("sv-SE", { timeZone: tz }).replace(" ", "T");
+    } catch {
+      return (/* @__PURE__ */ new Date()).toISOString();
+    }
+  };
+  const nodes = JSON.parse(workflow.nodes);
+  const edges = JSON.parse(workflow.edges);
+  const context = {
+    executionId,
+    workflowId: workflow.id,
+    parameters: inputParameters,
+    nodeOutputs: {},
+    nodeExecutions: nodes.map((n) => ({
+      nodeId: n.id,
+      status: "idle"
+    }))
+  };
+  async function coreExecute() {
+    try {
+      const checkpoint = await loadCheckpoint(executionId);
+      const executed = /* @__PURE__ */ new Set();
+      if (checkpoint) {
+        log.info(`Resuming from checkpoint (${checkpoint.completedNodes.length} nodes done)`);
+        for (const nodeId of checkpoint.completedNodes) {
+          executed.add(nodeId);
+        }
+        Object.assign(context.nodeOutputs, checkpoint.nodeOutputs);
+        context.nodeExecutions = checkpoint.nodeExecutions;
+      }
+      await updateExecutionStatus(executionId, "executing", context.nodeExecutions, stateProvider);
+      const targetNodeIds = new Set(edges.map((e) => e.target));
+      const startNodes = nodes.filter((n) => !targetNodeIds.has(n.id));
+      const queue = [...startNodes.map((n) => n.id)];
+      while (queue.length > 0) {
+        const nodeId = queue.shift();
+        if (executed.has(nodeId)) {
+          const outgoingEdges = edges.filter((e) => e.source === nodeId);
+          for (const edge of outgoingEdges) {
+            if (!executed.has(edge.target)) {
+              queue.push(edge.target);
+            }
+          }
+          continue;
+        }
+        const node = nodes.find((n) => n.id === nodeId);
+        if (!node) continue;
+        const incomingEdges = edges.filter((e) => e.target === nodeId);
+        const dependenciesMet = incomingEdges.every((e) => executed.has(e.source));
+        if (!dependenciesMet) {
+          queue.push(nodeId);
+          continue;
+        }
+        const inputs = {};
+        for (const edge of incomingEdges) {
+          const sourceOutputs = context.nodeOutputs[edge.source] || {};
+          if (edge.targetInput && edge.sourceOutput) {
+            inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
+          }
+        }
+        if (startNodes.some((n) => n.id === nodeId)) {
+          Object.assign(inputs, context.parameters);
+        }
+        try {
+          updateNodeStatus(context, nodeId, "executing");
+          const outputs = await executeNode(node, inputs, context);
+          context.nodeOutputs[nodeId] = outputs;
+          updateNodeStatus(context, nodeId, "completed", outputs);
+          executed.add(nodeId);
+          log.info(`Node ${node.type || nodeId} completed`);
+          await saveCheckpoint({
+            executionId,
+            workflowId: workflow.id,
+            completedNodes: Array.from(executed),
+            nodeOutputs: context.nodeOutputs,
+            nodeExecutions: context.nodeExecutions
+          });
+          const outgoingEdges = edges.filter((e) => e.source === nodeId);
+          for (const edge of outgoingEdges) {
+            if (!executed.has(edge.target)) {
+              queue.push(edge.target);
+            }
+          }
+        } catch (error) {
+          updateNodeStatus(context, nodeId, "error", void 0, error.message);
+          log.error(`Node ${node?.type || nodeId} failed: ${error.message}`);
+          throw error;
+        }
+      }
+      const sourceNodeIds = new Set(edges.map((e) => e.source));
+      const endNodes = nodes.filter((n) => !sourceNodeIds.has(n.id));
+      const result = {};
+      for (const node of endNodes) {
+        result[node.id] = context.nodeOutputs[node.id];
+      }
+      const responseNode = endNodes.find((n) => n.type === "http_response");
+      let httpResponse = void 0;
+      if (responseNode && context.nodeOutputs[responseNode.id]) {
+        const out = context.nodeOutputs[responseNode.id];
+        httpResponse = {
+          statusCode: out.statusCode || 200,
+          body: out.body,
+          headers: out.headers,
+          contentType: out.contentType || "application/json"
+        };
+      }
+      await stateProvider.updateExecution(executionId, {
+        status: "completed",
+        nodeExecutions: JSON.stringify(context.nodeExecutions),
+        result: JSON.stringify(result),
+        endedAt: formatTime()
+      });
+      await clearCheckpoint(executionId);
+      if (cooldownMs > 0) {
+        try {
+          const cooldownSec = Math.ceil(cooldownMs / 1e3);
+          await cacheProvider.setex(`wf:${workflow.id}:cooldown`, cooldownSec, "1");
+        } catch {
+        }
+      }
+      log.info(`Execution completed (${executed.size} nodes)`);
+      return { status: "completed", result, httpResponse };
+    } catch (error) {
+      if (s.dlq_enabled) {
+        try {
+          await stateProvider.createDeadLetter?.({
+            id: crypto.randomUUID?.() || executionId + "-dlq",
+            workflowId: workflow.id,
+            executionId,
+            error: error.message,
+            payload: JSON.stringify(inputParameters)
+          });
+        } catch {
+        }
+      }
+      await stateProvider.updateExecution(executionId, {
+        status: "error",
+        nodeExecutions: JSON.stringify(context.nodeExecutions),
+        error: error.message,
+        endedAt: formatTime()
+      });
+      log.error(`Execution failed: ${error.message}`);
+      return { status: "error", result: {}, error: error.message };
+    }
+  }
+  const timeoutPromise = new Promise(
+    (_, reject) => setTimeout(() => reject(new Error(
+      `Execution timed out after ${timeoutMs}ms`
+    )), timeoutMs)
+  );
+  return Promise.race([coreExecute(), timeoutPromise]);
+}
+async function executeSingleNode(executionId, workflow, targetNodeId, inputParameters) {
+  const nodes = JSON.parse(workflow.nodes);
+  const edges = JSON.parse(workflow.edges);
+  const targetNode = nodes.find((n) => n.id === targetNodeId);
+  if (!targetNode) {
+    throw new Error(`Node ${targetNodeId} not found in workflow`);
+  }
+  const context = {
+    executionId,
+    workflowId: workflow.id,
+    parameters: inputParameters,
+    nodeOutputs: {},
+    nodeExecutions: []
+  };
+  try {
+    await updateExecutionStatus(executionId, "executing", context.nodeExecutions, stateProvider);
+    const upstreamNodes = getUpstreamNodes(targetNodeId, nodes, edges);
+    const nodesToExecute = [...upstreamNodes, targetNodeId];
+    context.nodeExecutions = nodesToExecute.map((nodeId) => ({
+      nodeId,
+      status: "idle"
+    }));
+    const executed = /* @__PURE__ */ new Set();
+    const queue = [...nodesToExecute];
+    while (queue.length > 0) {
+      const nodeId = queue.shift();
+      if (executed.has(nodeId)) continue;
+      const node = nodes.find((n) => n.id === nodeId);
+      if (!node) continue;
+      const incomingEdges = edges.filter((e) => e.target === nodeId);
+      const dependenciesMet = incomingEdges.every(
+        (e) => !nodesToExecute.includes(e.source) || executed.has(e.source)
+      );
+      if (!dependenciesMet) {
+        queue.push(nodeId);
+        continue;
+      }
+      const inputs = {};
+      for (const edge of incomingEdges) {
+        const sourceOutputs = context.nodeOutputs[edge.source] || {};
+        if (edge.targetInput && edge.sourceOutput) {
+          inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
+        }
+      }
+      const allTargetNodeIds = new Set(edges.map((e) => e.target));
+      if (!allTargetNodeIds.has(nodeId)) {
+        Object.assign(inputs, context.parameters);
+      }
+      try {
+        updateNodeStatus(context, nodeId, "executing");
+        await updateExecutionStatus(executionId, "executing", context.nodeExecutions, stateProvider);
+        const outputs = await executeNode(node, inputs, context);
+        context.nodeOutputs[nodeId] = outputs;
+        updateNodeStatus(context, nodeId, "completed", outputs);
+        executed.add(nodeId);
+      } catch (error) {
+        updateNodeStatus(context, nodeId, "error", void 0, error.message);
+        throw error;
+      }
+    }
+    const result = {
+      [targetNodeId]: context.nodeOutputs[targetNodeId]
+    };
+    await stateProvider.updateExecution(executionId, {
+      status: "completed",
+      nodeExecutions: JSON.stringify(context.nodeExecutions),
+      result: JSON.stringify(result),
+      endedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  } catch (error) {
+    await stateProvider.updateExecution(executionId, {
+      status: "error",
+      nodeExecutions: JSON.stringify(context.nodeExecutions),
+      error: error.message,
+      endedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  }
+}
+function getUpstreamNodes(targetNodeId, nodes, edges) {
+  const upstream = [];
+  const visited = /* @__PURE__ */ new Set();
+  const queue = [targetNodeId];
+  while (queue.length > 0) {
+    const nodeId = queue.shift();
+    if (visited.has(nodeId)) continue;
+    visited.add(nodeId);
+    const incomingEdges = edges.filter((e) => e.target === nodeId);
+    for (const edge of incomingEdges) {
+      if (!visited.has(edge.source)) {
+        upstream.push(edge.source);
+        queue.push(edge.source);
+      }
+    }
+  }
+  return upstream;
 }
 
 // src/routes/execute.ts
-var executeRoute = new OpenAPIHono3();
+init_redis();
+
+// src/engine/queue.ts
+var queueClient = null;
+var queueInitialized = false;
+function getQueueProvider() {
+  return process.env.FRONTBASE_QUEUE_PROVIDER || "qstash";
+}
+function getQueueClient() {
+  if (queueInitialized) return queueClient;
+  queueInitialized = true;
+  const token = process.env.FRONTBASE_QUEUE_TOKEN || process.env.QSTASH_TOKEN;
+  if (!token) {
+    console.log("\u2B1C Queue: not configured (no FRONTBASE_QUEUE_TOKEN)");
+    return null;
+  }
+  const provider = getQueueProvider();
+  if (provider === "qstash") {
+    try {
+      const { Client } = __require("@upstash/qstash");
+      queueClient = new Client({ token });
+      console.log("\u{1F504} Queue: QStash durable execution enabled");
+      return queueClient;
+    } catch {
+      console.warn("\u26A0\uFE0F Queue: @upstash/qstash not installed, durable execution disabled");
+      return null;
+    }
+  }
+  console.warn(`\u26A0\uFE0F Queue: unsupported provider "${provider}", durable execution disabled`);
+  return null;
+}
+function isQueueEnabled() {
+  return getQueueClient() !== null;
+}
+var isQStashEnabled = isQueueEnabled;
+async function publishExecution(destinationUrl, payload, options) {
+  const client = getQueueClient();
+  if (!client) return null;
+  const provider = getQueueProvider();
+  if (provider === "qstash") {
+    try {
+      const result = await client.publishJSON({
+        url: destinationUrl,
+        body: payload,
+        retries: options?.retries ?? 3
+      });
+      return result.messageId || null;
+    } catch (error) {
+      console.error("[Queue] Publish failed:", error.message);
+      return null;
+    }
+  }
+  console.warn(`[Queue] Publishing not implemented for provider "${provider}"`);
+  return null;
+}
+async function verifyQueueSignature(signature, _body) {
+  if (!signature) return false;
+  const provider = getQueueProvider();
+  if (provider === "qstash") {
+    const currentKey = process.env.FRONTBASE_QUEUE_SIGNING_KEY || process.env.QSTASH_CURRENT_SIGNING_KEY;
+    const nextKey = process.env.FRONTBASE_QUEUE_NEXT_SIGNING_KEY || process.env.QSTASH_NEXT_SIGNING_KEY;
+    if (!currentKey && !nextKey) {
+      console.warn("[Queue] No signing keys configured, skipping verification");
+      return true;
+    }
+    try {
+      const { Receiver } = __require("@upstash/qstash");
+      const receiver = new Receiver({
+        currentSigningKey: currentKey || "",
+        nextSigningKey: nextKey || ""
+      });
+      return await receiver.verify({ signature, body: _body });
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+// src/engine/concurrency.ts
+async function acquireConcurrency(workflowId, limit) {
+  if (limit <= 0) return true;
+  try {
+    const key = `wf:${workflowId}:concurrency`;
+    const current = await cacheProvider.incr(key);
+    if (current === 1) {
+      await cacheProvider.expire(key, 300);
+    }
+    if (current > limit) {
+      await cacheProvider.decr(key);
+      return false;
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+async function releaseConcurrency(workflowId) {
+  try {
+    const key = `wf:${workflowId}:concurrency`;
+    await cacheProvider.decr(key);
+  } catch {
+  }
+}
+
+// src/routes/execute.ts
+var executeRoute = new OpenAPIHono4();
 var route3 = createRoute3({
   method: "post",
   path: "/:id",
@@ -744,13 +1834,40 @@ var route3 = createRoute3({
           schema: ErrorResponseSchema
         }
       }
+    },
+    429: {
+      description: "Rate limited / concurrency exceeded / cooldown",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema
+        }
+      }
+    },
+    401: {
+      description: "Unauthorized (invalid QStash signature)",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema
+        }
+      }
     }
   }
 });
 executeRoute.openapi(route3, async (c) => {
   const { id } = c.req.valid("param");
-  const body = await c.req.json().catch(() => ({}));
-  const [workflow] = await db.select().from(workflows).where(eq3(workflows.id, id)).limit(1);
+  const rawBody = await c.req.text();
+  const body = rawBody ? JSON.parse(rawBody) : {};
+  const qstashSignature = c.req.header("Upstash-Signature");
+  if (qstashSignature) {
+    const valid = await verifyQueueSignature(qstashSignature, rawBody);
+    if (!valid) {
+      return c.json({
+        error: "Unauthorized",
+        message: "Invalid QStash signature"
+      }, 401);
+    }
+  }
+  const workflow = await stateProvider.getWorkflowById(id);
   if (!workflow) {
     return c.json({
       error: "NotFound",
@@ -763,9 +1880,65 @@ executeRoute.openapi(route3, async (c) => {
       message: `Workflow ${id} is not active`
     }, 400);
   }
+  const settings = workflow.settings ? JSON.parse(workflow.settings) : {};
+  const rateLimitEnabled = settings.rate_limit_enabled !== false;
+  const rateLimitMax = settings.rate_limit_max || 60;
+  const debounceSec = Math.ceil((settings.debounce_ms || 0) / 1e3);
+  const cooldownMs = settings.cooldown_ms || 0;
+  const concurrencyLimit = settings.concurrency_limit || 0;
+  if (cooldownMs > 0) {
+    try {
+      const existing = await cacheProvider.get(`wf:${id}:cooldown`);
+      if (existing) {
+        return c.json({
+          error: "CoolDown",
+          message: `Workflow ${id} is cooling down. Try again later.`
+        }, 429);
+      }
+      const timeoutSec = Math.ceil((settings.execution_timeout_ms || 3e4) / 1e3);
+      await cacheProvider.setex(`wf:${id}:cooldown`, timeoutSec, "running");
+    } catch {
+    }
+  }
+  if (debounceSec > 0) {
+    const { shouldDebounce: shouldDebounce2 } = await import("./debounce-HSJYP36F.js");
+    const debounced = await shouldDebounce2(id, debounceSec);
+    if (debounced) {
+      return c.json({
+        error: "Debounced",
+        message: `Workflow ${id} was triggered too recently (${settings.debounce_ms}ms window)`
+      }, 429);
+    }
+  }
+  if (rateLimitEnabled) {
+    try {
+      const { allowed, remaining } = await rateLimit(
+        `wf:${id}:rate:${Math.floor(Date.now() / 6e4)}`,
+        rateLimitMax,
+        60
+      );
+      if (!allowed) {
+        return c.json({
+          error: "RateLimited",
+          message: `Workflow ${id} rate limit exceeded (${rateLimitMax}/min). Retry after 1 minute.`
+        }, 429);
+      }
+      c.header("X-RateLimit-Remaining", String(remaining));
+    } catch {
+    }
+  }
+  if (concurrencyLimit > 0) {
+    const acquired = await acquireConcurrency(id, concurrencyLimit);
+    if (!acquired) {
+      return c.json({
+        error: "ConcurrencyLimitExceeded",
+        message: `Workflow ${id} has reached its concurrency limit (${concurrencyLimit}). Try again later.`
+      }, 429);
+    }
+  }
   const executionId = uuidv4();
   const now = (/* @__PURE__ */ new Date()).toISOString();
-  await db.insert(executions).values({
+  await stateProvider.createExecution({
     id: executionId,
     workflowId: id,
     status: "started",
@@ -774,7 +1947,9 @@ executeRoute.openapi(route3, async (c) => {
     nodeExecutions: JSON.stringify([]),
     startedAt: now
   });
-  executeWorkflow(executionId, workflow, body.parameters || {}).catch((err) => console.error(`Execution ${executionId} failed:`, err));
+  executeWorkflow(executionId, workflow, body.parameters || {}, settings).catch((err) => console.error(`Execution ${executionId} failed:`, err)).finally(() => {
+    if (concurrencyLimit > 0) releaseConcurrency(id);
+  });
   return c.json({
     executionId,
     status: "started",
@@ -823,7 +1998,7 @@ var singleNodeRoute = createRoute3({
 executeRoute.openapi(singleNodeRoute, async (c) => {
   const { id, nodeId } = c.req.valid("param");
   const body = await c.req.json().catch(() => ({}));
-  const [workflow] = await db.select().from(workflows).where(eq3(workflows.id, id)).limit(1);
+  const workflow = await stateProvider.getWorkflowById(id);
   if (!workflow) {
     return c.json({
       error: "NotFound",
@@ -832,7 +2007,7 @@ executeRoute.openapi(singleNodeRoute, async (c) => {
   }
   const executionId = uuidv4();
   const now = (/* @__PURE__ */ new Date()).toISOString();
-  await db.insert(executions).values({
+  await stateProvider.createExecution({
     id: executionId,
     workflowId: id,
     status: "started",
@@ -850,10 +2025,10 @@ executeRoute.openapi(singleNodeRoute, async (c) => {
 });
 
 // src/routes/webhook.ts
-import { OpenAPIHono as OpenAPIHono4, createRoute as createRoute4, z as z5 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono5, createRoute as createRoute4, z as z5 } from "@hono/zod-openapi";
 import { v4 as uuidv42 } from "uuid";
-import { eq as eq4, and } from "drizzle-orm";
-var webhookRoute = new OpenAPIHono4();
+init_redis();
+var webhookRoute = new OpenAPIHono5();
 var route4 = createRoute4({
   method: "post",
   path: "/:id",
@@ -888,47 +2063,291 @@ var route4 = createRoute4({
           schema: ErrorResponseSchema
         }
       }
+    },
+    429: {
+      description: "Rate limited / concurrency exceeded / cooldown",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema
+        }
+      }
     }
   }
 });
 webhookRoute.openapi(route4, async (c) => {
-  const { id } = c.req.valid("param");
-  const payload = c.req.valid("json");
-  const [workflow] = await db.select().from(workflows).where(
-    and(
-      eq4(workflows.id, id),
-      eq4(workflows.isActive, true)
-    )
-  ).limit(1);
-  if (!workflow) {
+  try {
+    const { id } = c.req.valid("param");
+    const payload = c.req.valid("json");
+    const workflow = await stateProvider.getActiveWebhookWorkflow(id);
+    if (!workflow) {
+      return c.json({
+        error: "NotFound",
+        message: `Active workflow ${id} not found`
+      }, 404);
+    }
+    const wfNodes = JSON.parse(workflow.nodes);
+    const triggerNode = wfNodes.find(
+      (n) => n.type === "webhook_trigger" || n.data?.type === "webhook_trigger"
+    );
+    if (triggerNode) {
+      const inputs = triggerNode.data?.inputs || triggerNode.inputs || [];
+      const getInput = (name) => {
+        const inp = inputs.find((i) => i.name === name);
+        return inp?.value;
+      };
+      const authMode = getInput("authentication") || "none";
+      if (authMode === "header") {
+        const expectedName = getInput("headerName") || "X-API-Key";
+        const expectedValue = getInput("headerValue");
+        if (expectedValue) {
+          const actual = c.req.header(expectedName);
+          if (actual !== expectedValue) {
+            return c.json({
+              error: "Unauthorized",
+              message: `Missing or invalid '${expectedName}' header`
+            }, 401);
+          }
+        }
+      } else if (authMode === "basic") {
+        const expectedUser = getInput("username") || "";
+        const expectedPass = getInput("password") || "";
+        const authHeader = c.req.header("Authorization");
+        if (!authHeader || !authHeader.startsWith("Basic ")) {
+          c.header("WWW-Authenticate", 'Basic realm="Webhook"');
+          return c.json({
+            error: "Unauthorized",
+            message: "Basic authentication required"
+          }, 401);
+        }
+        const decoded = atob(authHeader.slice(6));
+        const [user, pass] = decoded.split(":");
+        if (user !== expectedUser || pass !== expectedPass) {
+          return c.json({
+            error: "Unauthorized",
+            message: "Invalid credentials"
+          }, 401);
+        }
+      }
+    }
+    const settings = workflow.settings ? JSON.parse(workflow.settings) : {};
+    const rateLimitEnabled = settings.rate_limit_enabled !== false;
+    const rateLimitMax = settings.rate_limit_max || 60;
+    const debounceSec = Math.ceil((settings.debounce_ms || 0) / 1e3);
+    const cooldownMs = settings.cooldown_ms || 0;
+    const concurrencyLimit = settings.concurrency_limit || 0;
+    if (cooldownMs > 0) {
+      try {
+        const existing = await cacheProvider.get(`wf:${id}:cooldown`);
+        if (existing) {
+          return c.json({
+            error: "CoolDown",
+            message: `Workflow ${id} is cooling down. Try again later.`
+          }, 429);
+        }
+        const timeoutSec = Math.ceil((settings.execution_timeout_ms || 3e4) / 1e3);
+        await cacheProvider.setex(`wf:${id}:cooldown`, timeoutSec, "running");
+      } catch {
+      }
+    }
+    if (rateLimitEnabled) {
+      try {
+        const { allowed, remaining } = await rateLimit(
+          `wf:${id}:rate:${Math.floor(Date.now() / 6e4)}`,
+          rateLimitMax,
+          60
+        );
+        if (!allowed) {
+          return c.json({
+            error: "RateLimited",
+            message: `Workflow ${id} rate limit exceeded (${rateLimitMax}/min). Retry after 1 minute.`
+          }, 429);
+        }
+        c.header("X-RateLimit-Remaining", String(remaining));
+      } catch {
+      }
+    }
+    if (debounceSec > 0 && await shouldDebounce(id, debounceSec)) {
+      return c.json({
+        executionId: null,
+        status: "debounced",
+        message: `Execution skipped (debounced within ${settings.debounce_ms || debounceSec * 1e3}ms window)`
+      }, 200);
+    }
+    if (concurrencyLimit > 0) {
+      const acquired = await acquireConcurrency(id, concurrencyLimit);
+      if (!acquired) {
+        return c.json({
+          error: "ConcurrencyLimitExceeded",
+          message: `Workflow ${id} has reached its concurrency limit (${concurrencyLimit}). Try again later.`
+        }, 429);
+      }
+    }
+    const executionId = uuidv42();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    await stateProvider.createExecution({
+      id: executionId,
+      workflowId: id,
+      status: "started",
+      triggerType: "http_webhook",
+      triggerPayload: JSON.stringify(payload),
+      nodeExecutions: JSON.stringify([]),
+      startedAt: now
+    });
+    const hasResponseNode = wfNodes.some((n) => n.type === "http_response");
+    if (hasResponseNode) {
+      try {
+        const execResult = await executeWorkflow(executionId, workflow, payload.data, settings);
+        if (execResult.httpResponse) {
+          const { statusCode, body, headers: respHeaders, contentType } = execResult.httpResponse;
+          const responseBody = typeof body === "string" ? body : JSON.stringify(body);
+          c.header("Content-Type", contentType || "application/json");
+          if (respHeaders) {
+            for (const [k, v] of Object.entries(respHeaders)) {
+              c.header(k, v);
+            }
+          }
+          c.status(statusCode);
+          return c.body(responseBody);
+        }
+        return c.json({
+          executionId,
+          status: execResult.status,
+          result: execResult.result
+        }, 200);
+      } catch (err) {
+        return c.json({
+          executionId,
+          status: "error",
+          error: err.message
+        }, 500);
+      } finally {
+        if (concurrencyLimit > 0) releaseConcurrency(id);
+      }
+    }
+    if (settings.queue_enabled && isQStashEnabled()) {
+      const publicUrl = process.env.PUBLIC_URL || process.env.EDGE_URL || "";
+      const destUrl = `${publicUrl}/api/execute/${id}`;
+      const msgId = await publishExecution(destUrl, {
+        executionId,
+        workflowId: id,
+        parameters: payload.data,
+        triggerType: "http_webhook",
+        triggerPayload: JSON.stringify(payload)
+      }, {
+        retries: settings.retry_count ?? 3,
+        backoff: settings.retry_backoff ?? "exponential"
+      });
+      if (msgId) {
+        if (concurrencyLimit > 0) releaseConcurrency(id);
+        return c.json({
+          executionId,
+          status: "started",
+          message: "Execution queued via QStash (durable)"
+        }, 200);
+      }
+    }
+    executeWorkflow(executionId, workflow, payload.data, settings).catch((err) => console.error(`Webhook execution ${executionId} failed:`, err)).finally(() => {
+      if (concurrencyLimit > 0) releaseConcurrency(id);
+    });
     return c.json({
-      error: "NotFound",
-      message: `Active workflow ${id} not found`
-    }, 404);
+      executionId,
+      status: "started",
+      message: "Webhook received, execution started"
+    }, 200);
+  } catch (err) {
+    console.error("[Webhook Error]", err);
+    return c.json({
+      success: false,
+      error: err.message || "Unknown webhook error",
+      stack: process.env.NODE_ENV !== "production" ? err.stack : void 0
+    }, 500);
   }
-  const executionId = uuidv42();
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  await db.insert(executions).values({
-    id: executionId,
-    workflowId: id,
-    status: "started",
-    triggerType: "http_webhook",
-    triggerPayload: JSON.stringify(payload),
-    nodeExecutions: JSON.stringify([]),
-    startedAt: now
-  });
-  executeWorkflow(executionId, workflow, payload.data).catch((err) => console.error(`Webhook execution ${executionId} failed:`, err));
-  return c.json({
-    executionId,
-    status: "started",
-    message: "Webhook received, execution started"
-  }, 200);
 });
 
 // src/routes/executions.ts
-import { OpenAPIHono as OpenAPIHono5, createRoute as createRoute5, z as z6 } from "@hono/zod-openapi";
-import { eq as eq5, desc } from "drizzle-orm";
-var executionsRoute = new OpenAPIHono5();
+import { OpenAPIHono as OpenAPIHono6, createRoute as createRoute5, z as z6 } from "@hono/zod-openapi";
+var executionsRoute = new OpenAPIHono6();
+var allRoute = createRoute5({
+  method: "get",
+  path: "/all",
+  tags: ["Executions"],
+  summary: "List all executions across all workflows",
+  description: "Returns recent executions with optional filters (status, date range)",
+  request: {
+    query: z6.object({
+      limit: z6.string().optional().openapi({ description: "Max results (default 100)" }),
+      status: z6.string().optional().openapi({ description: "Comma-separated statuses" }),
+      workflowId: z6.string().optional().openapi({ description: "Filter by workflow ID" }),
+      since: z6.string().optional().openapi({ description: "ISO date lower bound" }),
+      until: z6.string().optional().openapi({ description: "ISO date upper bound" })
+    })
+  },
+  responses: {
+    200: {
+      description: "All executions",
+      content: {
+        "application/json": {
+          schema: z6.object({
+            executions: z6.array(ExecutionSchema.omit({ nodeExecutions: true, triggerPayload: true })),
+            total: z6.number()
+          })
+        }
+      }
+    }
+  }
+});
+executionsRoute.openapi(allRoute, async (c) => {
+  const q = c.req.valid("query");
+  const filters = {
+    limit: Math.min(parseInt(q.limit || "100"), 500),
+    status: q.status ? q.status.split(",") : void 0,
+    workflowId: q.workflowId || void 0,
+    since: q.since || void 0,
+    until: q.until || void 0
+  };
+  const results = await stateProvider.listAllExecutions(filters);
+  return c.json({
+    executions: results.map((e) => ({
+      id: e.id,
+      workflowId: e.workflowId,
+      status: e.status,
+      triggerType: e.triggerType,
+      error: e.error || void 0,
+      usage: e.usage || void 0,
+      startedAt: e.startedAt,
+      endedAt: e.endedAt || void 0
+    })),
+    total: results.length
+  }, 200);
+});
+var statsRoute = createRoute5({
+  method: "get",
+  path: "/stats",
+  tags: ["Executions"],
+  summary: "Get execution counts per workflow",
+  description: "Returns run counts for each workflow",
+  responses: {
+    200: {
+      description: "Execution stats",
+      content: {
+        "application/json": {
+          schema: z6.object({
+            stats: z6.array(z6.object({
+              workflowId: z6.string(),
+              totalRuns: z6.number(),
+              successfulRuns: z6.number(),
+              failedRuns: z6.number()
+            }))
+          })
+        }
+      }
+    }
+  }
+});
+executionsRoute.openapi(statsRoute, async (c) => {
+  const stats = await stateProvider.getExecutionStats();
+  return c.json({ stats }, 200);
+});
 var getRoute = createRoute5({
   method: "get",
   path: "/:id",
@@ -961,7 +2380,7 @@ var getRoute = createRoute5({
 });
 executionsRoute.openapi(getRoute, async (c) => {
   const { id } = c.req.valid("param");
-  const [execution] = await db.select().from(executions).where(eq5(executions.id, id)).limit(1);
+  const execution = await stateProvider.getExecutionById(id);
   if (!execution) {
     return c.json({
       error: "NotFound",
@@ -1014,7 +2433,7 @@ executionsRoute.openapi(listRoute, async (c) => {
   const { workflowId } = c.req.valid("param");
   const { limit } = c.req.valid("query");
   const maxResults = Math.min(parseInt(limit || "20"), 100);
-  const results = await db.select().from(executions).where(eq5(executions.workflowId, workflowId)).orderBy(desc(executions.startedAt)).limit(maxResults);
+  const results = await stateProvider.listExecutionsByWorkflow(workflowId, maxResults);
   return c.json({
     executions: results.map((e) => ({
       id: e.id,
@@ -1029,52 +2448,567 @@ executionsRoute.openapi(listRoute, async (c) => {
     total: results.length
   }, 200);
 });
-var statsRoute = createRoute5({
-  method: "get",
-  path: "/stats",
-  tags: ["Executions"],
-  summary: "Get execution counts per workflow",
-  description: "Returns run counts for each workflow",
-  responses: {
-    200: {
-      description: "Execution stats",
+
+// src/routes/update.ts
+import { OpenAPIHono as OpenAPIHono7, createRoute as createRoute6, z as z7 } from "@hono/zod-openapi";
+var updateRoute = new OpenAPIHono7();
+var route5 = createRoute6({
+  method: "post",
+  path: "/",
+  tags: ["System"],
+  summary: "Self-update the Edge Engine bundle",
+  description: "Receives a new compiled bundle, writes to disk, and schedules a graceful restart.",
+  request: {
+    body: {
       content: {
         "application/json": {
-          schema: z6.object({
-            stats: z6.array(z6.object({
-              workflowId: z6.string(),
-              totalRuns: z6.number(),
-              successfulRuns: z6.number(),
-              failedRuns: z6.number()
-            }))
+          schema: z7.object({
+            script_content: z7.string().min(1).openapi({
+              description: "The compiled JS bundle content"
+            }),
+            source_hash: z7.string().min(1).openapi({
+              description: "12-char source hash for tracking"
+            }),
+            version: z7.string().optional().openapi({
+              description: "Optional version string"
+            })
           })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Bundle written \u2014 restart scheduled",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema.extend({
+            source_hash: z7.string(),
+            restart_in_ms: z7.number()
+          })
+        }
+      }
+    },
+    400: {
+      description: "Invalid payload",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema
+        }
+      }
+    },
+    500: {
+      description: "Write failed",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema
         }
       }
     }
   }
 });
-executionsRoute.openapi(statsRoute, async (c) => {
-  const allExecutions = await db.select().from(executions);
-  const statsMap = /* @__PURE__ */ new Map();
-  for (const exec of allExecutions) {
-    const current = statsMap.get(exec.workflowId) || { totalRuns: 0, successfulRuns: 0, failedRuns: 0 };
-    current.totalRuns++;
-    if (exec.status === "completed") {
-      current.successfulRuns++;
-    } else if (exec.status === "error") {
-      current.failedRuns++;
+updateRoute.openapi(route5, async (c) => {
+  try {
+    const { script_content, source_hash, version } = c.req.valid("json");
+    const path2 = await import("path");
+    const fs = await import("fs");
+    const { fileURLToPath: fileURLToPath2 } = await import("url");
+    const distDir = path2.resolve(process.cwd(), "dist");
+    const entryFile = path2.join(distDir, "index.js");
+    if (!fs.existsSync(distDir)) {
+      fs.mkdirSync(distDir, { recursive: true });
     }
-    statsMap.set(exec.workflowId, current);
+    const tmpFile = `${entryFile}.tmp.${Date.now()}`;
+    fs.writeFileSync(tmpFile, script_content, "utf-8");
+    fs.renameSync(tmpFile, entryFile);
+    const sizeKB = Math.round(script_content.length / 1024);
+    console.log(`[Update] New bundle written: ${sizeKB} KB, hash=${source_hash}, version=${version || "N/A"}`);
+    const restartDelayMs = 1500;
+    setTimeout(() => {
+      console.log("[Update] Restarting with new bundle...");
+      process.exit(0);
+    }, restartDelayMs);
+    return c.json({
+      success: true,
+      message: `Bundle updated (${sizeKB} KB). Restarting in ${restartDelayMs}ms.`,
+      source_hash,
+      restart_in_ms: restartDelayMs
+    }, 200);
+  } catch (err) {
+    console.error("[Update] Failed:", err);
+    return c.json({
+      error: "UpdateFailed",
+      message: err.message || "Failed to write bundle"
+    }, 500);
   }
-  const stats = Array.from(statsMap.entries()).map(([workflowId, counts]) => ({
-    workflowId,
-    ...counts
-  }));
-  return c.json({ stats }, 200);
 });
 
+// src/routes/openai.ts
+import { OpenAPIHono as OpenAPIHono8 } from "@hono/zod-openapi";
+var openaiRoute = new OpenAPIHono8();
+function resolveModel(modelSlug, c) {
+  if (!modelSlug) {
+    return { error: c.json({ error: { message: "Missing required field: model", type: "invalid_request_error", code: "missing_field" } }, 400) };
+  }
+  const models = getGPUModels();
+  const model = models.find((m) => m.slug === modelSlug);
+  if (!model) {
+    return { error: c.json({ error: { message: `Model '${modelSlug}' not found. Available: ${models.map((m) => m.slug).join(", ")}`, type: "invalid_request_error", code: "model_not_found" } }, 404) };
+  }
+  const ai = getAIBinding();
+  if (!ai) {
+    return { error: c.json({ error: { message: "AI binding not available.", type: "server_error", code: "ai_binding_missing" } }, 503) };
+  }
+  return { model, ai };
+}
+function mergeDefaults(payload, model) {
+  if (model.provider_config) {
+    const defaults = typeof model.provider_config === "string" ? JSON.parse(model.provider_config) : model.provider_config;
+    for (const [k, v] of Object.entries(defaults)) {
+      if (!(k in payload)) payload[k] = v;
+    }
+  }
+}
+openaiRoute.get("/models", (c) => {
+  const models = getGPUModels();
+  return c.json({
+    object: "list",
+    data: models.map((m) => ({
+      id: m.slug,
+      object: "model",
+      created: Math.floor(Date.now() / 1e3),
+      owned_by: m.provider,
+      permission: [],
+      root: m.model_id,
+      parent: null
+    }))
+  });
+});
+openaiRoute.post("/chat/completions", async (c) => {
+  let body;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: { message: "Invalid JSON body", type: "invalid_request_error", code: "invalid_json" } }, 400);
+  }
+  const resolved = resolveModel(body.model, c);
+  if ("error" in resolved) return resolved.error;
+  const { model, ai } = resolved;
+  const payload = {};
+  if (body.messages) payload.messages = body.messages;
+  if (body.max_tokens != null) payload.max_tokens = body.max_tokens;
+  if (body.temperature != null) payload.temperature = body.temperature;
+  if (body.top_p != null) payload.top_p = body.top_p;
+  if (body.top_k != null) payload.top_k = body.top_k;
+  if (body.stream != null) payload.stream = body.stream;
+  if (body.stop != null) payload.stop = body.stop;
+  if (body.seed != null) payload.seed = body.seed;
+  if (body.frequency_penalty != null) payload.frequency_penalty = body.frequency_penalty;
+  if (body.presence_penalty != null) payload.presence_penalty = body.presence_penalty;
+  if (body.repetition_penalty != null) payload.repetition_penalty = body.repetition_penalty;
+  if (body.tools != null) payload.tools = body.tools;
+  if (body.response_format != null) payload.response_format = body.response_format;
+  if (body.raw != null) payload.raw = body.raw;
+  if (body.lora != null) payload.lora = body.lora;
+  mergeDefaults(payload, model);
+  try {
+    const result = await ai.run(model.model_id, payload);
+    const responseContent = typeof result === "string" ? result : result?.response ?? result?.result ?? JSON.stringify(result);
+    return c.json({
+      id: `chatcmpl-${crypto.randomUUID().slice(0, 12)}`,
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1e3),
+      model: model.slug,
+      choices: [{
+        index: 0,
+        message: { role: "assistant", content: responseContent },
+        finish_reason: "stop"
+      }],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+    });
+  } catch (err) {
+    console.error(`[OpenAI] Inference error for ${body.model}:`, err);
+    return c.json({ error: { message: err.message || "Inference failed", type: "server_error", code: "inference_error" } }, 500);
+  }
+});
+openaiRoute.post("/embeddings", async (c) => {
+  let body;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: { message: "Invalid JSON body", type: "invalid_request_error", code: "invalid_json" } }, 400);
+  }
+  const resolved = resolveModel(body.model, c);
+  if ("error" in resolved) return resolved.error;
+  const { model, ai } = resolved;
+  const input = body.input;
+  const payload = Array.isArray(input) ? { text: input } : { text: [input] };
+  try {
+    const result = await ai.run(model.model_id, payload);
+    const data = Array.isArray(result?.data) ? result.data.map((emb, i) => ({
+      object: "embedding",
+      embedding: emb.values ?? emb,
+      index: i
+    })) : [{ object: "embedding", embedding: result?.data ?? result, index: 0 }];
+    return c.json({
+      object: "list",
+      data,
+      model: model.slug,
+      usage: { prompt_tokens: 0, total_tokens: 0 }
+    });
+  } catch (err) {
+    console.error(`[OpenAI] Embedding error for ${body.model}:`, err);
+    return c.json({ error: { message: err.message || "Embedding failed", type: "server_error", code: "inference_error" } }, 500);
+  }
+});
+openaiRoute.post("/images/generations", async (c) => {
+  let body;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: { message: "Invalid JSON body", type: "invalid_request_error", code: "invalid_json" } }, 400);
+  }
+  const resolved = resolveModel(body.model, c);
+  if ("error" in resolved) return resolved.error;
+  const { model, ai } = resolved;
+  if (!body.prompt) {
+    return c.json({ error: { message: "Missing required field: prompt", type: "invalid_request_error", code: "missing_field" } }, 400);
+  }
+  const payload = { prompt: body.prompt };
+  if (body.size) {
+    const [w, h] = body.size.split("x").map(Number);
+    if (w && h) {
+      payload.width = w;
+      payload.height = h;
+    }
+  }
+  if (body.n != null) payload.num_steps = body.n;
+  mergeDefaults(payload, model);
+  try {
+    const result = await ai.run(model.model_id, payload);
+    let b64Data;
+    if (result instanceof ArrayBuffer || result instanceof Uint8Array) {
+      const bytes = result instanceof ArrayBuffer ? new Uint8Array(result) : result;
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      b64Data = btoa(binary);
+    } else if (typeof result === "string") {
+      b64Data = result;
+    } else {
+      b64Data = JSON.stringify(result);
+    }
+    const responseFormat = body.response_format || "b64_json";
+    return c.json({
+      created: Math.floor(Date.now() / 1e3),
+      data: [{
+        ...responseFormat === "b64_json" ? { b64_json: b64Data } : { url: `data:image/png;base64,${b64Data}` },
+        revised_prompt: body.prompt
+      }]
+    });
+  } catch (err) {
+    console.error(`[OpenAI] Image generation error for ${body.model}:`, err);
+    return c.json({ error: { message: err.message || "Image generation failed", type: "server_error", code: "inference_error" } }, 500);
+  }
+});
+openaiRoute.post("/audio/transcriptions", async (c) => {
+  let modelSlug;
+  let audioData = null;
+  const contentType = c.req.header("content-type") || "";
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await c.req.formData();
+    const file = formData.get("file");
+    modelSlug = formData.get("model");
+    if (!file) {
+      return c.json({ error: { message: "Missing required field: file", type: "invalid_request_error", code: "missing_field" } }, 400);
+    }
+    audioData = await file.arrayBuffer();
+  } else {
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: { message: "Invalid request body", type: "invalid_request_error", code: "invalid_body" } }, 400);
+    }
+    modelSlug = body.model;
+    if (body.file) {
+      const raw = body.file.replace(/^data:audio\/[^;]+;base64,/, "");
+      audioData = Uint8Array.from(atob(raw), (ch) => ch.charCodeAt(0)).buffer;
+    }
+  }
+  const resolved = resolveModel(modelSlug, c);
+  if ("error" in resolved) return resolved.error;
+  const { model, ai } = resolved;
+  if (!audioData) {
+    return c.json({ error: { message: "No audio data provided", type: "invalid_request_error", code: "missing_field" } }, 400);
+  }
+  try {
+    const result = await ai.run(model.model_id, { audio: [...new Uint8Array(audioData)] });
+    return c.json({
+      text: result?.text ?? result?.result ?? JSON.stringify(result)
+    });
+  } catch (err) {
+    console.error(`[OpenAI] Transcription error for ${modelSlug}:`, err);
+    return c.json({ error: { message: err.message || "Transcription failed", type: "server_error", code: "inference_error" } }, 500);
+  }
+});
+openaiRoute.post("/audio/speech", async (c) => {
+  let body;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: { message: "Invalid JSON body", type: "invalid_request_error", code: "invalid_json" } }, 400);
+  }
+  const resolved = resolveModel(body.model, c);
+  if ("error" in resolved) return resolved.error;
+  const { model, ai } = resolved;
+  if (!body.input) {
+    return c.json({ error: { message: "Missing required field: input", type: "invalid_request_error", code: "missing_field" } }, 400);
+  }
+  const payload = { text: body.input };
+  if (body.voice) payload.voice = body.voice;
+  if (body.speed) payload.speed = body.speed;
+  mergeDefaults(payload, model);
+  try {
+    const result = await ai.run(model.model_id, payload);
+    if (result instanceof ArrayBuffer || result instanceof Uint8Array) {
+      const format = body.response_format || "mp3";
+      const mimeMap = {
+        mp3: "audio/mpeg",
+        opus: "audio/opus",
+        aac: "audio/aac",
+        flac: "audio/flac",
+        wav: "audio/wav",
+        pcm: "audio/pcm"
+      };
+      const audioBuffer = result instanceof Uint8Array ? result.buffer : result;
+      return new Response(audioBuffer, {
+        headers: { "Content-Type": mimeMap[format] || "audio/mpeg" }
+      });
+    }
+    return c.json(result);
+  } catch (err) {
+    console.error(`[OpenAI] TTS error for ${body.model}:`, err);
+    return c.json({ error: { message: err.message || "Text-to-speech failed", type: "server_error", code: "inference_error" } }, 500);
+  }
+});
+openaiRoute.post("/responses", async (c) => {
+  let body;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: { message: "Invalid JSON body", type: "invalid_request_error", code: "invalid_json" } }, 400);
+  }
+  const resolved = resolveModel(body.model, c);
+  if ("error" in resolved) return resolved.error;
+  const { model, ai } = resolved;
+  if (!body.input) {
+    return c.json({ error: { message: "Missing required field: input", type: "invalid_request_error", code: "missing_field" } }, 400);
+  }
+  const payload = { input: body.input };
+  if (body.reasoning) {
+    payload.reasoning = {};
+    if (body.reasoning.effort) payload.reasoning.effort = body.reasoning.effort;
+    if (body.reasoning.summary) payload.reasoning.summary = body.reasoning.summary;
+  }
+  if (body.instructions) payload.instructions = body.instructions;
+  if (body.max_tokens != null) payload.max_tokens = body.max_tokens;
+  if (body.temperature != null) payload.temperature = body.temperature;
+  if (body.tools != null) payload.tools = body.tools;
+  mergeDefaults(payload, model);
+  try {
+    const result = await ai.run(model.model_id, payload);
+    const responseText = typeof result === "string" ? result : result?.response ?? result?.output?.[0]?.content?.[0]?.text ?? result?.result ?? JSON.stringify(result);
+    return c.json({
+      id: `resp-${crypto.randomUUID().slice(0, 12)}`,
+      object: "response",
+      created_at: Math.floor(Date.now() / 1e3),
+      model: model.slug,
+      output: [{
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: responseText }]
+      }],
+      usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 }
+    });
+  } catch (err) {
+    console.error(`[OpenAI] Responses API error for ${body.model}:`, err);
+    return c.json({ error: { message: err.message || "Response generation failed", type: "server_error", code: "inference_error" } }, 500);
+  }
+});
+
+// src/middleware/auth.ts
+import { jwt } from "hono/jwt";
+import { csrf } from "hono/csrf";
+var apiKeyAuth = async (c, next) => {
+  const validKeys = (process.env.API_KEYS || "").split(",").map((k) => k.trim()).filter(Boolean);
+  if (validKeys.length === 0) {
+    console.warn("\u26A0\uFE0F No API_KEYS configured - webhook auth disabled");
+    return next();
+  }
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return c.json({ error: "Unauthorized", message: "Missing or invalid Authorization header" }, 401);
+  }
+  const token = authHeader.slice(7).trim();
+  if (!validKeys.includes(token)) {
+    return c.json({ error: "Unauthorized", message: "Invalid API key" }, 401);
+  }
+  return next();
+};
+var aiApiKeyAuth = async (c, next) => {
+  const envHashes = process.env.FRONTBASE_API_KEY_HASHES;
+  if (!envHashes) {
+    console.warn("\u26A0\uFE0F No FRONTBASE_API_KEY_HASHES configured - AI auth disabled");
+    return next();
+  }
+  let keyEntries;
+  try {
+    keyEntries = JSON.parse(envHashes);
+  } catch {
+    console.error("[AI Auth] Failed to parse FRONTBASE_API_KEY_HASHES");
+    return next();
+  }
+  if (keyEntries.length === 0) {
+    return next();
+  }
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return c.json({
+      error: {
+        message: "Missing or invalid Authorization header. Use: Authorization: Bearer <api_key>",
+        type: "invalid_request_error",
+        code: "missing_api_key"
+      }
+    }, 401);
+  }
+  const token = authHeader.slice(7).trim();
+  const encoder = new TextEncoder();
+  const data = encoder.encode(token);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const tokenHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  const matchedKey = keyEntries.find((k) => k.hash === tokenHash);
+  if (!matchedKey) {
+    return c.json({
+      error: {
+        message: "Invalid API key.",
+        type: "invalid_request_error",
+        code: "invalid_api_key"
+      }
+    }, 401);
+  }
+  if (matchedKey.expires_at) {
+    const expiresAt = new Date(matchedKey.expires_at);
+    if (expiresAt < /* @__PURE__ */ new Date()) {
+      return c.json({
+        error: {
+          message: "API key has expired.",
+          type: "invalid_request_error",
+          code: "expired_api_key"
+        }
+      }, 401);
+    }
+  }
+  return next();
+};
+var csrfProtection = csrf({
+  origin: (origin, c) => {
+    const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:5173").split(",");
+    return allowedOrigins.includes(origin);
+  }
+});
+
+// src/engine/lite.ts
+var liquidEngine = new Liquid({
+  strictVariables: false,
+  strictFilters: false
+});
+function createLiteApp() {
+  const app2 = new OpenAPIHono9({
+    defaultHook: (result, c) => {
+      if (!result.success) {
+        console.error("[Zod Validation Error]", JSON.stringify(result.error.issues, null, 2));
+        return c.json({
+          success: false,
+          error: "Validation failed",
+          details: result.error.issues
+        }, 400);
+      }
+    }
+  });
+  app2.onError((err, c) => {
+    console.error("[Global Error]", err);
+    if (err.name === "ZodError" || err.issues) {
+      return c.json({
+        success: false,
+        error: "Validation failed",
+        details: err.issues || err.message
+      }, 400);
+    }
+    return c.json({
+      success: false,
+      error: err.message || "Internal server error"
+    }, 500);
+  });
+  app2.use("*", requestId());
+  app2.use("*", logger());
+  app2.use("*", secureHeaders());
+  app2.use("*", timing());
+  app2.use("*", bodyLimit({ maxSize: 50 * 1024 * 1024 }));
+  app2.use("/api/*", etag());
+  app2.use("*", async (c, next) => {
+    try {
+      const mw = timeout(29e3);
+      return await mw(c, next);
+    } catch {
+      return await next();
+    }
+  });
+  app2.use("/api/*", async (c, next) => {
+    await next();
+    if (!c.res.headers.has("Cache-Control")) {
+      c.res.headers.set("Cache-Control", "no-cache");
+    }
+  });
+  app2.use("/api/*", cors({ origin: "*" }));
+  app2.use("*", cors({ origin: "*" }));
+  app2.use("/api/webhook/*", apiKeyAuth);
+  app2.route("/api/health", healthRoute);
+  app2.route("/api/manifest", manifestRoute);
+  app2.route("/api/deploy", deployRoute);
+  app2.route("/api/execute", executeRoute);
+  app2.route("/api/webhook", webhookRoute);
+  app2.route("/api/executions", executionsRoute);
+  app2.route("/api/update", updateRoute);
+  app2.use("/v1/*", aiApiKeyAuth);
+  app2.route("/v1", openaiRoute);
+  app2.doc("/api/openapi.json", {
+    openapi: "3.1.0",
+    info: {
+      title: "Frontbase Edge Engine API",
+      version: "0.1.0",
+      description: "Edge runtime API for workflows, webhooks, triggers, and data proxy."
+    },
+    servers: [
+      { url: "http://localhost:3002", description: "Local development" }
+    ]
+  });
+  app2.get("/api/docs", swaggerUI({ url: "/api/openapi.json" }));
+  return app2;
+}
+var liteApp = createLiteApp();
+liteApp.get("/", (c) => c.json({
+  service: "Frontbase Edge Engine",
+  mode: "lite",
+  status: "running",
+  docs: "/api/docs",
+  health: "/api/health"
+}));
+
 // src/routes/pages.ts
-import { OpenAPIHono as OpenAPIHono6, createRoute as createRoute6, z as z7 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono10, createRoute as createRoute7, z as z8 } from "@hono/zod-openapi";
 
 // src/ssr/components/static.ts
 function escapeHtml(str) {
@@ -1536,14 +3470,14 @@ function renderButton(id, props, propsJson) {
     </button>`;
 }
 function renderLink(id, props, propsJson) {
-  const text4 = escapeHtml2(String(props.text || props.label || props.children || "Link"));
+  const text2 = escapeHtml2(String(props.text || props.label || props.children || "Link"));
   const href = escapeHtml2(String(props.href || props.to || "#"));
   const target = props.target || "_self";
   const color = props.color || "#3b82f6";
   const underline = props.underline !== false;
   const style = `color:${color};${underline ? "text-decoration:underline" : "text-decoration:none"};cursor:pointer`;
   const attrs = getCommonAttributes2(id, "fb-link", props, style, "link", propsJson);
-  return `<a ${attrs} href="${href}" target="${target}">${text4}</a>`;
+  return `<a ${attrs} href="${href}" target="${target}">${text2}</a>`;
 }
 function renderTabs(id, props, childrenHtml, propsJson) {
   const tabs = props.tabs || [];
@@ -2095,14 +4029,14 @@ function renderHero(id, props, stylesData) {
     align: alignment,
     className: "text-lg sm:text-xl text-muted-foreground"
   })}</div>` : "";
-  const renderCtaButton = (text4, link, actionBindings, isPrimary) => {
-    if (!text4) return "";
+  const renderCtaButton = (text2, link, actionBindings, isPrimary) => {
+    if (!text2) return "";
     const baseClasses = isPrimary ? "inline-flex items-center justify-center px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors" : "inline-flex items-center justify-center px-6 py-3 rounded-lg border border-input bg-background hover:bg-accent hover:text-accent-foreground font-medium transition-colors";
     const onClickAction = actionBindings?.find((b) => b.trigger === "onClick");
     if (onClickAction?.actionType === "scrollToSection" && onClickAction.config?.sectionId) {
       return `<button data-scroll-to="${escapeHtml4(onClickAction.config.sectionId)}" 
                      class="${baseClasses}">
-                     ${escapeHtml4(text4)}
+                     ${escapeHtml4(text2)}
                    </button>`;
     }
     if (onClickAction?.actionType === "openPage" && onClickAction.config?.pageUrl) {
@@ -2111,12 +4045,12 @@ function renderHero(id, props, stylesData) {
       return `<a href="${escapeHtml4(onClickAction.config.pageUrl)}" 
                      target="${target}" ${rel ? `rel="${rel}"` : ""}
                      class="${baseClasses}">
-                     ${escapeHtml4(text4)}
+                     ${escapeHtml4(text2)}
                    </a>`;
     }
     return `<a href="${escapeHtml4(link || "#")}" 
                  class="${baseClasses}">
-                 ${escapeHtml4(text4)}
+                 ${escapeHtml4(text2)}
                </a>`;
   };
   const primaryCtaHtml = renderCtaButton(props.ctaText, props.ctaLink, props.ctaActionBindings || props.actionBindings, true);
@@ -2325,12 +4259,12 @@ function renderCTA(id, props, stylesData) {
 }
 
 // src/ssr/components/landing/Navbar.ts
-function renderCtaLink(id, text4, target, navType, variant) {
+function renderCtaLink(id, text2, target, navType, variant) {
   const scrollAttr = navType === "scroll" ? `data-scroll-to="${escapeHtml4(target)}"` : "";
   const variantClasses = variant === "primary" ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border hover:bg-accent";
   return `<a id="${id}" href="${escapeHtml4(target)}" ${scrollAttr}
        class="inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${variantClasses}">
-        ${escapeHtml4(text4)}
+        ${escapeHtml4(text2)}
     </a>`;
 }
 function renderNavbar(id, props, stylesData) {
@@ -2800,8 +4734,8 @@ function renderFooter(id, props, stylesData) {
 }
 
 // src/ssr/lib/liquid.ts
-import { Liquid } from "liquidjs";
-var liquid = new Liquid({
+import { Liquid as Liquid2 } from "liquidjs";
+var liquid = new Liquid2({
   strictVariables: false,
   // Allow undefined variables (render as empty)
   strictFilters: false,
@@ -3193,7 +5127,7 @@ async function renderComponent(component, context, depth = 0) {
   if (type === "Navbar" && resolvedProps.logo) {
     const logoProps = resolvedProps.logo;
     if (logoProps.useProjectLogo || logoProps.showIcon) {
-      const { getFaviconUrl } = await import("./project-settings-IJSR4OWY.js");
+      const { getFaviconUrl } = await import("./project-settings-TNEKQFVJ.js");
       const faviconUrl = await getFaviconUrl();
       resolvedProps = {
         ...resolvedProps,
@@ -3414,7 +5348,7 @@ async function renderPage(layoutData, context) {
 }
 
 // src/ssr/lib/auth.ts
-import { createClient as createClient2 } from "@supabase/supabase-js";
+import { createClient as createClient3 } from "@supabase/supabase-js";
 var supabase = null;
 function getSupabaseClient() {
   if (supabase) return supabase;
@@ -3424,21 +5358,21 @@ function getSupabaseClient() {
     console.warn("Supabase credentials not configured. User auth will be disabled.");
     return null;
   }
-  supabase = createClient2(supabaseUrl, supabaseAnonKey);
+  supabase = createClient3(supabaseUrl, supabaseAnonKey);
   return supabase;
 }
 async function getUserFromSession(request) {
   try {
-    const client2 = getSupabaseClient();
-    if (!client2) return null;
+    const client = getSupabaseClient();
+    if (!client) return null;
     const accessToken = extractAccessToken(request);
     if (!accessToken) return null;
-    const { data: { user }, error } = await client2.auth.getUser(accessToken);
+    const { data: { user }, error } = await client.auth.getUser(accessToken);
     if (error || !user) {
       console.warn("Auth verification failed:", error?.message);
       return null;
     }
-    const { data: contact, error: contactError } = await client2.from("contacts").select("*").eq("email", user.email).single();
+    const { data: contact, error: contactError } = await client.from("contacts").select("*").eq("email", user.email).single();
     if (contactError || !contact) {
       return {
         id: user.id,
@@ -3685,528 +5619,6 @@ function buildSystemContext() {
   };
 }
 
-// src/storage/LocalSqliteProvider.ts
-import { drizzle as drizzle2 } from "drizzle-orm/libsql";
-import { createClient as createClient3 } from "@libsql/client";
-import { sql, eq as eq6 } from "drizzle-orm";
-import { sqliteTable as sqliteTable2, text as text2, integer as integer2 } from "drizzle-orm/sqlite-core";
-
-// src/storage/edge-migrations.ts
-var MIGRATIONS = [
-  {
-    version: 1,
-    description: "Initial schema \u2014 published_pages + project_settings",
-    sql: [
-      // Schema version tracking
-      `CREATE TABLE IF NOT EXISTS _schema_version (
-                version INTEGER PRIMARY KEY,
-                description TEXT,
-                applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )`,
-      // Published pages
-      `CREATE TABLE IF NOT EXISTS published_pages (
-                id TEXT PRIMARY KEY,
-                slug TEXT NOT NULL UNIQUE,
-                name TEXT NOT NULL,
-                title TEXT,
-                description TEXT,
-                layout_data TEXT NOT NULL,
-                seo_data TEXT,
-                datasources TEXT,
-                css_bundle TEXT,
-                version INTEGER NOT NULL DEFAULT 1,
-                published_at TEXT NOT NULL,
-                is_public INTEGER NOT NULL DEFAULT 1,
-                is_homepage INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )`,
-      // Indexes
-      `CREATE INDEX IF NOT EXISTS idx_published_pages_slug ON published_pages(slug)`,
-      `CREATE INDEX IF NOT EXISTS idx_published_pages_homepage ON published_pages(is_homepage)`,
-      // Project settings
-      `CREATE TABLE IF NOT EXISTS project_settings (
-                id TEXT PRIMARY KEY DEFAULT 'default',
-                favicon_url TEXT,
-                logo_url TEXT,
-                site_name TEXT,
-                site_description TEXT,
-                app_url TEXT,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )`,
-      // Default settings row
-      `INSERT OR IGNORE INTO project_settings (id, updated_at) VALUES ('default', datetime('now'))`
-    ]
-  }
-  // -------------------------------------------------------------------------
-  // Future migrations go here:
-  // -------------------------------------------------------------------------
-  // {
-  //     version: 2,
-  //     description: 'Add analytics columns',
-  //     sql: [
-  //         `ALTER TABLE published_pages ADD COLUMN view_count INTEGER DEFAULT 0`,
-  //     ],
-  // },
-];
-async function runMigrations(execute, providerName) {
-  await execute(`CREATE TABLE IF NOT EXISTS _schema_version (
-        version INTEGER PRIMARY KEY,
-        description TEXT,
-        applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`);
-  let appliedCount = 0;
-  for (const migration of MIGRATIONS) {
-    try {
-      await execute(
-        `INSERT OR IGNORE INTO _schema_version (version, description) 
-                 VALUES (${migration.version}, '${migration.description.replace(/'/g, "''")}')`
-      );
-      for (const sql4 of migration.sql) {
-        await execute(sql4);
-      }
-      appliedCount++;
-    } catch (error) {
-      console.error(`[${providerName}:Migration] Failed at v${migration.version}: ${error}`);
-      throw error;
-    }
-  }
-  const latestVersion = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
-  console.log(`[${providerName}:Migration] Schema at v${latestVersion} (${appliedCount} migrations checked)`);
-}
-
-// src/storage/LocalSqliteProvider.ts
-var publishedPages = sqliteTable2("published_pages", {
-  id: text2("id").primaryKey(),
-  slug: text2("slug").notNull().unique(),
-  name: text2("name").notNull(),
-  title: text2("title"),
-  description: text2("description"),
-  layoutData: text2("layout_data").notNull(),
-  seoData: text2("seo_data"),
-  datasources: text2("datasources"),
-  cssBundle: text2("css_bundle"),
-  version: integer2("version").notNull().default(1),
-  publishedAt: text2("published_at").notNull(),
-  isPublic: integer2("is_public", { mode: "boolean" }).notNull().default(true),
-  isHomepage: integer2("is_homepage", { mode: "boolean" }).notNull().default(false),
-  createdAt: text2("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: text2("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
-});
-var projectSettings = sqliteTable2("project_settings", {
-  id: text2("id").primaryKey().default("default"),
-  faviconUrl: text2("favicon_url"),
-  logoUrl: text2("logo_url"),
-  siteName: text2("site_name"),
-  siteDescription: text2("site_description"),
-  appUrl: text2("app_url"),
-  updatedAt: text2("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
-});
-var DEFAULT_FAVICON = "/static/icon.png";
-var LocalSqliteProvider = class {
-  db = null;
-  /** Get or create the database connection */
-  getDb() {
-    if (!this.db) {
-      const client2 = createClient3({
-        url: process.env.PAGES_DB_URL || "file:./data/pages.db"
-      });
-      this.db = drizzle2(client2);
-    }
-    return this.db;
-  }
-  // =========================================================================
-  // Lifecycle
-  // =========================================================================
-  async init() {
-    const database = this.getDb();
-    await runMigrations(
-      async (sqlStr) => {
-        database.run(sql.raw(sqlStr));
-      },
-      "LocalSqlite"
-    );
-    console.log("\u{1F4C4} Published pages database initialized");
-  }
-  async initSettings() {
-    const database = this.getDb();
-    await database.run(sql`
-            CREATE TABLE IF NOT EXISTS project_settings (
-                id TEXT PRIMARY KEY DEFAULT 'default',
-                favicon_url TEXT,
-                logo_url TEXT,
-                site_name TEXT,
-                site_description TEXT,
-                app_url TEXT,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-    console.log("\u2699\uFE0F Project settings database initialized");
-  }
-  // =========================================================================
-  // Pages CRUD
-  // =========================================================================
-  async upsertPage(page) {
-    const database = this.getDb();
-    const record = {
-      id: page.id,
-      slug: page.slug,
-      name: page.name,
-      title: page.title || null,
-      description: page.description || null,
-      layoutData: JSON.stringify(page.layoutData),
-      seoData: page.seoData ? JSON.stringify(page.seoData) : null,
-      datasources: page.datasources ? JSON.stringify(page.datasources) : null,
-      cssBundle: page.cssBundle || null,
-      version: page.version,
-      publishedAt: page.publishedAt,
-      isPublic: page.isPublic,
-      isHomepage: page.isHomepage
-    };
-    const existing = await database.select().from(publishedPages).where(eq6(publishedPages.slug, page.slug)).get();
-    if (existing) {
-      await database.update(publishedPages).set({
-        ...record,
-        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-      }).where(eq6(publishedPages.slug, page.slug));
-      console.log(`\u{1F4DD} Updated published page: ${page.slug} (v${page.version}), cssBundle: ${page.cssBundle ? page.cssBundle.length + " bytes" : "null"}`);
-    } else {
-      await database.insert(publishedPages).values(record);
-      console.log(`\u{1F4C4} Created published page: ${page.slug} (v${page.version}), cssBundle: ${page.cssBundle ? page.cssBundle.length + " bytes" : "null"}`);
-    }
-    return { success: true, version: page.version };
-  }
-  async getPageBySlug(slug) {
-    const database = this.getDb();
-    const record = await database.select().from(publishedPages).where(eq6(publishedPages.slug, slug)).get();
-    if (!record) return null;
-    return {
-      id: record.id,
-      slug: record.slug,
-      name: record.name,
-      title: record.title || void 0,
-      description: record.description || void 0,
-      layoutData: JSON.parse(record.layoutData),
-      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
-      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
-      cssBundle: record.cssBundle || void 0,
-      version: record.version,
-      publishedAt: record.publishedAt,
-      isPublic: record.isPublic,
-      isHomepage: record.isHomepage
-    };
-  }
-  async getHomepage() {
-    const database = this.getDb();
-    const record = await database.select().from(publishedPages).where(eq6(publishedPages.isHomepage, true)).get();
-    if (!record) return null;
-    const result = {
-      id: record.id,
-      slug: record.slug,
-      name: record.name,
-      title: record.title || void 0,
-      description: record.description || void 0,
-      layoutData: JSON.parse(record.layoutData),
-      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
-      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
-      cssBundle: record.cssBundle || void 0,
-      version: record.version,
-      publishedAt: record.publishedAt,
-      isPublic: record.isPublic,
-      isHomepage: record.isHomepage
-    };
-    console.log(`[pages-store] getHomepage: cssBundle present: ${!!result.cssBundle}, length: ${result.cssBundle?.length || 0}, raw column: ${record.cssBundle ? record.cssBundle.length + " bytes" : "NULL"}`);
-    return result;
-  }
-  async deletePage(slug) {
-    const database = this.getDb();
-    await database.delete(publishedPages).where(eq6(publishedPages.slug, slug));
-    return true;
-  }
-  async listPages() {
-    const database = this.getDb();
-    const records = await database.select({
-      slug: publishedPages.slug,
-      name: publishedPages.name,
-      version: publishedPages.version
-    }).from(publishedPages);
-    return records;
-  }
-  // =========================================================================
-  // Project Settings CRUD
-  // =========================================================================
-  async getProjectSettings() {
-    const database = this.getDb();
-    const record = await database.select().from(projectSettings).where(eq6(projectSettings.id, "default")).get();
-    if (!record) {
-      return {
-        id: "default",
-        faviconUrl: null,
-        logoUrl: null,
-        siteName: null,
-        siteDescription: null,
-        appUrl: null,
-        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    }
-    return record;
-  }
-  async getFaviconUrl() {
-    const settings = await this.getProjectSettings();
-    return settings.faviconUrl || DEFAULT_FAVICON;
-  }
-  async updateProjectSettings(updates) {
-    const database = this.getDb();
-    const existing = await database.select().from(projectSettings).where(eq6(projectSettings.id, "default")).get();
-    if (existing) {
-      await database.update(projectSettings).set({
-        ...updates,
-        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-      }).where(eq6(projectSettings.id, "default"));
-    } else {
-      await database.insert(projectSettings).values({
-        id: "default",
-        ...updates,
-        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-      });
-    }
-    console.log("\u2699\uFE0F Project settings updated");
-    return this.getProjectSettings();
-  }
-};
-
-// src/storage/TursoHttpProvider.ts
-import { drizzle as drizzle3 } from "drizzle-orm/libsql";
-import { createClient as createClient4 } from "@libsql/client";
-import { sql as sql2, eq as eq7 } from "drizzle-orm";
-import { sqliteTable as sqliteTable3, text as text3, integer as integer3 } from "drizzle-orm/sqlite-core";
-var publishedPages2 = sqliteTable3("published_pages", {
-  id: text3("id").primaryKey(),
-  slug: text3("slug").notNull().unique(),
-  name: text3("name").notNull(),
-  title: text3("title"),
-  description: text3("description"),
-  layoutData: text3("layout_data").notNull(),
-  seoData: text3("seo_data"),
-  datasources: text3("datasources"),
-  cssBundle: text3("css_bundle"),
-  version: integer3("version").notNull().default(1),
-  publishedAt: text3("published_at").notNull(),
-  isPublic: integer3("is_public", { mode: "boolean" }).notNull().default(true),
-  isHomepage: integer3("is_homepage", { mode: "boolean" }).notNull().default(false),
-  createdAt: text3("created_at").notNull().default(sql2`CURRENT_TIMESTAMP`),
-  updatedAt: text3("updated_at").notNull().default(sql2`CURRENT_TIMESTAMP`)
-});
-var projectSettings2 = sqliteTable3("project_settings", {
-  id: text3("id").primaryKey().default("default"),
-  faviconUrl: text3("favicon_url"),
-  logoUrl: text3("logo_url"),
-  siteName: text3("site_name"),
-  siteDescription: text3("site_description"),
-  appUrl: text3("app_url"),
-  updatedAt: text3("updated_at").notNull().default(sql2`CURRENT_TIMESTAMP`)
-});
-var DEFAULT_FAVICON2 = "/static/icon.png";
-var TursoHttpProvider = class {
-  db;
-  constructor() {
-    const url = process.env.FRONTBASE_STATE_DB_URL;
-    const authToken2 = process.env.FRONTBASE_STATE_DB_TOKEN;
-    if (!url) {
-      throw new Error(
-        "[TursoHttpProvider] FRONTBASE_STATE_DB_URL is required when FRONTBASE_ENV=cloud. Set this to your Turso database URL (e.g., libsql://your-db.turso.io)."
-      );
-    }
-    const client2 = createClient4({ url, authToken: authToken2 });
-    this.db = drizzle3(client2);
-    console.log(`\u2601\uFE0F TursoHttpProvider connected to: ${url.substring(0, 40)}...`);
-  }
-  // =========================================================================
-  // Lifecycle
-  // =========================================================================
-  async init() {
-    await runMigrations(
-      async (sqlStr) => {
-        await this.db.run(sql2.raw(sqlStr));
-      },
-      "Turso"
-    );
-    console.log("\u2601\uFE0F Published pages table initialized (Turso)");
-  }
-  async initSettings() {
-    await this.db.run(sql2`
-            CREATE TABLE IF NOT EXISTS project_settings (
-                id TEXT PRIMARY KEY DEFAULT 'default',
-                favicon_url TEXT,
-                logo_url TEXT,
-                site_name TEXT,
-                site_description TEXT,
-                app_url TEXT,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-    console.log("\u2601\uFE0F Project settings table initialized (Turso)");
-  }
-  // =========================================================================
-  // Pages CRUD
-  // =========================================================================
-  async upsertPage(page) {
-    const record = {
-      id: page.id,
-      slug: page.slug,
-      name: page.name,
-      title: page.title || null,
-      description: page.description || null,
-      layoutData: JSON.stringify(page.layoutData),
-      seoData: page.seoData ? JSON.stringify(page.seoData) : null,
-      datasources: page.datasources ? JSON.stringify(page.datasources) : null,
-      cssBundle: page.cssBundle || null,
-      version: page.version,
-      publishedAt: page.publishedAt,
-      isPublic: page.isPublic,
-      isHomepage: page.isHomepage
-    };
-    const existing = await this.db.select().from(publishedPages2).where(eq7(publishedPages2.id, page.id)).get();
-    if (existing) {
-      await this.db.update(publishedPages2).set({
-        ...record,
-        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-      }).where(eq7(publishedPages2.id, page.id));
-      console.log(`\u2601\uFE0F Updated page (Turso): ${page.slug} (v${page.version})`);
-    } else {
-      await this.db.insert(publishedPages2).values(record);
-      console.log(`\u2601\uFE0F Created page (Turso): ${page.slug} (v${page.version})`);
-    }
-    return { success: true, version: page.version };
-  }
-  async getPageBySlug(slug) {
-    const record = await this.db.select().from(publishedPages2).where(eq7(publishedPages2.slug, slug)).get();
-    if (!record) return null;
-    return {
-      id: record.id,
-      slug: record.slug,
-      name: record.name,
-      title: record.title || void 0,
-      description: record.description || void 0,
-      layoutData: JSON.parse(record.layoutData),
-      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
-      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
-      cssBundle: record.cssBundle || void 0,
-      version: record.version,
-      publishedAt: record.publishedAt,
-      isPublic: record.isPublic,
-      isHomepage: record.isHomepage
-    };
-  }
-  async getHomepage() {
-    const record = await this.db.select().from(publishedPages2).where(eq7(publishedPages2.isHomepage, true)).get();
-    if (!record) return null;
-    const result = {
-      id: record.id,
-      slug: record.slug,
-      name: record.name,
-      title: record.title || void 0,
-      description: record.description || void 0,
-      layoutData: JSON.parse(record.layoutData),
-      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
-      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
-      cssBundle: record.cssBundle || void 0,
-      version: record.version,
-      publishedAt: record.publishedAt,
-      isPublic: record.isPublic,
-      isHomepage: record.isHomepage
-    };
-    console.log(`[turso-provider] getHomepage: cssBundle present: ${!!result.cssBundle}, length: ${result.cssBundle?.length || 0}`);
-    return result;
-  }
-  async deletePage(slug) {
-    await this.db.delete(publishedPages2).where(eq7(publishedPages2.slug, slug));
-    return true;
-  }
-  async listPages() {
-    return await this.db.select({
-      slug: publishedPages2.slug,
-      name: publishedPages2.name,
-      version: publishedPages2.version
-    }).from(publishedPages2);
-  }
-  // =========================================================================
-  // Project Settings CRUD
-  // =========================================================================
-  async getProjectSettings() {
-    const record = await this.db.select().from(projectSettings2).where(eq7(projectSettings2.id, "default")).get();
-    if (!record) {
-      return {
-        id: "default",
-        faviconUrl: null,
-        logoUrl: null,
-        siteName: null,
-        siteDescription: null,
-        appUrl: null,
-        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    }
-    return record;
-  }
-  async getFaviconUrl() {
-    const settings = await this.getProjectSettings();
-    return settings.faviconUrl || DEFAULT_FAVICON2;
-  }
-  async updateProjectSettings(updates) {
-    const existing = await this.db.select().from(projectSettings2).where(eq7(projectSettings2.id, "default")).get();
-    if (existing) {
-      await this.db.update(projectSettings2).set({
-        ...updates,
-        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-      }).where(eq7(projectSettings2.id, "default"));
-    } else {
-      await this.db.insert(projectSettings2).values({
-        id: "default",
-        ...updates,
-        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-      });
-    }
-    console.log("\u2601\uFE0F Project settings updated (Turso)");
-    return this.getProjectSettings();
-  }
-};
-
-// src/storage/index.ts
-var _provider = null;
-function createInitialProvider() {
-  const env = process.env.FRONTBASE_DEPLOYMENT_MODE || "local";
-  if (env === "cloud") {
-    console.log("\u2601\uFE0F FRONTBASE_DEPLOYMENT_MODE=cloud \u2014 using TursoHttpProvider");
-    return new TursoHttpProvider();
-  }
-  console.log("\u{1F4BE} Starting with LocalSqliteProvider (may upgrade to Turso after sync)");
-  return new LocalSqliteProvider();
-}
-function getStateProvider() {
-  if (!_provider) {
-    _provider = createInitialProvider();
-  }
-  return _provider;
-}
-async function upgradeToTurso() {
-  console.log("\u{1F504} Upgrading state provider to TursoHttpProvider...");
-  const turso = new TursoHttpProvider();
-  await turso.init();
-  _provider = turso;
-  console.log("\u2601\uFE0F State provider upgraded to TursoHttpProvider");
-  return _provider;
-}
-var stateProvider = new Proxy({}, {
-  get(_target, prop) {
-    const provider = getStateProvider();
-    const value = provider[prop];
-    if (typeof value === "function") {
-      return value.bind(provider);
-    }
-    return value;
-  }
-});
-
 // src/ssr/baseStyles.ts
 var FALLBACK_CSS = `
 /* FALLBACK CSS - Used when cssBundle is not available (legacy pages) */
@@ -4285,122 +5697,9 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height
 .dark .fb-logo-cloud img:not(.no-invert) { filter: invert(1) brightness(1.1); }
 `;
 
-// src/routes/pages.ts
+// src/ssr/htmlDocument.ts
 var HYDRATE_VERSION = "20260205h";
 var DEFAULT_FAVICON3 = "/static/icon.png";
-var ErrorResponseSchema2 = z7.object({
-  error: z7.string(),
-  message: z7.string().optional()
-});
-var pagesRoute = new OpenAPIHono6();
-var renderPageRoute = createRoute6({
-  method: "get",
-  path: "/:slug",
-  tags: ["Pages"],
-  summary: "Render a published page",
-  description: "Server-side renders a published page by slug. Returns full HTML document.",
-  request: {
-    params: z7.object({
-      slug: z7.string().min(1).describe("Page slug")
-    })
-  },
-  responses: {
-    200: {
-      description: "Rendered HTML page",
-      content: {
-        "text/html": {
-          schema: z7.string()
-        }
-      }
-    },
-    404: {
-      description: "Page not found",
-      content: {
-        "application/json": {
-          schema: ErrorResponseSchema2
-        }
-      }
-    }
-  }
-});
-async function fetchPage(slug) {
-  const cacheKey = `page:${slug}`;
-  try {
-    const { getRedis: getRedis2 } = await import("./redis-DAINDPXS.js");
-    const redis = getRedis2();
-    const cached2 = await redis.get(cacheKey);
-    if (cached2) {
-      console.log(`[SSR] Cache HIT: ${slug}`);
-      return cached2;
-    }
-  } catch {
-  }
-  let page = null;
-  try {
-    const publishedPage = await stateProvider.getPageBySlug(slug);
-    if (publishedPage) {
-      console.log(`[SSR] Found published page: ${slug} (v${publishedPage.version})`);
-      page = {
-        id: publishedPage.id,
-        name: publishedPage.name,
-        slug: publishedPage.slug,
-        title: publishedPage.title,
-        description: publishedPage.description,
-        isPublic: publishedPage.isPublic,
-        isHomepage: publishedPage.isHomepage,
-        layoutData: publishedPage.layoutData,
-        cssBundle: publishedPage.cssBundle,
-        createdAt: publishedPage.publishedAt,
-        updatedAt: publishedPage.publishedAt
-      };
-    }
-  } catch (error) {
-    console.warn("[SSR] Error reading local storage:", error);
-  }
-  if (!page) {
-    const apiBase = process.env.BACKEND_URL || "http://127.0.0.1:8000";
-    try {
-      const url = `${apiBase}/api/pages/public/${slug}`;
-      console.log(`[SSR] Fallback to FastAPI: ${url}`);
-      const response = await fetch(url, {
-        headers: { "Accept": "application/json" },
-        redirect: "follow"
-      });
-      if (!response.ok) {
-        if (response.status === 404) return null;
-        console.error(`Failed to fetch page: ${response.status}`);
-        return null;
-      }
-      const result = await response.json();
-      page = result.success ? result.data : null;
-    } catch (error) {
-      console.error("Error fetching page from FastAPI:", error);
-      return null;
-    }
-  }
-  if (page) {
-    try {
-      const { getRedis: getRedis2 } = await import("./redis-DAINDPXS.js");
-      const redis = getRedis2();
-      await redis.setex(cacheKey, 60, JSON.stringify(page));
-      console.log(`[SSR] Cache SET: ${slug} (60s TTL)`);
-    } catch {
-    }
-  }
-  return page;
-}
-async function fetchTrackingConfig() {
-  const apiBase = process.env.BACKEND_URL || "http://127.0.0.1:8000";
-  try {
-    const response = await fetch(`${apiBase}/api/settings/privacy`);
-    if (response.ok) {
-      return await response.json();
-    }
-  } catch (error) {
-    console.warn("[SSR] Failed to fetch tracking config:", error);
-  }
-  return getDefaultTrackingConfig();
-}
 function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl = DEFAULT_FAVICON3) {
   const title = page.title || page.name;
   const description = page.description || "";
@@ -4459,8 +5758,6 @@ function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, favi
     })();
     </script>
     
-    <!-- Tailwind CSS Bundle (injected below via cssBundle) -->
-    
     <!-- Base styles (from CSS Bundle or fallback) -->
     <style>
         ${page.cssBundle || FALLBACK_CSS}
@@ -4476,7 +5773,6 @@ function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, favi
     id: page.id,
     slug: page.slug,
     layoutData: page.layoutData,
-    // Include for hydration access to bindings with dataRequest
     datasources: page.datasources
   })};
     </script>
@@ -4491,6 +5787,121 @@ function safeJsonStringify(obj) {
 }
 function escapeHtml5(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+// src/routes/pages.ts
+var ErrorResponseSchema2 = z8.object({
+  error: z8.string(),
+  message: z8.string().optional()
+});
+var pagesRoute = new OpenAPIHono10();
+var renderPageRoute = createRoute7({
+  method: "get",
+  path: "/:slug",
+  tags: ["Pages"],
+  summary: "Render a published page",
+  description: "Server-side renders a published page by slug. Returns full HTML document.",
+  request: {
+    params: z8.object({
+      slug: z8.string().min(1).describe("Page slug")
+    })
+  },
+  responses: {
+    200: {
+      description: "Rendered HTML page",
+      content: {
+        "text/html": {
+          schema: z8.string()
+        }
+      }
+    },
+    404: {
+      description: "Page not found",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema2
+        }
+      }
+    }
+  }
+});
+async function fetchPage(slug) {
+  const cacheKey = `page:${slug}`;
+  try {
+    const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+    const redis = getRedis2();
+    const cached2 = await redis.get(cacheKey);
+    if (cached2) {
+      console.log(`[SSR] Cache HIT: ${slug}`);
+      return cached2;
+    }
+  } catch {
+  }
+  let page = null;
+  try {
+    const publishedPage = await stateProvider.getPageBySlug(slug);
+    if (publishedPage) {
+      console.log(`[SSR] Found published page: ${slug} (v${publishedPage.version})`);
+      page = {
+        id: publishedPage.id,
+        name: publishedPage.name,
+        slug: publishedPage.slug,
+        title: publishedPage.title,
+        description: publishedPage.description,
+        isPublic: publishedPage.isPublic,
+        isHomepage: publishedPage.isHomepage,
+        layoutData: publishedPage.layoutData,
+        cssBundle: publishedPage.cssBundle,
+        createdAt: publishedPage.publishedAt,
+        updatedAt: publishedPage.publishedAt
+      };
+    }
+  } catch (error) {
+    console.warn("[SSR] Error reading local storage:", error);
+  }
+  if (!page) {
+    const apiBase = process.env.BACKEND_URL || "http://127.0.0.1:8000";
+    try {
+      const url = `${apiBase}/api/pages/public/${slug}`;
+      console.log(`[SSR] Fallback to FastAPI: ${url}`);
+      const response = await fetch(url, {
+        headers: { "Accept": "application/json" },
+        redirect: "follow"
+      });
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        console.error(`Failed to fetch page: ${response.status}`);
+        return null;
+      }
+      const result = await response.json();
+      page = result.success ? result.data : null;
+    } catch (error) {
+      console.error("Error fetching page from FastAPI:", error);
+      return null;
+    }
+  }
+  if (page) {
+    try {
+      const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+      const redis = getRedis2();
+      await redis.setex(cacheKey, 60, JSON.stringify(page));
+      console.log(`[SSR] Cache SET: ${slug} (60s TTL)`);
+    } catch {
+    }
+  }
+  return page;
+}
+async function fetchTrackingConfig() {
+  const apiBase = process.env.BACKEND_URL || "http://127.0.0.1:8000";
+  try {
+    const response = await fetch(`${apiBase}/api/settings/privacy`);
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch (error) {
+    console.warn("[SSR] Failed to fetch tracking config:", error);
+  }
+  return getDefaultTrackingConfig();
 }
 pagesRoute.openapi(renderPageRoute, async (c) => {
   const { slug } = c.req.param();
@@ -4550,7 +5961,7 @@ pagesRoute.get("/", async (c) => {
     const cacheKey = "page:__homepage__";
     let homepage = null;
     try {
-      const { getRedis: getRedis2 } = await import("./redis-DAINDPXS.js");
+      const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
       const redis = getRedis2();
       const cached2 = await redis.get(cacheKey);
       if (cached2) {
@@ -4597,7 +6008,7 @@ pagesRoute.get("/", async (c) => {
       }
       if (homepage) {
         try {
-          const { getRedis: getRedis2 } = await import("./redis-DAINDPXS.js");
+          const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
           const redis = getRedis2();
           await redis.setex(cacheKey, 60, JSON.stringify(homepage));
           console.log("[SSR] Cache SET: homepage (60s TTL)");
@@ -4653,39 +6064,23 @@ pagesRoute.get("/", async (c) => {
   } catch (error) {
     console.error("Error fetching homepage:", error);
   }
-  return c.html(`
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>No Homepage Configured</title>
-    <style>
-        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 2rem; }
-        .container { max-width: 600px; margin: 0 auto; text-align: center; padding-top: 4rem; }
-        h1 { color: #1e293b; }
-        p { color: #64748b; }
-        a { display: inline-block; background: #1e293b; color: white; padding: 0.75rem 2rem; border-radius: 0.5rem; text-decoration: none; margin-top: 1rem; }
-        a:hover { background: #334155; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>No Homepage Configured</h1>
-        <p>Create a homepage in the dashboard and mark it as the homepage.</p>
-        <a href="/dashboard">Go to Dashboard</a>
-    </div>
-</body>
-</html>
-    `);
+  return c.json({
+    service: "Frontbase Edge Engine",
+    mode: "full",
+    status: "running",
+    homepage: false,
+    message: "No homepage published. Publish a page marked as homepage from the dashboard.",
+    docs: "/api/docs",
+    health: "/api/health"
+  });
 });
 
 // src/routes/import.ts
 import { Hono } from "hono";
 
 // src/schemas/publish.ts
-import { z as z8 } from "zod";
-var ComponentTypeSchema = z8.enum([
+import { z as z9 } from "zod";
+var ComponentTypeSchema = z9.enum([
   // Static
   "Text",
   "Heading",
@@ -4723,7 +6118,7 @@ var ComponentTypeSchema = z8.enum([
   "Card",
   "Panel"
 ]);
-var DatasourceTypeSchema = z8.enum([
+var DatasourceTypeSchema = z9.enum([
   "supabase",
   "neon",
   "planetscale",
@@ -4732,162 +6127,164 @@ var DatasourceTypeSchema = z8.enum([
   "mysql",
   "sqlite"
 ]);
-var DatasourceConfigSchema = z8.object({
-  id: z8.string(),
+var DatasourceConfigSchema = z9.object({
+  id: z9.string(),
   type: DatasourceTypeSchema,
-  name: z8.string(),
+  name: z9.string(),
   // URL is safe to publish (no password)
-  url: z8.string().optional(),
+  url: z9.string().optional(),
   // For Supabase: anon key is safe to publish
-  anonKey: z8.string().optional(),
+  anonKey: z9.string().optional(),
   // Secret environment variable name (actual secret NOT published)
-  secretEnvVar: z8.string().optional()
+  secretEnvVar: z9.string().optional()
 });
-var ColumnOverrideSchema = z8.object({
-  visible: z8.boolean().nullish(),
-  label: z8.string().nullish(),
-  width: z8.string().nullish(),
-  sortable: z8.boolean().nullish(),
-  filterable: z8.boolean().nullish(),
-  type: z8.string().nullish(),
-  primaryKey: z8.string().nullish()
+var ColumnOverrideSchema = z9.object({
+  visible: z9.boolean().nullish(),
+  label: z9.string().nullish(),
+  width: z9.string().nullish(),
+  sortable: z9.boolean().nullish(),
+  filterable: z9.boolean().nullish(),
+  type: z9.string().nullish(),
+  primaryKey: z9.string().nullish()
   // Added for FK reference
 });
-var DataRequestSchema = z8.object({
-  url: z8.string(),
+var DataRequestSchema = z9.object({
+  url: z9.string(),
   // Full URL with query params (may contain {{ENV_VAR}} placeholders)
-  method: z8.string().default("GET"),
+  method: z9.string().default("GET"),
   // HTTP method
-  headers: z8.record(z8.string(), z8.string()).default({}),
+  headers: z9.record(z9.string(), z9.string()).default({}),
   // Headers
-  body: z8.record(z8.string(), z8.unknown()).optional(),
+  body: z9.record(z9.string(), z9.unknown()).optional(),
   // For POST requests
-  resultPath: z8.string().default(""),
+  resultPath: z9.string().default(""),
   // JSON path to extract data
-  flattenRelations: z8.boolean().default(true),
+  flattenRelations: z9.boolean().default(true),
   // Flatten nested objects
-  queryConfig: z8.record(z8.string(), z8.unknown()).optional()
+  queryConfig: z9.record(z9.string(), z9.unknown()).optional()
   // RPC config for DataTable
 });
-var ComponentBindingSchema = z8.object({
-  componentId: z8.string().nullish(),
-  datasourceId: z8.string().nullish(),
-  tableName: z8.string().nullish(),
+var ComponentBindingSchema = z9.object({
+  componentId: z9.string().nullish(),
+  datasourceId: z9.string().nullish(),
+  tableName: z9.string().nullish(),
   // columns can be string[] (column names) or object[] (enriched schema from publish)
-  columns: z8.union([
-    z8.array(z8.string()),
-    z8.array(z8.object({
-      name: z8.string(),
-      type: z8.string(),
-      nullable: z8.boolean().optional(),
-      primary_key: z8.boolean().optional(),
-      default: z8.any().optional(),
-      foreign_key_table: z8.string().nullish(),
-      foreign_key_column: z8.string().nullish()
+  columns: z9.union([
+    z9.array(z9.string()),
+    z9.array(z9.object({
+      name: z9.string(),
+      type: z9.string(),
+      nullable: z9.boolean().optional(),
+      primary_key: z9.boolean().optional(),
+      default: z9.any().optional(),
+      foreign_key_table: z9.string().nullish(),
+      foreign_key_column: z9.string().nullish()
     }).passthrough())
   ]).nullish(),
-  columnOrder: z8.array(z8.string()).nullish(),
-  columnOverrides: z8.record(z8.string(), ColumnOverrideSchema).nullish(),
-  filters: z8.record(z8.string(), z8.unknown()).nullish(),
-  primaryKey: z8.string().nullish(),
-  foreignKeys: z8.array(z8.object({
-    column: z8.string(),
-    referencedTable: z8.string(),
-    referencedColumn: z8.string()
+  columnOrder: z9.array(z9.string()).nullish(),
+  columnOverrides: z9.record(z9.string(), ColumnOverrideSchema).nullish(),
+  filters: z9.record(z9.string(), z9.unknown()).nullish(),
+  primaryKey: z9.string().nullish(),
+  foreignKeys: z9.array(z9.object({
+    column: z9.string(),
+    referencedTable: z9.string(),
+    referencedColumn: z9.string()
   }).passthrough()).nullish(),
   dataRequest: DataRequestSchema.nullish(),
   // Form-specific fields
-  fieldOverrides: z8.record(z8.string(), z8.unknown()).nullish(),
-  fieldOrder: z8.array(z8.string()).nullish(),
-  dataSourceId: z8.string().nullish(),
+  fieldOverrides: z9.record(z9.string(), z9.unknown()).nullish(),
+  fieldOrder: z9.array(z9.string()).nullish(),
+  dataSourceId: z9.string().nullish(),
   // camelCase alias
   // Dynamic feature configuration (for DataTable server-side features)
-  frontendFilters: z8.array(z8.record(z8.string(), z8.unknown())).nullish(),
-  sorting: z8.record(z8.string(), z8.unknown()).nullish(),
-  pagination: z8.record(z8.string(), z8.unknown()).nullish(),
-  filtering: z8.record(z8.string(), z8.unknown()).nullish()
+  frontendFilters: z9.array(z9.record(z9.string(), z9.unknown())).nullish(),
+  sorting: z9.record(z9.string(), z9.unknown()).nullish(),
+  pagination: z9.record(z9.string(), z9.unknown()).nullish(),
+  filtering: z9.record(z9.string(), z9.unknown()).nullish()
 }).passthrough();
-var VisibilitySettingsSchema = z8.object({
-  mobile: z8.boolean().default(true),
-  tablet: z8.boolean().default(true),
-  desktop: z8.boolean().default(true)
+var VisibilitySettingsSchema = z9.object({
+  mobile: z9.boolean().default(true),
+  tablet: z9.boolean().default(true),
+  desktop: z9.boolean().default(true)
 });
-var ViewportOverridesSchema = z8.object({
-  mobile: z8.record(z8.string(), z8.any()).nullable().optional(),
-  tablet: z8.record(z8.string(), z8.any()).nullable().optional()
+var ViewportOverridesSchema = z9.object({
+  mobile: z9.record(z9.string(), z9.any()).nullable().optional(),
+  tablet: z9.record(z9.string(), z9.any()).nullable().optional()
 }).passthrough();
-var StylesDataSchema = z8.object({
-  values: z8.record(z8.string(), z8.any()).nullable().optional(),
-  activeProperties: z8.array(z8.string()).nullable().optional(),
-  stylingMode: z8.string().default("visual"),
+var StylesDataSchema = z9.object({
+  values: z9.record(z9.string(), z9.any()).nullable().optional(),
+  activeProperties: z9.array(z9.string()).nullable().optional(),
+  stylingMode: z9.string().default("visual"),
   viewportOverrides: ViewportOverridesSchema.nullable().optional()
 }).passthrough();
-var ComponentStylesSchema = z8.record(z8.string(), z8.any()).nullable().optional();
-var PageComponentSchema = z8.lazy(
-  () => z8.object({
-    id: z8.string(),
-    type: z8.string(),
+var ComponentStylesSchema = z9.record(z9.string(), z9.any()).nullable().optional();
+var PageComponentSchema = z9.lazy(
+  () => z9.object({
+    id: z9.string(),
+    type: z9.string(),
     // ComponentTypeSchema is too strict for flexibility
-    props: z8.record(z8.string(), z8.unknown()).nullable().optional(),
+    props: z9.record(z9.string(), z9.unknown()).nullable().optional(),
     styles: ComponentStylesSchema,
     // Legacy: direct styles
     stylesData: StylesDataSchema.nullable().optional(),
     // New: structured styles with overrides
     visibility: VisibilitySettingsSchema.nullable().optional(),
     // Per-viewport visibility
-    children: z8.array(PageComponentSchema).nullable().optional(),
+    children: z9.array(PageComponentSchema).nullable().optional(),
     binding: ComponentBindingSchema.nullable().optional()
   })
 );
-var PageLayoutSchema = z8.object({
-  content: z8.array(PageComponentSchema),
-  root: z8.record(z8.string(), z8.unknown()).optional()
+var PageLayoutSchema = z9.object({
+  content: z9.array(PageComponentSchema),
+  root: z9.record(z9.string(), z9.unknown()).optional()
 });
-var SeoDataSchema = z8.object({
-  title: z8.string().optional(),
-  description: z8.string().optional(),
-  keywords: z8.array(z8.string()).optional(),
-  ogImage: z8.string().optional(),
-  canonical: z8.string().optional()
+var SeoDataSchema = z9.object({
+  title: z9.string().optional(),
+  description: z9.string().optional(),
+  keywords: z9.array(z9.string()).optional(),
+  ogImage: z9.string().optional(),
+  canonical: z9.string().optional()
 });
-var PublishPageSchema = z8.object({
+var PublishPageSchema = z9.object({
   // Page identity (can be UUID or custom string ID like "default-homepage")
-  id: z8.string().min(1),
-  slug: z8.string().min(1),
-  name: z8.string(),
-  title: z8.string().optional(),
-  description: z8.string().optional(),
+  id: z9.string().min(1),
+  slug: z9.string().min(1),
+  name: z9.string(),
+  title: z9.string().optional(),
+  description: z9.string().optional(),
   // Layout & structure
   layoutData: PageLayoutSchema,
   // SEO
   seoData: SeoDataSchema.nullable().optional(),
   // Datasources (non-sensitive config only)
-  datasources: z8.array(DatasourceConfigSchema).nullable().optional(),
+  datasources: z9.array(DatasourceConfigSchema).nullable().optional(),
   // CSS Bundle (tree-shaken, component-specific CSS from FastAPI)
-  cssBundle: z8.string().nullable().optional(),
+  cssBundle: z9.string().nullable().optional(),
   // Versioning
-  version: z8.number().int().min(1),
-  publishedAt: z8.string().datetime(),
+  version: z9.number().int().min(1),
+  publishedAt: z9.string().datetime(),
   // Flags
-  isPublic: z8.boolean().default(true),
-  isHomepage: z8.boolean().default(false)
+  isPublic: z9.boolean().default(true),
+  isHomepage: z9.boolean().default(false),
+  // Content hash for drift detection (SHA-256 of publishable attributes)
+  contentHash: z9.string().nullable().optional()
 });
-var ImportPageRequestSchema = z8.object({
+var ImportPageRequestSchema = z9.object({
   page: PublishPageSchema,
   // Optional: force overwrite even if version is same
-  force: z8.boolean().default(false)
+  force: z9.boolean().default(false)
 });
-var ImportPageResponseSchema = z8.object({
-  success: z8.boolean(),
-  slug: z8.string(),
-  version: z8.number(),
-  previewUrl: z8.string(),
-  message: z8.string().optional()
+var ImportPageResponseSchema = z9.object({
+  success: z9.boolean(),
+  slug: z9.string(),
+  version: z9.number(),
+  previewUrl: z9.string(),
+  message: z9.string().optional()
 });
-var ErrorResponseSchema3 = z8.object({
-  success: z8.literal(false),
-  error: z8.string(),
-  details: z8.record(z8.string(), z8.unknown()).optional()
+var ErrorResponseSchema3 = z9.object({
+  success: z9.literal(false),
+  error: z9.string(),
+  details: z9.record(z9.string(), z9.unknown()).optional()
 });
 
 // src/routes/import.ts
@@ -4936,6 +6333,17 @@ importRoute.post("/", async (c) => {
       }
     }
     const result = await stateProvider.upsertPage(page);
+    try {
+      const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+      const redis = getRedis2();
+      await redis.del(`page:${page.slug}`);
+      console.log(`[Import] Cache invalidated: page:${page.slug}`);
+      if (page.isHomepage) {
+        await redis.del("page:__homepage__");
+        console.log(`[Import] Cache invalidated: page:__homepage__`);
+      }
+    } catch {
+    }
     const publicUrl = process.env.PUBLIC_URL;
     let previewUrl;
     const pageUrlPath = page.isHomepage ? "" : page.slug;
@@ -5045,8 +6453,6 @@ importRoute.get("/status", async (c) => {
     ready: true
   });
 });
-stateProvider.init().catch(console.error);
-stateProvider.initSettings().catch(console.error);
 
 // src/routes/data.ts
 import { Hono as Hono2 } from "hono";
@@ -5188,12 +6594,12 @@ var TursoAdapter = class {
   }
   async execute(sql4, params) {
     try {
-      const { createClient: createClient5 } = await import("@libsql/client");
-      const client2 = createClient5({
+      const { createClient: createClient4 } = await import("@libsql/client");
+      const client = createClient4({
         url: this.url,
         authToken: this.authToken
       });
-      const result = await client2.execute(sql4);
+      const result = await client.execute(sql4);
       return { data: result.rows };
     } catch (error) {
       console.error("[Turso] Query error:", error);
@@ -5234,17 +6640,18 @@ function getDefaultDatasource() {
   return defaultAdapter;
 }
 async function handleDataQuery(table, options = {}, datasourceConfig) {
-  const adapter2 = datasourceConfig ? createDatasourceAdapter(datasourceConfig) : getDefaultDatasource();
-  if (!adapter2) {
+  const adapter = datasourceConfig ? createDatasourceAdapter(datasourceConfig) : getDefaultDatasource();
+  if (!adapter) {
     return { data: [], error: "No datasource configured" };
   }
-  return adapter2.query({
+  return adapter.query({
     table,
     ...options
   });
 }
 
 // src/routes/data.ts
+init_redis();
 var dataRoute = new Hono2();
 var cachedDatasource = null;
 function resolveEnvVars(template) {
@@ -5451,8 +6858,9 @@ dataRoute.post("/clear-cache", async (c) => {
 });
 
 // src/routes/cache.ts
-import { OpenAPIHono as OpenAPIHono7, createRoute as createRoute7, z as z9 } from "@hono/zod-openapi";
-var cacheRoute = new OpenAPIHono7();
+init_redis();
+import { OpenAPIHono as OpenAPIHono11, createRoute as createRoute8, z as z10 } from "@hono/zod-openapi";
+var cacheRoute = new OpenAPIHono11();
 function isRedisInitialized() {
   try {
     getRedis();
@@ -5465,8 +6873,8 @@ function ensureRedisInitialized() {
   if (isRedisInitialized()) {
     return true;
   }
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.FRONTBASE_CACHE_URL;
+  const token = process.env.FRONTBASE_CACHE_TOKEN;
   if (!url || !token) {
     return false;
   }
@@ -5477,25 +6885,25 @@ function ensureRedisInitialized() {
     return false;
   }
 }
-var CacheStatusSchema = z9.object({
-  success: z9.boolean(),
-  message: z9.string()
+var CacheStatusSchema = z10.object({
+  success: z10.boolean(),
+  message: z10.string()
 });
-var CacheStatsSchema = z9.object({
-  success: z9.boolean(),
-  configured: z9.boolean(),
-  connected: z9.boolean().optional(),
-  message: z9.string()
+var CacheStatsSchema = z10.object({
+  success: z10.boolean(),
+  configured: z10.boolean(),
+  connected: z10.boolean().optional(),
+  message: z10.string()
 });
-var InvalidateRequestSchema = z9.object({
-  key: z9.string().optional().openapi({ description: "Single cache key to invalidate" }),
-  pattern: z9.string().optional().openapi({ description: "Glob pattern to match multiple keys" })
+var InvalidateRequestSchema = z10.object({
+  key: z10.string().optional().openapi({ description: "Single cache key to invalidate" }),
+  pattern: z10.string().optional().openapi({ description: "Glob pattern to match multiple keys" })
 });
-var InvalidateResponseSchema = z9.object({
-  success: z9.boolean(),
-  message: z9.string()
+var InvalidateResponseSchema = z10.object({
+  success: z10.boolean(),
+  message: z10.string()
 });
-var testRoute = createRoute7({
+var testRoute = createRoute8({
   method: "get",
   path: "/test",
   tags: ["Cache"],
@@ -5519,7 +6927,7 @@ cacheRoute.openapi(testRoute, async (c) => {
   const result = await testConnection();
   return c.json(result, 200);
 });
-var invalidateRoute = createRoute7({
+var invalidateRoute = createRoute8({
   method: "post",
   path: "/invalidate",
   tags: ["Cache"],
@@ -5583,7 +6991,7 @@ cacheRoute.openapi(invalidateRoute, async (c) => {
     }, 500);
   }
 });
-var statsRoute2 = createRoute7({
+var statsRoute2 = createRoute8({
   method: "get",
   path: "/stats",
   tags: ["Cache"],
@@ -5617,147 +7025,50 @@ cacheRoute.openapi(statsRoute2, async (c) => {
     message: connectionResult.message
   }, 200);
 });
-
-// src/middleware/auth.ts
-import { bearerAuth } from "hono/bearer-auth";
-import { jwt } from "hono/jwt";
-import { csrf } from "hono/csrf";
-var apiKeyAuth = bearerAuth({
-  verifyToken: async (token, c) => {
-    const validKeys = (process.env.API_KEYS || "").split(",").filter((k) => k.trim());
-    if (validKeys.length === 0) {
-      console.warn("\u26A0\uFE0F No API_KEYS configured - webhook auth disabled");
-      return true;
-    }
-    return validKeys.includes(token.trim());
-  }
-});
-var csrfProtection = csrf({
-  origin: (origin, c) => {
-    const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:5173").split(",");
-    return allowedOrigins.includes(origin);
-  }
-});
-
-// src/adapters/shared.ts
-function createApp() {
-  const app2 = new OpenAPIHono8({
-    defaultHook: (result, c) => {
-      if (!result.success) {
-        console.error("[Zod Validation Error] Request body validation failed:");
-        console.error(JSON.stringify(result.error.issues, null, 2));
-        return c.json({
-          success: false,
-          error: "Validation failed",
-          details: result.error.issues
-        }, 400);
+var flushRoute = createRoute8({
+  method: "post",
+  path: "/flush",
+  tags: ["Cache"],
+  summary: "Flush all cache entries",
+  description: "Clears all cached data. Called after reconfiguration or redeployment.",
+  responses: {
+    200: {
+      description: "Flush result",
+      content: {
+        "application/json": {
+          schema: CacheStatusSchema
+        }
       }
     }
-  });
-  app2.onError((err, c) => {
-    console.error("[Global Error]", err);
-    if (err.name === "ZodError" || err.issues) {
-      console.error("[Zod Validation Error] Details:");
-      console.error(JSON.stringify(err.issues || err, null, 2));
-      return c.json({
-        success: false,
-        error: "Validation failed",
-        details: err.issues || err.message
-      }, 400);
-    }
+  }
+});
+cacheRoute.openapi(flushRoute, async (c) => {
+  if (!ensureRedisInitialized()) {
+    return c.json({ success: true, message: "No cache configured, nothing to flush" }, 200);
+  }
+  try {
+    await invalidatePattern("*");
+    return c.json({ success: true, message: "All cache entries flushed" }, 200);
+  } catch (error) {
     return c.json({
       success: false,
-      error: err.message || "Internal server error"
-    }, 500);
-  });
-  return app2;
-}
-function wireMiddleware(app2, options = {}) {
-  const { corsOrigins = [] } = options;
-  app2.use("*", requestId());
-  app2.use("*", logger());
-  app2.use("*", secureHeaders());
-  if (options.compress && options.compressMiddleware) {
-    app2.use("*", options.compressMiddleware());
+      message: error instanceof Error ? error.message : "Flush failed"
+    }, 200);
   }
-  app2.use("*", timeout(29e3));
-  app2.use("*", bodyLimit({ maxSize: 50 * 1024 * 1024 }));
-  const origins = ["http://localhost:5173", "http://localhost:8000", ...corsOrigins];
-  app2.use("/api/*", cors({ origin: origins, credentials: true }));
-  app2.use("*", cors({ origin: origins, credentials: true }));
-  app2.use("/api/webhook/*", apiKeyAuth);
-}
-function wireRoutes(app2, scope = "full") {
-  app2.route("/api/health", healthRoute);
-  app2.doc("/api/openapi.json", {
-    openapi: "3.1.0",
-    info: {
-      title: "Frontbase Edge Engine API",
-      version: "0.1.0",
-      description: "Edge runtime API for SSR pages, workflows, and triggers."
-    },
-    servers: [
-      { url: "http://localhost:3002", description: "Local development" }
-    ]
-  });
-  app2.get("/api/docs", swaggerUI({ url: "/api/openapi.json" }));
-  if (scope === "pages" || scope === "full") {
-    app2.route("/api/import", importRoute);
-    app2.route("/api/data", dataRoute);
-    app2.route("/api/cache", cacheRoute);
-    app2.route("", pagesRoute);
-  }
-  if (scope === "automations" || scope === "full") {
-    app2.route("/api/deploy", deployRoute);
-    app2.route("/api/execute", executeRoute);
-    app2.route("/api/webhook", webhookRoute);
-    app2.route("/api/executions", executionsRoute);
-  }
-}
+});
+
+// src/engine/full.ts
+var app = createLiteApp();
+app.route("/api/import", importRoute);
+app.route("/api/data", dataRoute);
+app.route("/api/cache", cacheRoute);
+app.route("", pagesRoute);
 
 // src/startup/sync.ts
-import { sql as sql3 } from "drizzle-orm";
+init_redis();
 var BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 var MAX_RETRIES = 5;
 var RETRY_DELAY_MS = 3e3;
-async function initActionsDb() {
-  try {
-    await db.run(sql3`
-            CREATE TABLE IF NOT EXISTS workflows (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                description TEXT,
-                trigger_type TEXT NOT NULL,
-                trigger_config TEXT,
-                nodes TEXT NOT NULL,
-                edges TEXT NOT NULL,
-                version INTEGER NOT NULL DEFAULT 1,
-                is_active INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                published_by TEXT
-            )
-        `);
-    await db.run(sql3`
-            CREATE TABLE IF NOT EXISTS executions (
-                id TEXT PRIMARY KEY,
-                workflow_id TEXT NOT NULL REFERENCES workflows(id),
-                status TEXT NOT NULL,
-                trigger_type TEXT NOT NULL,
-                trigger_payload TEXT,
-                node_executions TEXT,
-                result TEXT,
-                error TEXT,
-                usage REAL DEFAULT 0,
-                started_at TEXT NOT NULL,
-                ended_at TEXT
-            )
-        `);
-    console.log("[Startup Sync] \u2705 Actions database tables initialized");
-  } catch (error) {
-    console.error("[Startup Sync] \u274C Failed to initialize Actions database:", error);
-  }
-}
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -5817,39 +7128,6 @@ async function syncSupabaseJwtFromFastAPI() {
     return { status: "error", retry: true };
   }
 }
-async function syncTursoSettingsFromFastAPI() {
-  if (process.env.FRONTBASE_DEPLOYMENT_MODE === "cloud") {
-    console.log("[Startup Sync] \u2139\uFE0F Already in cloud mode \u2014 Turso sync skipped");
-    return { status: "success" };
-  }
-  try {
-    const response = await fetch(`${BACKEND_URL}/api/settings/turso/`, {
-      headers: { "Accept": "application/json" },
-      signal: AbortSignal.timeout(5e3)
-    });
-    if (!response.ok) {
-      console.warn(`[Startup Sync] Turso settings fetch failed: ${response.status}`);
-      return { status: "error", retry: response.status >= 500 };
-    }
-    const settings = await response.json();
-    if (settings.turso_enabled && settings.turso_url && settings.turso_token) {
-      process.env.FRONTBASE_STATE_DB_URL = settings.turso_url;
-      process.env.FRONTBASE_STATE_DB_TOKEN = settings.turso_token;
-      await upgradeToTurso();
-      console.log("[Startup Sync] \u2705 Turso state provider activated from Settings UI");
-      return { status: "success" };
-    } else {
-      console.log("[Startup Sync] \u2139\uFE0F Turso not enabled in Settings UI \u2014 using local SQLite");
-      return { status: "not-configured" };
-    }
-  } catch (error) {
-    const isConnectionError = error?.cause?.code === "ECONNREFUSED";
-    if (!isConnectionError) {
-      console.warn("[Startup Sync] Turso sync failed:", error.message);
-    }
-    return { status: "error", retry: true };
-  }
-}
 async function syncHomepageFromFastAPI() {
   try {
     const response = await fetch(`${BACKEND_URL}/api/pages/homepage/`, {
@@ -5900,19 +7178,13 @@ async function syncHomepageFromFastAPI() {
 async function runStartupSync() {
   console.log("[Startup Sync] \u{1F680} Starting Edge database initialization...");
   await stateProvider.init();
-  await initActionsDb();
   console.log("[Startup Sync] Syncing settings from backend...");
-  let tursoUpgraded = false;
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const redisResult = await syncRedisSettingsFromFastAPI();
     const supabaseResult = await syncSupabaseJwtFromFastAPI();
-    const tursoResult = await syncTursoSettingsFromFastAPI();
-    if (tursoResult.status === "success" && process.env.FRONTBASE_STATE_DB_URL) {
-      tursoUpgraded = true;
-    }
-    const allDone = (redisResult.status === "success" || redisResult.status === "not-configured") && (supabaseResult.status === "success" || supabaseResult.status === "not-configured") && (tursoResult.status === "success" || tursoResult.status === "not-configured");
+    const allDone = (redisResult.status === "success" || redisResult.status === "not-configured") && (supabaseResult.status === "success" || supabaseResult.status === "not-configured");
     if (allDone) break;
-    const needsRetry = redisResult.status === "error" && redisResult.retry || supabaseResult.status === "error" && supabaseResult.retry || tursoResult.status === "error" && tursoResult.retry;
+    const needsRetry = redisResult.status === "error" && redisResult.retry || supabaseResult.status === "error" && supabaseResult.retry;
     if (needsRetry && attempt < MAX_RETRIES) {
       console.log(`[Startup Sync] Attempt ${attempt}/${MAX_RETRIES}, retrying in ${RETRY_DELAY_MS / 1e3}s...`);
       await sleep(RETRY_DELAY_MS);
@@ -5939,13 +7211,7 @@ async function runStartupSync() {
 }
 
 // src/index.ts
-var adapter = {
-  platform: "docker",
-  scope: "full"
-};
-var app = createApp();
-wireMiddleware(app, { compress: true, compressMiddleware: compress });
-wireRoutes(app, adapter.scope);
+app.use("*", compress());
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
 var publicPath = path.resolve(__dirname, "../public");
@@ -5953,6 +7219,65 @@ app.use("/static/*", serveStatic({
   root: publicPath,
   rewriteRequestPath: (p) => p.replace(/^\/static/, "")
 }));
+app.post("/api/build-bundle", async (c) => {
+  const { execSync } = await import("child_process");
+  const fs = await import("fs");
+  const PROVIDER_CONFIGS = {
+    "cloudflare": { config: "tsup.cloudflare-lite.ts", output: "cloudflare-lite.js" },
+    "cloudflare-full": { config: "tsup.cloudflare.ts", output: "cloudflare.js" },
+    "supabase": { config: "tsup.supabase-edge-lite.ts", output: "supabase-edge-lite.js" },
+    "supabase-full": { config: "tsup.supabase-edge.ts", output: "supabase-edge.js" },
+    "upstash": { config: "tsup.upstash-workflow-lite.ts", output: "upstash-workflow-lite.js" },
+    "upstash-full": { config: "tsup.upstash-workflow.ts", output: "upstash-workflow.js" },
+    "vercel": { config: "tsup.vercel-edge-lite.ts", output: "vercel-edge-lite.js" },
+    "vercel-full": { config: "tsup.vercel-edge.ts", output: "vercel-edge.js" },
+    "netlify": { config: "tsup.netlify-edge-lite.ts", output: "netlify-edge-lite.js" },
+    "netlify-full": { config: "tsup.netlify-edge.ts", output: "netlify-edge.js" },
+    "deno": { config: "tsup.deno-deploy-lite.ts", output: "deno-deploy-lite.js" },
+    "deno-full": { config: "tsup.deno-deploy.ts", output: "deno-deploy.js" }
+  };
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const adapterType = body.adapter_type || "automations";
+    const provider = body.provider || "cloudflare";
+    const isFull = adapterType === "full";
+    const configKey = isFull ? `${provider}-full` : provider;
+    const cfg = PROVIDER_CONFIGS[configKey];
+    if (!cfg) {
+      return c.json({ success: false, error: `Unknown provider/adapter: ${configKey}` }, 400);
+    }
+    const { config: configFile, output: outputFile } = cfg;
+    const label = `${provider.charAt(0).toUpperCase() + provider.slice(1)} ${isFull ? "Full" : "Lite"}`;
+    const edgeRoot = path.resolve(__dirname, "..");
+    const distFile = path.join(edgeRoot, "dist", outputFile);
+    if (fs.existsSync(distFile)) fs.unlinkSync(distFile);
+    console.log(`[Build] Building ${label} bundle in ${edgeRoot}...`);
+    const result = execSync(`npx tsup --config ${configFile}`, {
+      cwd: edgeRoot,
+      encoding: "utf-8",
+      timeout: isFull ? 12e4 : 6e4,
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    if (!fs.existsSync(distFile)) {
+      return c.json({ success: false, error: `Build output not found: ${distFile}` }, 500);
+    }
+    const content = fs.readFileSync(distFile, "utf-8");
+    console.log(`[Build] ${label} bundle: ${content.length} bytes (${Math.round(content.length / 1024)} KB)`);
+    return c.json({
+      success: true,
+      script_content: content,
+      script_filename: outputFile,
+      size_bytes: content.length,
+      adapter_type: adapterType
+    });
+  } catch (err) {
+    console.error("[Build] Failed:", err.message);
+    return c.json({
+      success: false,
+      error: err.stderr || err.message || "Unknown build error"
+    }, 500);
+  }
+});
 var port = parseInt(process.env.PORT || "3002");
 serve({
   fetch: app.fetch,
@@ -5960,7 +7285,7 @@ serve({
 }, (info) => {
   console.log(`\u{1F680} Edge Engine running on http://localhost:${info.port}`);
   console.log(`\u{1F4CD} PUBLIC_URL: ${process.env.PUBLIC_URL || "(not set - using request headers)"}`);
-  console.log(`\u{1F50C} Adapter: ${adapter.platform} (scope: ${adapter.scope})`);
+  console.log(`\u{1F50C} Adapter: docker (scope: full)`);
   runStartupSync().catch((err) => {
     console.error("[Startup Sync] Error:", err);
   });

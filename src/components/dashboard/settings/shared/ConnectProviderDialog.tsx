@@ -27,7 +27,8 @@ import {
     DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
-import { API_BASE } from './edgeConstants';
+import { API_BASE, CAPABILITY_LABELS } from './edgeConstants';
+import type { ProviderCapability } from './edgeConstants';
 import { useConnectProvider } from './connect-dialog/useConnectProvider';
 import { SupabaseDiscovery } from './connect-dialog/SupabaseDiscovery';
 import { NeonDiscovery } from './connect-dialog/NeonDiscovery';
@@ -220,14 +221,23 @@ export const ConnectProviderDialog: React.FC<ConnectProviderDialogProps> = ({
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     {filteredProviders.map(([key, cfg]) => (
-                                        <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
+                                        <SelectItem key={key} value={key}>
+                                            <span className="flex items-center gap-2">
+                                                <span>{cfg.label}</span>
+                                                <span className="text-[10px] text-muted-foreground">
+                                                    {cfg.capabilities
+                                                        ?.map(c => CAPABILITY_LABELS[c as ProviderCapability] || c)
+                                                        .join(' · ')}
+                                                </span>
+                                            </span>
+                                        </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         </div>
                     )}
 
-                    {!hideDisplayName && (
+                    {!hideDisplayName && effectiveProvider !== 'turso' && (
                         <div className="space-y-2">
                             <Label>Display Name</Label>
                             <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. My Prod Account" />

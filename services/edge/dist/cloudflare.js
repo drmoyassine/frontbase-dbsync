@@ -25247,174 +25247,14 @@ var require_built3 = __commonJS({
   }
 });
 
-// src/cache/redis.ts
-var redis_exports = {};
-__export(redis_exports, {
-  IoRedisAdapter: () => IoRedisAdapter,
-  UpstashAdapter: () => UpstashAdapter,
-  cached: () => cached,
-  dequeue: () => dequeue,
-  enqueue: () => enqueue,
-  get: () => get,
-  getRedis: () => getRedis,
-  initRedis: () => initRedis,
-  invalidate: () => invalidate,
-  invalidatePattern: () => invalidatePattern,
-  queueLength: () => queueLength,
-  rateLimit: () => rateLimit,
-  set: () => set,
-  testConnection: () => testConnection
+// src/cache/ioredis-adapter.ts
+var ioredis_adapter_exports = {};
+__export(ioredis_adapter_exports, {
+  IoRedisAdapter: () => IoRedisAdapter
 });
-function initRedis(config) {
-  if (config.url.startsWith("http")) {
-    if (!config.token) {
-      throw new Error("Redis Token is required for Upstash HTTP connection");
-    }
-    redisInstance = new UpstashAdapter(config.url, config.token);
-  } else {
-    redisInstance = new IoRedisAdapter(config.url);
-  }
-  return redisInstance;
-}
-function getRedis() {
-  if (!redisInstance) {
-    throw new Error("Redis not initialized. Call initRedis() first.");
-  }
-  return redisInstance;
-}
-async function cached(key, fn, ttlSeconds = 60) {
-  try {
-    const redis = getRedis();
-    const cachedValue = await redis.get(key);
-    if (cachedValue !== null) {
-      return cachedValue;
-    }
-    const result = await fn();
-    await redis.setex(key, ttlSeconds, JSON.stringify(result));
-    return result;
-  } catch {
-    return fn();
-  }
-}
-async function invalidate(key) {
-  const redis = getRedis();
-  await redis.del(key);
-}
-async function invalidatePattern(pattern) {
-  const redis = getRedis();
-  const keys = await redis.keys(pattern);
-  if (keys.length > 0) {
-    await redis.del(...keys);
-  }
-}
-async function set(key, value, ttlSeconds) {
-  const redis = getRedis();
-  const stringValue = JSON.stringify(value);
-  if (ttlSeconds) {
-    await redis.setex(key, ttlSeconds, stringValue);
-  } else {
-    await redis.set(key, stringValue);
-  }
-}
-async function get(key) {
-  const redis = getRedis();
-  return redis.get(key);
-}
-async function enqueue(queue, data) {
-  const redis = getRedis();
-  await redis.lpush(queue, JSON.stringify(data));
-}
-async function dequeue(queue) {
-  const redis = getRedis();
-  const item = await redis.rpop(queue);
-  return item ? JSON.parse(item) : null;
-}
-async function queueLength(queue) {
-  const redis = getRedis();
-  return redis.llen(queue);
-}
-async function rateLimit(key, limit2, windowSeconds) {
-  const redis = getRedis();
-  const current = await redis.incr(key);
-  if (current === 1) {
-    await redis.expire(key, windowSeconds);
-  }
-  return {
-    allowed: current <= limit2,
-    remaining: Math.max(0, limit2 - current)
-  };
-}
-async function testConnection() {
-  try {
-    const redis = getRedis();
-    await redis.ping();
-    return { success: true, message: "Redis connection successful" };
-  } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Connection failed"
-    };
-  }
-}
-var UpstashAdapter, IoRedisAdapter, redisInstance;
-var init_redis = __esm({
-  "src/cache/redis.ts"() {
-    init_nodejs();
-    UpstashAdapter = class {
-      client;
-      constructor(url, token) {
-        this.client = new Redis2({ url, token });
-      }
-      async get(key) {
-        return this.client.get(key);
-      }
-      async set(key, value) {
-        return this.client.set(key, value);
-      }
-      async setex(key, seconds, value) {
-        return this.client.setex(key, seconds, value);
-      }
-      async del(...keys) {
-        return this.client.del(...keys);
-      }
-      async keys(pattern) {
-        return this.client.keys(pattern);
-      }
-      async ping() {
-        return this.client.ping();
-      }
-      async lpush(key, ...elements) {
-        return this.client.lpush(key, ...elements);
-      }
-      async rpop(key) {
-        return this.client.rpop(key);
-      }
-      async llen(key) {
-        return this.client.llen(key);
-      }
-      async incr(key) {
-        return this.client.incr(key);
-      }
-      async expire(key, seconds) {
-        return this.client.expire(key, seconds);
-      }
-      async decr(key) {
-        return this.client.decr(key);
-      }
-      async zadd(key, score, member) {
-        const result = await this.client.zadd(key, { score, member });
-        return result ?? 0;
-      }
-      async zpopmax(key) {
-        const result = await this.client.zpopmax(key, 1);
-        if (!result || result.length === 0) return null;
-        const first2 = result[0];
-        if (first2 && typeof first2 === "object" && "member" in first2) {
-          return { member: first2.member, score: first2.score };
-        }
-        return null;
-      }
-    };
+var IoRedisAdapter;
+var init_ioredis_adapter = __esm({
+  "src/cache/ioredis-adapter.ts"() {
     IoRedisAdapter = class {
       client;
       initialized;
@@ -25503,12 +25343,191 @@ var init_redis = __esm({
         return { member: result[0], score: parseFloat(result[1]) };
       }
     };
+  }
+});
+
+// src/cache/redis.ts
+var redis_exports = {};
+__export(redis_exports, {
+  UpstashAdapter: () => UpstashAdapter,
+  cached: () => cached,
+  dequeue: () => dequeue,
+  enqueue: () => enqueue,
+  get: () => get,
+  getRedis: () => getRedis,
+  initRedis: () => initRedis,
+  initRedisAsync: () => initRedisAsync,
+  invalidate: () => invalidate,
+  invalidatePattern: () => invalidatePattern,
+  queueLength: () => queueLength,
+  rateLimit: () => rateLimit,
+  set: () => set,
+  testConnection: () => testConnection
+});
+function initRedis(config) {
+  if (config.url.startsWith("http")) {
+    if (!config.token) {
+      throw new Error("Redis Token is required for Upstash HTTP connection");
+    }
+    redisInstance = new UpstashAdapter(config.url, config.token);
+  } else {
+    throw new Error("TCP Redis (redis://) requires initRedisAsync(). Use initRedisAsync() for non-HTTP URLs.");
+  }
+  return redisInstance;
+}
+async function initRedisAsync(config) {
+  if (config.url.startsWith("http")) {
+    return initRedis(config);
+  }
+  const { IoRedisAdapter: IoRedisAdapter2 } = await Promise.resolve().then(() => (init_ioredis_adapter(), ioredis_adapter_exports));
+  redisInstance = new IoRedisAdapter2(config.url);
+  return redisInstance;
+}
+function getRedis() {
+  if (!redisInstance) {
+    throw new Error("Redis not initialized. Call initRedis() first.");
+  }
+  return redisInstance;
+}
+async function cached(key, fn, ttlSeconds = 60) {
+  try {
+    const redis = getRedis();
+    const cachedValue = await redis.get(key);
+    if (cachedValue !== null) {
+      return cachedValue;
+    }
+    const result = await fn();
+    await redis.setex(key, ttlSeconds, JSON.stringify(result));
+    return result;
+  } catch {
+    return fn();
+  }
+}
+async function invalidate(key) {
+  const redis = getRedis();
+  await redis.del(key);
+}
+async function invalidatePattern(pattern) {
+  const redis = getRedis();
+  const keys = await redis.keys(pattern);
+  if (keys.length > 0) {
+    await redis.del(...keys);
+  }
+}
+async function set(key, value, ttlSeconds) {
+  const redis = getRedis();
+  const stringValue = JSON.stringify(value);
+  if (ttlSeconds) {
+    await redis.setex(key, ttlSeconds, stringValue);
+  } else {
+    await redis.set(key, stringValue);
+  }
+}
+async function get(key) {
+  const redis = getRedis();
+  return redis.get(key);
+}
+async function enqueue(queue, data) {
+  const redis = getRedis();
+  await redis.lpush(queue, JSON.stringify(data));
+}
+async function dequeue(queue) {
+  const redis = getRedis();
+  const item = await redis.rpop(queue);
+  return item ? JSON.parse(item) : null;
+}
+async function queueLength(queue) {
+  const redis = getRedis();
+  return redis.llen(queue);
+}
+async function rateLimit(key, limit2, windowSeconds) {
+  const redis = getRedis();
+  const current = await redis.incr(key);
+  if (current === 1) {
+    await redis.expire(key, windowSeconds);
+  }
+  return {
+    allowed: current <= limit2,
+    remaining: Math.max(0, limit2 - current)
+  };
+}
+async function testConnection() {
+  try {
+    const redis = getRedis();
+    await redis.ping();
+    return { success: true, message: "Redis connection successful" };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Connection failed"
+    };
+  }
+}
+var UpstashAdapter, redisInstance;
+var init_redis = __esm({
+  "src/cache/redis.ts"() {
+    init_nodejs();
+    UpstashAdapter = class {
+      client;
+      constructor(url, token) {
+        this.client = new Redis2({ url, token });
+      }
+      async get(key) {
+        return this.client.get(key);
+      }
+      async set(key, value) {
+        return this.client.set(key, value);
+      }
+      async setex(key, seconds, value) {
+        return this.client.setex(key, seconds, value);
+      }
+      async del(...keys) {
+        return this.client.del(...keys);
+      }
+      async keys(pattern) {
+        return this.client.keys(pattern);
+      }
+      async ping() {
+        return this.client.ping();
+      }
+      async lpush(key, ...elements) {
+        return this.client.lpush(key, ...elements);
+      }
+      async rpop(key) {
+        return this.client.rpop(key);
+      }
+      async llen(key) {
+        return this.client.llen(key);
+      }
+      async incr(key) {
+        return this.client.incr(key);
+      }
+      async expire(key, seconds) {
+        return this.client.expire(key, seconds);
+      }
+      async decr(key) {
+        return this.client.decr(key);
+      }
+      async zadd(key, score, member) {
+        const result = await this.client.zadd(key, { score, member });
+        return result ?? 0;
+      }
+      async zpopmax(key) {
+        const result = await this.client.zpopmax(key, 1);
+        if (!result || result.length === 0) return null;
+        const first2 = result[0];
+        if (first2 && typeof first2 === "object" && "member" in first2) {
+          return { member: first2.member, score: first2.score };
+        }
+        return null;
+      }
+    };
     redisInstance = null;
   }
 });
 
 // src/cache/index.ts
-function createInitialProvider2() {
+async function createInitialProvider2() {
   const cacheUrl = process.env.FRONTBASE_CACHE_URL;
   const cacheToken = process.env.FRONTBASE_CACHE_TOKEN;
   if (cacheUrl && cacheUrl.startsWith("http") && cacheToken) {
@@ -25523,9 +25542,9 @@ function createInitialProvider2() {
   }
   if (cacheUrl && !cacheUrl.startsWith("http")) {
     try {
-      const { initRedis: initRedis2 } = (init_redis(), __toCommonJS(redis_exports));
+      const { initRedisAsync: initRedisAsync2 } = (init_redis(), __toCommonJS(redis_exports));
       console.log("\u{1F534} Cache: IoRedis TCP provider");
-      return initRedis2({ url: cacheUrl });
+      return await initRedisAsync2({ url: cacheUrl });
     } catch {
       console.warn("\u26A0\uFE0F Failed to init IoRedis adapter, falling back to NullCache");
       return new NullCacheProvider();
@@ -25536,17 +25555,24 @@ function createInitialProvider2() {
 }
 function getCacheProvider() {
   if (!_provider2) {
-    _provider2 = createInitialProvider2();
+    if (!_initPromise2) {
+      _initPromise2 = createInitialProvider2().then((p2) => {
+        _provider2 = p2;
+        return p2;
+      });
+    }
+    return new NullCacheProvider();
   }
   return _provider2;
 }
-var _provider2, cacheProvider;
+var _provider2, _initPromise2, cacheProvider;
 var init_cache = __esm({
   "src/cache/index.ts"() {
     init_NullCacheProvider();
     init_NullCacheProvider();
     init_redis();
     _provider2 = null;
+    _initPromise2 = null;
     cacheProvider = new Proxy({}, {
       get(_target, prop) {
         const provider = getCacheProvider();
@@ -57996,7 +58022,7 @@ function createInitialProvider() {
     console.log("\u2601\uFE0F Using TursoHttpProvider");
     return new TursoHttpProvider();
   }
-  console.log("\u{1F4BE} Starting with LocalSqliteProvider (may upgrade to Turso after sync)");
+  console.log("\u{1F4BE} Using LocalSqliteProvider");
   return new LocalSqliteProvider();
 }
 function getStateProvider() {
@@ -58007,15 +58033,6 @@ function getStateProvider() {
   if (!_provider) {
     _provider = createInitialProvider();
   }
-  return _provider;
-}
-async function upgradeToTurso() {
-  console.log("\u{1F504} Upgrading state provider to TursoHttpProvider...");
-  const turso = new TursoHttpProvider();
-  await turso.init();
-  _provider = turso;
-  _initPromise = Promise.resolve();
-  console.log("\u2601\uFE0F State provider upgraded to TursoHttpProvider");
   return _provider;
 }
 var _initPromise = null;
@@ -58341,261 +58358,8 @@ function createWorkflowLogger(level = "all", prefix = "[Workflow]") {
 
 // src/engine/runtime.ts
 init_cache();
-async function executeWorkflow(executionId, workflow, inputParameters, settings) {
-  const s = settings || (workflow.settings ? JSON.parse(workflow.settings) : {});
-  const timeoutMs = s.execution_timeout_ms || 3e4;
-  const cooldownMs = s.cooldown_ms || 0;
-  const tz = s.timezone || "UTC";
-  const log2 = createWorkflowLogger(s.log_level || "all", `[Workflow:${executionId.slice(0, 8)}]`);
-  const formatTime = () => {
-    try {
-      return (/* @__PURE__ */ new Date()).toLocaleString("sv-SE", { timeZone: tz }).replace(" ", "T");
-    } catch {
-      return (/* @__PURE__ */ new Date()).toISOString();
-    }
-  };
-  const nodes = JSON.parse(workflow.nodes);
-  const edges = JSON.parse(workflow.edges);
-  const context = {
-    executionId,
-    workflowId: workflow.id,
-    parameters: inputParameters,
-    nodeOutputs: {},
-    nodeExecutions: nodes.map((n) => ({
-      nodeId: n.id,
-      status: "idle"
-    }))
-  };
-  async function coreExecute() {
-    try {
-      const checkpoint = await loadCheckpoint(executionId);
-      const executed = /* @__PURE__ */ new Set();
-      if (checkpoint) {
-        log2.info(`Resuming from checkpoint (${checkpoint.completedNodes.length} nodes done)`);
-        for (const nodeId of checkpoint.completedNodes) {
-          executed.add(nodeId);
-        }
-        Object.assign(context.nodeOutputs, checkpoint.nodeOutputs);
-        context.nodeExecutions = checkpoint.nodeExecutions;
-      }
-      await updateExecutionStatus(executionId, "executing", context.nodeExecutions);
-      const targetNodeIds = new Set(edges.map((e) => e.target));
-      const startNodes = nodes.filter((n) => !targetNodeIds.has(n.id));
-      const queue = [...startNodes.map((n) => n.id)];
-      while (queue.length > 0) {
-        const nodeId = queue.shift();
-        if (executed.has(nodeId)) {
-          const outgoingEdges = edges.filter((e) => e.source === nodeId);
-          for (const edge of outgoingEdges) {
-            if (!executed.has(edge.target)) {
-              queue.push(edge.target);
-            }
-          }
-          continue;
-        }
-        const node = nodes.find((n) => n.id === nodeId);
-        if (!node) continue;
-        const incomingEdges = edges.filter((e) => e.target === nodeId);
-        const dependenciesMet = incomingEdges.every((e) => executed.has(e.source));
-        if (!dependenciesMet) {
-          queue.push(nodeId);
-          continue;
-        }
-        const inputs = {};
-        for (const edge of incomingEdges) {
-          const sourceOutputs = context.nodeOutputs[edge.source] || {};
-          if (edge.targetInput && edge.sourceOutput) {
-            inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
-          }
-        }
-        if (startNodes.some((n) => n.id === nodeId)) {
-          Object.assign(inputs, context.parameters);
-        }
-        try {
-          updateNodeStatus(context, nodeId, "executing");
-          const outputs = await executeNode(node, inputs, context);
-          context.nodeOutputs[nodeId] = outputs;
-          updateNodeStatus(context, nodeId, "completed", outputs);
-          executed.add(nodeId);
-          log2.info(`Node ${node.type || nodeId} completed`);
-          await saveCheckpoint({
-            executionId,
-            workflowId: workflow.id,
-            completedNodes: Array.from(executed),
-            nodeOutputs: context.nodeOutputs,
-            nodeExecutions: context.nodeExecutions
-          });
-          const outgoingEdges = edges.filter((e) => e.source === nodeId);
-          for (const edge of outgoingEdges) {
-            if (!executed.has(edge.target)) {
-              queue.push(edge.target);
-            }
-          }
-        } catch (error) {
-          updateNodeStatus(context, nodeId, "error", void 0, error.message);
-          log2.error(`Node ${node?.type || nodeId} failed: ${error.message}`);
-          throw error;
-        }
-      }
-      const sourceNodeIds = new Set(edges.map((e) => e.source));
-      const endNodes = nodes.filter((n) => !sourceNodeIds.has(n.id));
-      const result = {};
-      for (const node of endNodes) {
-        result[node.id] = context.nodeOutputs[node.id];
-      }
-      const responseNode = endNodes.find((n) => n.type === "http_response");
-      let httpResponse = void 0;
-      if (responseNode && context.nodeOutputs[responseNode.id]) {
-        const out = context.nodeOutputs[responseNode.id];
-        httpResponse = {
-          statusCode: out.statusCode || 200,
-          body: out.body,
-          headers: out.headers,
-          contentType: out.contentType || "application/json"
-        };
-      }
-      await stateProvider.updateExecution(executionId, {
-        status: "completed",
-        nodeExecutions: JSON.stringify(context.nodeExecutions),
-        result: JSON.stringify(result),
-        endedAt: formatTime()
-      });
-      await clearCheckpoint(executionId);
-      if (cooldownMs > 0) {
-        try {
-          const cooldownSec = Math.ceil(cooldownMs / 1e3);
-          await cacheProvider.setex(`wf:${workflow.id}:cooldown`, cooldownSec, "1");
-        } catch {
-        }
-      }
-      log2.info(`Execution completed (${executed.size} nodes)`);
-      return { status: "completed", result, httpResponse };
-    } catch (error) {
-      if (s.dlq_enabled) {
-        try {
-          await stateProvider.createDeadLetter?.({
-            id: crypto.randomUUID?.() || executionId + "-dlq",
-            workflowId: workflow.id,
-            executionId,
-            error: error.message,
-            payload: JSON.stringify(inputParameters)
-          });
-        } catch {
-        }
-      }
-      await stateProvider.updateExecution(executionId, {
-        status: "error",
-        nodeExecutions: JSON.stringify(context.nodeExecutions),
-        error: error.message,
-        endedAt: formatTime()
-      });
-      log2.error(`Execution failed: ${error.message}`);
-      return { status: "error", result: {}, error: error.message };
-    }
-  }
-  const timeoutPromise = new Promise(
-    (_, reject2) => setTimeout(() => reject2(new Error(
-      `Execution timed out after ${timeoutMs}ms`
-    )), timeoutMs)
-  );
-  return Promise.race([coreExecute(), timeoutPromise]);
-}
-async function executeSingleNode(executionId, workflow, targetNodeId, inputParameters) {
-  const nodes = JSON.parse(workflow.nodes);
-  const edges = JSON.parse(workflow.edges);
-  const targetNode = nodes.find((n) => n.id === targetNodeId);
-  if (!targetNode) {
-    throw new Error(`Node ${targetNodeId} not found in workflow`);
-  }
-  const context = {
-    executionId,
-    workflowId: workflow.id,
-    parameters: inputParameters,
-    nodeOutputs: {},
-    nodeExecutions: []
-  };
-  try {
-    await updateExecutionStatus(executionId, "executing", context.nodeExecutions);
-    const upstreamNodes = getUpstreamNodes(targetNodeId, nodes, edges);
-    const nodesToExecute = [...upstreamNodes, targetNodeId];
-    context.nodeExecutions = nodesToExecute.map((nodeId) => ({
-      nodeId,
-      status: "idle"
-    }));
-    const executed = /* @__PURE__ */ new Set();
-    const queue = [...nodesToExecute];
-    while (queue.length > 0) {
-      const nodeId = queue.shift();
-      if (executed.has(nodeId)) continue;
-      const node = nodes.find((n) => n.id === nodeId);
-      if (!node) continue;
-      const incomingEdges = edges.filter((e) => e.target === nodeId);
-      const dependenciesMet = incomingEdges.every(
-        (e) => !nodesToExecute.includes(e.source) || executed.has(e.source)
-      );
-      if (!dependenciesMet) {
-        queue.push(nodeId);
-        continue;
-      }
-      const inputs = {};
-      for (const edge of incomingEdges) {
-        const sourceOutputs = context.nodeOutputs[edge.source] || {};
-        if (edge.targetInput && edge.sourceOutput) {
-          inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
-        }
-      }
-      const allTargetNodeIds = new Set(edges.map((e) => e.target));
-      if (!allTargetNodeIds.has(nodeId)) {
-        Object.assign(inputs, context.parameters);
-      }
-      try {
-        updateNodeStatus(context, nodeId, "executing");
-        await updateExecutionStatus(executionId, "executing", context.nodeExecutions);
-        const outputs = await executeNode(node, inputs, context);
-        context.nodeOutputs[nodeId] = outputs;
-        updateNodeStatus(context, nodeId, "completed", outputs);
-        executed.add(nodeId);
-      } catch (error) {
-        updateNodeStatus(context, nodeId, "error", void 0, error.message);
-        throw error;
-      }
-    }
-    const result = {
-      [targetNodeId]: context.nodeOutputs[targetNodeId]
-    };
-    await stateProvider.updateExecution(executionId, {
-      status: "completed",
-      nodeExecutions: JSON.stringify(context.nodeExecutions),
-      result: JSON.stringify(result),
-      endedAt: (/* @__PURE__ */ new Date()).toISOString()
-    });
-  } catch (error) {
-    await stateProvider.updateExecution(executionId, {
-      status: "error",
-      nodeExecutions: JSON.stringify(context.nodeExecutions),
-      error: error.message,
-      endedAt: (/* @__PURE__ */ new Date()).toISOString()
-    });
-  }
-}
-function getUpstreamNodes(targetNodeId, nodes, edges) {
-  const upstream = [];
-  const visited = /* @__PURE__ */ new Set();
-  const queue = [targetNodeId];
-  while (queue.length > 0) {
-    const nodeId = queue.shift();
-    if (visited.has(nodeId)) continue;
-    visited.add(nodeId);
-    const incomingEdges = edges.filter((e) => e.target === nodeId);
-    for (const edge of incomingEdges) {
-      if (!visited.has(edge.source)) {
-        upstream.push(edge.source);
-        queue.push(edge.source);
-      }
-    }
-  }
-  return upstream;
-}
+
+// src/engine/node-executors.ts
 async function executeNode(node, inputs, context) {
   switch (node.type) {
     case "trigger":
@@ -58763,11 +58527,268 @@ function updateNodeStatus(context, nodeId, status, outputs, error) {
     if (error) execution.error = error;
   }
 }
-async function updateExecutionStatus(executionId, status, nodeExecutions) {
-  await stateProvider.updateExecution(executionId, {
+async function updateExecutionStatus(executionId, status, nodeExecutions, stateProvider2) {
+  await stateProvider2.updateExecution(executionId, {
     status,
     nodeExecutions: JSON.stringify(nodeExecutions)
   });
+}
+
+// src/engine/runtime.ts
+async function executeWorkflow(executionId, workflow, inputParameters, settings) {
+  const s = settings || (workflow.settings ? JSON.parse(workflow.settings) : {});
+  const timeoutMs = s.execution_timeout_ms || 3e4;
+  const cooldownMs = s.cooldown_ms || 0;
+  const tz = s.timezone || "UTC";
+  const log2 = createWorkflowLogger(s.log_level || "all", `[Workflow:${executionId.slice(0, 8)}]`);
+  const formatTime = () => {
+    try {
+      return (/* @__PURE__ */ new Date()).toLocaleString("sv-SE", { timeZone: tz }).replace(" ", "T");
+    } catch {
+      return (/* @__PURE__ */ new Date()).toISOString();
+    }
+  };
+  const nodes = JSON.parse(workflow.nodes);
+  const edges = JSON.parse(workflow.edges);
+  const context = {
+    executionId,
+    workflowId: workflow.id,
+    parameters: inputParameters,
+    nodeOutputs: {},
+    nodeExecutions: nodes.map((n) => ({
+      nodeId: n.id,
+      status: "idle"
+    }))
+  };
+  async function coreExecute() {
+    try {
+      const checkpoint = await loadCheckpoint(executionId);
+      const executed = /* @__PURE__ */ new Set();
+      if (checkpoint) {
+        log2.info(`Resuming from checkpoint (${checkpoint.completedNodes.length} nodes done)`);
+        for (const nodeId of checkpoint.completedNodes) {
+          executed.add(nodeId);
+        }
+        Object.assign(context.nodeOutputs, checkpoint.nodeOutputs);
+        context.nodeExecutions = checkpoint.nodeExecutions;
+      }
+      await updateExecutionStatus(executionId, "executing", context.nodeExecutions, stateProvider);
+      const targetNodeIds = new Set(edges.map((e) => e.target));
+      const startNodes = nodes.filter((n) => !targetNodeIds.has(n.id));
+      const queue = [...startNodes.map((n) => n.id)];
+      while (queue.length > 0) {
+        const nodeId = queue.shift();
+        if (executed.has(nodeId)) {
+          const outgoingEdges = edges.filter((e) => e.source === nodeId);
+          for (const edge of outgoingEdges) {
+            if (!executed.has(edge.target)) {
+              queue.push(edge.target);
+            }
+          }
+          continue;
+        }
+        const node = nodes.find((n) => n.id === nodeId);
+        if (!node) continue;
+        const incomingEdges = edges.filter((e) => e.target === nodeId);
+        const dependenciesMet = incomingEdges.every((e) => executed.has(e.source));
+        if (!dependenciesMet) {
+          queue.push(nodeId);
+          continue;
+        }
+        const inputs = {};
+        for (const edge of incomingEdges) {
+          const sourceOutputs = context.nodeOutputs[edge.source] || {};
+          if (edge.targetInput && edge.sourceOutput) {
+            inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
+          }
+        }
+        if (startNodes.some((n) => n.id === nodeId)) {
+          Object.assign(inputs, context.parameters);
+        }
+        try {
+          updateNodeStatus(context, nodeId, "executing");
+          const outputs = await executeNode(node, inputs, context);
+          context.nodeOutputs[nodeId] = outputs;
+          updateNodeStatus(context, nodeId, "completed", outputs);
+          executed.add(nodeId);
+          log2.info(`Node ${node.type || nodeId} completed`);
+          await saveCheckpoint({
+            executionId,
+            workflowId: workflow.id,
+            completedNodes: Array.from(executed),
+            nodeOutputs: context.nodeOutputs,
+            nodeExecutions: context.nodeExecutions
+          });
+          const outgoingEdges = edges.filter((e) => e.source === nodeId);
+          for (const edge of outgoingEdges) {
+            if (!executed.has(edge.target)) {
+              queue.push(edge.target);
+            }
+          }
+        } catch (error) {
+          updateNodeStatus(context, nodeId, "error", void 0, error.message);
+          log2.error(`Node ${node?.type || nodeId} failed: ${error.message}`);
+          throw error;
+        }
+      }
+      const sourceNodeIds = new Set(edges.map((e) => e.source));
+      const endNodes = nodes.filter((n) => !sourceNodeIds.has(n.id));
+      const result = {};
+      for (const node of endNodes) {
+        result[node.id] = context.nodeOutputs[node.id];
+      }
+      const responseNode = endNodes.find((n) => n.type === "http_response");
+      let httpResponse = void 0;
+      if (responseNode && context.nodeOutputs[responseNode.id]) {
+        const out = context.nodeOutputs[responseNode.id];
+        httpResponse = {
+          statusCode: out.statusCode || 200,
+          body: out.body,
+          headers: out.headers,
+          contentType: out.contentType || "application/json"
+        };
+      }
+      await stateProvider.updateExecution(executionId, {
+        status: "completed",
+        nodeExecutions: JSON.stringify(context.nodeExecutions),
+        result: JSON.stringify(result),
+        endedAt: formatTime()
+      });
+      await clearCheckpoint(executionId);
+      if (cooldownMs > 0) {
+        try {
+          const cooldownSec = Math.ceil(cooldownMs / 1e3);
+          await cacheProvider.setex(`wf:${workflow.id}:cooldown`, cooldownSec, "1");
+        } catch {
+        }
+      }
+      log2.info(`Execution completed (${executed.size} nodes)`);
+      return { status: "completed", result, httpResponse };
+    } catch (error) {
+      if (s.dlq_enabled) {
+        try {
+          await stateProvider.createDeadLetter?.({
+            id: crypto.randomUUID?.() || executionId + "-dlq",
+            workflowId: workflow.id,
+            executionId,
+            error: error.message,
+            payload: JSON.stringify(inputParameters)
+          });
+        } catch {
+        }
+      }
+      await stateProvider.updateExecution(executionId, {
+        status: "error",
+        nodeExecutions: JSON.stringify(context.nodeExecutions),
+        error: error.message,
+        endedAt: formatTime()
+      });
+      log2.error(`Execution failed: ${error.message}`);
+      return { status: "error", result: {}, error: error.message };
+    }
+  }
+  const timeoutPromise = new Promise(
+    (_, reject2) => setTimeout(() => reject2(new Error(
+      `Execution timed out after ${timeoutMs}ms`
+    )), timeoutMs)
+  );
+  return Promise.race([coreExecute(), timeoutPromise]);
+}
+async function executeSingleNode(executionId, workflow, targetNodeId, inputParameters) {
+  const nodes = JSON.parse(workflow.nodes);
+  const edges = JSON.parse(workflow.edges);
+  const targetNode = nodes.find((n) => n.id === targetNodeId);
+  if (!targetNode) {
+    throw new Error(`Node ${targetNodeId} not found in workflow`);
+  }
+  const context = {
+    executionId,
+    workflowId: workflow.id,
+    parameters: inputParameters,
+    nodeOutputs: {},
+    nodeExecutions: []
+  };
+  try {
+    await updateExecutionStatus(executionId, "executing", context.nodeExecutions, stateProvider);
+    const upstreamNodes = getUpstreamNodes(targetNodeId, nodes, edges);
+    const nodesToExecute = [...upstreamNodes, targetNodeId];
+    context.nodeExecutions = nodesToExecute.map((nodeId) => ({
+      nodeId,
+      status: "idle"
+    }));
+    const executed = /* @__PURE__ */ new Set();
+    const queue = [...nodesToExecute];
+    while (queue.length > 0) {
+      const nodeId = queue.shift();
+      if (executed.has(nodeId)) continue;
+      const node = nodes.find((n) => n.id === nodeId);
+      if (!node) continue;
+      const incomingEdges = edges.filter((e) => e.target === nodeId);
+      const dependenciesMet = incomingEdges.every(
+        (e) => !nodesToExecute.includes(e.source) || executed.has(e.source)
+      );
+      if (!dependenciesMet) {
+        queue.push(nodeId);
+        continue;
+      }
+      const inputs = {};
+      for (const edge of incomingEdges) {
+        const sourceOutputs = context.nodeOutputs[edge.source] || {};
+        if (edge.targetInput && edge.sourceOutput) {
+          inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
+        }
+      }
+      const allTargetNodeIds = new Set(edges.map((e) => e.target));
+      if (!allTargetNodeIds.has(nodeId)) {
+        Object.assign(inputs, context.parameters);
+      }
+      try {
+        updateNodeStatus(context, nodeId, "executing");
+        await updateExecutionStatus(executionId, "executing", context.nodeExecutions, stateProvider);
+        const outputs = await executeNode(node, inputs, context);
+        context.nodeOutputs[nodeId] = outputs;
+        updateNodeStatus(context, nodeId, "completed", outputs);
+        executed.add(nodeId);
+      } catch (error) {
+        updateNodeStatus(context, nodeId, "error", void 0, error.message);
+        throw error;
+      }
+    }
+    const result = {
+      [targetNodeId]: context.nodeOutputs[targetNodeId]
+    };
+    await stateProvider.updateExecution(executionId, {
+      status: "completed",
+      nodeExecutions: JSON.stringify(context.nodeExecutions),
+      result: JSON.stringify(result),
+      endedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  } catch (error) {
+    await stateProvider.updateExecution(executionId, {
+      status: "error",
+      nodeExecutions: JSON.stringify(context.nodeExecutions),
+      error: error.message,
+      endedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  }
+}
+function getUpstreamNodes(targetNodeId, nodes, edges) {
+  const upstream = [];
+  const visited = /* @__PURE__ */ new Set();
+  const queue = [targetNodeId];
+  while (queue.length > 0) {
+    const nodeId = queue.shift();
+    if (visited.has(nodeId)) continue;
+    visited.add(nodeId);
+    const incomingEdges = edges.filter((e) => e.target === nodeId);
+    for (const edge of incomingEdges) {
+      if (!visited.has(edge.source)) {
+        upstream.push(edge.source);
+        queue.push(edge.source);
+      }
+    }
+  }
+  return upstream;
 }
 
 // src/routes/execute.ts
@@ -74481,9 +74502,99 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height
 .dark .fb-logo-cloud img:not(.no-invert) { filter: invert(1) brightness(1.1); }
 `;
 
-// src/routes/pages.ts
+// src/ssr/htmlDocument.ts
 var HYDRATE_VERSION = "20260205h";
 var DEFAULT_FAVICON3 = "/static/icon.png";
+function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl = DEFAULT_FAVICON3) {
+  const title = page.title || page.name;
+  const description = page.description || "";
+  const keywords = page.keywords || "";
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${escapeHtml5(title)}</title>
+    ${description ? `<meta name="description" content="${escapeHtml5(description)}">` : ""}
+    ${keywords ? `<meta name="keywords" content="${escapeHtml5(keywords)}">` : ""}
+    <meta name="generator" content="Frontbase">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="${faviconUrl}">
+    <link rel="apple-touch-icon" href="${faviconUrl}">
+    
+    <!-- Prefetch hydration bundle -->
+    <link rel="modulepreload" href="/static/react/hydrate.js?v=${HYDRATE_VERSION}">
+
+    <!-- Client-Side Visitor Context Enhancement -->
+    <script>
+    (function() {
+        if (sessionStorage.getItem('visitor-enhanced')) return;
+        
+        // Configuration from advancedVariables
+        const adv = ${JSON.stringify(trackingConfig.advancedVariables || {})};
+        const data = {};
+
+        // Timezone as UTC offset (+3, -5.5)
+        if (adv.timezone?.collect !== false) {
+            const offset = -new Date().getTimezoneOffset() / 60;
+            data.tz = (offset >= 0 ? '+' : '') + offset;
+        }
+
+        // Viewport only
+        if (adv.viewport?.collect !== false) {
+            data.vp = innerWidth + 'x' + innerHeight;
+        }
+
+        // Theme preference
+        if (adv.themePreference?.collect !== false) {
+            data.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+
+        // Connection type
+        if (adv.connectionType?.collect !== false && navigator.connection) {
+            data.conn = navigator.connection.effectiveType;
+        }
+
+        if (Object.keys(data).length > 0) {
+            document.cookie = "visitor-enhanced=" + encodeURIComponent(JSON.stringify(data)) + "; path=/; max-age=31536000; SameSite=Lax";
+            sessionStorage.setItem('visitor-enhanced', '1');
+        }
+    })();
+    </script>
+    
+    <!-- Base styles (from CSS Bundle or fallback) -->
+    <style>
+        ${page.cssBundle || FALLBACK_CSS}
+    </style>
+</head>
+<body>
+    <div id="root">${bodyHtml}</div>
+    
+    <!-- Initial state for hydration -->
+    <script>
+        window.__INITIAL_STATE__ = ${safeJsonStringify(initialState)};
+        window.__PAGE_DATA__ = ${safeJsonStringify({
+    id: page.id,
+    slug: page.slug,
+    layoutData: page.layoutData,
+    datasources: page.datasources
+  })};
+    </script>
+    
+    <!-- Hydration bundle (all interactive components) -->
+    <script type="module" src="/static/react/hydrate.js?v=${HYDRATE_VERSION}"></script>
+</body>
+</html>`;
+}
+function safeJsonStringify(obj) {
+  return JSON.stringify(obj).replace(/<\/script>/gi, "<\\/script>").replace(/<!--/g, "<\\!--");
+}
+function escapeHtml5(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+// src/routes/pages.ts
 var ErrorResponseSchema2 = external_exports.object({
   error: external_exports.string(),
   message: external_exports.string().optional()
@@ -74596,97 +74707,6 @@ async function fetchTrackingConfig() {
     console.warn("[SSR] Failed to fetch tracking config:", error);
   }
   return getDefaultTrackingConfig();
-}
-function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl = DEFAULT_FAVICON3) {
-  const title = page.title || page.name;
-  const description = page.description || "";
-  const keywords = page.keywords || "";
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${escapeHtml5(title)}</title>
-    ${description ? `<meta name="description" content="${escapeHtml5(description)}">` : ""}
-    ${keywords ? `<meta name="keywords" content="${escapeHtml5(keywords)}">` : ""}
-    <meta name="generator" content="Frontbase">
-    
-    <!-- Favicon -->
-    <link rel="icon" type="image/png" href="${faviconUrl}">
-    <link rel="apple-touch-icon" href="${faviconUrl}">
-    
-    <!-- Prefetch hydration bundle -->
-    <link rel="modulepreload" href="/static/react/hydrate.js?v=${HYDRATE_VERSION}">
-
-    <!-- Client-Side Visitor Context Enhancement -->
-    <script>
-    (function() {
-        if (sessionStorage.getItem('visitor-enhanced')) return;
-        
-        // Configuration from advancedVariables
-        const adv = ${JSON.stringify(trackingConfig.advancedVariables || {})};
-        const data = {};
-
-        // Timezone as UTC offset (+3, -5.5)
-        if (adv.timezone?.collect !== false) {
-            const offset = -new Date().getTimezoneOffset() / 60;
-            data.tz = (offset >= 0 ? '+' : '') + offset;
-        }
-
-        // Viewport only
-        if (adv.viewport?.collect !== false) {
-            data.vp = innerWidth + 'x' + innerHeight;
-        }
-
-        // Theme preference
-        if (adv.themePreference?.collect !== false) {
-            data.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        }
-
-        // Connection type
-        if (adv.connectionType?.collect !== false && navigator.connection) {
-            data.conn = navigator.connection.effectiveType;
-        }
-
-        if (Object.keys(data).length > 0) {
-            document.cookie = "visitor-enhanced=" + encodeURIComponent(JSON.stringify(data)) + "; path=/; max-age=31536000; SameSite=Lax";
-            sessionStorage.setItem('visitor-enhanced', '1');
-        }
-    })();
-    </script>
-    
-    <!-- Tailwind CSS Bundle (injected below via cssBundle) -->
-    
-    <!-- Base styles (from CSS Bundle or fallback) -->
-    <style>
-        ${page.cssBundle || FALLBACK_CSS}
-    </style>
-</head>
-<body>
-    <div id="root">${bodyHtml}</div>
-    
-    <!-- Initial state for hydration -->
-    <script>
-        window.__INITIAL_STATE__ = ${safeJsonStringify(initialState)};
-        window.__PAGE_DATA__ = ${safeJsonStringify({
-    id: page.id,
-    slug: page.slug,
-    layoutData: page.layoutData,
-    // Include for hydration access to bindings with dataRequest
-    datasources: page.datasources
-  })};
-    </script>
-    
-    <!-- Hydration bundle (all interactive components) -->
-    <script type="module" src="/static/react/hydrate.js?v=${HYDRATE_VERSION}"></script>
-</body>
-</html>`;
-}
-function safeJsonStringify(obj) {
-  return JSON.stringify(obj).replace(/<\/script>/gi, "<\\/script>").replace(/<!--/g, "<\\!--");
-}
-function escapeHtml5(str) {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 pagesRoute.openapi(renderPageRoute, async (c) => {
   const { slug } = c.req.param();
@@ -75904,39 +75924,6 @@ async function syncSupabaseJwtFromFastAPI() {
     return { status: "error", retry: true };
   }
 }
-async function syncTursoSettingsFromFastAPI() {
-  if (process.env.FRONTBASE_DEPLOYMENT_MODE === "cloud") {
-    console.log("[Startup Sync] \u2139\uFE0F Already in cloud mode \u2014 Turso sync skipped");
-    return { status: "success" };
-  }
-  try {
-    const response = await fetch(`${BACKEND_URL}/api/settings/turso/`, {
-      headers: { "Accept": "application/json" },
-      signal: AbortSignal.timeout(5e3)
-    });
-    if (!response.ok) {
-      console.warn(`[Startup Sync] Turso settings fetch failed: ${response.status}`);
-      return { status: "error", retry: response.status >= 500 };
-    }
-    const settings = await response.json();
-    if (settings.turso_enabled && settings.turso_url && settings.turso_token) {
-      process.env.FRONTBASE_STATE_DB_URL = settings.turso_url;
-      process.env.FRONTBASE_STATE_DB_TOKEN = settings.turso_token;
-      await upgradeToTurso();
-      console.log("[Startup Sync] \u2705 Turso state provider activated from Settings UI");
-      return { status: "success" };
-    } else {
-      console.log("[Startup Sync] \u2139\uFE0F Turso not enabled in Settings UI \u2014 using local SQLite");
-      return { status: "not-configured" };
-    }
-  } catch (error) {
-    const isConnectionError = error?.cause?.code === "ECONNREFUSED";
-    if (!isConnectionError) {
-      console.warn("[Startup Sync] Turso sync failed:", error.message);
-    }
-    return { status: "error", retry: true };
-  }
-}
 async function syncHomepageFromFastAPI() {
   try {
     const response = await fetch(`${BACKEND_URL}/api/pages/homepage/`, {
@@ -75991,11 +75978,9 @@ async function runStartupSync() {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const redisResult = await syncRedisSettingsFromFastAPI();
     const supabaseResult = await syncSupabaseJwtFromFastAPI();
-    const tursoResult = await syncTursoSettingsFromFastAPI();
-    if (tursoResult.status === "success" && process.env.FRONTBASE_STATE_DB_URL) ;
-    const allDone = (redisResult.status === "success" || redisResult.status === "not-configured") && (supabaseResult.status === "success" || supabaseResult.status === "not-configured") && (tursoResult.status === "success" || tursoResult.status === "not-configured");
+    const allDone = (redisResult.status === "success" || redisResult.status === "not-configured") && (supabaseResult.status === "success" || supabaseResult.status === "not-configured");
     if (allDone) break;
-    const needsRetry = redisResult.status === "error" && redisResult.retry || supabaseResult.status === "error" && supabaseResult.retry || tursoResult.status === "error" && tursoResult.retry;
+    const needsRetry = redisResult.status === "error" && redisResult.retry || supabaseResult.status === "error" && supabaseResult.retry;
     if (needsRetry && attempt < MAX_RETRIES) {
       console.log(`[Startup Sync] Attempt ${attempt}/${MAX_RETRIES}, retrying in ${RETRY_DELAY_MS / 1e3}s...`);
       await sleep2(RETRY_DELAY_MS);
@@ -76021,6 +76006,15 @@ async function runStartupSync() {
   console.warn("[Startup Sync] \u26A0\uFE0F Could not sync homepage after all retries. Homepage will be pull-published on first request.");
 }
 
+// src/adapters/shared.ts
+function ensureProcessEnv() {
+  globalThis.process ??= { env: {} };
+}
+function setPlatform(platform2) {
+  ensureProcessEnv();
+  globalThis.process.env.FRONTBASE_ADAPTER_PLATFORM = platform2;
+}
+
 // src/adapters/cloudflare.ts
 var syncStarted = false;
 var cloudflare_default = {
@@ -76031,7 +76025,7 @@ var cloudflare_default = {
         globalThis.process.env[key] = value;
       }
     }
-    globalThis.process.env.FRONTBASE_ADAPTER_PLATFORM = "cloudflare";
+    setPlatform("cloudflare");
     if (env2.AI) {
       setAIBinding(env2.AI);
     }

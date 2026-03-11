@@ -1,17 +1,18 @@
 /**
- * WizardComputeStep — Step 2: Choose CPU vs GPU compute type.
+ * WizardComputeStep — Step 1: Choose CPU vs GPU compute type.
+ * Clicking a card auto-advances to Step 2 (provider).
  */
 
 import { Cpu, Brain } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { DeployWizardState } from './useDeployWizard';
 
-export function WizardComputeStep({ computeType, setComputeType }: DeployWizardState) {
+export function WizardComputeStep({ computeType, selectComputeAndProceed }: DeployWizardState) {
     return (
         <div className="grid grid-cols-2 gap-3">
             <button
                 type="button"
-                onClick={() => setComputeType('cpu')}
+                onClick={() => selectComputeAndProceed('cpu')}
                 className={`relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-all ${computeType === 'cpu'
                     ? 'border-primary bg-primary/5'
                     : 'border-border hover:border-muted-foreground/50'
@@ -27,7 +28,7 @@ export function WizardComputeStep({ computeType, setComputeType }: DeployWizardS
             </button>
             <button
                 type="button"
-                onClick={() => setComputeType('gpu')}
+                onClick={() => selectComputeAndProceed('gpu')}
                 className={`relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-all ${computeType === 'gpu'
                     ? 'border-primary bg-primary/5'
                     : 'border-border hover:border-muted-foreground/50'
@@ -45,3 +46,4 @@ export function WizardComputeStep({ computeType, setComputeType }: DeployWizardS
         </div>
     );
 }
+

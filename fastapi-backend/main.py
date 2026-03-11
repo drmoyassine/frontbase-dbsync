@@ -47,7 +47,7 @@ def _ensure_local_edge():
                 name="Local SQLite",
                 provider="sqlite",
                 db_url="file:local.db",
-                is_default=True,
+                is_default=False,
                 is_system=True,
                 created_at=now,
                 updated_at=now,
@@ -55,6 +55,10 @@ def _ensure_local_edge():
             db.add(sys_db)
             db.flush()
             logger.info("[Startup] ✅ Local SQLite DB seeded")
+        elif bool(sys_db.is_default):
+            # Clear stale default on system resource
+            sys_db.is_default = False  # type: ignore[assignment]
+            logger.info("[Startup] Cleared is_default on system DB")
 
         # --- 2. Local Redis system cache ---
         sys_cache = db.query(EdgeCache).filter(EdgeCache.is_system == True).first()  # noqa: E712
@@ -64,7 +68,7 @@ def _ensure_local_edge():
                 name="Local Redis",
                 provider="redis",
                 cache_url="redis://localhost:6379",
-                is_default=True,
+                is_default=False,
                 is_system=True,
                 created_at=now,
                 updated_at=now,
@@ -72,6 +76,10 @@ def _ensure_local_edge():
             db.add(sys_cache)
             db.flush()
             logger.info("[Startup] ✅ Local Redis cache seeded")
+        elif bool(sys_cache.is_default):
+            # Clear stale default on system resource
+            sys_cache.is_default = False  # type: ignore[assignment]
+            logger.info("[Startup] Cleared is_default on system cache")
 
         # --- 3. Local Edge system engine ---
         sys_engine = db.query(EdgeEngine).filter(EdgeEngine.is_system == True).first()  # noqa: E712

@@ -16,7 +16,6 @@
  *   - WizardAIModelStep    — Step 4 UI
  */
 
-import { useState, useCallback } from 'react';
 import { Rocket, Loader2, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -30,8 +29,6 @@ import { WizardProviderStep } from './deploy-wizard/WizardProviderStep';
 import { WizardComputeStep } from './deploy-wizard/WizardComputeStep';
 import { WizardConfigStep } from './deploy-wizard/WizardConfigStep';
 import { WizardAIModelStep } from './deploy-wizard/WizardAIModelStep';
-import { ConnectProviderDialog } from './ConnectProviderDialog';
-import { KNOWN_EDGE_PROVIDERS } from './edgeConstants';
 
 // ============================================================================
 // Component
@@ -39,47 +36,21 @@ import { KNOWN_EDGE_PROVIDERS } from './edgeConstants';
 
 export function DeployEngineWizard() {
     const wizard = useDeployWizard();
-    const [connectOpen, setConnectOpen] = useState(false);
 
     const {
         open, handleOpenChange,
         step, error, isDeploying,
         goNext, goBack, canNext, stepTitle, stepNumber,
-        validProviders, computeType, selectedModel,
+        computeType, selectedModel,
         selectedProvider, selectedProviderType,
     } = wizard;
-
-    // When user clicks "Deploy Engine", check if providers exist first
-    const handleDeployClick = useCallback(() => {
-        if (validProviders.length === 0) {
-            // No edge providers connected — prompt to connect one first
-            setConnectOpen(true);
-        } else {
-            handleOpenChange(true);
-        }
-    }, [validProviders, handleOpenChange]);
-
-    // After connecting a provider, auto-open the deploy wizard
-    const handleProviderConnected = useCallback((_accountId: string) => {
-        setConnectOpen(false);
-        // Small delay to let react-query refetch providers before opening wizard
-        setTimeout(() => handleOpenChange(true), 300);
-    }, [handleOpenChange]);
 
     return (
         <>
             {/* Deploy Engine trigger button — always active */}
-            <Button size="sm" onClick={handleDeployClick}>
+            <Button size="sm" onClick={() => handleOpenChange(true)}>
                 <Rocket className="w-4 h-4 mr-2" /> Deploy Engine
             </Button>
-
-            {/* Connect Provider fallback dialog (DRY — reuses existing component) */}
-            <ConnectProviderDialog
-                open={connectOpen}
-                onOpenChange={setConnectOpen}
-                allowedProviders={[...KNOWN_EDGE_PROVIDERS]}
-                onConnected={handleProviderConnected}
-            />
 
             {/* Main deploy wizard dialog */}
             <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -102,8 +73,8 @@ export function DeployEngineWizard() {
                             </Alert>
                         )}
 
-                        {step === 'provider' && <WizardProviderStep {...wizard} />}
                         {step === 'compute-type' && <WizardComputeStep {...wizard} />}
+                        {step === 'provider' && <WizardProviderStep {...wizard} />}
                         {step === 'engine-config' && <WizardConfigStep {...wizard} />}
                         {step === 'ai-model' && <WizardAIModelStep {...wizard} />}
 
@@ -123,7 +94,7 @@ export function DeployEngineWizard() {
                     {step !== 'deploying' && (
                         <DialogFooter className="flex justify-between sm:justify-between">
                             <div>
-                                {step !== 'provider' && (
+                                {step !== 'compute-type' && (
                                     <Button variant="outline" onClick={goBack} size="sm">
                                         <ChevronLeft className="w-4 h-4 mr-1" /> Back
                                     </Button>

@@ -389,7 +389,7 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                                     <div className="flex items-center gap-2">
                                         <h4 className="font-medium text-sm">{queue.name}</h4>
                                         <Badge variant="outline" className="text-xs">{queue.provider}</Badge>
-                                        {queue.is_default && (
+                                        {queue.is_default && !queue.is_system && (
                                             <Badge variant="secondary" className="text-xs gap-1">
                                                 <Star className="h-3 w-3" /> Default
                                             </Badge>

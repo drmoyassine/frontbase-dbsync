@@ -88,6 +88,14 @@ manifestRoute.get('/', (c) => {
         deployed_at: process.env.FRONTBASE_DEPLOYED_AT || null,
         bundle_checksum: process.env.FRONTBASE_BUNDLE_CHECKSUM || null,
         capabilities: getCapabilities(),
+        tech_stack: {
+            runtime: process.env.FRONTBASE_ADAPTER_PLATFORM === 'cloudflare' || process.env.FRONTBASE_ADAPTER_PLATFORM === 'cloudflare-lite'
+                ? 'Cloudflare Workers' : 'Node.js',
+            framework: 'Hono',
+            orm: 'Drizzle ORM',
+            templating: 'LiquidJS',
+            validation: 'Zod + OpenAPI 3.1',
+        },
         gpu_models: gpuModels.map(m => ({
             slug: m.slug,
             model_id: m.model_id,

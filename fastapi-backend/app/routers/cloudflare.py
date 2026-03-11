@@ -52,7 +52,6 @@ async def connect_cloudflare(payload: ConnectRequest, db: Session = Depends(get_
     api_token, account_id = cloudflare_api.get_provider_credentials(payload.provider_id, db)
     
     def _do_connect():
-        import requests as req
         hdrs = cloudflare_api.headers(api_token)
         
         nonlocal account_id
@@ -61,7 +60,7 @@ async def connect_cloudflare(payload: ConnectRequest, db: Session = Depends(get_
         # Detect account ID if missing
         if not account_id:
             print("[Cloudflare] Auto-detecting account ID...")
-            resp = req.get(
+            resp = httpx.get(
                 f"{cloudflare_api.CF_API}/accounts",
                 headers=hdrs,
                 params={"per_page": 5},

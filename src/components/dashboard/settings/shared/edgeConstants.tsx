@@ -50,6 +50,7 @@ export const KNOWN_EDGE_PROVIDERS = new Set([
     'cloudflare', 'supabase', 'upstash', 'vercel', 'netlify', 'deno',
 ]);
 
+
 // ============================================================================
 // Provider Resource Labels — used by DeployEngineWizard for input labels
 // ============================================================================
@@ -136,33 +137,55 @@ export interface ProviderFieldConfig {
     required?: boolean;
 }
 
+export type ProviderCapability = 'cpu' | 'gpu' | 'database' | 'auth' | 'storage' | 'cache' | 'queue' | 'vector_db' | 'search' | 'cms' | 'email';
+
+/** Human-readable short labels for provider capabilities */
+export const CAPABILITY_LABELS: Record<ProviderCapability, string> = {
+    cpu: 'CPU',
+    gpu: 'GPU',
+    database: 'Database',
+    auth: 'Auth',
+    storage: 'Storage',
+    cache: 'Cache',
+    queue: 'Queue',
+    vector_db: 'Vector DB',
+    search: 'Search',
+    cms: 'CMS',
+    email: 'Email',
+};
+
 export interface ProviderConfig {
     label: string;
     defaultName: string;
     fields: ProviderFieldConfig[];
     helpText?: React.ReactNode;
+    /** What this provider can do — used for filtering (e.g. deploy wizard GPU vs CPU) */
+    capabilities?: ProviderCapability[];
 }
 
 export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     cloudflare: {
-        label: 'Cloudflare Workers',
+        label: 'Cloudflare',
         defaultName: 'Cloudflare Account',
+        capabilities: ['cpu', 'gpu', 'database', 'storage', 'cache', 'queue', 'vector_db'],
         fields: [
             { key: 'api_token', label: 'API Token', placeholder: 'Cloudflare API Token', type: 'password', required: true },
         ],
         helpText: <>Requires "Workers Scripts: Edit" and "Account Settings: Read". <a href="https://dash.cloudflare.com/profile/api-tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a></>,
     },
     supabase: {
-        label: 'Supabase Edge Functions',
+        label: 'Supabase',
         defaultName: 'Supabase Account',
+        capabilities: ['cpu', 'database', 'auth', 'storage', 'vector_db'],
         fields: [
             { key: 'access_token', label: 'Access Token', placeholder: 'sbp_...', type: 'password', required: true },
         ],
         helpText: <><a href="https://supabase.com/dashboard/account/tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Generate access token →</a> One token discovers all your projects.</>,
     },
     upstash: {
-        label: 'Upstash Workflows',
+        label: 'Upstash',
         defaultName: 'Upstash Account',
+        capabilities: ['cpu', 'cache', 'queue', 'vector_db', 'search'],
         fields: [
             { key: 'api_token', label: 'API Token', placeholder: 'Upstash API Token', type: 'password', required: true },
             { key: 'email', label: 'Email', placeholder: 'you@example.com', required: true },
@@ -170,32 +193,36 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
         helpText: <><a href="https://console.upstash.com/account/api?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Get API key →</a> Found in Console → Account → Management API.</>,
     },
     vercel: {
-        label: 'Vercel Edge Functions',
+        label: 'Vercel',
         defaultName: 'Vercel Account',
+        capabilities: ['cpu', 'cache', 'storage', 'database'],
         fields: [
             { key: 'api_token', label: 'API Token', placeholder: 'Vercel API Token', type: 'password', required: true },
         ],
         helpText: <><a href="https://vercel.com/account/tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a> One token for all your projects.</>,
     },
     netlify: {
-        label: 'Netlify Edge Functions',
+        label: 'Netlify',
         defaultName: 'Netlify Account',
+        capabilities: ['cpu', 'storage'],
         fields: [
             { key: 'api_token', label: 'API Token', placeholder: 'nfp_...', type: 'password', required: true },
         ],
         helpText: <><a href="https://app.netlify.com/user/applications#personal-access-tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a> A site will be created automatically on first deploy.</>,
     },
     deno: {
-        label: 'Deno Deploy',
+        label: 'Deno',
         defaultName: 'Deno Deploy Account',
+        capabilities: ['cpu', 'cache', 'queue'],
         fields: [
             { key: 'access_token', label: 'Organization Token', placeholder: 'ddo_...', type: 'password', required: true },
         ],
         helpText: <>Create an org token at your <a href="https://dash.deno.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Deno Deploy dashboard</a> → Organization Settings.</>,
     },
     neon: {
-        label: 'Neon Postgres',
+        label: 'Neon',
         defaultName: 'Neon Account',
+        capabilities: ['database', 'auth'],
         fields: [
             { key: 'api_key', label: 'API Key', placeholder: 'neon_api_...', type: 'password', required: true },
         ],
@@ -204,6 +231,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     postgres: {
         label: 'PostgreSQL',
         defaultName: 'PostgreSQL Server',
+        capabilities: ['database'],
         fields: [
             { key: 'host', label: 'Host', placeholder: 'db.example.com', required: true },
             { key: 'port', label: 'Port', placeholder: '5432' },
@@ -215,6 +243,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     mysql: {
         label: 'MySQL',
         defaultName: 'MySQL Server',
+        capabilities: ['database'],
         fields: [
             { key: 'host', label: 'Host', placeholder: 'db.example.com', required: true },
             { key: 'port', label: 'Port', placeholder: '3306' },
@@ -226,6 +255,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     wordpress: {
         label: 'WordPress',
         defaultName: 'WordPress Site',
+        capabilities: ['cms'],
         fields: [
             { key: 'base_url', label: 'Site URL', placeholder: 'https://mysite.com', required: true },
             { key: 'username', label: 'Username', placeholder: 'admin', required: true },
@@ -236,6 +266,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     wordpress_rest: {
         label: 'WordPress',
         defaultName: 'WordPress Site',
+        capabilities: ['cms'],
         fields: [
             { key: 'base_url', label: 'Site URL', placeholder: 'https://mysite.com', required: true },
             { key: 'username', label: 'Username', placeholder: 'admin', required: true },
@@ -246,6 +277,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     wordpress_graphql: {
         label: 'WordPress',
         defaultName: 'WordPress Site',
+        capabilities: ['cms'],
         fields: [
             { key: 'base_url', label: 'Site URL', placeholder: 'https://mysite.com', required: true },
             { key: 'username', label: 'Username', placeholder: 'admin', required: true },
@@ -254,8 +286,9 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
         helpText: <>Generate an Application Password in WordPress → Users → Profile → Application Passwords.</>,
     },
     turso: {
-        label: 'Turso (libSQL)',
+        label: 'Turso',
         defaultName: 'Turso Databases',
+        capabilities: ['database'],
         fields: [
             { key: 'db_url', label: 'Database URL', placeholder: 'libsql://your-db.turso.io', required: true },
             { key: 'db_token', label: 'Auth Token', placeholder: 'Database auth token', type: 'password', required: true },
@@ -263,3 +296,8 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
         helpText: <>Get your URL and token from the Turso dashboard or CLI.</>,
     },
 };
+
+// Derived: providers that support GPU inference (used to filter deploy wizard)
+export const GPU_CAPABLE_PROVIDERS = new Set(
+    Object.entries(PROVIDER_CONFIGS).filter(([, c]) => c.capabilities?.includes('gpu')).map(([k]) => k)
+);

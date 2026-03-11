@@ -19,6 +19,8 @@ import { useToast } from '@/hooks/use-toast';
 import {
     API_BASE,
     KNOWN_EDGE_PROVIDERS,
+    PROVIDER_CONFIGS,
+    GPU_CAPABLE_PROVIDERS,
     fetchGPUCatalog,
     deployGPUModel,
 } from '../edgeConstants';
@@ -46,26 +48,35 @@ export function useDeployWizard() {
     const { data: edgeQueues = [] } = useEdgeQueues();
 
     const [open, setOpen] = useState(false);
-    const [step, setStep] = useState<WizardStep>('provider');
+    const [step, setStep] = useState<WizardStep>('compute-type');
     const [error, setError] = useState<string | null>(null);
     const [isDeploying, setIsDeploying] = useState(false);
 
-    // Step 1: Provider
+    // Step 1: Compute type (declared first — filteredProviders depends on it)
+    const [computeType, setComputeType] = useState<ComputeType | null>(null);
+
+    // Step 2: Provider
     const [selectedProviderId, setSelectedProviderId] = useState('');
     const validProviders = useMemo(
         () => providers.filter(p => p.is_active && KNOWN_EDGE_PROVIDERS.has(p.provider)),
         [providers]
     );
-    const selectedProvider = validProviders.find(p => p.id === selectedProviderId);
+
+    // Filtered by compute type: GPU → only GPU-capable, CPU → all edge providers
+    const filteredProviders = useMemo(
+        () => computeType === 'gpu'
+            ? validProviders.filter(p => GPU_CAPABLE_PROVIDERS.has(p.provider))
+            : validProviders,
+        [validProviders, computeType]
+    );
+    const selectedProvider = filteredProviders.find(p => p.id === selectedProviderId);
     const selectedProviderType = selectedProvider?.provider || 'cloudflare';
 
-    // Step 2: Compute type
-    const [computeType, setComputeType] = useState<ComputeType>('cpu');
 
     // Step 3: Engine config
     const [engineType, setEngineType] = useState<'lite' | 'full'>('lite');
     const [workerName, setWorkerName] = useState('frontbase-edge');
-    const [selectedDbId, setSelectedDbId] = useState('default');
+    const [selectedDbId, setSelectedDbId] = useState('none');
     const [selectedCacheId, setSelectedCacheId] = useState('none');
     const [selectedQueueId, setSelectedQueueId] = useState('none');
     const [gpuMode, setGPUMode] = useState<GPUMode>('new');
@@ -103,12 +114,12 @@ export function useDeployWizard() {
     });
     const catalogTypes = [...new Set(allCatalogModels.map((m) => m.model_type))].sort();
 
-    // Auto-select first provider
+    // Auto-select first provider (re-run when filteredProviders changes, e.g. after compute toggle)
     useEffect(() => {
-        if (validProviders.length > 0 && !selectedProviderId) {
-            setSelectedProviderId(validProviders[0].id);
+        if (filteredProviders.length > 0 && !filteredProviders.find(p => p.id === selectedProviderId)) {
+            setSelectedProviderId(filteredProviders[0].id);
         }
-    }, [validProviders, selectedProviderId]);
+    }, [filteredProviders, selectedProviderId]);
 
     // Auto-select default DB
     useEffect(() => {
@@ -122,10 +133,15 @@ export function useDeployWizard() {
     const handleOpenChange = (isOpen: boolean) => {
         setOpen(isOpen);
         if (!isOpen) {
-            setStep('provider');
+            setStep('compute-type');
             setError(null);
-            setComputeType('cpu');
+            setComputeType(null);
+            setSelectedProviderId('');
             setEngineType('lite');
+            setWorkerName('frontbase-edge');
+            setSelectedDbId('none');
+            setSelectedCacheId('none');
+            setSelectedQueueId('none');
             setGPUMode('new');
             setExistingEngineId('');
             setSelectedModel(null);
@@ -136,12 +152,19 @@ export function useDeployWizard() {
     };
 
     // ── Navigation ───────────────────────────────────────────────────────
+    // Step order: compute-type → provider → engine-config → (ai-model if GPU)
+    const selectComputeAndProceed = (type: ComputeType) => {
+        setComputeType(type);
+        setError(null);
+        setStep('provider');
+    };
+
     const goNext = () => {
         setError(null);
-        if (step === 'provider') {
+        if (step === 'compute-type') {
+            setStep('provider');
+        } else if (step === 'provider') {
             if (!selectedProviderId) { setError('Select a provider'); return; }
-            setStep('compute-type');
-        } else if (step === 'compute-type') {
             setStep('engine-config');
         } else if (step === 'engine-config') {
             if (computeType === 'gpu') {
@@ -160,8 +183,8 @@ export function useDeployWizard() {
 
     const goBack = () => {
         setError(null);
-        if (step === 'compute-type') setStep('provider');
-        else if (step === 'engine-config') setStep('compute-type');
+        if (step === 'provider') setStep('compute-type');
+        else if (step === 'engine-config') setStep('provider');
         else if (step === 'ai-model') setStep('engine-config');
     };
 
@@ -247,8 +270,8 @@ export function useDeployWizard() {
     // ── Step title helper ────────────────────────────────────────────────
     const stepTitle = () => {
         switch (step) {
-            case 'provider': return 'Select Provider';
             case 'compute-type': return 'Compute Type';
+            case 'provider': return 'Select Provider';
             case 'engine-config': return computeType === 'gpu' && gpuMode === 'existing' ? 'Select Engine' : 'Engine Configuration';
             case 'ai-model': return 'Select AI Model';
             case 'deploying': return 'Deploying...';
@@ -257,16 +280,16 @@ export function useDeployWizard() {
 
     const stepNumber = () => {
         const steps: WizardStep[] = computeType === 'gpu'
-            ? ['provider', 'compute-type', 'engine-config', 'ai-model']
-            : ['provider', 'compute-type', 'engine-config'];
+            ? ['compute-type', 'provider', 'engine-config', 'ai-model']
+            : ['compute-type', 'provider', 'engine-config'];
         const idx = steps.indexOf(step);
         return idx >= 0 ? `Step ${idx + 1} of ${steps.length}` : '';
     };
 
     // ── Can proceed? ─────────────────────────────────────────────────────
     const canNext = () => {
-        if (step === 'provider') return !!selectedProviderId;
         if (step === 'compute-type') return true;
+        if (step === 'provider') return !!selectedProviderId;
         if (step === 'engine-config') {
             if (computeType === 'gpu' && gpuMode === 'existing') return !!existingEngineId;
             return !!workerName;
@@ -283,12 +306,12 @@ export function useDeployWizard() {
         step, error, isDeploying,
         goNext, goBack, canNext, stepTitle, stepNumber,
 
-        // Step 1: Provider
-        validProviders, selectedProviderId, setSelectedProviderId,
-        selectedProvider, selectedProviderType,
+        // Step 1: Compute
+        computeType, setComputeType, selectComputeAndProceed,
 
-        // Step 2: Compute
-        computeType, setComputeType,
+        // Step 2: Provider (filtered by compute type)
+        validProviders, filteredProviders, selectedProviderId, setSelectedProviderId,
+        selectedProvider, selectedProviderType,
 
         // Step 3: Engine config
         engineType, setEngineType,

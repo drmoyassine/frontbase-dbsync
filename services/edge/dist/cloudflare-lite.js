@@ -51305,7 +51305,7 @@ function createInitialProvider() {
     console.log("\u2601\uFE0F Using TursoHttpProvider");
     return new TursoHttpProvider();
   }
-  console.log("\u{1F4BE} Starting with LocalSqliteProvider (may upgrade to Turso after sync)");
+  console.log("\u{1F4BE} Using LocalSqliteProvider");
   return new LocalSqliteProvider();
 }
 function getStateProvider() {

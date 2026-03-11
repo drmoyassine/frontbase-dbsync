@@ -5,19 +5,24 @@
  * - GPU: New vs Existing toggle + engine picker
  * - Engine type (Lite / Full)
  * - Resource name (provider-aware label from PROVIDER_RESOURCE_LABELS)
- * - Edge DB / Cache / Queue selectors
+ * - Edge DB / Cache / Queue selectors with "Connect New" option
  *
  * This is the main customization point for per-provider features.
  */
 
+import { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Cpu, Layers, Plus } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PROVIDER_RESOURCE_LABELS } from '../edgeConstants';
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PROVIDER_RESOURCE_LABELS, PROVIDER_CONFIGS } from '../edgeConstants';
+import { ConnectProviderDialog } from '../ConnectProviderDialog';
 import type { EdgeEngine } from '@/hooks/useEdgeInfrastructure';
 import type { DeployWizardState } from './useDeployWizard';
+
+const CONNECT_NEW_VALUE = '__connect_new__';
 
 export function WizardConfigStep({
     computeType,
@@ -32,6 +37,34 @@ export function WizardConfigStep({
     selectedQueueId, setSelectedQueueId,
     edgeDbs, edgeCaches, edgeQueues,
 }: DeployWizardState) {
+    const queryClient = useQueryClient();
+
+    // Connect New dialog state — tracks which resource type is being connected
+    const [connectOpen, setConnectOpen] = useState(false);
+    const [connectingFor, setConnectingFor] = useState<'database' | 'cache' | 'queue' | null>(null);
+
+    // Filtered providers for Connect New dialog based on capability
+    const connectAllowedProviders = useMemo(() => {
+        if (!connectingFor) return [];
+        return Object.entries(PROVIDER_CONFIGS)
+            .filter(([, config]) => config.capabilities.includes(connectingFor))
+            .map(([key]) => key);
+    }, [connectingFor]);
+
+    const handleConnectNew = (type: 'database' | 'cache' | 'queue') => {
+        setConnectingFor(type);
+        setConnectOpen(true);
+    };
+
+    // Filter out local/system resources — cloud engines can't reach localhost
+    const cloudDbs = edgeDbs.filter((db: any) => !db.is_system);
+    const cloudCaches = edgeCaches.filter((c: any) => !c.is_system);
+    const cloudQueues = edgeQueues.filter((q: any) => !q.is_system);
+
+    // System default label — only show if default is a non-local resource
+    const defaultDb = cloudDbs.find((db: any) => db.is_default);
+    const defaultDbLabel = defaultDb ? `System Default (${defaultDb.name})` : null;
+
     return (
         <div className="space-y-4">
             {/* GPU: New vs Existing toggle */}
@@ -151,51 +184,115 @@ export function WizardConfigStep({
                         </div>
                     </div>
 
-                    {/* DB + Cache + Queue */}
+                    {/* Edge Database */}
                     <div className="space-y-2">
-                        <Label>Edge State Database</Label>
-                        <Select value={selectedDbId} onValueChange={setSelectedDbId}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="none">None (No Database)</SelectItem>
-                                <SelectItem value="default">Use System Default</SelectItem>
-                                {edgeDbs.map((db: any) => (
-                                    <SelectItem key={db.id} value={db.id}>{db.name} ({db.provider})</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">The runtime needs a fast database for global state cache.</p>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label>Edge Cache</Label>
-                        <Select value={selectedCacheId} onValueChange={setSelectedCacheId}>
+                        <Label>Edge Database</Label>
+                        <Select value={selectedDbId} onValueChange={v => {
+                            if (v === CONNECT_NEW_VALUE) { handleConnectNew('database'); return; }
+                            setSelectedDbId(v);
+                        }}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="none">None</SelectItem>
-                                {edgeCaches.map(cache => (
+                                {defaultDbLabel && <SelectItem value="default">{defaultDbLabel}</SelectItem>}
+                                {cloudDbs.map((db: any) => (
+                                    <SelectItem key={db.id} value={db.id}>{db.name} ({db.provider})</SelectItem>
+                                ))}
+                                <SelectSeparator />
+                                <SelectItem value={CONNECT_NEW_VALUE} className="text-primary">
+                                    <span className="flex items-center gap-1.5"><Plus className="w-3 h-3" /> Connect New Database</span>
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">Persistent edge database for published pages and state.</p>
+                    </div>
+
+                    {/* Edge Cache */}
+                    <div className="space-y-2">
+                        <Label>Edge Cache</Label>
+                        <Select value={selectedCacheId} onValueChange={v => {
+                            if (v === CONNECT_NEW_VALUE) { handleConnectNew('cache'); return; }
+                            setSelectedCacheId(v);
+                        }}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                {cloudCaches.map(cache => (
                                     <SelectItem key={cache.id} value={cache.id}>{cache.name} ({cache.provider})</SelectItem>
                                 ))}
+                                <SelectSeparator />
+                                <SelectItem value={CONNECT_NEW_VALUE} className="text-primary">
+                                    <span className="flex items-center gap-1.5"><Plus className="w-3 h-3" /> Connect New Cache</span>
+                                </SelectItem>
                             </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">Optional caching layer (Upstash, Redis) for faster page loads.</p>
                     </div>
 
+                    {/* Edge Queue */}
                     <div className="space-y-2">
                         <Label>Edge Queue</Label>
-                        <Select value={selectedQueueId} onValueChange={setSelectedQueueId}>
+                        <Select value={selectedQueueId} onValueChange={v => {
+                            if (v === CONNECT_NEW_VALUE) { handleConnectNew('queue'); return; }
+                            setSelectedQueueId(v);
+                        }}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="none">None</SelectItem>
-                                {edgeQueues.map(queue => (
+                                {cloudQueues.map(queue => (
                                     <SelectItem key={queue.id} value={queue.id}>{queue.name} ({queue.provider})</SelectItem>
                                 ))}
+                                <SelectSeparator />
+                                <SelectItem value={CONNECT_NEW_VALUE} className="text-primary">
+                                    <span className="flex items-center gap-1.5"><Plus className="w-3 h-3" /> Connect New Queue</span>
+                                </SelectItem>
                             </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">Optional message queue (QStash) for durable workflow execution.</p>
                     </div>
                 </>
             )}
+
+            {/* Connect Provider dialog — filtered by resource capability */}
+            <ConnectProviderDialog
+                open={connectOpen}
+                onOpenChange={setConnectOpen}
+                allowedProviders={connectAllowedProviders}
+                onConnected={async (accountId) => {
+                    // Auto-register edge resources from the newly connected account
+                    // so they appear in the wizard dropdown immediately.
+                    try {
+                        if (connectingFor === 'database') {
+                            const disc = await fetch(`/api/edge-providers/discover-by-account/${accountId}`).then(r => r.json());
+                            const dbs = disc?.resources?.filter((r: any) => r.type === 'turso_db') || [];
+                            for (const db of dbs) {
+                                await fetch(`/api/edge-databases/`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        name: db.name || 'Database',
+                                        provider: 'turso',
+                                        db_url: db.db_url,
+                                        db_token: db.token,
+                                        provider_account_id: accountId,
+                                        is_default: false,
+                                    }),
+                                });
+                            }
+                        }
+                        // TODO: similar for cache/queue when those providers support discovery
+                    } catch (e) {
+                        console.warn('[Wizard] Auto-register edge resource failed:', e);
+                    }
+
+                    // Invalidate queries so new entries appear
+                    const queryKeyMap = { database: 'edge-databases', cache: 'edge-caches', queue: 'edge-queues' };
+                    if (connectingFor) queryClient.invalidateQueries({ queryKey: [queryKeyMap[connectingFor]] });
+                    queryClient.invalidateQueries({ queryKey: ['edge-providers'] });
+                    setConnectOpen(false);
+                    setConnectingFor(null);
+                }}
+            />
         </div>
     );
 }

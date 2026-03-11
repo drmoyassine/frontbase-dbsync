@@ -37,12 +37,17 @@ from ..services import engine_deploy
 # final engine_url. Providers without hooks use the default URL builder.
 
 async def _cf_pre_deploy(ctx: dict, provider: EdgeProviderAccount, worker_name: str, db: Session) -> str:
-    """Cloudflare: detect account_id if missing, enable workers.dev subdomain."""
+    """Cloudflare: detect account_id if missing, build the workers.dev URL.
+    
+    NOTE: We do NOT enable the subdomain here — the worker doesn't exist yet.
+    Subdomain enable happens in _deploy_cloudflare() AFTER the upload.
+    """
     from ..services import cloudflare_api
     from ..core.security import encrypt_credentials
+    import re
 
     account_id = ctx.get("account_id")
-    api_token = ctx.get("api_token")
+    api_token = str(ctx.get("api_token") or "")
 
     if not account_id:
         account_id = await cloudflare_api.detect_account_id(api_token)
@@ -52,7 +57,27 @@ async def _cf_pre_deploy(ctx: dict, provider: EdgeProviderAccount, worker_name: 
         provider.provider_credentials = encrypt_credentials(raw_creds)  # type: ignore[assignment]
         db.commit()
 
-    return await cloudflare_api.enable_workers_dev(api_token, account_id, worker_name)
+    # Construct URL (matches what enable_workers_dev will return after upload)
+    normalized_name = re.sub(r'[^a-z0-9-]', '-', worker_name.lower()).strip('-')
+    # Get the subdomain for this CF account
+    import httpx
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{cloudflare_api.CF_API}/accounts/{account_id}/workers/subdomain",
+                headers=cloudflare_api.headers(str(api_token)),
+                timeout=10.0,
+            )
+            subdomain = "workers.dev"
+            if resp.status_code == 200:
+                sub_data = resp.json()
+                subdomain_name = sub_data.get("result", {}).get("subdomain", "")
+                if subdomain_name:
+                    subdomain = f"{subdomain_name}.workers.dev"
+    except Exception:
+        subdomain = "workers.dev"
+
+    return f"https://{normalized_name}.{subdomain}"
 
 
 # Registry: provider_type → async pre-deploy hook

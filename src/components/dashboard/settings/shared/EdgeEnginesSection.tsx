@@ -264,22 +264,13 @@ export function EdgeEnginesSection() {
                                                     </div>
                                                     <div className="flex items-center gap-1.5 flex-wrap">
                                                         <span className="text-sm text-muted-foreground font-medium">Bindings:</span>
-                                                        <Badge variant="outline" className={`text-[10px] h-5 py-0 ${engine.edge_db_name
-                                                            ? 'bg-blue-500/5 border-blue-500/20 text-blue-400'
-                                                            : 'bg-muted/50 border-border text-muted-foreground'
-                                                            }`}>
+                                                        <Badge variant="outline" className="text-[10px] h-5 py-0 bg-muted/50 border-border text-muted-foreground">
                                                             DB: {engine.edge_db_name || 'None'}
                                                         </Badge>
-                                                        <Badge variant="outline" className={`text-[10px] h-5 py-0 ${engine.edge_cache_name
-                                                            ? 'bg-amber-500/5 border-amber-500/20 text-amber-400'
-                                                            : 'bg-muted/50 border-border text-muted-foreground'
-                                                            }`}>
+                                                        <Badge variant="outline" className="text-[10px] h-5 py-0 bg-muted/50 border-border text-muted-foreground">
                                                             Cache: {engine.edge_cache_name || 'None'}
                                                         </Badge>
-                                                        <Badge variant="outline" className={`text-[10px] h-5 py-0 ${engine.edge_queue_name
-                                                            ? 'bg-green-500/5 border-green-500/20 text-green-400'
-                                                            : 'bg-muted/50 border-border text-muted-foreground'
-                                                            }`}>
+                                                        <Badge variant="outline" className="text-[10px] h-5 py-0 bg-muted/50 border-border text-muted-foreground">
                                                             Queue: {engine.edge_queue_name || 'None'}
                                                         </Badge>
                                                     </div>

@@ -75,7 +75,7 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
 
     try:
         # Check if engine has a customized snapshot (forked)
-        existing_snapshot = json.loads(str(engine.source_snapshot or '{}')) if engine.source_snapshot else {}
+        existing_snapshot = json.loads(str(engine.source_snapshot or '{}')) if str(engine.source_snapshot or '') else {}
         is_forked = bool(engine.is_forked) or any(
             not k.startswith(f"{CORE_PREFIX}/") for k in existing_snapshot if not k.endswith("README.md")
         )
@@ -150,6 +150,11 @@ async def _deploy_cloudflare(
     if not api_token or not account_id or not worker_name:
         raise HTTPException(400, "Missing Cloudflare credentials or worker_name in engine config")
 
+    # Narrow types for pyright after guard
+    api_token = str(api_token)
+    account_id = str(account_id)
+    worker_name = str(worker_name)
+
     script_filename = "cloudflare.js" if adapter_type == "full" else "cloudflare-lite.js"
 
     # Check if engine has GPU models — inject AI binding if so
@@ -163,6 +168,9 @@ async def _deploy_cloudflare(
         api_token, account_id, worker_name, script_content,
         script_filename, bindings=bindings,
     )
+
+    # Enable workers.dev subdomain AFTER upload (worker must exist first)
+    await cloudflare_api.enable_workers_dev(str(api_token), str(account_id), str(worker_name))
 
     # Build and push secrets
     secrets = build_engine_secrets(

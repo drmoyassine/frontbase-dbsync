@@ -104,6 +104,7 @@ async def upload_worker(
     # CF requires lowercase, alphanumeric, dashes only
     worker_name = re.sub(r'[^a-z0-9-]', '-', worker_name.lower()).strip('-')
     url = f"{CF_API}/accounts/{account_id}/workers/scripts/{worker_name}"
+    print(f"[Cloudflare] Uploading worker '{worker_name}' ({len(script_content)} bytes) to {url}")
 
     metadata: dict = {
         "main_module": script_filename,
@@ -124,13 +125,15 @@ async def upload_worker(
             url,
             headers=headers(api_token),
             files=files,
-            timeout=30.0,
+            timeout=60.0,
         )
-        if resp.status_code not in (200, 201):
+        result = resp.json()
+        cf_success = result.get("success", False)
+        print(f"[Cloudflare] Upload response: status={resp.status_code} success={cf_success}")
+        if resp.status_code not in (200, 201) or not cf_success:
             # Parse CF error into a friendly message
             try:
-                err_data = resp.json()
-                errors = err_data.get("errors", [])
+                errors = result.get("errors", [])
                 if errors:
                     msg = errors[0].get("message", resp.text[:300])
                 else:
@@ -141,20 +144,42 @@ async def upload_worker(
                 400,
                 f"Cloudflare rejected the worker '{worker_name}': {msg}"
             )
-        return resp.json()
+        return result
 
 
 async def enable_workers_dev(api_token: str, account_id: str, worker_name: str) -> str:
-    """Enable the workers.dev subdomain for the worker. Returns the worker URL."""
+    """Enable the workers.dev subdomain for the worker. Returns the worker URL.
+    
+    Retries up to 3 times with a 2s delay — CF sometimes needs a moment
+    to propagate a newly uploaded worker before subdomain can be enabled.
+    """
+    import re, asyncio
+    # Normalize name to match what upload_worker used
+    worker_name = re.sub(r'[^a-z0-9-]', '-', worker_name.lower()).strip('-')
     url = f"{CF_API}/accounts/{account_id}/workers/scripts/{worker_name}/subdomain"
 
+    last_error = ""
     async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            url,
-            headers={**headers(api_token), "Content-Type": "application/json"},
-            json={"enabled": True},
-            timeout=10.0,
-        )
+        for attempt in range(3):
+            resp = await client.post(
+                url,
+                headers={**headers(api_token), "Content-Type": "application/json"},
+                json={"enabled": True},
+                timeout=10.0,
+            )
+            if resp.status_code in (200, 201):
+                print(f"[Cloudflare] workers.dev subdomain enabled for '{worker_name}' (attempt {attempt + 1})")
+                break
+            last_error = resp.text[:300]
+            print(f"[Cloudflare] Subdomain enable attempt {attempt + 1}/3 failed: {resp.status_code} {last_error}")
+            if attempt < 2:
+                await asyncio.sleep(2)  # Wait for CF propagation
+        else:
+            raise HTTPException(
+                400,
+                f"Failed to enable workers.dev subdomain for '{worker_name}' after 3 attempts: {last_error}"
+            )
+
         subdomain_resp = await client.get(
             f"{CF_API}/accounts/{account_id}/workers/subdomain",
             headers=headers(api_token),
@@ -167,7 +192,9 @@ async def enable_workers_dev(api_token: str, account_id: str, worker_name: str) 
             if subdomain_name:
                 subdomain = f"{subdomain_name}.workers.dev"
 
-        return f"https://{worker_name}.{subdomain}"
+        worker_url = f"https://{worker_name}.{subdomain}"
+        print(f"[Cloudflare] Worker URL: {worker_url}")
+        return worker_url
 
 
 async def set_secrets(api_token: str, account_id: str, worker_name: str, secrets: dict) -> None:

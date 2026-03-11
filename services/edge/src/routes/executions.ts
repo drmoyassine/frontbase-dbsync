@@ -13,7 +13,7 @@ const executionsRoute = new OpenAPIHono();
 const allRoute = createRoute({
     method: 'get',
     path: '/all',
-    tags: ['Executions'],
+    tags: ['Execution'],
     summary: 'List all executions across all workflows',
     description: 'Returns recent executions with optional filters (status, date range)',
     request: {
@@ -72,7 +72,7 @@ executionsRoute.openapi(allRoute, async (c) => {
 const statsRoute = createRoute({
     method: 'get',
     path: '/stats',
-    tags: ['Executions'],
+    tags: ['Execution'],
     summary: 'Get execution counts per workflow',
     description: 'Returns run counts for each workflow',
     responses: {
@@ -104,7 +104,7 @@ executionsRoute.openapi(statsRoute, async (c) => {
 const getRoute = createRoute({
     method: 'get',
     path: '/:id',
-    tags: ['Executions'],
+    tags: ['Execution'],
     summary: 'Get execution status',
     description: 'Returns the status and details of a workflow execution',
     request: {
@@ -164,7 +164,7 @@ executionsRoute.openapi(getRoute, async (c) => {
 const listRoute = createRoute({
     method: 'get',
     path: '/workflow/:workflowId',
-    tags: ['Executions'],
+    tags: ['Execution'],
     summary: 'List workflow executions',
     description: 'Returns recent executions for a specific workflow',
     request: {

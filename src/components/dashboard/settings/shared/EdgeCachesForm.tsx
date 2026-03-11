@@ -135,7 +135,7 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
                                     <div className="flex items-center gap-2">
                                         <h4 className="font-medium text-sm">{cache.name}</h4>
                                         <Badge variant="outline" className="text-xs">{cache.provider}</Badge>
-                                        {cache.is_default && (
+                                        {cache.is_default && !cache.is_system && (
                                             <Badge variant="secondary" className="text-xs gap-1">
                                                 <Star className="h-3 w-3" /> Default
                                             </Badge>

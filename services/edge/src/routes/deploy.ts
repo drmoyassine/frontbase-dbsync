@@ -12,7 +12,7 @@ const deployRoute = new OpenAPIHono();
 const route = createRoute({
     method: 'post',
     path: '/',
-    tags: ['Deployment'],
+    tags: ['Workflows'],
     summary: 'Deploy a workflow',
     description: 'Receives a workflow from FastAPI and stores it for execution',
     request: {

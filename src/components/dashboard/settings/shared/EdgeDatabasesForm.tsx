@@ -430,7 +430,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                 {getProviderIcon(db.provider)}
                                 <span className="font-medium">{db.name}</span>
                                 <Badge variant="outline" className="text-xs">{db.provider}</Badge>
-                                {db.is_default && (
+                                {db.is_default && !db.is_system && (
                                     <Badge variant="secondary" className="text-xs gap-1">
                                         <Star className="h-3 w-3" /> Default
                                     </Badge>

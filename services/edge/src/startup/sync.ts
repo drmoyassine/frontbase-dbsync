@@ -173,6 +173,14 @@ export async function runStartupSync(): Promise<void> {
     // Initialize state database (runs migrations including v2 for workflows/executions)
     await stateProvider.init();
 
+    // On cloud platforms (Supabase, CF, Vercel, etc.), there's no FastAPI backend.
+    // Credentials (Redis, JWT, Turso) are pushed as env vars/secrets at deploy time.
+    // Skip the backend sync to avoid 15s of wasted cold-start retries to localhost:8000.
+    if (!process.env.BACKEND_URL) {
+        console.log('[Startup Sync] ☁️  No BACKEND_URL set — skipping backend sync (cloud platform mode)');
+        return;
+    }
+
     // Sync settings from backend with retries (FastAPI may not be ready yet)
     // NOTE: Turso/edge DB credentials are now pushed as env vars via secrets_builder
     // during deploy — no startup sync needed for database config.

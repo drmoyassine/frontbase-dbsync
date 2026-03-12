@@ -115,8 +115,12 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
         db.commit()
         db.refresh(engine)
 
-        # Flush cache
-        cache_flushed = await _flush_cache(engine_url)
+        # Flush cache (only for persistent runtimes — serverless functions don't keep cache)
+        serverless_providers = {'supabase', 'vercel', 'netlify', 'deno', 'upstash'}
+        if provider not in serverless_providers:
+            cache_flushed = await _flush_cache(engine_url)
+        else:
+            cache_flushed = False
 
         return {
             "success": True,

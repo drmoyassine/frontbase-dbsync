@@ -7,6 +7,7 @@
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
+import { getPlatform } from '../adapters/shared.js';
 
 const startedAt = Date.now();
 const healthRoute = new OpenAPIHono();
@@ -41,7 +42,7 @@ healthRoute.openapi(route, (c) => {
         status: 'ok',
         service: 'frontbase-edge',
         version: '0.1.0',
-        provider: process.env.FRONTBASE_ADAPTER_PLATFORM || 'docker',
+        provider: getPlatform(),
         uptime_seconds: Math.floor((Date.now() - startedAt) / 1000),
         timestamp: new Date().toISOString(),
     });

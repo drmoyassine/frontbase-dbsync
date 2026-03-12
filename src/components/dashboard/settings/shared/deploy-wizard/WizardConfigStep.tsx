@@ -151,16 +151,22 @@ export function WizardConfigStep({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setEngineType('full')}
-                                className={`flex flex-col items-start gap-1.5 rounded-lg border-2 p-3 text-left transition-all ${engineType === 'full'
-                                    ? 'border-primary bg-primary/5'
-                                    : 'border-border hover:border-muted-foreground/50'
+                                onClick={() => { if (selectedProviderType !== 'supabase') setEngineType('full'); }}
+                                className={`flex flex-col items-start gap-1.5 rounded-lg border-2 p-3 text-left transition-all ${
+                                    selectedProviderType === 'supabase'
+                                        ? 'border-border opacity-60 cursor-not-allowed'
+                                        : engineType === 'full'
+                                            ? 'border-primary bg-primary/5'
+                                            : 'border-border hover:border-muted-foreground/50'
                                     }`}
                             >
                                 <div className="flex items-center gap-2">
                                     <Layers className="w-4 h-4 text-purple-500" />
                                     <span className="font-medium text-sm">Full</span>
                                     <Badge variant="secondary" className="text-[10px] h-4 py-0 bg-purple-500/10 text-purple-500">~2.2 MB</Badge>
+                                    {selectedProviderType === 'supabase' && (
+                                        <Badge variant="outline" className="text-[10px] h-4 py-0 border-amber-500/50 text-amber-500">Soon</Badge>
+                                    )}
                                 </div>
                                 <p className="text-[11px] text-muted-foreground leading-tight">
                                     Everything in Lite + SSR pages, React rendering, component library, data routes.

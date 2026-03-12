@@ -269,10 +269,11 @@ export function useDeployWizard() {
 
     // ── Step title helper ────────────────────────────────────────────────
     const stepTitle = () => {
+        const providerLabel = PROVIDER_CONFIGS[selectedProviderType]?.label || selectedProviderType;
         switch (step) {
             case 'compute-type': return 'Compute Type';
             case 'provider': return 'Select Provider';
-            case 'engine-config': return computeType === 'gpu' && gpuMode === 'existing' ? 'Select Engine' : 'Engine Configuration';
+            case 'engine-config': return computeType === 'gpu' && gpuMode === 'existing' ? 'Select Engine' : `${providerLabel} Engine Configuration`;
             case 'ai-model': return 'Select AI Model';
             case 'deploying': return 'Deploying...';
         }

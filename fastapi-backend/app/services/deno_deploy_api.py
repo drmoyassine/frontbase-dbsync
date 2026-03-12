@@ -47,11 +47,19 @@ async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_t
         engine_id=str(engine.id),
     )
 
-    # Ensure app exists — create if not found
-    await ensure_app_exists(access_token, project_name)
+    # Ensure app exists — create if not found. Returns the actual slug used.
+    actual_slug = await ensure_app_exists(access_token, project_name)
+
+    # If the slug changed (e.g. due to 409 conflict), persist the real slug
+    if actual_slug != project_name:
+        engine_cfg['project_name'] = actual_slug
+        engine.engine_config = json.dumps(engine_cfg)  # type: ignore[assignment]
+        engine.url = get_project_url(actual_slug)  # type: ignore[assignment]
+        db.commit()
+        print(f"[Deno Deploy] Slug changed: {project_name} -> {actual_slug}")
 
     # Deploy function (v2 includes env_vars in the deploy call)
-    await deploy_function(access_token, project_name, script_content, script_filename, secrets)
+    await deploy_function(access_token, actual_slug, script_content, script_filename, secrets)
 
 
 # ── Platform-specific API calls ───────────────────────────────────────
@@ -126,10 +134,11 @@ def get_project_url(project_name: str) -> str:
     return f"https://{project_name}.deno.dev"
 
 
-async def ensure_app_exists(access_token: str, project_name: str) -> None:
+async def ensure_app_exists(access_token: str, project_name: str) -> str:
     """Check if a Deno Deploy app exists; create it if not.
     
     Auto-provisioning: the user only provides a token, we handle app creation.
+    Returns the actual app slug (may differ from project_name if a fallback was used).
     """
     async with httpx.AsyncClient() as client:
         # Check if app exists
@@ -139,28 +148,33 @@ async def ensure_app_exists(access_token: str, project_name: str) -> None:
             timeout=10.0,
         )
         if resp.status_code == 200:
-            return  # App exists
+            return project_name  # App exists
 
         if resp.status_code in (404, 400):
-            # App doesn't exist — create it
+            # App doesn't exist — create it (v2 API uses 'slug' field)
             create_resp = await client.post(
                 f"{DENO_DEPLOY_API}/apps",
                 headers=_headers(access_token),
-                json={"name": project_name},
+                json={"slug": project_name},
                 timeout=15.0,
             )
             if create_resp.status_code in (200, 201):
-                return
-            # If name is taken, try with a random suffix
+                # Return the slug from the response (API may sanitize it)
+                created = create_resp.json()
+                return str(created.get('slug', project_name))
+            # If slug is taken, try with a random suffix
             if create_resp.status_code == 409:
                 import uuid
-                fallback_name = f"{project_name}-{uuid.uuid4().hex[:6]}"
+                fallback_slug = f"{project_name}-{uuid.uuid4().hex[:6]}"
                 retry = await client.post(
                     f"{DENO_DEPLOY_API}/apps",
                     headers=_headers(access_token),
-                    json={"name": fallback_name},
+                    json={"slug": fallback_slug},
                     timeout=15.0,
                 )
                 if retry.status_code in (200, 201):
-                    return
+                    created = retry.json()
+                    return str(created.get('slug', fallback_slug))
             raise HTTPException(400, f"Failed to create Deno Deploy app '{project_name}': {create_resp.text[:300]}")
+
+        raise HTTPException(400, f"Deno Deploy app check failed ({resp.status_code}): {resp.text[:300]}")

@@ -67,10 +67,11 @@ async def deploy_function(
     Uses PATCH to update existing function, falls back to POST to create.
     The function body is sent as a JSON string in the 'body' field.
     """
+    tag = f"[Supabase Deploy]"
     url = f"{SUPABASE_API}/projects/{project_ref}/functions/{function_name}"
     headers = {**_headers(access_token), "Content-Type": "application/json"}
-    print(f"[Supabase Deploy] Function: {function_name}, Project: {project_ref}")
-    print(f"[Supabase Deploy] Bundle size: {len(script_content)} chars")
+    print(f"{tag} Function: {function_name}, Project: {project_ref}")
+    print(f"{tag} Bundle size: {len(script_content)} chars")
 
     async with httpx.AsyncClient() as client:
         # Try update first (PATCH)
@@ -80,8 +81,8 @@ async def deploy_function(
             json={"body": script_content, "verify_jwt": False},
             timeout=60.0,
         )
-        print(f"[Supabase Deploy] PATCH {url} → {resp.status_code}")
-        print(f"[Supabase Deploy] PATCH response: {resp.text[:500]}")
+        print(f"{tag} PATCH {url} → {resp.status_code}")
+        print(f"{tag} PATCH response: {resp.text[:500]}")
 
         if resp.status_code == 404:
             # Function doesn't exist — create it
@@ -92,8 +93,8 @@ async def deploy_function(
                 json={"slug": function_name, "name": function_name, "body": script_content, "verify_jwt": False},
                 timeout=60.0,
             )
-            print(f"[Supabase Deploy] POST {create_url} → {resp.status_code}")
-            print(f"[Supabase Deploy] POST response: {resp.text[:500]}")
+            print(f"{tag} POST {create_url} → {resp.status_code}")
+            print(f"{tag} POST response: {resp.text[:500]}")
 
         if resp.status_code not in (200, 201):
             raise HTTPException(400, f"Supabase deploy failed ({resp.status_code}): {resp.text[:300]}")

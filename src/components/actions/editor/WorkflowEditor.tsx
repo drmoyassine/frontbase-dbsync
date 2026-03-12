@@ -282,18 +282,20 @@ export function WorkflowEditor({
 
     // Batch publish handler — replaces both handlePublish and handlePublishToEngine
     const handleBatchPublish = async (engineIds: string[]) => {
-        if (!currentDraftId) {
-            toast({ title: 'Save first', description: 'Please save the workflow before publishing', variant: 'destructive' });
-            return;
-        }
-
-        // Save first if dirty
-        if (isDirty) {
+        // Auto-save if never saved or dirty
+        if (!currentDraftId || isDirty) {
             await handleSave();
         }
 
+        // Re-read currentDraftId after save (handleSave sets it via setCurrentDraft)
+        const draftIdToPublish = useActionsStore.getState().currentDraftId;
+        if (!draftIdToPublish) {
+            toast({ title: 'Save Failed', description: 'Could not save workflow before publishing', variant: 'destructive' });
+            return;
+        }
+
         try {
-            const result = await publishBatch.mutateAsync({ draftId: currentDraftId, engineIds });
+            const result = await publishBatch.mutateAsync({ draftId: draftIdToPublish, engineIds });
             const succeeded = result.results?.filter((r: any) => r.success) || [];
             const failed = result.results?.filter((r: any) => !r.success) || [];
             if (succeeded.length > 0) {

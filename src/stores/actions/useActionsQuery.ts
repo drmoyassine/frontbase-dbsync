@@ -35,7 +35,8 @@ export interface WorkflowDraft {
     is_published: boolean;
     is_active: boolean;
     published_version?: number;
-    deployed_engines?: Record<string, { name: string; url: string; deployed_at: string; is_active?: boolean }>;
+    deployed_engines?: Record<string, { name: string; url: string; deployed_at: string; is_active?: boolean; deployed_version_hash?: string }>;
+    content_hash?: string;
     created_at: string;
     updated_at: string;
     created_by?: string;
@@ -139,6 +140,21 @@ async function publishDraftToEngine(
     if (!response.ok) {
         const error = await response.json();
         throw new Error(error.detail || 'Failed to publish to engine');
+    }
+    return response.json();
+}
+
+async function publishDraftBatch(
+    { draftId, engineIds }: { draftId: string; engineIds: string[] }
+): Promise<{ success: boolean; message: string; results: Array<{ engineId: string; name: string; success: boolean; error?: string }> }> {
+    const response = await fetch(`${API_BASE}/drafts/${draftId}/publish-batch/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ engine_ids: engineIds }),
+    });
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to batch publish');
     }
     return response.json();
 }
@@ -417,6 +433,18 @@ export function usePublishDraftToEngine() {
 
     return useMutation({
         mutationFn: publishDraftToEngine,
+        onSuccess: (_, { draftId }) => {
+            queryClient.invalidateQueries({ queryKey: ['workflow-drafts'] });
+            queryClient.invalidateQueries({ queryKey: ['workflow-draft', draftId] });
+        },
+    });
+}
+
+export function usePublishDraftBatch() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: publishDraftBatch,
         onSuccess: (_, { draftId }) => {
             queryClient.invalidateQueries({ queryKey: ['workflow-drafts'] });
             queryClient.invalidateQueries({ queryKey: ['workflow-draft', draftId] });

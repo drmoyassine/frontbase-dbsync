@@ -24,8 +24,7 @@ import {
     useWorkflowDraft,
     useCreateDraft,
     useUpdateDraft,
-    usePublishDraft,
-    usePublishDraftToEngine,
+    usePublishDraftBatch,
     useToggleDraftActive,
     useToggleTargetActive,
     useTestDraft,
@@ -80,8 +79,7 @@ export function WorkflowEditor({
     const { data: draft } = useWorkflowDraft(draftId || currentDraftId);
     const createDraft = useCreateDraft();
     const updateDraft = useUpdateDraft();
-    const publishDraft = usePublishDraft();
-    const publishToEngine = usePublishDraftToEngine();
+    const publishBatch = usePublishDraftBatch();
     const toggleActive = useToggleDraftActive();
     const toggleTargetActive = useToggleTargetActive();
     const testDraft = useTestDraft();
@@ -282,8 +280,8 @@ export function WorkflowEditor({
         }
     }, [executionResult?.status]);
 
-    // Publish handler (local edge)
-    const handlePublish = async () => {
+    // Batch publish handler — replaces both handlePublish and handlePublishToEngine
+    const handleBatchPublish = async (engineIds: string[]) => {
         if (!currentDraftId) {
             toast({ title: 'Save first', description: 'Please save the workflow before publishing', variant: 'destructive' });
             return;
@@ -295,38 +293,21 @@ export function WorkflowEditor({
         }
 
         try {
-            const result = await publishDraft.mutateAsync(currentDraftId);
-            toast({
-                title: 'Published!',
-                description: `Version ${result.version} deployed to local edge`
-            });
+            const result = await publishBatch.mutateAsync({ draftId: currentDraftId, engineIds });
+            const succeeded = result.results?.filter((r: any) => r.success) || [];
+            const failed = result.results?.filter((r: any) => !r.success) || [];
+            if (succeeded.length > 0) {
+                const names = succeeded.map((r: any) => r.name).join(', ');
+                toast({ title: 'Published!', description: `Deployed to ${names}` });
+            }
+            if (failed.length > 0) {
+                const names = failed.map((r: any) => r.name).join(', ');
+                toast({ title: 'Publish Failed', description: `Failed: ${names}`, variant: 'destructive' });
+            }
             markClean();
         } catch (error: any) {
-            toast({ title: 'Publish Failed', description: error.message, variant: 'destructive' });
-        }
-    };
-
-    // Publish to specific engine handler
-    const handlePublishToEngine = async (engineId: string, engineName: string) => {
-        if (!currentDraftId) {
-            toast({ title: 'Save first', description: 'Please save the workflow before publishing', variant: 'destructive' });
-            return;
-        }
-
-        if (isDirty) {
-            await handleSave();
-        }
-
-        try {
-            const result = await publishToEngine.mutateAsync({ draftId: currentDraftId, engineId });
-            toast({
-                title: 'Published!',
-                description: result.message || `Deployed to ${engineName}`
-            });
-            markClean();
-        } catch (error: any) {
-            const detail = error?.response?.data?.detail || error?.message || 'Unknown error';
-            toast({ title: 'Publish Failed', description: typeof detail === 'object' ? JSON.stringify(detail) : String(detail), variant: 'destructive' });
+            const detail = error?.message || 'Unknown error';
+            toast({ title: 'Publish Failed', description: detail, variant: 'destructive' });
         }
     };
 
@@ -357,13 +338,12 @@ export function WorkflowEditor({
                     onClose={onClose}
                     isSaving={updateDraft.isPending || createDraft.isPending}
                     isTesting={testDraft.isPending}
-                    isPublishing={publishDraft.isPending || publishToEngine.isPending}
+                    isPublishing={publishBatch.isPending}
                     onDescriptionChange={setDescription}
                     onSettingsChange={setWorkflowSettings}
                     onSave={handleSave}
                     onTest={handleTest}
-                    onPublish={handlePublish}
-                    onPublishToEngine={handlePublishToEngine}
+                    onBatchPublish={handleBatchPublish}
                     onToggleActive={(checked) => toggleActive.mutate({ draftId: currentDraftId, isActive: checked })}
                     onToggleTargetActive={(draftId, engineId, checked) => toggleTargetActive.mutate({ draftId, engineId, is_active: checked })}
                     onClose_handler={handleClose}

@@ -14231,9 +14231,9 @@ var init_chunk_LLI2WIYN = __esm({
       /**
        * Wrap a new middleware around the HTTP client.
        */
-      use = (middleware2) => {
+      use = (middleware) => {
         const makeRequest = this.client.request.bind(this.client);
-        this.client.request = (req) => middleware2(req, makeRequest);
+        this.client.request = (req) => middleware(req, makeRequest);
       };
       /**
        * Technically this is not private, we can hide it from intellisense by doing this
@@ -49889,7 +49889,7 @@ var zValidator = (target, schema, hook) => (
 );
 
 // node_modules/hono/dist/compose.js
-var compose = (middleware2, onError, onNotFound) => {
+var compose = (middleware, onError, onNotFound) => {
   return (context, next) => {
     let index = -1;
     return dispatch(0);
@@ -49901,11 +49901,11 @@ var compose = (middleware2, onError, onNotFound) => {
       let res;
       let isError = false;
       let handler;
-      if (middleware2[i]) {
-        handler = middleware2[i][0][0];
+      if (middleware[i]) {
+        handler = middleware[i][0][0];
         context.req.routeIndex = i;
       } else {
-        handler = i === middleware2.length && next || void 0;
+        handler = i === middleware.length && next || void 0;
       }
       if (handler) {
         try {
@@ -50274,86 +50274,6 @@ var HonoRequest = class {
 // node_modules/hono/dist/utils/html.js
 var HtmlEscapedCallbackPhase = {
   Stringify: 1};
-var raw = (value, callbacks) => {
-  const escapedString = new String(value);
-  escapedString.isEscaped = true;
-  escapedString.callbacks = callbacks;
-  return escapedString;
-};
-var escapeRe = /[&<>'"]/;
-var stringBufferToString = async (buffer, callbacks) => {
-  let str = "";
-  callbacks ||= [];
-  const resolvedBuffer = await Promise.all(buffer);
-  for (let i = resolvedBuffer.length - 1; ; i--) {
-    str += resolvedBuffer[i];
-    i--;
-    if (i < 0) {
-      break;
-    }
-    let r = resolvedBuffer[i];
-    if (typeof r === "object") {
-      callbacks.push(...r.callbacks || []);
-    }
-    const isEscaped = r.isEscaped;
-    r = await (typeof r === "object" ? r.toString() : r);
-    if (typeof r === "object") {
-      callbacks.push(...r.callbacks || []);
-    }
-    if (r.isEscaped ?? isEscaped) {
-      str += r;
-    } else {
-      const buf = [str];
-      escapeToBuffer(r, buf);
-      str = buf[0];
-    }
-  }
-  return raw(str, callbacks);
-};
-var escapeToBuffer = (str, buffer) => {
-  const match2 = str.search(escapeRe);
-  if (match2 === -1) {
-    buffer[0] += str;
-    return;
-  }
-  let escape4;
-  let index;
-  let lastIndex = 0;
-  for (index = match2; index < str.length; index++) {
-    switch (str.charCodeAt(index)) {
-      case 34:
-        escape4 = "&quot;";
-        break;
-      case 39:
-        escape4 = "&#39;";
-        break;
-      case 38:
-        escape4 = "&amp;";
-        break;
-      case 60:
-        escape4 = "&lt;";
-        break;
-      case 62:
-        escape4 = "&gt;";
-        break;
-      default:
-        continue;
-    }
-    buffer[0] += str.substring(lastIndex, index) + escape4;
-    lastIndex = index + 1;
-  }
-  buffer[0] += str.substring(lastIndex, index);
-};
-var resolveCallbackSync = (str) => {
-  const callbacks = str.callbacks;
-  if (!callbacks?.length) {
-    return str;
-  }
-  const buffer = [str];
-  const context = {};
-  callbacks.forEach((c) => c({ phase: HtmlEscapedCallbackPhase.Stringify, buffer, context }));
-  return buffer[0];
-};
 var resolveCallback = async (str, phase, preserveCallbacks, context, buffer) => {
   if (typeof str === "object" && !(str instanceof String)) {
     if (!(str instanceof Promise)) {
@@ -50741,9 +50661,9 @@ var Context = class {
       setDefaultContentType("application/json", headers)
     );
   };
-  html = (html2, arg, headers) => {
-    const res = (html22) => this.#newResponse(html22, arg, setDefaultContentType("text/html; charset=UTF-8", headers));
-    return typeof html2 === "object" ? resolveCallback(html2, HtmlEscapedCallbackPhase.Stringify, false, {}).then(res) : res(html2);
+  html = (html, arg, headers) => {
+    const res = (html2) => this.#newResponse(html2, arg, setDefaultContentType("text/html; charset=UTF-8", headers));
+    return typeof html === "object" ? resolveCallback(html, HtmlEscapedCallbackPhase.Stringify, false, {}).then(res) : res(html);
   };
   /**
    * `.redirect()` can Redirect, default status code is 302.
@@ -51426,13 +51346,13 @@ function buildMatcherFromPreprocessedRoutes(routes) {
   }
   return [regexp, handlerMap, staticMap];
 }
-function findMiddleware(middleware2, path) {
-  if (!middleware2) {
+function findMiddleware(middleware, path) {
+  if (!middleware) {
     return void 0;
   }
-  for (const k of Object.keys(middleware2).sort((a2, b2) => b2.length - a2.length)) {
+  for (const k of Object.keys(middleware).sort((a2, b2) => b2.length - a2.length)) {
     if (buildWildcardRegExp(k).test(path)) {
-      return [...middleware2[k]];
+      return [...middleware[k]];
     }
   }
   return void 0;
@@ -51446,13 +51366,13 @@ var RegExpRouter = class {
     this.#routes = { [METHOD_NAME_ALL]: /* @__PURE__ */ Object.create(null) };
   }
   add(method, path, handler) {
-    const middleware2 = this.#middleware;
+    const middleware = this.#middleware;
     const routes = this.#routes;
-    if (!middleware2 || !routes) {
+    if (!middleware || !routes) {
       throw new Error(MESSAGE_MATCHER_IS_ALREADY_BUILT);
     }
-    if (!middleware2[method]) {
-      [middleware2, routes].forEach((handlerMap) => {
+    if (!middleware[method]) {
+      [middleware, routes].forEach((handlerMap) => {
         handlerMap[method] = /* @__PURE__ */ Object.create(null);
         Object.keys(handlerMap[METHOD_NAME_ALL]).forEach((p2) => {
           handlerMap[method][p2] = [...handlerMap[METHOD_NAME_ALL][p2]];
@@ -51466,16 +51386,16 @@ var RegExpRouter = class {
     if (/\*$/.test(path)) {
       const re2 = buildWildcardRegExp(path);
       if (method === METHOD_NAME_ALL) {
-        Object.keys(middleware2).forEach((m2) => {
-          middleware2[m2][path] ||= findMiddleware(middleware2[m2], path) || findMiddleware(middleware2[METHOD_NAME_ALL], path) || [];
+        Object.keys(middleware).forEach((m2) => {
+          middleware[m2][path] ||= findMiddleware(middleware[m2], path) || findMiddleware(middleware[METHOD_NAME_ALL], path) || [];
         });
       } else {
-        middleware2[method][path] ||= findMiddleware(middleware2[method], path) || findMiddleware(middleware2[METHOD_NAME_ALL], path) || [];
+        middleware[method][path] ||= findMiddleware(middleware[method], path) || findMiddleware(middleware[METHOD_NAME_ALL], path) || [];
       }
-      Object.keys(middleware2).forEach((m2) => {
+      Object.keys(middleware).forEach((m2) => {
         if (method === METHOD_NAME_ALL || method === m2) {
-          Object.keys(middleware2[m2]).forEach((p2) => {
-            re2.test(p2) && middleware2[m2][p2].push([handler, paramCount]);
+          Object.keys(middleware[m2]).forEach((p2) => {
+            re2.test(p2) && middleware[m2][p2].push([handler, paramCount]);
           });
         }
       });
@@ -51494,7 +51414,7 @@ var RegExpRouter = class {
       Object.keys(routes).forEach((m2) => {
         if (method === METHOD_NAME_ALL || method === m2) {
           routes[m2][path2] ||= [
-            ...findMiddleware(middleware2[m2], path2) || findMiddleware(middleware2[METHOD_NAME_ALL], path2) || []
+            ...findMiddleware(middleware[m2], path2) || findMiddleware(middleware[METHOD_NAME_ALL], path2) || []
           ];
           routes[m2][path2].push([handler, paramCount - len + i + 1]);
         }
@@ -51888,11 +51808,11 @@ var OpenAPIHono = class _OpenAPIHono extends Hono2 {
         }
       }
     }
-    const middleware2 = routeMiddleware ? Array.isArray(routeMiddleware) ? routeMiddleware : [routeMiddleware] : [];
+    const middleware = routeMiddleware ? Array.isArray(routeMiddleware) ? routeMiddleware : [routeMiddleware] : [];
     this.on(
       [route6.method],
       route6.path.replaceAll(/\/{(.+?)}/g, "/:$1"),
-      ...middleware2,
+      ...middleware,
       ...validators,
       handler
     );
@@ -52005,158 +51925,6 @@ function isJSONContentType(contentType) {
 function isFormContentType(contentType) {
   return contentType.startsWith("multipart/form-data") || contentType.startsWith("application/x-www-form-urlencoded");
 }
-
-// node_modules/hono/dist/helper/html/index.js
-var html = (strings, ...values) => {
-  const buffer = [""];
-  for (let i = 0, len = strings.length - 1; i < len; i++) {
-    buffer[0] += strings[i];
-    const children = Array.isArray(values[i]) ? values[i].flat(Infinity) : [values[i]];
-    for (let i2 = 0, len2 = children.length; i2 < len2; i2++) {
-      const child = children[i2];
-      if (typeof child === "string") {
-        escapeToBuffer(child, buffer);
-      } else if (typeof child === "number") {
-        buffer[0] += child;
-      } else if (typeof child === "boolean" || child === null || child === void 0) {
-        continue;
-      } else if (typeof child === "object" && child.isEscaped) {
-        if (child.callbacks) {
-          buffer.unshift("", child);
-        } else {
-          const tmp = child.toString();
-          if (tmp instanceof Promise) {
-            buffer.unshift("", tmp);
-          } else {
-            buffer[0] += tmp;
-          }
-        }
-      } else if (child instanceof Promise) {
-        buffer.unshift("", child);
-      } else {
-        escapeToBuffer(child.toString(), buffer);
-      }
-    }
-  }
-  buffer[0] += strings.at(-1);
-  return buffer.length === 1 ? "callbacks" in buffer ? raw(resolveCallbackSync(raw(buffer[0], buffer.callbacks))) : raw(buffer[0]) : stringBufferToString(buffer, buffer.callbacks);
-};
-
-// node_modules/@hono/swagger-ui/dist/index.js
-var RENDER_TYPE = {
-  STRING_ARRAY: "string_array",
-  STRING: "string",
-  JSON_STRING: "json_string",
-  RAW: "raw"
-};
-var RENDER_TYPE_MAP = {
-  configUrl: RENDER_TYPE.STRING,
-  deepLinking: RENDER_TYPE.RAW,
-  presets: RENDER_TYPE.STRING_ARRAY,
-  plugins: RENDER_TYPE.STRING_ARRAY,
-  spec: RENDER_TYPE.JSON_STRING,
-  url: RENDER_TYPE.STRING,
-  urls: RENDER_TYPE.JSON_STRING,
-  layout: RENDER_TYPE.STRING,
-  docExpansion: RENDER_TYPE.STRING,
-  maxDisplayedTags: RENDER_TYPE.RAW,
-  operationsSorter: RENDER_TYPE.RAW,
-  requestInterceptor: RENDER_TYPE.RAW,
-  responseInterceptor: RENDER_TYPE.RAW,
-  persistAuthorization: RENDER_TYPE.RAW,
-  defaultModelsExpandDepth: RENDER_TYPE.RAW,
-  defaultModelExpandDepth: RENDER_TYPE.RAW,
-  defaultModelRendering: RENDER_TYPE.STRING,
-  displayRequestDuration: RENDER_TYPE.RAW,
-  filter: RENDER_TYPE.RAW,
-  showExtensions: RENDER_TYPE.RAW,
-  showCommonExtensions: RENDER_TYPE.RAW,
-  queryConfigEnabled: RENDER_TYPE.RAW,
-  displayOperationId: RENDER_TYPE.RAW,
-  tagsSorter: RENDER_TYPE.RAW,
-  onComplete: RENDER_TYPE.RAW,
-  syntaxHighlight: RENDER_TYPE.JSON_STRING,
-  tryItOutEnabled: RENDER_TYPE.RAW,
-  requestSnippetsEnabled: RENDER_TYPE.RAW,
-  requestSnippets: RENDER_TYPE.JSON_STRING,
-  oauth2RedirectUrl: RENDER_TYPE.STRING,
-  showMutabledRequest: RENDER_TYPE.RAW,
-  request: RENDER_TYPE.JSON_STRING,
-  supportedSubmitMethods: RENDER_TYPE.JSON_STRING,
-  validatorUrl: RENDER_TYPE.STRING,
-  withCredentials: RENDER_TYPE.RAW,
-  modelPropertyMacro: RENDER_TYPE.RAW,
-  parameterMacro: RENDER_TYPE.RAW
-};
-var renderSwaggerUIOptions = (options) => {
-  const optionsStrings = Object.entries(options).map(([k, v2]) => {
-    const key = k;
-    if (RENDER_TYPE_MAP[key] === RENDER_TYPE.STRING) {
-      return `${key}: '${v2}'`;
-    }
-    if (RENDER_TYPE_MAP[key] === RENDER_TYPE.STRING_ARRAY) {
-      if (!Array.isArray(v2)) {
-        return "";
-      }
-      return `${key}: [${v2.map((ve) => `${ve}`).join(",")}]`;
-    }
-    if (RENDER_TYPE_MAP[key] === RENDER_TYPE.JSON_STRING) {
-      return `${key}: ${JSON.stringify(v2)}`;
-    }
-    if (RENDER_TYPE_MAP[key] === RENDER_TYPE.RAW) {
-      return `${key}: ${v2}`;
-    }
-    return "";
-  }).join(",");
-  return optionsStrings;
-};
-var remoteAssets = ({ version: version7 }) => {
-  const url = `https://cdn.jsdelivr.net/npm/swagger-ui-dist${version7 !== void 0 ? `@${version7}` : ""}`;
-  return {
-    css: [`${url}/swagger-ui.css`],
-    js: [`${url}/swagger-ui-bundle.js`]
-  };
-};
-var SwaggerUI = (options) => {
-  const asset = remoteAssets({ version: options?.version });
-  delete options.version;
-  if (options.manuallySwaggerUIHtml) {
-    return options.manuallySwaggerUIHtml(asset);
-  }
-  const optionsStrings = renderSwaggerUIOptions(options);
-  return `
-    <div>
-      <div id="swagger-ui"></div>
-      ${asset.css.map((url) => html`<link rel="stylesheet" href="${url}" />`)}
-      ${asset.js.map((url) => html`<script src="${url}" crossorigin="anonymous"></script>`)}
-      <script>
-        window.onload = () => {
-          window.ui = SwaggerUIBundle({
-            dom_id: '#swagger-ui',${optionsStrings},
-          })
-        }
-      </script>
-    </div>
-  `;
-};
-var middleware = (options) => async (c) => {
-  return c.html(
-    /* html */
-    `
-      <html lang="en">
-        <head>
-          <meta charset="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <meta name="description" content="SwaggerUI" />
-          <title>SwaggerUI</title>
-        </head>
-        <body>
-          ${SwaggerUI(options)}
-        </body>
-      </html>
-    `
-  );
-};
 
 // node_modules/hono/dist/middleware/cors/index.js
 var cors = (options) => {
@@ -53171,8 +52939,8 @@ var SimpleEmitter = class {
   constructor() {
     this.buffer = "";
   }
-  write(html2) {
-    this.buffer += stringify(html2);
+  write(html) {
+    this.buffer += stringify(html);
   }
 };
 var StreamedEmitter = class {
@@ -53180,8 +52948,8 @@ var StreamedEmitter = class {
     this.buffer = "";
     this.stream = new PassThrough();
   }
-  write(html2) {
-    this.stream.write(stringify(html2));
+  write(html) {
+    this.stream.write(stringify(html));
   }
   error(err2) {
     this.stream.emit("error", err2);
@@ -53194,12 +52962,12 @@ var KeepingTypeEmitter = class {
   constructor() {
     this.buffer = "";
   }
-  write(html2) {
-    html2 = toValue(html2);
-    if (typeof html2 !== "string" && this.buffer === "") {
-      this.buffer = html2;
+  write(html) {
+    html = toValue(html);
+    if (typeof html !== "string" && this.buffer === "") {
+      this.buffer = html;
     } else {
-      this.buffer = stringify(this.buffer) + stringify(html2);
+      this.buffer = stringify(this.buffer) + stringify(html);
     }
   }
 };
@@ -53896,8 +53664,8 @@ var Render = class {
     for (const tpl of templates) {
       ctx.renderLimit.check(getPerformance().now());
       try {
-        const html2 = yield tpl.render(ctx, emitter);
-        html2 && emitter.write(html2);
+        const html = yield tpl.render(ctx, emitter);
+        html && emitter.write(html);
         if (ctx.breakCalled || ctx.continueCalled)
           break;
       } catch (e) {
@@ -55391,10 +55159,10 @@ var Parser = class {
     this.loader = new Loader(this.liquid.options);
     this.parseLimit = new Limiter("parse length", liquid2.options.parseLimit);
   }
-  parse(html2, filepath) {
-    html2 = String(html2);
-    this.parseLimit.use(html2.length);
-    const tokenizer = new Tokenizer(html2, this.liquid.options.operators, filepath);
+  parse(html, filepath) {
+    html = String(html);
+    this.parseLimit.use(html.length);
+    const tokenizer = new Tokenizer(html, this.liquid.options.operators, filepath);
     const tokens = tokenizer.readTopLevelTokens(this.liquid.options);
     return this.parseTokens(tokens);
   }
@@ -56385,8 +56153,8 @@ var CaptureTag = class extends Tag {
   }
   *render(ctx) {
     const r = this.liquid.renderer;
-    const html2 = yield r.renderTemplates(this.templates, ctx);
-    ctx.bottom()[this.variable] = html2;
+    const html = yield r.renderTemplates(this.templates, ctx);
+    ctx.bottom()[this.variable] = html;
   }
   *children() {
     return this.templates;
@@ -56824,10 +56592,10 @@ var LayoutTag = class extends Tag {
     assert(filepath, () => `illegal file path "${filepath}"`);
     const templates = yield liquid2._parseLayoutFile(filepath, ctx.sync, this["currentFile"]);
     ctx.setRegister("blockMode", BlockMode.STORE);
-    const html2 = yield renderer.renderTemplates(this.templates, ctx);
+    const html = yield renderer.renderTemplates(this.templates, ctx);
     const blocks = ctx.getRegister("blocks");
     if (blocks[""] === void 0)
-      blocks[""] = (parent, emitter2) => emitter2.write(html2);
+      blocks[""] = (parent, emitter2) => emitter2.write(html);
     ctx.setRegister("blockMode", BlockMode.OUTPUT);
     ctx.push(yield args.render(ctx));
     yield renderer.renderTemplates(templates, ctx, emitter);
@@ -57137,9 +56905,9 @@ var Liquid = class _Liquid {
     forOwn(tags, (conf, name) => this.registerTag(name, conf));
     forOwn(filters, (handler, name) => this.registerFilter(name, handler));
   }
-  parse(html2, filepath) {
+  parse(html, filepath) {
     const parser = new Parser(this);
-    return parser.parse(html2, filepath);
+    return parser.parse(html, filepath);
   }
   _render(tpl, scope, renderOptions) {
     const ctx = scope instanceof Context2 ? scope : new Context2(scope, this.options, renderOptions);
@@ -57157,17 +56925,17 @@ var Liquid = class _Liquid {
     const ctx = new Context2(scope, this.options, renderOptions);
     return this.renderer.renderTemplatesToNodeStream(tpl, ctx);
   }
-  _parseAndRender(html2, scope, renderOptions) {
-    const tpl = this.parse(html2);
+  _parseAndRender(html, scope, renderOptions) {
+    const tpl = this.parse(html);
     return this._render(tpl, scope, renderOptions);
   }
-  parseAndRender(html2, scope, renderOptions) {
+  parseAndRender(html, scope, renderOptions) {
     return __awaiter(this, void 0, void 0, function* () {
-      return toPromise(this._parseAndRender(html2, scope, Object.assign(Object.assign({}, renderOptions), { sync: false })));
+      return toPromise(this._parseAndRender(html, scope, Object.assign(Object.assign({}, renderOptions), { sync: false })));
     });
   }
-  parseAndRenderSync(html2, scope, renderOptions) {
-    return toValueSync(this._parseAndRender(html2, scope, Object.assign(Object.assign({}, renderOptions), { sync: true })));
+  parseAndRenderSync(html, scope, renderOptions) {
+    return toValueSync(this._parseAndRender(html, scope, Object.assign(Object.assign({}, renderOptions), { sync: true })));
   }
   _parsePartialFile(file, sync, currentFile) {
     return new Parser(this).parseFile(file, sync, LookupType.Partials, currentFile);
@@ -57237,7 +57005,7 @@ var Liquid = class _Liquid {
         self2.options.layouts.unshift(...dirs);
         self2.options.partials.unshift(...dirs);
       }
-      self2.renderFile(filePath, ctx).then((html2) => callback(null, html2), callback);
+      self2.renderFile(filePath, ctx).then((html) => callback(null, html), callback);
     };
   }
   analyze(template, options = {}) {
@@ -57248,13 +57016,13 @@ var Liquid = class _Liquid {
   analyzeSync(template, options = {}) {
     return analyzeSync(template, options);
   }
-  parseAndAnalyze(html2, filename, options = {}) {
+  parseAndAnalyze(html, filename, options = {}) {
     return __awaiter(this, void 0, void 0, function* () {
-      return analyze(this.parse(html2, filename), options);
+      return analyze(this.parse(html, filename), options);
     });
   }
-  parseAndAnalyzeSync(html2, filename, options = {}) {
-    return analyzeSync(this.parse(html2, filename), options);
+  parseAndAnalyzeSync(html, filename, options = {}) {
+    return analyzeSync(this.parse(html, filename), options);
   }
   /** Return an array of all variables without their properties. */
   variables(template, options = {}) {
@@ -57445,6 +57213,13 @@ manifestRoute.get("/", (c) => {
     deployed_at: process.env.FRONTBASE_DEPLOYED_AT || null,
     bundle_checksum: process.env.FRONTBASE_BUNDLE_CHECKSUM || null,
     capabilities: getCapabilities(),
+    tech_stack: {
+      runtime: process.env.FRONTBASE_ADAPTER_PLATFORM === "cloudflare" || process.env.FRONTBASE_ADAPTER_PLATFORM === "cloudflare-lite" ? "Cloudflare Workers" : "Node.js",
+      framework: "Hono",
+      orm: "Drizzle ORM",
+      templating: "LiquidJS",
+      validation: "Zod + OpenAPI 3.1"
+    },
     gpu_models: gpuModels.map((m2) => ({
       slug: m2.slug,
       model_id: m2.model_id,
@@ -58195,7 +57970,7 @@ var deployRoute = new OpenAPIHono();
 var route2 = createRoute({
   method: "post",
   path: "/",
-  tags: ["Deployment"],
+  tags: ["Workflows"],
   summary: "Deploy a workflow",
   description: "Receives a workflow from FastAPI and stores it for execution",
   request: {
@@ -59379,7 +59154,7 @@ var executionsRoute = new OpenAPIHono();
 var allRoute = createRoute({
   method: "get",
   path: "/all",
-  tags: ["Executions"],
+  tags: ["Execution"],
   summary: "List all executions across all workflows",
   description: "Returns recent executions with optional filters (status, date range)",
   request: {
@@ -59432,7 +59207,7 @@ executionsRoute.openapi(allRoute, async (c) => {
 var statsRoute = createRoute({
   method: "get",
   path: "/stats",
-  tags: ["Executions"],
+  tags: ["Execution"],
   summary: "Get execution counts per workflow",
   description: "Returns run counts for each workflow",
   responses: {
@@ -59460,7 +59235,7 @@ executionsRoute.openapi(statsRoute, async (c) => {
 var getRoute = createRoute({
   method: "get",
   path: "/:id",
-  tags: ["Executions"],
+  tags: ["Execution"],
   summary: "Get execution status",
   description: "Returns the status and details of a workflow execution",
   request: {
@@ -59513,7 +59288,7 @@ executionsRoute.openapi(getRoute, async (c) => {
 var listRoute = createRoute({
   method: "get",
   path: "/workflow/:workflowId",
-  tags: ["Executions"],
+  tags: ["Execution"],
   summary: "List workflow executions",
   description: "Returns recent executions for a specific workflow",
   request: {
@@ -59648,6 +59423,205 @@ updateRoute.openapi(route5, async (c) => {
       error: "UpdateFailed",
       message: err2.message || "Failed to write bundle"
     }, 500);
+  }
+});
+
+// src/routes/cache.ts
+init_redis();
+var cacheRoute = new OpenAPIHono();
+function isRedisInitialized() {
+  try {
+    getRedis();
+    return true;
+  } catch {
+    return false;
+  }
+}
+function ensureRedisInitialized() {
+  if (isRedisInitialized()) {
+    return true;
+  }
+  const url = process.env.FRONTBASE_CACHE_URL;
+  const token = process.env.FRONTBASE_CACHE_TOKEN;
+  if (!url || !token) {
+    return false;
+  }
+  try {
+    initRedis({ url, token });
+    return true;
+  } catch {
+    return false;
+  }
+}
+var CacheStatusSchema = external_exports.object({
+  success: external_exports.boolean(),
+  message: external_exports.string()
+});
+var CacheStatsSchema = external_exports.object({
+  success: external_exports.boolean(),
+  configured: external_exports.boolean(),
+  connected: external_exports.boolean().optional(),
+  message: external_exports.string()
+});
+var InvalidateRequestSchema = external_exports.object({
+  key: external_exports.string().optional().openapi({ description: "Single cache key to invalidate" }),
+  pattern: external_exports.string().optional().openapi({ description: "Glob pattern to match multiple keys" })
+});
+var InvalidateResponseSchema = external_exports.object({
+  success: external_exports.boolean(),
+  message: external_exports.string()
+});
+var testRoute = createRoute({
+  method: "get",
+  path: "/test",
+  tags: ["Cache"],
+  summary: "Test Redis connection",
+  description: "Tests the Redis connection and returns the status.",
+  responses: {
+    200: {
+      description: "Connection test result",
+      content: {
+        "application/json": {
+          schema: CacheStatusSchema
+        }
+      }
+    }
+  }
+});
+cacheRoute.openapi(testRoute, async (c) => {
+  if (!ensureRedisInitialized()) {
+    return c.json({ success: false, message: "Redis not configured" }, 200);
+  }
+  const result = await testConnection();
+  return c.json(result, 200);
+});
+var invalidateRoute = createRoute({
+  method: "post",
+  path: "/invalidate",
+  tags: ["Cache"],
+  summary: "Invalidate cache entries",
+  description: "Invalidates a single cache key or all keys matching a pattern.",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: InvalidateRequestSchema
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Invalidation result",
+      content: {
+        "application/json": {
+          schema: InvalidateResponseSchema
+        }
+      }
+    },
+    400: {
+      description: "Bad request",
+      content: {
+        "application/json": {
+          schema: InvalidateResponseSchema
+        }
+      }
+    },
+    500: {
+      description: "Server error",
+      content: {
+        "application/json": {
+          schema: InvalidateResponseSchema
+        }
+      }
+    }
+  }
+});
+cacheRoute.openapi(invalidateRoute, async (c) => {
+  if (!ensureRedisInitialized()) {
+    return c.json({ success: false, message: "Redis not configured" }, 400);
+  }
+  try {
+    const { key, pattern } = c.req.valid("json");
+    if (key) {
+      await invalidate(key);
+      return c.json({ success: true, message: `Invalidated key: ${key}` }, 200);
+    } else if (pattern) {
+      await invalidatePattern(pattern);
+      return c.json({ success: true, message: `Invalidated pattern: ${pattern}` }, 200);
+    } else {
+      return c.json({ success: false, message: "Provide key or pattern" }, 400);
+    }
+  } catch (error) {
+    return c.json({
+      success: false,
+      message: error instanceof Error ? error.message : "Invalidation failed"
+    }, 500);
+  }
+});
+var statsRoute2 = createRoute({
+  method: "get",
+  path: "/stats",
+  tags: ["Cache"],
+  summary: "Get cache status",
+  description: "Returns the current cache configuration and connection status.",
+  responses: {
+    200: {
+      description: "Cache status",
+      content: {
+        "application/json": {
+          schema: CacheStatsSchema
+        }
+      }
+    }
+  }
+});
+cacheRoute.openapi(statsRoute2, async (c) => {
+  const configured = ensureRedisInitialized();
+  if (!configured) {
+    return c.json({
+      success: true,
+      configured: false,
+      message: "Redis not configured. Configure via Settings > Cache & Performance."
+    }, 200);
+  }
+  const connectionResult = await testConnection();
+  return c.json({
+    success: true,
+    configured: true,
+    connected: connectionResult.success,
+    message: connectionResult.message
+  }, 200);
+});
+var flushRoute = createRoute({
+  method: "post",
+  path: "/flush",
+  tags: ["Cache"],
+  summary: "Flush all cache entries",
+  description: "Clears all cached data. Called after reconfiguration or redeployment.",
+  responses: {
+    200: {
+      description: "Flush result",
+      content: {
+        "application/json": {
+          schema: CacheStatusSchema
+        }
+      }
+    }
+  }
+});
+cacheRoute.openapi(flushRoute, async (c) => {
+  if (!ensureRedisInitialized()) {
+    return c.json({ success: true, message: "No cache configured, nothing to flush" }, 200);
+  }
+  try {
+    await invalidatePattern("*");
+    return c.json({ success: true, message: "All cache entries flushed" }, 200);
+  } catch (error) {
+    return c.json({
+      success: false,
+      message: error instanceof Error ? error.message : "Flush failed"
+    }, 200);
   }
 });
 
@@ -60108,20 +60082,198 @@ function createLiteApp() {
   app2.route("/api/webhook", webhookRoute);
   app2.route("/api/executions", executionsRoute);
   app2.route("/api/update", updateRoute);
+  app2.route("/api/cache", cacheRoute);
   app2.use("/v1/*", aiApiKeyAuth);
   app2.route("/v1", openaiRoute);
-  app2.doc("/api/openapi.json", {
+  const EDGE_VERSION = "0.1.0";
+  app2.doc("/api/openapi.json", (c) => ({
     openapi: "3.1.0",
     info: {
-      title: "Frontbase Edge Engine API",
-      version: "0.1.0",
-      description: "Edge runtime API for workflows, webhooks, triggers, and data proxy."
+      title: "Frontbase Edge Engine",
+      version: EDGE_VERSION,
+      description: [
+        "Self-sufficient edge runtime for SSR pages, workflow automation, webhooks, and AI inference.",
+        "",
+        "**Tech Stack:** Hono \xB7 Drizzle ORM \xB7 LiquidJS \xB7 Zod",
+        "",
+        "**Authentication:** Protected routes require an API key via the `x-api-key` header."
+      ].join("\n")
     },
     servers: [
-      { url: "http://localhost:3002", description: "Local development" }
-    ]
+      {
+        url: new URL(c.req.url).origin,
+        description: "Current server"
+      }
+    ],
+    tags: [
+      { name: "System", description: "Health checks, manifest, and self-update" },
+      { name: "Workflows", description: "Deploy, list, and manage published workflows" },
+      { name: "Execution", description: "Execute workflows and inspect runs" },
+      { name: "Webhooks", description: "Trigger workflows via incoming webhooks" },
+      { name: "Pages", description: "Published page management (Full engine only)" },
+      { name: "Data", description: "Datasource proxy \u2014 fetches data from connected backends (Supabase, Neon, etc.) for published pages (Full engine only)" },
+      { name: "Cache", description: "Redis/Upstash cache management \u2014 test connection, invalidate keys, flush, and stats" },
+      { name: "Queue", description: "QStash message queue management (coming soon)" },
+      { name: "AI", description: "OpenAI-compatible inference (GPU models required)" }
+    ],
+    security: [{ ApiKeyAuth: [] }],
+    components: {
+      securitySchemes: {
+        ApiKeyAuth: {
+          type: "apiKey",
+          in: "header",
+          name: "x-api-key",
+          description: "API key created in the Frontbase dashboard \u2192 Edge \u2192 API Keys"
+        }
+      }
+    }
+  }));
+  app2.get("/api/docs", (c) => {
+    return c.html(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontbase Edge API</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+    <style>
+        /* \u2500\u2500 Frontbase Dark Theme \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+        :root {
+            --fb-bg: #0f1117;
+            --fb-surface: #1a1d27;
+            --fb-border: #2a2d3a;
+            --fb-text: #e4e4e7;
+            --fb-text-muted: #a1a1aa;
+            --fb-primary: #6366f1;
+            --fb-primary-hover: #818cf8;
+            --fb-success: #22c55e;
+            --fb-warning: #eab308;
+            --fb-danger: #ef4444;
+            --fb-info: #3b82f6;
+        }
+        body {
+            margin: 0;
+            background: var(--fb-bg);
+            color: var(--fb-text);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        /* Header bar */
+        .fb-header {
+            background: var(--fb-surface);
+            border-bottom: 1px solid var(--fb-border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .fb-header h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--fb-text);
+        }
+        .fb-header .badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .fb-header .badge-version {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--fb-primary-hover);
+        }
+        .fb-header .badge-engine {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--fb-success);
+        }
+
+        /* Swagger UI dark overrides */
+        .swagger-ui { background: var(--fb-bg) !important; }
+        .swagger-ui .topbar { display: none !important; }
+        .swagger-ui .info { margin: 24px 0 !important; }
+        .swagger-ui .info .title { color: var(--fb-text) !important; font-family: 'Inter', sans-serif !important; }
+        .swagger-ui .info .description p { color: var(--fb-text-muted) !important; }
+        .swagger-ui .info .description code { background: var(--fb-surface) !important; color: var(--fb-primary-hover) !important; }
+        .swagger-ui .scheme-container { background: var(--fb-surface) !important; border: 1px solid var(--fb-border) !important; border-radius: 8px; box-shadow: none !important; }
+        .swagger-ui .opblock-tag { color: var(--fb-text) !important; border-bottom: 1px solid var(--fb-border) !important; font-family: 'Inter', sans-serif !important; }
+        .swagger-ui .opblock-tag small { color: var(--fb-text-muted) !important; }
+        .swagger-ui .opblock { border-radius: 8px !important; border: 1px solid var(--fb-border) !important; background: var(--fb-surface) !important; margin-bottom: 8px !important; }
+        .swagger-ui .opblock .opblock-summary { border: none !important; }
+        .swagger-ui .opblock .opblock-summary-description { color: var(--fb-text-muted) !important; }
+        .swagger-ui .opblock .opblock-summary-path { color: var(--fb-text) !important; }
+        .swagger-ui .opblock.opblock-get { border-color: rgba(34, 197, 94, 0.3) !important; }
+        .swagger-ui .opblock.opblock-post { border-color: rgba(59, 130, 246, 0.3) !important; }
+        .swagger-ui .opblock.opblock-put { border-color: rgba(234, 179, 8, 0.3) !important; }
+        .swagger-ui .opblock.opblock-delete { border-color: rgba(239, 68, 68, 0.3) !important; }
+        .swagger-ui .opblock.opblock-patch { border-color: rgba(168, 85, 247, 0.3) !important; }
+        .swagger-ui .opblock-body { background: var(--fb-bg) !important; }
+        .swagger-ui .opblock-section-header { background: var(--fb-surface) !important; border-bottom: 1px solid var(--fb-border) !important; }
+        .swagger-ui .opblock-section-header h4 { color: var(--fb-text) !important; }
+        .swagger-ui table thead tr th { color: var(--fb-text-muted) !important; border-bottom: 1px solid var(--fb-border) !important; }
+        .swagger-ui table tbody tr td { color: var(--fb-text) !important; border-bottom: 1px solid var(--fb-border) !important; }
+        .swagger-ui .parameter__name { color: var(--fb-text) !important; }
+        .swagger-ui .parameter__type { color: var(--fb-text-muted) !important; }
+        .swagger-ui .response-col_status { color: var(--fb-text) !important; }
+        .swagger-ui .response-col_description { color: var(--fb-text-muted) !important; }
+        .swagger-ui .model-box { background: var(--fb-surface) !important; }
+        .swagger-ui .model { color: var(--fb-text) !important; }
+        .swagger-ui .model-title { color: var(--fb-text) !important; }
+        .swagger-ui section.models { border: 1px solid var(--fb-border) !important; border-radius: 8px !important; }
+        .swagger-ui section.models h4 { color: var(--fb-text) !important; }
+        .swagger-ui .btn { border-radius: 6px !important; }
+        .swagger-ui .btn.authorize { background: var(--fb-primary) !important; color: white !important; border-color: var(--fb-primary) !important; }
+        .swagger-ui .btn.authorize svg { fill: white !important; }
+        .swagger-ui .btn.execute { background: var(--fb-primary) !important; border-color: var(--fb-primary) !important; }
+        .swagger-ui select { background: var(--fb-surface) !important; color: var(--fb-text) !important; border: 1px solid var(--fb-border) !important; border-radius: 6px !important; }
+        .swagger-ui input[type=text] { background: var(--fb-surface) !important; color: var(--fb-text) !important; border: 1px solid var(--fb-border) !important; border-radius: 6px !important; }
+        .swagger-ui textarea { background: var(--fb-surface) !important; color: var(--fb-text) !important; border: 1px solid var(--fb-border) !important; border-radius: 6px !important; }
+        .swagger-ui .highlight-code { background: var(--fb-surface) !important; }
+        .swagger-ui .highlight-code pre { color: var(--fb-text) !important; }
+        .swagger-ui .responses-inner { background: transparent !important; }
+        .swagger-ui .auth-wrapper { color: var(--fb-text) !important; }
+        .swagger-ui .dialog-ux .modal-ux { background: var(--fb-surface) !important; border: 1px solid var(--fb-border) !important; }
+        .swagger-ui .dialog-ux .modal-ux-header h3 { color: var(--fb-text) !important; }
+        .swagger-ui .dialog-ux .modal-ux-content p { color: var(--fb-text-muted) !important; }
+        .swagger-ui .wrapper { max-width: 1200px !important; padding: 0 24px !important; }
+        .swagger-ui .servers > label { color: var(--fb-text) !important; }
+        .swagger-ui .servers > label select { min-width: 320px; }
+        .swagger-ui a { color: var(--fb-primary-hover) !important; }
+    </style>
+</head>
+<body>
+    <div class="fb-header">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect width="24" height="24" rx="6" fill="#6366f1"/>
+            <path d="M7 8h10M7 12h7M7 16h4" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <h1>Frontbase Edge API</h1>
+        <span class="badge badge-version">v${EDGE_VERSION}</span>
+        <span class="badge badge-engine">Edge Engine</span>
+    </div>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script>
+        SwaggerUIBundle({
+            url: '/api/openapi.json',
+            dom_id: '#swagger-ui',
+            deepLinking: true,
+            presets: [
+                SwaggerUIBundle.presets.apis,
+                SwaggerUIBundle.SwaggerUIStandalonePreset,
+            ],
+            layout: 'BaseLayout',
+            defaultModelsExpandDepth: -1,
+            docExpansion: 'list',
+            filter: true,
+            persistAuthorization: true,
+        });
+    </script>
+</body>
+</html>`);
   });
-  app2.get("/api/docs", middleware({ url: "/api/openapi.json" }));
   return app2;
 }
 var liteApp = createLiteApp();
@@ -60436,13 +60588,13 @@ function renderEmbed(id, props) {
             ></iframe>
         </div>`;
   }
-  const html2 = props.html || "";
-  if (!html2) {
+  const html = props.html || "";
+  if (!html) {
     const attrs2 = getCommonAttributes(id, "fb-embed fb-embed-placeholder", props, `${containerStyle};display:flex;align-items:center;justify-content:center;background:#fffbeb;border:2px dashed #f59e0b;border-radius:8px`);
     return `<div ${attrs2}><span style="color:#92400e">Script embed code not set</span></div>`;
   }
   const attrs = getCommonAttributes(id, "fb-embed fb-embed-script", props, containerStyle);
-  return `<div ${attrs}>${html2}</div>`;
+  return `<div ${attrs}>${html}</div>`;
 }
 
 // src/ssr/components/interactive.ts
@@ -75654,210 +75806,10 @@ dataRoute.post("/clear-cache", async (c) => {
   return c.json({ success: true, message: "Cache cleared" });
 });
 
-// src/routes/cache.ts
-init_redis();
-var cacheRoute = new OpenAPIHono();
-function isRedisInitialized() {
-  try {
-    getRedis();
-    return true;
-  } catch {
-    return false;
-  }
-}
-function ensureRedisInitialized() {
-  if (isRedisInitialized()) {
-    return true;
-  }
-  const url = process.env.FRONTBASE_CACHE_URL;
-  const token = process.env.FRONTBASE_CACHE_TOKEN;
-  if (!url || !token) {
-    return false;
-  }
-  try {
-    initRedis({ url, token });
-    return true;
-  } catch {
-    return false;
-  }
-}
-var CacheStatusSchema = external_exports.object({
-  success: external_exports.boolean(),
-  message: external_exports.string()
-});
-var CacheStatsSchema = external_exports.object({
-  success: external_exports.boolean(),
-  configured: external_exports.boolean(),
-  connected: external_exports.boolean().optional(),
-  message: external_exports.string()
-});
-var InvalidateRequestSchema = external_exports.object({
-  key: external_exports.string().optional().openapi({ description: "Single cache key to invalidate" }),
-  pattern: external_exports.string().optional().openapi({ description: "Glob pattern to match multiple keys" })
-});
-var InvalidateResponseSchema = external_exports.object({
-  success: external_exports.boolean(),
-  message: external_exports.string()
-});
-var testRoute = createRoute({
-  method: "get",
-  path: "/test",
-  tags: ["Cache"],
-  summary: "Test Redis connection",
-  description: "Tests the Redis connection and returns the status.",
-  responses: {
-    200: {
-      description: "Connection test result",
-      content: {
-        "application/json": {
-          schema: CacheStatusSchema
-        }
-      }
-    }
-  }
-});
-cacheRoute.openapi(testRoute, async (c) => {
-  if (!ensureRedisInitialized()) {
-    return c.json({ success: false, message: "Redis not configured" }, 200);
-  }
-  const result = await testConnection();
-  return c.json(result, 200);
-});
-var invalidateRoute = createRoute({
-  method: "post",
-  path: "/invalidate",
-  tags: ["Cache"],
-  summary: "Invalidate cache entries",
-  description: "Invalidates a single cache key or all keys matching a pattern.",
-  request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: InvalidateRequestSchema
-        }
-      }
-    }
-  },
-  responses: {
-    200: {
-      description: "Invalidation result",
-      content: {
-        "application/json": {
-          schema: InvalidateResponseSchema
-        }
-      }
-    },
-    400: {
-      description: "Bad request",
-      content: {
-        "application/json": {
-          schema: InvalidateResponseSchema
-        }
-      }
-    },
-    500: {
-      description: "Server error",
-      content: {
-        "application/json": {
-          schema: InvalidateResponseSchema
-        }
-      }
-    }
-  }
-});
-cacheRoute.openapi(invalidateRoute, async (c) => {
-  if (!ensureRedisInitialized()) {
-    return c.json({ success: false, message: "Redis not configured" }, 400);
-  }
-  try {
-    const { key, pattern } = c.req.valid("json");
-    if (key) {
-      await invalidate(key);
-      return c.json({ success: true, message: `Invalidated key: ${key}` }, 200);
-    } else if (pattern) {
-      await invalidatePattern(pattern);
-      return c.json({ success: true, message: `Invalidated pattern: ${pattern}` }, 200);
-    } else {
-      return c.json({ success: false, message: "Provide key or pattern" }, 400);
-    }
-  } catch (error) {
-    return c.json({
-      success: false,
-      message: error instanceof Error ? error.message : "Invalidation failed"
-    }, 500);
-  }
-});
-var statsRoute2 = createRoute({
-  method: "get",
-  path: "/stats",
-  tags: ["Cache"],
-  summary: "Get cache status",
-  description: "Returns the current cache configuration and connection status.",
-  responses: {
-    200: {
-      description: "Cache status",
-      content: {
-        "application/json": {
-          schema: CacheStatsSchema
-        }
-      }
-    }
-  }
-});
-cacheRoute.openapi(statsRoute2, async (c) => {
-  const configured = ensureRedisInitialized();
-  if (!configured) {
-    return c.json({
-      success: true,
-      configured: false,
-      message: "Redis not configured. Configure via Settings > Cache & Performance."
-    }, 200);
-  }
-  const connectionResult = await testConnection();
-  return c.json({
-    success: true,
-    configured: true,
-    connected: connectionResult.success,
-    message: connectionResult.message
-  }, 200);
-});
-var flushRoute = createRoute({
-  method: "post",
-  path: "/flush",
-  tags: ["Cache"],
-  summary: "Flush all cache entries",
-  description: "Clears all cached data. Called after reconfiguration or redeployment.",
-  responses: {
-    200: {
-      description: "Flush result",
-      content: {
-        "application/json": {
-          schema: CacheStatusSchema
-        }
-      }
-    }
-  }
-});
-cacheRoute.openapi(flushRoute, async (c) => {
-  if (!ensureRedisInitialized()) {
-    return c.json({ success: true, message: "No cache configured, nothing to flush" }, 200);
-  }
-  try {
-    await invalidatePattern("*");
-    return c.json({ success: true, message: "All cache entries flushed" }, 200);
-  } catch (error) {
-    return c.json({
-      success: false,
-      message: error instanceof Error ? error.message : "Flush failed"
-    }, 200);
-  }
-});
-
 // src/engine/full.ts
 var app = createLiteApp();
 app.route("/api/import", importRoute);
 app.route("/api/data", dataRoute);
-app.route("/api/cache", cacheRoute);
 app.route("", pagesRoute);
 
 // src/startup/sync.ts

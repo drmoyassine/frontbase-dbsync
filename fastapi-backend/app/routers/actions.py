@@ -41,6 +41,20 @@ import os
 EDGE_URL = os.getenv("EDGE_URL", "http://localhost:3002")
 
 
+def _compute_content_hash(draft: AutomationDraft) -> str:
+    """Compute a deterministic hash of the workflow content for staleness detection."""
+    import hashlib
+    content = json.dumps({
+        "nodes": draft.nodes or [],
+        "edges": draft.edges or [],
+        "settings": draft.settings or {},
+        "trigger_config": draft.trigger_config or {},
+        "trigger_type": str(draft.trigger_type or "manual"),
+        "name": str(draft.name or ""),
+    }, sort_keys=True, default=str)
+    return hashlib.sha256(content.encode()).hexdigest()[:16]
+
+
 def _build_deploy_payload(draft: AutomationDraft, name_prefix: str = "", override_is_active: Optional[bool] = None) -> dict:
     """Build the deploy payload for the Edge /api/deploy endpoint."""
     import json
@@ -52,7 +66,7 @@ def _build_deploy_payload(draft: AutomationDraft, name_prefix: str = "", overrid
         "triggerConfig": draft.trigger_config or {},
         "nodes": draft.nodes,
         "edges": draft.edges,
-        "settings": json.dumps(draft.settings) if draft.settings else None,
+        "settings": json.dumps(draft.settings) if draft.settings else None,  # type: ignore[truthy-bool]
         "isActive": override_is_active if override_is_active is not None else draft.is_active,
         "publishedBy": str(draft.created_by) if str(draft.created_by or "") else None,
     }
@@ -187,6 +201,9 @@ async def update_draft(
     
     for key, value in update_data.items():
         setattr(draft, key, value)
+    
+    # Recompute content hash for staleness detection
+    draft.content_hash = _compute_content_hash(draft)  # type: ignore[assignment]
     
     db.commit()
     db.refresh(draft)
@@ -427,12 +444,13 @@ async def publish_draft_to_engine(
             draft_record.published_version = result_data.get("version", 1)
             draft_record.published_at = datetime.now(timezone.utc)  # type: ignore[assignment]
             # Accumulate deployed engine record
-            engines = dict(draft_record.deployed_engines or {})
+            engines: dict = dict(draft_record.deployed_engines or {})  # type: ignore[arg-type]
             engines[engine_id] = {
                 "name": engine_name,
                 "url": engine_url,
                 "deployed_at": datetime.now(timezone.utc).isoformat(),
-                "is_active": draft_record.is_active  # Inherit global active state on fresh publish
+                "is_active": bool(draft_record.is_active),  # Inherit global active state on fresh publish
+                "deployed_version_hash": str(draft_record.content_hash or ""),
             }
             draft_record.deployed_engines = engines  # type: ignore[assignment]
             update_db.commit()
@@ -445,6 +463,119 @@ async def publish_draft_to_engine(
         workflow_id=draft_id_str,
         version=result_data.get("version", 1)
     )
+
+class WorkflowBatchPublishRequest(BaseModel):
+    engine_ids: List[str]
+
+
+@router.post("/drafts/{draft_id}/publish-batch/")
+async def publish_draft_batch(
+    draft_id: str,
+    request: WorkflowBatchPublishRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Batch-publish a workflow draft to multiple Edge Engines.
+    Builds the deploy payload ONCE, fans out to all engines in parallel.
+    """
+    from sqlalchemy.orm.attributes import flag_modified
+
+    draft = db.query(AutomationDraft).filter(AutomationDraft.id == draft_id).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    # Recompute content hash before publishing
+    draft.content_hash = _compute_content_hash(draft)  # type: ignore[assignment]
+    db.commit()
+    db.refresh(draft)
+
+    # Resolve engines
+    engines = db.query(EdgeEngine).filter(EdgeEngine.id.in_(request.engine_ids)).all()
+    if not engines:
+        raise HTTPException(status_code=404, detail="No engines found")
+
+    engine_map = {str(e.id): e for e in engines}
+
+    # Build deploy payload ONCE
+    deploy_payload = _build_deploy_payload(draft)
+    draft_id_str = str(draft.id)
+    content_hash = str(draft.content_hash or "")
+    is_active_global = bool(draft.is_active)
+
+    # Release connection before slow I/O
+    db.expunge(draft)
+    for e in engines:
+        db.expunge(e)
+    db.close()
+
+    # Fan out to all engines in parallel
+    async def _deploy_to_engine(engine: EdgeEngine):
+        engine_url = str(getattr(engine, 'url', ''))
+        engine_name = str(getattr(engine, 'name', f'Engine {engine.id}'))
+        engine_id = str(engine.id)
+        if not engine_url:
+            return {"engineId": engine_id, "name": engine_name, "success": False, "error": "No URL"}
+
+        # Pre-flight: check queue requirement
+        wf_settings = deploy_payload.get('settings') or '{}'
+        try:
+            parsed_settings = json.loads(wf_settings) if isinstance(wf_settings, str) else wf_settings
+        except Exception:
+            parsed_settings = {}
+        needs_queue = parsed_settings.get('queue_enabled') or parsed_settings.get('dlq_enabled')
+        engine_queue_id = getattr(engine, 'edge_queue_id', None)
+        if needs_queue and not engine_queue_id:
+            return {"engineId": engine_id, "name": engine_name, "success": False,
+                    "error": f"Engine '{engine_name}' has no Queue provider configured"}
+
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{engine_url.rstrip('/')}/api/deploy",
+                    json=deploy_payload,
+                    timeout=30.0
+                )
+                if resp.status_code != 200:
+                    return {"engineId": engine_id, "name": engine_name, "success": False,
+                            "error": f"HTTP {resp.status_code}"}
+                return {"engineId": engine_id, "name": engine_name, "success": True,
+                        "version": resp.json().get("version", 1)}
+        except Exception as exc:
+            return {"engineId": engine_id, "name": engine_name, "success": False, "error": str(exc)}
+
+    results = await asyncio.gather(*[_deploy_to_engine(engine_map[eid]) for eid in request.engine_ids if eid in engine_map])
+
+    # Update DB with deployment records
+    update_db = SessionLocal()
+    try:
+        draft_record = update_db.query(AutomationDraft).filter(AutomationDraft.id == draft_id_str).first()
+        if draft_record:
+            deployed: dict = dict(draft_record.deployed_engines or {})  # type: ignore[arg-type]
+            for r in results:
+                if r["success"]:
+                    deployed[r["engineId"]] = {
+                        "name": r["name"],
+                        "url": str(getattr(engine_map.get(r["engineId"]), 'url', '')),
+                        "deployed_at": datetime.now(timezone.utc).isoformat(),
+                        "is_active": bool(is_active_global),
+                        "deployed_version_hash": content_hash,
+                    }
+            draft_record.deployed_engines = deployed  # type: ignore[assignment]
+            flag_modified(draft_record, "deployed_engines")
+            draft_record.is_published = True  # type: ignore[assignment]
+            draft_record.published_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+            update_db.commit()
+    finally:
+        update_db.close()
+
+    succeeded = [r for r in results if r["success"]]
+    failed = [r for r in results if not r["success"]]
+    return {
+        "success": len(failed) == 0,
+        "message": f"Published to {len(succeeded)}/{len(results)} engine(s)",
+        "results": results,
+    }
+
 
 @router.post("/drafts/{draft_id}/publish/{engine_id}/toggle")
 async def toggle_target_active(
@@ -502,7 +633,7 @@ async def toggle_target_active(
         
     # UPDATE DB with new is_active state for this engine
     from sqlalchemy.orm.attributes import flag_modified
-    engines = dict(draft.deployed_engines or {})
+    engines: dict = dict(draft.deployed_engines or {})  # type: ignore[arg-type]
     if engine_id in engines:
         engines[engine_id]["is_active"] = request.is_active
     else:
@@ -952,7 +1083,7 @@ async def list_all_executions(
         if wf_id:
             all_draft_ids.add(wf_id)
     for r in test_records:
-        if r.draft_id:
+        if str(r.draft_id or ""):
             all_draft_ids.add(str(r.draft_id))
 
     drafts_map = {}

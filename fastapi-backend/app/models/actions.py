@@ -34,8 +34,9 @@ class AutomationDraft(Base):
     is_published = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     published_version = Column(Integer, nullable=True)
-    deployed_engines = Column(JSON, nullable=True, default=dict)  # {engine_id: {name, url, deployed_at}}
+    deployed_engines = Column(JSON, nullable=True, default=dict)  # {engine_id: {name, url, deployed_at, deployed_version_hash}}
     settings = Column(JSON, nullable=True, default=dict)  # Per-workflow config: rate_limit, debounce, timeout, queue options
+    content_hash = Column(String(64), nullable=True)  # Hash of nodes+edges+settings for staleness detection
     published_at = Column(DateTime(timezone=True), nullable=True)
     
     # Metadata

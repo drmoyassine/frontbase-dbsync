@@ -121,7 +121,6 @@ PROVIDER_SECRET_KEYS: dict[str, set[str]] = {
     "neon":              {"api_key", "password"},
     "mysql":             {"password"},
     "wordpress_rest":    {"app_password"},
-    "wordpress_graphql": {"app_password"},
     # ── Edge Infrastructure (Connected Account = management API token) ──
     "turso":         {"databases"},     # manual registry: JSON blob of DB entries
     "upstash_redis": {"cache_token"},
@@ -142,8 +141,7 @@ PROVIDER_METADATA_KEYS: dict[str, set[str]] = {
     "postgres":          {"host", "port", "database", "username"},
     "neon":              {"host", "database", "project_id"},
     "mysql":             {"host", "port", "database", "username"},
-    "wordpress_rest":    {"base_url", "username"},
-    "wordpress_graphql": {"base_url"},
+    "wordpress_rest":    {"base_url", "username", "api_mode"},
     # ── Edge Infrastructure ──
     "turso":         set(),             # all data in encrypted blob
     "upstash_redis": {"cache_url"},

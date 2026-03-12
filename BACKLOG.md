@@ -120,6 +120,8 @@
 - [ ] 🔌 **Enterprise Secrets Management** — Infisical integration for deploy-time secrets injection, E2E encrypted storage, audit logs.
 - [ ] ✨ **GDPR Compliance Enhancements** — Cookie Consent Banner, IP Anonymization, Privacy Policy Template, Data Retention Controls.
 - [ ] ✨ **Admin User Management** — List, search, invite, delete Supabase auth users from dashboard. GoTrue Admin API for CRUD. Contacts sync.
+- [ ] 🔌 **Neon Auth Support** — Add Neon Auth as an auth provider option. Neon Auth provides @neondatabase/pg + drizzle integration. Detect when auth provider has database capability and auto-suggest same datasource for contacts table.
+- [ ] 🔌 **Storage Adapters** — Add storage provider adapters for Cloudflare R2, Vercel Blob, and Netlify Blobs alongside existing Supabase Storage.
 
 ---
 

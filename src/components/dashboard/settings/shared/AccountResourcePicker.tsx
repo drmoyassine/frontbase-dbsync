@@ -191,6 +191,10 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
     };
 
     const handleResourceSelect = (resourceId: string) => {
+        if (resourceId === '__connect_new_account__') {
+            setShowConnectDialog(true);
+            return;
+        }
         if (resourceId === '__create_new__') {
             if (hideConnectDisplayName) {
                 // Turso: open the connect modal directly (it's the DB form)
@@ -379,6 +383,13 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
                                             </span>
                                         </SelectItem>
                                     )}
+                                    {/* Connect Another Account — always available */}
+                                    <SelectItem value="__connect_new_account__">
+                                        <span className="flex items-center gap-2 text-primary">
+                                            <Plus className="h-3 w-3" />
+                                            Connect Another Account
+                                        </span>
+                                    </SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

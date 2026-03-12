@@ -32,7 +32,7 @@ import { CreatePageDialog } from './CreatePageDialog';
 
 export const PagesPanel: React.FC = () => {
   const navigate = useNavigate();
-  const { project, pages, createPage, deletePage, restorePage, permanentDeletePage, setCurrentPageId, loadPagesFromDatabase, publishPageToTarget, unpublishPageFromTarget } = useBuilderStore();
+  const { project, pages, createPage, deletePage, restorePage, permanentDeletePage, setCurrentPageId, loadPagesFromDatabase, publishPageToTarget, publishPageToTargets, unpublishPageFromTarget } = useBuilderStore();
   const { isAuthenticated, isLoading } = useAuthStore();
   const { searchQuery, setSearchQuery, filterStatus } = useDashboardStore();
   const [isCreating, setIsCreating] = useState(false);
@@ -110,15 +110,20 @@ export const PagesPanel: React.FC = () => {
 
   const handleSyncAllTargets = async (pageId: string) => {
     try {
-      // Fetch active full-scope engines and publish to each
+      // Fetch active full-scope engines and publish in batch
       const response = await fetch('/api/edge-engines/active/by-scope/full');
       const engines = await response.json();
       if (!Array.isArray(engines) || engines.length === 0) {
         toast.error('No active deployment targets found');
         return;
       }
-      await Promise.all(engines.map((eng: any) => publishPageToTarget(pageId, eng.id)));
-      toast.success(`Synced to ${engines.length} target(s)`);
+      const result = await publishPageToTargets(pageId, engines.map((eng: any) => eng.id));
+      if (result) {
+        const succeeded = result.results?.filter((r: any) => r.success) || [];
+        const failed = result.results?.filter((r: any) => !r.success) || [];
+        if (succeeded.length > 0) toast.success(`Synced to ${succeeded.length} target(s)`);
+        if (failed.length > 0) toast.error(`Failed to sync ${failed.length} target(s)`);
+      }
     } catch (err: any) {
       toast.error(err?.message || 'Failed to sync targets');
     }
@@ -126,6 +131,8 @@ export const PagesPanel: React.FC = () => {
 
   const handleSyncTarget = async (pageId: string, engineId: string) => {
     await publishPageToTarget(pageId, engineId);
+    await loadPagesFromDatabase(false, true);
+    toast.success('Target synced');
   };
 
   const handleUnpublishTarget = async (pageId: string, engineId: string) => {

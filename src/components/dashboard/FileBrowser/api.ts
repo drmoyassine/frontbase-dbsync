@@ -1,15 +1,30 @@
-// FileBrowser API Functions
+// FileBrowser API Functions — all scoped by storageProviderId
 
 import api from '@/services/api-service';
 import { Bucket, StorageFile } from './types';
 
+// ── Lazy size computation (non-blocking) ──────────────────────────────
+export async function computeSize(
+    providerId: string,
+    bucket: string,
+    path: string = '',
+): Promise<number> {
+    const params = new URLSearchParams();
+    params.set('provider_id', providerId);
+    params.set('bucket', bucket);
+    if (path) params.set('path', path);
+    const res = await api.get(`/api/storage/compute-size?${params.toString()}`);
+    return res.data.size ?? 0;
+}
+
 export async function createBucket(
+    providerId: string,
     name: string,
     isPublic: boolean,
     fileSizeLimit?: number,
     allowedMimeTypes?: string[]
 ) {
-    const res = await api.post('/api/storage/buckets', {
+    const res = await api.post(`/api/storage/buckets?provider_id=${providerId}`, {
         name,
         public: isPublic,
         file_size_limit: fileSizeLimit,
@@ -21,12 +36,13 @@ export async function createBucket(
 }
 
 export async function updateBucket(
+    providerId: string,
     id: string,
     isPublic: boolean,
     fileSizeLimit?: number,
     allowedMimeTypes?: string[]
 ) {
-    const res = await api.put(`/api/storage/buckets/${id}`, {
+    const res = await api.put(`/api/storage/buckets/${id}?provider_id=${providerId}`, {
         public: isPublic,
         file_size_limit: fileSizeLimit,
         allowed_mime_types: allowedMimeTypes,
@@ -36,26 +52,27 @@ export async function updateBucket(
     return data;
 }
 
-export async function deleteBucket(id: string) {
-    const res = await api.delete(`/api/storage/buckets/${id}`);
+export async function deleteBucket(providerId: string, id: string) {
+    const res = await api.delete(`/api/storage/buckets/${id}?provider_id=${providerId}`);
     const data = res.data;
     if (!data.success) throw new Error(data.error || 'Failed to delete bucket');
 }
 
-export async function emptyBucket(id: string) {
-    const res = await api.post(`/api/storage/buckets/${id}/empty`);
+export async function emptyBucket(providerId: string, id: string) {
+    const res = await api.post(`/api/storage/buckets/${id}/empty?provider_id=${providerId}`);
     const data = res.data;
     if (!data.success) throw new Error(data.error || 'Failed to empty bucket');
 }
 
-export async function fetchBuckets(): Promise<Bucket[]> {
-    const res = await api.get('/api/storage/buckets');
+export async function fetchBuckets(providerId: string): Promise<Bucket[]> {
+    const res = await api.get(`/api/storage/buckets?provider_id=${providerId}`);
     const data = res.data;
     if (!data.success) throw new Error(data.error || 'Failed to fetch buckets');
     return data.buckets;
 }
 
 export async function fetchFiles(
+    providerId: string,
     bucket: string,
     path?: string,
     page: number = 0,
@@ -63,6 +80,7 @@ export async function fetchFiles(
     search?: string
 ): Promise<StorageFile[]> {
     const params = new URLSearchParams();
+    params.set('provider_id', providerId);
     params.set('bucket', bucket);
     if (path) params.set('path', path);
     params.set('limit', limit.toString());
@@ -75,9 +93,9 @@ export async function fetchFiles(
     return data.files;
 }
 
-export async function deleteFile(paths: string[], bucket?: string): Promise<void> {
+export async function deleteFile(providerId: string, paths: string[], bucket?: string): Promise<void> {
     const res = await api.delete('/api/storage/delete', {
-        data: { paths, bucket },
+        data: { paths, bucket, provider_id: providerId },
     });
     const data = res.data;
     if (!data.success) {
@@ -85,8 +103,9 @@ export async function deleteFile(paths: string[], bucket?: string): Promise<void
     }
 }
 
-export async function getSignedUrl(path: string, bucket: string): Promise<string> {
+export async function getSignedUrl(providerId: string, path: string, bucket: string): Promise<string> {
     const params = new URLSearchParams();
+    params.set('provider_id', providerId);
     params.set('path', path);
     params.set('bucket', bucket);
 
@@ -96,8 +115,9 @@ export async function getSignedUrl(path: string, bucket: string): Promise<string
     return data.signedUrl;
 }
 
-export async function getPublicUrl(path: string, bucket: string): Promise<string> {
+export async function getPublicUrl(providerId: string, path: string, bucket: string): Promise<string> {
     const params = new URLSearchParams();
+    params.set('provider_id', providerId);
     params.set('path', path);
     params.set('bucket', bucket);
 
@@ -108,12 +128,14 @@ export async function getPublicUrl(path: string, bucket: string): Promise<string
 }
 
 export async function uploadFile(
+    providerId: string,
     file: File,
     path?: string,
     bucket?: string
 ): Promise<{ path: string; publicUrl: string }> {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('provider_id', providerId);
     if (path) formData.append('path', path);
     if (bucket) formData.append('bucket', bucket);
 
@@ -128,13 +150,14 @@ export async function uploadFile(
     return { path: data.path, publicUrl: data.publicUrl };
 }
 
-export async function createFolder(folderPath: string, bucket: string): Promise<void> {
-    const res = await api.post('/api/storage/create-folder', { folderPath, bucket });
+export async function createFolder(providerId: string, folderPath: string, bucket: string): Promise<void> {
+    const res = await api.post('/api/storage/create-folder', { folderPath, bucket, provider_id: providerId });
     const data = res.data;
     if (!data.success) throw new Error(data.error || 'Failed to create folder');
 }
 
 export async function moveFile(
+    providerId: string,
     sourceKey: string,
     destinationKey: string,
     options?: { sourceBucket?: string; destBucket?: string }
@@ -144,6 +167,7 @@ export async function moveFile(
         destinationKey,
         sourceBucket: options?.sourceBucket,
         destBucket: options?.destBucket,
+        provider_id: providerId,
     });
     const data = res.data;
     if (!data.success) throw new Error(data.error || 'Failed to move/rename');

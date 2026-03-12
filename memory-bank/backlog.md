@@ -60,3 +60,21 @@
 
 **Status**: Parked. Post-MVP infrastructure. Unified integrations layer and provider audit come first.
 
+---
+
+## Storage Adapters — Cloudflare R2, Vercel Blob, Netlify Blobs
+
+**What**: Implement `StorageAdapter` subclasses for Cloudflare R2, Vercel Blob Storage, and Netlify Blobs. The adapter base class and `SupabaseStorageAdapter` already exist in `fastapi-backend/app/services/storage_service.py`.
+
+**APIs**:
+| Provider | API | Auth |
+|----------|-----|------|
+| Cloudflare R2 | S3-compatible API or Workers API | API Token + Account ID |
+| Vercel Blob | `@vercel/blob` REST API | `BLOB_READ_WRITE_TOKEN` |
+| Netlify Blobs | Netlify Blobs API (`/.netlify/blobs/`) | Deploy token |
+
+**Each adapter needs**: `list_buckets`, `create_bucket`, `get_bucket`, `update_bucket`, `delete_bucket`, `empty_bucket`, `list_files`, `upload_file`, `delete_files`, `get_signed_url`, `get_public_url`, `move_file`, `create_folder`.
+
+**Frontend**: No changes needed — `StoragePanel.tsx` and `FileBrowser` are already provider-agnostic (scoped by `provider_id`). `compute_folder_size` + L1/L2/L3 caching works for any adapter.
+
+**Status**: Parked. Supabase adapter is the reference implementation. Add others as users request them.

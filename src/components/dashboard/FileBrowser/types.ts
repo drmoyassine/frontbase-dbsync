@@ -5,8 +5,8 @@ export interface Bucket {
     name: string;
     public: boolean;
     created_at: string;
-    provider: string;
-    size: number;
+    provider?: string;
+    size?: number;
     file_size_limit?: number;
     allowed_mime_types?: string[];
 }

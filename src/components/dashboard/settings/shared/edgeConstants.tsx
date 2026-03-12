@@ -33,9 +33,7 @@ export const PROVIDER_ICONS: Record<string, React.FC<any>> = {
     vercel: Triangle,
     netlify: Hexagon,
     deno: Zap,
-    wordpress: Globe,
     wordpress_rest: Globe,
-    wordpress_graphql: Globe,
     postgres: Database,
     mysql: HardDrive,
     neon: Database,
@@ -252,32 +250,10 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
             { key: 'password', label: 'Password', placeholder: 'Password', type: 'password', required: true },
         ],
     },
-    wordpress: {
-        label: 'WordPress',
-        defaultName: 'WordPress Site',
-        capabilities: ['cms'],
-        fields: [
-            { key: 'base_url', label: 'Site URL', placeholder: 'https://mysite.com', required: true },
-            { key: 'username', label: 'Username', placeholder: 'admin', required: true },
-            { key: 'app_password', label: 'Application Password', placeholder: 'xxxx xxxx xxxx xxxx', type: 'password', required: true },
-        ],
-        helpText: <>Generate an Application Password in WordPress → Users → Profile → Application Passwords.</>,
-    },
     wordpress_rest: {
-        label: 'WordPress',
-        defaultName: 'WordPress Site',
-        capabilities: ['cms'],
-        fields: [
-            { key: 'base_url', label: 'Site URL', placeholder: 'https://mysite.com', required: true },
-            { key: 'username', label: 'Username', placeholder: 'admin', required: true },
-            { key: 'app_password', label: 'Application Password', placeholder: 'xxxx xxxx xxxx xxxx', type: 'password', required: true },
-        ],
-        helpText: <>Generate an Application Password in WordPress → Users → Profile → Application Passwords.</>,
-    },
-    wordpress_graphql: {
-        label: 'WordPress',
-        defaultName: 'WordPress Site',
-        capabilities: ['cms'],
+        label: 'WordPress API',
+        defaultName: 'WordPress API',
+        capabilities: ['database', 'cms'],
         fields: [
             { key: 'base_url', label: 'Site URL', placeholder: 'https://mysite.com', required: true },
             { key: 'username', label: 'Username', placeholder: 'admin', required: true },
@@ -301,3 +277,18 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
 export const GPU_CAPABLE_PROVIDERS = new Set(
     Object.entries(PROVIDER_CONFIGS).filter(([, c]) => c.capabilities?.includes('gpu')).map(([k]) => k)
 );
+
+// Derived: providers that support object storage (used to filter Storage modal)
+export const STORAGE_CAPABLE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
+    .filter(([, c]) => c.capabilities?.includes('storage'))
+    .map(([k]) => k);
+
+// Derived: providers that support auth (used to filter Auth modal)
+export const AUTH_CAPABLE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
+    .filter(([, c]) => c.capabilities?.includes('auth'))
+    .map(([k]) => k);
+
+// Derived: providers that support database (used to filter Contacts DB selector)
+export const DATABASE_CAPABLE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
+    .filter(([, c]) => c.capabilities?.includes('database'))
+    .map(([k]) => k);

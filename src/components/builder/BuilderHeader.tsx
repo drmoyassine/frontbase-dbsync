@@ -24,6 +24,7 @@ import {
   Grid3x3,
   Settings,
   ExternalLink,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -74,6 +75,7 @@ export const BuilderHeader: React.FC<{
       setShowGrid,
       savePageToDatabase,
       publishPageToTarget,
+      publishPageToTargets,
       loadPagesFromDatabase,
       togglePageVisibility,
       deleteSelectedComponent
@@ -151,6 +153,8 @@ export const BuilderHeader: React.FC<{
       setIsPublishing(true);
       try {
         await publishPageToTarget(currentPageId, target.id);
+        // Reload once for single target
+        await loadPagesFromDatabase(false, true);
         const pagePath = currentPage.isHomepage ? '' : currentPage.slug;
         const origin = getPreviewOrigin(target);
         if (origin) {
@@ -174,13 +178,20 @@ export const BuilderHeader: React.FC<{
           toast.info('All selected targets are already up to date');
           return;
         }
-        await Promise.all(
-          selected.map(t => publishPageToTarget(currentPageId, t.id))
-        );
-        // No need for loadPagesFromDatabase — each publishPageToTarget already awaits it
-        // Single consolidated toast
-        const names = selected.map(t => t.name).join(', ');
-        toast.success(`Published to ${names}`);
+        // Single batch request — one save, one serialize, one reload
+        const result = await publishPageToTargets(currentPageId, selected.map(t => t.id));
+        if (result) {
+          const succeeded = result.results?.filter((r: any) => r.success) || [];
+          const failed = result.results?.filter((r: any) => !r.success) || [];
+          if (succeeded.length > 0) {
+            const names = succeeded.map((r: any) => r.name).join(', ');
+            toast.success(`Published to ${names}`);
+          }
+          if (failed.length > 0) {
+            const names = failed.map((r: any) => r.name).join(', ');
+            toast.error(`Failed to publish to: ${names}`);
+          }
+        }
       } catch (err: any) {
         toast.error(err?.message || 'Failed to publish');
       } finally {
@@ -397,24 +408,52 @@ export const BuilderHeader: React.FC<{
             </span>
           </Button>
 
-          {/* Publish Button with Target Dropdown */}
-          <Popover open={publishOpen} onOpenChange={setPublishOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                size="sm"
-                disabled={isSaving || isPublishing || loadingTargets}
-                onClick={handlePublishClick}
-              >
-                {(isPublishing || loadingTargets) ? (
-                  <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" />
-                ) : (
-                  <Play className="h-4 w-4 sm:mr-2" />
-                )}
-                <span className="hidden sm:inline">
-                  {isPublishing ? 'Publishing...' : 'Publish'}
-                </span>
-              </Button>
-            </PopoverTrigger>
+          {/* Publish Split Button: primary + chevron popover */}
+          <div className="flex items-center">
+            <Button
+              size="sm"
+              disabled={isSaving || isPublishing || loadingTargets}
+              onClick={handlePublishClick}
+              className="rounded-r-none"
+            >
+              {(isPublishing || loadingTargets) ? (
+                <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4 sm:mr-2" />
+              )}
+              <span className="hidden sm:inline">
+                {isPublishing ? 'Publishing...' : 'Publish'}
+              </span>
+            </Button>
+            <Popover open={publishOpen} onOpenChange={setPublishOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  size="sm"
+                  disabled={isSaving || isPublishing || loadingTargets}
+                  className="rounded-l-none border-l px-1.5"
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    // Load targets for dropdown on chevron click
+                    setLoadingTargets(true);
+                    try {
+                      const response = await fetch('/api/edge-engines/active/by-scope/full');
+                      const data = await response.json();
+                      const eligible = (data as EdgeTarget[]).filter(e => e.edge_db_id);
+                      setTargets(eligible);
+                      setSelectedTargets(new Set(
+                        eligible.filter(e => !isTargetSynced(e.id)).map(e => e.id)
+                      ));
+                      setPublishOpen(true);
+                    } catch (err) {
+                      console.error('Failed to load targets:', err);
+                    } finally {
+                      setLoadingTargets(false);
+                    }
+                  }}
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </Button>
+              </PopoverTrigger>
             <PopoverContent className="w-72 p-0" align="end">
               <div className="p-3 border-b">
                 <p className="text-sm font-semibold">Publish to Edge</p>
@@ -498,6 +537,7 @@ export const BuilderHeader: React.FC<{
               )}
             </PopoverContent>
           </Popover>
+          </div>
 
           {/* Page Settings */}
           <Button

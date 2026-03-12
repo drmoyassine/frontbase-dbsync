@@ -2,19 +2,19 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { datasourcesApi, Datasource, viewsApi } from '../api'
 import DataPreviewModal from '../components/DataPreviewModal'
+import { DatasourceModal } from '../components/DatasourceModal'
 import { Plus, Database, Trash2, TestTube, CheckCircle, XCircle, Loader2, Edit2, Filter } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { AccountResourcePicker, DiscoveredResource } from '@/components/dashboard/settings/shared/AccountResourcePicker'
+import { PROVIDER_CONFIGS } from '@/components/dashboard/settings/shared/edgeConstants'
 
-const TYPE_LABELS: Record<string, string> = {
-    supabase: 'Supabase',
-    postgres: 'PostgreSQL',
-    wordpress: 'WordPress (Direct DB)',
-    wordpress_rest: 'WordPress (REST API)',
-    wordpress_graphql: 'WordPress (GraphQL)',
-    neon: 'Neon',
-    mysql: 'MySQL',
-}
+/** Providers with 'database' or 'cms' capability — drives the Database Type selector. */
+const DATABASE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
+    .filter(([, c]) => c.capabilities?.includes('database') || c.capabilities?.includes('cms'))
+    .map(([key, c]) => ({ key, label: c.label }));
+
+const TYPE_LABELS: Record<string, string> = Object.fromEntries(
+    DATABASE_PROVIDERS.map(p => [p.key, p.label])
+);
 
 const TYPE_COLORS: Record<string, string> = {
     supabase: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -24,17 +24,9 @@ const TYPE_COLORS: Record<string, string> = {
     wordpress_graphql: 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-400',
     neon: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400',
     mysql: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
-}
-
-/** Maps datasource types to their compatible connected account provider types. */
-const DATASOURCE_PROVIDER_MAP: Record<string, string[]> = {
-    supabase: ['supabase'],
-    neon: ['neon'],
-    postgres: ['postgres'],
-    mysql: ['mysql'],
-    wordpress_rest: ['wordpress', 'wordpress_rest'],
-    wordpress_graphql: ['wordpress', 'wordpress_rest'],
-    wordpress: ['mysql'],
+    cloudflare: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+    turso: 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400',
+    vercel: 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-400',
 }
 
 export function Datasources() {
@@ -251,16 +243,18 @@ function DatasourceCard({
                                     {view.name}
                                 </button>
                                 <button
-                                    onClick={async (e) => {
+                                    onClick={(e) => {
                                         e.stopPropagation();
                                         if (window.confirm(`Delete view "${view.name}"?`)) {
-                                            await viewsApi.delete(view.id);
-                                            window.location.reload();
+                                            viewsApi.delete(view.id).then(() => {
+                                                window.location.reload();
+                                            });
                                         }
                                     }}
-                                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded text-red-400 hover:text-red-600"
+                                    title="Delete view"
                                 >
-                                    <XCircle className="w-3 h-3" />
+                                    <Trash2 className="w-2.5 h-2.5" />
                                 </button>
                             </div>
                         ))}
@@ -268,11 +262,11 @@ function DatasourceCard({
                 </div>
             )}
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-3 border-t border-gray-100 dark:border-gray-700">
                 <button
                     onClick={onTest}
                     disabled={isTesting}
-                    className="flex-[2] flex items-center justify-center gap-2 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
                 >
                     {isTesting ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -299,239 +293,6 @@ function DatasourceCard({
                 >
                     <Trash2 className="w-4 h-4" />
                 </button>
-            </div>
-        </div>
-    )
-}
-
-function DatasourceModal({
-    datasource,
-    onClose
-}: {
-    datasource?: Datasource | null,
-    onClose: () => void
-}) {
-    const queryClient = useQueryClient()
-    const isEditing = !!datasource
-
-    const [formData, setFormData] = useState({
-        name: datasource?.name || '',
-        type: datasource?.type || 'wordpress_rest',
-        host: datasource?.host || '',
-        port: datasource?.port || (datasource?.type === 'mysql' || datasource?.type === 'wordpress' ? 3306 : 5432),
-        database: datasource?.database || '',
-        username: datasource?.username || '',
-        password: '',
-        connection_uri: '',
-        api_url: datasource?.api_url || '',
-        anon_key: '',
-        api_key: '',
-        table_prefix: datasource?.table_prefix || 'wp_',
-        provider_account_id: (datasource as any)?.provider_account_id || '',
-    })
-
-    const mutation = useMutation({
-        mutationFn: (data: typeof formData) =>
-            isEditing
-                ? datasourcesApi.update(datasource.id, data)
-                : datasourcesApi.create(data),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['datasources'] })
-            onClose()
-        },
-    })
-
-    const testRawMutation = useMutation({
-        mutationFn: (data: typeof formData) =>
-            isEditing
-                ? datasourcesApi.testUpdate(datasource.id, data)
-                : datasourcesApi.testRaw(data),
-    })
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault()
-        mutation.mutate(formData)
-    }
-
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
-                <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
-                    <div>
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                            {isEditing ? `Edit ${datasource.name}` : 'Add Data Source'}
-                        </h2>
-                        <p className="text-xs text-gray-500 mt-1">Configure your database connection credentials</p>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors text-gray-400">
-                        <XCircle className="w-6 h-6" />
-                    </button>
-                </div>
-
-                <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="col-span-2 sm:col-span-1">
-                            <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">Display Name</label>
-                            <input
-                                type="text"
-                                value={formData.name}
-                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
-                                placeholder="My Production DB"
-                                required
-                            />
-                        </div>
-
-                        <div className="col-span-2 sm:col-span-1">
-                            <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">Database Type</label>
-                            <select
-                                value={formData.type}
-                                onChange={(e) => {
-                                    const newType = e.target.value as any;
-                                    setFormData({
-                                        ...formData,
-                                        type: newType,
-                                        port: newType === 'mysql' ? 3306 : 5432
-                                    });
-                                }}
-                                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                                disabled={isEditing}
-                            >
-                                <option value="supabase">Supabase</option>
-                                <option value="postgres">PostgreSQL</option>
-
-                                <option value="wordpress_rest">WordPress (REST API)</option>
-                                <option value="wordpress_graphql">WordPress (GraphQL)</option>
-                                <option value="neon">Neon</option>
-                                <option value="mysql">MySQL</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="space-y-4">
-                        {/* Connected Account Picker — replaces all inline credential fields */}
-                        <AccountResourcePicker
-                            compatibleProviders={DATASOURCE_PROVIDER_MAP[formData.type] || [formData.type]}
-                            label="Connected Account"
-                            autoSelectSingle
-                            selectedAccountId={formData.provider_account_id || undefined}
-                            onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
-                                setFormData({
-                                    ...formData,
-                                    provider_account_id: accountId,
-                                    name: formData.name || resource.name || '',
-                                })
-                            }}
-                            onClear={() => {
-                                setFormData({ ...formData, provider_account_id: '' })
-                            }}
-                        />
-
-                        {formData.provider_account_id && (
-                            <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                Credentials will be resolved from this Connected Account
-                            </div>
-                        )}
-
-                        {/* WordPress table_prefix — only shown for WordPress types */}
-                        {(formData.type === 'wordpress' || formData.type === 'wordpress_rest' || formData.type === 'wordpress_graphql') && (
-                            <div>
-                                <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">Table Prefix</label>
-                                <input
-                                    type="text"
-                                    value={formData.table_prefix}
-                                    onChange={(e) => setFormData({ ...formData, table_prefix: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                                    placeholder="wp_"
-                                />
-                            </div>
-                        )}
-                    </div>
-
-                    {testRawMutation.data && (
-                        <div className={`p-4 rounded-2xl text-sm flex items-start gap-3 animate-in slide-in-from-top-2 duration-300 border ${testRawMutation.data.data.success
-                            ? 'bg-green-50 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800/50'
-                            : 'bg-red-50 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800/50'
-                            }`}>
-                            <div className={`mt-0.5 p-1 rounded-full ${testRawMutation.data.data.success ? 'bg-green-100 dark:bg-green-800/50' : 'bg-red-100 dark:bg-red-800/50'}`}>
-                                {testRawMutation.data.data.success ? (
-                                    <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                                ) : (
-                                    <XCircle className="w-4 h-4 flex-shrink-0" />
-                                )}
-                            </div>
-                            <div className="flex-1">
-                                <p className="font-bold mb-1">{testRawMutation.data.data.message}</p>
-                                {testRawMutation.data.data.error && (
-                                    <p className="opacity-90 font-mono text-[10px] break-all bg-black/5 dark:bg-white/5 p-2 rounded-lg mt-2 leading-relaxed">
-                                        {testRawMutation.data.data.error}
-                                    </p>
-                                )}
-                                {testRawMutation.data.data.suggestion && (
-                                    <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl text-[11px] text-amber-900 dark:text-amber-200 leading-normal flex gap-2">
-                                        <div className="mt-0.5">💡</div>
-                                        <div>
-                                            <span className="font-bold">Suggestion:</span> {testRawMutation.data.data.suggestion}
-                                        </div>
-                                    </div>
-                                )}
-                                {testRawMutation.data.data.tables && (
-                                    <p className="mt-2 flex items-center gap-1.5 text-xs font-medium">
-                                        <Database className="w-3.5 h-3.5" />
-                                        Successfully listed {testRawMutation.data.data.tables.length} tables.
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {mutation.isError && (
-                        <div className="p-4 rounded-2xl bg-red-50 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800/50 text-sm flex items-start gap-3 animate-in slide-in-from-top-2 duration-300">
-                            <div className="mt-0.5 p-1 rounded-full bg-red-100 dark:bg-red-800/50">
-                                <XCircle className="w-4 h-4" />
-                            </div>
-                            <div>
-                                <p className="font-bold">Failed to save data source</p>
-                                <p className="opacity-90 mt-1">
-                                    {(mutation.error as any)?.response?.data?.detail || mutation.error.message}
-                                </p>
-                            </div>
-                        </div>
-                    )}
-                </form>
-
-                <div className="p-6 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 flex flex-col sm:flex-row gap-3">
-                    <button
-                        type="button"
-                        onClick={() => testRawMutation.mutate(formData)}
-                        disabled={testRawMutation.isPending || mutation.isPending}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold border-2 border-primary-600 text-primary-600 rounded-xl hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all disabled:opacity-50"
-                    >
-                        {testRawMutation.isPending ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                            <TestTube className="w-4 h-4" />
-                        )}
-                        Test Connection
-                    </button>
-                    <div className="flex gap-3 flex-1">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="flex-1 px-4 py-3 text-sm font-bold border-2 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={handleSubmit}
-                            disabled={mutation.isPending || testRawMutation.isPending}
-                            className="flex-1 px-4 py-3 text-sm font-bold bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-all disabled:opacity-50 shadow-lg shadow-primary-500/20"
-                        >
-                            {mutation.isPending ? (isEditing ? 'Saving...' : 'Adding...') : (isEditing ? 'Save Changes' : 'Add Data Source')}
-                        </button>
-                    </div>
-                </div>
             </div>
         </div>
     )

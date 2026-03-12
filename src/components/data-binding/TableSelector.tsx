@@ -10,7 +10,10 @@ import { cn } from '@/lib/utils';
 interface TableSelectorProps {
   value?: string;
   onValueChange: (value: string) => void;
+  /** Sync datasource ID — uses /api/sync/datasources/{id}/tables */
   dataSourceId?: string;
+  /** Provider account ID — uses /api/edge-providers/accounts/{id}/tables */
+  providerAccountId?: string;
   label?: string;
   placeholder?: string;
   disabled?: boolean;
@@ -22,6 +25,7 @@ export function TableSelector({
   value,
   onValueChange,
   dataSourceId,
+  providerAccountId,
   label = "Table",
   placeholder = "Select a table",
   disabled = false,
@@ -30,27 +34,37 @@ export function TableSelector({
 }: TableSelectorProps) {
   const [open, setOpen] = useState(false);
 
-  // Fetch tables from the selected datasource
+  // Determine which ID and URL to use
+  const activeId = providerAccountId || dataSourceId;
+  const apiUrl = providerAccountId
+    ? `/api/edge-providers/accounts/${providerAccountId}/tables`
+    : dataSourceId
+      ? `/api/sync/datasources/${dataSourceId}/tables`
+      : null;
+
+  // Fetch tables from the appropriate endpoint
   const { data: tables = [], isLoading, error, refetch } = useQuery<string[]>({
-    queryKey: ['datasource-tables', dataSourceId],
+    queryKey: ['datasource-tables', activeId, providerAccountId ? 'provider' : 'sync'],
     queryFn: async () => {
-      if (!dataSourceId) return [];
-      const response = await fetch(`/api/sync/datasources/${dataSourceId}/tables`);
+      if (!apiUrl) return [];
+      const response = await fetch(apiUrl);
       if (!response.ok) throw new Error('Failed to fetch tables');
       return response.json();
     },
-    enabled: !!dataSourceId,
+    enabled: !!activeId,
     staleTime: 30000, // Cache for 30 seconds
+    retry: 1,
+    refetchOnWindowFocus: false,
   });
 
-  const hasSource = !!dataSourceId;
+  const hasSource = !!activeId;
 
   // Reset table selection when datasource changes
   React.useEffect(() => {
     if (value && tables.length > 0 && !tables.includes(value)) {
       onValueChange('');
     }
-  }, [dataSourceId, tables, value, onValueChange]);
+  }, [activeId, tables, value, onValueChange]);
 
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -125,7 +139,7 @@ export function TableSelector({
     return (
       <div className="flex items-center gap-2 w-full">
         {selector}
-        {showRefresh && dataSourceId && (
+        {showRefresh && activeId && (
           <Button
             variant="ghost"
             size="icon"
@@ -145,7 +159,7 @@ export function TableSelector({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <Label>{label}</Label>
-        {showRefresh && dataSourceId && (
+        {showRefresh && activeId && (
           <Button
             variant="ghost"
             size="sm"

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { datasourcesApi } from '@/modules/dbsync/api/datasources';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -9,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { TableSelector } from '@/components/data-binding/TableSelector';
 import { AuthProviderSelector } from './AuthProviderSelector';
+import { DatabaseProviderSelector } from './DatabaseProviderSelector';
 import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useDashboardStore } from '@/stores/dashboard';
@@ -18,6 +18,9 @@ import { Settings, Save, RotateCcw, Plus, Trash2, HelpCircle } from 'lucide-reac
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Page } from '@/types/builder';
+import { PROVIDER_CONFIGS } from '@/components/dashboard/settings/shared/edgeConstants';
+import { useEdgeProviders } from '@/hooks/useEdgeInfrastructure';
+import { datasourcesApi } from '@/modules/dbsync/api/datasources';
 
 // Helper for Key-Value editors with internal state to prevent focus loss
 function KeyValueEditor({ title, description, data, onChange }: { title: string, description: string, data: Record<string, string>, onChange: (d: Record<string, string>) => void }) {
@@ -265,6 +268,8 @@ export function UserContactConfigPanel() {
   const { pages } = useBuilderStore();
   const { toast } = useToast();
 
+  const { data: allProviders = [] } = useEdgeProviders();
+
   // Local state for form
   const [selectedTable, setSelectedTable] = useState('');
   const [columns, setColumns] = useState({
@@ -275,10 +280,20 @@ export function UserContactConfigPanel() {
     createdAtColumn: '',
   });
   const [enabled, setEnabledState] = useState(true);
-  const [authDataSourceId, setAuthDataSourceId] = useState<string | null>(null);
+  const [authProviderId, setAuthProviderId] = useState<string | null>(null);
+  const [contactsDbId, setContactsDbId] = useState<string | null>(null);
   const [contactTypes, setContactTypes] = useState<Record<string, string>>({});
   const [contactTypeHomePages, setContactTypeHomePages] = useState<Record<string, string>>({});
   const [permissionLevels, setPermissionLevels] = useState<Record<string, string>>({});
+
+  // Derive auth provider type for auto-suggesting a matching datasource
+  const authProviderType = React.useMemo(() => {
+    if (!authProviderId) return undefined;
+    const provider = allProviders.find(p => p.id === authProviderId);
+    if (!provider) return undefined;
+    const config = PROVIDER_CONFIGS[provider.provider];
+    return config?.capabilities?.includes('database') ? provider.provider : undefined;
+  }, [authProviderId, allProviders]);
 
   // Initialize data binding store
   useEffect(() => {
@@ -304,7 +319,8 @@ export function UserContactConfigPanel() {
       setContactTypeHomePages(config.contactTypeHomePages || {});
       setPermissionLevels(config.permissionLevels || {});
       setEnabledState(config.enabled);
-      setAuthDataSourceId(config.authDataSourceId || null);
+      setAuthProviderId(config.authDataSourceId || null);
+      setContactsDbId(config.contactsDbId || config.authDataSourceId || null);
 
       if (config.contactsTable) {
         // If it's a datasource-based table, we might need a different loader eventually
@@ -314,18 +330,20 @@ export function UserContactConfigPanel() {
     }
   }, [config, loadTableSchema]);
 
-  // Fetch schema from datasource if present, otherwise use data-binding store
+  // Fetch schema from the contacts datasource
   const { data: datasourceSchema } = useQuery({
-    queryKey: ['datasource-schema', authDataSourceId, selectedTable],
+    queryKey: ['datasource-table-schema', contactsDbId, selectedTable],
     queryFn: async () => {
-      if (!authDataSourceId || !selectedTable) return null;
-      const res = await datasourcesApi.getTableSchema(authDataSourceId, selectedTable);
+      if (!contactsDbId || !selectedTable) return null;
+      const res = await datasourcesApi.getTableSchema(contactsDbId, selectedTable);
       return res.data;
     },
-    enabled: !!authDataSourceId && !!selectedTable
+    enabled: !!contactsDbId && !!selectedTable,
+    retry: 1,
+    refetchOnWindowFocus: false,
   });
 
-  const tableSchema = authDataSourceId
+  const tableSchema = contactsDbId
     ? (datasourceSchema ? { columns: datasourceSchema.columns.map((c: any) => ({ name: c.name, type: c.type })) } : null)
     : (selectedTable ? schemas.get(selectedTable) : null);
 
@@ -343,7 +361,7 @@ export function UserContactConfigPanel() {
 
   const handleTableChange = async (tableName: string) => {
     setSelectedTable(tableName);
-    if (tableName && !authDataSourceId) {
+    if (tableName && !contactsDbId) {
       await loadTableSchema(tableName);
     }
   };
@@ -360,7 +378,8 @@ export function UserContactConfigPanel() {
 
     setConfig({
       contactsTable: selectedTable,
-      authDataSourceId: authDataSourceId || undefined,
+      authDataSourceId: authProviderId || undefined,
+      contactsDbId: contactsDbId || undefined,
       columnMapping: {
         authUserIdColumn: columns.authUserIdColumn,
         contactIdColumn: columns.contactIdColumn,
@@ -423,8 +442,14 @@ export function UserContactConfigPanel() {
 
         <div className="space-y-6">
           <AuthProviderSelector
-            value={authDataSourceId || undefined}
-            onValueChange={setAuthDataSourceId}
+            value={authProviderId || undefined}
+            onValueChange={setAuthProviderId}
+          />
+
+          <DatabaseProviderSelector
+            value={contactsDbId || undefined}
+            onValueChange={setContactsDbId}
+            autoSuggestProviderType={authProviderType}
           />
 
           <Separator />
@@ -434,9 +459,9 @@ export function UserContactConfigPanel() {
             <TableSelector
               value={selectedTable}
               onValueChange={handleTableChange}
-              dataSourceId={authDataSourceId || undefined}
+              dataSourceId={contactsDbId || undefined}
               placeholder="Select contact table"
-              disabled={!authDataSourceId && !connected}
+              disabled={!contactsDbId && !connected}
             />
           </div>
 

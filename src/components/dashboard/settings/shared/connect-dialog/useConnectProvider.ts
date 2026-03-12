@@ -89,7 +89,7 @@ export function useConnectProvider(
 
     // Datasource-only providers (postgres, mysql, wordpress) belong in the Datasources
     // screen, not in the Edge Provider connect dialog — they can't host engines, caches, or queues.
-    const DATASOURCE_ONLY = new Set(['postgres', 'mysql', 'wordpress', 'wordpress_rest', 'wordpress_graphql']);
+    const DATASOURCE_ONLY = new Set(['postgres', 'mysql', 'wordpress_rest']);
     const visibleProviders = useMemo(
         () => Object.entries(PROVIDER_CONFIGS).filter(([key]) => !DATASOURCE_ONLY.has(key)),
         []

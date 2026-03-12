@@ -27,7 +27,7 @@ async def discover_resources(provider: str, creds: dict) -> dict:
         return {"success": False, "detail": f"Discovery not supported for provider: {provider}"}
 
     try:
-        return await discoverer(creds)
+        return await discoverer(creds)  # type: ignore[operator]
     except PermissionError as e:
         return {"success": False, "detail": str(e)}
     except Exception as e:
@@ -42,7 +42,7 @@ async def create_resource(provider: str, resource_type: str, creds: dict, **kwar
         return {"success": False, "detail": f"Resource creation not supported for {provider}/{resource_type}"}
 
     try:
-        return await creator(creds, **kwargs)
+        return await creator(creds, **kwargs)  # type: ignore[operator]
     except Exception as e:
         return {"success": False, "detail": f"Create failed: {str(e)}"}
 
@@ -54,13 +54,21 @@ async def create_resource(provider: str, resource_type: str, creds: dict, **kwar
 async def _discover_supabase(creds: dict) -> dict:
     from ..services.supabase_management import list_projects
     token = creds.get("access_token", "")
+    locked_ref = creds.get("project_ref", "")
     projects = await list_projects(token)
+
+    # If a project_ref was locked in at connection time, only return that project
+    if locked_ref:
+        projects = [p for p in projects if p.get("id") == locked_ref]
+
     return {
         "success": True,
         "resources": [
             {
-                "ref": p.get("id", ""),
+                "id": p.get("id", ""),     # Standard field for AccountResourcePicker
+                "ref": p.get("id", ""),     # Backward compat alias
                 "name": p.get("name", ""),
+                "type": "supabase_project",
                 "region": p.get("region", ""),
                 "status": p.get("status", ""),
             }

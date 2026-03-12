@@ -2,17 +2,22 @@
  * WorkflowEditorToolbar — Top toolbar for the workflow editor
  *
  * Contains: name/description inputs, save/test/publish buttons,
- * engine deployment dropdown, active status badge, settings, history toggle.
- *
- * Extracted from WorkflowEditor.tsx (L354-587) for single-responsibility compliance.
+ * engine deployment popover with checkboxes + staleness dots,
+ * active status badge, settings, history toggle.
  */
 
-import React from 'react';
-import { Save, Play, Rocket, X, Loader2, ChevronDown, Server, History } from 'lucide-react';
+import React, { useState } from 'react';
+import { Save, Play, Rocket, X, Loader2, ChevronDown, Server, History, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -24,6 +29,14 @@ import {
 import { WorkflowSettingsPanel, type WorkflowSettings } from './WorkflowSettingsPanel';
 import { useActionsStore } from '@/stores/actions';
 import { cn } from '@/lib/utils';
+
+interface EdgeTarget {
+    id: string;
+    name: string;
+    url: string;
+    edge_db_id?: string;
+    is_system?: boolean;
+}
 
 interface WorkflowEditorToolbarProps {
     // State
@@ -49,8 +62,7 @@ interface WorkflowEditorToolbarProps {
     onSettingsChange: (settings: WorkflowSettings) => void;
     onSave: () => void;
     onTest: () => void;
-    onPublish: () => void;
-    onPublishToEngine: (engineId: string, engineName: string) => void;
+    onBatchPublish: (engineIds: string[]) => Promise<void>;
     onToggleActive: (active: boolean) => void;
     onToggleTargetActive: (draftId: string, engineId: string, active: boolean) => void;
     onClose_handler: () => void;
@@ -63,10 +75,65 @@ export function WorkflowEditorToolbar({
     onClose,
     isSaving, isTesting, isPublishing,
     onDescriptionChange, onSettingsChange,
-    onSave, onTest, onPublish, onPublishToEngine,
+    onSave, onTest, onBatchPublish,
     onToggleActive, onToggleTargetActive,
     onClose_handler, onToggleHistory,
 }: WorkflowEditorToolbarProps) {
+    const [publishOpen, setPublishOpen] = useState(false);
+    const [selectedTargets, setSelectedTargets] = useState<Set<string>>(new Set());
+
+    // Determine if a target is synced (deploy hash matches content hash)
+    const isTargetSynced = (engineId: string) => {
+        if (isDirty) return false; // Unsaved changes = never synced
+        if (!draft?.deployed_engines?.[engineId]) return false;
+        const deployed = draft.deployed_engines[engineId];
+        if (!deployed.deployed_version_hash || !draft.content_hash) return false;
+        return deployed.deployed_version_hash === draft.content_hash;
+    };
+
+    // When popover opens, pre-select unsynced engines
+    const handlePopoverOpen = (open: boolean) => {
+        if (open) {
+            const eligible = engines.filter((e: any) => e.edge_db_id);
+            const unsynced = eligible.filter((e: any) => !isTargetSynced(e.id));
+            setSelectedTargets(new Set(unsynced.map((e: any) => e.id)));
+        }
+        setPublishOpen(open);
+    };
+
+    const toggleTarget = (id: string) => {
+        setSelectedTargets(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const handlePublishSelected = async () => {
+        const selected = engines.filter((e: any) => selectedTargets.has(e.id) && !isTargetSynced(e.id));
+        if (selected.length === 0) return;
+        await onBatchPublish(selected.map((e: any) => e.id));
+        setPublishOpen(false);
+    };
+
+    // Main publish button: batch to all deployed engines (or all if first publish)
+    const handleMainPublish = async () => {
+        const eligible = engines.filter((e: any) => e.edge_db_id);
+        if (eligible.length === 0) {
+            // Open popover to show "no targets"
+            handlePopoverOpen(true);
+            return;
+        }
+        if (eligible.length === 1) {
+            // Single target — publish directly
+            await onBatchPublish([eligible[0].id]);
+            return;
+        }
+        // Multiple targets — open popover for selection
+        handlePopoverOpen(true);
+    };
+
     return (
         <div className="flex items-center justify-between px-4 py-2 border-b bg-card">
             <div className="flex items-center gap-4">
@@ -108,19 +175,23 @@ export function WorkflowEditorToolbar({
                     )}
                 </Button>
 
-                {/* Publish split button: primary + engine dropdown */}
+                {/* Publish split button: primary publish + chevron popover */}
                 <div className="flex items-center">
                     <Button
                         size="sm"
-                        onClick={onPublish}
+                        onClick={handleMainPublish}
                         disabled={isPublishing}
                         className="rounded-r-none"
                     >
-                        <Rocket className="w-4 h-4 mr-2" />
-                        Publish
+                        {isPublishing ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                            <Rocket className="w-4 h-4 mr-2" />
+                        )}
+                        {isPublishing ? 'Publishing...' : 'Publish'}
                     </Button>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
+                    <Popover open={publishOpen} onOpenChange={handlePopoverOpen}>
+                        <PopoverTrigger asChild>
                             <Button
                                 size="sm"
                                 disabled={isPublishing}
@@ -128,79 +199,76 @@ export function WorkflowEditorToolbar({
                             >
                                 <ChevronDown className="w-4 h-4" />
                             </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-[240px]">
-                            <DropdownMenuLabel className="text-xs text-muted-foreground uppercase opacity-80 pt-1 pb-1">Deploy to Engine</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-
-                            {/* Local Edge toggle */}
-                            {(() => {
-                                const localEdge = engines.find((e: any) => e.is_system && e.name === 'Local Edge');
-                                if (!localEdge) return null;
-
-                                const isDeployed = draft?.deployed_engines?.[localEdge.id];
-                                const isActive = isDeployed?.is_active !== false;
-
-                                return (
-                                    <div className="flex items-center justify-between px-2 py-1.5 text-sm group">
-                                        <div
-                                            className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors flex-1"
-                                            onClick={() => onPublishToEngine(localEdge.id, localEdge.name)}
-                                            title="Push update to Local Edge"
-                                        >
-                                            <Server className="w-4 h-4 opacity-70 group-hover:opacity-100" />
-                                            <span>Local Edge</span>
-                                        </div>
-                                        <Switch
-                                            checked={!!isDeployed && isActive}
-                                            onCheckedChange={(checked) => {
-                                                if (!isDeployed && checked) {
-                                                    onPublishToEngine(localEdge.id, localEdge.name);
-                                                } else {
-                                                    onToggleTargetActive(currentDraftId!, localEdge.id, checked);
-                                                }
-                                            }}
-                                            className="scale-75 shrink-0 m-0"
-                                        />
-                                    </div>
-                                );
-                            })()}
-
-                            {/* Remote Engines */}
-                            {engines.filter((e: any) => !e.is_system).map((engine: any) => {
-                                const isDeployed = draft?.deployed_engines?.[engine.id];
-                                const isActive = isDeployed?.is_active !== false;
-                                return (
-                                    <div key={engine.id} className="flex items-center justify-between px-2 py-1.5 text-sm group">
-                                        <div
-                                            className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors flex-1"
-                                            onClick={() => onPublishToEngine(engine.id, engine.name)}
-                                            title={`Push update to ${engine.name}`}
-                                        >
-                                            <Server className="w-4 h-4 opacity-70 group-hover:opacity-100" />
-                                            <span className="truncate">{engine.name}</span>
-                                        </div>
-                                        <Switch
-                                            checked={!!isDeployed && isActive}
-                                            onCheckedChange={(checked) => {
-                                                if (!isDeployed && checked) {
-                                                    onPublishToEngine(engine.id, engine.name);
-                                                } else {
-                                                    onToggleTargetActive(currentDraftId!, engine.id, checked);
-                                                }
-                                            }}
-                                            className="scale-75 shrink-0 m-0"
-                                        />
-                                    </div>
-                                );
-                            })}
-                            {engines.filter((e: any) => !e.is_system).length === 0 && (
-                                <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-                                    No remote engines configured
-                                </DropdownMenuItem>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-72 p-0">
+                            <div className="p-3 border-b">
+                                <p className="text-sm font-medium">Publish to Edge</p>
+                            </div>
+                            <div className="p-2 space-y-1 max-h-[200px] overflow-auto">
+                                {engines.filter((e: any) => e.edge_db_id).length === 0 ? (
+                                    <p className="text-xs text-muted-foreground px-2 py-3 text-center">
+                                        No deployment targets configured.
+                                        <br />Configure in Settings → Edge.
+                                    </p>
+                                ) : (
+                                    engines.filter((e: any) => e.edge_db_id).map((engine: any) => {
+                                        const synced = isTargetSynced(engine.id);
+                                        return (
+                                            <label
+                                                key={engine.id}
+                                                className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer group"
+                                            >
+                                                <Checkbox
+                                                    checked={selectedTargets.has(engine.id)}
+                                                    onCheckedChange={() => toggleTarget(engine.id)}
+                                                />
+                                                <span className="truncate min-w-0 flex-1 text-sm" title={engine.name}>
+                                                    {engine.name}
+                                                </span>
+                                                <span
+                                                    className={cn(
+                                                        "w-2 h-2 rounded-full shrink-0",
+                                                        synced ? "bg-emerald-500" : "bg-amber-500"
+                                                    )}
+                                                    title={synced ? "Up to date" : "Needs publish"}
+                                                />
+                                                {engine.url && (
+                                                    <a
+                                                        href={engine.url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <ExternalLink className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                                                    </a>
+                                                )}
+                                            </label>
+                                        );
+                                    })
+                                )}
+                            </div>
+                            {engines.filter((e: any) => e.edge_db_id).length > 0 && (
+                                <div className="p-2 border-t">
+                                    <Button
+                                        size="sm"
+                                        className="w-full"
+                                        disabled={selectedTargets.size === 0 || isPublishing}
+                                        onClick={handlePublishSelected}
+                                    >
+                                        {isPublishing ? (
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <Play className="h-4 w-4 mr-2" />
+                                        )}
+                                        {isPublishing
+                                            ? 'Publishing...'
+                                            : `Publish to ${selectedTargets.size} target${selectedTargets.size !== 1 ? 's' : ''}`}
+                                    </Button>
+                                </div>
                             )}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                        </PopoverContent>
+                    </Popover>
                 </div>
 
                 {/* Active Badge Dropdown */}
@@ -239,8 +307,8 @@ export function WorkflowEditorToolbar({
                                         </DropdownMenuLabel>
                                         {Object.entries(draft.deployed_engines).map(([engineId, engine]: [string, any]) => (
                                             <div key={engineId} className="flex items-center justify-between px-2 py-1.5 text-sm">
-                                                <div className="flex items-center gap-2 truncate pr-2">
-                                                    <Server className="w-3.5 h-3.5 opacity-70" />
+                                                <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                                                    <Server className="w-3.5 h-3.5 opacity-70 shrink-0" />
                                                     <span className="truncate">{engine.name}</span>
                                                 </div>
                                                 <Switch

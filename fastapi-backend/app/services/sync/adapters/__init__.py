@@ -14,7 +14,6 @@ def get_adapter(datasource: Datasource) -> DatabaseAdapter:
     adapter_map = {
         DatasourceType.SUPABASE: SupabaseAdapter,
         DatasourceType.POSTGRES: PostgresAdapter,
-        DatasourceType.WORDPRESS: MySQLAdapter,  # WordPress DB uses MySQL
         DatasourceType.WORDPRESS_REST: WordPressRestAdapter,
         DatasourceType.WORDPRESS_GRAPHQL: WordPressGraphQLAdapter,
         DatasourceType.NEON: NeonAdapter,

@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/dialog';
 import { FileBrowser } from './index';
 import { StorageFile } from './types';
+import { useQuery } from '@tanstack/react-query';
+import api from '@/services/api-service';
 
 export interface FilePickerDialogProps {
     /** Whether the dialog is open */
@@ -23,6 +25,8 @@ export interface FilePickerDialogProps {
     onOpenChange: (open: boolean) => void;
     /** Callback when a file is selected - receives the public URL */
     onSelect: (url: string, file: StorageFile) => void;
+    /** Optional: Storage provider ID (auto-detects first available if not set) */
+    storageProviderId?: string;
     /** Optional: Initial bucket to navigate to */
     initialBucket?: string;
     /** Optional: File type filter (e.g., 'image' to only allow images) */
@@ -37,11 +41,27 @@ export function FilePickerDialog({
     open,
     onOpenChange,
     onSelect,
+    storageProviderId,
     initialBucket,
     fileFilter = 'all',
     title = 'Select File',
     description = 'Browse your storage buckets to select a file.',
 }: FilePickerDialogProps) {
+    // If no storageProviderId provided, auto-detect the first one
+    const { data: providers = [] } = useQuery({
+        queryKey: ['storage-providers'],
+        queryFn: async () => {
+            const res = await api.get('/api/storage/providers/');
+            return res.data;
+        },
+        enabled: open && !storageProviderId,
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+
+    const resolvedProviderId = storageProviderId || (providers.length > 0 ? providers[0].id : null);
+
     const handleFileSelect = (url: string, file: StorageFile) => {
         // If filtering for images, validate
         if (fileFilter === 'image') {
@@ -64,11 +84,19 @@ export function FilePickerDialog({
                     <DialogDescription>{description}</DialogDescription>
                 </DialogHeader>
                 <div className="flex-1 overflow-auto -mx-6 px-6">
-                    <FileBrowser
-                        selectMode={true}
-                        onFileSelect={handleFileSelect}
-                        initialBucket={initialBucket}
-                    />
+                    {resolvedProviderId ? (
+                        <FileBrowser
+                            storageProviderId={resolvedProviderId}
+                            selectMode={true}
+                            onFileSelect={handleFileSelect}
+                            initialBucket={initialBucket}
+                        />
+                    ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                            <p>No storage providers configured.</p>
+                            <p className="text-sm mt-1">Add one in the Storage page first.</p>
+                        </div>
+                    )}
                 </div>
             </DialogContent>
         </Dialog>

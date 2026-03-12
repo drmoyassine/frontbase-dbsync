@@ -28,3 +28,6 @@ from .page import Page, PageDeployment  # noqa: F401
 
 # Actions (registered with Base via side-effect import)
 from app.models.actions import AutomationDraft, AutomationExecution  # noqa: F401
+
+# Storage
+from .storage_provider import StorageProvider  # noqa: F401

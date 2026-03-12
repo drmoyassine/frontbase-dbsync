@@ -2,7 +2,7 @@
 // Re-exports from the refactored module
 
 import React from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
 
 // UI Components
@@ -25,7 +25,7 @@ import { MultiSelectCustom } from '@/components/ui/multi-select-custom';
 import {
     HardDrive, FolderOpen, Folder, FolderPlus, File, Upload, Trash2, Copy, MoreVertical,
     ArrowLeft, RefreshCw, Lock, Globe, Plus, Edit2, Archive, Settings, Search, Check,
-    Move, X, ArrowUp, ArrowDown, ChevronsUpDown
+    Move, X, ArrowUp, ArrowDown, ChevronsUpDown, Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -33,12 +33,14 @@ import { cn } from '@/lib/utils';
 import { Bucket, StorageFile } from './types';
 import { MIME_TYPE_OPTIONS, PAGE_SIZE } from './constants';
 import { formatBytes, getFileIcon } from './utils';
-import { fetchBuckets, fetchFiles, getSignedUrl, getPublicUrl } from './api';
+import { fetchBuckets, fetchFiles, getSignedUrl, getPublicUrl, computeSize } from './api';
 import { useFileBrowserState } from './hooks/useFileBrowserState';
 import { useStorageMutations } from './hooks/useStorageMutations';
 
 // Types
 interface FileBrowserProps {
+    /** Required — the StorageProvider ID to scope all operations */
+    storageProviderId: string;
     onNavigationChange?: (isBrowsing: boolean) => void;
     /** When true, clicking a file calls onFileSelect instead of opening */
     selectMode?: boolean;
@@ -51,12 +53,13 @@ interface FileBrowserProps {
 }
 
 export function FileBrowser({
+    storageProviderId,
     onNavigationChange,
     selectMode = false,
     onFileSelect,
     initialBucket,
     hideBucketList = false,
-}: FileBrowserProps = {}) {
+}: FileBrowserProps) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -95,6 +98,7 @@ export function FileBrowser({
 
     // Use refactored mutations hook
     const mutations = useStorageMutations({
+        storageProviderId,
         currentBucket,
         currentPath,
         editingBucketId,
@@ -118,26 +122,79 @@ export function FileBrowser({
 
     // Queries
     const { data: buckets, isLoading: bucketsLoading, error: bucketsError, refetch: refetchBuckets } = useQuery({
-        queryKey: ['storage-buckets'],
-        queryFn: fetchBuckets,
-        staleTime: 30_000, // Cache for 30s
+        queryKey: ['storage-buckets', storageProviderId],
+        queryFn: () => fetchBuckets(storageProviderId),
+        staleTime: 30_000,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
+
+    // ── Cached bucket sizes via useQueries (L1: React Query cache) ──
+    const bucketSizeQueries = useQueries({
+        queries: (buckets ?? []).map((b) => ({
+            queryKey: ['storage-size', storageProviderId, b.name, '__root__'],
+            queryFn: () => computeSize(storageProviderId, b.name, ''),
+            staleTime: 5 * 60 * 1000,  // 5 min — backend has L2 Redis (10 min)
+            retry: 1,
+            refetchOnWindowFocus: false,
+        })),
+    });
+    // Build a lookup: bucketName → { size, isLoading, isError }
+    const bucketSizes = React.useMemo(() => {
+        const map: Record<string, { size: number | undefined; isLoading: boolean; isError: boolean }> = {};
+        (buckets ?? []).forEach((b, i) => {
+            const q = bucketSizeQueries[i];
+            map[b.name] = { size: q?.data, isLoading: q?.isLoading ?? true, isError: q?.isError ?? false };
+        });
+        return map;
+    }, [buckets, bucketSizeQueries]);
 
     const fullPath = currentBucket ? `${currentBucket}/${currentPath}`.replace(/\/$/, '') : '';
 
     const { data: files, isLoading: filesLoading, error: filesError, refetch: refetchFiles } = useQuery({
-        queryKey: ['storage-files', fullPath, page, fileSearch],
-        queryFn: () => fetchFiles(currentBucket!, currentPath || undefined, page, PAGE_SIZE, fileSearch),
+        queryKey: ['storage-files', storageProviderId, fullPath, page, fileSearch],
+        queryFn: () => fetchFiles(storageProviderId, currentBucket!, currentPath || undefined, page, PAGE_SIZE, fileSearch),
         enabled: !!currentBucket,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
 
+    // ── Cached folder sizes via useQueries ──
+    const folderFiles = React.useMemo(
+        () => (files ?? []).filter((f) => f.isFolder),
+        [files],
+    );
+    const folderSizeQueries = useQueries({
+        queries: folderFiles.map((f) => {
+            const folderPath = currentPath ? `${currentPath}/${f.name}` : f.name;
+            return {
+                queryKey: ['storage-size', storageProviderId, currentBucket, folderPath],
+                queryFn: () => computeSize(storageProviderId, currentBucket!, folderPath),
+                staleTime: 5 * 60 * 1000,
+                retry: 1,
+                refetchOnWindowFocus: false,
+                enabled: !!currentBucket,
+            };
+        }),
+    });
+    const folderSizes = React.useMemo(() => {
+        const map: Record<string, { size: number | undefined; isLoading: boolean; isError: boolean }> = {};
+        folderFiles.forEach((f, i) => {
+            const q = folderSizeQueries[i];
+            map[f.name] = { size: q?.data, isLoading: q?.isLoading ?? true, isError: q?.isError ?? false };
+        });
+        return map;
+    }, [folderFiles, folderSizeQueries]);
+
     const { data: destFolders, isLoading: destFoldersLoading } = useQuery({
-        queryKey: ['storage-files', moveDestBucket, moveDestPath, 'folders-only'],
+        queryKey: ['storage-files', storageProviderId, moveDestBucket, moveDestPath, 'folders-only'],
         queryFn: async () => {
-            const files = await fetchFiles(moveDestBucket!, moveDestPath || undefined, 0, 100);
+            const files = await fetchFiles(storageProviderId, moveDestBucket!, moveDestPath || undefined, 0, 100);
             return files.filter((f) => f.isFolder);
         },
         enabled: isMoveDialogOpen && !!moveDestBucket,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
 
     // Event Handlers
@@ -181,8 +238,8 @@ export function FileBrowser({
                 const isPublicBucket = currentBucketData?.public ?? false;
 
                 const url = isPublicBucket
-                    ? await getPublicUrl(path, currentBucket)
-                    : await getSignedUrl(path, currentBucket);
+                    ? await getPublicUrl(storageProviderId, path, currentBucket)
+                    : await getSignedUrl(storageProviderId, path, currentBucket);
 
                 // In selectMode, call onFileSelect instead of opening
                 if (selectMode && onFileSelect) {
@@ -206,8 +263,8 @@ export function FileBrowser({
             const isPublicBucket = currentBucketData?.public ?? false;
 
             const url = isPublicBucket
-                ? await getPublicUrl(path, currentBucket)
-                : await getSignedUrl(path, currentBucket);
+                ? await getPublicUrl(storageProviderId, path, currentBucket)
+                : await getSignedUrl(storageProviderId, path, currentBucket);
             await navigator.clipboard.writeText(url);
             toast({ title: 'URL Copied', description: 'The file URL has been copied to your clipboard.' });
         } catch (e) {
@@ -416,9 +473,11 @@ export function FileBrowser({
                                         <div className="flex flex-col">
                                             <span className="font-medium">{bucket.name}</span>
                                             <div className="flex items-center gap-2 mt-1">
-                                                <Badge variant="outline" className="text-[10px] font-semibold bg-[#006239]/10 text-[#006239] border-[#006239]/20">
-                                                    {bucket.provider}
-                                                </Badge>
+                                                {bucket.provider && (
+                                                    <Badge variant="outline" className="text-[10px] font-semibold bg-[#006239]/10 text-[#006239] border-[#006239]/20">
+                                                        {bucket.provider}
+                                                    </Badge>
+                                                )}
                                                 <span className="text-[11px] text-muted-foreground">
                                                     Created {new Date(bucket.created_at).toLocaleDateString()}
                                                 </span>
@@ -427,7 +486,14 @@ export function FileBrowser({
                                     </div>
                                     <div className="flex items-center gap-4">
                                         <div className="flex flex-col items-end">
-                                            <span className="text-sm font-medium">{formatBytes(bucket.size)}</span>
+                                            <span className="text-sm font-medium">
+                                                {(() => {
+                                                    const s = bucketSizes[bucket.name];
+                                                    if (!s || s.isLoading) return <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />Calculating…</span>;
+                                                    if (s.isError) return <span className="text-xs text-muted-foreground">—</span>;
+                                                    return formatBytes(s.size ?? 0);
+                                                })()}
+                                            </span>
                                             <Badge variant={bucket.public ? 'default' : 'secondary'} className="mt-1 h-5 text-[10px]">
                                                 {bucket.public ? (<><Globe className="h-3 w-3 mr-1" /> Public</>) : (<><Lock className="h-3 w-3 mr-1" /> Private</>)}
                                             </Badge>
@@ -694,7 +760,17 @@ export function FileBrowser({
                                         </TableCell>
                                         <TableCell className="text-sm text-muted-foreground">{file.isFolder ? 'Folder' : file.mimetype || file.name.split('.').pop()?.toUpperCase() || 'File'}</TableCell>
                                         <TableCell className="text-sm text-muted-foreground">{file.updated_at ? new Date(file.updated_at).toLocaleDateString() : '-'}</TableCell>
-                                        <TableCell className="text-sm text-muted-foreground">{formatBytes(file.size)}</TableCell>
+                                        <TableCell className="text-sm text-muted-foreground">
+                                            {file.isFolder
+                                                ? (() => {
+                                                    const s = folderSizes[file.name];
+                                                    if (!s || s.isLoading) return <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />Calculating…</span>;
+                                                    if (s.isError) return <span className="text-xs text-muted-foreground">—</span>;
+                                                    return formatBytes(s.size ?? 0);
+                                                })()
+                                                : formatBytes(file.size)
+                                            }
+                                        </TableCell>
                                         <TableCell>
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild><Button variant="ghost" size="sm"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>

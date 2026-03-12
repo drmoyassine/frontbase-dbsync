@@ -79,7 +79,8 @@ export interface PageDeployment {
 
 export interface UserContactConfig {
     contactsTable: string;
-    authDataSourceId?: string; // ID of the datasource acting as auth provider (e.g. Supabase)
+    authDataSourceId?: string; // ID of the provider account acting as auth provider (e.g. Supabase, Clerk)
+    contactsDbId?: string; // ID of the provider account with the contacts database (may differ from auth provider)
     columnMapping: {
         authUserIdColumn: string;
         contactIdColumn: string;

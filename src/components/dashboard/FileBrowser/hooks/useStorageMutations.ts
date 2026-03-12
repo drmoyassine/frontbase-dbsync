@@ -1,4 +1,4 @@
-// FileBrowser Mutations Hook
+// FileBrowser Mutations Hook — all scoped by storageProviderId
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
@@ -14,6 +14,7 @@ import {
 } from '../api';
 
 interface UseStorageMutationsOptions {
+    storageProviderId: string;
     currentBucket: string | null;
     currentPath: string;
     editingBucketId: string | null;
@@ -35,6 +36,7 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
     const queryClient = useQueryClient();
 
     const {
+        storageProviderId,
         currentBucket,
         currentPath,
         editingBucketId,
@@ -51,11 +53,13 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
         setCurrentBucket,
     } = options;
 
+    const pid = storageProviderId;
+
     const createBucketMutation = useMutation({
         mutationFn: (data: any) =>
-            createBucket(data.name, data.public, data.fileSizeLimit, data.allowedMimeTypes),
+            createBucket(pid, data.name, data.public, data.fileSizeLimit, data.allowedMimeTypes),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['storage-buckets'] });
+            queryClient.invalidateQueries({ queryKey: ['storage-buckets', pid] });
             setIsBucketDialogOpen(false);
             toast({ title: 'Bucket created' });
         },
@@ -69,9 +73,9 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
 
     const updateBucketMutation = useMutation({
         mutationFn: (data: any) =>
-            updateBucket(data.id, data.public, data.fileSizeLimit, data.allowedMimeTypes),
+            updateBucket(pid, data.id, data.public, data.fileSizeLimit, data.allowedMimeTypes),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['storage-buckets'] });
+            queryClient.invalidateQueries({ queryKey: ['storage-buckets', pid] });
             setIsBucketDialogOpen(false);
             toast({ title: 'Bucket updated' });
         },
@@ -84,9 +88,9 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
     });
 
     const deleteBucketMutation = useMutation({
-        mutationFn: deleteBucket,
+        mutationFn: (id: string) => deleteBucket(pid, id),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['storage-buckets'] });
+            queryClient.invalidateQueries({ queryKey: ['storage-buckets', pid] });
             if (currentBucket === editingBucketId) setCurrentBucket(null);
             toast({ title: 'Bucket deleted' });
             setConfirmDialog((prev: any) => ({ ...prev, isOpen: false }));
@@ -100,9 +104,9 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
     });
 
     const emptyBucketMutation = useMutation({
-        mutationFn: emptyBucket,
+        mutationFn: (id: string) => emptyBucket(pid, id),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['storage-files'] });
+            queryClient.invalidateQueries({ queryKey: ['storage-files', pid] });
             toast({ title: 'Bucket emptied' });
             setConfirmDialog((prev: any) => ({ ...prev, isOpen: false }));
         },
@@ -115,10 +119,10 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
     });
 
     const deleteMutation = useMutation({
-        mutationFn: (paths: string[]) => deleteFile(paths, currentBucket || undefined),
+        mutationFn: (paths: string[]) => deleteFile(pid, paths, currentBucket || undefined),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['storage-files'] });
-            queryClient.invalidateQueries({ queryKey: ['storage-buckets'] }); // Recalculate sizes
+            queryClient.invalidateQueries({ queryKey: ['storage-files', pid] });
+            queryClient.invalidateQueries({ queryKey: ['storage-buckets', pid] });
             setConfirmDialog((prev: any) => ({ ...prev, isOpen: false }));
             toast({ title: 'File deleted' });
         },
@@ -133,11 +137,11 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
     const uploadMutation = useMutation({
         mutationFn: async (file: File) => {
             const path = currentPath ? `${currentPath}/${file.name}` : file.name;
-            return uploadFile(file, path, currentBucket || undefined);
+            return uploadFile(pid, file, path, currentBucket || undefined);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['storage-files'] });
-            queryClient.invalidateQueries({ queryKey: ['storage-buckets'] }); // Recalculate sizes
+            queryClient.invalidateQueries({ queryKey: ['storage-files', pid] });
+            queryClient.invalidateQueries({ queryKey: ['storage-buckets', pid] });
             toast({ title: 'File uploaded' });
         },
         onError: (err) => {
@@ -154,11 +158,11 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
     const createFolderMutation = useMutation({
         mutationFn: async (folderName: string) => {
             const folderPath = currentPath ? `${currentPath}/${folderName}` : folderName;
-            return createFolder(folderPath, currentBucket!);
+            return createFolder(pid, folderPath, currentBucket!);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['storage-files'] });
-            queryClient.invalidateQueries({ queryKey: ['storage-buckets'] }); // Recalculate sizes
+            queryClient.invalidateQueries({ queryKey: ['storage-files', pid] });
+            queryClient.invalidateQueries({ queryKey: ['storage-buckets', pid] });
             setIsFolderDialogOpen(false);
             setNewFolderName('');
             toast({ title: 'Folder created' });
@@ -175,11 +179,11 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
         mutationFn: async ({ oldName, newName }: { oldName: string; newName: string }) => {
             const sourceKey = currentPath ? `${currentPath}/${oldName}` : oldName;
             const destKey = currentPath ? `${currentPath}/${newName}` : newName;
-            return moveFile(sourceKey, destKey, { sourceBucket: currentBucket!, destBucket: currentBucket! });
+            return moveFile(pid, sourceKey, destKey, { sourceBucket: currentBucket!, destBucket: currentBucket! });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['storage-files'] });
-            queryClient.invalidateQueries({ queryKey: ['storage-buckets'] }); // Recalculate sizes
+            queryClient.invalidateQueries({ queryKey: ['storage-files', pid] });
+            queryClient.invalidateQueries({ queryKey: ['storage-buckets', pid] });
             setIsRenameDialogOpen(false);
             setRenameTarget(null);
             setNewName('');
@@ -209,13 +213,13 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
                 targets.map((targetPath) => {
                     const fileName = targetPath.split('/').pop()!;
                     const destinationKey = destPath ? `${destPath}/${fileName}` : fileName;
-                    return moveFile(targetPath, destinationKey, { sourceBucket, destBucket });
+                    return moveFile(pid, targetPath, destinationKey, { sourceBucket, destBucket });
                 })
             );
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['storage-files'] });
-            queryClient.invalidateQueries({ queryKey: ['storage-buckets'] }); // Recalculate sizes
+            queryClient.invalidateQueries({ queryKey: ['storage-files', pid] });
+            queryClient.invalidateQueries({ queryKey: ['storage-buckets', pid] });
             setIsMoveDialogOpen(false);
             setMoveTargets([]);
             setSelectedFiles(new Set());

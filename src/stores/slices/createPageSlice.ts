@@ -27,6 +27,7 @@ export interface PageSlice {
     savePageToDatabase: (pageId: string) => Promise<void>;
 
     publishPageToTarget: (pageId: string, engineId: string) => Promise<string | undefined>;
+    publishPageToTargets: (pageId: string, engineIds: string[]) => Promise<{ success: boolean; message: string; results: Array<{ engineId: string; name: string; success: boolean; error?: string }> } | undefined>;
     unpublishPageFromTarget: (pageId: string, engineId: string) => Promise<void>;
     togglePageVisibility: (pageId: string) => Promise<void>;
     loadPagesFromDatabase: (includeDeleted?: boolean, force?: boolean) => Promise<void>;
@@ -234,14 +235,6 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
             if (result.success) {
                 setUnsavedChanges(false);
 
-                // Reload to get updated deployments array (await to ensure state is settled)
-                await get().loadPagesFromDatabase(false, true);
-
-                toast({
-                    title: "Page published to target",
-                    description: result.message || "Page has been published successfully to the specific target"
-                });
-
                 return result.previewUrl;
             } else {
                 throw new Error(result.error || 'Failed to publish page to target');
@@ -251,6 +244,47 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
             toast({
                 title: "Error publishing page",
                 description: error.message || "Failed to publish page to specific Edge Engine",
+                variant: "destructive"
+            });
+        } finally {
+            setSaving(false);
+        }
+    },
+
+    publishPageToTargets: async (pageId: string, engineIds: string[]) => {
+        const { pages, setSaving, setUnsavedChanges, savePageToDatabase } = get();
+        const page = pages.find(p => p.id === pageId);
+        if (!page || engineIds.length === 0) return;
+
+        setSaving(true);
+        try {
+            // Save once if needed
+            const { hasUnsavedChanges } = get();
+            if (hasUnsavedChanges) {
+                await savePageToDatabase(pageId);
+            }
+
+            // Single batch request
+            const response = await fetch(`/api/pages/${pageId}/publish-batch/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ engine_ids: engineIds }),
+            });
+
+            const result = await response.json();
+
+            if (result.results) {
+                setUnsavedChanges(false);
+                // Reload once to get updated deployments
+                await get().loadPagesFromDatabase(false, true);
+            }
+
+            return result;
+        } catch (error: any) {
+            console.error('Batch publish error:', error);
+            toast({
+                title: "Error publishing page",
+                description: error.message || "Failed to publish page to targets",
                 variant: "destructive"
             });
         } finally {

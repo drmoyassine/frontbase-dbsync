@@ -255,6 +255,24 @@ export const ConnectProviderDialog: React.FC<ConnectProviderDialogProps> = ({
                             />
                         </div>
                     ))}
+
+                    {/* WordPress API mode toggle */}
+                    {effectiveProvider === 'wordpress_rest' && (
+                        <div className="space-y-2">
+                            <Label>API Mode</Label>
+                            <Select
+                                value={credFields.api_mode || 'rest'}
+                                onValueChange={(val) => setCredFields(prev => ({ ...prev, api_mode: val }))}
+                            >
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="rest">REST API</SelectItem>
+                                    <SelectItem value="graphql">GraphQL (requires WPGraphQL plugin)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
                     {currentConfig.helpText && (
                         <p className="text-xs text-muted-foreground flex items-center mt-1">
                             <Shield className="w-3 h-3 mr-1" />

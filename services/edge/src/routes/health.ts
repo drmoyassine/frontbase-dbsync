@@ -28,7 +28,7 @@ const route = createRoute({
                         service: z.string(),
                         version: z.string(),
                         provider: z.string(),
-                        uptime_seconds: z.number(),
+                        uptime_seconds: z.number().optional(),
                         timestamp: z.string(),
                     }),
                 },
@@ -38,15 +38,18 @@ const route = createRoute({
 });
 
 healthRoute.openapi(route, (c) => {
+    const platform = getPlatform();
+    const isServerless = platform !== 'docker';
+
     return c.json({
         status: 'ok',
         service: 'frontbase-edge',
         version: '0.1.0',
-        provider: getPlatform(),
-        uptime_seconds: Math.floor((Date.now() - startedAt) / 1000),
+        provider: platform,
+        // Uptime is meaningless on serverless (cold starts reset it)
+        ...(isServerless ? {} : { uptime_seconds: Math.floor((Date.now() - startedAt) / 1000) }),
         timestamp: new Date().toISOString(),
     });
 });
 
 export { healthRoute };
-

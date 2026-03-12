@@ -4,10 +4,9 @@ Supabase Edge Functions — Deploy API.
 Platform-specific deploy orchestrator + Supabase Management API helpers.
 Credentials: { "access_token": "sbp_...", "project_ref": "..." }
 
-Uses the new Deploy endpoint (Feb 2025):
-  POST /v1/projects/{ref}/functions/deploy?slug={name}
-  Content-Type: multipart/form-data
-  Body: file (JS bundle) + metadata (JSON)
+Deployment uses PATCH to update / POST to create:
+  PATCH /v1/projects/{ref}/functions/{slug} (update existing)
+  POST  /v1/projects/{ref}/functions (create new, includes body)
 
 Secrets are project-level (shared across all functions):
   POST /v1/projects/{ref}/secrets

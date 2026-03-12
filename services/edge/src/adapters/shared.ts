@@ -64,14 +64,21 @@ export function createDenoHandler(
             });
         }
 
-        // Supabase Edge Functions don't strip the /functions/v1/{slug} prefix
-        // from the request URL. Rewrite the URL so Hono route matching works.
-        const url = new URL(req.url);
-        const fnPrefix = url.pathname.match(/^\/functions\/v1\/[^/]+/);
-        if (fnPrefix) {
-            const strippedPath = url.pathname.slice(fnPrefix[0].length) || '/';
-            const newUrl = new URL(strippedPath + url.search, url.origin);
-            req = new Request(newUrl.toString(), req);
+        // Supabase Edge Runtime strips /functions/v1/ but leaves /{slug}/ in the
+        // request path. Strip the first path segment so Hono routes match.
+        // e.g. /my-function/api/health → /api/health
+        if (platform.startsWith('supabase')) {
+            const url = new URL(req.url);
+            const firstSlash = url.pathname.indexOf('/', 1); // find 2nd /
+            if (firstSlash > 0) {
+                const strippedPath = url.pathname.slice(firstSlash);
+                const newUrl = new URL(strippedPath + url.search, url.origin);
+                req = new Request(newUrl.toString(), req);
+            } else {
+                // Root path — e.g. /my-function → /
+                const newUrl = new URL('/' + url.search, url.origin);
+                req = new Request(newUrl.toString(), req);
+            }
         }
 
         return app.fetch(req);

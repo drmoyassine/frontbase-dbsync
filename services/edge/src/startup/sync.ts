@@ -85,7 +85,12 @@ async function syncSupabaseJwtFromFastAPI(): Promise<SyncResult> {
 
         if (settings.supabase_jwt_secret) {
             // Store in process.env so auth.ts picks it up
-            process.env.SUPABASE_JWT_SECRET = settings.supabase_jwt_secret;
+            // Wrapped in try-catch: Deno Deploy forbids process.env writes
+            try {
+                process.env.SUPABASE_JWT_SECRET = settings.supabase_jwt_secret;
+            } catch {
+                // On Supabase Edge, JWT secret is set via project-level secrets
+            }
             console.log('[Startup Sync] ✅ Supabase JWT secret synced from backend');
             return { status: 'success' };
         } else {

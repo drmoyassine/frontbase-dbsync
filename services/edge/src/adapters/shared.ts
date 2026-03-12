@@ -13,15 +13,30 @@ import type { Hono } from 'hono';
 
 // ── Core helpers ──────────────────────────────────────────────────────
 
-/** Ensure process.env exists (serverless runtimes may not have it) */
+/** Module-level platform tag (avoids process.env writes blocked by Deno Deploy) */
+let _platform = 'docker';
+
+/** Ensure process.env exists for READING (serverless runtimes may not have it) */
 export function ensureProcessEnv(): void {
     (globalThis as any).process ??= { env: {} };
 }
 
 /** Tag the adapter platform for /api/health identification */
 export function setPlatform(platform: string): void {
-    ensureProcessEnv();
-    (globalThis as any).process.env.FRONTBASE_ADAPTER_PLATFORM = platform;
+    _platform = platform;
+    // Also try to set process.env for backward compat, but swallow errors
+    // on runtimes that forbid it (Supabase/Deno Deploy)
+    try {
+        ensureProcessEnv();
+        (globalThis as any).process.env.FRONTBASE_ADAPTER_PLATFORM = platform;
+    } catch {
+        // Deno Deploy throws NotSupported — safe to ignore
+    }
+}
+
+/** Get the current adapter platform tag */
+export function getPlatform(): string {
+    return _platform;
 }
 
 // ── Factory: Deno.serve() handler (Supabase, Netlify, Deno Deploy) ──

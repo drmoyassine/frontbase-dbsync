@@ -11,6 +11,7 @@
 
 import { stateProvider } from '../storage/index.js';
 import { initRedis } from '../cache/redis.js';
+import { getPlatform } from '../adapters/shared.js';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 const MAX_RETRIES = 5;
@@ -173,11 +174,12 @@ export async function runStartupSync(): Promise<void> {
     // Initialize state database (runs migrations including v2 for workflows/executions)
     await stateProvider.init();
 
-    // On cloud platforms (Supabase, CF, Vercel, etc.), there's no FastAPI backend.
-    // Credentials (Redis, JWT, Turso) are pushed as env vars/secrets at deploy time.
-    // Skip the backend sync to avoid 15s of wasted cold-start retries to localhost:8000.
-    if (!process.env.BACKEND_URL) {
-        console.log('[Startup Sync] ☁️  No BACKEND_URL set — skipping backend sync (cloud platform mode)');
+    // Only Docker (local) engines sync with FastAPI — all cloud platforms
+    // (cloudflare, supabase, vercel, netlify, deno, upstash) get their config
+    // from deploy-time secrets. Skip to avoid 15s of wasted cold-start retries.
+    const platform = getPlatform();
+    if (platform !== 'docker') {
+        console.log(`[Startup Sync] ☁️  Platform "${platform}" — skipping backend sync (secrets pushed at deploy time)`);
         return;
     }
 

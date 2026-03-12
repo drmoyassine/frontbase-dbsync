@@ -63,30 +63,31 @@ async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_t
 async def deploy_function(
     access_token: str, project_ref: str, function_name: str, script_content: str
 ) -> dict:
-    """Deploy a Supabase Edge Function using the new /functions/deploy endpoint.
-
-    This endpoint auto-creates the function if it doesn't exist, or updates
-    it if it does. Uses multipart/form-data with the JS bundle as a file.
+    """Create or update a Supabase Edge Function.
+    
+    Uses PATCH to update existing function, falls back to POST to create.
+    The function body is sent as a JSON string in the 'body' field.
     """
-    url = f"{SUPABASE_API}/projects/{project_ref}/functions/deploy"
-
-    # Metadata instructs Supabase on entrypoint and JWT verification
-    metadata = json.dumps({
-        "entrypoint_path": "index.ts",
-        "verify_jwt": False,
-    })
+    url = f"{SUPABASE_API}/projects/{project_ref}/functions/{function_name}"
+    headers = {**_headers(access_token), "Content-Type": "application/json"}
 
     async with httpx.AsyncClient() as client:
-        resp = await client.post(
+        # Try update first (PATCH)
+        resp = await client.patch(
             url,
-            params={"slug": function_name},
-            headers=_headers(access_token),
-            files=[
-                ("file", ("index.ts", script_content.encode("utf-8"), "application/typescript")),
-            ],
-            data={"metadata": metadata},
+            headers=headers,
+            json={"body": script_content, "verify_jwt": False},
             timeout=60.0,
         )
+        if resp.status_code == 404:
+            # Function doesn't exist — create it
+            create_url = f"{SUPABASE_API}/projects/{project_ref}/functions"
+            resp = await client.post(
+                create_url,
+                headers=headers,
+                json={"slug": function_name, "name": function_name, "body": script_content, "verify_jwt": False},
+                timeout=60.0,
+            )
 
         if resp.status_code not in (200, 201):
             raise HTTPException(400, f"Supabase deploy failed ({resp.status_code}): {resp.text[:300]}")

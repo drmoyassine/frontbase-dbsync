@@ -3,6 +3,15 @@ Supabase Edge Functions — Deploy API.
 
 Platform-specific deploy orchestrator + Supabase Management API helpers.
 Credentials: { "access_token": "sbp_...", "project_ref": "..." }
+
+Uses the new Deploy endpoint (Feb 2025):
+  POST /v1/projects/{ref}/functions/deploy?slug={name}
+  Content-Type: multipart/form-data
+  Body: file (JS bundle) + metadata (JSON)
+
+Secrets are project-level (shared across all functions):
+  POST /v1/projects/{ref}/secrets
+  Body: [{"name": "KEY", "value": "val"}, ...]
 """
 
 import json
@@ -18,7 +27,7 @@ SUPABASE_API = "https://api.supabase.com/v1"
 
 
 def _headers(access_token: str) -> dict:
-    return {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+    return {"Authorization": f"Bearer {access_token}"}
 
 
 async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_type: str) -> None:
@@ -34,12 +43,10 @@ async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_t
     if not access_token or not project_ref or not function_name:
         raise HTTPException(400, "Missing Supabase credentials (access_token, project_ref) or function_name in engine config")
 
-    script_filename = "supabase-edge.js" if adapter_type == "full" else "supabase-edge-lite.js"
+    # Deploy function (create or update via new deploy endpoint)
+    await deploy_function(str(access_token), str(project_ref), str(function_name), script_content)
 
-    # Deploy function (create or update)
-    await deploy_function(access_token, project_ref, function_name, script_content)
-
-    # Push secrets
+    # Push project-level secrets
     secrets = build_engine_secrets(
         db,
         edge_db_id=str(engine.edge_db_id) if engine.edge_db_id is not None else None,
@@ -48,7 +55,7 @@ async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_t
         engine_id=str(engine.id),
     )
     if secrets:
-        await set_function_secrets(access_token, project_ref, function_name, secrets)
+        await set_project_secrets(str(access_token), str(project_ref), secrets)
 
 
 # ── Platform-specific API calls ───────────────────────────────────────
@@ -56,47 +63,56 @@ async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_t
 async def deploy_function(
     access_token: str, project_ref: str, function_name: str, script_content: str
 ) -> dict:
-    """Create or update a Supabase Edge Function."""
-    url = f"{SUPABASE_API}/projects/{project_ref}/functions/{function_name}"
+    """Deploy a Supabase Edge Function using the new /functions/deploy endpoint.
+
+    This endpoint auto-creates the function if it doesn't exist, or updates
+    it if it does. Uses multipart/form-data with the JS bundle as a file.
+    """
+    url = f"{SUPABASE_API}/projects/{project_ref}/functions/deploy"
+
+    # Metadata instructs Supabase on entrypoint and JWT verification
+    metadata = json.dumps({
+        "entrypoint_path": "index.ts",
+        "verify_jwt": False,
+    })
 
     async with httpx.AsyncClient() as client:
-        # Try update first (PATCH), fall back to create (POST)
-        resp = await client.patch(
+        resp = await client.post(
             url,
+            params={"slug": function_name},
             headers=_headers(access_token),
-            json={"body": script_content, "verify_jwt": False},
-            timeout=30.0,
+            files=[
+                ("file", ("index.ts", script_content.encode("utf-8"), "application/typescript")),
+            ],
+            data={"metadata": metadata},
+            timeout=60.0,
         )
-        if resp.status_code == 404:
-            # Function doesn't exist — create it
-            create_url = f"{SUPABASE_API}/projects/{project_ref}/functions"
-            resp = await client.post(
-                create_url,
-                headers=_headers(access_token),
-                json={"slug": function_name, "name": function_name, "body": script_content, "verify_jwt": False},
-                timeout=30.0,
-            )
 
         if resp.status_code not in (200, 201):
-            raise HTTPException(400, f"Supabase deploy failed: {resp.text[:300]}")
+            raise HTTPException(400, f"Supabase deploy failed ({resp.status_code}): {resp.text[:300]}")
         return resp.json()
 
 
-async def set_function_secrets(
-    access_token: str, project_ref: str, function_name: str, secrets: dict
+async def set_project_secrets(
+    access_token: str, project_ref: str, secrets: dict
 ) -> None:
-    """Set environment variables for a Supabase Edge Function."""
-    url = f"{SUPABASE_API}/projects/{project_ref}/functions/{function_name}"
+    """Set project-level secrets (shared across all Edge Functions).
+
+    Supabase Edge Functions don't have per-function env vars.
+    All secrets are set at the project level via POST /v1/projects/{ref}/secrets.
+    """
+    url = f"{SUPABASE_API}/projects/{project_ref}/secrets"
+    payload = [{"name": k, "value": str(v)} for k, v in secrets.items()]
+
     async with httpx.AsyncClient() as client:
-        # Supabase uses env vars on the function config
-        resp = await client.patch(
+        resp = await client.post(
             url,
-            headers=_headers(access_token),
-            json={"env_vars": secrets},
+            headers={**_headers(access_token), "Content-Type": "application/json"},
+            json=payload,
             timeout=30.0,
         )
         if resp.status_code not in (200, 201):
-            print(f"[Supabase] Warning: Failed to set env vars: {resp.status_code}")
+            print(f"[Supabase] Warning: Failed to set project secrets: {resp.status_code} {resp.text[:200]}")
 
 
 async def delete_function(access_token: str, project_ref: str, function_name: str) -> None:

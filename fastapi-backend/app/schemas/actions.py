@@ -101,6 +101,7 @@ class WorkflowDraftResponse(WorkflowDraftBase):
     is_active: bool = True
     published_version: Optional[int] = None
     deployed_engines: Optional[Dict[str, Any]] = None
+    content_hash: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     created_by: Optional[str] = None

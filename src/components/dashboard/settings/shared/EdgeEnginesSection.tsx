@@ -222,7 +222,6 @@ export function EdgeEnginesSection() {
                         ) : (
                             <div className="space-y-3">
                                 {filteredEngines.map(engine => {
-                                    const isGPU = !!engine.gpu_model;
                                     const providerName = providers.find(p => p.id === engine.edge_provider_id)?.name || engine.provider;
                                     const isSelected = selectedIds.has(engine.id);
                                     const engineUrl = engine.url?.startsWith('http') ? engine.url : `https://${engine.url}`;
@@ -255,12 +254,15 @@ export function EdgeEnginesSection() {
                                                                 </button>
                                                             } />
                                                         )}
-                                                        {engine.gpu_model && (
-                                                            <AITestDialog gpuModel={engine.gpu_model} trigger={
+                                                        {engine.gpu_models && engine.gpu_models.length > 0 && (
+                                                            <AITestDialog gpuModels={engine.gpu_models} trigger={
                                                                 <button className="inline-flex items-center no-underline" title="AI Endpoint Details">
                                                                     <Badge variant="outline" className="text-[10px] h-5 py-0 cursor-pointer hover:opacity-80 transition-opacity bg-purple-500/5 border-purple-500/20 text-purple-400">
                                                                         <Brain className="w-3 h-3 mr-1" />
-                                                                        {engine.gpu_model.name}
+                                                                        {engine.gpu_models.length === 1
+                                                                            ? engine.gpu_models[0].name
+                                                                            : `${engine.gpu_models.length} AI Models`
+                                                                        }
                                                                     </Badge>
                                                                 </button>
                                                             } />

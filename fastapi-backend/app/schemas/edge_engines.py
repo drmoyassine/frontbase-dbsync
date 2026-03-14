@@ -62,7 +62,7 @@ class EdgeEngineResponse(BaseModel):
     edge_queue_id: Optional[str] = None
     edge_queue_name: Optional[str] = None
     engine_config: Optional[dict] = None
-    gpu_model: Optional[GPUModelSummary] = None
+    gpu_models: List[GPUModelSummary] = []
     is_active: bool
     is_system: bool = False
     is_imported: bool = False

@@ -32,7 +32,6 @@ import type { CatalogModel } from '../edgeConstants';
 
 export type WizardStep = 'provider' | 'compute-type' | 'engine-config' | 'ai-model' | 'deploying';
 export type ComputeType = 'cpu' | 'gpu';
-export type GPUMode = 'new' | 'existing';
 
 // ============================================================================
 // Hook
@@ -79,19 +78,14 @@ export function useDeployWizard() {
     const [selectedDbId, setSelectedDbId] = useState('none');
     const [selectedCacheId, setSelectedCacheId] = useState('none');
     const [selectedQueueId, setSelectedQueueId] = useState('none');
-    const [gpuMode, setGPUMode] = useState<GPUMode>('new');
-    const [existingEngineId, setExistingEngineId] = useState('');
+
 
     // Step 4: AI Model (GPU only)
     const [catalogFilter, setCatalogFilter] = useState('');
     const [catalogTypeFilter, setCatalogTypeFilter] = useState('all');
-    const [selectedModel, setSelectedModel] = useState<CatalogModel | null>(null);
+    const [selectedModels, setSelectedModels] = useState<CatalogModel[]>([]);
 
-    // CF engines for "existing" GPU mode
-    const cfEngines = useMemo(
-        () => engines.filter((e: EdgeEngine) => e.edge_provider_id),
-        [engines]
-    );
+
 
     // Catalog query — only when GPU + we have a provider
     const { data: catalog, isLoading: catalogLoading } = useQuery({
@@ -142,9 +136,7 @@ export function useDeployWizard() {
             setSelectedDbId('none');
             setSelectedCacheId('none');
             setSelectedQueueId('none');
-            setGPUMode('new');
-            setExistingEngineId('');
-            setSelectedModel(null);
+            setSelectedModels([]);
             setCatalogFilter('');
             setCatalogTypeFilter('all');
             setIsDeploying(false);
@@ -168,10 +160,6 @@ export function useDeployWizard() {
             setStep('engine-config');
         } else if (step === 'engine-config') {
             if (computeType === 'gpu') {
-                if (gpuMode === 'existing' && !existingEngineId) {
-                    setError('Select an existing engine');
-                    return;
-                }
                 setStep('ai-model');
             } else {
                 handleDeploy();
@@ -197,62 +185,50 @@ export function useDeployWizard() {
         try {
             let targetEngineId: string | null = null;
 
-            // ----- New Engine path (CPU or GPU-New) -------------------------
-            if (computeType === 'cpu' || gpuMode === 'new') {
-                const res = await fetch(`${API_BASE}/api/edge-engines/deploy`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        provider_id: selectedProviderId,
-                        worker_name: workerName,
-                        adapter_type: engineType === 'full' ? 'full' : 'automations',
-                        edge_db_id: selectedDbId === 'none' ? '__none__' : selectedDbId === 'default' ? undefined : selectedDbId,
-                        edge_cache_id: selectedCacheId === 'none' ? '__none__' : selectedCacheId,
-                        edge_queue_id: selectedQueueId === 'none' ? '__none__' : selectedQueueId,
-                    }),
-                });
-                const data = await res.json();
-                if (!res.ok || !data.success) {
-                    throw new Error(data.detail || data.error || 'Deploy failed');
-                }
-                targetEngineId = data.engine_id || null;
+            // ----- Deploy new engine ----------------------------------------
+            const res = await fetch(`${API_BASE}/api/edge-engines/deploy`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    provider_id: selectedProviderId,
+                    worker_name: workerName,
+                    adapter_type: engineType === 'full' ? 'full' : 'automations',
+                    edge_db_id: selectedDbId === 'none' ? '__none__' : selectedDbId === 'default' ? undefined : selectedDbId,
+                    edge_cache_id: selectedCacheId === 'none' ? '__none__' : selectedCacheId,
+                    edge_queue_id: selectedQueueId === 'none' ? '__none__' : selectedQueueId,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.detail || data.error || 'Deploy failed');
+            }
+            targetEngineId = data.engine_id || null;
 
-                // Refetch to get the new engine in the list
-                const { data: refreshedEngines } = await refetchEngines();
-                if (!targetEngineId && refreshedEngines) {
-                    const newEngine = refreshedEngines.find(
-                        (e: EdgeEngine) => e.name.toLowerCase().includes(workerName.toLowerCase())
-                    );
-                    if (newEngine) targetEngineId = newEngine.id;
-                }
+            // Refetch to get the new engine in the list
+            const { data: refreshedEngines } = await refetchEngines();
+            if (!targetEngineId && refreshedEngines) {
+                const newEngine = refreshedEngines.find(
+                    (e: EdgeEngine) => e.name.toLowerCase().includes(workerName.toLowerCase())
+                );
+                if (newEngine) targetEngineId = newEngine.id;
             }
 
-            // ----- Existing Engine path (GPU-Existing) ----------------------
-            if (computeType === 'gpu' && gpuMode === 'existing') {
-                targetEngineId = existingEngineId;
-            }
-
-            // ----- Attach GPU model if GPU path -----------------------------
-            if (computeType === 'gpu' && selectedModel && targetEngineId) {
-                const modelResult = await deployGPUModel({
-                    name: selectedModel.name.split('/').pop() || selectedModel.name,
-                    model_type: selectedModel.model_type,
-                    provider: 'workers_ai',
-                    model_id: selectedModel.model_id,
-                    edge_engine_id: targetEngineId,
-                });
-
-                const redeployStatus = modelResult.redeployed
-                    ? 'Engine redeployed with AI binding ✓'
-                    : modelResult.redeploy_error
-                        ? `Model attached. Redeploy warning: ${modelResult.redeploy_error}`
-                        : 'Model attached (manual redeploy may be needed)';
-
+            // ----- Attach GPU models if GPU path ----------------------------
+            if (computeType === 'gpu' && selectedModels.length > 0 && targetEngineId) {
+                for (const model of selectedModels) {
+                    await deployGPUModel({
+                        name: model.name.split('/').pop() || model.name,
+                        model_type: model.model_type,
+                        provider: 'workers_ai',
+                        model_id: model.model_id,
+                        edge_engine_id: targetEngineId,
+                    });
+                }
                 toast({
-                    title: '🧠 GPU Model Deployed',
-                    description: `${modelResult.name} → ${modelResult.endpoint_url}\n${redeployStatus}`,
+                    title: '🧠 Engine Deployed with AI',
+                    description: `${workerName} deployed with ${selectedModels.length} model(s)`,
                 });
-            } else if (computeType === 'cpu') {
+            } else {
                 toast({ title: '🚀 Engine Deployed', description: `${workerName} deployed successfully` });
             }
 
@@ -273,7 +249,7 @@ export function useDeployWizard() {
         switch (step) {
             case 'compute-type': return 'Compute Type';
             case 'provider': return 'Select Provider';
-            case 'engine-config': return computeType === 'gpu' && gpuMode === 'existing' ? 'Select Engine' : `${providerLabel} Engine Configuration`;
+            case 'engine-config': return `${providerLabel} Engine Configuration`;
             case 'ai-model': return 'Select AI Model';
             case 'deploying': return 'Deploying...';
         }
@@ -292,7 +268,6 @@ export function useDeployWizard() {
         if (step === 'compute-type') return true;
         if (step === 'provider') return !!selectedProviderId;
         if (step === 'engine-config') {
-            if (computeType === 'gpu' && gpuMode === 'existing') return !!existingEngineId;
             return !!workerName;
         }
         if (step === 'ai-model') return true; // model is optional — they can skip
@@ -320,16 +295,14 @@ export function useDeployWizard() {
         selectedDbId, setSelectedDbId,
         selectedCacheId, setSelectedCacheId,
         selectedQueueId, setSelectedQueueId,
-        gpuMode, setGPUMode,
-        existingEngineId, setExistingEngineId,
-        edgeDbs, edgeCaches, edgeQueues, cfEngines,
+        edgeDbs, edgeCaches, edgeQueues,
 
         // Step 4: AI Model
         catalog, catalogLoading,
         filteredCatalog, catalogTypes,
         catalogFilter, setCatalogFilter,
         catalogTypeFilter, setCatalogTypeFilter,
-        selectedModel, setSelectedModel,
+        selectedModels, setSelectedModels,
     };
 }
 

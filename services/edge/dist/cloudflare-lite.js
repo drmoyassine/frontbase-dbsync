@@ -41208,6 +41208,23 @@ var Liquid = class _Liquid {
   }
 };
 
+// src/adapters/shared.ts
+var _platform = "docker";
+function ensureProcessEnv() {
+  globalThis.process ??= { env: {} };
+}
+function setPlatform(platform2) {
+  _platform = platform2;
+  try {
+    ensureProcessEnv();
+    globalThis.process.env.FRONTBASE_ADAPTER_PLATFORM = platform2;
+  } catch {
+  }
+}
+function getPlatform() {
+  return _platform;
+}
+
 // src/routes/health.ts
 var startedAt = Date.now();
 var healthRoute = new OpenAPIHono();
@@ -41227,7 +41244,7 @@ var route = createRoute({
             service: external_exports.string(),
             version: external_exports.string(),
             provider: external_exports.string(),
-            uptime_seconds: external_exports.number(),
+            uptime_seconds: external_exports.number().optional(),
             timestamp: external_exports.string()
           })
         }
@@ -41236,12 +41253,15 @@ var route = createRoute({
   }
 });
 healthRoute.openapi(route, (c) => {
+  const platform2 = getPlatform();
+  const isServerless = platform2 !== "docker";
   return c.json({
     status: "ok",
     service: "frontbase-edge",
     version: "0.1.0",
-    provider: process.env.FRONTBASE_ADAPTER_PLATFORM || "docker",
-    uptime_seconds: Math.floor((Date.now() - startedAt) / 1e3),
+    provider: platform2,
+    // Uptime is meaningless on serverless (cold starts reset it)
+    ...isServerless ? {} : { uptime_seconds: Math.floor((Date.now() - startedAt) / 1e3) },
     timestamp: (/* @__PURE__ */ new Date()).toISOString()
   });
 });
@@ -50631,6 +50651,23 @@ var MIGRATIONS = [
             )`,
       `CREATE INDEX IF NOT EXISTS idx_dead_letters_workflow ON dead_letters(workflow_id)`
     ]
+  },
+  {
+    version: 6,
+    description: "Add edge_logs table for persisted runtime logs",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS edge_logs (
+                id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                level TEXT NOT NULL,
+                message TEXT NOT NULL,
+                source TEXT DEFAULT 'runtime',
+                metadata TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )`,
+      `CREATE INDEX IF NOT EXISTS idx_edge_logs_timestamp ON edge_logs(timestamp DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_edge_logs_level ON edge_logs(level)`
+    ]
   }
 ];
 async function runMigrations(execute, providerName) {
@@ -50723,6 +50760,18 @@ var executionsTable = sqliteTable("executions", {
   usage: real("usage").default(0),
   startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   endedAt: text("ended_at")
+});
+var edgeLogsTable = sqliteTable("edge_logs", {
+  id: text("id").primaryKey(),
+  timestamp: text("timestamp").notNull(),
+  level: text("level").notNull(),
+  // debug | info | warn | error
+  message: text("message").notNull(),
+  source: text("source").default("runtime"),
+  // runtime | request | error | system
+  metadata: text("metadata"),
+  // JSON string — provider-specific extras
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
 
 // src/storage/TursoHttpProvider.ts
@@ -52908,6 +52957,89 @@ cacheRoute.openapi(flushRoute, async (c) => {
   }
 });
 
+// src/routes/edge-logs.ts
+var edgeLogsRoute = new Hono2();
+async function getDb() {
+  await ensureInitialized();
+  const provider = getStateProvider();
+  return provider.db || provider.getDb?.();
+}
+edgeLogsRoute.post("/", async (c) => {
+  const body = await c.req.json();
+  const logs = body?.logs;
+  if (!logs || !Array.isArray(logs) || logs.length === 0) {
+    return c.json({ success: false, error: "No logs provided" }, 400);
+  }
+  const db = await getDb();
+  if (!db) {
+    return c.json({ success: false, error: "State database not available" }, 503);
+  }
+  const values = logs.map((log2) => ({
+    id: crypto.randomUUID(),
+    timestamp: log2.timestamp || (/* @__PURE__ */ new Date()).toISOString(),
+    level: log2.level || "info",
+    message: log2.message || "",
+    source: log2.source || "runtime",
+    metadata: log2.metadata ? JSON.stringify(log2.metadata) : null
+  }));
+  try {
+    const BATCH_SIZE = 100;
+    let inserted = 0;
+    for (let i = 0; i < values.length; i += BATCH_SIZE) {
+      const batch = values.slice(i, i + BATCH_SIZE);
+      await db.insert(edgeLogsTable).values(batch);
+      inserted += batch.length;
+    }
+    return c.json({ success: true, inserted });
+  } catch (err2) {
+    const message = err2 instanceof Error ? err2.message : String(err2);
+    console.error("[EdgeLogs] Bulk insert failed:", message);
+    return c.json({ success: false, error: message }, 500);
+  }
+});
+edgeLogsRoute.get("/", async (c) => {
+  const limit2 = Math.min(parseInt(c.req.query("limit") || "50"), 500);
+  const before = c.req.query("before");
+  const level = c.req.query("level");
+  const db = await getDb();
+  if (!db) {
+    return c.json({ logs: [], next_cursor: null, error: "State database not available" }, 503);
+  }
+  try {
+    const conditions = [];
+    if (before) {
+      conditions.push(sql`${edgeLogsTable.timestamp} < ${before}`);
+    }
+    if (level) {
+      conditions.push(sql`${edgeLogsTable.level} = ${level}`);
+    }
+    let query = db.select().from(edgeLogsTable);
+    if (conditions.length > 0) {
+      query = query.where(conditions.length === 1 ? conditions[0] : and(...conditions));
+    }
+    const rows = await query.orderBy(desc(edgeLogsTable.timestamp)).limit(limit2 + 1);
+    const hasMore = rows.length > limit2;
+    const results = hasMore ? rows.slice(0, limit2) : rows;
+    const nextCursor = hasMore ? results[results.length - 1]?.timestamp : null;
+    return c.json({
+      logs: results.map((row) => ({
+        id: row.id,
+        timestamp: row.timestamp,
+        level: row.level,
+        message: row.message,
+        source: row.source,
+        metadata: row.metadata ? JSON.parse(row.metadata) : null
+      })),
+      next_cursor: nextCursor,
+      total: results.length
+    });
+  } catch (err2) {
+    const message = err2 instanceof Error ? err2.message : String(err2);
+    console.error("[EdgeLogs] Query failed:", message);
+    return c.json({ logs: [], next_cursor: null, error: message }, 500);
+  }
+});
+
 // src/routes/openai.ts
 var openaiRoute = new OpenAPIHono();
 function resolveModel(modelSlug, c) {
@@ -52977,6 +53109,11 @@ openaiRoute.post("/chat/completions", async (c) => {
   mergeDefaults(payload, model);
   try {
     const result = await ai.run(model.model_id, payload);
+    if (result && typeof result === "object" && Array.isArray(result.choices)) {
+      result.model = result.model || model.slug;
+      result.id = result.id || `chatcmpl-${crypto.randomUUID().slice(0, 12)}`;
+      return c.json(result);
+    }
     const responseContent = typeof result === "string" ? result : result?.response ?? result?.result ?? JSON.stringify(result);
     return c.json({
       id: `chatcmpl-${crypto.randomUUID().slice(0, 12)}`,
@@ -53183,6 +53320,11 @@ openaiRoute.post("/responses", async (c) => {
   mergeDefaults(payload, model);
   try {
     const result = await ai.run(model.model_id, payload);
+    if (result && typeof result === "object" && Array.isArray(result.output)) {
+      result.model = result.model || model.slug;
+      result.id = result.id || `resp-${crypto.randomUUID().slice(0, 12)}`;
+      return c.json(result);
+    }
     const responseText = typeof result === "string" ? result : result?.response ?? result?.output?.[0]?.content?.[0]?.text ?? result?.result ?? JSON.stringify(result);
     return c.json({
       id: `resp-${crypto.randomUUID().slice(0, 12)}`,
@@ -53366,6 +53508,7 @@ function createLiteApp() {
   app.route("/api/executions", executionsRoute);
   app.route("/api/update", updateRoute);
   app.route("/api/cache", cacheRoute);
+  app.route("/api/edge-logs", edgeLogsRoute);
   app.use("/v1/*", aiApiKeyAuth);
   app.route("/v1", openaiRoute);
   const EDGE_VERSION = "0.1.0";
@@ -53567,15 +53710,6 @@ liteApp.get("/", (c) => c.json({
   docs: "/api/docs",
   health: "/api/health"
 }));
-
-// src/adapters/shared.ts
-function ensureProcessEnv() {
-  globalThis.process ??= { env: {} };
-}
-function setPlatform(platform2) {
-  ensureProcessEnv();
-  globalThis.process.env.FRONTBASE_ADAPTER_PLATFORM = platform2;
-}
 
 // src/adapters/cloudflare-lite.ts
 var cloudflare_lite_default = {

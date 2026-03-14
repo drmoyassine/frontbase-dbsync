@@ -41,7 +41,7 @@ export function DeployEngineWizard() {
         open, handleOpenChange,
         step, error, isDeploying,
         goNext, goBack, canNext, stepTitle, stepNumber,
-        computeType, selectedModel,
+        computeType, selectedModels,
         selectedProvider, selectedProviderType,
     } = wizard;
 
@@ -82,9 +82,7 @@ export function DeployEngineWizard() {
                             <div className="flex flex-col items-center justify-center py-8 gap-3">
                                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                                 <p className="text-sm text-muted-foreground">
-                                    {computeType === 'gpu' && wizard.gpuMode === 'existing'
-                                        ? 'Attaching AI model & redeploying engine...'
-                                        : `Deploying engine to ${selectedProvider?.name || selectedProviderType}...`}
+                                    Deploying engine to {selectedProvider?.name || selectedProviderType}...
                                 </p>
                             </div>
                         )}
@@ -110,7 +108,7 @@ export function DeployEngineWizard() {
                                     {step === 'engine-config' && computeType === 'cpu' ? (
                                         <><Rocket className="w-4 h-4 mr-1" /> Deploy</>
                                     ) : step === 'ai-model' ? (
-                                        <><Rocket className="w-4 h-4 mr-1" /> {selectedModel ? 'Deploy with Model' : 'Deploy without Model'}</>
+                                        <><Rocket className="w-4 h-4 mr-1" /> {selectedModels.length > 0 ? `Deploy with ${selectedModels.length} Model${selectedModels.length > 1 ? 's' : ''}` : 'Deploy without Model'}</>
                                     ) : (
                                         <>Next <ChevronRight className="w-4 h-4 ml-1" /></>
                                     )}

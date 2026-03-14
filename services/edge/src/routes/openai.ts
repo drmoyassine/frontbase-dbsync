@@ -106,6 +106,15 @@ openaiRoute.post('/chat/completions', async (c) => {
 
     try {
         const result = await ai.run(model.model_id, payload);
+
+        // If Workers AI already returned a full OpenAI chat completion object, pass it through
+        if (result && typeof result === 'object' && Array.isArray(result.choices)) {
+            result.model = result.model || model.slug;
+            result.id = result.id || `chatcmpl-${crypto.randomUUID().slice(0, 12)}`;
+            return c.json(result);
+        }
+
+        // Legacy Workers AI response shapes (plain string or {response: "..."})
         const responseContent = typeof result === 'string'
             ? result
             : result?.response ?? result?.result ?? JSON.stringify(result);
@@ -369,6 +378,13 @@ openaiRoute.post('/responses', async (c) => {
 
     try {
         const result = await ai.run(model.model_id, payload);
+
+        // If Workers AI returned a Responses API-shaped object, pass it through
+        if (result && typeof result === 'object' && Array.isArray(result.output)) {
+            result.model = result.model || model.slug;
+            result.id = result.id || `resp-${crypto.randomUUID().slice(0, 12)}`;
+            return c.json(result);
+        }
 
         // Transform Workers AI result → OpenAI Responses API format
         const responseText = typeof result === 'string'

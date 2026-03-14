@@ -25,7 +25,7 @@ def _provider_response(provider: EdgeProviderAccount) -> dict:
     """Build a serializable response dict from an ORM provider object."""
     import json
     metadata = None
-    if provider.provider_metadata:
+    if str(provider.provider_metadata or ""):
         try:
             metadata = json.loads(str(provider.provider_metadata))
         except (json.JSONDecodeError, TypeError):
@@ -82,7 +82,7 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
         ).first()
         if existing_turso:
             existing_creds = {}
-            if existing_turso.provider_credentials:
+            if str(existing_turso.provider_credentials or ""):
                 existing_creds = decrypt_credentials(str(existing_turso.provider_credentials))
             databases = existing_creds.get("databases", [])
             # Build new DB entry from incoming credentials
@@ -136,10 +136,10 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
             ).all()
 
             for acct in same_provider_accounts:
-                if not acct.provider_credentials:
+                if not str(acct.provider_credentials or ""):
                     continue
                 try:
-                    stored_creds = decrypt_credentials(acct.provider_credentials)
+                    stored_creds = decrypt_credentials(str(acct.provider_credentials))
                     if all(
                         stored_creds.get(k) == incoming_identity.get(k)
                         for k in incoming_identity
@@ -211,6 +211,27 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
     # Used by log persistence to determine retention limits.
     await _detect_and_store_plan_tier(provider, payload, db)
 
+    # For Cloudflare: auto-detect account_id from API token and persist
+    if payload.provider == "cloudflare" and payload.provider_credentials:
+        api_token = payload.provider_credentials.get("api_token", "")
+        if api_token:
+            try:
+                from ..services.cloudflare_api import detect_account_id
+                account_id = await detect_account_id(api_token)
+                existing_meta = {}
+                if str(provider.provider_metadata or ""):
+                    try:
+                        existing_meta = json.loads(str(provider.provider_metadata))
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                existing_meta["account_id"] = account_id
+                provider.provider_metadata = json.dumps(existing_meta)  # type: ignore[assignment]
+                db.commit()
+                db.refresh(provider)
+                print(f"[CF Connect] Auto-detected account_id: {account_id}")
+            except Exception as e:
+                print(f"Warning: Could not auto-detect Cloudflare account_id: {e}")
+
     return _provider_response(provider)
 
 
@@ -239,7 +260,7 @@ async def _detect_and_store_plan_tier(
 
     if plan_tier:
         existing_meta = {}
-        if provider.provider_metadata:
+        if str(provider.provider_metadata or ""):
             try:
                 existing_meta = json.loads(str(provider.provider_metadata))
             except (json.JSONDecodeError, TypeError):
@@ -548,8 +569,8 @@ async def add_turso_database(
 
     # Decrypt existing credentials
     creds: dict = {}
-    if provider.provider_credentials:
-        creds = decrypt_credentials(provider.provider_credentials)
+    if str(provider.provider_credentials or ""):
+        creds = decrypt_credentials(str(provider.provider_credentials))
     databases: list = creds.get("databases", [])
 
     # Duplicate check: same URL
@@ -596,8 +617,8 @@ async def remove_turso_database(
         raise HTTPException(status_code=400, detail="Only Turso accounts support database registry")
 
     creds: dict = {}
-    if provider.provider_credentials:
-        creds = decrypt_credentials(provider.provider_credentials)
+    if str(provider.provider_credentials or ""):
+        creds = decrypt_credentials(str(provider.provider_credentials))
     databases: list = creds.get("databases", [])
 
     # Find and remove
@@ -630,8 +651,8 @@ async def test_turso_database(
         raise HTTPException(status_code=400, detail="Only Turso accounts support database registry")
 
     creds: dict = {}
-    if provider.provider_credentials:
-        creds = decrypt_credentials(provider.provider_credentials)
+    if str(provider.provider_credentials or ""):
+        creds = decrypt_credentials(str(provider.provider_credentials))
     databases: list = creds.get("databases", [])
 
     # Find the target database

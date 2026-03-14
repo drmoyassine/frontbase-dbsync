@@ -77,7 +77,7 @@ def _slugify(name: str) -> str:
 def _serialize(model: EdgeGPUModel) -> dict:
     """Serialize EdgeGPUModel to response dict."""
     config = None
-    if model.provider_config:
+    if str(model.provider_config) if model.provider_config else None:  # type: ignore[truthy-bool]
         try:
             config = json.loads(str(model.provider_config))
         except (json.JSONDecodeError, TypeError):
@@ -94,7 +94,7 @@ def _serialize(model: EdgeGPUModel) -> dict:
         "model_type": str(model.model_type),
         "provider": str(model.provider),
         "model_id": str(model.model_id),
-        "endpoint_url": str(model.endpoint_url) if model.endpoint_url else None,
+        "endpoint_url": str(model.endpoint_url) if str(model.endpoint_url or "") else None,
         "provider_config": config,
         "edge_engine_id": str(model.edge_engine_id),
         "engine_name": engine_name,
@@ -126,7 +126,26 @@ async def get_catalog(
     if provider == "workers_ai":
         api_token, account_id = get_provider_credentials(provider_id, db)
         if not account_id:
-            raise HTTPException(400, "Provider account missing account_id. Re-connect the provider.")
+            # Fallback: auto-detect and persist for providers connected before auto-detection was added
+            try:
+                from ..services.cloudflare_api import detect_account_id
+                account_id = await detect_account_id(api_token)
+                # Persist so future calls don't need to auto-detect
+                import json as _json
+                prov = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id).first()
+                if prov:
+                    existing_meta = {}
+                    if str(prov.provider_metadata or ""):
+                        try:
+                            existing_meta = _json.loads(str(prov.provider_metadata))
+                        except (_json.JSONDecodeError, TypeError):
+                            pass
+                    existing_meta["account_id"] = account_id
+                    prov.provider_metadata = _json.dumps(existing_meta)  # type: ignore[assignment]
+                    db.commit()
+                    print(f"[GPU Catalog] Backfilled account_id for provider {provider_id}")
+            except Exception as e:
+                raise HTTPException(400, f"Provider account missing account_id and auto-detect failed: {e}")
         credentials = {"api_token": api_token, "account_id": account_id}
     else:
         raise HTTPException(400, f"Catalog not yet supported for provider: {provider}")
@@ -178,18 +197,21 @@ async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db
     # Validate adapter exists
     get_adapter(payload.provider)
 
-    # Enforce single GPU model per engine
-    existing_model = db.query(EdgeGPUModel).filter(
+    # Compute slug early — needed for uniqueness check and model creation
+    slug = _slugify(payload.name)
+
+    # Enforce slug uniqueness within the same engine
+    existing_slug = db.query(EdgeGPUModel).filter(
         EdgeGPUModel.edge_engine_id == payload.edge_engine_id,
+        EdgeGPUModel.slug == slug,
     ).first()
-    if existing_model:
+    if existing_slug:
         raise HTTPException(
             409,
-            f"This engine already has an AI model ({existing_model.name}). Remove it first.",
+            f"This engine already has a model with slug '{slug}'. Choose a different name.",
         )
 
     now = datetime.now(timezone.utc).isoformat()
-    slug = _slugify(payload.name)
 
     endpoint_url = f"{str(engine.url).rstrip('/')}/v1/chat/completions"
 
@@ -215,7 +237,7 @@ async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db
     result = _serialize(model)
     redeployed = False
     redeploy_error = None
-    if engine.edge_provider_id:
+    if str(engine.edge_provider_id or ""):
         try:
             await _redeploy_engine(engine, db)
             redeployed = True
@@ -274,7 +296,7 @@ async def delete_gpu_model(model_id: str, db: Session = Depends(get_db)):
     # Auto-redeploy CF engines to remove stale binding
     redeployed = False
     redeploy_error = None
-    if engine and engine.edge_provider_id:
+    if engine and str(engine.edge_provider_id or ""):
         try:
             await _redeploy_engine(engine, db)
             redeployed = True

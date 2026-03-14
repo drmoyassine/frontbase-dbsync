@@ -9,15 +9,17 @@ import { API_BASE } from './edgeConstants';
 import { toast } from 'sonner';
 import { showTestToast } from './edgeTestToast';
 
+interface GPUModelInfo {
+    id: string;
+    name: string;
+    slug?: string;
+    model_id?: string;
+    model_type: string;
+    endpoint_url?: string | null;
+}
+
 interface AITestDialogProps {
-    gpuModel: {
-        id: string;
-        name: string;
-        slug?: string;
-        model_id?: string;
-        model_type: string;
-        endpoint_url?: string | null;
-    };
+    gpuModels: GPUModelInfo[];
     trigger?: React.ReactNode;
 }
 
@@ -34,13 +36,23 @@ import {
 // Component
 // =============================================================================
 
-export const AITestDialog: React.FC<AITestDialogProps> = ({ gpuModel, trigger }) => {
+export const AITestDialog: React.FC<AITestDialogProps> = ({ gpuModels, trigger }) => {
     const [open, setOpen] = useState(false);
     const [copied, setCopied] = useState(false);
     const [testing, setTesting] = useState(false);
     const [schemaExpanded, setSchemaExpanded] = useState(false);
     // Track which optional params are included — keyed by param name
     const [includedParams, setIncludedParams] = useState<Set<string>>(new Set());
+
+    // ── Model selector ───────────────────────────────────────────────
+    const [selectedModelIdx, setSelectedModelIdx] = useState(0);
+    const gpuModel = gpuModels[selectedModelIdx] || gpuModels[0];
+
+    // Reset endpoint + params when model changes
+    useEffect(() => {
+        setSelectedEndpointIdx(0);
+        setIncludedParams(new Set());
+    }, [selectedModelIdx]);
 
     const normalizedType = gpuModel.model_type.toLowerCase().replace(/\s+/g, '-');
     const contextSize = getContextSize(gpuModel.model_id);
@@ -77,23 +89,23 @@ export const AITestDialog: React.FC<AITestDialogProps> = ({ gpuModel, trigger })
     // Build cURL dynamically: base body + checked optional params
     const getCurlSnippet = useMemo(() => {
         let url = gpuModel.endpoint_url || `https://<engine-url>${activeModality.endpoint}`;
-        if (url.includes('/api/ai/')) {
-            const baseUrl = url.replace(/\/api\/ai\/.*$/, '');
-            url = `${baseUrl}${activeModality.endpoint}`;
-        }
+        // Strip any existing /v1/* or legacy /api/ai/* path to get the base origin
+        const baseUrl = url.replace(/\/(v1|api\/ai)\/.*$/, '');
+        url = `${baseUrl}${activeModality.endpoint}`;
         const modelName = gpuModel.slug || gpuModel.name.toLowerCase().replace(/\s+/g, '-');
         const body = { ...activeModality.baseBody(modelName) };
 
         // Inject checked optional params with their default values
         for (const param of activeModality.params) {
-            if (!param.required && includedParams.has(param.name) && param.defaultRaw !== null) {
+            if (!param.required && includedParams.has(param.name)) {
+                const value = param.defaultRaw !== null ? param.defaultRaw : null;
                 // Handle nested params like reasoning.effort
                 if (param.name.includes('.')) {
                     const [parent, child] = param.name.split('.');
                     if (!body[parent]) body[parent] = {};
-                    body[parent][child] = param.defaultRaw;
+                    body[parent][child] = value;
                 } else {
-                    body[param.name] = param.defaultRaw;
+                    body[param.name] = value;
                 }
             }
         }
@@ -149,12 +161,24 @@ export const AITestDialog: React.FC<AITestDialogProps> = ({ gpuModel, trigger })
                 </DialogHeader>
 
                 <div className="space-y-5 py-4 overflow-hidden">
-                    {/* Model Info — reordered: MODEL, TYPE, CONTEXT, ENDPOINT */}
+                    {/* Model Info — MODEL (dropdown if multiple), TYPE, CONTEXT, ENDPOINT */}
                     <div className="flex items-center gap-6 flex-wrap">
                         <div>
                             <p className="text-xs font-semibold uppercase text-muted-foreground">Model</p>
                             <div className="flex items-center gap-1.5">
-                                <p className="text-sm font-medium">{gpuModel.name}</p>
+                                {gpuModels.length > 1 ? (
+                                    <select
+                                        value={selectedModelIdx}
+                                        onChange={(e) => setSelectedModelIdx(Number(e.target.value))}
+                                        className="text-sm font-medium bg-transparent border border-border rounded px-1.5 py-0.5 cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
+                                    >
+                                        {gpuModels.map((m, i) => (
+                                            <option key={m.id} value={i}>{m.name}</option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <p className="text-sm font-medium">{gpuModel.name}</p>
+                                )}
                                 {modelCardUrl && (
                                     <a href={modelCardUrl} target="_blank" rel="noopener noreferrer" title="View model card">
                                         <ExternalLink className="h-3 w-3 text-muted-foreground hover:text-foreground transition-colors" />

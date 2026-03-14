@@ -30,14 +30,14 @@ export interface EdgeEngine {
     edge_queue_id: string | null;
     edge_queue_name?: string;
     engine_config?: any;
-    gpu_model?: {
+    gpu_models?: {
         id: string;
         name: string;
         slug?: string;
         model_id?: string;
         model_type: string;
         endpoint_url: string | null;
-    } | null;
+    }[];
     is_active: boolean;
     is_system?: boolean;
     bundle_checksum?: string | null;

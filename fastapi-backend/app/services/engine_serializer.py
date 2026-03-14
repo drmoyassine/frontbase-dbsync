@@ -74,16 +74,18 @@ def serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) -> 
             is_outdated = True
             sync_status = "stale"
 
-    # GPU model (single model per engine — see edge_gpu.py enforcement)
-    gpu_model_obj = engine.gpu_models[0] if engine.gpu_models else None
-    gpu_model_data = {
-        "id": str(gpu_model_obj.id),
-        "name": str(gpu_model_obj.name),
-        "slug": str(gpu_model_obj.slug),
-        "model_id": str(gpu_model_obj.model_id),
-        "model_type": str(gpu_model_obj.model_type),
-        "endpoint_url": str(gpu_model_obj.endpoint_url) if gpu_model_obj.endpoint_url else None,
-    } if gpu_model_obj else None
+    # GPU models — multiple models per engine supported
+    gpu_models_data = [
+        {
+            "id": str(m.id),
+            "name": str(m.name),
+            "slug": str(m.slug),
+            "model_id": str(m.model_id),
+            "model_type": str(m.model_type),
+            "endpoint_url": str(m.endpoint_url) if m.endpoint_url else None,
+        }
+        for m in (engine.gpu_models or [])
+    ]
 
     return {
         "id": str(engine.id),
@@ -99,7 +101,7 @@ def serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) -> 
         "edge_queue_id": str(engine.edge_queue_id) if engine.edge_queue_id else None,
         "edge_queue_name": edge_queue_name,
         "engine_config": config,
-        "gpu_model": gpu_model_data,
+        "gpu_models": gpu_models_data,
         "is_active": bool(engine.is_active),
         "is_system": bool(engine.is_system),
         "is_imported": bool(engine.is_imported) if hasattr(engine, 'is_imported') else False,

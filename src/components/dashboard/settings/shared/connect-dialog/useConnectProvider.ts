@@ -71,6 +71,7 @@ export interface ConnectProviderState {
 export function useConnectProvider(
     lockedProvider?: string,
     open?: boolean,
+    editProvider?: { id: string; name: string; provider: string } | null,
 ) {
     const { data: providers = [], refetch } = useEdgeProviders();
 
@@ -101,11 +102,17 @@ export function useConnectProvider(
             setCredFields({});
             setTestResult(null);
             setError(null);
-            const cfg = PROVIDER_CONFIGS[lockedProvider || providerType];
-            if (cfg) setName(cfg.defaultName);
-            if (lockedProvider) setProviderType(lockedProvider);
+            if (editProvider) {
+                // Edit mode: pre-fill with existing provider data
+                setName(editProvider.name);
+                setProviderType(editProvider.provider);
+            } else {
+                const cfg = PROVIDER_CONFIGS[lockedProvider || providerType];
+                if (cfg) setName(cfg.defaultName);
+                if (lockedProvider) setProviderType(lockedProvider);
+            }
         }
-    }, [open, lockedProvider]);
+    }, [open, lockedProvider, editProvider]);
 
     const resetForm = useCallback(() => {
         setCredFields({});
@@ -154,9 +161,45 @@ export function useConnectProvider(
         }
     }, [effectiveProvider, credFields, currentConfig.label]);
 
-    // Generic save — creates a standard provider. Returns the new account ID.
+    // Generic save — creates or updates a standard provider. Returns the account ID.
     const handleGenericSave = useCallback(async (extraCreds?: Record<string, string>): Promise<string> => {
         const finalCreds = extraCreds ? { ...credFields, ...extraCreds } : credFields;
+
+        // Edit mode: update existing provider via PUT
+        if (editProvider) {
+            const updateData: Record<string, any> = { name };
+            // Only include credentials if user actually entered new ones
+            const hasNewCreds = Object.values(finalCreds).some(v => v && v.trim() !== '');
+            if (hasNewCreds) {
+                updateData.provider_credentials = finalCreds;
+            }
+            await edgeInfrastructureApi.updateProvider({
+                id: editProvider.id,
+                data: updateData,
+            });
+
+            // Cloudflare: re-detect account_id if credentials changed
+            if (hasNewCreds && effectiveProvider === 'cloudflare') {
+                try {
+                    const res = await fetch(`${API_BASE}/api/cloudflare/connect`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ provider_id: editProvider.id }),
+                    });
+                    const data = await res.json();
+                    if (data.success && data.account_name) {
+                        await edgeInfrastructureApi.updateProvider({
+                            id: editProvider.id,
+                            data: { name: `Cloudflare: ${data.account_name}` },
+                        });
+                    }
+                } catch { /* non-fatal */ }
+            }
+
+            return editProvider.id;
+        }
+
+        // Create mode: POST new provider
         const newProvider = await edgeInfrastructureApi.createProvider({
             name,
             provider: effectiveProvider,
@@ -183,7 +226,7 @@ export function useConnectProvider(
         }
 
         return newProvider.id;
-    }, [name, effectiveProvider, credFields]);
+    }, [name, effectiveProvider, credFields, editProvider]);
 
     return {
         providers, refetch,

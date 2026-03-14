@@ -43050,4 +43050,4 @@ crypto-js/mode-ctr-gladman.js:
    *)
 */
 
-export { config, netlify_edge_lite_default as default };
+export default netlify_edge_lite_default;

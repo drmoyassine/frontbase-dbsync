@@ -110,6 +110,7 @@ async def upload_worker(
         "main_module": script_filename,
         "compatibility_date": "2024-12-01",
         "compatibility_flags": ["nodejs_compat"],
+        "observability": {"enabled": True, "head_sampling_rate": 1},
     }
     # Inject bindings (e.g., AI binding for GPU models)
     if bindings:

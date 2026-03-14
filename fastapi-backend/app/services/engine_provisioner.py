@@ -80,10 +80,27 @@ async def _cf_pre_deploy(ctx: dict, provider: EdgeProviderAccount, worker_name: 
     return f"https://{normalized_name}.{subdomain}"
 
 
+async def _deno_pre_deploy(ctx: dict, provider: EdgeProviderAccount, worker_name: str, db: Session) -> str:
+    """Deno Deploy: detect org subdomain and build the correct URL.
+    
+    Org tokens (ddo_...) → https://{slug}.{org}.deno.net
+    Personal tokens → https://{slug}.deno.dev
+    """
+    from ..services import deno_deploy_api
+
+    access_token = ctx.get('access_token', '')
+    org_sub = await deno_deploy_api.detect_org_subdomain(access_token)
+    url = deno_deploy_api.get_project_url(worker_name, org_sub)
+    if org_sub:
+        print(f"[Deno Deploy] Detected org subdomain: {org_sub} → {url}")
+    return url
+
+
 # Registry: provider_type → async pre-deploy hook
 # Extend this dict when adding new providers that need pre-deploy setup.
 PRE_DEPLOY_HOOKS: dict = {
     "cloudflare": _cf_pre_deploy,
+    "deno": _deno_pre_deploy,
 }
 
 

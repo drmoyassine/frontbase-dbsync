@@ -1,12 +1,10 @@
 /** Vercel Edge Functions — Full Adapter */
 import { fullApp } from '../engine/full.js';
 import { runStartupSync } from '../startup/sync.js';
-import { handle } from 'hono/vercel';
 import { setPlatform } from './shared.js';
 
 setPlatform('vercel-edge');
 let syncStarted = false;
-const wrapped = handle(fullApp);
 
 export const config = { runtime: 'edge' };
 export default async function handler(req: Request) {
@@ -17,5 +15,5 @@ export default async function handler(req: Request) {
             syncStarted = false;
         });
     }
-    return wrapped(req);
+    return fullApp.fetch(req);
 }

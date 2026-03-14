@@ -143,9 +143,10 @@ export const edgeInfrastructureApi = {
         if (!res.ok) throw new Error('Failed to update engine');
         return res.json();
     },
-    deleteEngine: async (id: string): Promise<void> => {
-        const res = await fetch(`${API_BASE}/api/edge-engines/${id}`, { method: 'DELETE' });
-        if (!res.ok) throw new Error('Failed to delete engine');
+    deleteEngine: async (id: string, deleteRemote = false): Promise<void> => {
+        const qs = deleteRemote ? '?delete_remote=true' : '';
+        const res = await fetch(`${API_BASE}/api/edge-engines/${id}${qs}`, { method: 'DELETE' });
+        if (!res.ok && res.status !== 204) throw new Error('Failed to delete engine');
     },
     redeployEngine: async (id: string): Promise<any> => {
         const res = await fetch(`${API_BASE}/api/edge-engines/${id}/redeploy`, { method: 'POST' });

@@ -44,6 +44,7 @@ interface ConnectProviderDialogProps {
     onOpenChange: (open: boolean) => void;
     onConnected?: (accountId: string) => void;
     hideDisplayName?: boolean;
+    editProvider?: { id: string; name: string; provider: string } | null;
 }
 
 // ============================================================================
@@ -57,8 +58,10 @@ export const ConnectProviderDialog: React.FC<ConnectProviderDialogProps> = ({
     onOpenChange,
     onConnected,
     hideDisplayName,
+    editProvider,
 }) => {
-    const state = useConnectProvider(lockedProvider, open);
+    const effectiveLockedProvider = editProvider?.provider || lockedProvider;
+    const state = useConnectProvider(effectiveLockedProvider, open, editProvider);
     const {
         providers, refetch,
         providerType, effectiveProvider, currentConfig, visibleProviders,
@@ -194,14 +197,18 @@ export const ConnectProviderDialog: React.FC<ConnectProviderDialogProps> = ({
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>
-                        {lockedProvider
-                            ? `Connect ${currentConfig.label}`
-                            : 'Connect Edge Provider'}
+                        {editProvider
+                            ? `Edit ${currentConfig.label} Account`
+                            : lockedProvider
+                                ? `Connect ${currentConfig.label}`
+                                : 'Connect Edge Provider'}
                     </DialogTitle>
                     <DialogDescription>
-                        {lockedProvider
-                            ? `Add your ${currentConfig.label} credentials.`
-                            : 'Authorize Frontbase to deploy workers on your behalf.'}
+                        {editProvider
+                            ? `Update credentials or display name for this ${currentConfig.label} connection.`
+                            : lockedProvider
+                                ? `Add your ${currentConfig.label} credentials.`
+                                : 'Authorize Frontbase to deploy workers on your behalf.'}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -213,8 +220,8 @@ export const ConnectProviderDialog: React.FC<ConnectProviderDialogProps> = ({
                         </Alert>
                     )}
 
-                    {/* Provider selector — hidden when locked */}
-                    {!lockedProvider && (
+                    {/* Provider selector — hidden when locked or editing */}
+                    {!lockedProvider && !editProvider && (
                         <div className="space-y-2">
                             <Label>Provider</Label>
                             <Select value={providerType} onValueChange={(val) => { handleProviderChange(val); resetDiscovery(); }}>
@@ -246,12 +253,12 @@ export const ConnectProviderDialog: React.FC<ConnectProviderDialogProps> = ({
 
                     {currentConfig.fields.map(field => (
                         <div key={field.key} className="space-y-2">
-                            <Label>{field.label}{field.required && ' *'}</Label>
+                            <Label>{field.label}{!editProvider && field.required && ' *'}</Label>
                             <Input
                                 type={field.type || 'text'}
                                 value={credFields[field.key] || ''}
                                 onChange={e => setCredFields(prev => ({ ...prev, [field.key]: e.target.value }))}
-                                placeholder={field.placeholder}
+                                placeholder={editProvider ? `Leave blank to keep current ${field.label.toLowerCase()}` : field.placeholder}
                             />
                         </div>
                     ))}
@@ -339,10 +346,14 @@ export const ConnectProviderDialog: React.FC<ConnectProviderDialogProps> = ({
                     </Button>
                     <Button
                         onClick={handleSave}
-                        disabled={!testResult?.success || isConnecting || (effectiveProvider === 'neon' && !selectedNeonProject)}
+                        disabled={editProvider
+                            ? isConnecting
+                            : (!testResult?.success || isConnecting || (effectiveProvider === 'neon' && !selectedNeonProject))}
                     >
                         {isConnecting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Cloud className="w-4 h-4 mr-2" />}
-                        {effectiveProvider === 'turso' ? 'Add Database' : 'Save Connection'}
+                        {editProvider
+                            ? 'Save Changes'
+                            : effectiveProvider === 'turso' ? 'Add Database' : 'Save Connection'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

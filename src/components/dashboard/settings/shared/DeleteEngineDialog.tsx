@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { Trash2, Loader2, AlertTriangle, Copy, Check as CheckIcon } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -19,6 +19,26 @@ const PROVIDER_LABELS: Record<string, string> = {
     deno: 'Deno Deploy',
     upstash: 'Upstash',
 };
+
+function CopyButton({ text }: { text: string }) {
+    const [copied, setCopied] = React.useState(false);
+    const handleCopy = (e: React.MouseEvent) => {
+        e.preventDefault();
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+    };
+    return (
+        <button
+            type="button"
+            onClick={handleCopy}
+            className="inline-flex items-center justify-center h-4 w-4 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+            title="Copy to clipboard"
+        >
+            {copied ? <CheckIcon className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+        </button>
+    );
+}
 
 export function DeleteEngineDialog({ engine, onDelete }: { engine: EdgeEngine; onDelete: (engine: EdgeEngine, alsoDeleteRemote: boolean) => void }) {
     const [open, setOpen] = useState(false);
@@ -86,8 +106,10 @@ export function DeleteEngineDialog({ engine, onDelete }: { engine: EdgeEngine; o
                                         </AlertDescription>
                                     </Alert>
                                     <div className="space-y-1.5">
-                                        <Label className="text-xs text-muted-foreground">
-                                            Type <span className="font-mono text-foreground font-medium">{engineDisplayName}</span> to confirm:
+                                        <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                            Type <span className="font-mono text-foreground font-medium">{engineDisplayName}</span>
+                                            <CopyButton text={engineDisplayName} />
+                                            to confirm:
                                         </Label>
                                         <Input
                                             value={confirmText}

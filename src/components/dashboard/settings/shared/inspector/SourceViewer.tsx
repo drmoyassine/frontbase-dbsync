@@ -71,6 +71,15 @@ export const SourceViewer: React.FC<SourceViewerProps> = ({
                         wordWrap: 'off',
                         automaticLayout: true,
                         padding: { top: 8, bottom: 8 },
+                        // Disable all auto-corrections
+                        quickSuggestions: false,
+                        suggestOnTriggerCharacters: false,
+                        parameterHints: { enabled: false },
+                        autoClosingBrackets: 'never',
+                        autoClosingQuotes: 'never',
+                        autoSurround: 'never',
+                        wordBasedSuggestions: 'off',
+                        acceptSuggestionOnCommitCharacter: false,
                     }}
                 />
             </div>

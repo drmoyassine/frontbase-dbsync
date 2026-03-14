@@ -13,28 +13,45 @@ export interface SourceSnapshotResponse {
     total_size: number;
 }
 
+/** Hierarchical file tree node for the inspector nav panel. */
+export interface HierNode {
+    rootFiles: string[];       // Files directly in this dir
+    subdirs: Map<string, HierNode>;
+}
+
 export interface InspectSettingsResponse {
     success: boolean;
     settings: {
-        compatibility_date: string;
-        compatibility_flags: string[];
-        usage_model: string;
-        bindings: Array<{ type: string; name: string;[key: string]: any }>;
-        routes: Array<{ type: string; pattern: string }>;
-        cron_triggers: Array<{ cron: string; created_on?: string }>;
-        placement: Record<string, any>;
-        tail_consumers: any[];
+        // CF-specific
+        compatibility_date?: string;
+        compatibility_flags?: string[];
+        usage_model?: string;
+        bindings?: Array<{ type: string; name: string;[key: string]: any }>;
+        routes?: Array<{ type: string; pattern: string }>;
+        cron_triggers?: Array<{ cron: string; created_on?: string }>;
+        placement?: Record<string, any>;
+        tail_consumers?: any[];
+        // Supabase-specific
+        verify_jwt?: boolean;
+        entrypoint_path?: string;
+        status?: string;
+        version?: number;
+        import_map?: boolean;
+        import_map_path?: string;
+        // Generic catch-all
+        [key: string]: any;
     };
 }
 
 export interface InspectSecretsResponse {
     success: boolean;
     secrets: string[];
+    imported_notice?: string;
 }
 
 // ─── Navigation Types ───────────────────────────────────────────────────────
 
-export type NavSection = 'files' | 'secrets' | 'settings';
+export type NavSection = 'files' | 'secrets' | 'settings' | 'logs';
 export type SelectedItem = { section: NavSection; key: string };
 
 // ─── Props Types ────────────────────────────────────────────────────────────
@@ -131,5 +148,15 @@ export async function inspectFetch<T>(endpoint: string, providerId: string, work
     });
     const data = await resp.json();
     if (!resp.ok || !data.success) throw new Error(data.detail || `Failed to fetch ${endpoint}`);
+    return data;
+}
+
+/** Engine-based inspect fetch — works for ALL providers (CF, Supabase, Deno). */
+export async function engineInspectFetch<T>(engineId: string, panel: 'source' | 'settings' | 'secrets'): Promise<T> {
+    const resp = await fetch(`${API_BASE}/api/edge-engines/${engineId}/inspect/${panel}`);
+    const data = await resp.json();
+    // If provider doesn't support this panel, return the data for the caller to handle
+    if (data.supported === false) throw new Error(data.detail || `${panel} not supported for this provider`);
+    if (!resp.ok || !data.success) throw new Error(data.detail || `Failed to fetch ${panel}`);
     return data;
 }

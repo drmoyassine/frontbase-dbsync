@@ -56,9 +56,9 @@ async def test_connection(url: str, provider: str) -> TestConnectionResult:
         )
 
 
-def extract_cf_creds(engine: EdgeEngine, db: Session = None) -> dict:
+def extract_cf_creds(engine: EdgeEngine, db: "Session | None" = None) -> dict:
     """Extract Cloudflare credentials and worker name from an EdgeEngine (DB-only, no I/O)."""
-    if not engine.edge_provider_id:
+    if not str(engine.edge_provider_id or ""):
         raise HTTPException(400, "No Cloudflare API token stored on the associated provider account")
 
     from ..core.credential_resolver import get_provider_context_by_id
@@ -78,7 +78,7 @@ def extract_cf_creds(engine: EdgeEngine, db: Session = None) -> dict:
 
     # Extract worker name from engine_config or URL
     worker_name = str(engine.name)  # Fallback
-    if engine.engine_config:
+    if str(engine.engine_config or ""):
         conf = json.loads(str(engine.engine_config))
         worker_name = conf.get("worker_name", worker_name)
 
@@ -133,7 +133,7 @@ async def delete_remote_resource(engine: EdgeEngine, db: Session) -> None:
     Reads the provider type from the linked EdgeProviderAccount and dispatches
     to the correct provider-specific delete API.
     """
-    if not engine.edge_provider_id:
+    if not str(engine.edge_provider_id or ""):
         raise HTTPException(400, "No provider account linked to this engine")
 
     provider = db.query(EdgeProviderAccount).filter(
@@ -162,19 +162,18 @@ async def delete_remote_resource(engine: EdgeEngine, db: Session) -> None:
         function_name = cfg.get("function_name")
         if not all([access_token, project_ref, function_name]):
             raise HTTPException(400, "Missing Supabase credentials or function_name")
-        await supabase_deploy_api.delete_function(access_token, project_ref, function_name)
+        await supabase_deploy_api.delete_function(str(access_token), str(project_ref), str(function_name))
 
     elif provider_type == "vercel":
         from ..services import vercel_deploy_api
         api_token = ctx.get("api_token")
-        deployment_id = cfg.get("deployment_id")
+        project_name = cfg.get("project_name")
         team_id = ctx.get("team_id")
         if not api_token:
             raise HTTPException(400, "Missing Vercel api_token")
-        if deployment_id:
-            await vercel_deploy_api.delete_deployment(api_token, deployment_id, team_id)
-        else:
-            print(f"[Delete] Vercel engine has no deployment_id in config — skipping remote delete")
+        if not project_name:
+            raise HTTPException(400, "Missing project_name in engine config")
+        await vercel_deploy_api.delete_project(api_token, project_name, team_id)
 
     elif provider_type == "netlify":
         from ..services import netlify_deploy_api
@@ -187,7 +186,7 @@ async def delete_remote_resource(engine: EdgeEngine, db: Session) -> None:
     elif provider_type == "deno":
         from ..services import deno_deploy_api
         access_token = ctx.get("access_token")
-        project_name = cfg.get("project_name")
+        project_name = cfg.get("project_name") or cfg.get("worker_name")
         if not access_token or not project_name:
             raise HTTPException(400, "Missing Deno Deploy credentials or project_name")
         await deno_deploy_api.delete_project(access_token, project_name)

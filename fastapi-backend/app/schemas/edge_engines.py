@@ -19,6 +19,7 @@ class EdgeEngineCreate(BaseModel):
     edge_queue_id: Optional[str] = None
     engine_config: Optional[dict] = None  # Engine-specific metadata (e.g. worker_name)
     is_active: bool = Field(default=True)
+    is_imported: bool = Field(default=False)
 
 
 class EdgeEngineUpdate(BaseModel):
@@ -32,6 +33,7 @@ class EdgeEngineUpdate(BaseModel):
     edge_queue_id: Optional[str] = None
     engine_config: Optional[dict] = None
     is_active: Optional[bool] = None
+    is_imported: Optional[bool] = None
 
 
 class GPUModelSummary(BaseModel):
@@ -63,6 +65,7 @@ class EdgeEngineResponse(BaseModel):
     gpu_model: Optional[GPUModelSummary] = None
     is_active: bool
     is_system: bool = False
+    is_imported: bool = False
     bundle_checksum: Optional[str] = None
     config_checksum: Optional[str] = None
     last_deployed_at: Optional[str] = None

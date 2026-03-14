@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Cloud, Plus, Trash2, Loader2, Shield, Server, Zap, ChevronDown, ChevronRight, Database, CheckCircle2, XCircle } from 'lucide-react';
+import { Cloud, Plus, Trash2, Loader2, Shield, Server, Zap, ChevronDown, ChevronRight, Database, CheckCircle2, XCircle, Pencil } from 'lucide-react';
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
@@ -10,12 +10,15 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useEdgeProviders, edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
 import { API_BASE, PROVIDER_ICONS } from './edgeConstants';
-import { ImportCloudflareWorkers } from './ImportCloudflareWorkers';
+
 import { ConnectProviderDialog } from './ConnectProviderDialog';
 
 export function EdgeProvidersSection() {
     const { data: providers = [], isLoading, refetch } = useEdgeProviders();
     const [connectDialogOpen, setConnectDialogOpen] = useState(false);
+
+    // Edit provider state
+    const [editProvider, setEditProvider] = useState<{ id: string; name: string; provider: string } | null>(null);
 
     // Re-test state for existing providers
     const [retestingId, setRetestingId] = useState<string | null>(null);
@@ -89,6 +92,15 @@ export function EdgeProvidersSection() {
                     onOpenChange={setConnectDialogOpen}
                     onConnected={() => {
                         refetch();
+                    }}
+                />
+                <ConnectProviderDialog
+                    open={!!editProvider}
+                    onOpenChange={(o) => { if (!o) setEditProvider(null); }}
+                    editProvider={editProvider}
+                    onConnected={() => {
+                        refetch();
+                        setEditProvider(null);
                     }}
                 />
             </CardHeader>
@@ -199,6 +211,18 @@ export function EdgeProvidersSection() {
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
+                                            {/* Edit credentials */}
+                                            {!isTurso && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="text-muted-foreground hover:text-primary"
+                                                    onClick={() => setEditProvider({ id: p.id, name: p.name, provider: p.provider })}
+                                                    title="Edit credentials"
+                                                >
+                                                    <Pencil className="w-4 h-4" />
+                                                </Button>
+                                            )}
                                             {/* Re-test connection (non-Turso) */}
                                             {!isTurso && (
                                                 <Button
@@ -215,9 +239,7 @@ export function EdgeProvidersSection() {
                                                     }
                                                 </Button>
                                             )}
-                                            {p.provider === 'cloudflare' && p.is_active && (
-                                                <ImportCloudflareWorkers providerId={p.id} />
-                                            )}
+
                                             <AlertDialog>
                                                 <AlertDialogTrigger asChild>
                                                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive">

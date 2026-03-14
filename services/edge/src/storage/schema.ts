@@ -87,6 +87,20 @@ export const executionsTable = sqliteTable('executions', {
 });
 
 // =============================================================================
+// Edge Logs (persisted runtime logs from provider APIs)
+// =============================================================================
+
+export const edgeLogsTable = sqliteTable('edge_logs', {
+    id: text('id').primaryKey(),
+    timestamp: text('timestamp').notNull(),
+    level: text('level').notNull(),          // debug | info | warn | error
+    message: text('message').notNull(),
+    source: text('source').default('runtime'),  // runtime | request | error | system
+    metadata: text('metadata'),              // JSON string — provider-specific extras
+    createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+// =============================================================================
 // Inferred Types
 // =============================================================================
 
@@ -94,3 +108,5 @@ export type NewPublishedPage = typeof publishedPages.$inferInsert;
 export type PublishedPageRow = typeof publishedPages.$inferSelect;
 export type WorkflowRow = typeof workflowsTable.$inferSelect;
 export type ExecutionRow = typeof executionsTable.$inferSelect;
+export type EdgeLogRow = typeof edgeLogsTable.$inferSelect;
+export type NewEdgeLog = typeof edgeLogsTable.$inferInsert;

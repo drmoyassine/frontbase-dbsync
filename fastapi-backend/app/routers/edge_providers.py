@@ -206,7 +206,125 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
             except Exception as e:
                 print(f"Warning: Could not auto-fetch Supabase API keys: {e}")
 
+    # ── Plan tier detection ──────────────────────────────────────────────
+    # Detect the user's plan tier at connect time and persist in metadata.
+    # Used by log persistence to determine retention limits.
+    await _detect_and_store_plan_tier(provider, payload, db)
+
     return _provider_response(provider)
+
+
+async def _detect_and_store_plan_tier(
+    provider: EdgeProviderAccount,
+    payload: EdgeProviderAccountCreate,
+    db: Session,
+) -> None:
+    """Detect provider plan tier and store in provider_metadata.plan_tier."""
+    import json
+    import httpx
+
+    provider_type = payload.provider
+    creds = payload.provider_credentials or {}
+    plan_tier: str | None = None
+
+    try:
+        if provider_type == "supabase":
+            plan_tier = await _detect_supabase_plan(creds)
+        elif provider_type == "cloudflare":
+            plan_tier = await _detect_cf_plan(creds)
+        elif provider_type == "deno":
+            plan_tier = "free"  # No plan API — default to free
+    except Exception as e:
+        print(f"[Plan Detection] Warning: {provider_type} plan detection failed: {e}")
+
+    if plan_tier:
+        existing_meta = {}
+        if provider.provider_metadata:
+            try:
+                existing_meta = json.loads(str(provider.provider_metadata))
+            except (json.JSONDecodeError, TypeError):
+                pass
+        existing_meta["plan_tier"] = plan_tier
+        provider.provider_metadata = json.dumps(existing_meta)  # type: ignore[assignment]
+        db.commit()
+        print(f"[Plan Detection] {provider_type}: detected plan_tier={plan_tier}")
+
+
+async def _detect_supabase_plan(creds: dict) -> str | None:
+    """Detect Supabase plan via GET /v1/organizations/{org_id}.
+
+    Returns: 'free', 'pro', 'team', or 'enterprise'.
+    """
+    import httpx
+
+    access_token = creds.get("access_token", "")
+    if not access_token:
+        return None
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        # List orgs to find org_id
+        resp = await client.get(
+            "https://api.supabase.com/v1/organizations",
+            headers=headers,
+        )
+        if resp.status_code != 200:
+            return None
+        orgs = resp.json()
+        if not orgs:
+            return None
+
+        # Get the first org's details (includes plan field)
+        org_id = orgs[0].get("id", "")
+        if not org_id:
+            return None
+
+        resp2 = await client.get(
+            f"https://api.supabase.com/v1/organizations/{org_id}",
+            headers=headers,
+        )
+        if resp2.status_code != 200:
+            return None
+        return resp2.json().get("plan", "free")
+
+
+async def _detect_cf_plan(creds: dict) -> str | None:
+    """Detect Cloudflare Workers plan via account-settings.
+
+    Returns: 'free' or 'paid' (based on default_usage_model).
+    """
+    import httpx
+
+    api_token = creds.get("api_token", "")
+    if not api_token:
+        return None
+
+    headers = {"Authorization": f"Bearer {api_token}"}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        # Get account ID first
+        resp = await client.get(
+            "https://api.cloudflare.com/client/v4/accounts",
+            headers=headers,
+        )
+        if resp.status_code != 200:
+            return None
+        accounts = resp.json().get("result", [])
+        if not accounts:
+            return None
+        account_id = accounts[0].get("id", "")
+
+        # Get Workers account settings (usage model = plan indicator)
+        resp2 = await client.get(
+            f"https://api.cloudflare.com/client/v4/accounts/{account_id}/workers/account-settings",
+            headers=headers,
+        )
+        if resp2.status_code != 200:
+            return None
+        usage_model = resp2.json().get("result", {}).get("default_usage_model", "")
+        # "standard" or "bundled" = paid, otherwise free
+        if usage_model in ("standard", "bundled"):
+            return "paid"
+        return "free"
 
 
 @router.put("/{provider_id}")
@@ -744,3 +862,177 @@ async def _list_postgres_tables(ctx: dict, provider_type: str) -> list:
             status_code=502,
             detail=f"Failed to query PostgreSQL: {str(e)[:200]}"
         )
+
+
+# =============================================================================
+# List Engines — generic multi-provider engine listing
+# =============================================================================
+
+async def _list_cf_engines(creds: dict) -> list[dict]:
+    """List Cloudflare Workers using existing cloudflare_api helper."""
+    from ..services import cloudflare_api
+    token = creds.get("api_token", "")
+    account_id = creds.get("account_id", "")
+    if not token or not account_id:
+        return []
+    workers = cloudflare_api.list_workers(token, account_id)
+    return [
+        {
+            "name": w["name"],
+            "url": w.get("url", ""),
+            "provider": "cloudflare",
+            "deployed_at": w.get("modified_on", ""),
+            "created_at": w.get("created_on", ""),
+        }
+        for w in workers
+    ]
+
+
+async def _list_supabase_engines(creds: dict) -> list[dict]:
+    """List Supabase Edge Functions via Management API."""
+    import httpx
+    token = creds.get("access_token", "")
+    project_ref = creds.get("project_ref", "")
+    if not token or not project_ref:
+        return []
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            f"https://api.supabase.com/v1/projects/{project_ref}/functions",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    if resp.status_code != 200:
+        return []
+    functions = resp.json()
+    if not isinstance(functions, list):
+        return []
+    return [
+        {
+            "name": f.get("name", f.get("slug", "")),
+            "url": f"https://{project_ref}.supabase.co/functions/v1/{f.get('slug', '')}",
+            "provider": "supabase",
+            "deployed_at": _epoch_to_iso(f.get("updated_at")),
+            "created_at": _epoch_to_iso(f.get("created_at")),
+        }
+        for f in functions
+    ]
+
+
+async def _list_deno_engines(creds: dict) -> list[dict]:
+    """List Deno Deploy apps via v2 API."""
+    import httpx
+    token = creds.get("access_token", "")
+    if not token:
+        return []
+    apps: list[dict] = []
+    cursor: str | None = None
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # Paginate up to 5 pages (150 apps max)
+        for _ in range(5):
+            params: dict[str, Any] = {"limit": 30}
+            if cursor:
+                params["cursor"] = cursor
+            resp = await client.get(
+                "https://api.deno.com/v2/apps",
+                headers={"Authorization": f"Bearer {token}"},
+                params=params,
+            )
+            if resp.status_code != 200:
+                break
+            page = resp.json()
+            if not isinstance(page, list) or len(page) == 0:
+                break
+            for a in page:
+                slug = a.get("slug", "")
+                apps.append({
+                    "name": slug,
+                    "url": f"https://{slug}.deno.dev",
+                    "provider": "deno",
+                    "deployed_at": a.get("updated_at", ""),
+                    "created_at": a.get("created_at", ""),
+                })
+            # Check Link header for next cursor
+            link = resp.headers.get("link", "")
+            if 'rel="next"' not in link:
+                break
+            import re
+            m = re.search(r'cursor=([^&>]+)', link)
+            cursor = m.group(1) if m else None
+            if not cursor:
+                break
+    return apps
+
+
+def _epoch_to_iso(val: Any) -> str:
+    """Convert Supabase epoch (seconds, millis, or micros) to ISO string, or pass through strings."""
+    if val is None:
+        return ""
+    if isinstance(val, (int, float)):
+        ts = float(val)
+        # Supabase may return seconds, milliseconds, or microseconds
+        if ts > 1e15:       # microseconds
+            ts = ts / 1e6
+        elif ts > 1e12:     # milliseconds
+            ts = ts / 1e3
+        try:
+            return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).isoformat()
+        except (OSError, OverflowError, ValueError):
+            return str(val)
+    return str(val)
+
+
+async def _list_vercel_engines(creds: dict) -> list[dict]:
+    """List Vercel projects via REST API."""
+    from ..services import vercel_deploy_api
+    token = creds.get("api_token", "")
+    team_id = creds.get("team_id")
+    if not token:
+        return []
+    projects = await vercel_deploy_api.list_projects(token, team_id)
+    return [
+        {
+            "name": p.get("name", ""),
+            "url": f"https://{p.get('name', '')}.vercel.app",
+            "provider": "vercel",
+            "deployed_at": _epoch_to_iso(p.get("updatedAt")),
+            "created_at": _epoch_to_iso(p.get("createdAt")),
+        }
+        for p in projects
+    ]
+
+
+_ENGINE_LISTERS: dict[str, Any] = {
+    "cloudflare": _list_cf_engines,
+    "supabase": _list_supabase_engines,
+    "deno": _list_deno_engines,
+    "vercel": _list_vercel_engines,
+}
+
+
+@router.post("/{account_id}/list-engines")
+async def list_engines_for_provider(account_id: str, db: Session = Depends(get_db)):
+    """List engines/functions/apps from a connected edge provider.
+
+    Dispatches to provider-specific listing API and returns unified shape.
+    """
+    from ..core.security import get_provider_creds
+
+    provider_row = db.query(EdgeProviderAccount).filter(
+        EdgeProviderAccount.id == account_id
+    ).first()
+    if not provider_row:
+        raise HTTPException(status_code=404, detail="Provider account not found")
+
+    provider_type = str(provider_row.provider)
+    lister = _ENGINE_LISTERS.get(provider_type)
+    if not lister:
+        return {"success": False, "detail": f"Engine listing not supported for {provider_type}", "engines": []}
+
+    creds = get_provider_creds(account_id, db)
+    if not creds:
+        return {"success": False, "detail": "No credentials stored for this account", "engines": []}
+
+    try:
+        engines = await lister(creds)
+        return {"success": True, "engines": engines}
+    except Exception as e:
+        return {"success": False, "detail": f"Failed to list engines: {str(e)[:300]}", "engines": []}

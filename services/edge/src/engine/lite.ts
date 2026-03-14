@@ -41,6 +41,7 @@ import { webhookRoute } from '../routes/webhook.js';
 import { executionsRoute } from '../routes/executions.js';
 import { updateRoute } from '../routes/update.js';
 import { cacheRoute } from '../routes/cache.js';
+import { edgeLogsRoute } from '../routes/edge-logs.js';
 // ai.ts still provides setAIBinding/setGPUModels/getGPUModels used by adapters + openai.ts
 import { openaiRoute } from '../routes/openai.js';
 import { apiKeyAuth, aiApiKeyAuth } from '../middleware/auth.js';
@@ -130,6 +131,7 @@ export function createLiteApp() {
     app.route('/api/executions', executionsRoute);
     app.route('/api/update', updateRoute);
     app.route('/api/cache', cacheRoute);
+    app.route('/api/edge-logs', edgeLogsRoute);
 
     // OpenAI-compatible AI routes (secured by API key auth)
     app.use('/v1/*', aiApiKeyAuth);

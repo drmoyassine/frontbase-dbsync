@@ -54,7 +54,8 @@ async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_t
     if actual_slug != project_name:
         engine_cfg['project_name'] = actual_slug
         engine.engine_config = json.dumps(engine_cfg)  # type: ignore[assignment]
-        engine.url = get_project_url(actual_slug)  # type: ignore[assignment]
+        org_sub = await detect_org_subdomain(access_token)
+        engine.url = get_project_url(actual_slug, org_sub)  # type: ignore[assignment]
         db.commit()
         print(f"[Deno Deploy] Slug changed: {project_name} -> {actual_slug}")
 
@@ -129,8 +130,70 @@ async def delete_project(access_token: str, project_name: str) -> None:
         raise HTTPException(400, f"Deno Deploy app delete failed: {resp.text[:300]}")
 
 
-def get_project_url(project_name: str) -> str:
-    """Build the public URL for a Deno Deploy app."""
+async def detect_org_subdomain(access_token: str) -> str | None:
+    """Detect the org subdomain for a Deno Deploy access token.
+    
+    Org tokens (ddo_...) create apps at {slug}.{org-slug}.deno.net.
+    Personal tokens create apps at {slug}.deno.dev.
+    
+    Strategy: List existing apps. If any exist, try a health-check on
+    {slug}.deno.dev first. If it fails or the app has no deployments,
+    check if the token prefix indicates an org token and prompt for
+    the org slug. As a fallback, we probe for the working URL.
+    """
+    # Check token prefix: ddo_ = org token, ddp_ = personal  
+    if not access_token.startswith('ddo_'):
+        return None  # Personal token, use .deno.dev
+    
+    # For org tokens, try to detect the subdomain by listing apps
+    # and testing one that has been deployed
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        resp = await client.get(
+            f"{DENO_DEPLOY_API}/apps",
+            headers=_headers(access_token),
+            timeout=10.0,
+        )
+        if resp.status_code != 200:
+            return None
+        
+        apps = resp.json()
+        if not apps:
+            return None
+        
+        # Try the first app: hit {slug}.deno.dev/api/health
+        # If it redirects or returns, we can detect the actual domain
+        test_slug = apps[0].get('slug', '')
+        if not test_slug:
+            return None
+        
+        try:
+            # Try health check on deno.dev
+            probe = await client.get(
+                f"https://{test_slug}.deno.dev/",
+                timeout=5.0,
+            )
+            # Check the final URL after redirects
+            final_host = str(probe.url).split('//')[1].split('/')[0] if str(probe.url).startswith('http') else ''
+            if '.deno.net' in final_host:
+                # Extract org subdomain: {slug}.{org}.deno.net → org
+                parts = final_host.split('.')
+                if len(parts) >= 3:
+                    # parts = [slug, org, 'deno', 'net']
+                    return parts[1]
+        except Exception:
+            pass
+    
+    return None
+
+
+def get_project_url(project_name: str, org_subdomain: str | None = None) -> str:
+    """Build the public URL for a Deno Deploy app.
+    
+    Org accounts: https://{slug}.{org}.deno.net
+    Personal accounts: https://{slug}.deno.dev
+    """
+    if org_subdomain:
+        return f"https://{project_name}.{org_subdomain}.deno.net"
     return f"https://{project_name}.deno.dev"
 
 

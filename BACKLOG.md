@@ -26,6 +26,30 @@
 
 - [ ] 🔧 **Split `FileBrowser/index.tsx`** (818L) — Extract file tree rendering, toolbar, and file actions into subcomponents (`FileTree.tsx`, `FileActions.tsx`, `FileUploader.tsx`). Single component currently handles tree state, upload logic, delete actions, and toolbar rendering. See `performance-optimization.md` §1.
 
+- [ ] ✨ **SSR/HTML Support for Supabase Edge Full Bundle** — Supabase Edge Functions rewrite `Content-Type: text/html` → `text/plain` with `x-content-type-options: nosniff`, blocking HTML rendering. Automations (webhooks, APIs) work fine since they return `application/json`. Full SSR requires a reverse proxy (e.g., Cloudflare) to fix the Content-Type.
+
+  **Bundle changes needed:**
+  - Build `supabase-edge` (Full) bundle via `tsup.supabase-edge.ts` (already exists, imports `fullApp` + SSR routes)
+  - SSR renderer must output **absolute CDN URLs** for static assets when `platform === 'supabase-edge'`:
+    - `hydrate.js` → host on Supabase Storage (public bucket) or external CDN, NOT relative `/static/react/hydrate.js`
+    - Favicon → external CDN URL, NOT `/static/icon.png`
+    - CSS → already inlined via `cssBundle` (no change needed)
+  - Publish pipeline: when target is Supabase, upload `hydrate.js` to Supabase Storage and inject the public URL into SSR templates
+
+  **Reverse proxy setup (user-configured, Frontbase provides instructions):**
+  - Cloudflare Origin Rule: resolve `example.com` to `project.supabase.co`, override Host Header
+  - Cloudflare URL Rewrite Rule: prepend `/functions/v1/fn-name` to path
+  - Cloudflare Response Header Rule: when path does NOT start with `/api/`, set `Content-Type: text/html; charset=UTF-8` + remove `x-content-type-options`
+  - All 3 rule types available on **Cloudflare free tier** (10 rules each)
+
+  **Edge Inspector UI:**
+  - For Supabase engines, show "SSR Setup Guide" with pre-filled rule values (project ref, function name)
+  - Copy-paste friendly rule configs
+  - "Test SSR" button: hits user's custom domain, verifies `Content-Type: text/html` + `<!DOCTYPE html>` in body
+
+  **Alternative paths:**
+  - Supabase Pro + custom domain lifts the `text/html` restriction entirely (no proxy needed)
+  - Self-hosted Supabase may not enforce the restriction
 ---
 
 ## ⚡ Automations

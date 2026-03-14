@@ -25,7 +25,7 @@ import uuid
 
 from ..database.config import get_db
 from sqlalchemy.orm import Session
-from ..models.models import EdgeEngine
+from ..models.models import EdgeEngine, EdgeProviderAccount
 
 from ..schemas.edge_engines import (
     EdgeEngineCreate, EdgeEngineUpdate, EdgeEngineResponse,
@@ -97,6 +97,7 @@ async def create_edge_engine(payload: EdgeEngineCreate, db: Session = Depends(ge
         edge_queue_id=payload.edge_queue_id,
         engine_config=json.dumps(payload.engine_config) if payload.engine_config else None,
         is_active=payload.is_active,
+        is_imported=payload.is_imported,
         created_at=now,
         updated_at=now,
     )
@@ -130,6 +131,29 @@ async def update_edge_engine(engine_id: str, payload: EdgeEngineUpdate, db: Sess
     db.commit()
     db.refresh(engine)
     return serialize_engine(engine)
+
+
+@router.delete("/{engine_id}", status_code=204)
+async def delete_edge_engine(
+    engine_id: str,
+    delete_remote: bool = Query(False, description="Also delete from remote provider"),
+    db: Session = Depends(get_db),
+):
+    """Delete an edge engine from Frontbase, optionally tearing down the remote deployment."""
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if not engine:
+        raise HTTPException(status_code=404, detail="Edge engine not found")
+
+    # Remote teardown (multi-provider)
+    if delete_remote and engine.edge_provider_id:
+        try:
+            await engine_test.delete_remote_resource(engine, db)
+        except Exception as e:
+            # Log but continue with local delete
+            print(f"[Delete] Remote teardown failed for {engine.name}: {e}")
+
+    db.delete(engine)
+    db.commit()
 
 
 # =============================================================================
@@ -443,3 +467,266 @@ async def list_active_engines_by_scope(scope: Literal["pages", "automations", "f
         }
         for e in engines
     ]
+
+
+# =============================================================================
+# Edge Logs — runtime log fetching, persistence config, batch sync
+# =============================================================================
+
+@router.get("/{engine_id}/logs")
+async def get_engine_logs(
+    engine_id: str,
+    limit: int = Query(default=50, ge=1, le=500),
+    cursor: str | None = Query(default=None),
+    level: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Fetch runtime logs from the engine's provider.
+
+    Returns normalized UnifiedLogEntry objects with cursor pagination.
+    Results are cached L1 (60s in-memory) and L2 (5 min Redis).
+    """
+    from ..services.edge_logs import fetch_logs
+    from ..core.credential_resolver import get_provider_context_by_id
+
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if not engine:
+        raise HTTPException(status_code=404, detail="Edge engine not found")
+    if not engine.edge_provider_id:
+        raise HTTPException(status_code=400, detail="Engine has no linked provider account")
+
+    ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
+    provider_type = ctx.get("provider_type", "")
+
+    # Determine app name (slug) from engine_config — provider-specific key
+    engine_cfg = _get_engine_config(engine)
+    if provider_type == "deno":
+        engine_name = engine_cfg.get("project_name", str(engine.name or ""))
+    elif provider_type == "cloudflare":
+        engine_name = engine_cfg.get("worker_name", str(engine.name or ""))
+    elif provider_type == "vercel":
+        engine_name = engine_cfg.get("project_name", str(engine.name or ""))
+    else:
+        engine_name = str(engine.name or "")
+
+    # Resolve Redis URL for L2 cache (from engine's connected cache)
+    redis_url = _get_engine_redis_url(engine, db)
+
+    result = await fetch_logs(
+        provider_type=provider_type,
+        creds=ctx,
+        engine_name=engine_name,
+        limit=limit,
+        cursor=cursor,
+        level=level,
+        redis_url=redis_url,
+        engine_id=engine_id,
+    )
+
+    return {
+        "logs": result.logs,
+        "next_cursor": result.next_cursor,
+        "provider": result.provider,
+        "cached": result.cached,
+    }
+
+
+@router.post("/{engine_id}/logs/sync")
+async def sync_engine_logs(engine_id: str, db: Session = Depends(get_db)):
+    """Batch-sync logs from provider to the edge state DB.
+
+    Triggered by QStash cron. Fetches all logs since last sync,
+    pushes them to the edge engine's POST /api/edge-logs endpoint.
+    """
+    import httpx
+    from ..services.edge_logs import fetch_logs
+    from ..core.credential_resolver import get_provider_context_by_id
+
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if not engine:
+        raise HTTPException(status_code=404, detail="Edge engine not found")
+    if not engine.edge_provider_id:
+        raise HTTPException(status_code=400, detail="Engine has no linked provider account")
+    if not engine.url:
+        raise HTTPException(status_code=400, detail="Engine has no URL configured")
+
+    # Check persistence is enabled
+    config = _get_engine_config(engine)
+    log_config = config.get("log_persistence", {})
+    if not log_config.get("enabled"):
+        return {"synced": 0, "detail": "Log persistence not enabled"}
+
+    ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
+    provider_type = ctx.get("provider_type", "")
+    # Resolve provider-specific slug from engine_config
+    engine_cfg = _get_engine_config(engine)
+    if provider_type == "deno":
+        engine_name = engine_cfg.get("project_name", str(engine.name or ""))
+    elif provider_type == "cloudflare":
+        engine_name = engine_cfg.get("worker_name", str(engine.name or ""))
+    elif provider_type == "vercel":
+        engine_name = engine_cfg.get("project_name", str(engine.name or ""))
+    else:
+        engine_name = str(engine.name or "")
+
+    # Fetch up to 1000 logs (max batch)
+    result = await fetch_logs(
+        provider_type=provider_type,
+        creds=ctx,
+        engine_name=engine_name,
+        limit=500,
+        redis_url=None,  # Skip cache for sync — we want fresh data
+        engine_id=engine_id,
+    )
+
+    if not result.logs:
+        return {"synced": 0, "detail": "No new logs from provider"}
+
+    # Push to edge engine's /api/edge-logs
+    engine_url = str(engine.url).rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{engine_url}/api/edge-logs",
+                json={"logs": result.logs},
+            )
+            if resp.status_code not in (200, 201):
+                return {"synced": 0, "detail": f"Edge push failed: {resp.status_code}"}
+    except Exception as e:
+        return {"synced": 0, "detail": f"Edge push error: {str(e)[:200]}"}
+
+    # Update last_sync_at
+    log_config["last_sync_at"] = datetime.utcnow().isoformat()
+    config["log_persistence"] = log_config
+    engine.engine_config = json.dumps(config)  # type: ignore[assignment]
+    engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+    db.commit()
+
+    return {"synced": len(result.logs), "detail": "Logs synced to edge DB"}
+
+
+@router.patch("/{engine_id}/logs/config")
+async def update_log_config(
+    engine_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+):
+    """Enable/disable log persistence and configure sync interval.
+
+    Payload: {
+        "enabled": bool,
+        "interval_hours": int,  # must be ≤ provider retention
+    }
+
+    Prerequisites: engine must have edge_db_id, edge_cache_id, edge_queue_id.
+    """
+    from ..services.edge_logs import get_retention_hours
+
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if not engine:
+        raise HTTPException(status_code=404, detail="Edge engine not found")
+
+    enabled = payload.get("enabled")
+    interval_hours = payload.get("interval_hours")
+
+    # Validate prerequisites if enabling
+    if enabled:
+        missing = []
+        if not engine.edge_db_id:
+            missing.append("Edge Database")
+        if not engine.edge_cache_id:
+            missing.append("Edge Cache")
+        if not engine.edge_queue_id:
+            missing.append("Edge Queue")
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Log persistence requires: {', '.join(missing)}. Connect them in engine settings.",
+            )
+
+    # Validate interval against retention
+    if interval_hours is not None and engine.edge_provider_id:
+        from ..core.credential_resolver import get_provider_context_by_id
+        ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
+        provider_type = ctx.get("provider_type", "")
+        plan_tier = ctx.get("_metadata", {}).get("plan_tier", "free")
+        retention = get_retention_hours(provider_type, plan_tier)
+        if interval_hours > retention:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Interval ({interval_hours}h) exceeds provider log retention ({retention}h). "
+                       f"Set a shorter interval.",
+            )
+
+    # Update config
+    config = _get_engine_config(engine)
+    log_config = config.get("log_persistence", {})
+    if enabled is not None:
+        log_config["enabled"] = enabled
+    if interval_hours is not None:
+        log_config["interval_hours"] = interval_hours
+    config["log_persistence"] = log_config
+
+    engine.engine_config = json.dumps(config)  # type: ignore[assignment]
+    engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+    db.commit()
+
+    # TODO: Register/deregister QStash schedule when toggling enabled
+    # This will be wired up when QStash integration is added
+
+    return {"log_persistence": log_config}
+
+
+@router.get("/{engine_id}/logs/retention")
+async def get_log_retention(engine_id: str, db: Session = Depends(get_db)):
+    """Get the provider's log retention period and current plan tier."""
+    from ..services.edge_logs import get_retention_hours
+
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if not engine:
+        raise HTTPException(status_code=404, detail="Edge engine not found")
+    if not engine.edge_provider_id:
+        raise HTTPException(status_code=400, detail="Engine has no linked provider account")
+
+    from ..core.credential_resolver import get_provider_context_by_id
+    ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
+    provider_type = ctx.get("provider_type", "")
+    plan_tier = ctx.get("_metadata", {}).get("plan_tier", "free")
+    retention = get_retention_hours(provider_type, plan_tier)
+
+    config = _get_engine_config(engine)
+    log_config = config.get("log_persistence", {})
+
+    return {
+        "provider": provider_type,
+        "plan_tier": plan_tier,
+        "retention_hours": retention,
+        "log_persistence": log_config,
+        "prerequisites_met": bool(engine.edge_db_id and engine.edge_cache_id and engine.edge_queue_id),
+    }
+
+
+# ── Helpers ───────────────────────────────────────────────────────────
+
+def _get_engine_config(engine: EdgeEngine) -> dict:
+    """Parse engine_config JSON, returning empty dict on failure."""
+    if not engine.engine_config:
+        return {}
+    try:
+        return json.loads(str(engine.engine_config))
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _get_engine_redis_url(engine: EdgeEngine, db: Session) -> str | None:
+    """Resolve Redis URL from engine's connected edge cache."""
+    if not engine.edge_cache_id:
+        return None
+    try:
+        from ..models.models import EdgeCache
+        cache = db.query(EdgeCache).filter(EdgeCache.id == str(engine.edge_cache_id)).first()
+        if cache and cache.connection_url:
+            return str(cache.connection_url)
+    except Exception:
+        pass
+    return None

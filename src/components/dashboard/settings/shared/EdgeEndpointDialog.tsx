@@ -80,8 +80,8 @@ export const EdgeEndpointDialog: React.FC<EdgeEndpointDialogProps> = ({ engineNa
                     {/* Endpoint URL + actions */}
                     <div className="space-y-2">
                         <p className="text-sm font-medium">Endpoint URL</p>
-                        <div className="flex items-center gap-2 bg-muted p-2.5 rounded-md border font-mono text-xs">
-                            <span className="flex-1 truncate text-blue-400">{fullUrl}</span>
+                        <div className="flex items-center gap-2 bg-muted p-2.5 rounded-md border font-mono text-xs min-w-0 overflow-hidden">
+                            <span className="flex-1 min-w-0 truncate text-blue-400">{fullUrl}</span>
                             <div className="flex items-center gap-1">
                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleCopy} title="Copy URL">
                                     {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}

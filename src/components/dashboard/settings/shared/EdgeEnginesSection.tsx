@@ -21,6 +21,7 @@ import { ReconfigureEngineDialog } from './ReconfigureEngineDialog';
 import { EdgeInspectorDialog } from './EdgeInspectorDialog';
 import { BulkDeleteDialog } from './BulkDeleteDialog';
 import { DeployEngineWizard } from './DeployEngineWizard';
+import { FetchEnginesDialog } from './FetchEnginesDialog';
 import { AITestDialog } from './AITestDialog';
 import { EdgeEndpointDialog } from './EdgeEndpointDialog';
 import { toast } from 'sonner';
@@ -94,7 +95,10 @@ export function EdgeEnginesSection() {
                     <CardTitle>Edge Engines</CardTitle>
                     <CardDescription>Deploys of the Unified Runtime Engine across your providers.</CardDescription>
                 </div>
-                <DeployEngineWizard />
+                <div className="flex items-center gap-2">
+                    <FetchEnginesDialog />
+                    <DeployEngineWizard />
+                </div>
             </CardHeader>
             <CardContent>
                 {validProviders.length === 0 && engines.length === 0 && (

@@ -64,33 +64,7 @@ export function useEdgeEngineActions({ providers, refetchEngines }: UseEdgeEngin
 
     const handleDelete = async (engine: EdgeEngine, alsoDeleteRemote: boolean) => {
         try {
-            const isCf = engine.provider === 'cloudflare' || engine.name.toLowerCase().includes('cloudflare');
-
-            // If user opted to also delete from Cloudflare, call teardown first
-            if (alsoDeleteRemote && isCf) {
-                const workerName = engine.name.replace(/^(Cloudflare|CF):\s*/i, '').trim() || engine.name;
-
-                const fallbackProviderId = providers.find((p: any) => p.is_active && p.provider === 'cloudflare')?.id;
-                const teardownProviderId = engine.edge_provider_id || fallbackProviderId;
-
-                if (!teardownProviderId) {
-                    throw new Error("No connected Cloudflare Provider account found to perform remote teardown. Please connect an account first.");
-                }
-
-                const res = await fetch(`${API_BASE}/api/cloudflare/teardown`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        provider_id: teardownProviderId,
-                        worker_name: workerName,
-                    }),
-                });
-                const data = await res.json();
-                if (!res.ok || !data.success) {
-                    throw new Error(data.detail || data.error || 'Remote teardown failed');
-                }
-            }
-            await edgeInfrastructureApi.deleteEngine(engine.id);
+            await edgeInfrastructureApi.deleteEngine(engine.id, alsoDeleteRemote);
             await refetchEngines();
         } catch (e: any) {
             alert(e.message);

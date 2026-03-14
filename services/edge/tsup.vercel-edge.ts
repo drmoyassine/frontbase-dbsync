@@ -1,3 +1,10 @@
 /** Vercel Edge Functions Full */
-import { tsupConfigNode } from './tsup.shared.js';
-export default tsupConfigNode('src/adapters/vercel-edge.ts');
+import { tsupConfigVercel } from './tsup.shared.js';
+
+const base = tsupConfigVercel('src/adapters/vercel-edge.ts');
+
+// Merge onSuccess to fix Vercel's export detection after build
+export default {
+    ...base,
+    onSuccess: 'node scripts/fix-vercel-exports.mjs dist/vercel-edge.js',
+};

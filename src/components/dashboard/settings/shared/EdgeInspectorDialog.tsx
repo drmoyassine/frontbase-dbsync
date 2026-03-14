@@ -25,11 +25,12 @@ import { SourceViewer } from './inspector/SourceViewer';
 import { SecretViewer } from './inspector/SecretViewer';
 import { SettingsPanel } from './inspector/SettingsPanel';
 import { EndpointsPanel } from './inspector/EndpointsPanel';
+import { LogsPanel } from './inspector/LogsPanel';
 import {
-    type NavSection, type SelectedItem,
+    type NavSection, type SelectedItem, type HierNode,
     type SourceSnapshotResponse, type InspectSettingsResponse, type InspectSecretsResponse,
     API_BASE, PROVIDER_LABELS,
-    extractWorkerName, getWorkerBaseUrl, inspectFetch,
+    extractWorkerName, getWorkerBaseUrl, engineInspectFetch,
 } from './inspector/types';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
@@ -58,10 +59,14 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
 
     const workerName = extractWorkerName(engine);
     const cacheKey = `${providerId}:${workerName}`;
-    const isCF = (engine.provider || 'cloudflare') === 'cloudflare';
+    const providerStr = engine.provider || 'cloudflare';
     const providerLabel = PROVIDER_LABELS[engine.provider || 'cloudflare'] || engine.provider || 'Provider';
 
-    // ─── Source snapshot (provider-agnostic — reads from backend DB) ─────
+    // Imported engines have no source snapshot — skip fetch to avoid 404 spam
+    const hasDeployHistory = !!(engine.last_deployed_at || engine.bundle_checksum);
+    const hasProvider = !!engine.edge_provider_id;
+
+    // ─── Source: prefer local snapshot, fall back to provider API for imported engines ─────
 
     const {
         data: sourceData,
@@ -70,26 +75,35 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
     } = useQuery<SourceSnapshotResponse>({
         queryKey: ['edge-inspector', 'source', engine.id],
         queryFn: async () => {
-            const resp = await fetch(`${API_BASE}/api/edge-engines/${engine.id}/source`);
-            const data = await resp.json();
-            if (!resp.ok) throw new Error(data.detail || 'No source snapshot available');
-            return data;
+            // Try local snapshot first (from previous deploy)
+            if (hasDeployHistory) {
+                const resp = await fetch(`${API_BASE}/api/edge-engines/${engine.id}/source`);
+                if (resp.ok) {
+                    const data = await resp.json();
+                    return data;
+                }
+            }
+            // Fall back to live provider API (import-friendly)
+            if (hasProvider) {
+                return await engineInspectFetch<SourceSnapshotResponse>(engine.id, 'source');
+            }
+            throw new Error('No source available');
         },
-        enabled: open,
+        enabled: open && (hasDeployHistory || hasProvider),
         staleTime: 5 * 60 * 1000,
-        retry: 1,
+        retry: 0,
         refetchOnWindowFocus: false,
     });
 
-    // ─── CF-only queries (secrets + settings from CF Management API) ─────
+    // ─── Settings + Secrets (multi-provider via engine inspector) ─────
 
     const {
         data: settings,
         isLoading: loadingSettings,
     } = useQuery<InspectSettingsResponse>({
-        queryKey: ['edge-inspector', 'settings', cacheKey],
-        queryFn: () => inspectFetch<InspectSettingsResponse>('settings', providerId, workerName),
-        enabled: open && !!providerId && isCF,
+        queryKey: ['edge-inspector', 'settings', engine.id],
+        queryFn: () => engineInspectFetch<InspectSettingsResponse>(engine.id, 'settings'),
+        enabled: open && hasProvider,
         staleTime: 5 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,
@@ -99,9 +113,9 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         data: secrets,
         isLoading: loadingSecrets,
     } = useQuery<InspectSecretsResponse>({
-        queryKey: ['edge-inspector', 'secrets', cacheKey],
-        queryFn: () => inspectFetch<InspectSecretsResponse>('secrets', providerId, workerName),
-        enabled: open && !!providerId && isCF,
+        queryKey: ['edge-inspector', 'secrets', engine.id],
+        queryFn: () => engineInspectFetch<InspectSecretsResponse>(engine.id, 'secrets'),
+        enabled: open && hasProvider,
         staleTime: 5 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,
@@ -124,19 +138,49 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
 
     const error = sourceError ? (sourceError as Error).message : null;
 
-    // ─── Build file tree from snapshot keys ──────────────────────────────
+    // ─── Build hierarchical file tree from snapshot keys ─────────────────
+    // Structure: { rootFiles: [...], subdirs: { "frontbase-core": { rootFiles: [...], subdirs: { "adapters": [...], ... } } } }
 
-    const fileTree = useMemo(() => {
-        if (!sourceData?.files) return {};
-        const tree: Record<string, string[]> = {};
+    const fileTree = useMemo((): HierNode => {
+        const root: HierNode = { rootFiles: [], subdirs: new Map() };
+        if (!sourceData?.files) return root;
+
+        const CORE = 'frontbase-core';
+
         for (const path of Object.keys(sourceData.files).sort()) {
-            const dir = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '.';
-            (tree[dir] ||= []).push(path);
-        }
-        return tree;
-    }, [sourceData]);
+            const parts = path.split('/');
 
-    const fileTreeDirs = useMemo(() => Object.keys(fileTree).sort(), [fileTree]);
+            if (parts[0] === CORE) {
+                // Special case: README.md goes to root
+                if (parts.length === 2 && parts[1] === 'README.md') {
+                    root.rootFiles.push(path);
+                    continue;
+                }
+
+                // Everything else nests under frontbase-core
+                if (!root.subdirs.has(CORE)) {
+                    root.subdirs.set(CORE, { rootFiles: [], subdirs: new Map() });
+                }
+                const coreNode = root.subdirs.get(CORE)!;
+
+                if (parts.length === 2) {
+                    // Direct file in frontbase-core/ (e.g. index.ts)
+                    coreNode.rootFiles.push(path);
+                } else {
+                    // Subdir within frontbase-core/ (e.g. frontbase-core/adapters/foo.ts)
+                    const subdir = parts[1];
+                    if (!coreNode.subdirs.has(subdir)) {
+                        coreNode.subdirs.set(subdir, { rootFiles: [], subdirs: new Map() });
+                    }
+                    coreNode.subdirs.get(subdir)!.rootFiles.push(path);
+                }
+            } else {
+                // Non-core file — put at root level
+                root.rootFiles.push(path);
+            }
+        }
+        return root;
+    }, [sourceData]);
 
     // Auto-select first file when source loads
     const firstFile = useMemo(() => {
@@ -270,14 +314,24 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
             );
         }
 
-        // Error state
-        if (error && selectedItem.section === 'files') {
+        // Error/no-source state
+        if ((error || !hasDeployHistory) && selectedItem.section === 'files') {
             return (
                 <div className="flex-1 flex items-center justify-center">
                     <div className="text-center space-y-3 max-w-sm">
                         <AlertTriangle className="h-8 w-8 text-muted-foreground mx-auto" />
-                        <p className="text-sm text-muted-foreground">{error}</p>
-                        <p className="text-xs text-muted-foreground">Deploy or redeploy this engine to capture a source snapshot.</p>
+                        <p className="text-sm text-muted-foreground">
+                            {hasDeployHistory
+                                ? error || 'Source snapshot not found'
+                                : 'No source snapshot available'
+                            }
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                            {hasDeployHistory
+                                ? 'Deploy or redeploy this engine to capture a source snapshot.'
+                                : 'This engine was imported externally. Deploy through Frontbase to capture source code.'
+                            }
+                        </p>
                     </div>
                 </div>
             );
@@ -317,6 +371,11 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         // Settings (CF-only)
         if (selectedItem.section === 'settings' && settings) {
             return <SettingsPanel settingsKey={selectedItem.key} settings={settings} />;
+        }
+
+        // Logs (all providers)
+        if (selectedItem.section === 'logs') {
+            return <LogsPanel engineId={engine.id} engineName={engine.name} />;
         }
 
         // Default empty state
@@ -418,14 +477,13 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
                         sourceData={sourceData}
                         loadingSource={loadingSource}
                         fileTree={fileTree}
-                        fileTreeDirs={fileTreeDirs}
                         expandedDirs={expandedDirs}
                         toggleDir={toggleDir}
                         secrets={secrets}
                         loadingSecrets={loadingSecrets}
                         settings={settings}
                         loadingSettings={loadingSettings}
-                        isCF={isCF}
+                        providerType={engine.provider || 'cloudflare'}
                         providerLabel={providerLabel}
                         adapterType={engine.adapter_type || 'automations'}
                         expandedSections={expandedSections}
@@ -433,6 +491,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
                         selectedItem={selectedItem}
                         setSelectedItem={setSelectedItem}
                         dirtyFiles={dirtyFileSet}
+                        openApiSpec={openApiSpec}
                     />
                     {renderRightPanel()}
                 </div>

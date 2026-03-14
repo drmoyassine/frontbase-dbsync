@@ -141,6 +141,23 @@ export const MIGRATIONS: Migration[] = [
             `CREATE INDEX IF NOT EXISTS idx_dead_letters_workflow ON dead_letters(workflow_id)`,
         ],
     },
+    {
+        version: 6,
+        description: 'Add edge_logs table for persisted runtime logs',
+        sql: [
+            `CREATE TABLE IF NOT EXISTS edge_logs (
+                id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                level TEXT NOT NULL,
+                message TEXT NOT NULL,
+                source TEXT DEFAULT 'runtime',
+                metadata TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE INDEX IF NOT EXISTS idx_edge_logs_timestamp ON edge_logs(timestamp DESC)`,
+            `CREATE INDEX IF NOT EXISTS idx_edge_logs_level ON edge_logs(level)`,
+        ],
+    },
 ];
 
 // =============================================================================

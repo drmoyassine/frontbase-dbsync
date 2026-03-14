@@ -102,6 +102,7 @@ def serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) -> 
         "gpu_model": gpu_model_data,
         "is_active": bool(engine.is_active),
         "is_system": bool(engine.is_system),
+        "is_imported": bool(engine.is_imported) if hasattr(engine, 'is_imported') else False,
         "bundle_checksum": bundle_checksum_val,
         "config_checksum": config_checksum_val,
         "last_deployed_at": last_deployed_at_val,

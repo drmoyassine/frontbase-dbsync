@@ -18,6 +18,7 @@ import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
+
 const shim = (name: string) => resolve(__dirname, `shims/${name}.js`);
 
 // ── Shared esbuild plugin ────────────────────────────────────────────
@@ -127,3 +128,31 @@ export function tsupConfigDeno(entry: string) {
         },
     } as Options);
 }
+
+// ── esbuild plugin: stub ioredis for Vercel Edge ────────────────────
+// Vercel Edge Runtime can't resolve external imports (they hang instead
+// of failing). Instead of externalizing ioredis, redirect it to an
+// empty shim so the IoRedisAdapter constructor fails immediately and
+// falls back to NullCache.
+const stubIoredis = {
+    name: 'stub-ioredis',
+    setup(build: any) {
+        build.onResolve({ filter: /^ioredis$/ }, () => ({
+            path: shim('empty'),
+        }));
+    },
+};
+
+/** Vercel config — like Deno but stubs ioredis + post-build export fix */
+export function tsupConfigVercel(entry: string) {
+    return defineConfig({
+        ...BASE,
+        entry: [entry],
+        platform: 'browser',
+        esbuildPlugins: [localSqlitePlugin, stubIoredis],
+        esbuildOptions(opts) {
+            opts.alias = { ...opts.alias, ...DENO_ALIASES };
+        },
+    } as Options);
+}
+

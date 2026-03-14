@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
-from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys
+from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys
 from app.middleware.test_mode import TestModeMiddleware
 
 logger = logging.getLogger(__name__)
@@ -301,7 +301,8 @@ app.include_router(edge_databases.router)  # Edge database connections
 app.include_router(edge_caches.router)  # Edge cache connections
 app.include_router(edge_queues.router)  # Edge queue connections
 app.include_router(cloudflare.router)  # One-click Cloudflare deploy
-app.include_router(cloudflare_inspector.router)  # CF Worker inspector
+app.include_router(cloudflare_inspector.router)  # CF Worker inspector (legacy)
+app.include_router(engine_inspector.router)  # Multi-provider engine inspector
 app.include_router(edge_gpu.router)  # Edge GPU AI inference models
 app.include_router(edge_api_keys.router)  # Tenant API keys for /v1/* endpoints
 

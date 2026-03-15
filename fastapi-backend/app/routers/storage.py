@@ -155,7 +155,14 @@ async def list_buckets(provider_id: str = Query(..., description="StorageProvide
         for bucket in buckets:
             bucket["provider"] = provider_label
 
-        return {"success": True, "buckets": buckets}
+        result: dict = {"success": True, "buckets": buckets}
+
+        # Surface permission warnings from adapters (e.g. CF R2 missing scope)
+        warning = getattr(adapter, "last_warning", None)
+        if warning:
+            result["permission_warning"] = warning
+
+        return result
     except HTTPException:
         raise
     except Exception as e:

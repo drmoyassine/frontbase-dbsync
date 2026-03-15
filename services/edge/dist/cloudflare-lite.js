@@ -53307,13 +53307,39 @@ openaiRoute.post("/responses", async (c) => {
   if (!body.input) {
     return c.json({ error: { message: "Missing required field: input", type: "invalid_request_error", code: "missing_field" } }, 400);
   }
-  const payload = { input: body.input };
+  const messages = [];
+  if (body.instructions) {
+    messages.push({ role: "system", content: body.instructions });
+  }
+  if (typeof body.input === "string") {
+    messages.push({ role: "user", content: body.input });
+  } else if (Array.isArray(body.input)) {
+    for (const item of body.input) {
+      if (typeof item === "string") {
+        messages.push({ role: "user", content: item });
+      } else if (item && typeof item === "object") {
+        if (item.type === "message") {
+          const role = item.role || "user";
+          const content = typeof item.content === "string" ? item.content : Array.isArray(item.content) ? item.content.map((c2) => c2?.text || c2?.content || "").join("") : JSON.stringify(item.content);
+          messages.push({ role, content });
+        } else if (item.role && item.content) {
+          messages.push({
+            role: item.role,
+            content: typeof item.content === "string" ? item.content : JSON.stringify(item.content)
+          });
+        }
+      }
+    }
+  }
+  if (messages.length === 0) {
+    return c.json({ error: { message: "Could not extract messages from input", type: "invalid_request_error", code: "invalid_input" } }, 400);
+  }
+  const payload = { messages };
   if (body.reasoning) {
     payload.reasoning = {};
     if (body.reasoning.effort) payload.reasoning.effort = body.reasoning.effort;
     if (body.reasoning.summary) payload.reasoning.summary = body.reasoning.summary;
   }
-  if (body.instructions) payload.instructions = body.instructions;
   if (body.max_tokens != null) payload.max_tokens = body.max_tokens;
   if (body.temperature != null) payload.temperature = body.temperature;
   if (body.tools != null) payload.tools = body.tools;

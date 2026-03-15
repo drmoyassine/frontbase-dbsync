@@ -415,6 +415,7 @@ class CloudflareR2Adapter(StorageAdapter):
         self.account_id = account_id
         self.base_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}"
         self.headers = {"Authorization": f"Bearer {api_token}"}
+        self.last_warning: Optional[str] = None  # Surfaced to frontend
 
     async def _get(self, path: str) -> Any:
         async with httpx.AsyncClient() as client:
@@ -439,15 +440,18 @@ class CloudflareR2Adapter(StorageAdapter):
             raise Exception(f"CF R2 API error: {res.text}")
 
     async def list_buckets(self) -> List[Dict[str, Any]]:
+        self.last_warning = None
         async with httpx.AsyncClient() as client:
             res = await client.get(
                 f"{self.base_url}/r2/buckets", headers=self.headers
             )
         if res.status_code == 403:
-            logger.warning(
-                "CF API token lacks R2 permission — return empty. "
-                "Re-create the token with 'Workers R2 Storage:Read' scope."
+            self.last_warning = (
+                "Your Cloudflare API token is missing R2 permissions. "
+                "Update your token to include 'Workers R2 Storage: Edit' scope "
+                "in Settings → Accounts → Cloudflare."
             )
+            logger.warning(self.last_warning)
             return []
         if not res.is_success:
             raise Exception(f"CF R2 API error: {res.text}")

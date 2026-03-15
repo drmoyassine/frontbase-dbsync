@@ -60,6 +60,10 @@ def compute_bundle_hash(content: str) -> str:
 # In-memory cache to avoid re-hashing on every request
 _source_hash_cache: dict[str, tuple[float, str]] = {}  # path → (mtime, hash)
 
+# Build cache: config_key → (source_hash, script_content, bundle_hash)
+# Avoids re-running tsup when source hasn't changed (prevents --reload restart)
+_build_cache: dict[str, tuple[str, str, str]] = {}
+
 
 # ── Core Zone Convention ──────────────────────────────────────────────
 # Files prefixed with CORE_PREFIX are system-managed (Frontbase core).
@@ -378,6 +382,15 @@ def build_worker(adapter_type: str = "automations", provider: str = "cloudflare"
     if not EDGE_DIR.exists():
         raise HTTPException(500, f"Edge service not available for building. EDGE_DIR={EDGE_DIR} does not exist and EDGE_URL is not set.")
 
+    # Cache check: skip rebuild if source hasn't changed since last build
+    current_src_hash = get_source_hash() or ""
+    cached = _build_cache.get(config_key)
+    if cached and dist_file.exists():
+        cached_hash, cached_content, cached_bundle_hash = cached
+        if cached_hash == current_src_hash:
+            print(f"[Bundle] {label} cache hit (hash={cached_bundle_hash}), skipping rebuild")
+            return cached_content, cached_bundle_hash
+
     if dist_file.exists():
         dist_file.unlink()
 
@@ -408,5 +421,6 @@ def build_worker(adapter_type: str = "automations", provider: str = "cloudflare"
 
     content = dist_file.read_text(encoding="utf-8")
     bundle_hash = compute_bundle_hash(content)
+    _build_cache[config_key] = (current_src_hash, content, bundle_hash)
     print(f"[Bundle] {label} bundle built: {len(content)} bytes ({len(content)//1024} KB) hash={bundle_hash}")
     return content, bundle_hash

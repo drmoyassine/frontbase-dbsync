@@ -47,9 +47,6 @@
   - Copy-paste friendly rule configs
   - "Test SSR" button: hits user's custom domain, verifies `Content-Type: text/html` + `<!DOCTYPE html>` in body
 
-  **Alternative paths:**
-  - Supabase Pro + custom domain lifts the `text/html` restriction entirely (no proxy needed)
-  - Self-hosted Supabase may not enforce the restriction
 ---
 
 ## ⚡ Automations
@@ -110,23 +107,22 @@
 ## 🌐 Edge Infrastructure
 
 ### Resilience & Status
-- [ ] 🔧 **Auto-migrate on Turso connect** — Bulk-push all previously published pages from backend → Turso when first enabled.
-- [ ] 🔧 **Publish-state sync check** — On Settings save, compare backend vs Turso rows, warn about drift.
+ 
+- [ ] 🔧 **Publish-state sync check** — On Settings save, compare backend vs edge DB rows, warn about drift.
 - [x] ~~**Skip redundant publishes (content hash)**~~ — ✅ Implemented via `page_hash.py`, Drizzle schema `content_hash` column, migration v3. Hash `layoutData + cssBundle`, skip writes if unchanged.
-- [ ] 🔧 **Turso quota guard** — Monitor row reads/writes, warn in UI, auto-fallback to local SQLite.
-- [ ] 🔧 **Upstash quota guard** — Monitor commands/month, reduce TTL or disable L2 cache gracefully.
-- [ ] 🔧 **Graceful provider downgrade** — Fall back to local SQLite/no-cache on Turso/Upstash failure. Log and surface in status panel.
-- [ ] ✨ **Edge vs Local badge** — Show "☁️ Turso" or "💾 Local SQLite" badge on published pages.
-- [ ] ✨ **Live status panel** — Settings widget showing Turso/Upstash quotas, connection status, hit rate.
-- [ ] ✨ **Provider switch confirmation** — Confirmation dialog when toggling Turso on/off.
+- [ ] 🔧 **Edge DB quota guard** — Monitor row reads/writes (Turso/Neon), warn in UI, auto-fallback to local SQLite.
+- [ ] 🔧 **Cache quota guard** — Monitor commands/month (Upstash), reduce TTL or disable L2 cache gracefully.
+- [ ] 🔧 **Graceful provider downgrade** — Fall back to local SQLite/no-cache on edge DB/cache failure. Log and surface in status panel.
+- [ ] ✨ **Edge provider badge** — Show provider icon + name (e.g. "☁️ Turso", "🐘 Neon", "💾 Local SQLite") on published pages and resource cards.
+- [ ] ✨ **Live status panel** — Settings widget showing edge DB/cache/queue quotas, connection status, hit rate.
+- [ ] ✨ **Provider switch confirmation** — Confirmation dialog when changing edge DB/cache/queue provider.
 
 ### Deployment & Adapters
-- [ ] 🔌 **Multi-Database Support** — Neon/PlanetScale HTTP drivers, self-hosted Postgres/MySQL support.
+- [ ] 🔌 **Postgres Edge State Provider** — `NeonEdgeProvider` + `SupabaseEdgeProvider` implementing `IStateProvider`. Dialect-aware migration runner (SQLite vs Postgres syntax). `_frontbase` schema isolation.
+- [ ] ✨ **Capability-driven resource forms** — Derive DB/Cache/Queue provider options from `PROVIDER_CONFIGS` capabilities metadata instead of hardcoding. Show capability badges in connect dialogs.
 - [ ] ✨ **Local Data Proxy (Hybrid Edge)** — Connect Edge workers to local/private infra via `serverless-redis-http` or Cloudflare Tunnels.
-- [ ] 🔌 **One-Click Integrations** — Upstash auto-create, Supabase project selector, Vercel auto-deploy.
+- [ ] 🔌 **One-Click Integrations** — Auto-create resources via provider management APIs (Upstash Redis, Neon projects, etc.).
 - [ ] ✨ **Multi-Provider Load Balancing** — DNS-level weighted routing across CF + Vercel + Netlify.
-- [ ] 🔌 **Vercel Edge Adapter** — New `IEdgeAdapter` for Vercel Edge Functions.
-- [ ] 🔌 **Netlify Edge Adapter** — New `IEdgeAdapter` for Netlify Edge Functions.
 - [ ] 🔧 **Extract Shared Edge Core** — Refactor into `shared/edge-core.ts` + thin adapter wrappers per provider.
 - [ ] ✨ **Edge `/api/config` Endpoint** — Receive settings updates without redeploying the Worker.
 - [x] ~~**Edge CORS Origin Configuration**~~ — ✅ Implemented in `engine/lite.ts` CORS middleware.

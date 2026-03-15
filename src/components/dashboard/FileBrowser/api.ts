@@ -64,11 +64,19 @@ export async function emptyBucket(providerId: string, id: string) {
     if (!data.success) throw new Error(data.error || 'Failed to empty bucket');
 }
 
-export async function fetchBuckets(providerId: string): Promise<Bucket[]> {
+export interface FetchBucketsResult {
+    buckets: Bucket[];
+    permissionWarning?: string;
+}
+
+export async function fetchBuckets(providerId: string): Promise<FetchBucketsResult> {
     const res = await api.get(`/api/storage/buckets?provider_id=${providerId}`);
     const data = res.data;
     if (!data.success) throw new Error(data.error || 'Failed to fetch buckets');
-    return data.buckets;
+    return {
+        buckets: data.buckets,
+        permissionWarning: data.permission_warning,
+    };
 }
 
 export async function fetchFiles(

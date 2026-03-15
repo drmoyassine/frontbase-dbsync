@@ -23,9 +23,10 @@ import { MultiSelectCustom } from '@/components/ui/multi-select-custom';
 
 // Icons
 import {
-    HardDrive, FolderOpen, Folder, FolderPlus, File, Upload, Trash2, Copy, MoreVertical,
-    ArrowLeft, RefreshCw, Lock, Globe, Plus, Edit2, Archive, Settings, Search, Check,
-    Move, X, ArrowUp, ArrowDown, ChevronsUpDown, Loader2
+    HardDrive, FolderOpen, Folder, File, Upload, Plus, RefreshCw, Settings,
+    MoreVertical, Trash2, Archive, X, Search, ArrowLeft, ArrowUp, ArrowDown,
+    ChevronsUpDown, Globe, Lock, Check, Loader2, Move, Edit2, Copy, FolderPlus,
+    ChevronRight, AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -121,13 +122,17 @@ export function FileBrowser({
     } = mutations;
 
     // Queries
-    const { data: buckets, isLoading: bucketsLoading, error: bucketsError, refetch: refetchBuckets } = useQuery({
+    const { data: bucketsResult, isLoading: bucketsLoading, error: bucketsError, refetch: refetchBuckets } = useQuery({
         queryKey: ['storage-buckets', storageProviderId],
         queryFn: () => fetchBuckets(storageProviderId),
         staleTime: 30_000,
         retry: 1,
         refetchOnWindowFocus: false,
     });
+
+    // Destructure the result — buckets + optional permission warning
+    const buckets = bucketsResult?.buckets;
+    const permissionWarning = bucketsResult?.permissionWarning;
 
     // ── Cached bucket sizes via useQueries (L1: React Query cache) ──
     const bucketSizeQueries = useQueries({
@@ -449,6 +454,14 @@ export function FileBrowser({
                             </Select>
                         </div>
                     </div>
+
+                    {/* Permission warning banner (e.g. CF missing R2 scope) */}
+                    {permissionWarning && (
+                        <div className="flex items-start gap-3 p-3 mb-4 rounded-lg border border-amber-300/50 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-500/30 text-amber-800 dark:text-amber-200">
+                            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                            <p className="text-sm">{permissionWarning}</p>
+                        </div>
+                    )}
 
                     {bucketsLoading ? (
                         <div className="space-y-2">

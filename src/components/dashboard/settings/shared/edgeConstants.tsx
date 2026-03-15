@@ -171,7 +171,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
         fields: [
             { key: 'api_token', label: 'API Token', placeholder: 'Cloudflare API Token', type: 'password', required: true },
         ],
-        helpText: <>Requires "Workers Scripts: Edit", "Account Settings: Read", and "Workers AI: Read" (for GPU catalog). <a href="https://dash.cloudflare.com/profile/api-tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a></>,
+        helpText: <>Requires: <strong>Workers Scripts: Edit</strong>, <strong>D1: Edit</strong>, <strong>Workers R2 Storage: Edit</strong>, <strong>Workers KV Storage: Edit</strong>, <strong>Queues: Edit</strong>, <strong>Workers AI: Read</strong>, and <strong>Account Settings: Read</strong>. <a href="https://dash.cloudflare.com/profile/api-tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a></>,
     },
     supabase: {
         label: 'Supabase',

@@ -162,6 +162,8 @@ async def fetch_logs(
         result = await _supabase_fetch_logs(creds, engine_name, limit, cursor, level)
     elif provider_type == "vercel":
         result = await _vercel_fetch_logs(creds, engine_name, limit, cursor, level)
+    elif provider_type == "netlify":
+        result = await _netlify_fetch_logs(creds, engine_name, limit, cursor, level)
     else:
         result = LogsResponse(logs=[], provider=provider_type)
 
@@ -439,6 +441,109 @@ async def _supabase_fetch_logs(
     return LogsResponse(logs=entries, next_cursor=next_cursor, provider="supabase")
 
 
+# ── Provider: Netlify ─────────────────────────────────────────────────
+
+async def _netlify_fetch_logs(
+    creds: dict, site_name: str, limit: int, cursor: str | None, level: str | None
+) -> LogsResponse:
+    """Fetch deploy logs from the latest Netlify deployment.
+
+    Netlify doesn't expose Edge Function runtime logs via API —
+    only deploy-time output is available via GET /deploys/{id}/log.
+    """
+    api_token = creds.get("api_token", "")
+    site_id = creds.get("site_id", "")
+
+    if not api_token:
+        return LogsResponse(logs=[], provider="netlify")
+
+    netlify_api = "https://api.netlify.com/api/v1"
+    headers = {"Authorization": f"Bearer {api_token}"}
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            # If no site_id, try to find a site by name
+            if not site_id:
+                resp = await client.get(
+                    f"{netlify_api}/sites",
+                    headers=headers,
+                    params={"name": site_name, "per_page": 1},
+                )
+                if resp.status_code == 200:
+                    sites = resp.json()
+                    if sites:
+                        site_id = sites[0].get("id", "")
+                if not site_id:
+                    return LogsResponse(logs=[], provider="netlify")
+
+            # Get latest deploys
+            resp = await client.get(
+                f"{netlify_api}/sites/{site_id}/deploys",
+                headers=headers,
+                params={"per_page": 3},
+            )
+            if resp.status_code != 200:
+                print(f"[EdgeLogs] Netlify deploys failed: {resp.status_code} {resp.text[:200]}")
+                return LogsResponse(logs=[], provider="netlify")
+
+            deploys = resp.json()
+            if not deploys:
+                return LogsResponse(logs=[], provider="netlify")
+
+            # Fetch log from the latest deploy
+            deploy = deploys[0]
+            deploy_id = deploy.get("id", "")
+            deploy_state = deploy.get("state", "unknown")
+            created = deploy.get("created_at", "")
+
+            log_resp = await client.get(
+                f"{netlify_api}/deploys/{deploy_id}/log",
+                headers=headers,
+            )
+
+            entries = []
+
+            # Add deploy status entry
+            entries.append(asdict(UnifiedLogEntry(
+                timestamp=created,
+                level="info" if deploy_state in ("ready", "prepared") else "warn",
+                message=f"[Deploy {deploy_id[:8]}] State: {deploy_state}",
+                source="deploy",
+                metadata={"deployId": deploy_id, "state": deploy_state},
+            )))
+
+            # Parse deploy log lines
+            if log_resp.status_code == 200:
+                log_data = log_resp.json() if log_resp.headers.get("content-type", "").startswith("application/json") else []
+                if isinstance(log_data, list):
+                    offset = int(cursor) if cursor and cursor.isdigit() else 0
+                    sliced = log_data[offset:offset + limit]
+                    for line in sliced:
+                        msg = line.get("message", str(line)) if isinstance(line, dict) else str(line)
+                        ts = line.get("ts", created) if isinstance(line, dict) else created
+                        log_level = "error" if "error" in msg.lower() else "info"
+
+                        if level and log_level != level:
+                            continue
+
+                        entries.append(asdict(UnifiedLogEntry(
+                            timestamp=ts if isinstance(ts, str) else created,
+                            level=log_level,
+                            message=msg,
+                            source="deploy",
+                            metadata={"deployId": deploy_id},
+                        )))
+
+                    next_cursor = str(offset + limit) if len(sliced) >= limit else None
+                    return LogsResponse(logs=entries, next_cursor=next_cursor, provider="netlify")
+
+            return LogsResponse(logs=entries, provider="netlify")
+
+    except Exception as e:
+        print(f"[EdgeLogs] Netlify logs error: {e}")
+        return LogsResponse(logs=[], provider="netlify")
+
+
 # ── Retention Config ──────────────────────────────────────────────────
 
 # Provider log retention periods (hours) by plan tier
@@ -447,6 +552,7 @@ RETENTION_HOURS: dict[str, dict[str, int]] = {
     "cloudflare": {"free": 72,   "paid": 720},    # 3 days / 30 days
     "supabase":   {"free": 24,   "pro": 168, "team": 168, "enterprise": 720},  # 1 / 7 / 7 / 30 days
     "vercel":     {"free": 1,    "pro": 24,  "enterprise": 720},  # 1h / 1 day / 30 days
+    "netlify":    {"free": 24,   "pro": 168, "enterprise": 720},  # 1 day / 7 days / 30 days
 }
 
 

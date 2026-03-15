@@ -363,14 +363,57 @@ openaiRoute.post('/responses', async (c) => {
         return c.json({ error: { message: 'Missing required field: input', type: 'invalid_request_error', code: 'missing_field' } }, 400);
     }
 
-    // Build Responses API payload — CF Workers AI accepts this natively
-    const payload: any = { input: body.input };
+    // Build CF Workers AI payload — convert Responses API `input` → `messages`
+    // CF Workers AI text-generation models expect { messages: [...] }, not { input: ... }
+    const messages: Array<{ role: string; content: string }> = [];
+
+    // Add system message from instructions
+    if (body.instructions) {
+        messages.push({ role: 'system', content: body.instructions });
+    }
+
+    // Convert `input` to messages
+    if (typeof body.input === 'string') {
+        // Simple string input → single user message
+        messages.push({ role: 'user', content: body.input });
+    } else if (Array.isArray(body.input)) {
+        // Array of input items (OpenAI Responses API format)
+        for (const item of body.input) {
+            if (typeof item === 'string') {
+                messages.push({ role: 'user', content: item });
+            } else if (item && typeof item === 'object') {
+                if (item.type === 'message') {
+                    // { type: 'message', role: '...', content: '...' | [...] }
+                    const role = item.role || 'user';
+                    const content = typeof item.content === 'string'
+                        ? item.content
+                        : Array.isArray(item.content)
+                            ? item.content.map((c: any) => c?.text || c?.content || '').join('')
+                            : JSON.stringify(item.content);
+                    messages.push({ role, content });
+                } else if (item.role && item.content) {
+                    // Direct { role, content } objects (n8n often sends this)
+                    messages.push({
+                        role: item.role,
+                        content: typeof item.content === 'string'
+                            ? item.content
+                            : JSON.stringify(item.content),
+                    });
+                }
+            }
+        }
+    }
+
+    if (messages.length === 0) {
+        return c.json({ error: { message: 'Could not extract messages from input', type: 'invalid_request_error', code: 'invalid_input' } }, 400);
+    }
+
+    const payload: any = { messages };
     if (body.reasoning) {
         payload.reasoning = {};
         if (body.reasoning.effort) payload.reasoning.effort = body.reasoning.effort;
         if (body.reasoning.summary) payload.reasoning.summary = body.reasoning.summary;
     }
-    if (body.instructions) payload.instructions = body.instructions;
     if (body.max_tokens != null) payload.max_tokens = body.max_tokens;
     if (body.temperature != null) payload.temperature = body.temperature;
     if (body.tools != null) payload.tools = body.tools;

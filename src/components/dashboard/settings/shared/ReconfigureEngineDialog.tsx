@@ -145,7 +145,7 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
 
             // 2. Remove AI models
             for (const modelId of modelsToRemove) {
-                const delRes = await fetch(`${API_BASE}/api/edge-gpu/${modelId}`, { method: 'DELETE' });
+                const delRes = await fetch(`${API_BASE}/api/edge-gpu/${modelId}?skip_redeploy=true`, { method: 'DELETE' });
                 if (!delRes.ok) {
                     const err = await delRes.json().catch(() => ({}));
                     console.warn(`Failed to remove model ${modelId}:`, err.detail);
@@ -154,7 +154,7 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
 
             // 3. Add new AI models
             for (const model of modelsToAdd) {
-                const createRes = await fetch(`${API_BASE}/api/edge-gpu/`, {
+                const createRes = await fetch(`${API_BASE}/api/edge-gpu/?skip_redeploy=true`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

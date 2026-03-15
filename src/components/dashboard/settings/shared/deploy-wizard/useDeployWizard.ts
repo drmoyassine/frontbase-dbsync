@@ -215,14 +215,16 @@ export function useDeployWizard() {
 
             // ----- Attach GPU models if GPU path ----------------------------
             if (computeType === 'gpu' && selectedModels.length > 0 && targetEngineId) {
-                for (const model of selectedModels) {
+                for (let i = 0; i < selectedModels.length; i++) {
+                    const model = selectedModels[i];
+                    const isLast = i === selectedModels.length - 1;
                     await deployGPUModel({
                         name: model.name.split('/').pop() || model.name,
                         model_type: model.model_type,
                         provider: 'workers_ai',
                         model_id: model.model_id,
                         edge_engine_id: targetEngineId,
-                    });
+                    }, !isLast); // skip redeploy for all except last
                 }
                 toast({
                     title: '🧠 Engine Deployed with AI',

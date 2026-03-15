@@ -110,8 +110,9 @@ export async function fetchGPUCatalog(
     return res.json();
 }
 
-export async function deployGPUModel(data: any): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/edge-gpu/`, {
+export async function deployGPUModel(data: any, skipRedeploy = false): Promise<any> {
+    const url = `${API_BASE}/api/edge-gpu/${skipRedeploy ? '?skip_redeploy=true' : ''}`;
+    const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),

@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -183,7 +183,7 @@ async def list_gpu_models(db: Session = Depends(get_db)):
 
 
 @router.post("/")
-async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db)):
+async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db), skip_redeploy: bool = Query(False)):
     """Deploy a new GPU model to an edge engine.
 
     After saving the model record, auto-redeploys CF engines so the AI
@@ -237,7 +237,7 @@ async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db
     result = _serialize(model)
     redeployed = False
     redeploy_error = None
-    if str(engine.edge_provider_id or ""):
+    if not skip_redeploy and str(engine.edge_provider_id or ""):
         try:
             await _redeploy_engine(engine, db)
             redeployed = True
@@ -279,7 +279,7 @@ async def update_gpu_model(model_id: str, payload: GPUModelUpdate, db: Session =
 
 
 @router.delete("/{model_id}")
-async def delete_gpu_model(model_id: str, db: Session = Depends(get_db)):
+async def delete_gpu_model(model_id: str, db: Session = Depends(get_db), skip_redeploy: bool = Query(False)):
     """Delete a GPU model.
 
     After deletion, auto-redeploys CF engines to remove stale AI
@@ -296,7 +296,7 @@ async def delete_gpu_model(model_id: str, db: Session = Depends(get_db)):
     # Auto-redeploy CF engines to remove stale binding
     redeployed = False
     redeploy_error = None
-    if engine and str(engine.edge_provider_id or ""):
+    if not skip_redeploy and engine and str(engine.edge_provider_id or ""):
         try:
             await _redeploy_engine(engine, db)
             redeployed = True

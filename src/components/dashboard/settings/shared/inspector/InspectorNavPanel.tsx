@@ -62,7 +62,8 @@ export const InspectorNavPanel: React.FC<InspectorNavPanelProps> = ({
     const isCF = providerType === 'cloudflare';
     const isVercel = providerType === 'vercel';
     const isSupabase = providerType === 'supabase';
-    const hasSecrets = isCF || isVercel || isSupabase;
+    const isNetlify = providerType === 'netlify';
+    const hasSecrets = isCF || isVercel || isSupabase || isNetlify;
 
     // Parse endpoint count from live spec
     const endpointCount = React.useMemo(() => {

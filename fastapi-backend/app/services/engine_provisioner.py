@@ -96,11 +96,42 @@ async def _deno_pre_deploy(ctx: dict, provider: EdgeProviderAccount, worker_name
     return url
 
 
+async def _netlify_pre_deploy(ctx: dict, provider: EdgeProviderAccount, worker_name: str, db: Session) -> str:
+    """Netlify: validate API token and return predictable URL.
+    
+    Site creation is deferred to deploy() which stores site_id
+    per-engine in engine_config. Each engine gets its own Netlify site.
+    """
+    from ..services import netlify_deploy_api
+    import httpx
+
+    api_token = ctx.get('api_token', '')
+    if not api_token:
+        raise HTTPException(400, "Missing Netlify API token in provider account")
+
+    # Validate the API token by checking the user's account
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{netlify_deploy_api.NETLIFY_API}/user",
+                headers=netlify_deploy_api._headers(api_token),
+            )
+            if resp.status_code == 401:
+                raise HTTPException(401, "Invalid Netlify API token")
+    except httpx.HTTPError as e:
+        print(f"[Netlify] Token validation failed: {e}")
+
+    # Return predictable URL — deploy() will create the site and
+    # update engine.url to the actual Netlify subdomain if different
+    return f"https://{worker_name}.netlify.app"
+
+
 # Registry: provider_type → async pre-deploy hook
 # Extend this dict when adding new providers that need pre-deploy setup.
 PRE_DEPLOY_HOOKS: dict = {
     "cloudflare": _cf_pre_deploy,
     "deno": _deno_pre_deploy,
+    "netlify": _netlify_pre_deploy,
 }
 
 

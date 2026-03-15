@@ -133,27 +133,7 @@ async def update_edge_engine(engine_id: str, payload: EdgeEngineUpdate, db: Sess
     return serialize_engine(engine)
 
 
-@router.delete("/{engine_id}", status_code=204)
-async def delete_edge_engine(
-    engine_id: str,
-    delete_remote: bool = Query(False, description="Also delete from remote provider"),
-    db: Session = Depends(get_db),
-):
-    """Delete an edge engine from Frontbase, optionally tearing down the remote deployment."""
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
-    if not engine:
-        raise HTTPException(status_code=404, detail="Edge engine not found")
 
-    # Remote teardown (multi-provider)
-    if delete_remote and engine.edge_provider_id:
-        try:
-            await engine_test.delete_remote_resource(engine, db)
-        except Exception as e:
-            # Log but continue with local delete
-            print(f"[Delete] Remote teardown failed for {engine.name}: {e}")
-
-    db.delete(engine)
-    db.commit()
 
 
 # =============================================================================
@@ -228,7 +208,7 @@ async def delete_edge_engine(
         raise HTTPException(status_code=403, detail="Cannot delete a system edge engine")
 
     # Delete remote resource (works for all providers)
-    if delete_remote and engine.edge_provider_id:
+    if delete_remote and str(engine.edge_provider_id or ""):
         await engine_test.delete_remote_resource(engine, db)
 
     db.delete(engine)
@@ -265,7 +245,7 @@ async def get_engine_source(engine_id: str, db: Session = Depends(get_db)):
     engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
     if not engine:
         raise HTTPException(status_code=404, detail="Engine not found")
-    if not engine.source_snapshot:
+    if not str(engine.source_snapshot or ""):
         raise HTTPException(
             status_code=404,
             detail="No source snapshot — engine may not have been deployed yet"
@@ -310,7 +290,7 @@ async def update_engine_source(engine_id: str, payload: dict, db: Session = Depe
             raise HTTPException(status_code=400, detail=f"Only .ts/.tsx/.md files allowed: {path}")
 
     # Merge into existing snapshot (DB only — no filesystem writes)
-    existing = json.loads(str(engine.source_snapshot)) if engine.source_snapshot else {}
+    existing = json.loads(str(engine.source_snapshot)) if str(engine.source_snapshot or "") else {}
     existing.update(files)
     engine.source_snapshot = json.dumps(existing)  # type: ignore[assignment]
 
@@ -329,7 +309,7 @@ async def update_engine_source(engine_id: str, payload: dict, db: Session = Depe
         engine.is_forked = True  # type: ignore[assignment]
 
     # Merge modified core files list
-    existing_modified = json.loads(str(engine.modified_core_files)) if engine.modified_core_files else []
+    existing_modified = json.loads(str(engine.modified_core_files)) if str(engine.modified_core_files or "") else []
     all_modified = list(set(existing_modified + modified_core))
     engine.modified_core_files = json.dumps(all_modified) if all_modified else None  # type: ignore[assignment]
 
@@ -370,7 +350,7 @@ async def batch_delete_engines(payload: BatchDeleteRequest, db: Session = Depend
     if payload.delete_remote:
         async def _safe_delete(eng: EdgeEngine):
             try:
-                if eng.edge_provider_id:
+                if str(eng.edge_provider_id or ""):
                     await engine_test.delete_remote_resource(eng, db)
             except Exception as e:
                 result.failed.append({"id": str(eng.id), "error": f"Remote delete failed: {e}"})
@@ -462,7 +442,7 @@ async def list_active_engines_by_scope(scope: Literal["pages", "automations", "f
             "url": str(e.url),
             "name": str(e.name),
             "adapter_type": str(e.adapter_type),
-            "edge_db_id": str(e.edge_db_id) if e.edge_db_id else None,
+            "edge_db_id": str(e.edge_db_id) if str(e.edge_db_id or "") else None,
             "is_active": bool(e.is_active),
         }
         for e in engines
@@ -492,7 +472,7 @@ async def get_engine_logs(
     engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
-    if not engine.edge_provider_id:
+    if not str(engine.edge_provider_id or ""):
         raise HTTPException(status_code=400, detail="Engine has no linked provider account")
 
     ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
@@ -506,6 +486,9 @@ async def get_engine_logs(
         engine_name = engine_cfg.get("worker_name", str(engine.name or ""))
     elif provider_type == "vercel":
         engine_name = engine_cfg.get("project_name", str(engine.name or ""))
+    elif provider_type == "netlify":
+        engine_name = engine_cfg.get("site_name", str(engine.name or ""))
+        ctx["site_id"] = engine_cfg.get("site_id", "")  # site_id is per-engine
     else:
         engine_name = str(engine.name or "")
 
@@ -545,9 +528,9 @@ async def sync_engine_logs(engine_id: str, db: Session = Depends(get_db)):
     engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
-    if not engine.edge_provider_id:
+    if not str(engine.edge_provider_id or ""):
         raise HTTPException(status_code=400, detail="Engine has no linked provider account")
-    if not engine.url:
+    if not str(engine.url or ""):
         raise HTTPException(status_code=400, detail="Engine has no URL configured")
 
     # Check persistence is enabled
@@ -566,6 +549,9 @@ async def sync_engine_logs(engine_id: str, db: Session = Depends(get_db)):
         engine_name = engine_cfg.get("worker_name", str(engine.name or ""))
     elif provider_type == "vercel":
         engine_name = engine_cfg.get("project_name", str(engine.name or ""))
+    elif provider_type == "netlify":
+        engine_name = engine_cfg.get("site_name", str(engine.name or ""))
+        ctx["site_id"] = engine_cfg.get("site_id", "")  # site_id is per-engine
     else:
         engine_name = str(engine.name or "")
 
@@ -632,11 +618,11 @@ async def update_log_config(
     # Validate prerequisites if enabling
     if enabled:
         missing = []
-        if not engine.edge_db_id:
+        if not str(engine.edge_db_id or ""):
             missing.append("Edge Database")
-        if not engine.edge_cache_id:
+        if not str(engine.edge_cache_id or ""):
             missing.append("Edge Cache")
-        if not engine.edge_queue_id:
+        if not str(engine.edge_queue_id or ""):
             missing.append("Edge Queue")
         if missing:
             raise HTTPException(
@@ -645,7 +631,7 @@ async def update_log_config(
             )
 
     # Validate interval against retention
-    if interval_hours is not None and engine.edge_provider_id:
+    if interval_hours is not None and str(engine.edge_provider_id or ""):
         from ..core.credential_resolver import get_provider_context_by_id
         ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
         provider_type = ctx.get("provider_type", "")
@@ -685,7 +671,7 @@ async def get_log_retention(engine_id: str, db: Session = Depends(get_db)):
     engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
-    if not engine.edge_provider_id:
+    if not str(engine.edge_provider_id or ""):
         raise HTTPException(status_code=400, detail="Engine has no linked provider account")
 
     from ..core.credential_resolver import get_provider_context_by_id
@@ -702,7 +688,7 @@ async def get_log_retention(engine_id: str, db: Session = Depends(get_db)):
         "plan_tier": plan_tier,
         "retention_hours": retention,
         "log_persistence": log_config,
-        "prerequisites_met": bool(engine.edge_db_id and engine.edge_cache_id and engine.edge_queue_id),
+        "prerequisites_met": bool(str(engine.edge_db_id or "") and str(engine.edge_cache_id or "") and str(engine.edge_queue_id or "")),  # type: ignore[redundant-expr]
     }
 
 
@@ -710,7 +696,7 @@ async def get_log_retention(engine_id: str, db: Session = Depends(get_db)):
 
 def _get_engine_config(engine: EdgeEngine) -> dict:
     """Parse engine_config JSON, returning empty dict on failure."""
-    if not engine.engine_config:
+    if not str(engine.engine_config or ""):
         return {}
     try:
         return json.loads(str(engine.engine_config))
@@ -720,7 +706,7 @@ def _get_engine_config(engine: EdgeEngine) -> dict:
 
 def _get_engine_redis_url(engine: EdgeEngine, db: Session) -> str | None:
     """Resolve Redis URL from engine's connected edge cache."""
-    if not engine.edge_cache_id:
+    if not str(engine.edge_cache_id or ""):
         return None
     try:
         from ..models.models import EdgeCache

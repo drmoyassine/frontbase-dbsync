@@ -178,9 +178,27 @@ async def delete_remote_resource(engine: EdgeEngine, db: Session) -> None:
     elif provider_type == "netlify":
         from ..services import netlify_deploy_api
         api_token = ctx.get("api_token")
-        site_id = ctx.get("site_id")
-        if not api_token or not site_id:
-            raise HTTPException(400, "Missing Netlify credentials or site_id")
+        site_id = cfg.get("site_id")  # site_id is per-engine, stored in engine_config
+        if not api_token:
+            raise HTTPException(400, "Missing Netlify api_token")
+        # Fallback: look up site by name if site_id not stored
+        if not site_id:
+            site_name = cfg.get("site_name", "")
+            if site_name:
+                import httpx
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        "https://api.netlify.com/api/v1/sites",
+                        headers={"Authorization": f"Bearer {api_token}"},
+                        params={"name": site_name, "per_page": 1},
+                    )
+                    if resp.status_code == 200:
+                        sites = resp.json()
+                        if sites:
+                            site_id = sites[0].get("id", "")
+        if not site_id:
+            print(f"[Netlify] No site_id found for engine — skipping remote delete")
+            return  # Nothing to delete remotely
         await netlify_deploy_api.delete_site(api_token, site_id)
 
     elif provider_type == "deno":

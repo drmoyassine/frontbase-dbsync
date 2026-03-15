@@ -18,7 +18,7 @@ import { timeAgo } from '@/hooks/useEdgeEngineActions';
 import { API_BASE, PROVIDER_ICONS, KNOWN_EDGE_PROVIDERS } from './edgeConstants';
 
 // Providers that support engine listing (subset of KNOWN_EDGE_PROVIDERS)
-const LISTABLE_PROVIDERS = new Set(['cloudflare', 'supabase', 'deno', 'vercel']);
+const LISTABLE_PROVIDERS = new Set(['cloudflare', 'supabase', 'deno', 'vercel', 'netlify']);
 
 type SortField = 'name' | 'deployed_at' | 'created_at';
 type SortDir = 'asc' | 'desc';
@@ -169,7 +169,7 @@ export function FetchEnginesDialog() {
 
     // Provider display name helper
     const providerLabel = (p: string) => {
-        const labels: Record<string, string> = { cloudflare: 'Cloudflare', supabase: 'Supabase', deno: 'Deno', vercel: 'Vercel' };
+        const labels: Record<string, string> = { cloudflare: 'Cloudflare', supabase: 'Supabase', deno: 'Deno', vercel: 'Vercel', netlify: 'Netlify' };
         return labels[p] || p;
     };
 
@@ -187,6 +187,7 @@ export function FetchEnginesDialog() {
                     supabase: 'function_name',
                     deno: 'project_name',
                     vercel: 'project_name',
+                    netlify: 'site_name',
                 };
                 const configKey = configKeyMap[eng.provider] || 'worker_name';
                 const created = await edgeInfrastructureApi.createEngine({

@@ -1021,11 +1021,38 @@ async def _list_vercel_engines(creds: dict) -> list[dict]:
     ]
 
 
+async def _list_netlify_engines(creds: dict) -> list[dict]:
+    """List Netlify sites via REST API."""
+    import httpx
+    token = creds.get("api_token", "")
+    if not token:
+        return []
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            "https://api.netlify.com/api/v1/sites",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    if resp.status_code != 200:
+        return []
+    return [
+        {
+            "name": s.get("name", ""),
+            "url": s.get("ssl_url", s.get("url", "")),
+            "provider": "netlify",
+            "deployed_at": s.get("published_deploy", {}).get("published_at", "") if isinstance(s.get("published_deploy"), dict) else "",
+            "created_at": s.get("created_at", ""),
+        }
+        for s in resp.json()
+        if isinstance(s, dict)
+    ]
+
+
 _ENGINE_LISTERS: dict[str, Any] = {
     "cloudflare": _list_cf_engines,
     "supabase": _list_supabase_engines,
     "deno": _list_deno_engines,
     "vercel": _list_vercel_engines,
+    "netlify": _list_netlify_engines,
 }
 
 

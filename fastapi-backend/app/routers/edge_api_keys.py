@@ -92,10 +92,13 @@ def _serialize(key: EdgeAPIKey, engine: Optional[EdgeEngine] = None) -> dict:
 
 
 async def _sync_keys_to_engines(engine_id: Optional[str]) -> None:
-    """Push updated FRONTBASE_API_KEY_HASHES to affected CF Workers.
+    """Push updated FRONTBASE_API_KEY_HASHES to affected engines.
+    
+    - CF Workers: patched via CF API (fast, no downtime)
+    - Other providers: full redeploy so env vars are baked into deployment
     
     If engine_id is set, only that engine is updated.
-    If engine_id is None (key scoped to "all engines"), update every CF engine.
+    If engine_id is None (key scoped to "all engines"), update every engine.
     Runs as a background task — failures are silent (logged, not raised).
     """
     from ..database.config import SessionLocal
@@ -105,41 +108,58 @@ async def _sync_keys_to_engines(engine_id: Optional[str]) -> None:
         if engine_id:
             engines = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).all()
         else:
-            # "All Engines" key — push to every engine that has a CF provider
+            # "All Engines" key — push to every engine that has a provider
             engines = db.query(EdgeEngine).filter(
                 EdgeEngine.edge_provider_id.isnot(None)
             ).all()
 
         for engine in engines:
             try:
-                cf_creds = _resolve_cf_credentials(engine, db)
-                if not cf_creds:
-                    continue  # Not a CF engine or missing creds
+                # Determine provider type
+                provider = db.query(EdgeProviderAccount).filter(
+                    EdgeProviderAccount.id == engine.edge_provider_id
+                ).first()
+                provider_type = str(provider.provider) if provider else ""
 
-                # Build only the API key hashes secret for this engine
-                key_secrets = {}
-                api_keys = db.query(EdgeAPIKey).filter(
-                    EdgeAPIKey.is_active == True,
-                    (EdgeAPIKey.edge_engine_id == str(engine.id)) | (EdgeAPIKey.edge_engine_id == None),
-                ).all()
-                if api_keys:
-                    keys_data = [{
-                        "prefix": str(k.prefix),
-                        "hash": str(k.key_hash),
-                        "expires_at": str(k.expires_at) if k.expires_at else None,  # type: ignore[truthy-bool]
-                    } for k in api_keys]
-                    key_secrets['FRONTBASE_API_KEY_HASHES'] = json.dumps(keys_data)
+                if provider_type == "cloudflare":
+                    # CF Workers: patch secrets directly (no redeploy needed)
+                    cf_creds = _resolve_cf_credentials(engine, db)
+                    if not cf_creds:
+                        continue
 
-                if key_secrets:
-                    patched, _, _ = await _patch_cf_settings(cf_creds, key_secrets)
-                    if patched:
-                        print(f"[KeySync] Pushed {len(api_keys)} key(s) to engine '{engine.name}'")
-                    else:
-                        print(f"[KeySync] Failed to push keys to engine '{engine.name}'")
+                    key_secrets = _build_key_secrets(engine, db)
+                    if key_secrets:
+                        patched, _, _ = await _patch_cf_settings(cf_creds, key_secrets)
+                        if patched:
+                            print(f"[KeySync] Pushed key hashes to CF engine '{engine.name}'")
+                        else:
+                            print(f"[KeySync] Failed to push keys to CF engine '{engine.name}'")
+                else:
+                    # All other providers: trigger full redeploy
+                    # (secrets are baked into deployment via secrets_builder)
+                    from ..services.engine_deploy import redeploy
+                    await redeploy(engine, db)
+                    print(f"[KeySync] Redeployed engine '{engine.name}' ({provider_type}) with updated key hashes")
             except Exception as e:
                 print(f"[KeySync] Error syncing keys to engine '{engine.name}': {e}")
     finally:
         db.close()
+
+
+def _build_key_secrets(engine: EdgeEngine, db: Session) -> dict:
+    """Build the FRONTBASE_API_KEY_HASHES secret for a specific engine."""
+    api_keys = db.query(EdgeAPIKey).filter(
+        EdgeAPIKey.is_active == True,
+        (EdgeAPIKey.edge_engine_id == str(engine.id)) | (EdgeAPIKey.edge_engine_id == None),
+    ).all()
+    if not api_keys:
+        return {}
+    keys_data = [{
+        "prefix": str(k.prefix),
+        "hash": str(k.key_hash),
+        "expires_at": str(k.expires_at) if k.expires_at else None,  # type: ignore[truthy-bool]
+    } for k in api_keys]
+    return {'FRONTBASE_API_KEY_HASHES': json.dumps(keys_data)}
 
 
 # =============================================================================

@@ -245,7 +245,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                         </Alert>
                     )}
 
-                    {/* Provider buttons — derived from PROVIDER_CONFIGS capabilities */}
+                    {/* Provider buttons — derived from EDGE_DATABASE_PROVIDERS registry */}
                     {!editingId && (
                         <div className="space-y-2">
                             <Label>Provider</Label>
@@ -257,7 +257,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                             key={opt.value}
                                             type="button"
                                             disabled={!opt.active}
-                                            onClick={() => opt.active && setSelectedProvider(opt.value)}
+                                            onClick={() => { opt.active && setSelectedProvider(opt.value); setFormAccountId(null); setFormUrl(''); setFormToken(''); setFormName(''); }}
                                             className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm transition-colors text-left
                                                 ${!opt.active
                                                     ? 'border-border opacity-50 cursor-not-allowed'
@@ -278,39 +278,41 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                         </div>
                     )}
 
-                    {/* Account resource picker — shown for any provider with connected-account support */}
-                    {DB_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.active && !editingId && (
-                        <AccountResourcePicker
-                            compatibleProviders={[selectedProvider]}
-                            label={selectedProvider === 'turso'
-                                ? 'From Connected Turso Account'
-                                : `From Connected Neon Account`}
-                            existingUrls={databases.map(d => d.db_url).filter(Boolean)}
-                            // Turso-specific: auto-select the container account, label as "Select Database", hide Display Name in connect modal
-                            autoSelectSingle={selectedProvider === 'turso'}
-                            resourceLabel={selectedProvider === 'turso' ? 'Select Database' : undefined}
-                            hideConnectDisplayName={selectedProvider === 'turso'}
-                            createResourceType={selectedProvider === 'turso' ? 'turso_db' : undefined}
-                            onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
-                                setFormAccountId(accountId);
-                                if (selectedProvider === 'turso') {
-                                    if (resource.db_url) setFormUrl(resource.db_url);
-                                    else if (resource.hostname) setFormUrl(`libsql://${resource.hostname}`);
-                                    if ((resource as any).token) setFormToken((resource as any).token);
-                                    if (!formName) setFormName(resource.name || '');
-                                } else if (selectedProvider === 'neon') {
-                                    if (resource.connection_uri) setFormUrl(resource.connection_uri);
-                                    else if (resource.db_url) setFormUrl(resource.db_url);
-                                    if (!formName) setFormName(resource.name || '');
-                                }
-                            }}
-                            onClear={() => {
-                                setFormAccountId(null);
-                                setFormUrl('');
-                                setFormToken('');
-                            }}
-                        />
-                    )}
+                    {/* Account resource picker — PRIMARY for active providers */}
+                    {(() => {
+                        const prov = DB_PROVIDER_OPTIONS.find(p => p.value === selectedProvider);
+                        if (!prov?.active || !prov.accountProvider || editingId) return null;
+                        return (
+                            <AccountResourcePicker
+                                compatibleProviders={[prov.accountProvider]}
+                                label={`Select ${prov.label} Database`}
+                                existingUrls={databases.map(d => d.db_url).filter(Boolean)}
+                                autoSelectSingle={selectedProvider === 'turso'}
+                                resourceLabel="Select Database"
+                                hideConnectDisplayName={selectedProvider === 'turso'}
+                                createResourceType={selectedProvider === 'turso' ? 'turso_db' : undefined}
+                                onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
+                                    setFormAccountId(accountId);
+                                    if (selectedProvider === 'turso') {
+                                        if (resource.db_url) setFormUrl(resource.db_url);
+                                        else if (resource.hostname) setFormUrl(`libsql://${resource.hostname}`);
+                                        if ((resource as any).token) setFormToken((resource as any).token);
+                                        if (!formName) setFormName(resource.name || '');
+                                    } else if (selectedProvider === 'neon') {
+                                        if (resource.connection_uri) setFormUrl(resource.connection_uri);
+                                        else if (resource.db_url) setFormUrl(resource.db_url);
+                                        if (!formName) setFormName(resource.name || '');
+                                    }
+                                }}
+                                onClear={() => {
+                                    setFormAccountId(null);
+                                    setFormUrl('');
+                                    setFormToken('');
+                                }}
+                            />
+                        );
+                    })()}
+
                     {/* Auto-discovered summary — show when resource picked from account */}
                     {formAccountId && (
                         <div className="space-y-3">
@@ -332,7 +334,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                         </div>
                     )}
 
-                    {/* Manual fields — only for inactive providers (no accounts) and edit mode */}
+                    {/* Manual fields — only for inactive providers or edit mode */}
                     {(!DB_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.active || editingId) && !formAccountId && (
                         <>
                             <div className="grid grid-cols-2 gap-3">

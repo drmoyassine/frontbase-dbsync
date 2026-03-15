@@ -88,7 +88,7 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
                         </Alert>
                     )}
 
-                    {/* Provider selector — derived from PROVIDER_CONFIGS capabilities */}
+                    {/* Provider selector — derived from EDGE_CACHE_PROVIDERS registry */}
                     <div className="space-y-2">
                         <Label>Provider</Label>
                         <div className="grid grid-cols-3 gap-2">
@@ -98,7 +98,7 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
                                     <button
                                         key={opt.value}
                                         type="button"
-                                        onClick={() => opt.active && setSelectedProvider(opt.value)}
+                                        onClick={() => { opt.active && setSelectedProvider(opt.value); if (setFormAccountId) setFormAccountId(null); setFormUrl(''); setFormToken(''); setFormName(''); }}
                                         disabled={!opt.active}
                                         className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm transition-colors text-left relative
                                             ${selectedProvider === opt.value
@@ -119,30 +119,34 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
                         </div>
                     </div>
 
-                    {/* Account resource picker — shown for providers with connected-account support */}
-                    {CACHE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.active && !editingId && setFormAccountId && (
-                        <AccountResourcePicker
-                            compatibleProviders={['upstash']}
-                            resourceTypeFilter="redis"
-                            createResourceType="redis"
-                            label="From Connected Upstash Account"
-                            existingUrls={existingUrls}
-                            onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
-                                setFormAccountId(accountId);
-                                if (resource.type === 'redis') {
-                                    if (resource.rest_url) setFormUrl(resource.rest_url);
-                                    else if (resource.endpoint) setFormUrl(`https://${resource.endpoint}`);
-                                    if (resource.rest_token) setFormToken(resource.rest_token);
-                                    if (!formName) setFormName(resource.name || '');
-                                }
-                            }}
-                            onClear={() => {
-                                setFormAccountId(null);
-                                setFormUrl('');
-                                setFormToken('');
-                            }}
-                        />
-                    )}
+                    {/* Account resource picker — PRIMARY for active providers */}
+                    {(() => {
+                        const prov = CACHE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider);
+                        if (!prov?.active || !prov.accountProvider || editingId || !setFormAccountId) return null;
+                        return (
+                            <AccountResourcePicker
+                                compatibleProviders={[prov.accountProvider]}
+                                resourceTypeFilter="redis"
+                                createResourceType="redis"
+                                label={`Select ${prov.label} Cache`}
+                                existingUrls={existingUrls}
+                                onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
+                                    setFormAccountId(accountId);
+                                    if (resource.type === 'redis') {
+                                        if (resource.rest_url) setFormUrl(resource.rest_url);
+                                        else if (resource.endpoint) setFormUrl(`https://${resource.endpoint}`);
+                                        if (resource.rest_token) setFormToken(resource.rest_token);
+                                        if (!formName) setFormName(resource.name || '');
+                                    }
+                                }}
+                                onClear={() => {
+                                    setFormAccountId(null);
+                                    setFormUrl('');
+                                    setFormToken('');
+                                }}
+                            />
+                        );
+                    })()}
 
                     {/* Auto-discovered summary — show when account picked */}
                     {formAccountId && (

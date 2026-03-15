@@ -249,7 +249,7 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                         </Alert>
                     )}
 
-                    {/* Provider selector */}
+                    {/* Provider selector — derived from EDGE_QUEUE_PROVIDERS registry */}
                     <div className="space-y-2">
                         <Label>Provider</Label>
                         <div className="grid grid-cols-2 gap-2">
@@ -259,7 +259,7 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                                     <button
                                         key={opt.value}
                                         type="button"
-                                        onClick={() => opt.active && setSelectedProvider(opt.value)}
+                                        onClick={() => { opt.active && setSelectedProvider(opt.value); setFormAccountId(null); setFormUrl(''); setFormToken(''); setFormSigningKey(''); setFormNextSigningKey(''); setFormName(''); }}
                                         disabled={!opt.active}
                                         className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm transition-colors text-left relative
                                             ${selectedProvider === opt.value
@@ -280,32 +280,36 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                         </div>
                     </div>
 
-                    {/* Account resource picker — shown for providers with connected-account support */}
-                    {QUEUE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.active && !editingId && (
-                        <AccountResourcePicker
-                            compatibleProviders={['upstash']}
-                            resourceTypeFilter="qstash"
-                            label="From Connected Upstash Account"
-                            existingUrls={queues.map(q => q.queue_url).filter(Boolean)}
-                            onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
-                                setFormAccountId(accountId);
-                                if (resource.type === 'qstash') {
-                                    if (resource.endpoint) setFormUrl(resource.endpoint);
-                                    if ((resource as any).token) setFormToken((resource as any).token);
-                                    if ((resource as any).signing_key) setFormSigningKey((resource as any).signing_key);
-                                    if ((resource as any).next_signing_key) setFormNextSigningKey((resource as any).next_signing_key);
-                                    if (!formName) setFormName('QStash');
-                                }
-                            }}
-                            onClear={() => {
-                                setFormAccountId(null);
-                                setFormUrl('');
-                                setFormToken('');
-                                setFormSigningKey('');
-                                setFormNextSigningKey('');
-                            }}
-                        />
-                    )}
+                    {/* Account resource picker — PRIMARY for active providers */}
+                    {(() => {
+                        const prov = QUEUE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider);
+                        if (!prov?.active || !prov.accountProvider || editingId) return null;
+                        return (
+                            <AccountResourcePicker
+                                compatibleProviders={[prov.accountProvider]}
+                                resourceTypeFilter="qstash"
+                                label={`Select ${prov.label} Queue`}
+                                existingUrls={queues.map(q => q.queue_url).filter(Boolean)}
+                                onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
+                                    setFormAccountId(accountId);
+                                    if (resource.type === 'qstash') {
+                                        if (resource.endpoint) setFormUrl(resource.endpoint);
+                                        if ((resource as any).token) setFormToken((resource as any).token);
+                                        if ((resource as any).signing_key) setFormSigningKey((resource as any).signing_key);
+                                        if ((resource as any).next_signing_key) setFormNextSigningKey((resource as any).next_signing_key);
+                                        if (!formName) setFormName('QStash');
+                                    }
+                                }}
+                                onClear={() => {
+                                    setFormAccountId(null);
+                                    setFormUrl('');
+                                    setFormToken('');
+                                    setFormSigningKey('');
+                                    setFormNextSigningKey('');
+                                }}
+                            />
+                        );
+                    })()}
 
                     {/* Auto-discovered summary — show when account picked */}
                     {formAccountId && (

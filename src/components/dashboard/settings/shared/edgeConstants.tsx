@@ -320,23 +320,50 @@ export interface EdgeResourceProvider {
     accountProvider: string | null;  // maps to PROVIDER_CONFIGS key
     active: boolean;
     placeholder?: string;  // URL placeholder for manual entry
+    /** Resource type filter for AccountResourcePicker discovery (e.g. 'redis', 'qstash', 'd1') */
+    resourceTypeFilter?: string;
+    /** Resource type to create when user clicks "Create New" */
+    createResourceType?: string;
 }
 
+/**
+ * Database providers — derived from PROVIDER_CONFIGS capabilities.
+ * Includes all providers with 'database' capability, EXCEPT wordpress_rest.
+ */
 export const EDGE_DATABASE_PROVIDERS: EdgeResourceProvider[] = [
-    { value: 'turso',  label: 'Turso',          icon: PROVIDER_ICONS.turso   || Cloud, accountProvider: 'turso',  active: true,  placeholder: 'libsql://your-db.turso.io' },
-    { value: 'neon',   label: 'Neon Postgres',   icon: PROVIDER_ICONS.neon    || Globe, accountProvider: 'neon',   active: true,  placeholder: 'postgresql://...' },
-    { value: 'sqlite', label: 'Local SQLite',    icon: HardDrive,                      accountProvider: null,     active: false, placeholder: 'file:local' },
+    { value: 'cloudflare', label: 'Cloudflare D1',    icon: PROVIDER_ICONS.cloudflare || Cloud,    accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'd1',     createResourceType: 'd1' },
+    { value: 'supabase',   label: 'Supabase',         icon: PROVIDER_ICONS.supabase   || Database, accountProvider: 'supabase',   active: true,  resourceTypeFilter: 'database' },
+    { value: 'turso',      label: 'Turso',             icon: PROVIDER_ICONS.turso      || Cloud,    accountProvider: 'turso',      active: true,  resourceTypeFilter: 'turso_db', createResourceType: 'turso_db' },
+    { value: 'neon',       label: 'Neon Postgres',     icon: PROVIDER_ICONS.neon       || Database, accountProvider: 'neon',       active: true,  resourceTypeFilter: 'database' },
+    { value: 'vercel',     label: 'Vercel Postgres',   icon: PROVIDER_ICONS.vercel     || Triangle, accountProvider: 'vercel',     active: true,  resourceTypeFilter: 'database' },
+    { value: 'postgres',   label: 'PostgreSQL',        icon: PROVIDER_ICONS.postgres   || Database, accountProvider: null,         active: false, placeholder: 'postgresql://user:pass@host:5432/db' },
+    { value: 'mysql',      label: 'MySQL',             icon: PROVIDER_ICONS.mysql      || HardDrive, accountProvider: null,        active: false, placeholder: 'mysql://user:pass@host:3306/db' },
+    { value: 'sqlite',     label: 'Local SQLite',      icon: HardDrive,                             accountProvider: null,         active: false, placeholder: 'file:local' },
 ];
 
+/**
+ * Cache providers — derived from PROVIDER_CONFIGS capabilities.
+ * Includes all providers with 'cache' capability.
+ */
 export const EDGE_CACHE_PROVIDERS: EdgeResourceProvider[] = [
-    { value: 'upstash',   label: 'Upstash Redis',     icon: PROVIDER_ICONS.upstash || Cloud, accountProvider: 'upstash', active: true  },
-    { value: 'redis',     label: 'Self-Hosted Redis',  icon: Server,                          accountProvider: null,      active: false },
-    { value: 'dragonfly', label: 'Dragonfly',          icon: Server,                          accountProvider: null,      active: false },
+    { value: 'upstash',    label: 'Upstash Redis',     icon: PROVIDER_ICONS.upstash    || Cloud,    accountProvider: 'upstash',    active: true,  resourceTypeFilter: 'redis',  createResourceType: 'redis' },
+    { value: 'cloudflare', label: 'Cloudflare KV',     icon: PROVIDER_ICONS.cloudflare || Cloud,    accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'kv' },
+    { value: 'vercel',     label: 'Vercel KV',         icon: PROVIDER_ICONS.vercel     || Triangle, accountProvider: 'vercel',     active: true,  resourceTypeFilter: 'kv' },
+    { value: 'deno',       label: 'Deno KV',           icon: PROVIDER_ICONS.deno       || Zap,      accountProvider: 'deno',       active: true,  resourceTypeFilter: 'kv' },
+    { value: 'redis',      label: 'Self-Hosted Redis',  icon: Server,                               accountProvider: null,         active: false },
+    { value: 'dragonfly',  label: 'Dragonfly',          icon: Server,                               accountProvider: null,         active: false },
 ];
 
+/**
+ * Queue providers — derived from PROVIDER_CONFIGS capabilities.
+ * Includes all providers with 'queue' capability.
+ */
 export const EDGE_QUEUE_PROVIDERS: EdgeResourceProvider[] = [
-    { value: 'qstash',   label: 'QStash',    icon: PROVIDER_ICONS.upstash || Zap, accountProvider: 'upstash', active: true  },
-    { value: 'rabbitmq', label: 'RabbitMQ',   icon: Server,                       accountProvider: null,      active: false },
-    { value: 'bullmq',   label: 'BullMQ',     icon: Server,                       accountProvider: null,      active: false },
-    { value: 'sqs',      label: 'AWS SQS',    icon: Cloud,                        accountProvider: null,      active: false },
+    { value: 'qstash',     label: 'QStash',             icon: PROVIDER_ICONS.upstash    || Zap,     accountProvider: 'upstash',    active: true,  resourceTypeFilter: 'qstash' },
+    { value: 'cloudflare', label: 'Cloudflare Queues',   icon: PROVIDER_ICONS.cloudflare || Cloud,   accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'queue' },
+    { value: 'deno',       label: 'Deno Queues',         icon: PROVIDER_ICONS.deno       || Zap,     accountProvider: 'deno',       active: true,  resourceTypeFilter: 'queue' },
+    { value: 'rabbitmq',   label: 'RabbitMQ',            icon: Server,                               accountProvider: null,         active: false },
+    { value: 'bullmq',     label: 'BullMQ',              icon: Server,                               accountProvider: null,         active: false },
+    { value: 'sqs',        label: 'AWS SQS',             icon: Cloud,                                accountProvider: null,         active: false },
 ];
+

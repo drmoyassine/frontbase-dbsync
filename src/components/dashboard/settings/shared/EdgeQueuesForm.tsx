@@ -287,18 +287,19 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                         return (
                             <AccountResourcePicker
                                 compatibleProviders={[prov.accountProvider]}
-                                resourceTypeFilter="qstash"
-                                label={`Select ${prov.label} Queue`}
+                                resourceTypeFilter={prov.resourceTypeFilter}
+                                label={`Select ${prov.label}`}
                                 existingUrls={queues.map(q => q.queue_url).filter(Boolean)}
+                                autoSelectSingle
+                                hideConnectDisplayName
                                 onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
                                     setFormAccountId(accountId);
-                                    if (resource.type === 'qstash') {
-                                        if (resource.endpoint) setFormUrl(resource.endpoint);
-                                        if ((resource as any).token) setFormToken((resource as any).token);
-                                        if ((resource as any).signing_key) setFormSigningKey((resource as any).signing_key);
-                                        if ((resource as any).next_signing_key) setFormNextSigningKey((resource as any).next_signing_key);
-                                        if (!formName) setFormName('QStash');
-                                    }
+                                    const url = resource.endpoint || resource.rest_url || resource.db_url || '';
+                                    if (url) setFormUrl(url);
+                                    if ((resource as any).token) setFormToken((resource as any).token);
+                                    if ((resource as any).signing_key) setFormSigningKey((resource as any).signing_key);
+                                    if ((resource as any).next_signing_key) setFormNextSigningKey((resource as any).next_signing_key);
+                                    if (!formName) setFormName(resource.name || prov.label);
                                 }}
                                 onClear={() => {
                                     setFormAccountId(null);

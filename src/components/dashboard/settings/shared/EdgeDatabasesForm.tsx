@@ -249,7 +249,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                     {!editingId && (
                         <div className="space-y-2">
                             <Label>Provider</Label>
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className="grid grid-cols-4 gap-2">
                                 {DB_PROVIDER_OPTIONS.map(opt => {
                                     const Icon = opt.icon;
                                     return (
@@ -285,24 +285,21 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                         return (
                             <AccountResourcePicker
                                 compatibleProviders={[prov.accountProvider]}
+                                resourceTypeFilter={prov.resourceTypeFilter}
                                 label={`Select ${prov.label} Database`}
                                 existingUrls={databases.map(d => d.db_url).filter(Boolean)}
-                                autoSelectSingle={selectedProvider === 'turso'}
+                                autoSelectSingle
                                 resourceLabel="Select Database"
-                                hideConnectDisplayName={selectedProvider === 'turso'}
-                                createResourceType={selectedProvider === 'turso' ? 'turso_db' : undefined}
+                                hideConnectDisplayName
+                                createResourceType={prov.createResourceType}
                                 onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
                                     setFormAccountId(accountId);
-                                    if (selectedProvider === 'turso') {
-                                        if (resource.db_url) setFormUrl(resource.db_url);
-                                        else if (resource.hostname) setFormUrl(`libsql://${resource.hostname}`);
-                                        if ((resource as any).token) setFormToken((resource as any).token);
-                                        if (!formName) setFormName(resource.name || '');
-                                    } else if (selectedProvider === 'neon') {
-                                        if (resource.connection_uri) setFormUrl(resource.connection_uri);
-                                        else if (resource.db_url) setFormUrl(resource.db_url);
-                                        if (!formName) setFormName(resource.name || '');
-                                    }
+                                    // Resolve URL from best available field
+                                    const url = resource.connection_uri || resource.db_url
+                                        || (resource.hostname ? `libsql://${resource.hostname}` : '');
+                                    if (url) setFormUrl(url);
+                                    if ((resource as any).token) setFormToken((resource as any).token);
+                                    if (!formName) setFormName(resource.name || '');
                                 }}
                                 onClear={() => {
                                     setFormAccountId(null);

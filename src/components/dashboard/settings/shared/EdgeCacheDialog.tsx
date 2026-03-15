@@ -126,18 +126,21 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
                         return (
                             <AccountResourcePicker
                                 compatibleProviders={[prov.accountProvider]}
-                                resourceTypeFilter="redis"
-                                createResourceType="redis"
-                                label={`Select ${prov.label} Cache`}
+                                resourceTypeFilter={prov.resourceTypeFilter}
+                                createResourceType={prov.createResourceType}
+                                label={`Select ${prov.label}`}
                                 existingUrls={existingUrls}
+                                autoSelectSingle
+                                hideConnectDisplayName
                                 onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
                                     setFormAccountId(accountId);
-                                    if (resource.type === 'redis') {
-                                        if (resource.rest_url) setFormUrl(resource.rest_url);
-                                        else if (resource.endpoint) setFormUrl(`https://${resource.endpoint}`);
-                                        if (resource.rest_token) setFormToken(resource.rest_token);
-                                        if (!formName) setFormName(resource.name || '');
-                                    }
+                                    const url = resource.rest_url
+                                        || (resource.endpoint ? `https://${resource.endpoint}` : '')
+                                        || resource.db_url || '';
+                                    if (url) setFormUrl(url);
+                                    if (resource.rest_token) setFormToken(resource.rest_token);
+                                    else if ((resource as any).token) setFormToken((resource as any).token);
+                                    if (!formName) setFormName(resource.name || '');
                                 }}
                                 onClear={() => {
                                     setFormAccountId(null);

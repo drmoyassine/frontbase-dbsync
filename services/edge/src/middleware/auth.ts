@@ -66,11 +66,21 @@ interface APIKeyHashEntry {
  */
 export const aiApiKeyAuth = async (c: Context, next: Next) => {
     const envHashes = process.env.FRONTBASE_API_KEY_HASHES;
+    const isDev = (process.env.NODE_ENV || 'development') === 'development';
 
     if (!envHashes) {
-        // No API keys configured — allow all (dev mode)
-        console.warn('⚠️ No FRONTBASE_API_KEY_HASHES configured - AI auth disabled');
-        return next();
+        if (isDev) {
+            // Dev mode: allow all requests when no keys configured
+            return next();
+        }
+        // Production: fail closed — no keys configured means no access
+        return c.json({
+            error: {
+                message: 'AI endpoints are not configured. No API keys have been deployed to this engine.',
+                type: 'invalid_request_error',
+                code: 'no_api_keys_configured',
+            },
+        }, 403);
     }
 
     let keyEntries: APIKeyHashEntry[];
@@ -78,11 +88,27 @@ export const aiApiKeyAuth = async (c: Context, next: Next) => {
         keyEntries = JSON.parse(envHashes);
     } catch {
         console.error('[AI Auth] Failed to parse FRONTBASE_API_KEY_HASHES');
-        return next(); // Degrade gracefully — allow through
+        // Fail closed — don't allow access if config is corrupted
+        return c.json({
+            error: {
+                message: 'API key configuration error. Contact administrator.',
+                type: 'server_error',
+                code: 'config_error',
+            },
+        }, 500);
     }
 
     if (keyEntries.length === 0) {
-        return next(); // No keys configured — allow all
+        if (isDev) {
+            return next(); // Dev mode: empty array = no auth
+        }
+        return c.json({
+            error: {
+                message: 'No API keys configured for this engine.',
+                type: 'invalid_request_error',
+                code: 'no_api_keys_configured',
+            },
+        }, 403);
     }
 
     const authHeader = c.req.header('Authorization');

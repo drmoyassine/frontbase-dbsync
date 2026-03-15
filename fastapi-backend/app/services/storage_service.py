@@ -405,11 +405,499 @@ class SupabaseStorageAdapter(StorageAdapter):
             raise Exception(f"Failed to create folder: {res.text}")
 
 
+# ── Cloudflare R2 Adapter ─────────────────────────────────────────────
+
+class CloudflareR2Adapter(StorageAdapter):
+    """Storage adapter for Cloudflare R2 (via CF REST API v4)."""
+
+    def __init__(self, api_token: str, account_id: str):
+        self.api_token = api_token
+        self.account_id = account_id
+        self.base_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}"
+        self.headers = {"Authorization": f"Bearer {api_token}"}
+
+    async def _get(self, path: str) -> Any:
+        async with httpx.AsyncClient() as client:
+            res = await client.get(f"{self.base_url}{path}", headers=self.headers)
+        if not res.is_success:
+            raise Exception(f"CF R2 API error: {res.text}")
+        data = res.json()
+        return data.get("result", data)
+
+    async def _post(self, path: str, payload: Dict[str, Any] | None = None) -> Any:
+        async with httpx.AsyncClient() as client:
+            res = await client.post(f"{self.base_url}{path}", json=payload or {}, headers=self.headers)
+        if not res.is_success:
+            raise Exception(f"CF R2 API error: {res.text}")
+        data = res.json()
+        return data.get("result", data)
+
+    async def _delete(self, path: str) -> None:
+        async with httpx.AsyncClient() as client:
+            res = await client.delete(f"{self.base_url}{path}", headers=self.headers)
+        if not res.is_success:
+            raise Exception(f"CF R2 API error: {res.text}")
+
+    async def list_buckets(self) -> List[Dict[str, Any]]:
+        async with httpx.AsyncClient() as client:
+            res = await client.get(
+                f"{self.base_url}/r2/buckets", headers=self.headers
+            )
+        if res.status_code == 403:
+            logger.warning(
+                "CF API token lacks R2 permission — return empty. "
+                "Re-create the token with 'Workers R2 Storage:Read' scope."
+            )
+            return []
+        if not res.is_success:
+            raise Exception(f"CF R2 API error: {res.text}")
+        data = res.json()
+        result = data.get("result", data)
+        buckets = result if isinstance(result, list) else result.get("buckets", [])
+        return [
+            {
+                "id": b.get("name"),
+                "name": b.get("name"),
+                "public": False,
+                "created_at": b.get("creation_date"),
+            }
+            for b in buckets
+        ]
+
+    async def create_bucket(self, name: str, public: bool = False,
+                            file_size_limit: Optional[int] = None,
+                            allowed_mime_types: Optional[List[str]] = None) -> Dict[str, Any]:
+        result = await self._post("/r2/buckets", {"name": name})
+        return {"id": name, "name": name, "public": False, "created_at": None}
+
+    async def get_bucket(self, bucket_id: str) -> Dict[str, Any]:
+        result = await self._get(f"/r2/buckets/{bucket_id}")
+        return {
+            "id": result.get("name", bucket_id),
+            "name": result.get("name", bucket_id),
+            "public": False,
+            "created_at": result.get("creation_date"),
+        }
+
+    async def update_bucket(self, bucket_id: str, public: bool = False,
+                            file_size_limit: Optional[int] = None,
+                            allowed_mime_types: Optional[List[str]] = None) -> None:
+        # R2 doesn't support bucket-level settings update via REST
+        logger.info(f"R2 update_bucket is a no-op for {bucket_id}")
+
+    async def delete_bucket(self, bucket_id: str) -> None:
+        await self._delete(f"/r2/buckets/{bucket_id}")
+
+    async def empty_bucket(self, bucket_id: str) -> None:
+        # R2 doesn't have a native "empty bucket" — delete all objects
+        files = await self.list_files(bucket_id)
+        if files:
+            paths = [f["name"] for f in files if not f.get("isFolder")]
+            if paths:
+                await self.delete_files(bucket_id, paths)
+
+    async def list_files(self, bucket: str, path: str = "",
+                         limit: int = 100, offset: int = 0,
+                         search: Optional[str] = None) -> List[Dict[str, Any]]:
+        # Use CF R2 API to list objects in a bucket
+        params: Dict[str, Any] = {"per_page": limit}
+        if path:
+            params["prefix"] = path if path.endswith("/") else f"{path}/"
+        params["delimiter"] = "/"
+
+        async with httpx.AsyncClient() as client:
+            res = await client.get(
+                f"{self.base_url}/r2/buckets/{bucket}/objects",
+                params=params,
+                headers=self.headers,
+            )
+        if not res.is_success:
+            raise Exception(f"Failed to list R2 objects: {res.text}")
+
+        data = res.json().get("result", {})
+        objects = data.get("objects", [])
+        prefixes = data.get("delimited_prefixes", [])
+
+        formatted = []
+        # Folders (common prefixes)
+        for prefix in prefixes:
+            folder_name = prefix.rstrip("/").rsplit("/", 1)[-1]
+            formatted.append({
+                "name": folder_name,
+                "id": prefix,
+                "size": 0,
+                "updated_at": None,
+                "mimetype": None,
+                "isFolder": True,
+            })
+        # Files
+        for obj in objects:
+            key = obj.get("key", "")
+            name = key.rsplit("/", 1)[-1] if "/" in key else key
+            if not name or name.endswith("/"):
+                continue
+            formatted.append({
+                "name": name,
+                "id": key,
+                "size": obj.get("size", 0),
+                "updated_at": obj.get("last_modified"),
+                "mimetype": obj.get("http_metadata", {}).get("contentType"),
+                "isFolder": False,
+            })
+        return formatted
+
+    async def upload_file(self, bucket: str, path: str,
+                          content: bytes, content_type: str) -> Dict[str, Any]:
+        headers = {**self.headers, "Content-Type": content_type}
+        async with httpx.AsyncClient() as client:
+            res = await client.put(
+                f"{self.base_url}/r2/buckets/{bucket}/objects/{path}",
+                content=content,
+                headers=headers,
+            )
+        if not res.is_success:
+            raise Exception(f"Failed to upload to R2: {res.text}")
+        return {"path": path}
+
+    async def delete_files(self, bucket: str, paths: List[str]) -> None:
+        for path in paths:
+            await self._delete(f"/r2/buckets/{bucket}/objects/{path}")
+
+    async def get_signed_url(self, bucket: str, path: str,
+                             expires_in: int = 3600) -> str:
+        raise Exception("R2 signed URLs require S3-compatible presigning (not yet implemented)")
+
+    async def get_public_url(self, bucket: str, path: str) -> str:
+        # R2 custom domains required for public access
+        return f"https://{self.account_id}.r2.cloudflarestorage.com/{bucket}/{path}"
+
+    async def move_file(self, bucket: str, source_key: str,
+                        destination_key: str) -> None:
+        raise Exception("R2 move requires S3 copy+delete (not yet implemented)")
+
+    async def create_folder(self, bucket: str, folder_path: str) -> None:
+        # R2 is flat — create a placeholder object
+        if not folder_path.endswith("/"):
+            folder_path += "/"
+        await self.upload_file(bucket, folder_path, b"", "application/x-directory")
+
+
+# ── Vercel Blob Adapter ──────────────────────────────────────────────
+
+class VercelBlobAdapter(StorageAdapter):
+    """Storage adapter for Vercel Blob stores."""
+
+    def __init__(self, api_token: str):
+        self.api_token = api_token
+        self.headers = {"Authorization": f"Bearer {api_token}"}
+
+    async def list_buckets(self) -> List[Dict[str, Any]]:
+        """List Vercel projects as 'buckets' (each project can use Vercel Blob).
+
+        Vercel doesn't expose a /v1/blob/stores list endpoint.
+        Projects are the correct unit — each one can have Blob storage.
+        """
+        async with httpx.AsyncClient() as client:
+            res = await client.get(
+                "https://api.vercel.com/v9/projects",
+                headers=self.headers,
+                params={"limit": 100},
+            )
+        if not res.is_success:
+            logger.warning(f"Vercel projects API failed: {res.status_code}")
+            return []
+        data = res.json()
+        projects = data.get("projects", [])
+        return [
+            {
+                "id": p.get("id", ""),
+                "name": p.get("name", p.get("id", "")),
+                "public": True,
+                "created_at": p.get("createdAt"),
+            }
+            for p in projects
+        ]
+
+    async def create_bucket(self, name: str, public: bool = False,
+                            file_size_limit: Optional[int] = None,
+                            allowed_mime_types: Optional[List[str]] = None) -> Dict[str, Any]:
+        raise Exception("Vercel Blob stores are created via the Vercel dashboard or CLI")
+
+    async def get_bucket(self, bucket_id: str) -> Dict[str, Any]:
+        async with httpx.AsyncClient() as client:
+            res = await client.get(
+                f"https://api.vercel.com/v1/blob/stores/{bucket_id}",
+                headers=self.headers,
+            )
+        if not res.is_success:
+            raise Exception(f"Failed to get Vercel Blob store: {res.text}")
+        s = res.json()
+        return {
+            "id": s.get("storeId", bucket_id),
+            "name": s.get("name", bucket_id),
+            "public": True,
+            "created_at": s.get("createdAt"),
+        }
+
+    async def update_bucket(self, bucket_id: str, public: bool = False,
+                            file_size_limit: Optional[int] = None,
+                            allowed_mime_types: Optional[List[str]] = None) -> None:
+        logger.info(f"Vercel Blob store update is a no-op for {bucket_id}")
+
+    async def delete_bucket(self, bucket_id: str) -> None:
+        raise Exception("Vercel Blob stores cannot be deleted via API")
+
+    async def empty_bucket(self, bucket_id: str) -> None:
+        files = await self.list_files(bucket_id)
+        if files:
+            urls = [f["id"] for f in files if not f.get("isFolder")]
+            if urls:
+                await self.delete_files(bucket_id, urls)
+
+    async def list_files(self, bucket: str, path: str = "",
+                         limit: int = 100, offset: int = 0,
+                         search: Optional[str] = None) -> List[Dict[str, Any]]:
+        params: Dict[str, Any] = {"limit": limit, "storeId": bucket}
+        if path:
+            params["prefix"] = path if path.endswith("/") else f"{path}/"
+        if offset:
+            # Vercel uses cursor-based pagination; offset not natively supported
+            pass
+
+        async with httpx.AsyncClient() as client:
+            res = await client.get(
+                "https://api.vercel.com/v1/blob",
+                params=params,
+                headers=self.headers,
+            )
+        if not res.is_success:
+            raise Exception(f"Failed to list Vercel Blobs: {res.text}")
+
+        data = res.json()
+        blobs = data.get("blobs", [])
+        folders = data.get("folders", [])
+
+        formatted = []
+        for folder in folders:
+            folder_name = folder.rstrip("/").rsplit("/", 1)[-1] if "/" in folder else folder.rstrip("/")
+            formatted.append({
+                "name": folder_name,
+                "id": folder,
+                "size": 0,
+                "updated_at": None,
+                "mimetype": None,
+                "isFolder": True,
+            })
+        for blob in blobs:
+            pathname = blob.get("pathname", "")
+            name = pathname.rsplit("/", 1)[-1] if "/" in pathname else pathname
+            formatted.append({
+                "name": name,
+                "id": blob.get("url", pathname),
+                "size": blob.get("size", 0),
+                "updated_at": blob.get("uploadedAt"),
+                "mimetype": blob.get("contentType"),
+                "isFolder": False,
+            })
+        return formatted
+
+    async def upload_file(self, bucket: str, path: str,
+                          content: bytes, content_type: str) -> Dict[str, Any]:
+        headers = {
+            **self.headers,
+            "Content-Type": content_type,
+            "x-api-blob-store-id": bucket,
+        }
+        async with httpx.AsyncClient() as client:
+            res = await client.put(
+                f"https://api.vercel.com/v1/blob/{path}",
+                content=content,
+                headers=headers,
+            )
+        if not res.is_success:
+            raise Exception(f"Failed to upload to Vercel Blob: {res.text}")
+        data = res.json()
+        return {"path": path, "publicUrl": data.get("url", "")}
+
+    async def delete_files(self, bucket: str, paths: List[str]) -> None:
+        # Vercel Blob delete by URL
+        async with httpx.AsyncClient() as client:
+            res = await client.request(
+                "DELETE",
+                "https://api.vercel.com/v1/blob",
+                json={"urls": paths},
+                headers=self.headers,
+            )
+        if not res.is_success:
+            raise Exception(f"Failed to delete Vercel Blobs: {res.text}")
+
+    async def get_signed_url(self, bucket: str, path: str,
+                             expires_in: int = 3600) -> str:
+        raise Exception("Vercel Blob signed URLs are not available via REST API")
+
+    async def get_public_url(self, bucket: str, path: str) -> str:
+        # Vercel Blob URLs are public by default — but need the actual blob URL
+        return path  # path is typically the full URL for Vercel Blobs
+
+    async def move_file(self, bucket: str, source_key: str,
+                        destination_key: str) -> None:
+        raise Exception("Vercel Blob does not support move/rename via API")
+
+    async def create_folder(self, bucket: str, folder_path: str) -> None:
+        # Vercel Blob is flat key-value — folders are virtual
+        if not folder_path.endswith("/"):
+            folder_path += "/"
+        await self.upload_file(bucket, f"{folder_path}.folder", b"", "application/x-directory")
+
+
+# ── Netlify Blobs Adapter ────────────────────────────────────────────
+
+class NetlifyBlobsAdapter(StorageAdapter):
+    """Storage adapter for Netlify Blobs (per-site blob stores)."""
+
+    def __init__(self, api_token: str):
+        self.api_token = api_token
+        self.headers = {"Authorization": f"Bearer {api_token}"}
+        self.base_url = "https://api.netlify.com/api/v1"
+
+    async def list_buckets(self) -> List[Dict[str, Any]]:
+        """List Netlify sites as 'buckets' (each site has its own blob store)."""
+        async with httpx.AsyncClient() as client:
+            res = await client.get(
+                f"{self.base_url}/sites",
+                headers=self.headers,
+                params={"per_page": 100},
+            )
+        if not res.is_success:
+            raise Exception(f"Failed to list Netlify sites: {res.text}")
+        sites = res.json()
+        return [
+            {
+                "id": s.get("id", ""),
+                "name": s.get("name", s.get("id", "")),
+                "public": True,
+                "created_at": s.get("created_at"),
+            }
+            for s in sites
+        ]
+
+    async def create_bucket(self, name: str, public: bool = False,
+                            file_size_limit: Optional[int] = None,
+                            allowed_mime_types: Optional[List[str]] = None) -> Dict[str, Any]:
+        raise Exception("Netlify Blobs are per-site — create a Netlify site first")
+
+    async def get_bucket(self, bucket_id: str) -> Dict[str, Any]:
+        async with httpx.AsyncClient() as client:
+            res = await client.get(
+                f"{self.base_url}/sites/{bucket_id}",
+                headers=self.headers,
+            )
+        if not res.is_success:
+            raise Exception(f"Failed to get Netlify site: {res.text}")
+        s = res.json()
+        return {
+            "id": s.get("id", bucket_id),
+            "name": s.get("name", bucket_id),
+            "public": True,
+            "created_at": s.get("created_at"),
+        }
+
+    async def update_bucket(self, bucket_id: str, public: bool = False,
+                            file_size_limit: Optional[int] = None,
+                            allowed_mime_types: Optional[List[str]] = None) -> None:
+        logger.info(f"Netlify Blobs update_bucket is a no-op for {bucket_id}")
+
+    async def delete_bucket(self, bucket_id: str) -> None:
+        raise Exception("Cannot delete a Netlify site via the Blobs adapter")
+
+    async def empty_bucket(self, bucket_id: str) -> None:
+        raise Exception("Netlify Blobs empty is not yet supported")
+
+    async def list_files(self, bucket: str, path: str = "",
+                         limit: int = 100, offset: int = 0,
+                         search: Optional[str] = None) -> List[Dict[str, Any]]:
+        # Netlify Blobs API — list deployed files for a site
+        async with httpx.AsyncClient() as client:
+            res = await client.get(
+                f"{self.base_url}/sites/{bucket}/files",
+                headers=self.headers,
+            )
+        if not res.is_success:
+            raise Exception(f"Failed to list Netlify files: {res.text}")
+
+        files = res.json()
+        formatted = []
+        prefix = (path + "/") if path else ""
+        for f in files:
+            file_path = f.get("path", "").lstrip("/")
+            if prefix and not file_path.startswith(prefix):
+                continue
+            relative = file_path[len(prefix):] if prefix else file_path
+            # Skip nested files (only show immediate children)
+            if "/" in relative:
+                # Extract top-level folder name
+                folder_name = relative.split("/")[0]
+                if not any(item["name"] == folder_name and item["isFolder"] for item in formatted):
+                    formatted.append({
+                        "name": folder_name,
+                        "id": f"{prefix}{folder_name}/",
+                        "size": 0,
+                        "updated_at": None,
+                        "mimetype": None,
+                        "isFolder": True,
+                    })
+                continue
+            if not relative:
+                continue
+            formatted.append({
+                "name": relative,
+                "id": file_path,
+                "size": f.get("size", 0),
+                "updated_at": None,
+                "mimetype": f.get("mime_type"),
+                "isFolder": False,
+            })
+        return formatted[:limit]
+
+    async def upload_file(self, bucket: str, path: str,
+                          content: bytes, content_type: str) -> Dict[str, Any]:
+        raise Exception("Netlify Blobs upload requires deploy context (not yet supported)")
+
+    async def delete_files(self, bucket: str, paths: List[str]) -> None:
+        raise Exception("Netlify Blobs delete requires deploy context (not yet supported)")
+
+    async def get_signed_url(self, bucket: str, path: str,
+                             expires_in: int = 3600) -> str:
+        raise Exception("Netlify Blobs does not support signed URLs")
+
+    async def get_public_url(self, bucket: str, path: str) -> str:
+        # Get site URL first
+        async with httpx.AsyncClient() as client:
+            res = await client.get(
+                f"{self.base_url}/sites/{bucket}",
+                headers=self.headers,
+            )
+        if not res.is_success:
+            return f"https://{bucket}.netlify.app/{path}"
+        site = res.json()
+        url = site.get("ssl_url") or site.get("url") or f"https://{bucket}.netlify.app"
+        return f"{url}/{path}"
+
+    async def move_file(self, bucket: str, source_key: str,
+                        destination_key: str) -> None:
+        raise Exception("Netlify Blobs does not support move/rename")
+
+    async def create_folder(self, bucket: str, folder_path: str) -> None:
+        raise Exception("Netlify Blobs does not support folder creation via API")
+
+
 # ── Factory ───────────────────────────────────────────────────────────
 
 ADAPTER_REGISTRY: Dict[str, type] = {
     "supabase": SupabaseStorageAdapter,
-    # Future: "cloudflare": R2StorageAdapter, etc.
+    "cloudflare": CloudflareR2Adapter,
+    "vercel": VercelBlobAdapter,
+    "netlify": NetlifyBlobsAdapter,
 }
 
 
@@ -417,6 +905,8 @@ def get_storage_adapter(db: Session, storage_provider_id: str) -> StorageAdapter
     """Resolve a StorageProvider → EdgeProviderAccount → credentials → adapter.
 
     This is the main entry point for all storage operations.
+    Uses the adapter registry to map provider type → adapter class,
+    then builds the adapter with provider-specific credentials.
     """
     from app.models.storage_provider import StorageProvider
 
@@ -436,15 +926,55 @@ def get_storage_adapter(db: Session, storage_provider_id: str) -> StorageAdapter
         from fastapi import HTTPException
         raise HTTPException(400, f"No storage adapter for provider type '{provider_type}'")
 
-    # Build adapter based on provider type
+    # ── Build adapter with provider-specific credentials ──────────────
     if provider_type == "supabase":
         api_url = ctx.get("api_url", "")
-        # Prefer service_role_key for full access, fallback to anon_key
         auth_key = ctx.get("service_role_key", "") or ctx.get("anon_key", "")
         if not api_url or not auth_key:
             from fastapi import HTTPException
             raise HTTPException(400, "Supabase account missing api_url or keys")
         return SupabaseStorageAdapter(api_url, auth_key)
+
+    if provider_type == "cloudflare":
+        api_token = ctx.get("api_token", "")
+        if not api_token:
+            from fastapi import HTTPException
+            raise HTTPException(400, "Cloudflare account missing api_token")
+        # Resolve account_id from metadata or first account
+        account_id = ctx.get("account_id", "")
+        if not account_id:
+            # Fetch first account ID via CF API
+            try:
+                import httpx as _httpx
+                resp = _httpx.get(
+                    "https://api.cloudflare.com/client/v4/accounts",
+                    headers={"Authorization": f"Bearer {api_token}"},
+                    params={"per_page": 1},
+                )
+                if resp.is_success:
+                    accounts = resp.json().get("result", [])
+                    if accounts:
+                        account_id = accounts[0]["id"]
+            except Exception:
+                pass
+        if not account_id:
+            from fastapi import HTTPException
+            raise HTTPException(400, "Could not resolve Cloudflare account ID for R2")
+        return CloudflareR2Adapter(api_token, account_id)
+
+    if provider_type == "vercel":
+        api_token = ctx.get("api_token", "")
+        if not api_token:
+            from fastapi import HTTPException
+            raise HTTPException(400, "Vercel account missing api_token")
+        return VercelBlobAdapter(api_token)
+
+    if provider_type == "netlify":
+        api_token = ctx.get("api_token", "")
+        if not api_token:
+            from fastapi import HTTPException
+            raise HTTPException(400, "Netlify account missing api_token")
+        return NetlifyBlobsAdapter(api_token)
 
     from fastapi import HTTPException
     raise HTTPException(400, f"Unsupported storage provider: {provider_type}")

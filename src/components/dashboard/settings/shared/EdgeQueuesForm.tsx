@@ -252,7 +252,7 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                     {/* Provider selector — derived from EDGE_QUEUE_PROVIDERS registry */}
                     <div className="space-y-2">
                         <Label>Provider</Label>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-3 gap-2">
                             {QUEUE_PROVIDER_OPTIONS.map(opt => {
                                 const Icon = opt.icon;
                                 return (

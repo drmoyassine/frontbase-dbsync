@@ -366,3 +366,16 @@ export const EDGE_QUEUE_PROVIDERS: EdgeResourceProvider[] = [
     { value: 'sqs',        label: 'AWS SQS',             icon: Cloud,                                accountProvider: null,         active: false },
 ];
 
+/**
+ * Storage providers — derived from PROVIDER_CONFIGS capabilities.
+ * Includes all providers with 'storage' capability.
+ */
+export const EDGE_STORAGE_PROVIDERS: EdgeResourceProvider[] = [
+    { value: 'cloudflare', label: 'Cloudflare R2',       icon: PROVIDER_ICONS.cloudflare || Cloud,    accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'r2' },
+    { value: 'supabase',   label: 'Supabase Storage',    icon: PROVIDER_ICONS.supabase   || Database, accountProvider: 'supabase',   active: true,  resourceTypeFilter: 'supabase_project' },
+    { value: 'vercel',     label: 'Vercel Blob',         icon: PROVIDER_ICONS.vercel     || Triangle, accountProvider: 'vercel',     active: true,  resourceTypeFilter: 'blob_store' },
+    { value: 'netlify',    label: 'Netlify Blobs',       icon: PROVIDER_ICONS.netlify    || Hexagon,  accountProvider: 'netlify',    active: true,  resourceTypeFilter: 'netlify_site' },
+    { value: 's3',         label: 'AWS S3',              icon: Cloud,                                 accountProvider: null,         active: false },
+    { value: 'gcs',        label: 'Google Cloud',        icon: Cloud,                                 accountProvider: null,         active: false },
+];
+

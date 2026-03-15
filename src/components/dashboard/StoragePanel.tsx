@@ -2,6 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { HardDrive, Plus, Trash2 } from 'lucide-react';
 import { FileBrowser } from './FileBrowser';
 import { toast } from 'sonner';
@@ -10,6 +11,7 @@ import {
   STORAGE_CAPABLE_PROVIDERS,
   PROVIDER_CONFIGS,
   PROVIDER_ICONS,
+  EDGE_STORAGE_PROVIDERS,
 } from '@/components/dashboard/settings/shared/edgeConstants';
 import { ConnectProviderDialog } from '@/components/dashboard/settings/shared/ConnectProviderDialog';
 import {
@@ -18,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useEdgeProviders } from '@/hooks/useEdgeInfrastructure';
@@ -62,7 +65,9 @@ function useStorageProviders() {
   });
 }
 
-// ── Add-Storage Dialog ────────────────────────────────────────────────
+// ── Add-Storage Dialog — Unified with provider tabs ───────────────────
+
+const STORAGE_PROVIDER_OPTIONS = EDGE_STORAGE_PROVIDERS;
 
 function AddStorageDialog({
   open,
@@ -74,16 +79,19 @@ function AddStorageDialog({
   const queryClient = useQueryClient();
   const { data: allAccounts = [] } = useEdgeProviders();
   const { data: existingProviders = [] } = useStorageProviders();
+  const [selectedProvider, setSelectedProvider] = React.useState<string>('cloudflare');
   const [selectedAccountId, setSelectedAccountId] = React.useState<string>('');
   const [connectOpen, setConnectOpen] = React.useState(false);
 
-  // Storage-capable accounts that haven't already been added
+  // Filter accounts by selected provider
   const availableAccounts = React.useMemo(() => {
+    const prov = STORAGE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider);
+    if (!prov?.accountProvider) return [];
     const existingIds = new Set(existingProviders.map(p => p.provider_account_id));
     return allAccounts.filter(
-      a => STORAGE_CAPABLE_PROVIDERS.includes(a.provider) && !existingIds.has(a.id)
+      a => a.provider === prov.accountProvider && !existingIds.has(a.id)
     );
-  }, [allAccounts, existingProviders]);
+  }, [allAccounts, existingProviders, selectedProvider]);
 
   const createMutation = useMutation({
     mutationFn: storageProvidersApi.create,
@@ -104,62 +112,100 @@ function AddStorageDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Storage Provider</DialogTitle>
             <DialogDescription>
-              Select a connected account to use for storage, or connect a new one.
+              Select a provider and connect an account for file storage.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 pt-2">
-            {availableAccounts.length > 0 ? (
-              <>
-                <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select account..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableAccounts.map(a => {
-                      const config = PROVIDER_CONFIGS[a.provider];
-                      const Icon = PROVIDER_ICONS[a.provider];
-                      return (
-                        <SelectItem key={a.id} value={a.id}>
-                          <div className="flex items-center gap-2">
-                            {Icon && <Icon className="h-4 w-4" />}
-                            <span>{a.name}</span>
-                            <span className="text-xs text-muted-foreground">({config?.label || a.provider})</span>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-                <div className="flex gap-2 justify-end">
+          <div className="space-y-4 py-4">
+            {/* Provider tabs — 3 col grid matching DB/Cache/Queue */}
+            <div className="space-y-2">
+              <Label>Provider</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {STORAGE_PROVIDER_OPTIONS.map(opt => {
+                  const Icon = opt.icon;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => { opt.active && setSelectedProvider(opt.value); setSelectedAccountId(''); }}
+                      disabled={!opt.active}
+                      className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm transition-colors text-left relative
+                        ${selectedProvider === opt.value
+                          ? 'border-primary bg-primary/5 text-primary'
+                          : opt.active
+                            ? 'border-border hover:bg-accent'
+                            : 'border-border opacity-50 cursor-not-allowed'
+                        }`}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{opt.label}</span>
+                      {!opt.active && (
+                        <Badge variant="outline" className="text-[10px] ml-auto px-1.5 py-0">Soon</Badge>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Account picker — scoped to selected provider */}
+            {(() => {
+              const prov = STORAGE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider);
+              if (!prov?.active || !prov.accountProvider) return null;
+
+              return availableAccounts.length > 0 ? (
+                <div className="space-y-3">
+                  <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select account..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableAccounts.map(a => {
+                        const config = PROVIDER_CONFIGS[a.provider];
+                        const AcctIcon = PROVIDER_ICONS[a.provider];
+                        return (
+                          <SelectItem key={a.id} value={a.id}>
+                            <div className="flex items-center gap-2">
+                              {AcctIcon && <AcctIcon className="h-4 w-4" />}
+                              <span>{a.name}</span>
+                              <span className="text-xs text-muted-foreground">({config?.label || a.provider})</span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="text-center space-y-3 py-4">
+                  <p className="text-sm text-muted-foreground">
+                    No {prov.label} accounts available. Connect one first.
+                  </p>
                   <Button variant="outline" size="sm" onClick={() => setConnectOpen(true)}>
-                    Connect New Account
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={!selectedAccountId || createMutation.isPending}
-                    onClick={handleAdd}
-                  >
-                    {createMutation.isPending ? 'Adding...' : 'Add Storage'}
+                    <Plus className="mr-2 h-3.5 w-3.5" />
+                    Connect {PROVIDER_CONFIGS[prov.accountProvider]?.label || prov.label} Account
                   </Button>
                 </div>
-              </>
-            ) : (
-              <div className="text-center space-y-3 py-4">
-                <p className="text-sm text-muted-foreground">
-                  No storage-capable accounts available. Connect one first.
-                </p>
-                <Button variant="outline" size="sm" onClick={() => setConnectOpen(true)}>
-                  <Plus className="mr-2 h-3.5 w-3.5" />
-                  Connect Account
-                </Button>
-              </div>
-            )}
+              );
+            })()}
           </div>
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setConnectOpen(true)}>
+              Connect New Account
+            </Button>
+            <Button
+              size="sm"
+              disabled={!selectedAccountId || createMutation.isPending}
+              onClick={handleAdd}
+            >
+              {createMutation.isPending ? 'Adding...' : 'Add Storage'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

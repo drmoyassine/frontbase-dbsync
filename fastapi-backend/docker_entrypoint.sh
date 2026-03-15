@@ -1,6 +1,15 @@
 #!/bin/bash
 set -e
 
+# Load persisted secrets (e.g. FERNET_KEY) from the Docker volume.
+# This file is auto-created by the app on first run and survives container recreation.
+if [ -f /app/data/.env ]; then
+  echo "Loading persisted environment from /app/data/.env"
+  set -a  # auto-export all sourced variables
+  source /app/data/.env
+  set +a
+fi
+
 # Wait for PostgreSQL if using it
 if [ "$DATABASE" = "postgresql" ]; then
   echo "Waiting for PostgreSQL to be ready..."

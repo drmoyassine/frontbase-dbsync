@@ -25,10 +25,22 @@ from sqlalchemy.orm import Session
 def _get_fernet() -> Fernet:
     """Get Fernet instance from FERNET_KEY env var (cached).
     
-    If FERNET_KEY is not set, generates a key and auto-persists it
-    to fastapi-backend/.env so it survives restarts and --reload.
+    Key resolution order:
+      1. FERNET_KEY environment variable (set by Docker/platform)
+      2. Persistent volume .env at /app/data/.env (survives container recreation)
+      3. Local .env at fastapi-backend/.env (dev fallback)
+      4. Auto-generate + persist to the best available location
     """
     key = os.environ.get("FERNET_KEY")
+    
+    # If not in env, try loading from persistent volume (Docker deployments)
+    if not key:
+        key = _load_key_from_env_file(_persistent_env_path())
+    
+    # If still not found, try local dev .env
+    if not key:
+        key = _load_key_from_env_file(_local_env_path())
+    
     if not key:
         key = Fernet.generate_key().decode()
         os.environ["FERNET_KEY"] = key
@@ -40,30 +52,71 @@ def _get_fernet() -> Fernet:
             RuntimeWarning,
             stacklevel=2,
         )
+    else:
+        os.environ["FERNET_KEY"] = key  # Cache in env for child processes
+    
     return Fernet(key.encode() if isinstance(key, str) else key)
 
 
-def _persist_key_to_env(key: str) -> None:
-    """Write FERNET_KEY to .env file (create or append)."""
-    # Find .env relative to the fastapi-backend directory
-    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
+def _persistent_env_path() -> str:
+    """Path on Docker persistent volume — survives container re-creation."""
+    return "/app/data/.env"
+
+
+def _local_env_path() -> str:
+    """Path relative to fastapi-backend directory — for local dev."""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
+
+
+def _load_key_from_env_file(env_path: str) -> str | None:
+    """Read FERNET_KEY from an .env file, returns None if not found."""
     try:
-        # Read existing content to avoid duplicates
+        if not os.path.exists(env_path):
+            return None
+        with open(env_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("FERNET_KEY=") and not line.startswith("#"):
+                    return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return None
+
+
+def _write_key_to_env_file(key: str, env_path: str) -> bool:
+    """Append FERNET_KEY to an .env file. Returns True on success."""
+    try:
         existing = ""
         if os.path.exists(env_path):
             with open(env_path, "r") as f:
                 existing = f.read()
-        
+
         if "FERNET_KEY=" in existing:
-            return  # Already set, don't overwrite
-        
+            return True  # Already set, don't overwrite
+
         with open(env_path, "a") as f:
             if existing and not existing.endswith("\n"):
                 f.write("\n")
             f.write(f"# Auto-generated encryption key — do NOT delete or change\n")
             f.write(f"FERNET_KEY={key}\n")
+        return True
     except OSError:
-        pass  # Can't write .env (e.g. read-only filesystem), key only lives in memory
+        return False
+
+
+def _persist_key_to_env(key: str) -> None:
+    """Write FERNET_KEY to the best available .env file.
+    
+    Priority: persistent Docker volume (/app/data/.env) first,
+    then local dev .env as fallback.
+    """
+    # Try persistent volume first (Docker production)
+    if os.path.isdir("/app/data"):
+        if _write_key_to_env_file(key, _persistent_env_path()):
+            return
+    
+    # Fallback: local dev .env
+    _write_key_to_env_file(key, _local_env_path())
 
 
 # ── Encrypt / Decrypt ─────────────────────────────────────────────────

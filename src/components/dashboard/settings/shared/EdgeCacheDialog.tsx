@@ -15,15 +15,13 @@ import {
     Dialog, DialogContent, DialogDescription, DialogFooter,
     DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, Loader2, Check, Zap, AlertTriangle, Cloud, Server } from 'lucide-react';
+import { Plus, Loader2, Check, Zap, AlertTriangle, Server } from 'lucide-react';
 import { CACHE_PROVIDER_OPTIONS } from '@/hooks/useEdgeCacheForm';
 import { AccountResourcePicker, DiscoveredResource } from './AccountResourcePicker';
+import { PROVIDER_ICONS } from './edgeConstants';
 
-const PROVIDER_ICONS: Record<string, React.ElementType> = {
-    upstash: Cloud,
-    redis: Server,
-    dragonfly: Server,
-};
+// Icons come from centralized PROVIDER_ICONS in edgeConstants.tsx
+// Fallback to Server icon for providers without a dedicated icon
 
 interface EdgeCacheDialogProps {
     dialogOpen: boolean;
@@ -90,12 +88,12 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
                         </Alert>
                     )}
 
-                    {/* Provider selector */}
+                    {/* Provider selector — derived from PROVIDER_CONFIGS capabilities */}
                     <div className="space-y-2">
                         <Label>Provider</Label>
                         <div className="grid grid-cols-3 gap-2">
                             {CACHE_PROVIDER_OPTIONS.map(opt => {
-                                const Icon = PROVIDER_ICONS[opt.value] || Cloud;
+                                const Icon = PROVIDER_ICONS[opt.value] || Server;
                                 return (
                                     <button
                                         key={opt.value}
@@ -121,8 +119,8 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
                         </div>
                     </div>
 
-                    {/* Account resource picker — select from Upstash accounts */}
-                    {selectedProvider === 'upstash' && !editingId && setFormAccountId && (
+                    {/* Account resource picker — shown for providers with connected-account support */}
+                    {CACHE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.active && !editingId && setFormAccountId && (
                         <AccountResourcePicker
                             compatibleProviders={['upstash']}
                             resourceTypeFilter="redis"

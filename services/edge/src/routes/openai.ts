@@ -429,6 +429,30 @@ openaiRoute.post('/responses', async (c) => {
             return c.json(result);
         }
 
+        // If Workers AI returned a chat completion object (e.g. Nemotron), transform → Responses API
+        if (result && typeof result === 'object' && Array.isArray(result.choices)) {
+            const msg = result.choices[0]?.message;
+            const content = msg?.content || '';
+            const usage = result.usage || {};
+
+            return c.json({
+                id: `resp-${(result.id || crypto.randomUUID()).slice(0, 16)}`,
+                object: 'response',
+                created_at: result.created || Math.floor(Date.now() / 1000),
+                model: result.model || model.slug,
+                output: [{
+                    type: 'message',
+                    role: 'assistant',
+                    content: [{ type: 'output_text', text: content }],
+                }],
+                usage: {
+                    input_tokens: usage.prompt_tokens || 0,
+                    output_tokens: usage.completion_tokens || 0,
+                    total_tokens: usage.total_tokens || 0,
+                },
+            });
+        }
+
         // Transform Workers AI result → OpenAI Responses API format
         const responseText = typeof result === 'string'
             ? result

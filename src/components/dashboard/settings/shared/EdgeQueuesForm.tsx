@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import {
     Plus, Trash2, Pencil, Loader2, Check,
-    Star, Shield, Zap, AlertTriangle, Cloud, Server, Lock,
+    Star, Shield, Zap, AlertTriangle, Server, Lock,
 } from 'lucide-react';
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { showTestToast, TestResult } from './edgeTestToast';
 import { AccountResourcePicker, DiscoveredResource } from './AccountResourcePicker';
+import { PROVIDER_ICONS, EDGE_QUEUE_PROVIDERS } from './edgeConstants';
 
 const API_BASE = '';
 
@@ -38,12 +39,8 @@ interface EdgeQueuesFormProps {
     withCard?: boolean;
 }
 
-const QUEUE_PROVIDER_OPTIONS = [
-    { value: 'qstash', label: 'QStash', icon: Zap, placeholder: 'https://qstash.upstash.io', active: true },
-    { value: 'rabbitmq', label: 'RabbitMQ', icon: Server, placeholder: 'amqp://host:5672', active: false },
-    { value: 'bullmq', label: 'BullMQ', icon: Server, placeholder: 'redis://host:6379', active: false },
-    { value: 'sqs', label: 'AWS SQS', icon: Cloud, placeholder: 'https://sqs.region.amazonaws.com/...', active: false },
-];
+/** Centralized from EDGE_QUEUE_PROVIDERS in edgeConstants.tsx */
+const QUEUE_PROVIDER_OPTIONS = EDGE_QUEUE_PROVIDERS;
 
 // Queue-specific icon
 const QueueIcon = ({ className }: { className?: string }) => (
@@ -214,8 +211,7 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
     };
 
     const getProviderIcon = (provider: string) => {
-        const opt = QUEUE_PROVIDER_OPTIONS.find(p => p.value === provider);
-        const Icon = opt?.icon || QueueIcon;
+        const Icon = PROVIDER_ICONS[provider] || QueueIcon;
         return <Icon className="h-4 w-4" />;
     };
 
@@ -284,8 +280,8 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                         </div>
                     </div>
 
-                    {/* Account resource picker — select from Upstash accounts for QStash */}
-                    {selectedProvider === 'qstash' && !editingId && (
+                    {/* Account resource picker — shown for providers with connected-account support */}
+                    {QUEUE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.active && !editingId && (
                         <AccountResourcePicker
                             compatibleProviders={['upstash']}
                             resourceTypeFilter="qstash"

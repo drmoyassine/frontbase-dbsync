@@ -10,13 +10,12 @@ import { useEdgeCaches, EdgeCache } from '@/hooks/useEdgeInfrastructure';
 import { toast } from 'sonner';
 import { showTestToast, TestResult } from '@/components/dashboard/settings/shared/edgeTestToast';
 
+import { EDGE_CACHE_PROVIDERS } from '@/components/dashboard/settings/shared/edgeConstants';
+
 const API_BASE = '';
 
-export const CACHE_PROVIDER_OPTIONS = [
-    { value: 'upstash', label: 'Upstash Redis', placeholder: 'https://xxx.upstash.io', active: true },
-    { value: 'redis', label: 'Self-Hosted Redis', placeholder: 'redis://host:6379', active: false },
-    { value: 'dragonfly', label: 'Dragonfly', placeholder: 'redis://host:6379', active: false },
-] as const;
+/** Re-export from centralized registry for backward compatibility */
+export const CACHE_PROVIDER_OPTIONS = EDGE_CACHE_PROVIDERS;
 
 export function useEdgeCacheForm() {
     const queryClient = useQueryClient();

@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import {
-    Plus, Database, Cloud, Globe, HardDrive, Loader2, Trash2,
+    Plus, Database, Loader2, Trash2,
     Pencil, AlertTriangle, Star, Shield, Zap, Check,
 } from 'lucide-react';
 import {
@@ -30,6 +30,7 @@ import { useEdgeDatabases } from '@/hooks/useEdgeInfrastructure';
 import { useQueryClient } from '@tanstack/react-query';
 import { showTestToast, TestResult } from './edgeTestToast';
 import { AccountResourcePicker, DiscoveredResource } from './AccountResourcePicker';
+import { PROVIDER_ICONS, EDGE_DATABASE_PROVIDERS } from './edgeConstants';
 
 const API_BASE = '';
 
@@ -52,11 +53,8 @@ interface EdgeDatabasesFormProps {
     withCard?: boolean;
 }
 
-const PROVIDER_OPTIONS = [
-    { value: 'turso', label: 'Turso', icon: Cloud, placeholder: 'libsql://your-db.turso.io' },
-    { value: 'neon', label: 'Neon Postgres', icon: Globe, placeholder: 'postgresql://...' },
-    { value: 'sqlite', label: 'Local SQLite', icon: HardDrive, placeholder: 'file:local', soon: true },
-];
+/** Providers derived from the centralized EDGE_DATABASE_PROVIDERS registry in edgeConstants.tsx */
+const DB_PROVIDER_OPTIONS = EDGE_DATABASE_PROVIDERS;
 
 export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard = false }) => {
     const queryClient = useQueryClient();
@@ -172,7 +170,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
             const res = await fetch(`${API_BASE}/api/edge-databases/${id}/test`, { method: 'POST' });
             const data: TestResult = await res.json();
             const db = databases.find(d => d.id === id);
-            const label = PROVIDER_OPTIONS.find(p => p.value === db?.provider)?.label || 'Database';
+            const label = DB_PROVIDER_OPTIONS.find(p => p.value === db?.provider)?.label || 'Database';
             showTestToast(data, label);
         } catch (e: any) {
             showTestToast({ success: false, message: e.message }, 'Database');
@@ -183,7 +181,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
     const handleTestInline = async () => {
         setTestingId('inline');
         try {
-            const providerLabel = PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.label || 'Database';
+            const providerLabel = DB_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.label || 'Database';
 
             if (editingId && !formToken) {
                 const res = await fetch(`${API_BASE}/api/edge-databases/${editingId}/test`, { method: 'POST' });
@@ -209,8 +207,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
     };
 
     const getProviderIcon = (provider: string) => {
-        const opt = PROVIDER_OPTIONS.find(p => p.value === provider);
-        const Icon = opt?.icon || Database;
+        const Icon = PROVIDER_ICONS[provider] || Database;
         return <Icon className="h-4 w-4" />;
     };
 
@@ -248,21 +245,21 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                         </Alert>
                     )}
 
-                    {/* Provider buttons */}
+                    {/* Provider buttons — derived from PROVIDER_CONFIGS capabilities */}
                     {!editingId && (
                         <div className="space-y-2">
                             <Label>Provider</Label>
                             <div className="grid grid-cols-3 gap-2">
-                                {PROVIDER_OPTIONS.map(opt => {
+                                {DB_PROVIDER_OPTIONS.map(opt => {
                                     const Icon = opt.icon;
                                     return (
                                         <button
                                             key={opt.value}
                                             type="button"
-                                            disabled={opt.soon}
-                                            onClick={() => !opt.soon && setSelectedProvider(opt.value)}
+                                            disabled={!opt.active}
+                                            onClick={() => opt.active && setSelectedProvider(opt.value)}
                                             className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm transition-colors text-left
-                                                ${opt.soon
+                                                ${!opt.active
                                                     ? 'border-border opacity-50 cursor-not-allowed'
                                                     : selectedProvider === opt.value
                                                         ? 'border-primary bg-primary/5 text-primary'
@@ -271,7 +268,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                         >
                                             <Icon className="h-4 w-4 shrink-0" />
                                             <span className="truncate">{opt.label}</span>
-                                            {opt.soon && (
+                                            {!opt.active && (
                                                 <span className="ml-auto text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">Soon</span>
                                             )}
                                         </button>
@@ -281,8 +278,8 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                         </div>
                     )}
 
-                    {/* Account resource picker — select from Turso or Neon accounts */}
-                    {(selectedProvider === 'turso' || selectedProvider === 'neon') && !editingId && (
+                    {/* Account resource picker — shown for any provider with connected-account support */}
+                    {DB_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.active && !editingId && (
                         <AccountResourcePicker
                             compatibleProviders={[selectedProvider]}
                             label={selectedProvider === 'turso'
@@ -335,8 +332,8 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                         </div>
                     )}
 
-                    {/* Manual fields — only for sqlite (no accounts) and edit mode */}
-                    {(selectedProvider === 'sqlite' || editingId) && !formAccountId && (
+                    {/* Manual fields — only for inactive providers (no accounts) and edit mode */}
+                    {(!DB_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.active || editingId) && !formAccountId && (
                         <>
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="space-y-1">
@@ -350,7 +347,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                 <div className="space-y-1">
                                     <Label>Database URL</Label>
                                     <Input
-                                        placeholder={PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.placeholder}
+                                        placeholder={DB_PROVIDER_OPTIONS.find(p => p.value === selectedProvider)?.placeholder}
                                         value={formUrl}
                                         onChange={e => setFormUrl(e.target.value)}
                                     />

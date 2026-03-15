@@ -292,3 +292,50 @@ export const AUTH_CAPABLE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
 export const DATABASE_CAPABLE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
     .filter(([, c]) => c.capabilities?.includes('database'))
     .map(([k]) => k);
+
+// Derived: providers that support cache (used by EdgeCacheDialog)
+export const CACHE_CAPABLE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
+    .filter(([, c]) => c.capabilities?.includes('cache'))
+    .map(([k]) => k);
+
+// Derived: providers that support queue (used by EdgeQueuesForm)
+export const QUEUE_CAPABLE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
+    .filter(([, c]) => c.capabilities?.includes('queue'))
+    .map(([k]) => k);
+
+// ============================================================================
+// Edge Resource Provider Registries
+//
+// Resource-level providers used by the edge DB / Cache / Queue forms.
+// Each maps back to an account-level provider in PROVIDER_CONFIGS.
+// `accountProvider` — the connected-account provider used for auto-discovery
+// `active`          — whether the resource provider has connected-account support
+// ============================================================================
+
+export interface EdgeResourceProvider {
+    value: string;
+    label: string;
+    icon: React.FC<any>;
+    accountProvider: string | null;  // maps to PROVIDER_CONFIGS key
+    active: boolean;
+    placeholder?: string;  // URL placeholder for manual entry
+}
+
+export const EDGE_DATABASE_PROVIDERS: EdgeResourceProvider[] = [
+    { value: 'turso',  label: 'Turso',          icon: PROVIDER_ICONS.turso   || Cloud, accountProvider: 'turso',  active: true,  placeholder: 'libsql://your-db.turso.io' },
+    { value: 'neon',   label: 'Neon Postgres',   icon: PROVIDER_ICONS.neon    || Globe, accountProvider: 'neon',   active: true,  placeholder: 'postgresql://...' },
+    { value: 'sqlite', label: 'Local SQLite',    icon: HardDrive,                      accountProvider: null,     active: false, placeholder: 'file:local' },
+];
+
+export const EDGE_CACHE_PROVIDERS: EdgeResourceProvider[] = [
+    { value: 'upstash',   label: 'Upstash Redis',     icon: PROVIDER_ICONS.upstash || Cloud, accountProvider: 'upstash', active: true  },
+    { value: 'redis',     label: 'Self-Hosted Redis',  icon: Server,                          accountProvider: null,      active: false },
+    { value: 'dragonfly', label: 'Dragonfly',          icon: Server,                          accountProvider: null,      active: false },
+];
+
+export const EDGE_QUEUE_PROVIDERS: EdgeResourceProvider[] = [
+    { value: 'qstash',   label: 'QStash',    icon: PROVIDER_ICONS.upstash || Zap, accountProvider: 'upstash', active: true  },
+    { value: 'rabbitmq', label: 'RabbitMQ',   icon: Server,                       accountProvider: null,      active: false },
+    { value: 'bullmq',   label: 'BullMQ',     icon: Server,                       accountProvider: null,      active: false },
+    { value: 'sqs',      label: 'AWS SQS',    icon: Cloud,                        accountProvider: null,      active: false },
+];

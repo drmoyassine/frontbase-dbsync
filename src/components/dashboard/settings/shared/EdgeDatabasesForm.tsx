@@ -249,7 +249,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                     {!editingId && (
                         <div className="space-y-2">
                             <Label>Provider</Label>
-                            <div className="grid grid-cols-4 gap-2">
+                            <div className="grid grid-cols-3 gap-2">
                                 {DB_PROVIDER_OPTIONS.map(opt => {
                                     const Icon = opt.icon;
                                     return (

@@ -136,7 +136,7 @@ export interface ProviderFieldConfig {
     required?: boolean;
 }
 
-export type ProviderCapability = 'cpu' | 'gpu' | 'database' | 'auth' | 'storage' | 'cache' | 'queue' | 'vector_db' | 'search' | 'cms' | 'email';
+export type ProviderCapability = 'cpu' | 'gpu' | 'database' | 'auth' | 'storage' | 'cache' | 'queue' | 'vector_db' | 'search' | 'cms' | 'email' | 'sandbox';
 
 /** Human-readable short labels for provider capabilities */
 export const CAPABILITY_LABELS: Record<ProviderCapability, string> = {
@@ -151,6 +151,7 @@ export const CAPABILITY_LABELS: Record<ProviderCapability, string> = {
     search: 'Search',
     cms: 'CMS',
     email: 'Email',
+    sandbox: 'Sandbox',
 };
 
 export interface ProviderConfig {
@@ -194,7 +195,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     vercel: {
         label: 'Vercel',
         defaultName: 'Vercel Account',
-        capabilities: ['cpu', 'cache', 'storage', 'database'],
+        capabilities: ['cpu', 'storage', 'cache', 'sandbox'],
         fields: [
             { key: 'api_token', label: 'API Token', placeholder: 'Vercel API Token', type: 'password', required: true },
         ],
@@ -212,7 +213,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     deno: {
         label: 'Deno',
         defaultName: 'Deno Deploy Account',
-        capabilities: ['cpu', 'cache', 'queue'],
+        capabilities: ['cpu', 'cache', 'sandbox'],
         fields: [
             { key: 'access_token', label: 'Organization Token', placeholder: 'ddo_...', type: 'password', required: true },
         ],
@@ -331,11 +332,10 @@ export interface EdgeResourceProvider {
  * Includes all providers with 'database' capability, EXCEPT wordpress_rest.
  */
 export const EDGE_DATABASE_PROVIDERS: EdgeResourceProvider[] = [
-    { value: 'cloudflare', label: 'Cloudflare D1',    icon: PROVIDER_ICONS.cloudflare || Cloud,    accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'd1',     createResourceType: 'd1' },
-    { value: 'supabase',   label: 'Supabase',         icon: PROVIDER_ICONS.supabase   || Database, accountProvider: 'supabase',   active: true,  resourceTypeFilter: 'database' },
-    { value: 'turso',      label: 'Turso',             icon: PROVIDER_ICONS.turso      || Cloud,    accountProvider: 'turso',      active: true,  resourceTypeFilter: 'turso_db', createResourceType: 'turso_db' },
-    { value: 'neon',       label: 'Neon Postgres',     icon: PROVIDER_ICONS.neon       || Database, accountProvider: 'neon',       active: true,  resourceTypeFilter: 'database' },
-    { value: 'vercel',     label: 'Vercel Postgres',   icon: PROVIDER_ICONS.vercel     || Triangle, accountProvider: 'vercel',     active: true,  resourceTypeFilter: 'database' },
+    { value: 'cloudflare', label: 'Cloudflare D1',    icon: PROVIDER_ICONS.cloudflare || Cloud,    accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'd1',              createResourceType: 'd1' },
+    { value: 'supabase',   label: 'Supabase',         icon: PROVIDER_ICONS.supabase   || Database, accountProvider: 'supabase',   active: true,  resourceTypeFilter: 'supabase_project' },
+    { value: 'turso',      label: 'Turso',             icon: PROVIDER_ICONS.turso      || Cloud,    accountProvider: 'turso',      active: true,  resourceTypeFilter: 'turso_db',        createResourceType: 'turso_db' },
+    { value: 'neon',       label: 'Neon Postgres',     icon: PROVIDER_ICONS.neon       || Database, accountProvider: 'neon',       active: true,  resourceTypeFilter: 'neon_project' },
     { value: 'postgres',   label: 'PostgreSQL',        icon: PROVIDER_ICONS.postgres   || Database, accountProvider: null,         active: false, placeholder: 'postgresql://user:pass@host:5432/db' },
     { value: 'mysql',      label: 'MySQL',             icon: PROVIDER_ICONS.mysql      || HardDrive, accountProvider: null,        active: false, placeholder: 'mysql://user:pass@host:3306/db' },
     { value: 'sqlite',     label: 'Local SQLite',      icon: HardDrive,                             accountProvider: null,         active: false, placeholder: 'file:local' },
@@ -346,10 +346,10 @@ export const EDGE_DATABASE_PROVIDERS: EdgeResourceProvider[] = [
  * Includes all providers with 'cache' capability.
  */
 export const EDGE_CACHE_PROVIDERS: EdgeResourceProvider[] = [
-    { value: 'upstash',    label: 'Upstash Redis',     icon: PROVIDER_ICONS.upstash    || Cloud,    accountProvider: 'upstash',    active: true,  resourceTypeFilter: 'redis',  createResourceType: 'redis' },
-    { value: 'cloudflare', label: 'Cloudflare KV',     icon: PROVIDER_ICONS.cloudflare || Cloud,    accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'kv' },
-    { value: 'vercel',     label: 'Vercel KV',         icon: PROVIDER_ICONS.vercel     || Triangle, accountProvider: 'vercel',     active: true,  resourceTypeFilter: 'kv' },
-    { value: 'deno',       label: 'Deno KV',           icon: PROVIDER_ICONS.deno       || Zap,      accountProvider: 'deno',       active: true,  resourceTypeFilter: 'kv' },
+    { value: 'upstash',    label: 'Upstash Redis',     icon: PROVIDER_ICONS.upstash    || Cloud,    accountProvider: 'upstash',    active: true,  resourceTypeFilter: 'redis',       createResourceType: 'redis' },
+    { value: 'cloudflare', label: 'Cloudflare KV',     icon: PROVIDER_ICONS.cloudflare || Cloud,    accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'kv',          createResourceType: 'kv' },
+    { value: 'vercel',     label: 'Vercel Edge Config', icon: PROVIDER_ICONS.vercel    || Triangle, accountProvider: 'vercel',     active: true,  resourceTypeFilter: 'edge_config' },
+    { value: 'deno',       label: 'Deno KV',           icon: PROVIDER_ICONS.deno       || Zap,      accountProvider: 'deno',       active: true,  resourceTypeFilter: 'deno_project' },
     { value: 'redis',      label: 'Self-Hosted Redis',  icon: Server,                               accountProvider: null,         active: false },
     { value: 'dragonfly',  label: 'Dragonfly',          icon: Server,                               accountProvider: null,         active: false },
 ];
@@ -361,7 +361,6 @@ export const EDGE_CACHE_PROVIDERS: EdgeResourceProvider[] = [
 export const EDGE_QUEUE_PROVIDERS: EdgeResourceProvider[] = [
     { value: 'qstash',     label: 'QStash',             icon: PROVIDER_ICONS.upstash    || Zap,     accountProvider: 'upstash',    active: true,  resourceTypeFilter: 'qstash' },
     { value: 'cloudflare', label: 'Cloudflare Queues',   icon: PROVIDER_ICONS.cloudflare || Cloud,   accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'queue' },
-    { value: 'deno',       label: 'Deno Queues',         icon: PROVIDER_ICONS.deno       || Zap,     accountProvider: 'deno',       active: true,  resourceTypeFilter: 'queue' },
     { value: 'rabbitmq',   label: 'RabbitMQ',            icon: Server,                               accountProvider: null,         active: false },
     { value: 'bullmq',     label: 'BullMQ',              icon: Server,                               accountProvider: null,         active: false },
     { value: 'sqs',        label: 'AWS SQS',             icon: Cloud,                                accountProvider: null,         active: false },

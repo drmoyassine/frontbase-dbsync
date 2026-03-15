@@ -77,21 +77,72 @@ async def _discover_supabase(creds: dict) -> dict:
     }
 
 
-async def _discover_cloudflare(creds: dict) -> dict:
-    token = creds.get("api_token", "")
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.get(
-            "https://api.cloudflare.com/client/v4/accounts",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+async def _cf_api_get(client: httpx.AsyncClient, token: str, path: str) -> list:
+    """DRY helper for Cloudflare API v4 paginated GET requests."""
+    resp = await client.get(
+        f"https://api.cloudflare.com/client/v4{path}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    if resp.status_code != 200:
+        return []
     data = resp.json()
-    return {
-        "success": True,
-        "resources": [
-            {"id": a.get("id"), "name": a.get("name")}
-            for a in data.get("result", [])
-        ],
-    }
+    return data.get("result", []) if isinstance(data.get("result"), list) else []
+
+
+async def _discover_cloudflare(creds: dict) -> dict:
+    """Discover all Cloudflare sub-resources: D1, KV, R2, Queues, Vectorize."""
+    token = creds.get("api_token", "")
+    resources: list[dict] = []
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        # 1. Get accounts
+        accounts = await _cf_api_get(client, token, "/accounts")
+        if not accounts:
+            return {"success": False, "detail": "No Cloudflare accounts found or invalid token"}
+
+        for acct in accounts:
+            acct_id = acct.get("id", "")
+            acct_name = acct.get("name", "")
+
+            # 2. D1 databases
+            for d in await _cf_api_get(client, token, f"/accounts/{acct_id}/d1/database"):
+                resources.append({
+                    "id": d.get("uuid", ""), "name": d.get("name", ""),
+                    "type": "d1", "account_id": acct_id, "account_name": acct_name,
+                    "db_url": f"d1://{d.get('uuid', '')}",  # Synthetic URL for display
+                })
+
+            # 3. KV namespaces
+            for ns in await _cf_api_get(client, token, f"/accounts/{acct_id}/storage/kv/namespaces"):
+                resources.append({
+                    "id": ns.get("id", ""), "name": ns.get("title", ""),
+                    "type": "kv", "account_id": acct_id, "account_name": acct_name,
+                })
+
+            # 4. R2 buckets
+            for b in await _cf_api_get(client, token, f"/accounts/{acct_id}/r2/buckets"):
+                resources.append({
+                    "id": b.get("name", ""), "name": b.get("name", ""),
+                    "type": "r2", "account_id": acct_id, "account_name": acct_name,
+                })
+
+            # 5. Queues
+            for q in await _cf_api_get(client, token, f"/accounts/{acct_id}/queues"):
+                resources.append({
+                    "id": q.get("queue_id", ""), "name": q.get("queue_name", ""),
+                    "type": "queue", "account_id": acct_id, "account_name": acct_name,
+                })
+
+            # 6. Vectorize indexes
+            for v in await _cf_api_get(client, token, f"/accounts/{acct_id}/vectorize/v2/indexes"):
+                resources.append({
+                    "id": v.get("name", ""), "name": v.get("name", ""),
+                    "type": "vectorize", "account_id": acct_id, "account_name": acct_name,
+                    "dimensions": v.get("config", {}).get("dimensions"),
+                    "metric": v.get("config", {}).get("metric"),
+                })
+
+    return {"success": True, "resources": resources}
 
 
 async def _discover_netlify(creds: dict) -> dict:
@@ -110,55 +161,78 @@ async def _discover_netlify(creds: dict) -> dict:
     }
 
 
+async def _upstash_get(auth: str, url: str) -> list | dict:
+    """DRY helper for Upstash Management API GET requests."""
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(url, headers={"Authorization": f"Basic {auth}"})
+    if resp.status_code != 200:
+        return []
+    return resp.json()
+
+
 async def _discover_upstash(creds: dict) -> dict:
+    """Discover all Upstash resources: Redis, QStash, Vector, Search."""
     token = creds.get("api_token", "")
     email = creds.get("email", "")
     auth = base64.b64encode(f"{email}:{token}".encode()).decode()
+    resources: list[dict] = []
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        # Discover Redis databases
-        redis_resp = await client.get(
-            "https://api.upstash.com/v2/redis/databases",
-            headers={"Authorization": f"Basic {auth}"},
-        )
-        # Discover QStash — get the real QStash token from the Developer API
-        qstash_ok = False
-        qstash_keys_data: dict = {}
-        qstash_token = ""
-        try:
-            user_resp = await client.get(
-                "https://api.upstash.com/v2/qstash/user",
-                headers={"Authorization": f"Basic {auth}"},
-            )
-            if user_resp.status_code == 200:
-                user_data = user_resp.json()
-                qstash_token = user_data.get("token", "")
-                if qstash_token:
-                    qstash_ok = True
-                    keys_resp = await client.get(
-                        "https://qstash.upstash.io/v2/keys",
-                        headers={"Authorization": f"Bearer {qstash_token}"},
-                    )
-                    if keys_resp.status_code == 200:
-                        qstash_keys_data = keys_resp.json()
-        except Exception:
-            pass  # QStash discovery is best-effort
-
-    redis_dbs = redis_resp.json() if redis_resp.status_code == 200 else []
-    resources: list[dict] = [
-        {"id": d.get("database_id"), "name": d.get("database_name"), "type": "redis",
-         "endpoint": d.get("endpoint"), "rest_url": d.get("rest_url"),
-         "rest_token": d.get("rest_token"), "region": d.get("region")}
-        for d in (redis_dbs if isinstance(redis_dbs, list) else [])
-    ]
-    if qstash_ok:
+    # 1. Redis databases
+    redis_dbs = await _upstash_get(auth, "https://api.upstash.com/v2/redis/databases")
+    for d in (redis_dbs if isinstance(redis_dbs, list) else []):
         resources.append({
-            "id": "qstash", "name": "QStash", "type": "qstash",
-            "endpoint": "https://qstash.upstash.io",
-            "token": qstash_token,
-            "signing_key": qstash_keys_data.get("current", ""),
-            "next_signing_key": qstash_keys_data.get("next", ""),
+            "id": d.get("database_id"), "name": d.get("database_name"), "type": "redis",
+            "endpoint": d.get("endpoint"), "rest_url": d.get("rest_url"),
+            "rest_token": d.get("rest_token"), "region": d.get("region"),
         })
+
+    # 2. QStash — get real QStash token from Developer API
+    try:
+        qstash_user = await _upstash_get(auth, "https://api.upstash.com/v2/qstash/user")
+        qstash_token = qstash_user.get("token", "") if isinstance(qstash_user, dict) else ""
+        if qstash_token:
+            qstash_keys_data: dict = {}
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                keys_resp = await client.get(
+                    "https://qstash.upstash.io/v2/keys",
+                    headers={"Authorization": f"Bearer {qstash_token}"},
+                )
+                if keys_resp.status_code == 200:
+                    qstash_keys_data = keys_resp.json()
+            resources.append({
+                "id": "qstash", "name": "QStash", "type": "qstash",
+                "endpoint": "https://qstash.upstash.io",
+                "token": qstash_token,
+                "signing_key": qstash_keys_data.get("current", ""),
+                "next_signing_key": qstash_keys_data.get("next", ""),
+            })
+    except Exception:
+        pass  # QStash discovery is best-effort
+
+    # 3. Vector indexes
+    try:
+        vector_indexes = await _upstash_get(auth, "https://api.upstash.com/v2/vector/indexes")
+        for v in (vector_indexes if isinstance(vector_indexes, list) else []):
+            resources.append({
+                "id": v.get("id", ""), "name": v.get("name", ""), "type": "vector",
+                "endpoint": v.get("endpoint", ""), "region": v.get("region", ""),
+                "dimensions": v.get("dimension_count"),
+                "similarity_function": v.get("similarity_function", ""),
+            })
+    except Exception:
+        pass
+
+    # 4. Search indexes (best-effort)
+    try:
+        search_indexes = await _upstash_get(auth, "https://api.upstash.com/v2/search/indexes")
+        for s in (search_indexes if isinstance(search_indexes, list) else []):
+            resources.append({
+                "id": s.get("id", ""), "name": s.get("name", ""), "type": "search",
+                "endpoint": s.get("endpoint", ""), "region": s.get("region", ""),
+            })
+    except Exception:
+        pass
+
     return {"success": True, "resources": resources}
 
 
@@ -361,6 +435,91 @@ async def _discover_mysql(creds: dict) -> dict:
 
 
 # =============================================================================
+# Additional Discoverers — Vercel & Deno
+# =============================================================================
+
+async def _discover_vercel(creds: dict) -> dict:
+    """Discover Vercel resources: projects, blob stores, edge configs."""
+    token = creds.get("api_token", "")
+    headers = {"Authorization": f"Bearer {token}"}
+    resources: list[dict] = []
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # 1. Projects
+        proj_resp = await client.get("https://api.vercel.com/v9/projects", headers=headers)
+        if proj_resp.status_code == 200:
+            for p in proj_resp.json().get("projects", []):
+                resources.append({
+                    "id": p.get("id", ""), "name": p.get("name", ""),
+                    "type": "vercel_project",
+                    "framework": p.get("framework", ""),
+                })
+
+        # 2. Edge Configs (cache-like)
+        ec_resp = await client.get("https://api.vercel.com/v1/edge-config", headers=headers)
+        if ec_resp.status_code == 200:
+            for ec in (ec_resp.json() if isinstance(ec_resp.json(), list) else []):
+                resources.append({
+                    "id": ec.get("id", ""), "name": ec.get("slug", ec.get("id", "")),
+                    "type": "edge_config",
+                    "item_count": ec.get("itemCount"),
+                })
+
+        # 3. Blob stores (storage)
+        try:
+            blob_resp = await client.get(
+                "https://api.vercel.com/v1/blob", headers=headers,
+                params={"limit": 50},
+            )
+            if blob_resp.status_code == 200:
+                for store in blob_resp.json().get("stores", []):
+                    resources.append({
+                        "id": store.get("id", ""), "name": store.get("name", ""),
+                        "type": "blob_store",
+                    })
+        except Exception:
+            pass  # Blob discovery is best-effort
+
+    return {"success": True, "resources": resources}
+
+
+async def _discover_deno(creds: dict) -> dict:
+    """Discover Deno Deploy resources: organizations, projects."""
+    token = creds.get("access_token", "")
+    headers = {"Authorization": f"Bearer {token}"}
+    resources: list[dict] = []
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # 1. Get organizations
+        org_resp = await client.get(
+            "https://api.deno.com/v1/organizations", headers=headers,
+        )
+        if org_resp.status_code != 200:
+            return {"success": False, "detail": f"Deno API error: {org_resp.status_code}"}
+
+        orgs = org_resp.json()
+        for org in (orgs if isinstance(orgs, list) else []):
+            org_id = org.get("id", "")
+
+            # 2. Projects per org (each project gets its own KV)
+            proj_resp = await client.get(
+                f"https://api.deno.com/v1/organizations/{org_id}/projects",
+                headers=headers,
+            )
+            if proj_resp.status_code == 200:
+                projects = proj_resp.json()
+                for p in (projects if isinstance(projects, list) else []):
+                    resources.append({
+                        "id": p.get("id", ""), "name": p.get("name", ""),
+                        "type": "deno_project",
+                        "org_id": org_id,
+                        "has_kv": True,  # Every Deno project gets KV
+                    })
+
+    return {"success": True, "resources": resources}
+
+
+# =============================================================================
 # Per-Provider Creators
 # =============================================================================
 
@@ -372,35 +531,112 @@ async def _create_upstash_redis(creds: dict, *, name: str = "", region: str = "u
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
             "https://api.upstash.com/v2/redis/database",
-            headers={
-                "Authorization": f"Basic {auth}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "database_name": name,
-                "platform": "aws",
-                "primary_region": region,
-                "read_regions": [],
-                "tls": True,
-            },
+            headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"},
+            json={"database_name": name, "platform": "aws", "primary_region": region, "read_regions": [], "tls": True},
         )
-
     if resp.status_code in (200, 201):
         data = resp.json()
         return {
             "success": True,
             "resource": {
-                "id": data.get("database_id"),
-                "name": data.get("database_name", name),
-                "type": "redis",
-                "endpoint": data.get("endpoint", ""),
-                "rest_url": data.get("rest_url", ""),
-                "rest_token": data.get("rest_token", ""),
+                "id": data.get("database_id"), "name": data.get("database_name", name),
+                "type": "redis", "endpoint": data.get("endpoint", ""),
+                "rest_url": data.get("rest_url", ""), "rest_token": data.get("rest_token", ""),
                 "region": data.get("region", region),
             },
         }
-    else:
-        return {"success": False, "detail": f"Upstash API error {resp.status_code}: {resp.text[:300]}"}
+    return {"success": False, "detail": f"Upstash API error {resp.status_code}: {resp.text[:300]}"}
+
+
+async def _create_turso_db(creds: dict, *, name: str = "", group: str = "default") -> dict:
+    """Create a new Turso database via Management API."""
+    token = creds.get("api_token", "")
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Get first org
+        org_resp = await client.get(
+            "https://api.turso.tech/v1/organizations",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        if org_resp.status_code != 200:
+            return {"success": False, "detail": f"Turso API error: {org_resp.status_code}"}
+        orgs = org_resp.json()
+        if not orgs:
+            return {"success": False, "detail": "No Turso organizations found"}
+        org_slug = orgs[0].get("slug", "")
+
+        resp = await client.post(
+            f"https://api.turso.tech/v1/organizations/{org_slug}/databases",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={"name": name, "group": group},
+        )
+    if resp.status_code in (200, 201):
+        data = resp.json()
+        db = data.get("database", data)
+        hostname = db.get("hostname", "")
+        return {
+            "success": True,
+            "resource": {
+                "id": db.get("name", name), "name": db.get("name", name),
+                "type": "turso_db", "hostname": hostname,
+                "db_url": f"libsql://{hostname}" if hostname else "",
+            },
+        }
+    return {"success": False, "detail": f"Turso create error {resp.status_code}: {resp.text[:300]}"}
+
+
+async def _create_cf_d1(creds: dict, *, name: str = "") -> dict:
+    """Create a new Cloudflare D1 database."""
+    token = creds.get("api_token", "")
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        accounts = await _cf_api_get(client, token, "/accounts")
+        if not accounts:
+            return {"success": False, "detail": "No Cloudflare accounts found"}
+        acct_id = accounts[0].get("id", "")
+
+        resp = await client.post(
+            f"https://api.cloudflare.com/client/v4/accounts/{acct_id}/d1/database",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={"name": name},
+        )
+    data = resp.json()
+    if data.get("success"):
+        result = data.get("result", {})
+        return {
+            "success": True,
+            "resource": {
+                "id": result.get("uuid", ""), "name": result.get("name", name),
+                "type": "d1", "db_url": f"d1://{result.get('uuid', '')}",
+            },
+        }
+    errors = data.get("errors", [{}])
+    return {"success": False, "detail": errors[0].get("message", "D1 create failed")}
+
+
+async def _create_cf_kv(creds: dict, *, name: str = "") -> dict:
+    """Create a new Cloudflare KV namespace."""
+    token = creds.get("api_token", "")
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        accounts = await _cf_api_get(client, token, "/accounts")
+        if not accounts:
+            return {"success": False, "detail": "No Cloudflare accounts found"}
+        acct_id = accounts[0].get("id", "")
+
+        resp = await client.post(
+            f"https://api.cloudflare.com/client/v4/accounts/{acct_id}/storage/kv/namespaces",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={"title": name},
+        )
+    data = resp.json()
+    if data.get("success"):
+        result = data.get("result", {})
+        return {
+            "success": True,
+            "resource": {
+                "id": result.get("id", ""), "name": result.get("title", name), "type": "kv",
+            },
+        }
+    errors = data.get("errors", [{}])
+    return {"success": False, "detail": errors[0].get("message", "KV create failed")}
 
 
 # =============================================================================
@@ -414,6 +650,8 @@ _DISCOVERERS: dict[str, object] = {
     "upstash":        _discover_upstash,
     "turso":          _discover_turso,
     "neon":           _discover_neon,
+    "vercel":         _discover_vercel,
+    "deno":           _discover_deno,
     "wordpress":      _discover_wordpress,
     "wordpress_rest": _discover_wordpress,
     "postgres":       _discover_postgres,
@@ -421,5 +659,7 @@ _DISCOVERERS: dict[str, object] = {
 }
 
 _CREATORS: dict[str, dict[str, object]] = {
-    "upstash": {"redis": _create_upstash_redis},
+    "upstash":    {"redis": _create_upstash_redis},
+    "turso":      {"turso_db": _create_turso_db},
+    "cloudflare": {"d1": _create_cf_d1, "kv": _create_cf_kv},
 }

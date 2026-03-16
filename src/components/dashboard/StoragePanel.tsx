@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { HardDrive, Plus, Trash2 } from 'lucide-react';
 import { FileBrowser } from './FileBrowser';
 import { toast } from 'sonner';
@@ -44,7 +45,7 @@ const storageProvidersApi = {
     const res = await api.get('/api/storage/providers/');
     return res.data;
   },
-  create: async (data: { provider_account_id: string; name?: string }): Promise<StorageProviderRecord> => {
+  create: async (data: { provider_account_id: string; name?: string; config?: Record<string, string> }): Promise<StorageProviderRecord> => {
     const res = await api.post('/api/storage/providers/', data);
     return res.data;
   },
@@ -81,7 +82,50 @@ function AddStorageDialog({
   const { data: existingProviders = [] } = useStorageProviders();
   const [selectedProvider, setSelectedProvider] = React.useState<string>('cloudflare');
   const [selectedAccountId, setSelectedAccountId] = React.useState<string>('');
+  const [selectedSiteId, setSelectedSiteId] = React.useState<string>('');
+  const [creatingNewSite, setCreatingNewSite] = React.useState(false);
+  const [newSiteName, setNewSiteName] = React.useState('');
   const [connectOpen, setConnectOpen] = React.useState(false);
+
+  // ── Netlify site picker ─────────────────────────────────────────────
+  const isNetlify = selectedProvider === 'netlify';
+  const { data: netlifySites = [], isLoading: sitesLoading } = useQuery<{ id: string; name: string; url: string }[]>({
+    queryKey: ['netlify-sites', selectedAccountId],
+    queryFn: async () => {
+      const res = await api.get(`/api/storage/netlify-sites?account_id=${selectedAccountId}`);
+      return res.data;
+    },
+    enabled: isNetlify && !!selectedAccountId,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+
+  // Reset site selection when account changes
+  useEffect(() => {
+    setSelectedSiteId('');
+    setCreatingNewSite(false);
+    setNewSiteName('');
+  }, [selectedAccountId, selectedProvider]);
+
+  // Create Netlify site mutation
+  const createSiteMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await api.post('/api/storage/netlify-sites', {
+        account_id: selectedAccountId,
+        name,
+      });
+      return res.data as { id: string; name: string; url: string };
+    },
+    onSuccess: (newSite) => {
+      queryClient.invalidateQueries({ queryKey: ['netlify-sites', selectedAccountId] });
+      setSelectedSiteId(newSite.id);
+      setCreatingNewSite(false);
+      setNewSiteName('');
+      toast.success(`Site "${newSite.name}" created`);
+    },
+    onError: () => toast.error('Failed to create Netlify site'),
+  });
 
   // Filter accounts by selected provider
   const availableAccounts = React.useMemo(() => {
@@ -106,7 +150,18 @@ function AddStorageDialog({
 
   const handleAdd = () => {
     if (!selectedAccountId) return;
-    createMutation.mutate({ provider_account_id: selectedAccountId });
+    if (isNetlify && !selectedSiteId) return;
+    const payload: { provider_account_id: string; name?: string; config?: Record<string, string> } = {
+      provider_account_id: selectedAccountId,
+    };
+    if (isNetlify && selectedSiteId) {
+      const site = netlifySites.find(s => s.id === selectedSiteId);
+      payload.config = { site_id: selectedSiteId };
+      if (site?.name) {
+        payload.name = `Netlify – ${site.name}`;
+      }
+    }
+    createMutation.mutate(payload);
   };
 
   return (
@@ -179,6 +234,104 @@ function AddStorageDialog({
                       })}
                     </SelectContent>
                   </Select>
+
+                  {/* Netlify site picker — shown after account selection */}
+                  {isNetlify && selectedAccountId && (
+                    <div className="space-y-2">
+                      <Label>Netlify Site</Label>
+                      {sitesLoading ? (
+                        <p className="text-sm text-muted-foreground py-2">Loading sites…</p>
+                      ) : creatingNewSite ? (
+                        /* ── Create New Site inline form ──────────── */
+                        <div className="space-y-2">
+                          <Input
+                            placeholder="my-storage-site"
+                            value={newSiteName}
+                            onChange={e => setNewSiteName(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && newSiteName.trim()) {
+                                createSiteMutation.mutate(newSiteName.trim());
+                              }
+                            }}
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              disabled={!newSiteName.trim() || createSiteMutation.isPending}
+                              onClick={() => createSiteMutation.mutate(newSiteName.trim())}
+                            >
+                              {createSiteMutation.isPending ? 'Creating…' : 'Create Site'}
+                            </Button>
+                            {netlifySites.length > 0 && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setCreatingNewSite(false)}
+                              >
+                                Cancel
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ) : netlifySites.length > 0 ? (
+                        /* ── Existing sites dropdown ──────────────── */
+                        <div className="space-y-2">
+                          <Select value={selectedSiteId} onValueChange={setSelectedSiteId}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a site to scope storage…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {netlifySites.map(s => (
+                                <SelectItem key={s.id} value={s.id}>
+                                  <div className="flex items-center gap-2">
+                                    <span>{s.name}</span>
+                                    {s.url && (
+                                      <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                        {s.url.replace(/^https?:\/\//, '')}
+                                      </span>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <button
+                            type="button"
+                            className="text-xs text-primary hover:underline flex items-center gap-1"
+                            onClick={() => setCreatingNewSite(true)}
+                          >
+                            <Plus className="h-3 w-3" /> Create New Site
+                          </button>
+                        </div>
+                      ) : (
+                        /* ── No sites — default to create ────────── */
+                        <div className="space-y-2">
+                          <p className="text-sm text-muted-foreground">
+                            No sites found. Create one to get started:
+                          </p>
+                          <Input
+                            placeholder="my-storage-site"
+                            value={newSiteName}
+                            onChange={e => setNewSiteName(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && newSiteName.trim()) {
+                                createSiteMutation.mutate(newSiteName.trim());
+                              }
+                            }}
+                            autoFocus
+                          />
+                          <Button
+                            size="sm"
+                            disabled={!newSiteName.trim() || createSiteMutation.isPending}
+                            onClick={() => createSiteMutation.mutate(newSiteName.trim())}
+                          >
+                            {createSiteMutation.isPending ? 'Creating…' : 'Create Site'}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center space-y-3 py-4">
@@ -200,7 +353,7 @@ function AddStorageDialog({
             </Button>
             <Button
               size="sm"
-              disabled={!selectedAccountId || createMutation.isPending}
+              disabled={!selectedAccountId || (isNetlify && !selectedSiteId) || createMutation.isPending}
               onClick={handleAdd}
             >
               {createMutation.isPending ? 'Adding...' : 'Add Storage'}

@@ -116,6 +116,83 @@ async def delete_storage_provider(provider_id: str):
         db.close()
 
 
+@router.get("/netlify-sites")
+async def list_netlify_sites(account_id: str = Query(..., description="EdgeProviderAccount ID")):
+    """List Netlify sites for a connected account (used by the site-picker in Add Storage)."""
+    import httpx
+    from app.core.credential_resolver import get_provider_context_by_id
+
+    db = SessionLocal()
+    try:
+        ctx = get_provider_context_by_id(db, account_id)
+    finally:
+        db.close()
+
+    api_token = ctx.get("api_token", "")
+    if not api_token:
+        raise HTTPException(400, "Netlify account missing api_token")
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        res = await client.get(
+            "https://api.netlify.com/api/v1/sites",
+            headers={"Authorization": f"Bearer {api_token}"},
+            params={"per_page": 100},
+        )
+    if not res.is_success:
+        raise HTTPException(502, f"Failed to list Netlify sites: {res.text}")
+
+    sites = res.json()
+    return [
+        {
+            "id": s.get("id", ""),
+            "name": s.get("name", s.get("id", "")),
+            "url": s.get("ssl_url") or s.get("url") or "",
+        }
+        for s in sites
+    ]
+
+
+@router.post("/netlify-sites")
+async def create_netlify_site(request: dict):
+    """Create a new Netlify site for storage (reuses netlify_deploy_api.create_site)."""
+    from app.core.credential_resolver import get_provider_context_by_id
+    from app.services.netlify_deploy_api import create_site
+
+    account_id = request.get("account_id", "")
+    site_name = request.get("name", "").strip()
+    if not account_id or not site_name:
+        raise HTTPException(400, "account_id and name are required")
+
+    db = SessionLocal()
+    try:
+        ctx = get_provider_context_by_id(db, account_id)
+    finally:
+        db.close()
+
+    api_token = ctx.get("api_token", "")
+    if not api_token:
+        raise HTTPException(400, "Netlify account missing api_token")
+
+    # Reuse existing create_site from netlify_deploy_api
+    site_id = await create_site(api_token, site_name)
+
+    # Fetch the created site to get the URL
+    import httpx
+    async with httpx.AsyncClient(timeout=15) as client:
+        res = await client.get(
+            f"https://api.netlify.com/api/v1/sites/{site_id}",
+            headers={"Authorization": f"Bearer {api_token}"},
+        )
+    url = ""
+    name = site_name
+    if res.is_success:
+        data = res.json()
+        url = data.get("ssl_url") or data.get("url") or ""
+        name = data.get("name", site_name)
+
+    return {"id": site_id, "name": name, "url": url}
+
+
 # ============================================================================
 # Helper — resolve adapter from provider_id
 # ============================================================================

@@ -4,15 +4,15 @@
 import React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { StorageFile } from './types';
+import { StorageFile, Bucket } from './types';
 import { useFileBrowserState } from './hooks/useFileBrowserState';
 import { useStorageMutations } from './hooks/useStorageMutations';
-import { BucketListView } from './BucketListView';
+import { BucketListView, StorageProviderInfo } from './BucketListView';
 import { FileListView } from './FileListView';
 
 // Types
 interface FileBrowserProps {
-    /** Required — the StorageProvider ID to scope all operations */
+    /** Required — the StorageProvider ID to scope file operations */
     storageProviderId: string;
     onNavigationChange?: (isBrowsing: boolean) => void;
     /** When true, clicking a file calls onFileSelect instead of opening */
@@ -23,6 +23,19 @@ interface FileBrowserProps {
     initialBucket?: string;
     /** Hide bucket list and only show files */
     hideBucketList?: boolean;
+    // ── Unified multi-provider mode props ──
+    /** Pre-merged buckets from all providers */
+    unifiedBuckets?: Bucket[];
+    /** Whether unified bucket data is still loading */
+    unifiedBucketsLoading?: boolean;
+    /** Error from fetching unified buckets */
+    unifiedBucketsError?: Error | null;
+    /** Permission warnings keyed by provider ID */
+    permissionWarnings?: Record<string, string>;
+    /** Available providers for the filter dropdown */
+    availableProviders?: { label: string; value: string }[];
+    /** Connected storage providers for the bucket create dialog */
+    connectedProviders?: StorageProviderInfo[];
 }
 
 export function FileBrowser({
@@ -32,6 +45,12 @@ export function FileBrowser({
     onFileSelect,
     initialBucket,
     hideBucketList = false,
+    unifiedBuckets,
+    unifiedBucketsLoading,
+    unifiedBucketsError,
+    permissionWarnings,
+    availableProviders,
+    connectedProviders,
 }: FileBrowserProps) {
     const queryClient = useQueryClient();
     const [isRefreshing, setIsRefreshing] = React.useState(false);
@@ -42,7 +61,7 @@ export function FileBrowser({
         currentBucket, setCurrentBucket, currentPath, setCurrentPath, page, setPage,
         sortConfig, handleSort, getSortedFiles,
         isBucketDialogOpen, setIsBucketDialogOpen, bucketDialogMode, editingBucketId, bucketForm, setBucketForm,
-        handleOpenCreateBucket, handleOpenEditBucket,
+        handleOpenCreateBucket, handleOpenEditBucket, editingBucketProvider,
         confirmDialog, setConfirmDialog,
         isFolderDialogOpen, setIsFolderDialogOpen, newFolderName, setNewFolderName,
         isRenameDialogOpen, setIsRenameDialogOpen, renameTarget, newName, setNewName, handleRename,
@@ -54,9 +73,32 @@ export function FileBrowser({
         handleBucketClick, handleBack,
     } = state;
 
+    // Track the active provider for the selected bucket (for file operations)
+    const [activeBucketProviderId, setActiveBucketProviderId] = React.useState<string>(storageProviderId);
+
+    // Override handleBucketClick to track the provider
+    const handleBucketClickWithProvider = React.useCallback((bucket: Bucket) => {
+        if (bucket.providerId) {
+            setActiveBucketProviderId(bucket.providerId);
+        }
+        handleBucketClick(bucket);
+    }, [handleBucketClick]);
+
+    // Reset active provider when going back to bucket list
+    const handleBackWithProvider = React.useCallback(() => {
+        handleBack();
+        if (!currentPath) {
+            // Going back to bucket list
+            setActiveBucketProviderId(storageProviderId);
+        }
+    }, [handleBack, currentPath, storageProviderId]);
+
+    // The effective provider ID for file operations
+    const effectiveProviderId = activeBucketProviderId || storageProviderId;
+
     // ── Shared mutations hook ──
     const mutations = useStorageMutations({
-        storageProviderId,
+        storageProviderId: effectiveProviderId,
         currentBucket,
         currentPath,
         editingBucketId,
@@ -93,9 +135,9 @@ export function FileBrowser({
         setIsRefreshing(true);
         try {
             await Promise.all([
-                queryClient.invalidateQueries({ queryKey: ['storage-buckets', storageProviderId] }),
+                queryClient.invalidateQueries({ queryKey: ['storage-buckets'] }),
                 currentBucket
-                    ? queryClient.invalidateQueries({ queryKey: ['storage-files', storageProviderId] })
+                    ? queryClient.invalidateQueries({ queryKey: ['storage-files', effectiveProviderId] })
                     : Promise.resolve(),
                 new Promise(resolve => setTimeout(resolve, 500)),
             ]);
@@ -115,19 +157,38 @@ export function FileBrowser({
                 deleteMutation.mutate([confirmDialog.targetId]);
             }
         } else if (confirmDialog.actionType === 'empty' && confirmDialog.targetId) {
-            emptyBucketMutation.mutate(confirmDialog.targetId);
+            // Look up the bucket to get its provider ID
+            const targetBucket = unifiedBuckets?.find(b => b.id === confirmDialog.targetId || b.name === confirmDialog.targetId);
+            emptyBucketMutation.mutate({ id: confirmDialog.targetId, providerId: targetBucket?.providerId });
         } else if (confirmDialog.actionType === 'deleteBucket' && confirmDialog.targetId) {
-            deleteBucketMutation.mutate(confirmDialog.targetId);
+            // Look up the bucket to get its provider ID
+            const targetBucket = unifiedBuckets?.find(b => b.id === confirmDialog.targetId || b.name === confirmDialog.targetId);
+            deleteBucketMutation.mutate({ id: confirmDialog.targetId, providerId: targetBucket?.providerId });
+            // Reset to page 1 so the user doesn't get stuck on an empty page
+            setBucketPage(1);
         }
     };
 
-    const handleBucketSubmit = () => {
+    const handleBucketSubmit = (selectedProviderId?: string, projectId?: string) => {
         const fileSize = bucketForm.fileSizeLimit ? parseFloat(bucketForm.fileSizeLimit) * 1024 * 1024 : undefined;
         const mimeTypes = bucketForm.allowedMimeTypes ? bucketForm.allowedMimeTypes.split(',').map((t) => t.trim()).filter(Boolean) : undefined;
         if (bucketDialogMode === 'create') {
-            createBucketMutation.mutate({ name: bucketForm.name, public: bucketForm.public, fileSizeLimit: fileSize, allowedMimeTypes: mimeTypes });
+            createBucketMutation.mutate({
+                name: bucketForm.name,
+                public: bucketForm.public,
+                fileSizeLimit: fileSize,
+                allowedMimeTypes: mimeTypes,
+                _providerId: selectedProviderId,
+                projectId,
+            });
         } else {
-            updateBucketMutation.mutate({ id: editingBucketId, public: bucketForm.public, fileSizeLimit: fileSize, allowedMimeTypes: mimeTypes });
+            updateBucketMutation.mutate({
+                id: editingBucketId,
+                public: bucketForm.public,
+                fileSizeLimit: fileSize,
+                allowedMimeTypes: mimeTypes,
+                _providerId: editingBucketProvider?.id,
+            });
         }
     };
 
@@ -155,7 +216,13 @@ export function FileBrowser({
     if (!currentBucket) {
         return (
             <BucketListView
-                storageProviderId={storageProviderId}
+                storageProviderId={effectiveProviderId}
+                buckets={unifiedBuckets}
+                bucketsLoading={unifiedBucketsLoading}
+                bucketsError={unifiedBucketsError}
+                permissionWarnings={permissionWarnings}
+                availableProviders={availableProviders}
+                connectedProviders={connectedProviders}
                 bucketSearch={bucketSearch}
                 setBucketSearch={setBucketSearch}
                 selectedProviders={selectedProviders}
@@ -170,13 +237,14 @@ export function FileBrowser({
                 isBucketDialogOpen={isBucketDialogOpen}
                 setIsBucketDialogOpen={setIsBucketDialogOpen}
                 bucketDialogMode={bucketDialogMode}
+                editingBucketProviderType={editingBucketProvider?.type}
                 bucketForm={bucketForm}
                 setBucketForm={setBucketForm}
                 handleOpenCreateBucket={handleOpenCreateBucket}
                 handleOpenEditBucket={handleOpenEditBucket}
                 confirmDialog={confirmDialog}
                 setConfirmDialog={setConfirmDialog}
-                onBucketClick={handleBucketClick}
+                onBucketClick={handleBucketClickWithProvider}
                 onBucketSubmit={handleBucketSubmit}
                 onConfirmAction={handleConfirmAction}
                 onRefresh={handleRefresh}
@@ -188,7 +256,7 @@ export function FileBrowser({
 
     return (
         <FileListView
-            storageProviderId={storageProviderId}
+            storageProviderId={effectiveProviderId}
             currentBucket={currentBucket}
             currentPath={currentPath}
             setCurrentPath={setCurrentPath}
@@ -208,6 +276,7 @@ export function FileBrowser({
             isBucketDialogOpen={isBucketDialogOpen}
             setIsBucketDialogOpen={setIsBucketDialogOpen}
             bucketDialogMode={bucketDialogMode}
+            editingBucketProviderType={editingBucketProvider?.type}
             bucketForm={bucketForm}
             setBucketForm={setBucketForm}
             handleOpenEditBucket={handleOpenEditBucket}
@@ -231,7 +300,7 @@ export function FileBrowser({
             setMoveDestBucket={setMoveDestBucket}
             setMoveDestPath={setMoveDestPath}
             handleMove={handleMove}
-            handleBack={handleBack}
+            handleBack={handleBackWithProvider}
             setCurrentBucket={setCurrentBucket}
             onBucketSubmit={handleBucketSubmit}
             onConfirmAction={handleConfirmAction}

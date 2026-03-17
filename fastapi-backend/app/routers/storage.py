@@ -154,7 +154,11 @@ async def list_netlify_sites(account_id: str = Query(..., description="EdgeProvi
 
 @router.post("/netlify-sites")
 async def create_netlify_site(request: dict):
-    """Create a new Netlify site for storage (reuses netlify_deploy_api.create_site)."""
+    """Create a new Netlify site for storage (reuses netlify_deploy_api.create_site).
+
+    After creation, triggers a minimal empty deploy to activate Netlify Blobs.
+    Without at least one deploy, Blobs write API returns 401 "Access Denied".
+    """
     from app.core.credential_resolver import get_provider_context_by_id
     from app.services.netlify_deploy_api import create_site
 
@@ -176,8 +180,27 @@ async def create_netlify_site(request: dict):
     # Reuse existing create_site from netlify_deploy_api
     site_id = await create_site(api_token, site_name)
 
-    # Fetch the created site to get the URL
+    # ── Trigger an initial empty deploy to activate Blobs ─────────────
+    # Netlify Blobs requires at least one deploy on the site before write
+    # operations (PUT) are allowed. Without this, the API returns 401.
     import httpx
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            deploy_res = await client.post(
+                f"https://api.netlify.com/api/v1/sites/{site_id}/deploys",
+                headers={"Authorization": f"Bearer {api_token}", "Content-Type": "application/json"},
+                json={"files": {}},  # Empty deploy — no files
+            )
+            if deploy_res.is_success:
+                import logging
+                logging.getLogger(__name__).info(
+                    f"Initial deploy for Netlify site {site_id} succeeded (Blobs activated)"
+                )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Initial deploy for Blobs activation failed: {e}")
+
+    # Fetch the created site to get the URL
     async with httpx.AsyncClient(timeout=15) as client:
         res = await client.get(
             f"https://api.netlify.com/api/v1/sites/{site_id}",
@@ -191,6 +214,81 @@ async def create_netlify_site(request: dict):
         name = data.get("name", site_name)
 
     return {"id": site_id, "name": name, "url": url}
+
+
+# ── Vercel Project Picker ───────────────────────────────────────────────
+
+@router.get("/vercel-projects")
+async def list_vercel_projects(account_id: str = Query(..., description="EdgeProviderAccount ID")):
+    """List Vercel projects for a connected account (used by project-picker in Create Bucket)."""
+    from app.core.credential_resolver import get_provider_context_by_id
+    from app.services import vercel_deploy_api
+
+    db = SessionLocal()
+    try:
+        ctx = get_provider_context_by_id(db, account_id)
+    finally:
+        db.close()
+
+    api_token = ctx.get("api_token", "")
+    if not api_token:
+        raise HTTPException(400, "Vercel account missing api_token")
+
+    team_id = ctx.get("team_id")
+    projects = await vercel_deploy_api.list_projects(api_token, team_id)
+    return [
+        {
+            "id": p.get("id", ""),
+            "name": p.get("name", p.get("id", "")),
+        }
+        for p in projects
+    ]
+
+
+@router.post("/vercel-projects")
+async def create_vercel_project(request: dict):
+    """Create a new Vercel project for blob storage connection."""
+    from app.core.credential_resolver import get_provider_context_by_id
+    import httpx
+
+    account_id = request.get("account_id", "")
+    project_name = request.get("name", "").strip()
+    if not account_id or not project_name:
+        raise HTTPException(400, "account_id and name are required")
+
+    db = SessionLocal()
+    try:
+        ctx = get_provider_context_by_id(db, account_id)
+    finally:
+        db.close()
+
+    api_token = ctx.get("api_token", "")
+    if not api_token:
+        raise HTTPException(400, "Vercel account missing api_token")
+
+    team_id = ctx.get("team_id")
+    headers = {"Authorization": f"Bearer {api_token}", "Content-Type": "application/json"}
+    params: dict = {}
+    if team_id:
+        params["teamId"] = team_id
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        res = await client.post(
+            "https://api.vercel.com/v10/projects",
+            headers=headers,
+            params=params,
+            json={"name": project_name, "framework": None},
+        )
+    if not res.is_success:
+        error_msg = res.text
+        try:
+            error_msg = res.json().get("error", {}).get("message", res.text)
+        except Exception:
+            pass
+        raise HTTPException(502, f"Failed to create Vercel project: {error_msg}")
+
+    data = res.json()
+    return {"id": data.get("id", ""), "name": data.get("name", project_name)}
 
 
 # ============================================================================
@@ -286,18 +384,29 @@ async def create_bucket(
     provider_id: str = Query(..., description="StorageProvider ID"),
 ):
     """Create a new bucket."""
+    import logging
+    logger = logging.getLogger(__name__)
     try:
         adapter = _resolve_adapter(provider_id)
-        bucket = await adapter.create_bucket(
-            name=request.get("name", ""),
-            public=request.get("public", False),
-            file_size_limit=request.get("file_size_limit"),
-            allowed_mime_types=request.get("allowed_mime_types"),
-        )
+        logger.info(f"[Storage] create_bucket request body: {request}")
+        # Build kwargs — project_id is Vercel-specific (for store↔project connection)
+        kwargs: dict = {
+            "name": request.get("name", ""),
+            "public": request.get("public", False),
+            "file_size_limit": request.get("file_size_limit"),
+            "allowed_mime_types": request.get("allowed_mime_types"),
+        }
+        if request.get("project_id"):
+            kwargs["project_id"] = request["project_id"]
+            logger.info(f"[Storage] project_id found: {request['project_id']}")
+        else:
+            logger.warning(f"[Storage] No project_id in request body")
+        bucket = await adapter.create_bucket(**kwargs)
         return {"success": True, "bucket": bucket}
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception(f"create_bucket failed for provider {provider_id}: {e}")
         raise HTTPException(500, str(e))
 
 
@@ -368,6 +477,9 @@ async def delete_bucket(
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print(f"delete_bucket failed for provider {provider_id}, bucket {bucket_id}:")
+        traceback.print_exc()
         raise HTTPException(500, str(e))
 
 

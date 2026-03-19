@@ -6,6 +6,7 @@
  */
 
 import React, { useState } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -17,11 +18,6 @@ import {
     Pencil, AlertTriangle, Star, Shield, Zap, Check,
 } from 'lucide-react';
 import {
-    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
-    AlertDialogTitle, AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import {
     Dialog, DialogContent, DialogDescription, DialogFooter,
     DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
@@ -29,7 +25,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useEdgeDatabases } from '@/hooks/useEdgeInfrastructure';
 import { useQueryClient } from '@tanstack/react-query';
 import { showTestToast, TestResult } from './edgeTestToast';
+import { DeleteResourceDialog, BulkDeleteResourceDialog } from './DeleteResourceDialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { AccountResourcePicker, DiscoveredResource } from './AccountResourcePicker';
+import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
 import { PROVIDER_ICONS, EDGE_DATABASE_PROVIDERS } from './edgeConstants';
 
 const API_BASE = '';
@@ -47,6 +46,7 @@ interface EdgeDatabase {
     created_at: string;
     updated_at: string;
     target_count: number;
+    supports_remote_delete?: boolean;
 }
 
 interface EdgeDatabasesFormProps {
@@ -81,6 +81,23 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
 
     // Account link
     const [formAccountId, setFormAccountId] = useState<string | null>(null);
+
+    // Bulk select
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+    const [bulkLoading, setBulkLoading] = useState(false);
+
+    const selectableDBs = databases.filter(d => !d.is_system);
+    const allSelected = selectableDBs.length > 0 && selectableDBs.every(d => selectedIds.has(d.id));
+    const toggleSelect = (id: string) => setSelectedIds(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+    });
+    const toggleSelectAll = () => {
+        if (allSelected) setSelectedIds(new Set());
+        else setSelectedIds(new Set(selectableDBs.map(d => d.id)));
+    };
 
     const refetchDatabases = () => queryClient.invalidateQueries({ queryKey: ['edge-databases'] });
 
@@ -142,6 +159,9 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
             resetForm();
             setDialogOpen(false);
             refetchDatabases();
+            if (data.warning) {
+                toast.warning(data.warning);
+            }
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -150,10 +170,13 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
     };
 
     // Delete
-    const handleDelete = async (id: string) => {
+    const handleDelete = async (id: string, deleteRemote: boolean = false) => {
         setDeletingId(id);
         try {
-            const res = await fetch(`${API_BASE}/api/edge-databases/${id}`, { method: 'DELETE' });
+            const url = deleteRemote
+                ? `${API_BASE}/api/edge-databases/${id}?delete_remote=true`
+                : `${API_BASE}/api/edge-databases/${id}`;
+            const res = await fetch(url, { method: 'DELETE' });
             if (!res.ok) {
                 const data = await res.json();
                 throw new Error(data.detail || `HTTP ${res.status}`);
@@ -161,6 +184,26 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
             refetchDatabases();
         } catch (e: any) { setError(e.message); }
         finally { setDeletingId(null); }
+    };
+
+    // Bulk Delete
+    const handleBulkDelete = async (deleteRemote: boolean) => {
+        setBulkLoading(true);
+        try {
+            const result = await edgeInfrastructureApi.batchDeleteDatabases([...selectedIds], deleteRemote);
+            if (result.failed.length > 0) {
+                toast.error(`${result.failed.length} database(s) failed to delete`);
+            }
+            if (result.success.length > 0) {
+                toast.success(`${result.success.length} database(s) deleted`);
+            }
+            setSelectedIds(new Set());
+            refetchDatabases();
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setBulkLoading(false);
+        }
     };
 
     // Test saved DB
@@ -196,6 +239,7 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                         provider: selectedProvider,
                         db_url: formUrl,
                         db_token: formToken || null,
+                        provider_account_id: formAccountId || null,
                     }),
                 });
                 const data: TestResult = await res.json();
@@ -284,19 +328,21 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                         if (!prov?.active || !prov.accountProvider || editingId) return null;
                         return (
                             <AccountResourcePicker
+                                key={selectedProvider}
                                 compatibleProviders={[prov.accountProvider]}
                                 resourceTypeFilter={prov.resourceTypeFilter}
                                 label={`Select ${prov.label} Database`}
                                 existingUrls={databases.map(d => d.db_url).filter(Boolean)}
                                 autoSelectSingle
                                 resourceLabel="Select Database"
-                                hideConnectDisplayName
+                                hideConnectDisplayName={!prov.createResourceType}
                                 createResourceType={prov.createResourceType}
                                 onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
                                     setFormAccountId(accountId);
                                     // Resolve URL from best available field
                                     const url = resource.connection_uri || resource.db_url
-                                        || (resource.hostname ? `libsql://${resource.hostname}` : '');
+                                        || (resource.hostname ? `libsql://${resource.hostname}` : '')
+                                        || resource.id || '';
                                     if (url) setFormUrl(url);
                                     if ((resource as any).token) setFormToken((resource as any).token);
                                     if (!formName) setFormName(resource.name || '');
@@ -419,10 +465,44 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                     <p className="text-sm mt-1">Add a database to store your published pages</p>
                 </div>
             ) : (
+                <>
+                {/* ── Bulk Action Bar ─────────────────────────── */}
+                <div className="flex items-center gap-2 mb-3">
+                    <Checkbox
+                        id="select-all-dbs"
+                        checked={allSelected}
+                        onCheckedChange={toggleSelectAll}
+                        disabled={selectableDBs.length === 0}
+                    />
+                    <label htmlFor="select-all-dbs" className="text-xs text-muted-foreground cursor-pointer">
+                        {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
+                    </label>
+                    {selectedIds.size > 0 && (
+                        <div className="flex items-center gap-1.5 ml-auto">
+                            <Button
+                                size="sm"
+                                variant="destructive"
+                                className="h-7 text-xs gap-1.5"
+                                onClick={() => setBulkDeleteOpen(true)}
+                                disabled={bulkLoading}
+                            >
+                                <Trash2 className="w-3 h-3" /> Delete
+                            </Button>
+                        </div>
+                    )}
+                </div>
                 <div className="space-y-3">
                     {databases.map((db) => (
-                        <div key={db.id} className="flex items-center justify-between p-3 rounded-lg border bg-card">
+                        <div key={db.id} className={`flex items-center justify-between p-3 rounded-lg border bg-card ${selectedIds.has(db.id) ? 'ring-1 ring-primary border-primary' : ''}`}>
                             <div className="flex items-center gap-3">
+                                {!db.is_system ? (
+                                    <Checkbox
+                                        checked={selectedIds.has(db.id)}
+                                        onCheckedChange={() => toggleSelect(db.id)}
+                                    />
+                                ) : (
+                                    <div className="w-4 shrink-0" />
+                                )}
                                 {getProviderIcon(db.provider)}
                                 <span className="font-medium">{db.name}</span>
                                 <Badge variant="outline" className="text-xs">{db.provider}</Badge>
@@ -458,48 +538,31 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                         <Button variant="ghost" size="icon" onClick={() => openEdit(db)} title="Edit">
                                             <Pencil className="h-4 w-4" />
                                         </Button>
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button
-                                                    variant="ghost" size="icon"
-                                                    disabled={deletingId === db.id}
-                                                >
-                                                    {deletingId === db.id
-                                                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                                                        : <Trash2 className="h-4 w-4 text-destructive" />}
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>Delete "{db.name}"?</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        This removes the database connection from Frontbase. The actual database is not affected.
-                                                        {db.target_count > 0 && (
-                                                            <span className="block mt-2 font-medium text-destructive">
-                                                                ⚠ {db.target_count} deployment target{db.target_count > 1 ? 's' : ''} use this database and will need to be reconfigured.
-                                                            </span>
-                                                        )}
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                    <AlertDialogAction
-                                                        onClick={() => handleDelete(db.id)}
-                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                    >
-                                                        Delete
-                                                    </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
+                                        <DeleteResourceDialog
+                                            resourceName={db.name}
+                                            resourceTypeLabel="database"
+                                            provider={db.provider}
+                                            supportsRemoteDelete={!!db.supports_remote_delete}
+                                            dependentCount={db.target_count}
+                                            dependentLabel="deployment target"
+                                            onDelete={(deleteRemote) => handleDelete(db.id, deleteRemote)}
+                                        />
                                     </>
                                 )}
                             </div>
                         </div>
                     ))}
                 </div>
+            </>
             )}
-        </div>
+
+            <BulkDeleteResourceDialog
+                open={bulkDeleteOpen}
+                onOpenChange={setBulkDeleteOpen}
+                selectedCount={selectedIds.size}
+                resourceTypeLabel="database"
+                onConfirm={handleBulkDelete}
+            />        </div>
     );
 
     if (withCard) {

@@ -22,17 +22,37 @@ export async function createBucket(
     name: string,
     isPublic: boolean,
     fileSizeLimit?: number,
-    allowedMimeTypes?: string[]
+    allowedMimeTypes?: string[],
+    projectId?: string,
 ) {
-    const res = await api.post(`/api/storage/buckets?provider_id=${providerId}`, {
-        name,
-        public: isPublic,
-        file_size_limit: fileSizeLimit,
-        allowed_mime_types: allowedMimeTypes,
-    });
-    const data = res.data;
-    if (!data.success) throw new Error(data.error || 'Failed to create bucket');
-    return data.bucket;
+    try {
+        const body: Record<string, unknown> = {
+            name,
+            public: isPublic,
+            file_size_limit: fileSizeLimit,
+            allowed_mime_types: allowedMimeTypes,
+        };
+        if (projectId) body.project_id = projectId;
+        const res = await api.post(`/api/storage/buckets?provider_id=${providerId}`, body);
+        const data = res.data;
+        if (!data.success) throw new Error(data.error || 'Failed to create bucket');
+        return data.bucket;
+    } catch (err: any) {
+        // Extract detail from FastAPI error response
+        const detail = err?.response?.data?.detail;
+        throw new Error(detail || err.message || 'Failed to create bucket');
+    }
+}
+
+// ── Vercel Project Picker ──────────────────────────────────────────────
+export async function fetchVercelProjects(accountId: string): Promise<{ id: string; name: string }[]> {
+    const res = await api.get(`/api/storage/vercel-projects?account_id=${accountId}`);
+    return res.data;
+}
+
+export async function createVercelProject(accountId: string, name: string): Promise<{ id: string; name: string }> {
+    const res = await api.post('/api/storage/vercel-projects', { account_id: accountId, name });
+    return res.data;
 }
 
 export async function updateBucket(
@@ -111,11 +131,12 @@ export async function deleteFile(providerId: string, paths: string[], bucket?: s
     }
 }
 
-export async function getSignedUrl(providerId: string, path: string, bucket: string): Promise<string> {
+export async function getSignedUrl(providerId: string, path: string, bucket: string, expiresIn: number = 3600): Promise<string> {
     const params = new URLSearchParams();
     params.set('provider_id', providerId);
     params.set('path', path);
     params.set('bucket', bucket);
+    params.set('expiresIn', String(expiresIn));
 
     const res = await api.get(`/api/storage/signed-url?${params.toString()}`);
     const data = res.data;

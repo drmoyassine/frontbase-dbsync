@@ -97,12 +97,28 @@ class SupabaseStorageAdapter(StorageAdapter):
 
         # Normalize response
         files = res.json()
+
         formatted = []
+        seen_folder_names: set[str] = set()  # Deduplicate folder entries
+
         for f in files:
+            name = f.get("name", "")
             is_folder = "metadata" not in f or f["metadata"] is None
+
+            # Skip placeholder / marker files
+            if name in (".emptyFolderPlaceholder", ".folder"):
+                continue
+
+            # Deduplicate folder entries (Supabase can return the same folder
+            # multiple times when nested subfolders exist)
+            if is_folder:
+                if name in seen_folder_names:
+                    continue
+                seen_folder_names.add(name)
+
             formatted.append({
-                "name": f.get("name"),
-                "id": f.get("id", f.get("name")),
+                "name": name,
+                "id": f.get("id", name),
                 "size": f.get("metadata", {}).get("size", 0) if not is_folder else 0,
                 "updated_at": f.get("updated_at") or f.get("last_accessed_at") or f.get("created_at"),
                 "mimetype": f.get("metadata", {}).get("mimetype") if f.get("metadata") else None,

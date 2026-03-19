@@ -182,6 +182,7 @@ async def _deploy_cloudflare(
         edge_cache_id=str(engine.edge_cache_id) if engine.edge_cache_id is not None else None,
         edge_queue_id=str(engine.edge_queue_id) if engine.edge_queue_id is not None else None,
         engine_id=str(engine.id),
+        deploy_provider='cloudflare',
     )
     if secrets:
         await cloudflare_api.set_secrets(api_token, account_id, worker_name, secrets)

@@ -6,6 +6,10 @@ export interface Bucket {
     public: boolean;
     created_at: string;
     provider?: string;
+    /** Storage provider ID — used to scope API calls to the correct provider */
+    providerId?: string;
+    /** Human-readable provider label (e.g. "Cloudflare R2") for display */
+    providerLabel?: string;
     size?: number;
     file_size_limit?: number;
     allowed_mime_types?: string[];

@@ -97,6 +97,9 @@ export function useEdgeCacheForm() {
             setDialogOpen(false);
             resetForm();
             refetchCaches();
+            if (data.warning) {
+                toast.warning(data.warning);
+            }
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -117,7 +120,7 @@ export function useEdgeCacheForm() {
             }
             const result = await res.json();
             if (result.remote_deleted) {
-                toast.success('Deleted from Upstash', { description: result.message });
+                toast.success('Deleted remotely', { description: result.message });
             }
             refetchCaches();
         } catch (e: any) { setError(e.message); }
@@ -155,6 +158,7 @@ export function useEdgeCacheForm() {
                         provider: selectedProvider,
                         cache_url: formUrl,
                         cache_token: formToken || null,
+                        provider_account_id: formAccountId || null,
                     }),
                 });
                 const data: TestResult = await res.json();

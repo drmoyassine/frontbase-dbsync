@@ -102,6 +102,7 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
     const { data: allProviders = [], refetch: refetchProviders } = useEdgeProviders();
     const [selectedAccount, setSelectedAccount] = useState<string>(selectedAccountId || '');
     const [resources, setResources] = useState<DiscoveredResource[]>([]);
+    const [selectedResourceId, setSelectedResourceId] = useState<string>('');
     const [isDiscovering, setIsDiscovering] = useState(false);
     const [discoverError, setDiscoverError] = useState<string | null>(null);
 
@@ -172,6 +173,7 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
             return;
         }
         setSelectedAccount(value);
+        setSelectedResourceId('');
     };
 
     /** Check if a discovered resource is already imported */
@@ -209,6 +211,7 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
         }
         const resource = resources.find(r => r.id === resourceId);
         if (resource && !isAlreadyImported(resource)) {
+            setSelectedResourceId(resourceId);
             onResourceSelected(resource, selectedAccount);
         }
     };
@@ -230,6 +233,7 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
             const data = await res.json();
             if (data.success && data.resource) {
                 // Auto-select the newly created resource
+                setSelectedResourceId(data.resource.id);
                 onResourceSelected(data.resource, selectedAccount);
                 setShowCreateDialog(false);
                 setCreateName('');
@@ -342,7 +346,7 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
                             <Label className="text-xs text-muted-foreground">
                                 {resourceLabel || `Select a resource`} ({resources.length} found)
                             </Label>
-                            <Select onValueChange={handleResourceSelect}>
+                            <Select value={selectedResourceId || undefined} onValueChange={handleResourceSelect}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Pick a resource..." />
                                 </SelectTrigger>

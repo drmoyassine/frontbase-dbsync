@@ -350,6 +350,7 @@ async def inspect_engine_secrets(engine_id: str, db: Session = Depends(get_db)):
                 edge_cache_id=str(engine.edge_cache_id) if engine.edge_cache_id else None,
                 edge_queue_id=str(engine.edge_queue_id) if engine.edge_queue_id else None,
                 engine_id=str(engine.id),
+                deploy_provider=provider,
             )
             result = {
                 "success": True,

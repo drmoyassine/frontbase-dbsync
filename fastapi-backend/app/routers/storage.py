@@ -457,6 +457,9 @@ async def empty_bucket(
     try:
         adapter = _resolve_adapter(provider_id)
         await adapter.empty_bucket(bucket_id)
+        # Invalidate size cache for this bucket
+        from app.services.storage.cache import clear_cached_size
+        await clear_cached_size(provider_id, bucket_id)
         return {"success": True, "message": "Bucket emptied"}
     except HTTPException:
         raise
@@ -523,6 +526,9 @@ async def upload_file(
             bucket, target_path, content,
             file.content_type or "application/octet-stream",
         )
+        # Invalidate size cache for this bucket
+        from app.services.storage.cache import clear_cached_size
+        await clear_cached_size(provider_id, bucket)
         return {"success": True, **result}
     except HTTPException:
         raise
@@ -557,10 +563,14 @@ async def delete_files(request: dict):
         raise HTTPException(400, "provider_id is required")
     try:
         adapter = _resolve_adapter(provider_id)
+        bucket = request.get("bucket", "")
         await adapter.delete_files(
-            request.get("bucket", ""),
+            bucket,
             request.get("paths", []),
         )
+        # Invalidate size cache for this bucket
+        from app.services.storage.cache import clear_cached_size
+        await clear_cached_size(provider_id, bucket)
         return {"success": True}
     except HTTPException:
         raise

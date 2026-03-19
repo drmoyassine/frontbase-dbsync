@@ -160,12 +160,22 @@ async def reconfigure(
     # 1. Resolve CF credentials
     cf_creds = _resolve_cf_credentials(engine, db)
 
+    # Resolve deploy provider for dual-path secrets
+    deploy_provider: str | None = None
+    if engine.edge_provider_id:
+        prov = db.query(EdgeProviderAccount).filter(
+            EdgeProviderAccount.id == engine.edge_provider_id
+        ).first()
+        if prov:
+            deploy_provider = str(prov.provider)
+
     # 2. Build new bindings
     new_bindings = build_engine_secrets(
         db,
         edge_db_id=payload.edge_db_id,
         edge_cache_id=payload.edge_cache_id,
         edge_queue_id=payload.edge_queue_id,
+        deploy_provider=deploy_provider,
     )
 
     # 3. PATCH CF Worker settings

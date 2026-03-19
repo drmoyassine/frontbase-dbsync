@@ -25,6 +25,7 @@ export function useFileBrowserState() {
     const [isBucketDialogOpen, setIsBucketDialogOpen] = useState(false);
     const [bucketDialogMode, setBucketDialogMode] = useState<'create' | 'edit'>('create');
     const [editingBucketId, setEditingBucketId] = useState<string | null>(null);
+    const [editingBucketProvider, setEditingBucketProvider] = useState<{ type: string; id: string } | null>(null);
     const [bucketForm, setBucketForm] = useState<BucketFormState>({
         name: '',
         public: false,
@@ -186,6 +187,10 @@ export function useFileBrowserState() {
         e.stopPropagation();
         setBucketDialogMode('edit');
         setEditingBucketId(bucket.id);
+        setEditingBucketProvider({
+            type: bucket.provider || '',
+            id: bucket.providerId || '',
+        });
         setBucketForm({
             name: bucket.name,
             public: bucket.public,
@@ -235,6 +240,7 @@ export function useFileBrowserState() {
         setBucketForm,
         handleOpenCreateBucket,
         handleOpenEditBucket,
+        editingBucketProvider,
 
         // Confirmation Dialog
         confirmDialog,

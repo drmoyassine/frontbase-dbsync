@@ -21,6 +21,7 @@ class EdgeDatabase(Base):
     db_url = Column(String(500), nullable=False)         # "libsql://your-db.turso.io"
     db_token = Column(String(1000), nullable=True)       # auth token (encrypted at rest)
     provider_account_id = Column(String, ForeignKey('edge_providers_accounts.id'), nullable=True)  # FK → Connected Account
+    provider_config = Column(Text, nullable=True)          # JSON — provider-specific metadata (scoped tokens, account IDs)
     is_default = Column(Boolean, default=False)
     is_system = Column(Boolean, default=False)            # True = pre-seeded, cannot be deleted
     created_at = Column(String, nullable=False)
@@ -46,6 +47,7 @@ class EdgeCache(Base):
     cache_url = Column(String(500), nullable=False)     # "https://xxx.upstash.io"
     cache_token = Column(String(1000), nullable=True)   # auth token (write-only to frontend)
     provider_account_id = Column(String, ForeignKey('edge_providers_accounts.id'), nullable=True)  # FK → Connected Account
+    provider_config = Column(Text, nullable=True)         # JSON — provider-specific metadata (scoped tokens, account IDs)
     is_default = Column(Boolean, default=False)
     is_system = Column(Boolean, default=False)      # System caches are undeletable
     created_at = Column(String, nullable=False)

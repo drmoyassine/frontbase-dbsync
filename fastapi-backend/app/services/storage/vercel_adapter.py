@@ -438,10 +438,35 @@ class VercelBlobAdapter(StorageAdapter):
 
     async def delete_files(self, bucket: str, paths: List[str]) -> None:
         rw_token = await self._get_rw_token(bucket)
+
+        # Expand folder paths to include all nested blobs
+        all_urls: List[str] = []
+        for p in paths:
+            if p.endswith("/"):
+                # Folder — list all blobs with this prefix and collect URLs
+                prefix = p
+                params: Dict[str, Any] = {"limit": 1000, "prefix": prefix}
+                async with httpx.AsyncClient(timeout=15) as client:
+                    res = await client.get(
+                        BLOB_API,
+                        params=params,
+                        headers=self._blob_headers(rw_token),
+                    )
+                if res.is_success:
+                    for blob in res.json().get("blobs", []):
+                        url = blob.get("url", "")
+                        if url:
+                            all_urls.append(url)
+            else:
+                all_urls.append(p)
+
+        if not all_urls:
+            return
+
         async with httpx.AsyncClient(timeout=15) as client:
             res = await client.post(
                 f"{BLOB_API}/delete",
-                json={"urls": paths},
+                json={"urls": all_urls},
                 headers=self._blob_headers(rw_token),
             )
         if not res.is_success:

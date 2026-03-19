@@ -21,17 +21,16 @@ import {
     DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import {
-    Plus, Trash2, Pencil, Loader2, Check,
+    Plus, Pencil, Loader2, Check, Trash2,
     Star, Shield, Zap, AlertTriangle, Server, Lock,
 } from 'lucide-react';
-import {
-    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
-    AlertDialogTitle, AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+
 import { showTestToast, TestResult } from './edgeTestToast';
 import { AccountResourcePicker, DiscoveredResource } from './AccountResourcePicker';
 import { PROVIDER_ICONS, EDGE_QUEUE_PROVIDERS } from './edgeConstants';
+import { DeleteResourceDialog, BulkDeleteResourceDialog } from './DeleteResourceDialog';
+import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
 
 const API_BASE = '';
 
@@ -79,6 +78,23 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
 
     // Account link
     const [formAccountId, setFormAccountId] = useState<string | null>(null);
+
+    // Bulk select
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+    const [bulkLoading, setBulkLoading] = useState(false);
+
+    const selectableQueues = queues.filter(q => !q.is_system);
+    const allSelected = selectableQueues.length > 0 && selectableQueues.every(q => selectedIds.has(q.id));
+    const toggleSelect = (id: string) => setSelectedIds(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+    });
+    const toggleSelectAll = () => {
+        if (allSelected) setSelectedIds(new Set());
+        else setSelectedIds(new Set(selectableQueues.map(q => q.id)));
+    };
 
     const refetchQueues = () => queryClient.invalidateQueries({ queryKey: ['edge-queues'] });
 
@@ -144,6 +160,9 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
             setDialogOpen(false);
             resetForm();
             refetchQueues();
+            if (data.warning) {
+                toast.warning(data.warning);
+            }
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -152,10 +171,13 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
     };
 
     // Delete
-    const handleDelete = async (id: string) => {
+    const handleDelete = async (id: string, deleteRemote: boolean = false) => {
         setDeletingId(id);
         try {
-            const res = await fetch(`${API_BASE}/api/edge-queues/${id}`, { method: 'DELETE' });
+            const url = deleteRemote
+                ? `${API_BASE}/api/edge-queues/${id}?delete_remote=true`
+                : `${API_BASE}/api/edge-queues/${id}`;
+            const res = await fetch(url, { method: 'DELETE' });
             if (!res.ok) {
                 const data = await res.json();
                 throw new Error(data.detail || `HTTP ${res.status}`);
@@ -163,6 +185,22 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
             refetchQueues();
         } catch (e: any) { setError(e.message); }
         finally { setDeletingId(null); }
+    };
+
+    // Bulk Delete
+    const handleBulkDelete = async (deleteRemote: boolean) => {
+        setBulkLoading(true);
+        try {
+            const result = await edgeInfrastructureApi.batchDeleteQueues([...selectedIds], deleteRemote);
+            if (result.failed.length > 0) toast.error(`${result.failed.length} queue(s) failed to delete`);
+            if (result.success.length > 0) toast.success(`${result.success.length} queue(s) deleted`);
+            setSelectedIds(new Set());
+            refetchQueues();
+        } catch (e: any) {
+            toast.error(e.message);
+        } finally {
+            setBulkLoading(false);
+        }
     };
 
 
@@ -200,6 +238,7 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                         provider: selectedProvider,
                         queue_url: formUrl,
                         queue_token: formToken || null,
+                        provider_account_id: formAccountId || null,
                     }),
                 });
                 const data: TestResult = await res.json();
@@ -286,15 +325,17 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                         if (!prov?.active || !prov.accountProvider || editingId) return null;
                         return (
                             <AccountResourcePicker
+                                key={selectedProvider}
                                 compatibleProviders={[prov.accountProvider]}
                                 resourceTypeFilter={prov.resourceTypeFilter}
+                                createResourceType={prov.createResourceType}
                                 label={`Select ${prov.label}`}
                                 existingUrls={queues.map(q => q.queue_url).filter(Boolean)}
                                 autoSelectSingle
-                                hideConnectDisplayName
+                                hideConnectDisplayName={!prov.createResourceType}
                                 onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
                                     setFormAccountId(accountId);
-                                    const url = resource.endpoint || resource.rest_url || resource.db_url || '';
+                                    const url = (resource as any).queue_url || resource.endpoint || resource.rest_url || resource.db_url || resource.id || '';
                                     if (url) setFormUrl(url);
                                     if ((resource as any).token) setFormToken((resource as any).token);
                                     if ((resource as any).signing_key) setFormSigningKey((resource as any).signing_key);
@@ -379,10 +420,44 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                     <p className="text-sm text-muted-foreground mt-1">Add a message queue for durable workflow execution.</p>
                 </div>
             ) : (
+                <>
+                {/* ── Bulk Action Bar ─────────────── */}
+                <div className="flex items-center gap-2 mb-3">
+                    <Checkbox
+                        id="select-all-queues"
+                        checked={allSelected}
+                        onCheckedChange={toggleSelectAll}
+                        disabled={selectableQueues.length === 0}
+                    />
+                    <label htmlFor="select-all-queues" className="text-xs text-muted-foreground cursor-pointer">
+                        {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
+                    </label>
+                    {selectedIds.size > 0 && (
+                        <div className="flex items-center gap-1.5 ml-auto">
+                            <Button
+                                size="sm"
+                                variant="destructive"
+                                className="h-7 text-xs gap-1.5"
+                                onClick={() => setBulkDeleteOpen(true)}
+                                disabled={bulkLoading}
+                            >
+                                <Trash2 className="w-3 h-3" /> Delete
+                            </Button>
+                        </div>
+                    )}
+                </div>
                 <div className="space-y-3">
                     {queues.map((queue) => (
-                        <div key={queue.id} className="flex items-center justify-between p-4 border rounded-lg bg-card hover:border-primary/50 transition-colors">
+                        <div key={queue.id} className={`flex items-center justify-between p-4 border rounded-lg bg-card hover:border-primary/50 transition-colors ${selectedIds.has(queue.id) ? 'ring-1 ring-primary border-primary' : ''}`}>
                             <div className="flex items-center gap-3">
+                                {!queue.is_system ? (
+                                    <Checkbox
+                                        checked={selectedIds.has(queue.id)}
+                                        onCheckedChange={() => toggleSelect(queue.id)}
+                                    />
+                                ) : (
+                                    <div className="w-4 shrink-0" />
+                                )}
                                 <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
                                     {getProviderIcon(queue.provider)}
                                 </div>
@@ -429,47 +504,31 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                                         <Button variant="ghost" size="icon" onClick={() => openEdit(queue)} title="Edit">
                                             <Pencil className="h-4 w-4" />
                                         </Button>
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button
-                                                    variant="ghost" size="icon"
-                                                    disabled={deletingId === queue.id}
-                                                >
-                                                    {deletingId === queue.id
-                                                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                                                        : <Trash2 className="h-4 w-4 text-destructive" />}
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>Delete "{queue.name}"?</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        This removes the queue connection from Frontbase. The actual queue service is not affected.
-                                                        {queue.engine_count > 0 && (
-                                                            <span className="block mt-2 font-medium text-destructive">
-                                                                ⚠ {queue.engine_count} edge engine{queue.engine_count > 1 ? 's' : ''} use this queue and will need to be reconfigured.
-                                                            </span>
-                                                        )}
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                    <AlertDialogAction
-                                                        onClick={() => handleDelete(queue.id)}
-                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                    >
-                                                        Delete
-                                                    </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
+                                        <DeleteResourceDialog
+                                            resourceName={queue.name}
+                                            resourceTypeLabel="queue"
+                                            provider={queue.provider}
+                                            supportsRemoteDelete={!!queue.supports_remote_delete}
+                                            dependentCount={queue.engine_count}
+                                            dependentLabel="edge engine"
+                                            onDelete={(deleteRemote) => handleDelete(queue.id, deleteRemote)}
+                                        />
                                     </>
                                 )}
                             </div>
                         </div>
                     ))}
                 </div>
+                </>
             )}
+
+            <BulkDeleteResourceDialog
+                open={bulkDeleteOpen}
+                onOpenChange={setBulkDeleteOpen}
+                selectedCount={selectedIds.size}
+                resourceTypeLabel="queue"
+                onConfirm={handleBulkDelete}
+            />
         </div>
     );
 

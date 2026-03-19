@@ -14,6 +14,9 @@ Adding a new provider:
 
 import httpx
 import base64
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -61,20 +64,71 @@ async def _discover_supabase(creds: dict) -> dict:
     if locked_ref:
         projects = [p for p in projects if p.get("id") == locked_ref]
 
-    return {
-        "success": True,
-        "resources": [
-            {
-                "id": p.get("id", ""),     # Standard field for AccountResourcePicker
-                "ref": p.get("id", ""),     # Backward compat alias
-                "name": p.get("name", ""),
-                "type": "supabase_project",
-                "region": p.get("region", ""),
-                "status": p.get("status", ""),
-            }
-            for p in projects
-        ],
-    }
+    # Enrich each project with the connection pooler URI for state DB use
+    resources: list[dict] = []
+    for p in projects:
+        ref = p.get("id", "")
+        entry: dict = {
+            "id": ref,
+            "ref": ref,
+            "name": p.get("name", ""),
+            "type": "supabase_project",
+            "region": p.get("region", ""),
+            "status": p.get("status", ""),
+        }
+        # Fetch pooler URI from Supabase management API (for PG state DB)
+        if ref and token:
+            try:
+                pooler_uri = await _fetch_supabase_pooler_uri(token, ref)
+                if pooler_uri:
+                    entry["db_url"] = pooler_uri
+            except Exception as e:
+                logger.warning("[Supabase discover] Failed to fetch pooler URI for ref=%s: %s", ref, e)
+        resources.append(entry)
+
+    return {"success": True, "resources": resources}
+
+
+async def _fetch_supabase_pooler_uri(access_token: str, project_ref: str, db_password: str | None = None) -> str | None:
+    """Fetch the Supavisor connection pooler URI for a Supabase project.
+    
+    If db_password is provided, it replaces the [YOUR-PASSWORD] placeholder
+    in the returned connection string.
+    """
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(
+            f"https://api.supabase.com/v1/projects/{project_ref}/config/database/pooler",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+    if resp.status_code != 200:
+        logger.warning("[Supabase pooler] API returned %d for ref=%s: %s", resp.status_code, project_ref, resp.text[:300])
+        return None
+    data = resp.json()
+    logger.debug("[Supabase pooler] Response for ref=%s: %s", project_ref, str(data)[:500])
+    
+    uri: str | None = None
+    # Supabase returns an array of pooler configs; prefer transaction mode
+    if isinstance(data, list):
+        for entry in data:
+            if entry.get("pool_mode") == "transaction" or entry.get("mode") == "transaction":
+                uri = entry.get("connection_string") or entry.get("connectionString") or entry.get("uri")
+                if uri:
+                    break
+        # Fallback: first available
+        if not uri and data:
+            first = data[0]
+            uri = first.get("connection_string") or first.get("connectionString") or first.get("uri")
+    elif isinstance(data, dict):
+        uri = data.get("connection_string") or data.get("connectionString") or data.get("uri")
+    
+    if not uri:
+        return None
+    
+    # Replace password placeholder
+    if db_password and "[YOUR-PASSWORD]" in uri:
+        uri = uri.replace("[YOUR-PASSWORD]", db_password)
+    
+    return uri
 
 
 async def _cf_api_get(client: httpx.AsyncClient, token: str, path: str) -> list:
@@ -114,9 +168,11 @@ async def _discover_cloudflare(creds: dict) -> dict:
 
             # 3. KV namespaces
             for ns in await _cf_api_get(client, token, f"/accounts/{acct_id}/storage/kv/namespaces"):
+                ns_id = ns.get("id", "")
                 resources.append({
-                    "id": ns.get("id", ""), "name": ns.get("title", ""),
+                    "id": ns_id, "name": ns.get("title", ""),
                     "type": "kv", "account_id": acct_id, "account_name": acct_name,
+                    "cache_url": f"kv://{ns_id}",  # Synthetic URL for provider-agnostic storage
                 })
 
             # 4. R2 buckets
@@ -128,9 +184,11 @@ async def _discover_cloudflare(creds: dict) -> dict:
 
             # 5. Queues
             for q in await _cf_api_get(client, token, f"/accounts/{acct_id}/queues"):
+                q_id = q.get("queue_id", "")
                 resources.append({
-                    "id": q.get("queue_id", ""), "name": q.get("queue_name", ""),
+                    "id": q_id, "name": q.get("queue_name", ""),
                     "type": "queue", "account_id": acct_id, "account_name": acct_name,
+                    "queue_url": f"cfq://{q_id}",  # Synthetic URL for provider-agnostic queue
                 })
 
             # 6. Vectorize indexes
@@ -317,8 +375,8 @@ async def _discover_neon(creds: dict) -> dict:
                 )
                 if conn_resp.status_code == 200:
                     conn_uri = conn_resp.json().get("uri", "")
-        except Exception:
-            pass  # non-fatal, URI will be empty
+        except Exception as e:
+            logger.warning("[Neon discover] Failed to fetch connection_uri for project=%s: %s", project_id, e)
         resources.append({
             "id": project_id,
             "name": p.get("name", ""),
@@ -455,15 +513,32 @@ async def _discover_vercel(creds: dict) -> dict:
                     "framework": p.get("framework", ""),
                 })
 
-        # 2. Edge Configs (cache-like)
+        # 2. Edge Configs (cache-like) — fetch connection strings for runtime use
         ec_resp = await client.get("https://api.vercel.com/v1/edge-config", headers=headers)
         if ec_resp.status_code == 200:
             for ec in (ec_resp.json() if isinstance(ec_resp.json(), list) else []):
-                resources.append({
-                    "id": ec.get("id", ""), "name": ec.get("slug", ec.get("id", "")),
+                ec_id = ec.get("id", "")
+                entry: dict = {
+                    "id": ec_id, "name": ec.get("slug", ec_id),
                     "type": "edge_config",
                     "item_count": ec.get("itemCount"),
-                })
+                }
+                # Fetch connection string (required for runtime access)
+                if ec_id:
+                    try:
+                        tok_resp = await client.get(
+                            f"https://api.vercel.com/v1/edge-config/{ec_id}/tokens",
+                            headers=headers,
+                        )
+                        if tok_resp.status_code == 200:
+                            tokens = tok_resp.json()
+                            if isinstance(tokens, list) and tokens:
+                                conn_str = tokens[0].get("connectionString", "")
+                                if conn_str:
+                                    entry["cache_url"] = conn_str
+                    except Exception:
+                        pass  # Best-effort
+                resources.append(entry)
 
         # 3. Blob stores (storage)
         try:
@@ -584,7 +659,7 @@ async def _create_turso_db(creds: dict, *, name: str = "", group: str = "default
     return {"success": False, "detail": f"Turso create error {resp.status_code}: {resp.text[:300]}"}
 
 
-async def _create_cf_d1(creds: dict, *, name: str = "") -> dict:
+async def _create_cf_d1(creds: dict, *, name: str = "", **_: object) -> dict:
     """Create a new Cloudflare D1 database."""
     token = creds.get("api_token", "")
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -612,7 +687,7 @@ async def _create_cf_d1(creds: dict, *, name: str = "") -> dict:
     return {"success": False, "detail": errors[0].get("message", "D1 create failed")}
 
 
-async def _create_cf_kv(creds: dict, *, name: str = "") -> dict:
+async def _create_cf_kv(creds: dict, *, name: str = "", **_: object) -> dict:
     """Create a new Cloudflare KV namespace."""
     token = creds.get("api_token", "")
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -638,6 +713,33 @@ async def _create_cf_kv(creds: dict, *, name: str = "") -> dict:
     errors = data.get("errors", [{}])
     return {"success": False, "detail": errors[0].get("message", "KV create failed")}
 
+async def _create_cf_queue(creds: dict, *, name: str = "", **_: object) -> dict:
+    """Create a new Cloudflare Queue."""
+    token = creds.get("api_token", "")
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        accounts = await _cf_api_get(client, token, "/accounts")
+        if not accounts:
+            return {"success": False, "detail": "No Cloudflare accounts found"}
+        acct_id = accounts[0].get("id", "")
+
+        resp = await client.post(
+            f"https://api.cloudflare.com/client/v4/accounts/{acct_id}/queues",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={"queue_name": name},
+        )
+    data = resp.json()
+    if data.get("success"):
+        result = data.get("result", {})
+        return {
+            "success": True,
+            "resource": {
+                "id": result.get("queue_id", ""), "name": result.get("queue_name", name),
+                "type": "queue",
+            },
+        }
+    errors = data.get("errors", [{}])
+    return {"success": False, "detail": errors[0].get("message", "Queue create failed")}
+
 
 # =============================================================================
 # Registries — add new providers here
@@ -661,5 +763,5 @@ _DISCOVERERS: dict[str, object] = {
 _CREATORS: dict[str, dict[str, object]] = {
     "upstash":    {"redis": _create_upstash_redis},
     "turso":      {"turso_db": _create_turso_db},
-    "cloudflare": {"d1": _create_cf_d1, "kv": _create_cf_kv},
+    "cloudflare": {"d1": _create_cf_d1, "kv": _create_cf_kv, "queue": _create_cf_queue},
 }

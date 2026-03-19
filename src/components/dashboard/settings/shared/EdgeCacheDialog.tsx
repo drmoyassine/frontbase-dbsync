@@ -110,6 +110,9 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
                                     >
                                         <Icon className="h-4 w-4 shrink-0" />
                                         <span className="truncate">{opt.label}</span>
+                                        {opt.platformLock && (
+                                            <Badge variant="outline" className="text-[10px] ml-auto px-1.5 py-0 border-amber-400 text-amber-500">{opt.platformLock} only</Badge>
+                                        )}
                                         {!opt.active && (
                                             <Badge variant="outline" className="text-[10px] ml-auto px-1.5 py-0">Soon</Badge>
                                         )}
@@ -117,6 +120,20 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
                                 );
                             })}
                         </div>
+
+                        {/* Platform-lock compatibility warning */}
+                        {(() => {
+                            const prov = CACHE_PROVIDER_OPTIONS.find(p => p.value === selectedProvider);
+                            if (!prov?.platformLock || !prov.compatHint) return null;
+                            return (
+                                <Alert className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+                                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                                    <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
+                                        {prov.compatHint}
+                                    </AlertDescription>
+                                </Alert>
+                            );
+                        })()}
                     </div>
 
                     {/* Account resource picker — PRIMARY for active providers */}
@@ -125,18 +142,20 @@ export const EdgeCacheDialog: React.FC<EdgeCacheDialogProps> = ({
                         if (!prov?.active || !prov.accountProvider || editingId || !setFormAccountId) return null;
                         return (
                             <AccountResourcePicker
+                                key={selectedProvider}
                                 compatibleProviders={[prov.accountProvider]}
                                 resourceTypeFilter={prov.resourceTypeFilter}
                                 createResourceType={prov.createResourceType}
                                 label={`Select ${prov.label}`}
                                 existingUrls={existingUrls}
                                 autoSelectSingle
-                                hideConnectDisplayName
+                                hideConnectDisplayName={!prov.createResourceType}
                                 onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
                                     setFormAccountId(accountId);
-                                    const url = resource.rest_url
+                                    const url = (resource as any).cache_url
+                                        || resource.rest_url
                                         || (resource.endpoint ? `https://${resource.endpoint}` : '')
-                                        || resource.db_url || '';
+                                        || resource.db_url || resource.id || '';
                                     if (url) setFormUrl(url);
                                     if (resource.rest_token) setFormToken(resource.rest_token);
                                     else if ((resource as any).token) setFormToken((resource as any).token);

@@ -67,7 +67,7 @@ class NetlifyBlobsAdapter(StorageAdapter):
             {
                 "id": self._strip_prefix(s),
                 "name": self._strip_prefix(s),
-                "public": True,
+                "public": False,
                 "created_at": None,
             }
             for s in stores
@@ -77,16 +77,33 @@ class NetlifyBlobsAdapter(StorageAdapter):
     async def create_bucket(self, name: str, public: bool = False,
                             file_size_limit: Optional[int] = None,
                             allowed_mime_types: Optional[List[str]] = None) -> Dict[str, Any]:
-        """Create a store by writing a marker blob (stores auto-create on first write)."""
+        """Create a store by writing a marker blob (stores auto-create on first write).
+
+        If the site has never been deployed, Blobs write returns 401.
+        We auto-activate by triggering an empty deploy and retrying.
+        """
         store = self._store_name(name)
         url = f"{self.blobs_url}/{store}/.frontbase-init"
-        # Step 1: Get signed URL
+
         async with httpx.AsyncClient(timeout=30) as client:
             res = await client.put(
                 url,
                 headers={**self.headers, "Accept": self.SIGNED_URL_ACCEPT},
                 content=b"",
             )
+
+        # ── 401 = Blobs not activated (no deploys yet) → auto-activate ──
+        if res.status_code == 401:
+            logger.info(f"Blobs not activated for site {self.site_id} — triggering empty deploy")
+            await self._activate_blobs()
+            # Retry the original request
+            async with httpx.AsyncClient(timeout=30) as client:
+                res = await client.put(
+                    url,
+                    headers={**self.headers, "Accept": self.SIGNED_URL_ACCEPT},
+                    content=b"",
+                )
+
         if not res.is_success:
             raise Exception(f"Failed to get signed URL for store creation: {res.text}")
         signed_url = res.json().get("url")
@@ -97,14 +114,30 @@ class NetlifyBlobsAdapter(StorageAdapter):
             res2 = await client.put(signed_url, content=b"frontbase-init")
         if not res2.is_success:
             raise Exception(f"Failed to create store marker: {res2.text}")
-        return {"id": name, "name": name, "public": True, "created_at": None}
+        return {"id": name, "name": name, "public": False, "created_at": None}
+
+    async def _activate_blobs(self) -> None:
+        """Trigger an empty deploy to activate Netlify Blobs for this site."""
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                res = await client.post(
+                    f"{self.api_url}/sites/{self.site_id}/deploys",
+                    headers={**self.headers, "Content-Type": "application/json"},
+                    json={"files": {}},
+                )
+                if res.is_success:
+                    logger.info(f"Blobs activated for site {self.site_id} via empty deploy")
+                else:
+                    logger.warning(f"Blobs activation deploy returned {res.status_code}: {res.text[:200]}")
+        except Exception as e:
+            logger.warning(f"Blobs activation failed: {e}")
 
     async def get_bucket(self, bucket_id: str) -> Dict[str, Any]:
         """Get store info (stores don't have metadata, return name)."""
         return {
             "id": bucket_id,
             "name": bucket_id,
-            "public": True,
+            "public": False,
             "created_at": None,
         }
 
@@ -115,12 +148,16 @@ class NetlifyBlobsAdapter(StorageAdapter):
 
     async def delete_bucket(self, bucket_id: str) -> None:
         """Delete a store by deleting all its blobs (store auto-deletes when empty)."""
+        logger.info(f"Deleting Netlify bucket (store): {bucket_id}")
         await self.empty_bucket(bucket_id)
+        logger.info(f"Netlify bucket '{bucket_id}' deleted (all blobs removed)")
 
     async def empty_bucket(self, bucket_id: str) -> None:
         """Delete all blobs in a store."""
         store = self._store_name(bucket_id)
+        logger.info(f"Emptying Netlify store: {store}")
         cursor: Optional[str] = None
+        total_deleted = 0
         async with httpx.AsyncClient(timeout=30) as client:
             while True:
                 params: Dict[str, str] = {}
@@ -132,21 +169,38 @@ class NetlifyBlobsAdapter(StorageAdapter):
                     params=params,
                 )
                 if res.status_code == 404:
+                    logger.info(f"Store {store} not found (already deleted or empty)")
                     break
+                if res.status_code == 401:
+                    logger.info(f"Blobs 401 during empty — activating blobs")
+                    await self._activate_blobs()
+                    res = await client.get(
+                        f"{self.blobs_url}/{store}",
+                        headers=self.headers,
+                        params=params,
+                    )
+                    if not res.is_success:
+                        raise Exception(f"Failed to list blobs after activation: {res.status_code} {res.text[:200]}")
                 if not res.is_success:
-                    raise Exception(f"Failed to list blobs for empty: {res.text}")
+                    raise Exception(f"Failed to list blobs for empty: {res.status_code} {res.text[:200]}")
                 data = res.json()
                 blobs = data.get("blobs", [])
+                logger.info(f"Found {len(blobs)} blobs in store {store}")
                 for blob in blobs:
                     key = blob.get("key", "")
                     if key:
-                        await client.delete(
+                        del_res = await client.delete(
                             f"{self.blobs_url}/{store}/{key}",
                             headers=self.headers,
                         )
+                        if del_res.status_code not in (200, 204, 404):
+                            logger.warning(f"Failed to delete blob {key}: {del_res.status_code} {del_res.text[:200]}")
+                        else:
+                            total_deleted += 1
                 cursor = data.get("next_cursor")
                 if not cursor:
                     break
+        logger.info(f"Emptied store {store}: deleted {total_deleted} blobs")
 
     async def list_files(self, bucket: str, path: str = "",
                          limit: int = 100, offset: int = 0,
@@ -264,10 +318,41 @@ class NetlifyBlobsAdapter(StorageAdapter):
         return {"path": path, "publicUrl": ""}
 
     async def delete_files(self, bucket: str, paths: List[str]) -> None:
-        """Delete blobs by key."""
+        """Delete blobs by key. For folder paths, recursively delete all nested blobs."""
         store = self._store_name(bucket)
+
+        # Expand folder paths to include all nested blobs
+        all_keys: List[str] = []
+        for key in paths:
+            if key.endswith("/"):
+                # Folder — list all blobs under this prefix
+                async with httpx.AsyncClient(timeout=30) as client:
+                    cursor: Optional[str] = None
+                    while True:
+                        params: Dict[str, str] = {"prefix": key}
+                        if cursor:
+                            params["cursor"] = cursor
+                        res = await client.get(
+                            f"{self.blobs_url}/{store}",
+                            headers=self.headers,
+                            params=params,
+                        )
+                        if not res.is_success:
+                            break
+                        data = res.json()
+                        for blob in data.get("blobs", []):
+                            k = blob.get("key", "")
+                            if k:
+                                all_keys.append(k)
+                        cursor = data.get("next_cursor")
+                        if not cursor:
+                            break
+            else:
+                all_keys.append(key)
+
+        # Delete all collected keys
         async with httpx.AsyncClient(timeout=30) as client:
-            for key in paths:
+            for key in all_keys:
                 res = await client.delete(
                     f"{self.blobs_url}/{store}/{key}",
                     headers=self.headers,
@@ -292,8 +377,8 @@ class NetlifyBlobsAdapter(StorageAdapter):
         return signed_url
 
     async def get_public_url(self, bucket: str, path: str) -> str:
-        """Netlify Blobs aren't publicly accessible — return a download via API."""
-        return f"{self.blobs_url}/{self._store_name(bucket)}/{path}"
+        """Netlify Blobs aren't publicly accessible — return a signed URL instead."""
+        return await self.get_signed_url(bucket, path)
 
     async def move_file(self, bucket: str, source_key: str,
                         destination_key: str) -> None:

@@ -52,6 +52,7 @@ async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_t
         edge_cache_id=str(engine.edge_cache_id) if engine.edge_cache_id is not None else None,
         edge_queue_id=str(engine.edge_queue_id) if engine.edge_queue_id is not None else None,
         engine_id=str(engine.id),
+        deploy_provider='supabase',
     )
     if secrets:
         await set_project_secrets(str(access_token), str(project_ref), secrets)

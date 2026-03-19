@@ -16,10 +16,10 @@ import {
 } from '@/hooks/useEdgeInfrastructure';
 import { useEdgeEngineActions, timeAgo } from '@/hooks/useEdgeEngineActions';
 import { PROVIDER_ICONS } from './edgeConstants';
-import { DeleteEngineDialog } from './DeleteEngineDialog';
+import { DeleteResourceDialog, BulkDeleteResourceDialog, PROVIDER_LABELS } from './DeleteResourceDialog';
 import { ReconfigureEngineDialog } from './ReconfigureEngineDialog';
 import { EdgeInspectorDialog } from './EdgeInspectorDialog';
-import { BulkDeleteDialog } from './BulkDeleteDialog';
+
 import { DeployEngineWizard } from './DeployEngineWizard';
 import { FetchEnginesDialog } from './FetchEnginesDialog';
 import { AITestDialog } from './AITestDialog';
@@ -337,9 +337,12 @@ export function EdgeEnginesSection() {
                                                                     }
                                                                 </Button>
                                                                 <ReconfigureEngineDialog engine={engine} />
-                                                                <DeleteEngineDialog
-                                                                    engine={engine}
-                                                                    onDelete={handleDelete}
+                                                                <DeleteResourceDialog
+                                                                    resourceName={engine.name}
+                                                                    resourceTypeLabel="engine"
+                                                                    provider={engine.provider || ''}
+                                                                    supportsRemoteDelete={!!engine.provider && engine.provider !== 'unknown'}
+                                                                    onDelete={(deleteRemote) => handleDelete(engine, deleteRemote)}
                                                                 />
                                                             </>
                                                         )}
@@ -356,10 +359,11 @@ export function EdgeEnginesSection() {
                 )}
             </CardContent>
 
-            <BulkDeleteDialog
+            <BulkDeleteResourceDialog
                 open={bulkDeleteOpen}
                 onOpenChange={setBulkDeleteOpen}
                 selectedCount={selectedIds.size}
+                resourceTypeLabel="engine"
                 onConfirm={handleBulkDelete}
             />
         </Card >

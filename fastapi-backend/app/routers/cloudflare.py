@@ -152,7 +152,7 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
             if default_db:
                 edge_db_id = str(default_db.id)
 
-        secrets = build_engine_secrets(db, edge_db_id, edge_cache_id, edge_queue_id)
+        secrets = build_engine_secrets(db, edge_db_id, edge_cache_id, edge_queue_id, deploy_provider='cloudflare')
 
         # Direct cache URL/token (legacy — overrides EdgeCache lookup)
         if payload.cache_url:

@@ -13,6 +13,7 @@
 
 import React from 'react';
 import { Cloud, Server, Globe, Rocket, Database, Workflow, Triangle, Hexagon, Zap, HardDrive } from 'lucide-react';
+import { BRAND_ICONS } from '@/components/icons/providers';
 
 // ============================================================================
 // API Base
@@ -22,15 +23,18 @@ export const API_BASE = '';
 
 // ============================================================================
 // Provider Icons — used everywhere for provider badge/icon display
+// Lucide icons are fallbacks; brand SVGs from src/components/icons/ override.
+// To add a brand icon: drop {provider_key}.svg in src/components/icons/
+// and add the import in providers.tsx.
 // ============================================================================
 
-export const PROVIDER_ICONS: Record<string, React.FC<any>> = {
+const LUCIDE_FALLBACKS: Record<string, React.FC<any>> = {
     cloudflare: Cloud,
     docker: Server,
     flyio: Rocket,
     supabase: Database,
     upstash: Workflow,
-    vercel: Triangle,
+    vercel: (props: any) => <Triangle {...props} fill="currentColor" />,
     netlify: Hexagon,
     deno: Zap,
     wordpress_rest: Globe,
@@ -38,6 +42,12 @@ export const PROVIDER_ICONS: Record<string, React.FC<any>> = {
     mysql: HardDrive,
     neon: Database,
     turso: Cloud,
+};
+
+/** Brand SVGs override Lucide fallbacks when a matching .svg exists */
+export const PROVIDER_ICONS: Record<string, React.FC<any>> = {
+    ...LUCIDE_FALLBACKS,
+    ...BRAND_ICONS,
 };
 
 // ============================================================================
@@ -171,7 +181,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
         fields: [
             { key: 'api_token', label: 'API Token', placeholder: 'Cloudflare API Token', type: 'password', required: true },
         ],
-        helpText: <>Requires: <strong>Workers Scripts: Edit</strong>, <strong>D1: Edit</strong>, <strong>Workers R2 Storage: Edit</strong>, <strong>Workers KV Storage: Edit</strong>, <strong>Queues: Edit</strong>, <strong>Workers AI: Read</strong>, and <strong>Account Settings: Read</strong>. <a href="https://dash.cloudflare.com/profile/api-tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Create token →</a></>,
+        helpText: <span className="text-xs text-muted-foreground leading-relaxed">Create a <a href="https://dash.cloudflare.com/profile/api-tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Custom API Token</a> with <strong>Account</strong>-level permissions: <em>(Edit)</em> for Workers Scripts · D1 · R2 Storage · KV Storage · Queues · API Tokens, and <em>(Read)</em> for Workers AI · Account Settings.</span>,
     },
     supabase: {
         label: 'Supabase',
@@ -325,6 +335,11 @@ export interface EdgeResourceProvider {
     resourceTypeFilter?: string;
     /** Resource type to create when user clicks "Create New" */
     createResourceType?: string;
+    /** If set, this resource only works natively on the specified engine platform.
+     *  On other platforms, it requires HTTP API access (with limitations). */
+    platformLock?: string;
+    /** Human-readable compatibility hint shown when platformLock doesn't match engine */
+    compatHint?: string;
 }
 
 /**
@@ -349,7 +364,7 @@ export const EDGE_CACHE_PROVIDERS: EdgeResourceProvider[] = [
     { value: 'upstash',    label: 'Upstash Redis',     icon: PROVIDER_ICONS.upstash    || Cloud,    accountProvider: 'upstash',    active: true,  resourceTypeFilter: 'redis',       createResourceType: 'redis' },
     { value: 'cloudflare', label: 'Cloudflare KV',     icon: PROVIDER_ICONS.cloudflare || Cloud,    accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'kv',          createResourceType: 'kv' },
     { value: 'vercel',     label: 'Vercel Edge Config', icon: PROVIDER_ICONS.vercel    || Triangle, accountProvider: 'vercel',     active: true,  resourceTypeFilter: 'edge_config' },
-    { value: 'deno',       label: 'Deno KV',           icon: PROVIDER_ICONS.deno       || Zap,      accountProvider: 'deno',       active: true,  resourceTypeFilter: 'deno_project' },
+    { value: 'deno',       label: 'Deno KV',           icon: PROVIDER_ICONS.deno       || Zap,      accountProvider: 'deno',       active: true,  resourceTypeFilter: 'deno_project', platformLock: 'deno', compatHint: 'Deno KV is only available on Deno Deploy engines. Other platforms cannot access Deno KV.' },
     { value: 'redis',      label: 'Self-Hosted Redis',  icon: Server,                               accountProvider: null,         active: false },
     { value: 'dragonfly',  label: 'Dragonfly',          icon: Server,                               accountProvider: null,         active: false },
 ];
@@ -360,7 +375,7 @@ export const EDGE_CACHE_PROVIDERS: EdgeResourceProvider[] = [
  */
 export const EDGE_QUEUE_PROVIDERS: EdgeResourceProvider[] = [
     { value: 'qstash',     label: 'QStash',             icon: PROVIDER_ICONS.upstash    || Zap,     accountProvider: 'upstash',    active: true,  resourceTypeFilter: 'qstash' },
-    { value: 'cloudflare', label: 'Cloudflare Queues',   icon: PROVIDER_ICONS.cloudflare || Cloud,   accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'queue' },
+    { value: 'cloudflare', label: 'Cloudflare Queues',   icon: PROVIDER_ICONS.cloudflare || Cloud,   accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'queue',  createResourceType: 'queue' },
     { value: 'rabbitmq',   label: 'RabbitMQ',            icon: Server,                               accountProvider: null,         active: false },
     { value: 'bullmq',     label: 'BullMQ',              icon: Server,                               accountProvider: null,         active: false },
     { value: 'sqs',        label: 'AWS SQS',             icon: Cloud,                                accountProvider: null,         active: false },

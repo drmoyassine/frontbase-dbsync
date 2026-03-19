@@ -66,3 +66,21 @@ async def set_cached_size(provider_id: str, bucket: str, path: str, size: int) -
             await cache_set(redis_url, key, str(size), ttl=_SIZE_CACHE_TTL_REDIS)
     except Exception:
         pass  # Redis unavailable — L1 still works
+
+
+async def clear_cached_size(provider_id: str, bucket: str) -> None:
+    """Clear ALL cached sizes for a (provider, bucket) pair from L1.
+
+    Called after mutations (delete, empty, upload) to force fresh recomputation.
+    L2 (Redis) entries expire naturally via TTL (10 min).
+    """
+    prefix = f"storage:size:{provider_id}:{bucket}:"
+
+    # L1: Clear matching keys from memory
+    async with _SIZE_CACHE_LOCK:
+        keys_to_remove = [k for k in _SIZE_CACHE if k.startswith(prefix)]
+        for k in keys_to_remove:
+            del _SIZE_CACHE[k]
+
+    if keys_to_remove:
+        logger.info(f"[Cache] Cleared {len(keys_to_remove)} size entries for {provider_id}/{bucket}")

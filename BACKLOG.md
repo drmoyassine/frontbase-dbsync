@@ -142,6 +142,7 @@
 - [ ] ✨ **Admin User Management** — List, search, invite, delete Supabase auth users from dashboard. GoTrue Admin API for CRUD. Contacts sync.
 - [ ] 🔌 **Neon Auth Support** — Add Neon Auth as an auth provider option. Neon Auth provides @neondatabase/pg + drizzle integration. Detect when auth provider has database capability and auto-suggest same datasource for contacts table.
 - [ ] 🔌 **Storage Adapters** — Add storage provider adapters for Cloudflare R2, Vercel Blob, and Netlify Blobs alongside existing Supabase Storage.
+- [ ] ✨ **Cross-Bucket & Cross-Provider File Move** — Enable moving files between buckets and across providers (single + multi-select). **Backend:** Add `download_file(bucket, path) → bytes` to `StorageAdapter` ABC (all 4 adapters), new `POST /api/storage/move-cross` endpoint (download → upload → delete, native `move_file` optimization for same-bucket Supabase), streaming for files >50MB. **Frontend:** Enhanced `MoveDialog` with bucket picker grouped by provider, folder browser for dest bucket, cross-provider badge, progress indicator. Multi-select already works via `moveMutation` targets array. ~3-4 hours effort.
 
 ---
 

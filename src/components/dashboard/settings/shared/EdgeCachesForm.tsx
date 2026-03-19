@@ -6,24 +6,25 @@
  */
 
 import React, { useState } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-    Trash2, Pencil, Loader2, Star, Shield, Zap, Cloud, Server,
+    Pencil, Loader2, Star, Shield, Zap, Cloud, Server, Trash2,
 } from 'lucide-react';
-import {
-    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
-    AlertDialogTitle, AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useEdgeCacheForm } from '@/hooks/useEdgeCacheForm';
 import { EdgeCache } from '@/hooks/useEdgeInfrastructure';
 import { EdgeCacheDialog } from './EdgeCacheDialog';
+import { DeleteResourceDialog, BulkDeleteResourceDialog } from './DeleteResourceDialog';
+import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface EdgeCachesFormProps {
     withCard?: boolean;
 }
+
 
 const PROVIDER_ICONS: Record<string, React.ElementType> = {
     upstash: Cloud,
@@ -40,56 +41,8 @@ const CacheIcon = ({ className }: { className?: string }) => (
     </svg>
 );
 
-/** Sub-component for delete dialog body — needs its own state for checkbox */
-const DeleteCacheDialogBody: React.FC<{
-    cache: EdgeCache;
-    onDelete: (deleteRemote: boolean) => void;
-}> = ({ cache, onDelete }) => {
-    const isUpstashLinked = cache.provider === 'upstash' && !!cache.provider_account_id;
-    const [deleteRemote, setDeleteRemote] = useState(false);
-
-    return (
-        <>
-            <AlertDialogHeader>
-                <AlertDialogTitle>Delete "{cache.name}"?</AlertDialogTitle>
-                <AlertDialogDescription asChild>
-                    <div>
-                        <p>This removes the cache connection from Frontbase.</p>
-                        {cache.engine_count > 0 && (
-                            <p className="mt-2 font-medium text-destructive">
-                                ⚠ {cache.engine_count} edge engine{cache.engine_count > 1 ? 's' : ''} use this cache and will need to be reconfigured.
-                            </p>
-                        )}
-                        {isUpstashLinked && (
-                            <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={deleteRemote}
-                                    onChange={(e) => setDeleteRemote(e.target.checked)}
-                                    className="rounded border-destructive text-destructive focus:ring-destructive"
-                                />
-                                <span className="text-sm text-destructive font-medium">
-                                    Also delete the Redis database from Upstash
-                                </span>
-                            </label>
-                        )}
-                    </div>
-                </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                    onClick={() => onDelete(deleteRemote)}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                    {deleteRemote ? 'Delete Everywhere' : 'Delete'}
-                </AlertDialogAction>
-            </AlertDialogFooter>
-        </>
-    );
-};
-
 export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false }) => {
+    const queryClient = useQueryClient();
     const hook = useEdgeCacheForm();
     const {
         caches, isLoading,
@@ -100,6 +53,38 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
     const getProviderIcon = (provider: string) => {
         const Icon = PROVIDER_ICONS[provider] || CacheIcon;
         return <Icon className="h-4 w-4" />;
+    };
+
+    // Bulk select
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+    const [bulkLoading, setBulkLoading] = useState(false);
+
+    const selectableCaches = caches.filter((c: any) => !c.is_system);
+    const allSelected = selectableCaches.length > 0 && selectableCaches.every((c: any) => selectedIds.has(c.id));
+    const toggleSelect = (id: string) => setSelectedIds(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+    });
+    const toggleSelectAll = () => {
+        if (allSelected) setSelectedIds(new Set());
+        else setSelectedIds(new Set(selectableCaches.map((c: any) => c.id)));
+    };
+
+    const handleBulkDelete = async (deleteRemote: boolean) => {
+        setBulkLoading(true);
+        try {
+            const result = await edgeInfrastructureApi.batchDeleteCaches([...selectedIds], deleteRemote);
+            if (result.failed.length > 0) toast.error(`${result.failed.length} cache(s) failed to delete`);
+            if (result.success.length > 0) toast.success(`${result.success.length} cache(s) deleted`);
+            setSelectedIds(new Set());
+            queryClient.invalidateQueries({ queryKey: ['edge-caches'] });
+        } catch (e: any) {
+            toast.error(e.message);
+        } finally {
+            setBulkLoading(false);
+        }
     };
 
     if (isLoading) {
@@ -124,10 +109,44 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
                     <p className="text-sm text-muted-foreground mt-1">Add a cache to speed up edge responses.</p>
                 </div>
             ) : (
+                <>
+                {/* ── Bulk Action Bar ───────────── */}
+                <div className="flex items-center gap-2 mb-3">
+                    <Checkbox
+                        id="select-all-caches"
+                        checked={allSelected}
+                        onCheckedChange={toggleSelectAll}
+                        disabled={selectableCaches.length === 0}
+                    />
+                    <label htmlFor="select-all-caches" className="text-xs text-muted-foreground cursor-pointer">
+                        {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
+                    </label>
+                    {selectedIds.size > 0 && (
+                        <div className="flex items-center gap-1.5 ml-auto">
+                            <Button
+                                size="sm"
+                                variant="destructive"
+                                className="h-7 text-xs gap-1.5"
+                                onClick={() => setBulkDeleteOpen(true)}
+                                disabled={bulkLoading}
+                            >
+                                <Trash2 className="w-3 h-3" /> Delete
+                            </Button>
+                        </div>
+                    )}
+                </div>
                 <div className="space-y-3">
                     {caches.map((cache) => (
-                        <div key={cache.id} className="flex items-center justify-between p-4 border rounded-lg bg-card hover:border-primary/50 transition-colors">
+                        <div key={cache.id} className={`flex items-center justify-between p-4 border rounded-lg bg-card hover:border-primary/50 transition-colors ${selectedIds.has(cache.id) ? 'ring-1 ring-primary border-primary' : ''}`}>
                             <div className="flex items-center gap-3">
+                                {!cache.is_system ? (
+                                    <Checkbox
+                                        checked={selectedIds.has(cache.id)}
+                                        onCheckedChange={() => toggleSelect(cache.id)}
+                                    />
+                                ) : (
+                                    <div className="w-4 shrink-0" />
+                                )}
                                 <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
                                     {getProviderIcon(cache.provider)}
                                 </div>
@@ -169,31 +188,31 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
                                         <Button variant="ghost" size="icon" onClick={() => openEdit(cache)} title="Edit">
                                             <Pencil className="h-4 w-4" />
                                         </Button>
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button
-                                                    variant="ghost" size="icon"
-                                                    disabled={deletingId === cache.id}
-                                                >
-                                                    {deletingId === cache.id
-                                                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                                                        : <Trash2 className="h-4 w-4 text-destructive" />}
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <DeleteCacheDialogBody
-                                                    cache={cache}
-                                                    onDelete={(deleteRemote) => handleDelete(cache.id, deleteRemote)}
-                                                />
-                                            </AlertDialogContent>
-                                        </AlertDialog>
+                                        <DeleteResourceDialog
+                                            resourceName={cache.name}
+                                            resourceTypeLabel="cache"
+                                            provider={cache.provider}
+                                            supportsRemoteDelete={!!cache.supports_remote_delete}
+                                            dependentCount={cache.engine_count}
+                                            dependentLabel="edge engine"
+                                            onDelete={(deleteRemote) => handleDelete(cache.id, deleteRemote)}
+                                        />
                                     </>
                                 )}
                             </div>
                         </div>
                     ))}
                 </div>
+                </>
             )}
+
+            <BulkDeleteResourceDialog
+                open={bulkDeleteOpen}
+                onOpenChange={setBulkDeleteOpen}
+                selectedCount={selectedIds.size}
+                resourceTypeLabel="cache"
+                onConfirm={handleBulkDelete}
+            />
         </div>
     );
 

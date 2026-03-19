@@ -51,13 +51,15 @@ class EdgeCacheResponse(BaseModel):
     created_at: str
     updated_at: str
     engine_count: int = 0  # Number of edge engines using this cache
+    warning: Optional[str] = None
+    supports_remote_delete: bool = False
 
 
 # =============================================================================
 # Helpers
 # =============================================================================
 
-def _serialize_cache(cache, db, engine_count: int = 0) -> EdgeCacheResponse:
+def _serialize_cache(cache, db, engine_count: int = 0, warning: Optional[str] = None) -> EdgeCacheResponse:
     """Serialize an EdgeCache ORM object."""
     from ..models.models import EdgeProviderAccount
     account_name = None
@@ -67,6 +69,10 @@ def _serialize_cache(cache, db, engine_count: int = 0) -> EdgeCacheResponse:
         ).first()
         if acct:
             account_name = str(acct.name)
+    from ..services.provider_resource_deleter import supports_remote_delete_for_model
+    can_remote_delete = bool(cache.provider_account_id) and supports_remote_delete_for_model(
+        "cache", str(cache.provider)
+    )
     return EdgeCacheResponse(
         id=str(cache.id),
         name=str(cache.name),
@@ -75,11 +81,13 @@ def _serialize_cache(cache, db, engine_count: int = 0) -> EdgeCacheResponse:
         has_token=bool(cache.cache_token) or bool(cache.provider_account_id),
         is_default=bool(cache.is_default),
         is_system=bool(getattr(cache, 'is_system', False)),
-        provider_account_id=str(cache.provider_account_id) if cache.provider_account_id else None,
+        provider_account_id=str(cache.provider_account_id) if cache.provider_account_id is not None else None,
         account_name=account_name,
         created_at=str(cache.created_at),
         updated_at=str(cache.updated_at),
         engine_count=engine_count,
+        warning=warning,
+        supports_remote_delete=can_remote_delete,
     )
 
 
@@ -143,11 +151,25 @@ async def create_edge_cache(payload: EdgeCacheCreate):
             created_at=now,
             updated_at=now,
         )
+
+        # CF lifecycle: create scoped token for KV resources
+        token_warning = None
+        if payload.provider == 'cloudflare' and payload.provider_account_id:
+            import json
+            from ..services.cf_token_manager import maybe_create_scoped_token_typed
+            config = await maybe_create_scoped_token_typed(
+                'cloudflare', 'kv', payload.name,
+                payload.provider_account_id, db,
+            )
+            if config:
+                token_warning = config.pop('_warning', None)
+                cache.provider_config = json.dumps(config)  # type: ignore[assignment]
+
         db.add(cache)
         db.commit()
         db.refresh(cache)
         
-        return _serialize_cache(cache, db, 0)
+        return _serialize_cache(cache, db, 0, warning=token_warning)
     finally:
         db.close()
 
@@ -196,8 +218,8 @@ async def update_edge_cache(cache_id: str, payload: EdgeCacheUpdate):
 async def delete_edge_cache(cache_id: str, delete_remote: bool = False):
     """Delete an edge cache connection.
     
-    If delete_remote=True and the cache was created from a connected Upstash account,
-    also delete the Redis database at Upstash via Management API.
+    If delete_remote=True and the cache was created from a connected account,
+    also delete the resource at the provider.
     """
     db = SessionLocal()
     try:
@@ -221,43 +243,29 @@ async def delete_edge_cache(cache_id: str, delete_remote: bool = False):
             )
         
         remote_deleted = False
-        # If delete_remote requested and cache linked to a provider account
+        cache_provider = str(cache.provider)
+
+        # CF lifecycle: delete scoped token if exists
+        if cache_provider == 'cloudflare':
+            from ..services.cf_token_manager import maybe_delete_scoped_token
+            await maybe_delete_scoped_token(
+                'cloudflare',
+                str(cache.provider_config) if cache.provider_config is not None else None,
+                str(cache.provider_account_id) if cache.provider_account_id is not None else None,
+                db,
+            )
+
+        # Remote resource delete via unified service
         if delete_remote and getattr(cache, 'provider_account_id', None):
-            try:
-                from ..core.security import get_provider_creds
-                account = db.query(EdgeProviderAccount).filter(
-                    EdgeProviderAccount.id == cache.provider_account_id
-                ).first()
-                if account and str(account.provider) == "upstash":
-                    import httpx, base64
-                    creds = get_provider_creds(str(account.id), db)
-                    if creds:
-                        token = creds.get("api_token", "")
-                        email = creds.get("email", "")
-                        auth = base64.b64encode(f"{email}:{token}".encode()).decode()
-                        cache_url = str(cache.cache_url)
-                        # List all Redis DBs and find matching one by endpoint URL
-                        async with httpx.AsyncClient(timeout=15.0) as client:
-                            list_resp = await client.get(
-                                "https://api.upstash.com/v2/redis/databases",
-                                headers={"Authorization": f"Basic {auth}"},
-                            )
-                            if list_resp.status_code == 200:
-                                dbs = list_resp.json()
-                                for rdb in (dbs if isinstance(dbs, list) else []):
-                                    rest_url = rdb.get("rest_url", "")
-                                    endpoint = rdb.get("endpoint", "")
-                                    if (rest_url and rest_url in cache_url) or (endpoint and endpoint in cache_url):
-                                        db_id = rdb.get("database_id")
-                                        if db_id:
-                                            del_resp = await client.delete(
-                                                f"https://api.upstash.com/v2/redis/database/{db_id}",
-                                                headers={"Authorization": f"Basic {auth}"},
-                                            )
-                                            remote_deleted = del_resp.status_code in (200, 204)
-                                        break
-            except Exception:
-                pass  # Remote delete is best-effort; local delete proceeds
+            from ..services.provider_resource_deleter import delete_resource_for_edge_model
+            remote_deleted = await delete_resource_for_edge_model(
+                model_kind="cache",
+                provider=cache_provider,
+                resource_url=str(cache.cache_url),
+                provider_config_json=str(cache.provider_config) if cache.provider_config is not None else None,
+                provider_account_id=str(cache.provider_account_id),
+                db_session=db,
+            )
         
         was_default = bool(cache.is_default)
         cache_name = str(cache.name)
@@ -272,8 +280,82 @@ async def delete_edge_cache(cache_id: str, delete_remote: bool = False):
         db.commit()
         msg = f"Edge cache '{cache_name}' deleted"
         if remote_deleted:
-            msg += " (also removed from Upstash)"
+            msg += f" (also removed from {cache_provider.title()})"
         return {"success": True, "message": msg, "remote_deleted": remote_deleted}
+    finally:
+        db.close()
+
+
+class BatchDeleteCacheRequest(BaseModel):
+    ids: List[str]
+    delete_remote: bool = False
+
+
+class BatchResult(BaseModel):
+    success: List[str] = []
+    failed: List[dict] = []
+    total: int = 0
+
+
+@router.post("/batch/delete", response_model=BatchResult)
+async def batch_delete_caches(payload: BatchDeleteCacheRequest):
+    """Batch delete caches. Optionally delete remote resources in parallel."""
+    import asyncio
+    result = BatchResult(total=len(payload.ids))
+    db = SessionLocal()
+    try:
+        records_to_delete: list[EdgeCache] = []
+        for cid in payload.ids:
+            cache = db.query(EdgeCache).filter(EdgeCache.id == cid).first()
+            if not cache:
+                result.failed.append({"id": cid, "error": "Not found"})
+                continue
+            if getattr(cache, 'is_system', False):
+                result.failed.append({"id": cid, "error": "Cannot delete system cache"})
+                continue
+            ref_count = db.query(EdgeEngine).filter(EdgeEngine.edge_cache_id == cid).count()
+            if ref_count > 0:
+                result.failed.append({"id": cid, "error": f"{ref_count} engine(s) still reference this cache"})
+                continue
+            records_to_delete.append(cache)
+
+        if payload.delete_remote:
+            async def _safe_delete(rec: EdgeCache):
+                try:
+                    if getattr(rec, 'provider_account_id', None):
+                        from ..services.provider_resource_deleter import delete_resource_for_edge_model
+                        await delete_resource_for_edge_model(
+                            model_kind="cache",
+                            provider=str(rec.provider),
+                            resource_url=str(rec.cache_url),
+                            provider_config_json=str(rec.provider_config) if rec.provider_config is not None else None,
+                            provider_account_id=str(rec.provider_account_id),
+                            db_session=db,
+                        )
+                except Exception as e:
+                    result.failed.append({"id": str(rec.id), "error": f"Remote delete failed: {e}"})
+            await asyncio.gather(*[_safe_delete(rec) for rec in records_to_delete])
+
+        for rec in records_to_delete:
+            rid = str(rec.id)
+            if any(f.get("id") == rid for f in result.failed):
+                continue
+            try:
+                if str(rec.provider) == 'cloudflare':
+                    from ..services.cf_token_manager import maybe_delete_scoped_token
+                    await maybe_delete_scoped_token(
+                        'cloudflare',
+                        str(rec.provider_config) if rec.provider_config is not None else None,
+                        str(rec.provider_account_id) if rec.provider_account_id is not None else None,
+                        db,
+                    )
+                db.delete(rec)
+                result.success.append(rid)
+            except Exception as e:
+                result.failed.append({"id": rid, "error": str(e)})
+
+        db.commit()
+        return result
     finally:
         db.close()
 
@@ -290,16 +372,17 @@ async def test_edge_cache(cache_id: str):
         cache_url = str(cache.cache_url)
         from ..core.security import decrypt_field
         cache_token_raw = cache.cache_token
-        cache_token = decrypt_field(str(cache_token_raw)) if cache_token_raw else None  # type: ignore[truthy-bool]
+        cache_token = decrypt_field(str(cache_token_raw)) if cache_token_raw is not None else None
         cache_provider = str(cache.provider)
+        acct_id = str(cache.provider_account_id) if cache.provider_account_id is not None else None
     finally:
         db.close()
     
-    return await test_cache(cache_provider, cache_url, cache_token)
+    return await test_cache(cache_provider, cache_url, cache_token, acct_id)
 
 
 @router.post("/test-connection", response_model=TestCacheResult)
 async def test_connection_inline(payload: EdgeCacheCreate):
     """Test a cache connection before saving it."""
-    return await test_cache(payload.provider, payload.cache_url, payload.cache_token)
+    return await test_cache(payload.provider, payload.cache_url, payload.cache_token, payload.provider_account_id)
 

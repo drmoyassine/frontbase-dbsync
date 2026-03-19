@@ -4,7 +4,7 @@
  * Composes the Edge Engines section.
  * Individual sections are split into their own files for maintainability:
  *  - EdgeEnginesSection.tsx     (Deploy Engine + engine list)
- *  - DeleteEngineDialog.tsx     (Remote teardown + confirmation)
+ *  - DeleteResourceDialog.tsx   (Shared delete confirmation + bulk delete)
  *  - edgeConstants.ts           (Shared constants)
  *
  * Connected Accounts (EdgeProvidersSection) has moved to Settings > Connected Accounts.

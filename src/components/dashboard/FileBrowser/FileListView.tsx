@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import {
     FolderOpen, Folder, File, Upload, RefreshCw, Settings,
     MoreVertical, Trash2, Archive, X, Search, ArrowLeft, ArrowUp, ArrowDown,
-    ChevronsUpDown, Check, Loader2, Move, Edit2, Copy, FolderPlus,
+    ChevronsUpDown, Check, Loader2, Move, Edit2, Share2, FolderPlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -27,6 +27,7 @@ import { BucketDialog } from './dialogs/BucketDialog';
 import { CreateFolderDialog } from './dialogs/CreateFolderDialog';
 import { RenameDialog } from './dialogs/RenameDialog';
 import { MoveDialog } from './dialogs/MoveDialog';
+import { ShareLinkDialog } from './dialogs/ShareLinkDialog';
 
 interface FileListViewProps {
     storageProviderId: string;
@@ -54,6 +55,7 @@ interface FileListViewProps {
     isBucketDialogOpen: boolean;
     setIsBucketDialogOpen: (v: boolean) => void;
     bucketDialogMode: 'create' | 'edit';
+    editingBucketProviderType?: string;
     bucketForm: BucketFormState;
     setBucketForm: (v: BucketFormState) => void;
     handleOpenEditBucket: (bucket: Bucket, e: React.MouseEvent) => void;
@@ -109,7 +111,7 @@ export function FileListView({
     selectedFiles, setSelectedFiles, handleSelectAll, handleSelectFile,
     selectMode, onFileSelect,
     isBucketDialogOpen, setIsBucketDialogOpen,
-    bucketDialogMode, bucketForm, setBucketForm, handleOpenEditBucket,
+    bucketDialogMode, editingBucketProviderType, bucketForm, setBucketForm, handleOpenEditBucket,
     confirmDialog, setConfirmDialog,
     isFolderDialogOpen, setIsFolderDialogOpen, newFolderName, setNewFolderName,
     isRenameDialogOpen, setIsRenameDialogOpen, renameTarget, newName, setNewName, handleRename,
@@ -121,6 +123,7 @@ export function FileListView({
 }: FileListViewProps) {
     const { toast } = useToast();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const [shareFile, setShareFile] = React.useState<string | null>(null);
     const [uploadingCount, setUploadingCount] = React.useState(0);
 
     // ── Bucket query (React Query deduplicates with BucketListView) ──
@@ -230,25 +233,20 @@ export function FileListView({
         }
     };
 
-    const handleCopyUrl = async (fileName: string) => {
-        const path = currentPath ? `${currentPath}/${fileName}` : fileName;
-        try {
-            const isPublicBucket = currentBucketData?.public ?? false;
-            const url = isPublicBucket
-                ? await getPublicUrl(storageProviderId, path, currentBucket)
-                : await getSignedUrl(storageProviderId, path, currentBucket);
-            await navigator.clipboard.writeText(url);
-            toast({ title: 'URL Copied', description: 'The file URL has been copied to your clipboard.' });
-        } catch {
-            toast({ title: 'Copy Failed', description: 'Failed to copy file URL.', variant: 'destructive' });
-        }
+    const handleShareLink = (fileName: string) => {
+        setShareFile(fileName);
     };
 
-    const handleDeleteFile = (fileName: string) => {
-        const path = currentPath ? `${currentPath}/${fileName}` : fileName;
+    const handleDeleteFile = (file: { name: string; id: string; isFolder?: boolean }) => {
+        // Use the file's id which already includes trailing / for folders
+        const path = file.id;
+        const label = file.isFolder ? 'Delete Folder' : 'Delete File';
+        const desc = file.isFolder
+            ? `Are you sure you want to delete the folder "${file.name}" and ALL its contents? This cannot be undone.`
+            : `Are you sure you want to delete ${file.name}? This cannot be undone.`;
         setConfirmDialog({
-            isOpen: true, title: 'Delete File',
-            description: `Are you sure you want to delete ${fileName}? This cannot be undone.`,
+            isOpen: true, title: label,
+            description: desc,
             actionLabel: 'Delete', variant: 'destructive', actionType: 'delete', targetId: path,
         });
     };
@@ -423,10 +421,10 @@ export function FileListView({
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild><Button variant="ghost" size="sm"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={() => handleCopyUrl(file.name)}><Copy className="h-4 w-4 mr-2" /> Copy URL</DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => handleShareLink(file.name)}><Share2 className="h-4 w-4 mr-2" /> Share Link</DropdownMenuItem>
                                                     <DropdownMenuItem onClick={() => handleRename(file)}><Edit2 className="h-4 w-4 mr-2" /> Rename</DropdownMenuItem>
                                                     <DropdownMenuItem onClick={() => handleMove(currentPath ? `${currentPath}/${file.name}` : file.name)}><Move className="h-4 w-4 mr-2" /> Move</DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => handleDeleteFile(file.name)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete</DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => handleDeleteFile(file)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete</DropdownMenuItem>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
                                         </TableCell>
@@ -462,6 +460,7 @@ export function FileListView({
                 onFormChange={setBucketForm}
                 onSubmit={onBucketSubmit}
                 isPending={bucketMutationPending}
+                providerType={editingBucketProviderType}
             />
             <CreateFolderDialog
                 open={isFolderDialogOpen}
@@ -492,6 +491,20 @@ export function FileListView({
                 onDestPathChange={setMoveDestPath}
                 onSubmit={onMoveSubmit}
                 isPending={moveMutation.isPending}
+            />
+            <ShareLinkDialog
+                open={!!shareFile}
+                onOpenChange={(open) => { if (!open) setShareFile(null); }}
+                fileName={shareFile || ''}
+                isPublicBucket={currentBucketData?.public ?? false}
+                onGenerateUrl={async (expiresIn) => {
+                    const path = currentPath ? `${currentPath}/${shareFile}` : (shareFile || '');
+                    return await getSignedUrl(storageProviderId, path, currentBucket, expiresIn);
+                }}
+                onGetPublicUrl={async () => {
+                    const path = currentPath ? `${currentPath}/${shareFile}` : (shareFile || '');
+                    return await getPublicUrl(storageProviderId, path, currentBucket);
+                }}
             />
         </Card>
     );

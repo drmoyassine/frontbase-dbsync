@@ -63,6 +63,7 @@ export interface EdgeCache {
     created_at: string;
     updated_at: string;
     engine_count: number;
+    supports_remote_delete?: boolean;
 }
 
 export interface EdgeQueue {
@@ -77,6 +78,8 @@ export interface EdgeQueue {
     created_at: string;
     updated_at: string;
     engine_count: number;
+    provider_account_id?: string | null;
+    supports_remote_delete?: boolean;
 }
 
 export interface BatchResult {
@@ -255,6 +258,39 @@ export const edgeInfrastructureApi = {
     getEdgeQueues: async (): Promise<EdgeQueue[]> => {
         const res = await fetch(`${API_BASE}/api/edge-queues/`);
         if (!res.ok) throw new Error('Failed to fetch edge queues');
+        return res.json();
+    },
+
+    // Batch Operations — Databases
+    batchDeleteDatabases: async (ids: string[], delete_remote = false): Promise<BatchResult> => {
+        const res = await fetch(`${API_BASE}/api/edge-databases/batch/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids, delete_remote }),
+        });
+        if (!res.ok) throw new Error('Batch delete databases failed');
+        return res.json();
+    },
+
+    // Batch Operations — Caches
+    batchDeleteCaches: async (ids: string[], delete_remote = false): Promise<BatchResult> => {
+        const res = await fetch(`${API_BASE}/api/edge-caches/batch/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids, delete_remote }),
+        });
+        if (!res.ok) throw new Error('Batch delete caches failed');
+        return res.json();
+    },
+
+    // Batch Operations — Queues
+    batchDeleteQueues: async (ids: string[], delete_remote = false): Promise<BatchResult> => {
+        const res = await fetch(`${API_BASE}/api/edge-queues/batch/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids, delete_remote }),
+        });
+        if (!res.ok) throw new Error('Batch delete queues failed');
         return res.json();
     },
 };

@@ -56,10 +56,13 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
     const pid = storageProviderId;
 
     const createBucketMutation = useMutation({
-        mutationFn: (data: any) =>
-            createBucket(pid, data.name, data.public, data.fileSizeLimit, data.allowedMimeTypes),
+        mutationFn: (data: any) => {
+            const targetPid = data._providerId || pid;
+            return createBucket(targetPid, data.name, data.public, data.fileSizeLimit, data.allowedMimeTypes, data.projectId);
+        },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['storage-buckets', pid] });
+            // Invalidate ALL provider bucket queries so unified view refreshes
+            queryClient.invalidateQueries({ queryKey: ['storage-buckets'] });
             setIsBucketDialogOpen(false);
             toast({ title: 'Bucket created' });
         },
@@ -72,10 +75,12 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
     });
 
     const updateBucketMutation = useMutation({
-        mutationFn: (data: any) =>
-            updateBucket(pid, data.id, data.public, data.fileSizeLimit, data.allowedMimeTypes),
+        mutationFn: (data: any) => {
+            const targetPid = data._providerId || pid;
+            return updateBucket(targetPid, data.id, data.public, data.fileSizeLimit, data.allowedMimeTypes);
+        },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['storage-buckets', pid] });
+            queryClient.invalidateQueries({ queryKey: ['storage-buckets'] });
             setIsBucketDialogOpen(false);
             toast({ title: 'Bucket updated' });
         },
@@ -88,9 +93,10 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
     });
 
     const deleteBucketMutation = useMutation({
-        mutationFn: (id: string) => deleteBucket(pid, id),
+        mutationFn: ({ id, providerId }: { id: string; providerId?: string }) =>
+            deleteBucket(providerId || pid, id),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['storage-buckets', pid] });
+            queryClient.invalidateQueries({ queryKey: ['storage-buckets'] });
             if (currentBucket === editingBucketId) setCurrentBucket(null);
             toast({ title: 'Bucket deleted' });
             setConfirmDialog((prev: any) => ({ ...prev, isOpen: false }));
@@ -104,9 +110,11 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
     });
 
     const emptyBucketMutation = useMutation({
-        mutationFn: (id: string) => emptyBucket(pid, id),
+        mutationFn: ({ id, providerId }: { id: string; providerId?: string }) =>
+            emptyBucket(providerId || pid, id),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['storage-files', pid] });
+            queryClient.invalidateQueries({ queryKey: ['storage-files'] });
+            queryClient.invalidateQueries({ queryKey: ['storage-size'] });
             toast({ title: 'Bucket emptied' });
             setConfirmDialog((prev: any) => ({ ...prev, isOpen: false }));
         },
@@ -123,6 +131,7 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['storage-files', pid] });
             queryClient.invalidateQueries({ queryKey: ['storage-buckets', pid] });
+            queryClient.invalidateQueries({ queryKey: ['storage-size'] });
             setConfirmDialog((prev: any) => ({ ...prev, isOpen: false }));
             toast({ title: 'File deleted' });
         },
@@ -142,6 +151,7 @@ export function useStorageMutations(options: UseStorageMutationsOptions) {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['storage-files', pid] });
             queryClient.invalidateQueries({ queryKey: ['storage-buckets', pid] });
+            queryClient.invalidateQueries({ queryKey: ['storage-size'] });
             toast({ title: 'File uploaded' });
         },
         onError: (err) => {

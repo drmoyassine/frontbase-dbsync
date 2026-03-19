@@ -2,8 +2,14 @@
  * State Provider Factory
  * 
  * Architecture:
- *   - CF Workers / Cloud: TursoHttpProvider (always)
- *   - Docker / local dev:  LocalSqliteProvider (uses local SQLite file)
+ *   - Provider dispatched by FRONTBASE_STATE_DB_PROVIDER env var:
+ *     - 'turso'     → TursoHttpProvider (default for cloud/BYOE)
+ *     - 'cloudflare'→ CfD1HttpProvider (D1 via HTTP API)
+ *     - 'neon'      → NeonHttpProvider (PG via @neondatabase/serverless)
+ *     - 'supabase'  → NeonHttpProvider (Supabase pooler, same PG adapter)
+ *   - Fallback (no provider set):
+ *     - Cloud/CF Workers → TursoHttpProvider
+ *     - Docker/local dev → LocalSqliteProvider
  * 
  * TursoHttpProvider uses lazy init (getDb()) — safe to instantiate even
  * before env vars are available (CF module evaluation).
@@ -39,19 +45,47 @@ function isCloudRuntime(): boolean {
 }
 
 /**
- * Create the initial state provider.
+ * Create the initial state provider based on FRONTBASE_STATE_DB_PROVIDER.
  * 
- * Cloud/CF → TursoHttpProvider (lazy, no-throw constructor)
- * Docker   → LocalSqliteProvider (immediate, file: URL)
+ * Provider dispatch:
+ *   turso      → TursoHttpProvider (libsql over HTTP)
+ *   cloudflare → CfD1HttpProvider (D1 via CF HTTP API)
+ *   neon       → NeonHttpProvider (@neondatabase/serverless)
+ *   supabase   → NeonHttpProvider (Supabase pooler, same PG adapter)
+ *   (unset)    → Auto-detect: cloud → Turso, docker → LocalSqlite
  */
 function createInitialProvider(): IStateProvider {
-    if (isCloudRuntime()) {
-        console.log('☁️ Using TursoHttpProvider');
-        return new TursoHttpProvider();
-    }
+    const provider = process.env.FRONTBASE_STATE_DB_PROVIDER?.toLowerCase();
 
-    console.log('💾 Using LocalSqliteProvider');
-    return new LocalSqliteProvider();
+    switch (provider) {
+        case 'turso':
+            console.log('☁️ Using TursoHttpProvider (explicit)');
+            return new TursoHttpProvider();
+
+        case 'cloudflare':
+        case 'cloudflare_d1': {
+            // Lazy import to avoid loading in non-CF builds
+            const { CfD1HttpProvider } = require('./CfD1HttpProvider');
+            console.log('🔶 Using CfD1HttpProvider (D1 via HTTP)');
+            return new CfD1HttpProvider();
+        }
+
+        case 'neon':
+        case 'supabase': {
+            const { NeonHttpProvider } = require('./NeonHttpProvider');
+            console.log(`🐘 Using NeonHttpProvider (${provider})`);
+            return new NeonHttpProvider();
+        }
+
+        default:
+            // Legacy auto-detect fallback
+            if (isCloudRuntime()) {
+                console.log('☁️ Using TursoHttpProvider (auto-detect)');
+                return new TursoHttpProvider();
+            }
+            console.log('💾 Using LocalSqliteProvider');
+            return new LocalSqliteProvider();
+    }
 }
 
 export function getStateProvider(): IStateProvider {

@@ -16,12 +16,12 @@ const manifestRoute = new OpenAPIHono();
 
 /**
  * Derive adapter_type from FRONTBASE_ADAPTER_PLATFORM env var.
- * cloudflare = full, cloudflare-lite = lite, docker = full (default)
+ * Any platform ending in '-lite' = lite, otherwise = full
  */
 function getAdapterType(): string {
     const platform = process.env.FRONTBASE_ADAPTER_PLATFORM || 'docker';
-    if (platform === 'cloudflare-lite') return 'lite';
-    return 'full'; // cloudflare, docker, etc.
+    if (platform.endsWith('-lite')) return 'lite';
+    return 'full';
 }
 
 /**

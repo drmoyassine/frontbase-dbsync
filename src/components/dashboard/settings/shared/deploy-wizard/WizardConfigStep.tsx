@@ -116,13 +116,29 @@ export function WizardConfigStep({
                     {PROVIDER_RESOURCE_LABELS[selectedProviderType]?.inputLabel || 'Worker Name'}
                 </Label>
                 <div className="flex gap-2 items-center">
-                    <Input value={workerName} onChange={e => setWorkerName(e.target.value)} />
+                    <Input
+                        value={workerName}
+                        onChange={e => {
+                            // Sanitize: lowercase, replace underscores/spaces with hyphens,
+                            // strip non-alphanumeric/hyphen chars, collapse consecutive hyphens
+                            const sanitized = e.target.value
+                                .toLowerCase()
+                                .replace(/[_\s]+/g, '-')
+                                .replace(/[^a-z0-9-]/g, '')
+                                .replace(/-{2,}/g, '-');
+                            setWorkerName(sanitized);
+                        }}
+                        placeholder="my-edge-worker"
+                    />
                     {PROVIDER_RESOURCE_LABELS[selectedProviderType]?.urlSuffix && (
                         <span className="text-sm text-muted-foreground whitespace-nowrap">
                             {PROVIDER_RESOURCE_LABELS[selectedProviderType].urlSuffix}
                         </span>
                     )}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                    Only lowercase letters, numbers, and hyphens. This becomes part of the deployment URL.
+                </p>
             </div>
 
             {/* Edge Database */}

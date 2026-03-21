@@ -17,7 +17,7 @@ import {
     MoreVertical, Archive, X, Search, Globe, Lock, Loader2, AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { PROVIDER_ICONS } from '@/components/dashboard/settings/shared/edgeConstants';
+import { PROVIDER_ICONS, ProviderBadge } from '@/components/dashboard/settings/shared/edgeConstants';
 
 import { Bucket, BucketFormState, ConfirmDialogState, BucketSortConfig } from './types';
 import { formatBytes } from './utils';
@@ -249,25 +249,17 @@ export function BucketListView({
                                     onClick={() => onBucketClick(bucket)}
                                 >
                                     <div className="flex items-center gap-3">
-                                        <FolderOpen className="h-5 w-5 text-muted-foreground" />
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">{bucket.name}</span>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                {bucket.providerLabel && ProvIcon && (
-                                                    <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-primary/5 text-primary border-primary/20">
-                                                        <ProvIcon className="h-3 w-3" />
-                                                        {bucket.providerLabel}
-                                                    </Badge>
-                                                )}
-                                                {bucket.created_at && (
-                                                <span className="text-[11px] text-muted-foreground">
-                                                    Created {new Date(bucket.created_at).toLocaleDateString()}
-                                                </span>
-                                                )}
-                                            </div>
-                                        </div>
+                                        {bucket.provider && (
+                                            <ProviderBadge provider={bucket.provider} label={bucket.providerLabel} />
+                                        )}
+                                        <span className="font-medium">{bucket.name}</span>
                                     </div>
                                     <div className="flex items-center gap-4">
+                                        {bucket.created_at && (
+                                        <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                            Created {new Date(bucket.created_at).toLocaleDateString()}
+                                        </span>
+                                        )}
                                         <div className="flex flex-col items-end">
                                             <span className="text-sm font-medium">
                                                 {(() => {

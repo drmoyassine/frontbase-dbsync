@@ -15,7 +15,7 @@ import {
     EdgeEngine,
 } from '@/hooks/useEdgeInfrastructure';
 import { useEdgeEngineActions, timeAgo } from '@/hooks/useEdgeEngineActions';
-import { PROVIDER_ICONS } from './edgeConstants';
+import { PROVIDER_ICONS, ENGINE_PROVIDER_LABELS, ProviderBadge } from './edgeConstants';
 import { DeleteResourceDialog, BulkDeleteResourceDialog, PROVIDER_LABELS } from './DeleteResourceDialog';
 import { ReconfigureEngineDialog } from './ReconfigureEngineDialog';
 import { EdgeInspectorDialog } from './EdgeInspectorDialog';
@@ -238,8 +238,11 @@ export function EdgeEnginesSection() {
                                                 ) : (
                                                     <div className="w-4 shrink-0" />
                                                 )}
-                                                <div className="space-y-4 flex-1 min-w-0">
+                                                <div className="space-y-1 flex-1 min-w-0">
                                                     <div className="flex items-center gap-2 flex-wrap">
+                                                        {engine.provider && (
+                                                            <ProviderBadge provider={engine.provider} label={ENGINE_PROVIDER_LABELS[engine.provider]} />
+                                                        )}
                                                         <h4 className="font-medium text-sm">{engine.name}</h4>
                                                         {!engine.is_active && (
                                                             <Badge variant="secondary" className="text-[10px] h-5 py-0 bg-muted text-muted-foreground">Paused</Badge>

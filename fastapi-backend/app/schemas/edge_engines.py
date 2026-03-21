@@ -4,7 +4,7 @@ Pydantic schemas for the Edge Engines API.
 Extracted from routers/edge_engines.py for single-concern compliance.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Literal
 
 
@@ -128,4 +128,17 @@ class GenericDeployRequest(BaseModel):
     edge_db_id: Optional[str] = None
     edge_cache_id: Optional[str] = None
     edge_queue_id: Optional[str] = None
+
+    @field_validator("worker_name")
+    @classmethod
+    def validate_worker_name(cls, v: str) -> str:
+        """Enforce URL-safe subdomain naming: lowercase a-z, 0-9, hyphens only."""
+        import re
+        v = v.strip().lower()
+        if not re.match(r'^[a-z0-9]([a-z0-9-]*[a-z0-9])?$', v):
+            raise ValueError(
+                "Name must contain only lowercase letters, numbers, and hyphens. "
+                "Cannot start or end with a hyphen."
+            )
+        return v
 

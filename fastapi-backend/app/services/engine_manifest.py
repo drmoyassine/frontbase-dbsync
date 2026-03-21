@@ -40,9 +40,11 @@ async def sync_engine_manifest(engine: EdgeEngine, db: Session) -> dict:
     now = datetime.utcnow().isoformat()
     synced_models: list[str] = []
 
-    # --- Update engine metadata from manifest ---
-    if manifest.get("adapter_type"):
-        engine.adapter_type = manifest["adapter_type"]  # type: ignore[assignment]
+    # Note: adapter_type is NOT synced from manifest — the DB value
+    # (set at provision/deploy time) is the source of truth.
+    # The manifest's getAdapterType() only recognizes 'cloudflare-lite'
+    # and defaults everything else to 'full', which would incorrectly
+    # overwrite lite engines on Vercel/Netlify/Deno.
     if manifest.get("deployed_at"):
         engine.last_deployed_at = manifest["deployed_at"]  # type: ignore[assignment]
     if manifest.get("bundle_checksum"):

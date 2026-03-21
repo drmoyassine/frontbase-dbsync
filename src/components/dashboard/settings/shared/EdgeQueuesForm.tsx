@@ -28,7 +28,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 
 import { showTestToast, TestResult } from './edgeTestToast';
 import { AccountResourcePicker, DiscoveredResource } from './AccountResourcePicker';
-import { PROVIDER_ICONS, EDGE_QUEUE_PROVIDERS } from './edgeConstants';
+import { PROVIDER_ICONS, EDGE_QUEUE_PROVIDERS, ProviderBadge } from './edgeConstants';
 import { DeleteResourceDialog, BulkDeleteResourceDialog } from './DeleteResourceDialog';
 import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
 
@@ -458,32 +458,28 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                                 ) : (
                                     <div className="w-4 shrink-0" />
                                 )}
-                                <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
-                                    {getProviderIcon(queue.provider)}
-                                </div>
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <h4 className="font-medium text-sm">{queue.name}</h4>
-                                        <Badge variant="outline" className="text-xs">{queue.provider}</Badge>
-                                        {queue.is_default && !queue.is_system && (
-                                            <Badge variant="secondary" className="text-xs gap-1">
-                                                <Star className="h-3 w-3" /> Default
-                                            </Badge>
-                                        )}
-                                        {queue.is_system && (
-                                            <Badge variant="outline" className="text-xs gap-1 border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400">
-                                                <Shield className="h-3 w-3" /> System
-                                            </Badge>
-                                        )}
-                                        {queue.has_signing_key && (
-                                            <Badge variant="outline" className="text-xs gap-1 border-green-300 text-green-600 dark:border-green-700 dark:text-green-400">
-                                                <Lock className="h-3 w-3" /> Signed
-                                            </Badge>
-                                        )}
-                                    </div>
-                                </div>
+                                <ProviderBadge provider={queue.provider} label={QUEUE_PROVIDER_OPTIONS.find(p => p.value === queue.provider)?.label} />
+                                <h4 className="font-medium text-sm">{queue.name}</h4>
+                                {queue.is_default && !queue.is_system && (
+                                    <Badge variant="secondary" className="text-[10px] gap-1">
+                                        <Star className="h-3 w-3" /> Default
+                                    </Badge>
+                                )}
+                                {queue.is_system && (
+                                    <Badge variant="outline" className="text-[10px] gap-1 border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400">
+                                        <Shield className="h-3 w-3" /> System
+                                    </Badge>
+                                )}
+                                {queue.has_signing_key && (
+                                    <Badge variant="outline" className="text-[10px] gap-1 border-green-300 text-green-600 dark:border-green-700 dark:text-green-400">
+                                        <Lock className="h-3 w-3" /> Signed
+                                    </Badge>
+                                )}
                             </div>
                             <div className="flex items-center gap-2">
+                                <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                    Created {new Date(queue.created_at).toLocaleDateString()}
+                                </span>
                                 {queue.engine_count > 0 && (
                                     <Badge variant="secondary" className="text-xs">
                                         {queue.engine_count} engine{queue.engine_count > 1 ? 's' : ''}

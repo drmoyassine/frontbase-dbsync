@@ -20,6 +20,7 @@ import { EdgeCacheDialog } from './EdgeCacheDialog';
 import { DeleteResourceDialog, BulkDeleteResourceDialog } from './DeleteResourceDialog';
 import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
 import { useQueryClient } from '@tanstack/react-query';
+import { EDGE_CACHE_PROVIDERS, ProviderBadge } from './edgeConstants';
 
 interface EdgeCachesFormProps {
     withCard?: boolean;
@@ -147,27 +148,23 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
                                 ) : (
                                     <div className="w-4 shrink-0" />
                                 )}
-                                <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
-                                    {getProviderIcon(cache.provider)}
-                                </div>
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <h4 className="font-medium text-sm">{cache.name}</h4>
-                                        <Badge variant="outline" className="text-xs">{cache.provider}</Badge>
-                                        {cache.is_default && !cache.is_system && (
-                                            <Badge variant="secondary" className="text-xs gap-1">
-                                                <Star className="h-3 w-3" /> Default
-                                            </Badge>
-                                        )}
-                                        {cache.is_system && (
-                                            <Badge variant="outline" className="text-xs gap-1 border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400">
-                                                <Shield className="h-3 w-3" /> System
-                                            </Badge>
-                                        )}
-                                    </div>
-                                </div>
+                                <ProviderBadge provider={cache.provider} label={EDGE_CACHE_PROVIDERS.find(p => p.value === cache.provider)?.label} />
+                                <h4 className="font-medium text-sm">{cache.name}</h4>
+                                {cache.is_default && !cache.is_system && (
+                                    <Badge variant="secondary" className="text-[10px] gap-1">
+                                        <Star className="h-3 w-3" /> Default
+                                    </Badge>
+                                )}
+                                {cache.is_system && (
+                                    <Badge variant="outline" className="text-[10px] gap-1 border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400">
+                                        <Shield className="h-3 w-3" /> System
+                                    </Badge>
+                                )}
                             </div>
                             <div className="flex items-center gap-2">
+                                <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                    Created {new Date(cache.created_at).toLocaleDateString()}
+                                </span>
                                 {cache.engine_count > 0 && (
                                     <Badge variant="secondary" className="text-xs">
                                         {cache.engine_count} engine{cache.engine_count > 1 ? 's' : ''}

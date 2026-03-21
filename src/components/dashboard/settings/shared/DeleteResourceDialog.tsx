@@ -83,6 +83,8 @@ export function DeleteResourceDialog({
     const [isDeleting, setIsDeleting] = useState(false);
 
     const resolvedProviderLabel = providerLabel || PROVIDER_LABELS[provider || ''] || provider || 'provider';
+    // Supabase & Neon edge databases only drop the schema + role, not the whole DB
+    const isSchemaOnly = resourceTypeLabel === 'database' && ['supabase', 'neon'].includes(provider || '');
     const confirmValid = !deleteRemote || confirmText === resourceName;
 
     const handleConfirmDelete = async () => {
@@ -139,7 +141,10 @@ export function DeleteResourceDialog({
                                         Also delete from {resolvedProviderLabel}
                                     </label>
                                     <p className="text-xs text-muted-foreground">
-                                        Permanently removes the <code className="bg-muted px-1 rounded text-[11px]">{resourceName}</code> {resourceTypeLabel} from your {resolvedProviderLabel} account.
+                                        {isSchemaOnly
+                                            ? <>Drops the <code className="bg-muted px-1 rounded text-[11px]">{resourceName}</code> schema and its associated role from your {resolvedProviderLabel} project. Your database itself is not affected.</>
+                                            : <>Permanently removes the <code className="bg-muted px-1 rounded text-[11px]">{resourceName}</code> {resourceTypeLabel} from your {resolvedProviderLabel} account.</>
+                                        }
                                     </p>
                                 </div>
                             </div>
@@ -149,7 +154,10 @@ export function DeleteResourceDialog({
                                     <Alert variant="destructive" className="py-2">
                                         <AlertTriangle className="h-4 w-4" />
                                         <AlertDescription className="text-xs">
-                                            This is <strong>irreversible</strong>. The {resourceTypeLabel} and all its data will be permanently deleted from {resolvedProviderLabel}.
+                                            {isSchemaOnly
+                                                ? <>This is <strong>irreversible</strong>. The schema, all its tables, and the associated database role will be permanently dropped from {resolvedProviderLabel}. Your database and other schemas are not affected.</>
+                                                : <>This is <strong>irreversible</strong>. The {resourceTypeLabel} and all its data will be permanently deleted from {resolvedProviderLabel}.</>
+                                            }
                                         </AlertDescription>
                                     </Alert>
                                     <div className="space-y-1.5">

@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import {
     Plus, Database, Loader2, Trash2,
-    Pencil, AlertTriangle, Star, Shield, Zap, Check,
+    Pencil, AlertTriangle, Star, Shield, Zap, Check, Layers,
 } from 'lucide-react';
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -29,7 +29,7 @@ import { DeleteResourceDialog, BulkDeleteResourceDialog } from './DeleteResource
 import { Checkbox } from '@/components/ui/checkbox';
 import { AccountResourcePicker, DiscoveredResource } from './AccountResourcePicker';
 import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
-import { PROVIDER_ICONS, EDGE_DATABASE_PROVIDERS } from './edgeConstants';
+import { PROVIDER_ICONS, EDGE_DATABASE_PROVIDERS, ProviderBadge } from './edgeConstants';
 
 const API_BASE = '';
 
@@ -47,6 +47,7 @@ interface EdgeDatabase {
     updated_at: string;
     target_count: number;
     supports_remote_delete?: boolean;
+    schema_name?: string | null;
 }
 
 interface EdgeDatabasesFormProps {
@@ -87,6 +88,18 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
     const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
     const [bulkLoading, setBulkLoading] = useState(false);
 
+    // PG schema isolation
+    const [formSchemaName, setFormSchemaName] = useState<string | null>(null);
+    const [discoveredSchemas, setDiscoveredSchemas] = useState<{id: string; name: string; has_role?: boolean}[]>([]);
+    const [isDiscoveringSchemas, setIsDiscoveringSchemas] = useState(false);
+    const [schemaDiscoverError, setSchemaDiscoverError] = useState<string | null>(null);
+    const [showCreateSchema, setShowCreateSchema] = useState(false);
+    const [createSchemaSuffix, setCreateSchemaSuffix] = useState('');
+    const [isCreatingSchema, setIsCreatingSchema] = useState(false);
+    // Scoped PG role credentials (set by create-schema or reset-role-password)
+    const [formRoleName, setFormRoleName] = useState<string | null>(null);
+    const [formRolePassword, setFormRolePassword] = useState<string | null>(null);
+
     const selectableDBs = databases.filter(d => !d.is_system);
     const allSelected = selectableDBs.length > 0 && selectableDBs.every(d => selectedIds.has(d.id));
     const toggleSelect = (id: string) => setSelectedIds(prev => {
@@ -109,6 +122,13 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
         setFormToken('');
         setFormIsDefault(false);
         setFormAccountId(null);
+        setFormSchemaName(null);
+        setDiscoveredSchemas([]);
+        setSchemaDiscoverError(null);
+        setShowCreateSchema(false);
+        setCreateSchemaSuffix('');
+        setFormRoleName(null);
+        setFormRolePassword(null);
         setError(null);
     };
 
@@ -141,6 +161,9 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
             };
             if (formToken) payload.db_token = formToken;
             if (formAccountId) payload.provider_account_id = formAccountId;
+            if (formSchemaName) payload.schema_name = formSchemaName;
+            if (formRoleName) payload.role_name = formRoleName;
+            if (formRolePassword) payload.role_password = formRolePassword;
 
             const url = editingId
                 ? `${API_BASE}/api/edge-databases/${editingId}`
@@ -332,7 +355,12 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                 compatibleProviders={[prov.accountProvider]}
                                 resourceTypeFilter={prov.resourceTypeFilter}
                                 label={`Select ${prov.label} Database`}
-                                existingUrls={databases.map(d => d.db_url).filter(Boolean)}
+                                existingUrls={
+                                    // PG providers support schema isolation — same project can connect multiple times
+                                    ['supabase', 'neon', 'postgres'].includes(selectedProvider)
+                                        ? []
+                                        : databases.map(d => d.db_url).filter(Boolean)
+                                }
                                 autoSelectSingle
                                 resourceLabel="Select Database"
                                 hideConnectDisplayName={!prov.createResourceType}
@@ -346,6 +374,26 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                     if (url) setFormUrl(url);
                                     if ((resource as any).token) setFormToken((resource as any).token);
                                     if (!formName) setFormName(resource.name || '');
+                                    // Auto-discover PG schemas for PG-based providers
+                                    if (['supabase', 'neon', 'postgres'].includes(selectedProvider) && url) {
+                                        setIsDiscoveringSchemas(true);
+                                        setSchemaDiscoverError(null);
+                                        fetch(`${API_BASE}/api/edge-databases/discover-schemas`, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ db_url: url, provider: selectedProvider, provider_account_id: accountId }),
+                                        })
+                                            .then(r => r.json())
+                                            .then(data => {
+                                                if (data.schemas) {
+                                                    setDiscoveredSchemas(data.schemas);
+                                                } else {
+                                                    setSchemaDiscoverError(data.detail || 'Could not discover schemas');
+                                                }
+                                            })
+                                            .catch(e => setSchemaDiscoverError(e.message))
+                                            .finally(() => setIsDiscoveringSchemas(false));
+                                    }
                                 }}
                                 onClear={() => {
                                     setFormAccountId(null);
@@ -355,6 +403,115 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                             />
                         );
                     })()}
+
+                    {/* PG Schema Picker — shown for PG-based providers after resource is picked */}
+                    {formAccountId && ['supabase', 'neon', 'postgres'].includes(selectedProvider) && !editingId && (
+                        <div className="space-y-2">
+                            <Label className="text-sm flex items-center gap-1.5">
+                                <Layers className="h-3.5 w-3.5" />
+                                State Schema
+                            </Label>
+                            {isDiscoveringSchemas ? (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Discovering schemas...
+                                </div>
+                            ) : (
+                                <>
+                                    <select
+                                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                        value={formSchemaName || ''}
+                                        onChange={(e) => {
+                                            if (e.target.value === '__create_new__') {
+                                                setShowCreateSchema(true);
+                                                setCreateSchemaSuffix('');
+                                            } else {
+                                                setFormSchemaName(e.target.value || null);
+                                                // For Supabase: reset role password for existing schema (re-import)
+                                                if (e.target.value && selectedProvider === 'supabase' && formAccountId) {
+                                                    (async () => {
+                                                        try {
+                                                            const res = await fetch(`${API_BASE}/api/edge-databases/reset-role-password`, {
+                                                                method: 'POST',
+                                                                headers: { 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({ db_url: formUrl, schema_name: e.target.value, provider_account_id: formAccountId }),
+                                                            });
+                                                            const data = await res.json();
+                                                            if (res.ok && data.role_name) {
+                                                                setFormRoleName(data.role_name);
+                                                                setFormRolePassword(data.role_password);
+                                                            }
+                                                        } catch { /* non-blocking */ }
+                                                    })();
+                                                } else {
+                                                    setFormRoleName(null);
+                                                    setFormRolePassword(null);
+                                                }
+                                                setShowCreateSchema(false);
+                                            }
+                                        }}
+                                    >
+                                        <option value="">Default (frontbase_edge)</option>
+                                        {discoveredSchemas.map(s => (
+                                            <option key={s.id} value={s.name}>{s.name}</option>
+                                        ))}
+                                        <option value="__create_new__">+ Create New Schema</option>
+                                    </select>
+
+                                    {showCreateSchema && (
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm text-muted-foreground whitespace-nowrap">frontbase_edge_</span>
+                                            <Input
+                                                placeholder="staging"
+                                                value={createSchemaSuffix}
+                                                onChange={e => setCreateSchemaSuffix(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                                                className="flex-1"
+                                            />
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={!createSchemaSuffix || isCreatingSchema}
+                                                onClick={async () => {
+                                                    setIsCreatingSchema(true);
+                                                    try {
+                                                        const res = await fetch(`${API_BASE}/api/edge-databases/create-schema`, {
+                                                            method: 'POST',
+                                                            headers: { 'Content-Type': 'application/json' },
+                                                            body: JSON.stringify({ db_url: formUrl, suffix: createSchemaSuffix, provider: selectedProvider, provider_account_id: formAccountId }),
+                                                        });
+                                                        const data = await res.json();
+                                                        if (res.ok && data.schema_name) {
+                                                            setFormSchemaName(data.schema_name);
+                                                            // Store scoped role creds from Supabase create
+                                                            if (data.role_name) setFormRoleName(data.role_name);
+                                                            if (data.role_password) setFormRolePassword(data.role_password);
+                                                            setDiscoveredSchemas(prev => [...prev, { id: data.schema_name, name: data.schema_name, has_role: !!data.role_name }]);
+                                                            setShowCreateSchema(false);
+                                                            setCreateSchemaSuffix('');
+                                                        } else {
+                                                            setError(data.detail || 'Failed to create schema');
+                                                        }
+                                                    } catch (e: any) {
+                                                        setError(e.message);
+                                                    } finally {
+                                                        setIsCreatingSchema(false);
+                                                    }
+                                                }}
+                                            >
+                                                {isCreatingSchema ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Create'}
+                                            </Button>
+                                        </div>
+                                    )}
+
+                                    {formSchemaName && (
+                                        <p className="text-xs text-muted-foreground">
+                                            All edge state will be stored in the <code>{formSchemaName}</code> PostgreSQL schema.
+                                        </p>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    )}
 
                     {/* Auto-discovered summary — show when resource picked from account */}
                     {formAccountId && (
@@ -503,21 +660,23 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                 ) : (
                                     <div className="w-4 shrink-0" />
                                 )}
-                                {getProviderIcon(db.provider)}
-                                <span className="font-medium">{db.name}</span>
-                                <Badge variant="outline" className="text-xs">{db.provider}</Badge>
+                                <ProviderBadge provider={db.provider} label={DB_PROVIDER_OPTIONS.find(p => p.value === db.provider)?.label} />
+                                <span className="font-medium text-sm">{db.name}</span>
                                 {db.is_default && !db.is_system && (
-                                    <Badge variant="secondary" className="text-xs gap-1">
+                                    <Badge variant="secondary" className="text-[10px] gap-1">
                                         <Star className="h-3 w-3" /> Default
                                     </Badge>
                                 )}
                                 {db.is_system && (
-                                    <Badge variant="outline" className="text-xs gap-1 border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400">
+                                    <Badge variant="outline" className="text-[10px] gap-1 border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400">
                                         <Shield className="h-3 w-3" /> System
                                     </Badge>
                                 )}
                             </div>
                             <div className="flex items-center gap-3">
+                                <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                    Created {new Date(db.created_at).toLocaleDateString()}
+                                </span>
                                 {db.target_count > 0 && (
                                     <Badge variant="secondary" className="text-xs">
                                         {db.target_count} target{db.target_count > 1 ? 's' : ''}

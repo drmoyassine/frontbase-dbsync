@@ -14,6 +14,7 @@
 import React from 'react';
 import { Cloud, Server, Globe, Rocket, Database, Workflow, Triangle, Hexagon, Zap, HardDrive } from 'lucide-react';
 import { BRAND_ICONS } from '@/components/icons/providers';
+import { Badge } from '@/components/ui/badge';
 
 // ============================================================================
 // API Base
@@ -347,13 +348,13 @@ export interface EdgeResourceProvider {
  * Includes all providers with 'database' capability, EXCEPT wordpress_rest.
  */
 export const EDGE_DATABASE_PROVIDERS: EdgeResourceProvider[] = [
-    { value: 'cloudflare', label: 'Cloudflare D1',    icon: PROVIDER_ICONS.cloudflare || Cloud,    accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'd1',              createResourceType: 'd1' },
-    { value: 'supabase',   label: 'Supabase',         icon: PROVIDER_ICONS.supabase   || Database, accountProvider: 'supabase',   active: true,  resourceTypeFilter: 'supabase_project' },
-    { value: 'turso',      label: 'Turso',             icon: PROVIDER_ICONS.turso      || Cloud,    accountProvider: 'turso',      active: true,  resourceTypeFilter: 'turso_db',        createResourceType: 'turso_db' },
-    { value: 'neon',       label: 'Neon Postgres',     icon: PROVIDER_ICONS.neon       || Database, accountProvider: 'neon',       active: true,  resourceTypeFilter: 'neon_project' },
-    { value: 'postgres',   label: 'PostgreSQL',        icon: PROVIDER_ICONS.postgres   || Database, accountProvider: null,         active: false, placeholder: 'postgresql://user:pass@host:5432/db' },
-    { value: 'mysql',      label: 'MySQL',             icon: PROVIDER_ICONS.mysql      || HardDrive, accountProvider: null,        active: false, placeholder: 'mysql://user:pass@host:3306/db' },
-    { value: 'sqlite',     label: 'Local SQLite',      icon: HardDrive,                             accountProvider: null,         active: false, placeholder: 'file:local' },
+    { value: 'cloudflare', label: 'D1 SQLite',           icon: PROVIDER_ICONS.cloudflare || Cloud,    accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'd1',              createResourceType: 'd1' },
+    { value: 'supabase',   label: 'Supabase Postgres',   icon: PROVIDER_ICONS.supabase   || Database, accountProvider: 'supabase',   active: true,  resourceTypeFilter: 'supabase_project' },
+    { value: 'turso',      label: 'Turso SQLite',         icon: PROVIDER_ICONS.turso      || Cloud,    accountProvider: 'turso',      active: true,  resourceTypeFilter: 'turso_db',        createResourceType: 'turso_db' },
+    { value: 'neon',       label: 'Neon Postgres',         icon: PROVIDER_ICONS.neon       || Database, accountProvider: 'neon',       active: true,  resourceTypeFilter: 'neon_project' },
+    { value: 'postgres',   label: 'PostgreSQL',            icon: PROVIDER_ICONS.postgres   || Database, accountProvider: null,         active: false, placeholder: 'postgresql://user:pass@host:5432/db' },
+    { value: 'mysql',      label: 'MySQL',                 icon: PROVIDER_ICONS.mysql      || HardDrive, accountProvider: null,        active: false, placeholder: 'mysql://user:pass@host:3306/db' },
+    { value: 'sqlite',     label: 'Local SQLite',          icon: HardDrive,                             accountProvider: null,         active: false, placeholder: 'file:local' },
 ];
 
 /**
@@ -374,8 +375,8 @@ export const EDGE_CACHE_PROVIDERS: EdgeResourceProvider[] = [
  * Includes all providers with 'queue' capability.
  */
 export const EDGE_QUEUE_PROVIDERS: EdgeResourceProvider[] = [
-    { value: 'qstash',     label: 'QStash',             icon: PROVIDER_ICONS.upstash    || Zap,     accountProvider: 'upstash',    active: true,  resourceTypeFilter: 'qstash' },
-    { value: 'cloudflare', label: 'Cloudflare Queues',   icon: PROVIDER_ICONS.cloudflare || Cloud,   accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'queue',  createResourceType: 'queue' },
+    { value: 'qstash',     label: 'Upstash QStash',         icon: PROVIDER_ICONS.upstash    || Zap,     accountProvider: 'upstash',    active: true,  resourceTypeFilter: 'qstash' },
+    { value: 'cloudflare', label: 'Cloudflare Queues',       icon: PROVIDER_ICONS.cloudflare || Cloud,   accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'queue',  createResourceType: 'queue' },
     { value: 'rabbitmq',   label: 'RabbitMQ',            icon: Server,                               accountProvider: null,         active: false },
     { value: 'bullmq',     label: 'BullMQ',              icon: Server,                               accountProvider: null,         active: false },
     { value: 'sqs',        label: 'AWS SQS',             icon: Cloud,                                accountProvider: null,         active: false },
@@ -393,4 +394,52 @@ export const EDGE_STORAGE_PROVIDERS: EdgeResourceProvider[] = [
     { value: 's3',         label: 'AWS S3',              icon: Cloud,                                 accountProvider: null,         active: false },
     { value: 'gcs',        label: 'Google Cloud',        icon: Cloud,                                 accountProvider: null,         active: false },
 ];
+
+// ============================================================================
+// Engine Provider Labels — used by edge engine cards
+// ============================================================================
+
+export const ENGINE_PROVIDER_LABELS: Record<string, string> = {
+    cloudflare: 'CF Workers',
+    vercel: 'Vercel Edge',
+    supabase: 'Supabase Edge',
+    netlify: 'Netlify Functions',
+    deno: 'Deno Deploy',
+    upstash: 'Upstash Workflow',
+};
+
+// ============================================================================
+// Shared ProviderBadge — DRY badge component used across all resource cards.
+// Matches storage badge styling: bg-primary/5, text-primary, border-primary/20.
+// ============================================================================
+
+/** All resource-type registries, combined for label lookup */
+const ALL_RESOURCE_PROVIDERS = [
+    ...EDGE_DATABASE_PROVIDERS,
+    ...EDGE_CACHE_PROVIDERS,
+    ...EDGE_QUEUE_PROVIDERS,
+    ...EDGE_STORAGE_PROVIDERS,
+];
+
+/** Look up the human label for a provider key, falling back to the key itself */
+export function getProviderLabel(providerKey: string, resourceType?: 'database' | 'cache' | 'queue' | 'storage' | 'engine'): string {
+    if (resourceType === 'engine') return ENGINE_PROVIDER_LABELS[providerKey] || providerKey;
+    // Try resource registries first (they have the most specific label)
+    const match = ALL_RESOURCE_PROVIDERS.find(p => p.value === providerKey);
+    if (match) return match.label;
+    // Fall back to account-level config label
+    return PROVIDER_CONFIGS[providerKey]?.label || providerKey;
+}
+
+/** Shared provider badge matching the Storage cards style */
+export function ProviderBadge({ provider, label }: { provider: string; label?: string }) {
+    const Icon = PROVIDER_ICONS[provider];
+    const displayLabel = label || getProviderLabel(provider);
+    return (
+        <Badge variant="outline" className="text-xs font-semibold gap-1.5 px-2 py-0.5 bg-primary/5 text-primary border-primary/20">
+            {Icon && <Icon className="h-3.5 w-3.5" />}
+            {displayLabel}
+        </Badge>
+    );
+}
 

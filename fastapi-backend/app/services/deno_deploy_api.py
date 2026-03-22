@@ -28,6 +28,7 @@ async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_t
 
     ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
     access_token = ctx.get('access_token')
+    org_slug = ctx.get('org_slug', '')  # Set by user during account connection
 
     # project_name (app slug) is stored in engine_config, not provider credentials
     engine_cfg = json.loads(str(engine.engine_config or '{}'))
@@ -55,13 +56,30 @@ async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_t
     if actual_slug != project_name:
         engine_cfg['project_name'] = actual_slug
         engine.engine_config = json.dumps(engine_cfg)  # type: ignore[assignment]
-        org_sub = await detect_org_subdomain(access_token)
-        engine.url = get_project_url(actual_slug, org_sub)  # type: ignore[assignment]
         db.commit()
         print(f"[Deno Deploy] Slug changed: {project_name} -> {actual_slug}")
 
-    # Deploy function (v2 includes env_vars in the deploy call)
+    # Deploy function (v2 deploy endpoint does NOT persist env_vars)
     await deploy_function(access_token, actual_slug, script_content, script_filename, secrets)
+
+    # Set env vars separately — the deploy endpoint ignores them,
+    # so we must use the PATCH /apps/{slug} endpoint explicitly.
+    if secrets:
+        await set_env_vars(access_token, actual_slug, secrets)
+
+    # Correct the engine URL using org_slug from provider credentials
+    correct_url = get_project_url(actual_slug, org_slug or None)
+    # If a custom domain is configured, preserve it — only update original_url for reference
+    if engine_cfg.get("custom_domain"):
+        if engine_cfg.get("original_url") != correct_url:
+            engine_cfg["original_url"] = correct_url
+            engine.engine_config = json.dumps(engine_cfg)  # type: ignore[assignment]
+            db.commit()
+            print(f"[Deno Deploy] custom_domain active, updated original_url: {correct_url}")
+    elif str(engine.url) != correct_url:
+        engine.url = correct_url  # type: ignore[assignment]
+        db.commit()
+        print(f"[Deno Deploy] URL corrected: {correct_url}")
 
 
 # ── Platform-specific API calls ───────────────────────────────────────
@@ -131,59 +149,61 @@ async def delete_project(access_token: str, project_name: str) -> None:
         raise HTTPException(400, f"Deno Deploy app delete failed: {resp.text[:300]}")
 
 
-async def detect_org_subdomain(access_token: str) -> str | None:
+async def detect_org_subdomain(access_token: str, app_slug: str | None = None) -> str | None:
     """Detect the org subdomain for a Deno Deploy access token.
     
     Org tokens (ddo_...) create apps at {slug}.{org-slug}.deno.net.
     Personal tokens create apps at {slug}.deno.dev.
     
-    Strategy: List existing apps. If any exist, try a health-check on
-    {slug}.deno.dev first. If it fails or the app has no deployments,
-    check if the token prefix indicates an org token and prompt for
-    the org slug. As a fallback, we probe for the working URL.
+    Strategy: HEAD-probe a live app at {slug}.deno.dev — if the response
+    URL (after redirects) is on .deno.net, extract the org slug.
+    
+    IMPORTANT: This must be called AFTER deploy, so the app is live.
     """
     # Check token prefix: ddo_ = org token, ddp_ = personal  
     if not access_token.startswith('ddo_'):
         return None  # Personal token, use .deno.dev
     
-    # For org tokens, try to detect the subdomain by listing apps
-    # and testing one that has been deployed
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        resp = await client.get(
-            f"{DENO_DEPLOY_API}/apps",
-            headers=_headers(access_token),
-            timeout=10.0,
-        )
-        if resp.status_code != 200:
-            return None
-        
-        apps = resp.json()
-        if not apps:
-            return None
-        
-        # Try the first app: hit {slug}.deno.dev/api/health
-        # If it redirects or returns, we can detect the actual domain
-        test_slug = apps[0].get('slug', '')
-        if not test_slug:
-            return None
-        
+    # Determine which slug to probe
+    test_slug = app_slug
+    if not test_slug:
+        # Fallback: list apps and pick the first one
         try:
-            # Try health check on deno.dev
-            probe = await client.get(
-                f"https://{test_slug}.deno.dev/",
-                timeout=5.0,
-            )
-            # Check the final URL after redirects
-            final_host = str(probe.url).split('//')[1].split('/')[0] if str(probe.url).startswith('http') else ''
-            if '.deno.net' in final_host:
-                # Extract org subdomain: {slug}.{org}.deno.net → org
-                parts = final_host.split('.')
-                if len(parts) >= 3:
-                    # parts = [slug, org, 'deno', 'net']
-                    return parts[1]
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"{DENO_DEPLOY_API}/apps",
+                    headers=_headers(access_token),
+                )
+                if resp.status_code == 200:
+                    apps = resp.json()
+                    if isinstance(apps, list) and apps:
+                        test_slug = apps[0].get('slug', '')
         except Exception:
             pass
     
+    if not test_slug:
+        print("[Deno Deploy] Warning: No app slug available for org detection")
+        return None
+    
+    # HEAD-probe the app at .deno.dev — follow redirects
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=8.0) as client:
+            probe = await client.head(f"https://{test_slug}.deno.dev/")
+            final_url = str(probe.url)
+            final_host = final_url.split('//')[1].split('/')[0] if final_url.startswith('http') else ''
+            print(f"[Deno Deploy] Probe {test_slug}.deno.dev → final host: {final_host}")
+            
+            if '.deno.net' in final_host:
+                # Extract org: {slug}.{org}.deno.net → org is parts[1]
+                parts = final_host.split('.')
+                if len(parts) >= 4:  # slug.org.deno.net
+                    org = parts[1]
+                    print(f"[Deno Deploy] Detected org subdomain: {org}")
+                    return org
+    except Exception as e:
+        print(f"[Deno Deploy] Probe failed: {e}")
+    
+    print("[Deno Deploy] Warning: Could not detect org subdomain for org token")
     return None
 
 

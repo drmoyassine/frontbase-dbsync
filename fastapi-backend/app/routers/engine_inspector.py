@@ -42,7 +42,7 @@ def _resolve_engine(engine_id: str, db: Session) -> tuple:
         raise HTTPException(404, "Edge engine not found")
 
     # Resolve provider credentials
-    if not engine.edge_provider_id:
+    if engine.edge_provider_id is None:
         raise HTTPException(400, "Engine has no connected provider account")
 
     ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
@@ -52,7 +52,7 @@ def _resolve_engine(engine_id: str, db: Session) -> tuple:
 
     # Parse engine_config
     cfg = {}
-    if engine.engine_config:
+    if engine.engine_config is not None:
         try:
             cfg = json.loads(str(engine.engine_config))
         except (json.JSONDecodeError, TypeError):
@@ -354,7 +354,7 @@ async def inspect_engine_secrets(engine_id: str, db: Session = Depends(get_db)):
             )
             result = {
                 "success": True,
-                "secrets": [{"name": k, "type": "encrypted"} for k in sorted(secrets.keys())],
+                "secrets": sorted(secrets.keys()),
             }
 
     elif provider == "vercel":
@@ -487,3 +487,78 @@ async def _vercel_inspect_secrets(ctx: dict, cfg: dict) -> dict:
             for e in envs
         ],
     }
+
+
+# =============================================================================
+# Domain Management — multi-provider, dispatched via domain_manager.py
+# =============================================================================
+
+def _get_creds(engine_id: str, db: Session) -> tuple:
+    """Resolve engine + merged credentials (ctx + raw creds for provider-specific keys).
+    
+    Returns (engine, provider_type, merged_creds).
+    """
+    from ..core.security import decrypt_credentials
+
+    engine, provider, ctx, cfg = _resolve_engine(engine_id, db)
+    
+    # Raw creds include provider-specific keys like personal_token, user_id
+    from ..models.models import EdgeProviderAccount
+    provider_acct = db.query(EdgeProviderAccount).filter(
+        EdgeProviderAccount.id == str(engine.edge_provider_id)
+    ).first()
+    raw_creds = {}
+    if provider_acct and provider_acct.provider_credentials:
+        raw_creds = decrypt_credentials(str(provider_acct.provider_credentials))
+    
+    # Merge: raw creds take precedence (they have all fields), ctx adds flattened extras
+    merged = {**ctx, **raw_creds}
+    return engine, provider, merged
+
+
+from pydantic import BaseModel as _BaseModel  # noqa: E402
+
+
+class _AddDomainBody(_BaseModel):
+    domain: str
+
+
+@router.get("/{engine_id}/inspect/domains")
+async def inspect_engine_domains(engine_id: str, db: Session = Depends(get_db)):
+    """List custom domains for this engine."""
+    from ..services import domain_manager as dm
+
+    engine, provider, creds = _get_creds(engine_id, db)
+    result = await dm.list_domains(engine, creds, provider, db=db)
+    return result.to_dict()
+
+
+@router.post("/{engine_id}/inspect/domains")
+async def add_engine_domain(engine_id: str, body: _AddDomainBody, db: Session = Depends(get_db)):
+    """Add a custom domain to this engine."""
+    from ..services import domain_manager as dm
+
+    engine, provider, creds = _get_creds(engine_id, db)
+    result = await dm.add_domain(engine, creds, provider, body.domain, db=db)
+    return result.to_dict()
+
+
+@router.delete("/{engine_id}/inspect/domains/{domain_id}")
+async def delete_engine_domain(engine_id: str, domain_id: str, db: Session = Depends(get_db)):
+    """Remove a custom domain from this engine."""
+    from ..services import domain_manager as dm
+
+    engine, provider, creds = _get_creds(engine_id, db)
+    result = await dm.delete_domain(engine, creds, provider, domain_id, db=db)
+    return result.to_dict()
+
+
+@router.post("/{engine_id}/inspect/domains/{domain_id}/verify")
+async def verify_engine_domain(engine_id: str, domain_id: str, db: Session = Depends(get_db)):
+    """Trigger DNS verification for a custom domain."""
+    from ..services import domain_manager as dm
+
+    engine, provider, creds = _get_creds(engine_id, db)
+    result = await dm.verify_domain(engine, creds, provider, domain_id, db=db)
+    return result.to_dict()
+

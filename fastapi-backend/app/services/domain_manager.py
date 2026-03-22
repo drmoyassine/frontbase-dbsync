@@ -114,6 +114,37 @@ def _get_engine_name(engine: EdgeEngine) -> str:
             cfg.get("resource_name") or "")
 
 
+def _save_custom_domain(engine: EdgeEngine, domain: str, db: Optional[Session]) -> None:
+    """Persist custom_domain to engine_config and update engine.url.
+    
+    Saves the original URL for restoration on delete.
+    """
+    engine_cfg = json.loads(str(engine.engine_config or '{}'))
+    engine_cfg["custom_domain"] = domain
+    if "original_url" not in engine_cfg and engine.url:
+        engine_cfg["original_url"] = str(engine.url)
+    engine.engine_config = json.dumps(engine_cfg)  # type: ignore[assignment]
+    engine.url = f"https://{domain}"  # type: ignore[assignment]
+    if db:
+        db.commit()
+        print(f"[Domains] Custom domain saved: {domain} for engine {engine.name}")
+
+
+def _remove_custom_domain(engine: EdgeEngine, db: Optional[Session]) -> None:
+    """Remove custom_domain from engine_config and restore original URL."""
+    engine_cfg = json.loads(str(engine.engine_config or '{}'))
+    if "custom_domain" not in engine_cfg:
+        return
+    original_url = engine_cfg.pop("original_url", None)
+    del engine_cfg["custom_domain"]
+    engine.engine_config = json.dumps(engine_cfg)  # type: ignore[assignment]
+    if original_url:
+        engine.url = original_url  # type: ignore[assignment]
+    if db:
+        db.commit()
+        print(f"[Domains] Custom domain removed for engine {engine.name}")
+
+
 # =============================================================================
 # Cloudflare — Workers Custom Domains
 # =============================================================================
@@ -177,9 +208,13 @@ async def _cf_add(engine: EdgeEngine, creds: dict, domain: str, **kwargs: Any) -
         return DomainResult(success=False, detail=f"CF API error: {msg}")
 
     d = resp.json().get("result", {})
+    domain_name = d.get("hostname", domain)
+    # CF domains are active immediately — save as custom domain
+    db: Optional[Session] = kwargs.get("db")
+    _save_custom_domain(engine, domain_name, db)
     return DomainResult(success=True, domain=DomainInfo(
         id=d.get("id", ""),
-        domain=d.get("hostname", domain),
+        domain=domain_name,
         status="active",
         ssl_status="active",
         dns_target=f"{worker_name}.workers.dev",
@@ -199,6 +234,8 @@ async def _cf_delete(engine: EdgeEngine, creds: dict, domain_id: str, **kwargs: 
         )
     if resp.status_code not in (200, 204):
         return DomainResult(success=False, detail=f"CF API error: {resp.status_code}")
+    db: Optional[Session] = kwargs.get("db")
+    _remove_custom_domain(engine, db)
     return DomainResult(success=True, detail="Domain removed")
 
 
@@ -300,6 +337,8 @@ async def _vercel_delete(engine: EdgeEngine, creds: dict, domain_id: str, **kwar
         )
     if resp.status_code not in (200, 204):
         return DomainResult(success=False, detail=f"Vercel API error: {resp.status_code}")
+    db: Optional[Session] = kwargs.get("db")
+    _remove_custom_domain(engine, db)
     return DomainResult(success=True, detail="Domain removed")
 
 
@@ -321,10 +360,16 @@ async def _vercel_verify(engine: EdgeEngine, creds: dict, domain_id: str, **kwar
     if resp.status_code != 200:
         return DomainResult(success=False, detail=f"Vercel API error: {resp.status_code}")
     d = resp.json()
+    domain_name = d.get("name", domain_id)
+    is_active = d.get("verified", False)
+    if is_active:
+        # Domain verified — save as custom domain
+        db: Optional[Session] = kwargs.get("db")
+        _save_custom_domain(engine, domain_name, db)
     return DomainResult(success=True, domain=DomainInfo(
-        id=d.get("name", domain_id),
-        domain=d.get("name", domain_id),
-        status="active" if d.get("verified") else "pending",
+        id=domain_name,
+        domain=domain_name,
+        status="active" if is_active else "pending",
         provider="vercel",
     ).to_dict())
 
@@ -410,6 +455,8 @@ async def _netlify_delete(engine: EdgeEngine, creds: dict, domain_id: str, **kwa
         )
     if resp.status_code != 200:
         return DomainResult(success=False, detail=f"Netlify API error: {resp.status_code}")
+    db: Optional[Session] = kwargs.get("db")
+    _remove_custom_domain(engine, db)
     return DomainResult(success=True, detail="Domain removed")
 
 
@@ -468,16 +515,7 @@ async def _deno_add(engine: EdgeEngine, creds: dict, domain: str, **kwargs: Any)
 async def _deno_delete(engine: EdgeEngine, creds: dict, domain_id: str, **kwargs: Any) -> DomainResult:
     """Remove the saved custom domain from engine_config and restore original URL."""
     db: Optional[Session] = kwargs.get("db")
-    engine_cfg = json.loads(str(engine.engine_config or '{}'))
-    if "custom_domain" in engine_cfg:
-        # Restore original URL
-        original_url = engine_cfg.pop("original_url", None)
-        del engine_cfg["custom_domain"]
-        engine.engine_config = json.dumps(engine_cfg)  # type: ignore[assignment]
-        if original_url:
-            engine.url = original_url  # type: ignore[assignment]
-        if db:
-            db.commit()
+    _remove_custom_domain(engine, db)
     return DomainResult(success=True, detail="Custom domain removed")
 
 
@@ -518,17 +556,8 @@ async def _deno_verify(engine: EdgeEngine, creds: dict, domain_id: str, **kwargs
             detail=f"Health check returned {resp.status_code} — domain is reachable but the edge engine is not responding correctly.",
         )
 
-    # Health check passed — save to engine_config + update engine URL
-    engine_cfg = json.loads(str(engine.engine_config or '{}'))
-    engine_cfg["custom_domain"] = domain
-    # Preserve original URL for restore on delete
-    if "original_url" not in engine_cfg and engine.url:
-        engine_cfg["original_url"] = str(engine.url)
-    engine.engine_config = json.dumps(engine_cfg)  # type: ignore[assignment]
-    engine.url = f"https://{domain}"  # type: ignore[assignment]
-    if db:
-        db.commit()
-        print(f"[Deno Domains] Custom domain saved: {domain} for engine {engine.name}, URL updated")
+    # Health check passed — save custom domain + update engine URL
+    _save_custom_domain(engine, domain, db)
 
     return DomainResult(
         success=True,

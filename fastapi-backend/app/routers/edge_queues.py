@@ -297,7 +297,7 @@ async def delete_edge_queue(queue_id: str, delete_remote: bool = False):
             )
 
         # Remote resource delete via unified service
-        if delete_remote and queue.provider_account_id:
+        if delete_remote and queue.provider_account_id is not None:
             from ..services.provider_resource_deleter import delete_resource_for_edge_model
             remote_deleted = await delete_resource_for_edge_model(
                 model_kind="queue",
@@ -360,7 +360,7 @@ async def batch_delete_queues(payload: BatchDeleteQueueRequest):
         if payload.delete_remote:
             async def _safe_delete(rec: EdgeQueue):
                 try:
-                    if rec.provider_account_id:
+                    if rec.provider_account_id is not None:
                         from ..services.provider_resource_deleter import delete_resource_for_edge_model
                         await delete_resource_for_edge_model(
                             model_kind="queue",

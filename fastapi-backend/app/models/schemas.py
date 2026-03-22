@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, constr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, StringConstraints
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import json
@@ -8,13 +8,13 @@ from typing import Annotated
 
 # Authentication Models
 class LoginRequest(BaseModel):
-    username: constr(min_length=3, max_length=50)
-    password: constr(min_length=6)
+    username: Annotated[str, StringConstraints(min_length=3, max_length=50)]
+    password: Annotated[str, StringConstraints(min_length=6)]
 
 class RegisterRequest(BaseModel):
-    username: constr(min_length=3, max_length=50)
+    username: Annotated[str, StringConstraints(min_length=3, max_length=50)]
     email: EmailStr
-    password: constr(min_length=8)
+    password: Annotated[str, StringConstraints(min_length=8)]
 
 class DemoInfoResponse(BaseModel):
     demo_mode: bool
@@ -34,8 +34,8 @@ class UserResponse(BaseModel):
 
 # Page Models
 class PageCreateRequest(BaseModel):
-    name: constr(min_length=1, max_length=100)
-    slug: constr(min_length=1, max_length=100)  # Relaxed pattern for more flexibility
+    name: Annotated[str, StringConstraints(min_length=1, max_length=100)]
+    slug: Annotated[str, StringConstraints(min_length=1, max_length=100)]  # Relaxed pattern for more flexibility
     title: Optional[str] = None
     description: Optional[str] = None
     keywords: Optional[str] = None
@@ -47,7 +47,7 @@ class PageCreateRequest(BaseModel):
         populate_by_name = True  # Allow both field name and alias
 
 class PageUpdateRequest(BaseModel):
-    name: Optional[constr(min_length=1, max_length=100)] = None
+    name: Optional[Annotated[str, StringConstraints(min_length=1, max_length=100)]] = None
     slug: Optional[str] = Field(default=None, max_length=100)  # Allow empty string for homepage
     title: Optional[str] = None
     description: Optional[str] = None
@@ -88,9 +88,9 @@ class PageResponse(BaseModel):
 
 # Database Connection Models
 class DatabaseConnectionRequest(BaseModel):
-    url: constr(min_length=1)
-    anonKey: constr(min_length=1)
-    serviceKey: Optional[constr(min_length=1)] = None
+    url: Annotated[str, StringConstraints(min_length=1)]
+    anonKey: Annotated[str, StringConstraints(min_length=1)]
+    serviceKey: Optional[Annotated[str, StringConstraints(min_length=1)]] = None
 
 class DatabaseConnectionResponse(BaseModel):
     success: bool
@@ -104,14 +104,14 @@ class TableSchemaResponse(BaseModel):
 
 # Project Models
 class ProjectUpdateRequest(BaseModel):
-    name: Optional[constr(min_length=1, max_length=100)] = None
+    name: Optional[Annotated[str, StringConstraints(min_length=1, max_length=100)]] = None
     description: Optional[str] = None
     app_url: Optional[str] = Field(default=None, alias="appUrl")
     favicon_url: Optional[str] = Field(default=None, alias="faviconUrl")
     logo_url: Optional[str] = Field(default=None, alias="logoUrl")
-    supabase_url: Optional[constr(min_length=1)] = None
-    supabase_anon_key: Optional[constr(min_length=1)] = None
-    supabase_service_key: Optional[constr(min_length=1)] = None
+    supabase_url: Optional[Annotated[str, StringConstraints(min_length=1)]] = None
+    supabase_anon_key: Optional[Annotated[str, StringConstraints(min_length=1)]] = None
+    supabase_service_key: Optional[Annotated[str, StringConstraints(min_length=1)]] = None
     users_config: Optional[Dict[str, Any]] = Field(default=None, alias="usersConfig")
 
     class Config:
@@ -148,15 +148,15 @@ class ProjectResponse(BaseModel):
 
 # Variable Models
 class VariableCreateRequest(BaseModel):
-    name: constr(min_length=1, max_length=50)
-    type: constr(pattern=r'^(variable|calculated)$')
+    name: Annotated[str, StringConstraints(min_length=1, max_length=50)]
+    type: Annotated[str, StringConstraints(pattern=r'^(variable|calculated)$')]
     value: Optional[str] = None
     formula: Optional[str] = None
     description: Optional[str] = None
 
 class VariableUpdateRequest(BaseModel):
-    name: Optional[constr(min_length=1, max_length=50)] = None
-    type: Optional[constr(pattern=r'^(variable|calculated)$')] = None
+    name: Optional[Annotated[str, StringConstraints(min_length=1, max_length=50)]] = None
+    type: Optional[Annotated[str, StringConstraints(pattern=r'^(variable|calculated)$')]] = None
     value: Optional[str] = None
     formula: Optional[str] = None
     description: Optional[str] = None

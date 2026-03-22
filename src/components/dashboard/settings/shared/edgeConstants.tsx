@@ -69,7 +69,7 @@ export const PROVIDER_RESOURCE_LABELS: Record<string, { inputLabel: string; urlS
     supabase: { inputLabel: 'Function Name', urlSuffix: '' },
     vercel: { inputLabel: 'Project Name', urlSuffix: '.vercel.app' },
     netlify: { inputLabel: 'Site Name', urlSuffix: '.netlify.app' },
-    deno: { inputLabel: 'Project Name', urlSuffix: '.deno.dev' },
+    deno: { inputLabel: 'Project Name', urlSuffix: '' },
     upstash: { inputLabel: 'Resource Name', urlSuffix: '.upstash.app' },
 };
 
@@ -224,11 +224,12 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     deno: {
         label: 'Deno',
         defaultName: 'Deno Deploy Account',
-        capabilities: ['cpu', 'cache', 'sandbox'],
+        capabilities: ['cpu', 'sandbox'],
         fields: [
             { key: 'access_token', label: 'Organization Token', placeholder: 'ddo_...', type: 'password', required: true },
+            { key: 'personal_token', label: 'Personal Token', placeholder: 'ddp_...', type: 'password', required: false },
         ],
-        helpText: <>Create an org token at your <a href="https://dash.deno.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Deno Deploy dashboard</a> → Organization Settings.</>,
+        helpText: <>Org token for deploys, personal token to auto-detect org slug. Get both from <a href="https://dash.deno.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Deno Deploy dashboard</a>.</>,
     },
     neon: {
         label: 'Neon',

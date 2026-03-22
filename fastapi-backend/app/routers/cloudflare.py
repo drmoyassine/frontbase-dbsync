@@ -118,6 +118,7 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
             account_id = await cloudflare_api.detect_account_id(api_token)
             
             # Save it back to DB
+            provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.provider_id).first()
             if provider:
                 from ..core.security import decrypt_credentials, encrypt_credentials
                 creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
@@ -199,7 +200,7 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
             else:
                 engine = EdgeEngine(
                     id=str(uuid.uuid4()),
-                    name=f"Cloudflare: {payload.worker_name}",
+                    name=payload.worker_name,
                     edge_provider_id=payload.provider_id,
                     adapter_type=payload.adapter_type,
                     url=worker_url,

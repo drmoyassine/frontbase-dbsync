@@ -49,9 +49,28 @@ export interface InspectSecretsResponse {
     imported_notice?: string;
 }
 
+export interface DomainInfo {
+    id: string;
+    domain: string;
+    status: string;           // 'active' | 'pending' | 'error'
+    ssl_status: string;
+    verification_type: string;
+    verification_value: string;
+    dns_target: string;
+    dns_records?: { type: string; name: string; content: string }[];
+    provider: string;
+    created_at: string;
+}
+
+export interface InspectDomainsResponse {
+    success: boolean;
+    domains: DomainInfo[] | null;
+    detail: string;
+}
+
 // ─── Navigation Types ───────────────────────────────────────────────────────
 
-export type NavSection = 'files' | 'secrets' | 'settings' | 'logs';
+export type NavSection = 'files' | 'secrets' | 'settings' | 'logs' | 'domains';
 export type SelectedItem = { section: NavSection; key: string };
 
 // ─── Props Types ────────────────────────────────────────────────────────────
@@ -152,7 +171,7 @@ export async function inspectFetch<T>(endpoint: string, providerId: string, work
 }
 
 /** Engine-based inspect fetch — works for ALL providers (CF, Supabase, Deno). */
-export async function engineInspectFetch<T>(engineId: string, panel: 'source' | 'settings' | 'secrets'): Promise<T> {
+export async function engineInspectFetch<T>(engineId: string, panel: 'source' | 'settings' | 'secrets' | 'domains'): Promise<T> {
     const resp = await fetch(`${API_BASE}/api/edge-engines/${engineId}/inspect/${panel}`);
     const data = await resp.json();
     // If provider doesn't support this panel, return the data for the caller to handle

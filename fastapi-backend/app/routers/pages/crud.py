@@ -68,7 +68,7 @@ def serialize_page(page: Page) -> dict:
             # then there are unpublished changes.
             if dep.status == "published" and dep.content_hash != getattr(page, 'content_hash', None):
                 has_unpublished_changes = True
-    elif page.is_public:
+    elif bool(page.is_public):
         # Legacy case: Page is marked public but has no deployment records in the new system
         has_unpublished_changes = True
 
@@ -122,12 +122,12 @@ async def fan_out_unpublish(slug: str, page_id: str, db: Session):
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         for engine, result in zip(engines, results):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 print(f"[Unpublish] Warning - could not reach {engine.name}: {result}")
-            elif result.status_code == 200:
+            elif hasattr(result, 'status_code') and result.status_code == 200:  # type: ignore[union-attr]
                 print(f"[Unpublish] Removed from {engine.name}: {original_slug}")
-            else:
-                print(f"[Unpublish] {engine.name} returned {result.status_code}: {result.text}")
+            elif hasattr(result, 'status_code'):
+                print(f"[Unpublish] {engine.name} returned {result.status_code}: {result.text}")  # type: ignore[union-attr]
     
     # Clean up PageDeployment records
     db.query(PageDeployment).filter(PageDeployment.page_id == page_id).delete()

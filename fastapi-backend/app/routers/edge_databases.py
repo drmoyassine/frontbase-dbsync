@@ -7,7 +7,6 @@ These replace the old global Turso settings in settings.json.
 Each EdgeDatabase can be attached to one or more DeploymentTargets.
 """
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 import uuid
@@ -15,54 +14,23 @@ import httpx
 
 from ..database.config import SessionLocal
 from ..models.models import EdgeDatabase, EdgeEngine
+from ..schemas.edge_databases import (
+    EdgeDatabaseCreate,
+    EdgeDatabaseUpdate,
+    EdgeDatabaseResponse,
+    DiscoverSchemasRequest,
+    CreateSchemaRequest,
+    ResetRolePasswordRequest,
+    BatchDeleteDatabaseRequest,
+    BatchResult,
+)
+from ..schemas.edge_engines import TestConnectionResult
 
 router = APIRouter(prefix="/api/edge-databases", tags=["edge-databases"])
 
 
 # =============================================================================
-# Schemas
-# =============================================================================
-
-class EdgeDatabaseCreate(BaseModel):
-    name: str
-    provider: str  # "turso", "neon", "planetscale"
-    db_url: str
-    db_token: Optional[str] = None
-    provider_account_id: Optional[str] = None  # FK → Connected Account
-    is_default: bool = False
-
-class EdgeDatabaseUpdate(BaseModel):
-    name: Optional[str] = None
-    provider: Optional[str] = None
-    db_url: Optional[str] = None
-    db_token: Optional[str] = None
-    provider_account_id: Optional[str] = None
-    is_default: Optional[bool] = None
-
-class EdgeDatabaseResponse(BaseModel):
-    id: str
-    name: str
-    provider: str
-    db_url: str
-    has_token: bool  # Never expose the actual token
-    is_default: bool
-    is_system: bool = False  # True = pre-seeded, cannot be deleted
-    provider_account_id: Optional[str] = None
-    account_name: Optional[str] = None
-    created_at: str
-    updated_at: str
-    target_count: int = 0  # Number of deployment targets using this DB
-    warning: Optional[str] = None  # Scoped token creation warnings
-    supports_remote_delete: bool = False  # Whether this resource can be deleted remotely
-
-class TestConnectionResult(BaseModel):
-    success: bool
-    message: str
-    latency_ms: Optional[float] = None
-
-
-# =============================================================================
-# Endpoints
+# Helpers
 # =============================================================================
 
 def _serialize_edge_db(edb, db, target_count: int = 0, warning: Optional[str] = None) -> EdgeDatabaseResponse:
@@ -79,6 +47,15 @@ def _serialize_edge_db(edb, db, target_count: int = 0, warning: Optional[str] = 
     can_remote_delete = bool(edb.provider_account_id) and supports_remote_delete_for_model(
         "database", str(edb.provider)
     )
+    # Extract schema_name from provider_config JSON
+    config_schema_name = None
+    if edb.provider_config:  # type: ignore[truthy-bool]
+        import json as _json
+        try:
+            pc = _json.loads(str(edb.provider_config))
+            config_schema_name = pc.get('schema_name')
+        except (ValueError, TypeError):
+            pass
     return EdgeDatabaseResponse(
         id=str(edb.id),
         name=str(edb.name),
@@ -94,8 +71,13 @@ def _serialize_edge_db(edb, db, target_count: int = 0, warning: Optional[str] = 
         target_count=target_count,
         warning=warning,
         supports_remote_delete=can_remote_delete,
+        schema_name=config_schema_name,
     )
 
+
+# =============================================================================
+# Endpoints
+# =============================================================================
 
 @router.get("/", response_model=List[EdgeDatabaseResponse])
 async def list_edge_databases():
@@ -148,8 +130,30 @@ async def create_edge_database(payload: EdgeDatabaseCreate):
             updated_at=now,
         )
 
-        # CF lifecycle: create scoped token for D1 resources
+        # Store schema_name in provider_config JSON (PG providers)
+        if payload.schema_name and payload.provider in ('supabase', 'neon', 'postgres'):
+            import json as _json
+            existing_config = {}
+            if edge_db.provider_config:  # type: ignore[truthy-bool]
+                try:
+                    existing_config = _json.loads(str(edge_db.provider_config))
+                except (ValueError, TypeError):
+                    pass
+            existing_config['schema_name'] = payload.schema_name
+            edge_db.provider_config = _json.dumps(existing_config)  # type: ignore[assignment]
+
+        # Supabase lifecycle: auto-provision scoped role + schema + tables,
+        # then replace the [YOUR-PASSWORD] placeholder in db_url with real creds.
         token_warning = None
+        if payload.provider == 'supabase' and payload.provider_account_id:
+            from ..services.supabase_state_db import provision_supabase_scoped_role
+            provision_result = await provision_supabase_scoped_role(
+                edge_db, payload.provider_account_id, payload.schema_name,
+            )
+            if provision_result.get('warning'):
+                token_warning = provision_result['warning']
+
+        # CF lifecycle: create scoped token for D1 resources
         if payload.provider == 'cloudflare' and payload.provider_account_id:
             import json
             from ..services.cf_token_manager import maybe_create_scoped_token_typed
@@ -252,8 +256,43 @@ async def delete_edge_database(db_id: str, delete_remote: bool = False):
                 db,
             )
 
+        # Supabase lifecycle: drop schema, role, remove from PostgREST config
+        if db_provider == 'supabase' and delete_remote and bool(edge_db.provider_account_id):
+            import json as _json
+            _raw_config = str(edge_db.provider_config) if edge_db.provider_config is not None else '{}'
+            provider_config = _json.loads(_raw_config)
+            schema_name = provider_config.get('schema_name')
+            if schema_name:
+                from ..services.supabase_state_db import cleanup_supabase_state_db
+                from ..models.models import EdgeProviderAccount
+                from ..core.security import decrypt_credentials
+                acct = db.query(EdgeProviderAccount).filter(
+                    EdgeProviderAccount.id == str(edge_db.provider_account_id)
+                ).first()
+                if acct:
+                    creds = decrypt_credentials(str(acct.provider_credentials))
+                    access_token = creds.get('access_token', '')
+                    # Extract project ref from supabase_url (e.g. https://xxxx.supabase.co)
+                    import re
+                    supabase_url = provider_config.get('supabase_url', '')
+                    ref_match = re.search(r'//([a-z0-9]+)\.supabase', supabase_url)
+                    project_ref = ref_match.group(1) if ref_match else ''
+                    if access_token and project_ref:
+                        import logging
+                        _logger = logging.getLogger(__name__)
+                        cleanup_result = await cleanup_supabase_state_db(
+                            token=access_token,
+                            project_ref=project_ref,
+                            schema_name=schema_name,
+                        )
+                        if cleanup_result.get('success'):
+                            _logger.info("[Edge DB delete] ✅ Supabase cleanup done for schema '%s'", schema_name)
+                            remote_deleted = True
+                        else:
+                            _logger.warning("[Edge DB delete] ⚠️ Supabase cleanup had errors: %s", cleanup_result.get('errors'))
+
         # Remote resource delete via unified service
-        if delete_remote and edge_db.provider_account_id:
+        if delete_remote and bool(edge_db.provider_account_id):
             from ..services.provider_resource_deleter import delete_resource_for_edge_model
             remote_deleted = await delete_resource_for_edge_model(
                 model_kind="database",
@@ -279,17 +318,6 @@ async def delete_edge_database(db_id: str, delete_remote: bool = False):
         return {"success": True, "message": msg, "remote_deleted": remote_deleted}
     finally:
         db.close()
-
-
-class BatchDeleteDatabaseRequest(BaseModel):
-    ids: List[str]
-    delete_remote: bool = False
-
-
-class BatchResult(BaseModel):
-    success: List[str] = []
-    failed: List[dict] = []
-    total: int = 0
 
 
 @router.post("/batch/delete", response_model=BatchResult)
@@ -320,7 +348,7 @@ async def batch_delete_databases(payload: BatchDeleteDatabaseRequest):
         if payload.delete_remote:
             async def _safe_delete(rec: EdgeDatabase):
                 try:
-                    if rec.provider_account_id:
+                    if bool(rec.provider_account_id):
                         from ..services.provider_resource_deleter import delete_resource_for_edge_model
                         await delete_resource_for_edge_model(
                             model_kind="database",
@@ -379,337 +407,80 @@ async def test_edge_database(db_id: str):
         db.close()
     
     # Test based on provider
-    return await _test_connection(edge_provider, db_url, db_token, acct_id)
+    from ..services.db_connection_tester import test_db_connection
+    return await test_db_connection(edge_provider, db_url, db_token, acct_id)
 
 
 @router.post("/test-connection", response_model=TestConnectionResult)
 async def test_connection_inline(payload: EdgeDatabaseCreate):
     """Test a database connection before saving it."""
-    return await _test_connection(payload.provider, payload.db_url, payload.db_token, payload.provider_account_id)
+    from ..services.db_connection_tester import test_db_connection
+    return await test_db_connection(payload.provider, payload.db_url, payload.db_token, payload.provider_account_id)
 
 
-# =============================================================================
-# Helpers
-# =============================================================================
-
-async def _test_connection(provider: str, db_url: str, db_token: Optional[str], provider_account_id: Optional[str] = None) -> TestConnectionResult:
-    """Test connectivity to an edge-compatible database."""
-    import time
+@router.post("/discover-schemas")
+async def discover_schemas(payload: DiscoverSchemasRequest):
+    """Discover existing frontbase_edge* schemas in a PG database.
     
-    if provider == "turso":
-        return await _test_turso(db_url, db_token)
-    elif provider == "sqlite":
-        return TestConnectionResult(
-            success=True,
-            message="Local SQLite is always available",
-            latency_ms=0,
-        )
-    elif provider == "neon":
-        return await _test_neon(db_url, db_token)
-    elif provider == "cloudflare":
-        return await _test_cloudflare_d1(db_url, provider_account_id)
-    elif provider == "supabase":
-        return await _test_supabase_db(db_url, provider_account_id)
-    else:
-        return TestConnectionResult(
-            success=False,
-            message=f"Unknown provider: {provider}",
-        )
-
-
-async def _test_turso(db_url: str, db_token: Optional[str]) -> TestConnectionResult:
-    """Test Turso connectivity via HTTP API."""
-    import time
-    
-    # Convert libsql:// to https:// for HTTP API
-    http_url = db_url
-    if http_url.startswith("libsql://"):
-        http_url = http_url.replace("libsql://", "https://")
-    
-    if not http_url.startswith("https://"):
-        http_url = f"https://{http_url}"
-    
-    pipeline_url = f"{http_url}/v2/pipeline"
-    
-    start = time.time()
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                pipeline_url,
-                json={"requests": [
-                    {"type": "execute", "stmt": {"sql": "SELECT 1 AS ping"}},
-                    {"type": "close"},
-                ]},
-                headers={
-                    "Authorization": f"Bearer {db_token}",
-                    "Content-Type": "application/json",
-                },
-                timeout=10.0,
-            )
-        
-        latency = round((time.time() - start) * 1000, 1)
-        
-        if resp.status_code == 200:
-            return TestConnectionResult(
-                success=True,
-                message=f"Connected to Turso in {latency}ms",
-                latency_ms=latency,
-            )
-        else:
-            return TestConnectionResult(
-                success=False,
-                message=f"Turso returned HTTP {resp.status_code}: {resp.text[:200]}",
-            )
-    except Exception as e:
-        return TestConnectionResult(
-            success=False,
-            message=f"Connection failed: {str(e)}",
-        )
-
-
-async def _test_neon(db_url: str, db_token: Optional[str]) -> TestConnectionResult:
-    """Test Neon connectivity via asyncpg (standard PostgreSQL connection)."""
-    import time
-    import asyncpg
-
-    if not db_url:
-        return TestConnectionResult(success=False, message="No connection URI provided")
-
-    start = time.time()
-    try:
-        conn = await asyncpg.connect(db_url, timeout=10)
-        try:
-            await conn.fetchval("SELECT 1")
-        finally:
-            await conn.close()
-
-        latency = round((time.time() - start) * 1000, 1)
-        return TestConnectionResult(
-            success=True,
-            message=f"Connected to Neon in {latency}ms",
-            latency_ms=latency,
-        )
-    except Exception as e:
-        err = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
-        return TestConnectionResult(
-            success=False,
-            message=f"Connection failed: {err}",
-        )
-
-
-async def _test_cloudflare_d1(db_url: str, provider_account_id: Optional[str]) -> TestConnectionResult:
-    """Test CF D1 connectivity by querying database info via the CF API."""
-    import time
-
-    if not provider_account_id:
-        return TestConnectionResult(success=False, message="No connected account — cannot test D1")
-
-    # Extract UUID from d1:// URL
-    db_uuid = db_url.replace("d1://", "").strip()
-    if not db_uuid:
-        return TestConnectionResult(success=False, message="Invalid D1 URL")
-
-    # Resolve credentials from connected account
-    from ..core.security import get_provider_creds
-    db = SessionLocal()
-    try:
-        creds = get_provider_creds(provider_account_id, db)
-    finally:
-        db.close()
-
-    if not creds:
-        return TestConnectionResult(success=False, message="Could not resolve account credentials")
-
-    token = creds.get("api_token", "")
-    start = time.time()
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # Get CF account ID
-            accts_resp = await client.get(
-                "https://api.cloudflare.com/client/v4/accounts",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            if accts_resp.status_code != 200:
-                return TestConnectionResult(success=False, message=f"CF API error: {accts_resp.status_code}")
-            accounts = accts_resp.json().get("result", [])
-            if not accounts:
-                return TestConnectionResult(success=False, message="No Cloudflare accounts found")
-            acct_id = accounts[0].get("id", "")
-
-            # Query the D1 database info
-            resp = await client.get(
-                f"https://api.cloudflare.com/client/v4/accounts/{acct_id}/d1/database/{db_uuid}",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-
-        latency = round((time.time() - start) * 1000, 1)
-        data = resp.json()
-        if data.get("success"):
-            db_name = data.get("result", {}).get("name", db_uuid)
-            return TestConnectionResult(
-                success=True,
-                message=f"Connected to D1 '{db_name}' in {latency}ms",
-                latency_ms=latency,
-            )
-        errors = data.get("errors", [{}])
-        return TestConnectionResult(
-            success=False,
-            message=f"D1 error: {errors[0].get('message', 'Unknown')}",
-        )
-    except Exception as e:
-        return TestConnectionResult(success=False, message=f"Connection failed: {str(e)}")
-
-
-async def _test_supabase_db(db_url: str, provider_account_id: Optional[str] = None) -> TestConnectionResult:
-    """Test Supabase DB connectivity.
-    
-    Strategy:
-      1. If db_url is a valid postgresql:// URI → asyncpg direct connection
-      2. Otherwise, resolve credentials from connected account → REST API ping
+    Called after user picks a Supabase/Neon/Postgres resource to list
+    available schemas for state isolation.
     """
-    import time
-
-    # Strategy 1: direct PG connection if we have a valid URI
-    if db_url and db_url.startswith(('postgresql://', 'postgres://')) and '[YOUR-PASSWORD]' not in db_url:
-        start = time.time()
-        try:
-            import asyncpg
-            conn = await asyncpg.connect(db_url, timeout=10)
-            try:
-                await conn.fetchval("SELECT 1")
-            finally:
-                await conn.close()
-            latency = round((time.time() - start) * 1000, 1)
-            return TestConnectionResult(
-                success=True,
-                message=f"Connected to Supabase DB in {latency}ms (direct PG)",
-                latency_ms=latency,
-            )
-        except Exception as e:
-            err = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
-            return TestConnectionResult(success=False, message=f"Connection failed: {err}")
-
-    # Strategy 2: REST API ping via connected account credentials
-    if not provider_account_id:
-        return TestConnectionResult(
-            success=False,
-            message="No valid PostgreSQL URI and no connected account. "
-                    "Please connect a Supabase account first.",
-        )
-
-    import logging
-    _log = logging.getLogger(__name__)
-
-    from ..core.security import get_provider_creds
-    db = SessionLocal()
-    try:
-        creds = get_provider_creds(provider_account_id, db)
-    finally:
-        db.close()
-
-    if not creds:
-        return TestConnectionResult(success=False, message="Could not resolve account credentials")
-
-    api_url = creds.get("api_url", "")
-    service_key = creds.get("service_role_key", "")
-    anon_key = creds.get("anon_key", "")
-    key_to_use = service_key or anon_key
-
-    if not api_url or not key_to_use:
-        _log.warning("[Supabase test] Missing api_url=%s or keys for acct=%s. Keys: %s",
-                     bool(api_url), provider_account_id, list(creds.keys()))
-        return TestConnectionResult(
-            success=False,
-            message=f"Connected account is missing api_url or service_role_key. "
-                    f"Available credential keys: {', '.join(creds.keys())}",
-        )
-
-    # Ping the Supabase REST API
-    start = time.time()
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{api_url}/rest/v1/",
-                headers={
-                    "apikey": key_to_use,
-                    "Authorization": f"Bearer {key_to_use}",
-                },
-            )
-        latency = round((time.time() - start) * 1000, 1)
-        if resp.status_code in (200, 204):
-            return TestConnectionResult(
-                success=True,
-                message=f"Connected to Supabase in {latency}ms (REST API)",
-                latency_ms=latency,
-            )
-        else:
-            return TestConnectionResult(
-                success=False,
-                message=f"Supabase REST API returned HTTP {resp.status_code}: {resp.text[:200]}",
-            )
-    except Exception as e:
-        err = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
-        return TestConnectionResult(success=False, message=f"Connection failed: {err}")
+    if payload.provider == 'supabase' and payload.provider_account_id:
+        # Use Supabase Management API — no pooler URL needed
+        from ..services.supabase_state_db import discover_pg_schemas_supabase
+        from ..services.db_connection_tester import get_supabase_api_context
+        token, project_ref = await get_supabase_api_context(payload.db_url, payload.provider_account_id)
+        if not token or not project_ref:
+            raise HTTPException(400, "Could not resolve Supabase credentials")
+        result = await discover_pg_schemas_supabase(token, project_ref)
+    else:
+        from ..services.supabase_state_db import discover_pg_schemas
+        from ..services.db_connection_tester import resolve_pg_url
+        resolved_url = await resolve_pg_url(payload.db_url, payload.provider, payload.provider_account_id)
+        result = await discover_pg_schemas(resolved_url)
+    if not result.get('success'):
+        raise HTTPException(400, result.get('detail', 'Schema discovery failed'))
+    return result
 
 
-async def _resolve_supabase_pooler(db_url_or_ref: str, provider_account_id: str) -> Optional[str]:
-    """Resolve the Supabase pooler URI from the connected account credentials."""
-    import logging
-    logger = logging.getLogger(__name__)
+@router.post("/create-schema")
+async def create_schema(payload: CreateSchemaRequest):
+    """Create a new frontbase_edge_<suffix> schema in a PG database.
+    
+    Suffix must be lowercase alphanumeric + underscores.
+    """
+    if payload.provider == 'supabase' and payload.provider_account_id:
+        # Use Supabase Management API — no pooler URL needed
+        from ..services.supabase_state_db import create_pg_schema_supabase
+        from ..services.db_connection_tester import get_supabase_api_context
+        token, project_ref = await get_supabase_api_context(payload.db_url, payload.provider_account_id)
+        if not token or not project_ref:
+            raise HTTPException(400, "Could not resolve Supabase credentials")
+        result = await create_pg_schema_supabase(token, project_ref, payload.suffix)
+    else:
+        from ..services.supabase_state_db import create_pg_schema
+        from ..services.db_connection_tester import resolve_pg_url
+        resolved_url = await resolve_pg_url(payload.db_url, payload.provider, payload.provider_account_id)
+        result = await create_pg_schema(resolved_url, payload.suffix)
+    if not result.get('success'):
+        raise HTTPException(400, result.get('detail', 'Schema creation failed'))
+    return result
 
-    from ..core.security import get_provider_creds
-    from ..services.provider_discovery import _fetch_supabase_pooler_uri
 
-    db = SessionLocal()
-    try:
-        creds = get_provider_creds(provider_account_id, db)
-    finally:
-        db.close()
+@router.post("/reset-role-password")
+async def reset_role_password(payload: ResetRolePasswordRequest):
+    """Reset the scoped role password for an existing Supabase schema.
 
-    if not creds:
-        logger.warning("[Supabase test] No creds found for account %s", provider_account_id)
-        return None
+    Used during re-import: the schema exists but the password is lost.
+    Returns {success, role_name, role_password}.
+    """
+    from ..services.db_connection_tester import get_supabase_api_context
+    token, project_ref = await get_supabase_api_context(payload.db_url, payload.provider_account_id)
+    if not token or not project_ref:
+        raise HTTPException(400, "Could not resolve Supabase credentials")
 
-    token = creds.get("access_token", "")
-    if not token:
-        logger.warning("[Supabase test] No access_token in creds for account %s", provider_account_id)
-        return None
-
-    # Extract project ref: either a plain ref or from the db_url
-    project_ref = db_url_or_ref
-    if '.' in project_ref or '/' in project_ref:
-        # Try to extract ref from URL patterns like db.xxxx.supabase.co
-        import re
-        match = re.search(r'db\.([a-z0-9]+)\.supabase', project_ref)
-        if match:
-            project_ref = match.group(1)
-
-    try:
-        uri = await _fetch_supabase_pooler_uri(token, project_ref)
-        if uri:
-            return uri
-        logger.warning("[Supabase test] Pooler API returned no URI for ref=%s", project_ref)
-    except Exception as e:
-        logger.warning("[Supabase test] Pooler API failed for ref=%s: %s", project_ref, e)
-
-    # Fallback: try the database settings endpoint
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"https://api.supabase.com/v1/projects/{project_ref}/config/database",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                host = data.get("host", "")
-                if host:
-                    # Build a standard pooler URI
-                    port = data.get("port", 5432)
-                    db_name = data.get("db_name", "postgres")
-                    return f"postgresql://postgres.{project_ref}:{token}@{host}:{port}/{db_name}"
-            else:
-                logger.warning("[Supabase test] Settings API returned %d for ref=%s", resp.status_code, project_ref)
-    except Exception as e:
-        logger.warning("[Supabase test] Settings API failed for ref=%s: %s", project_ref, e)
-
-    return None
+    from ..services.supabase_state_db import reset_supabase_role_password
+    result = await reset_supabase_role_password(token, project_ref, payload.schema_name)
+    if not result.get('success'):
+        raise HTTPException(400, result.get('detail', 'Role password reset failed'))
+    return result

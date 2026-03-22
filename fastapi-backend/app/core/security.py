@@ -272,7 +272,7 @@ def get_provider_creds(provider_id: str, db: Session) -> dict:
     creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
     
     # Merge with metadata if available
-    if provider.provider_metadata:
+    if provider.provider_metadata is not None:
         try:
             metadata = json.loads(str(provider.provider_metadata))
             creds.update(metadata)

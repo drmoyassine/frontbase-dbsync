@@ -100,7 +100,7 @@ def update_page(db: Session, page_id: str, page_data: dict):
     if 'layout_data' in page_data:
         page.layout_data = json.dumps(page_data['layout_data'])
     
-    page.updated_at = get_current_timestamp()
+    page.updated_at = get_current_timestamp()  # type: ignore[assignment]
     db.commit()
     db.refresh(page)
     return page
@@ -139,8 +139,8 @@ def update_project(db: Session, project_data: dict):
             project.logo_url = project_data['logo_url']
         if 'users_config' in project_data:
             config = project_data['users_config']
-            project.users_config = json.dumps(config) if isinstance(config, (dict, list)) else config
-        project.updated_at = get_current_timestamp()
+            project.users_config = json.dumps(config) if isinstance(config, (dict, list)) else config  # type: ignore[assignment]
+        project.updated_at = get_current_timestamp()  # type: ignore[assignment]
     
     db.commit()
     db.refresh(project)
@@ -187,7 +187,7 @@ def get_project_settings(db: Session, project_id: str = "default"):
         print(f"Error getting project settings: {e}")
         return None
 
-def update_project_settings(db: Session, project_id: str = "default", settings: dict = None):
+def update_project_settings(db: Session, project_id: str = "default", settings: dict | None = None):
     """Update project settings"""
     if settings is None:
         settings = {}

@@ -22,7 +22,7 @@ from fastapi import HTTPException
 def get_provider_context(
     db: Session,
     provider_type: str,
-    provider_id: str = None,
+    provider_id: Optional[str] = None,
 ) -> dict:
     """Get decrypted credentials + metadata for any connected account.
 
@@ -61,7 +61,7 @@ def get_provider_context(
 
     # Parse metadata
     metadata = {}
-    if provider.provider_metadata:
+    if provider.provider_metadata is not None:
         try:
             metadata = json.loads(str(provider.provider_metadata))
         except (json.JSONDecodeError, TypeError):
@@ -96,7 +96,7 @@ def get_provider_context_by_id(db: Session, provider_id: str) -> dict:
 
     creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
     metadata = {}
-    if provider.provider_metadata:
+    if provider.provider_metadata is not None:
         try:
             metadata = json.loads(str(provider.provider_metadata))
         except (json.JSONDecodeError, TypeError):
@@ -156,7 +156,7 @@ def _from_connected_accounts(db: Session, mode: str) -> Optional[dict]:
 
     # Get metadata (api_url, project_ref — non-sensitive)
     metadata = {}
-    if provider.provider_metadata:
+    if provider.provider_metadata is not None:
         try:
             metadata = json.loads(str(provider.provider_metadata))
         except (json.JSONDecodeError, TypeError):

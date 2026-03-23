@@ -32,6 +32,7 @@ import { AccountResourcePicker, DiscoveredResource } from './AccountResourcePick
 import { PROVIDER_ICONS, EDGE_QUEUE_PROVIDERS, ProviderBadge } from './edgeConstants';
 import { DeleteResourceDialog, BulkDeleteResourceDialog } from './DeleteResourceDialog';
 import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
+import { EdgeResourceRow } from './EdgeResourceRow';
 
 const API_BASE = '';
 
@@ -448,19 +449,20 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                     )}
                 </div>
                 <div className="space-y-3">
-                    {queues.map((queue) => (
-                        <div key={queue.id} className={`flex items-center justify-between p-4 border rounded-lg bg-card hover:border-primary/50 transition-colors ${selectedIds.has(queue.id) ? 'ring-1 ring-primary border-primary' : ''}`}>
-                            <div className="flex items-center gap-3">
-                                {!queue.is_system ? (
-                                    <Checkbox
-                                        checked={selectedIds.has(queue.id)}
-                                        onCheckedChange={() => toggleSelect(queue.id)}
-                                    />
-                                ) : (
-                                    <div className="w-4 shrink-0" />
-                                )}
-                                <ProviderBadge provider={queue.provider} label={QUEUE_PROVIDER_OPTIONS.find(p => p.value === queue.provider)?.label} />
-                                <h4 className="font-medium text-sm">{queue.name}</h4>
+                    {queues.map((queue) => {
+                        const providerLabel = QUEUE_PROVIDER_OPTIONS.find(p => p.value === queue.provider)?.label;
+                        const Icon = PROVIDER_ICONS[queue.provider] || QueueIcon;
+                        return (
+                        <EdgeResourceRow
+                            key={queue.id}
+                            icon={<Icon className="w-5 h-5" />}
+                            name={queue.name}
+                            subtitle={providerLabel}
+                            selectable={!queue.is_system}
+                            selected={selectedIds.has(queue.id)}
+                            onSelectChange={() => toggleSelect(queue.id)}
+                            showSelectSpacer={queue.is_system}
+                            badges={<>
                                 {queue.is_default && !queue.is_system && (
                                     <Badge variant="secondary" className="text-[10px] gap-1">
                                         <Star className="h-3 w-3" /> Default
@@ -476,8 +478,8 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                                         <Lock className="h-3 w-3" /> Signed
                                     </Badge>
                                 )}
-                            </div>
-                            <div className="flex items-center gap-2">
+                            </>}
+                            metadata={<>
                                 <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                                     Created {new Date(queue.created_at).toLocaleDateString()}
                                 </span>
@@ -500,6 +502,8 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                                         </Tooltip>
                                     </TooltipProvider>
                                 )}
+                            </>}
+                            actions={<>
                                 <Button
                                     variant="ghost" size="icon"
                                     onClick={() => handleTest(queue.id)}
@@ -526,9 +530,10 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                                         />
                                     </>
                                 )}
-                            </div>
-                        </div>
-                    ))}
+                            </>}
+                        />
+                        );
+                    })}
                 </div>
                 </>
             )}

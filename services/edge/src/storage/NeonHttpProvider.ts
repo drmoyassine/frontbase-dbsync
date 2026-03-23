@@ -388,9 +388,22 @@ export class NeonHttpProvider implements IStateProvider {
         };
     }
 
-    // =========================================================================
-    // Executions
-    // =========================================================================
+    async listWorkflows(): Promise<WorkflowData[]> {
+        const rows = await this.all(`SELECT * FROM ${SCHEMA}.workflows`);
+        return rows.map(r => this.rowToWorkflow(r));
+    }
+
+    async deleteWorkflow(id: string): Promise<boolean> {
+        await this.query(`DELETE FROM ${SCHEMA}.workflows WHERE id = $1`, [id]);
+        return true;
+    }
+
+    async toggleWorkflow(id: string, isActive: boolean): Promise<void> {
+        await this.query(
+            `UPDATE ${SCHEMA}.workflows SET is_active = $1, updated_at = $2 WHERE id = $3`,
+            [isActive, new Date().toISOString(), id]
+        );
+    }
 
     async createExecution(execution: NewExecutionData): Promise<void> {
         await this.query(

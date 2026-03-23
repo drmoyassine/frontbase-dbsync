@@ -1,94 +1,158 @@
 /**
- * Authentication Middleware for Hono Actions Engine
+ * Authentication Middleware for Hono Edge Engine
  * 
- * Sprint 2: Security Layer
+ * Three auth layers:
+ * 1. systemKeyAuth  — M2M (FastAPI → Edge) via x-system-key header
+ * 2. userApiKeyAuth — User-facing (AI + webhooks) via Authorization: Bearer
+ * 3. JWT / CSRF / IP — Supplementary security helpers
  * 
- * This module provides:
- * - Bearer token auth for webhooks (API keys)
- * - JWT verification for edge-deployed end user routes (future)
- * - IP restriction helpers
+ * Scoped API keys: each user key has a scope ('user' | 'management' | 'all').
+ * - 'user' scope keys work on /v1/* (AI) and /api/webhook/* routes
+ * - 'management' scope keys work on management endpoints as a fallback to system key
+ * - 'all' scope keys work everywhere
  */
 
-import { bearerAuth } from 'hono/bearer-auth';
 import { jwt } from 'hono/jwt';
 import { csrf } from 'hono/csrf';
 import type { Context, Next } from 'hono';
 
 // =============================================================================
-// API Key Authentication (for Webhooks)
-// =============================================================================
-
-/**
- * Custom API key middleware for webhook endpoints.
- * Checks for Bearer token only when API_KEYS env var is configured.
- * 
- * If no API_KEYS are set, all requests are allowed (dev mode).
- * This avoids Hono's bearerAuth throwing when no Authorization header is present.
- */
-export const apiKeyAuth = async (c: Context, next: Next) => {
-    const validKeys = (process.env.API_KEYS || '').split(',').map(k => k.trim()).filter(Boolean);
-
-    if (validKeys.length === 0) {
-        // No API keys configured — allow all (dev mode)
-        console.warn('⚠️ No API_KEYS configured - webhook auth disabled');
-        return next();
-    }
-
-    const authHeader = c.req.header('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return c.json({ error: 'Unauthorized', message: 'Missing or invalid Authorization header' }, 401);
-    }
-
-    const token = authHeader.slice(7).trim();
-    if (!validKeys.includes(token)) {
-        return c.json({ error: 'Unauthorized', message: 'Invalid API key' }, 401);
-    }
-
-    return next();
-};
-
-// =============================================================================
-// AI API Key Authentication (for /v1/* OpenAI-compatible endpoints)
+// Shared Helpers
 // =============================================================================
 
 interface APIKeyHashEntry {
     prefix: string;
     hash: string;
+    scope: string;       // 'user' | 'management' | 'all'
     expires_at: string | null;
 }
 
+/** Parse FRONTBASE_API_KEY_HASHES env var into typed entries. Returns null on error. */
+function parseKeyHashes(): APIKeyHashEntry[] | null {
+    const envHashes = process.env.FRONTBASE_API_KEY_HASHES;
+    if (!envHashes) return null;
+    try {
+        return JSON.parse(envHashes);
+    } catch {
+        console.error('[Auth] Failed to parse FRONTBASE_API_KEY_HASHES');
+        return null;
+    }
+}
+
+/** Extract Bearer token from Authorization header. */
+function extractBearerToken(c: Context): string | null {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+    return authHeader.slice(7).trim();
+}
+
+/** SHA-256 hash a string and return hex digest. */
+async function sha256(input: string): Promise<string> {
+    const data = new TextEncoder().encode(input);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Validate a Bearer token against stored hashes, checking scope. */
+async function validateApiKey(
+    token: string,
+    allowedScopes: string[],
+): Promise<APIKeyHashEntry | null> {
+    const keyEntries = parseKeyHashes();
+    if (!keyEntries || keyEntries.length === 0) return null;
+
+    const tokenHash = await sha256(token);
+    const matched = keyEntries.find(k => k.hash === tokenHash);
+    if (!matched) return null;
+
+    // Check scope — treat missing scope as 'user' for backward compatibility
+    const keyScope = matched.scope || 'user';
+    if (!allowedScopes.includes(keyScope) && keyScope !== 'all') {
+        return null;
+    }
+
+    // Check expiry
+    if (matched.expires_at) {
+        if (new Date(matched.expires_at) < new Date()) return null;
+    }
+
+    return matched;
+}
+
+// =============================================================================
+// System Key Authentication (M2M: FastAPI → Edge)
+// =============================================================================
+
 /**
- * API key middleware for OpenAI-compatible endpoints.
- * Validates Bearer token against FRONTBASE_API_KEY_HASHES (synced from backend).
+ * System key middleware for management endpoints.
+ * Validates the x-system-key header against FRONTBASE_SYSTEM_KEY env var.
  * 
- * If no API key hashes are configured, all requests are allowed (dev mode).
- * Returns OpenAI-compatible error format on auth failure.
+ * Fallback: also accepts user API keys with scope 'management' or 'all'
+ * (for power-user scripting against the engine).
+ * 
+ * Dev mode: if no FRONTBASE_SYSTEM_KEY is configured, all requests pass through.
  */
-export const aiApiKeyAuth = async (c: Context, next: Next) => {
+export const systemKeyAuth = async (c: Context, next: Next) => {
+    const systemKey = process.env.FRONTBASE_SYSTEM_KEY;
+
+    if (!systemKey) {
+        // No system key configured — allow all (dev mode / local Docker)
+        return next();
+    }
+
+    // 1. Check x-system-key header (primary path — FastAPI M2M)
+    const sysHeader = c.req.header('x-system-key');
+    if (sysHeader && sysHeader === systemKey) {
+        return next();
+    }
+
+    // 2. Fallback: check user API key with management scope
+    const bearerToken = extractBearerToken(c);
+    if (bearerToken) {
+        const matched = await validateApiKey(bearerToken, ['management', 'all']);
+        if (matched) return next();
+    }
+
+    return c.json({
+        error: {
+            message: 'Unauthorized. Provide x-system-key header or a management-scoped API key.',
+            type: 'invalid_request_error',
+            code: 'unauthorized',
+        },
+    }, 401);
+};
+
+// =============================================================================
+// User API Key Authentication (for /v1/* AI + /api/webhook/* endpoints)
+// =============================================================================
+
+/**
+ * User API key middleware for user-facing endpoints.
+ * Validates Bearer token against FRONTBASE_API_KEY_HASHES with scope checking.
+ * 
+ * Accepts keys with scope 'user' or 'all'.
+ * Returns OpenAI-compatible error format on auth failure.
+ * 
+ * Dev mode: if no API key hashes are configured, all requests pass through.
+ */
+export const userApiKeyAuth = async (c: Context, next: Next) => {
     const envHashes = process.env.FRONTBASE_API_KEY_HASHES;
     const isDev = (process.env.NODE_ENV || 'development') === 'development';
 
     if (!envHashes) {
-        if (isDev) {
-            // Dev mode: allow all requests when no keys configured
-            return next();
-        }
-        // Production: fail closed — no keys configured means no access
+        if (isDev) return next();
         return c.json({
             error: {
-                message: 'AI endpoints are not configured. No API keys have been deployed to this engine.',
+                message: 'No API keys configured for this engine.',
                 type: 'invalid_request_error',
                 code: 'no_api_keys_configured',
             },
         }, 403);
     }
 
-    let keyEntries: APIKeyHashEntry[];
-    try {
-        keyEntries = JSON.parse(envHashes);
-    } catch {
-        console.error('[AI Auth] Failed to parse FRONTBASE_API_KEY_HASHES');
-        // Fail closed — don't allow access if config is corrupted
+    const keyEntries = parseKeyHashes();
+    if (!keyEntries) {
         return c.json({
             error: {
                 message: 'API key configuration error. Contact administrator.',
@@ -99,9 +163,7 @@ export const aiApiKeyAuth = async (c: Context, next: Next) => {
     }
 
     if (keyEntries.length === 0) {
-        if (isDev) {
-            return next(); // Dev mode: empty array = no auth
-        }
+        if (isDev) return next();
         return c.json({
             error: {
                 message: 'No API keys configured for this engine.',
@@ -111,8 +173,8 @@ export const aiApiKeyAuth = async (c: Context, next: Next) => {
         }, 403);
     }
 
-    const authHeader = c.req.header('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = extractBearerToken(c);
+    if (!token) {
         return c.json({
             error: {
                 message: 'Missing or invalid Authorization header. Use: Authorization: Bearer <api_key>',
@@ -122,42 +184,22 @@ export const aiApiKeyAuth = async (c: Context, next: Next) => {
         }, 401);
     }
 
-    const token = authHeader.slice(7).trim();
-
-    // Hash the provided token and compare against stored hashes
-    const encoder = new TextEncoder();
-    const data = encoder.encode(token);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const tokenHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-    const matchedKey = keyEntries.find(k => k.hash === tokenHash);
-    if (!matchedKey) {
+    const matched = await validateApiKey(token, ['user', 'all']);
+    if (!matched) {
         return c.json({
             error: {
-                message: 'Invalid API key.',
+                message: 'Invalid API key or insufficient scope.',
                 type: 'invalid_request_error',
                 code: 'invalid_api_key',
             },
         }, 401);
     }
 
-    // Check expiry
-    if (matchedKey.expires_at) {
-        const expiresAt = new Date(matchedKey.expires_at);
-        if (expiresAt < new Date()) {
-            return c.json({
-                error: {
-                    message: 'API key has expired.',
-                    type: 'invalid_request_error',
-                    code: 'expired_api_key',
-                },
-            }, 401);
-        }
-    }
-
     return next();
 };
+
+// Legacy alias — kept for backward compatibility (used by lite.ts import)
+export const aiApiKeyAuth = userApiKeyAuth;
 
 // =============================================================================
 // JWT Authentication (for Edge-deployed End User Routes)

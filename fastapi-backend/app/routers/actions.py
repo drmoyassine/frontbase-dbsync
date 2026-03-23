@@ -20,6 +20,7 @@ from app.database.utils import get_db
 from app.database.config import SessionLocal
 from app.models.actions import AutomationDraft, AutomationExecution
 from app.models.models import EdgeEngine
+from app.services.edge_client import get_edge_headers
 from app.schemas.actions import (
     WorkflowDraftCreate,
     WorkflowDraftUpdate,
@@ -394,10 +395,14 @@ async def publish_draft_to_engine(
     # 2. SLOW I/O — no DB connection held
     try:
         async with httpx.AsyncClient() as client:
+            # Get auth headers for this engine
+            auth_headers = get_edge_headers(engine)
+            
             # Pre-flight health check
             try:
                 health_resp = await client.get(
                     f"{engine_url.rstrip('/')}/api/health",
+                    headers=auth_headers,
                     timeout=5.0
                 )
                 if health_resp.status_code != 200:
@@ -415,6 +420,7 @@ async def publish_draft_to_engine(
             response = await client.post(
                 f"{engine_url.rstrip('/')}/api/deploy",
                 json=deploy_payload,
+                headers=auth_headers,
                 timeout=30.0
             )
             
@@ -530,9 +536,11 @@ async def publish_draft_batch(
 
         try:
             async with httpx.AsyncClient() as client:
+                batch_auth = get_edge_headers(engine)
                 resp = await client.post(
                     f"{engine_url.rstrip('/')}/api/deploy",
                     json=deploy_payload,
+                    headers=batch_auth,
                     timeout=30.0
                 )
                 if resp.status_code != 200:
@@ -613,9 +621,11 @@ async def toggle_target_active(
     
     try:
         async with httpx.AsyncClient() as client:
+            toggle_auth = get_edge_headers(engine)
             response = await client.post(
                 f"{engine_url.rstrip('/')}/api/deploy",
                 json=deploy_payload,
+                headers=toggle_auth,
                 timeout=30.0
             )
             

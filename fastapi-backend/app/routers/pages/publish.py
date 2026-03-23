@@ -16,6 +16,7 @@ import uuid
 from app.database.config import SessionLocal
 from app.models.models import Page, EdgeEngine, PageDeployment
 from app.services.page_hash import compute_page_hash
+from app.services.edge_client import get_edge_headers
 from app.services.publish_serializer import (
     get_datasources_for_publish,
     convert_to_publish_schema,
@@ -94,10 +95,11 @@ async def publish_to_target(page_id: str, engine_id: str):
         print(f"[Publish:SingleTarget] Sending to: {import_url}")
         
         async with httpx.AsyncClient() as client:
+            auth_headers = get_edge_headers(engine)
             response = await client.post(
                 import_url,
                 json=serialized,
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", **auth_headers},
                 timeout=15.0,
             )
             success = response.status_code == 200
@@ -230,13 +232,16 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
 
     # 3. FAN OUT to all engines in parallel
     async def _send_to_engine(eid: str, info: dict[str, str]) -> dict[str, object]:
-        import_url = f"{info['url'].rstrip('/')}/api/import"
+        import_url = f"{str(info['url']).rstrip('/')}/api/import"
+        # Get auth headers for this specific engine
+        eng_obj = next((e for e in engines if str(e.id) == eid), None)
+        auth_hdrs = get_edge_headers(eng_obj) if eng_obj else {}
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
                     import_url,
                     json=serialized,
-                    headers={"Content-Type": "application/json"},
+                    headers={"Content-Type": "application/json", **auth_hdrs},
                     timeout=15.0,
                 )
             ok = resp.status_code == 200

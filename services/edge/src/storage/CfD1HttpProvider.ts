@@ -336,6 +336,23 @@ export class CfD1HttpProvider implements IStateProvider {
         };
     }
 
+    async listWorkflows(): Promise<WorkflowData[]> {
+        const rows = await this.all(`SELECT * FROM workflows`);
+        return rows.map(r => this.rowToWorkflow(r));
+    }
+
+    async deleteWorkflow(id: string): Promise<boolean> {
+        await this.run(`DELETE FROM workflows WHERE id = ?1`, [id]);
+        return true;
+    }
+
+    async toggleWorkflow(id: string, isActive: boolean): Promise<void> {
+        await this.run(
+            `UPDATE workflows SET is_active = ?1, updated_at = ?2 WHERE id = ?3`,
+            [isActive ? 1 : 0, new Date().toISOString(), id]
+        );
+    }
+
     // =========================================================================
     // Executions
     // =========================================================================

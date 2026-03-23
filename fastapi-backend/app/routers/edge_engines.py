@@ -86,6 +86,11 @@ async def create_edge_engine(payload: EdgeEngineCreate, db: Session = Depends(ge
             raise HTTPException(status_code=400, detail="Invalid edge_provider_id")
 
     now = datetime.utcnow().isoformat()
+    # Inject system key into engine_config for M2M auth
+    from ..services.edge_client import inject_system_key
+    raw_config = json.dumps(payload.engine_config) if payload.engine_config else None
+    config_with_key = inject_system_key(raw_config)
+
     engine = EdgeEngine(
         id=str(uuid.uuid4()),
         name=payload.name,
@@ -95,7 +100,7 @@ async def create_edge_engine(payload: EdgeEngineCreate, db: Session = Depends(ge
         edge_db_id=payload.edge_db_id,
         edge_cache_id=payload.edge_cache_id,
         edge_queue_id=payload.edge_queue_id,
-        engine_config=json.dumps(payload.engine_config) if payload.engine_config else None,
+        engine_config=config_with_key,
         is_active=payload.is_active,
         is_imported=payload.is_imported,
         created_at=now,
@@ -571,10 +576,13 @@ async def sync_engine_logs(engine_id: str, db: Session = Depends(get_db)):
     # Push to edge engine's /api/edge-logs
     engine_url = str(engine.url).rstrip("/")
     try:
+        from ..services.edge_client import get_edge_headers
+        auth_headers = get_edge_headers(engine)
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 f"{engine_url}/api/edge-logs",
                 json={"logs": result.logs},
+                headers=auth_headers,
             )
             if resp.status_code not in (200, 201):
                 return {"synced": 0, "detail": f"Edge push failed: {resp.status_code}"}

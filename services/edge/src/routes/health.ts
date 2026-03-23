@@ -135,10 +135,32 @@ const route = createRoute({
 });
 
 healthRoute.openapi(route, async (c) => {
+    // Tiered response: minimal without system key, full diagnostics with key
+    const systemKey = process.env.FRONTBASE_SYSTEM_KEY;
+    const provided = c.req.header('x-system-key');
+    const isAuthenticated = !systemKey || (provided === systemKey);
+
+    if (!isAuthenticated) {
+        // Minimal liveness check — no infrastructure details
+        return c.json({
+            status: 'ok',
+            service: 'frontbase-edge',
+            version: '0.1.0',
+            provider: getPlatform(),
+            timestamp: new Date().toISOString(),
+            bindings: {
+                stateDb: { provider: 'hidden', status: 'ok' as const },
+                cache: { provider: 'hidden', status: 'ok' as const },
+                queue: { provider: 'hidden', status: 'ok' as const },
+            },
+        });
+    }
+
+    // Full diagnostics — authenticated via system key
     const platform = getPlatform();
     const isServerless = platform !== 'docker';
 
-    // Run all binding checks in parallel (each has 3s timeout)
+    // Run all binding checks in parallel (each has timeout)
     const [stateDb, cache, queue] = await Promise.all([
         checkStateDb(),
         checkCache(),

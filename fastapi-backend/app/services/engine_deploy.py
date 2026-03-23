@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from ..models.models import EdgeEngine, EdgeProviderAccount
 from ..services.bundle import build_worker, build_worker_from_snapshot, get_source_hash, capture_source_snapshot, CORE_PREFIX
 from ..services.secrets_builder import build_engine_secrets
+from ..services.edge_client import get_edge_headers
 from ..services import cloudflare_api
 from ..services import supabase_deploy_api
 from ..services import upstash_deploy_api
@@ -98,7 +99,7 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
         elif provider in PROVIDER_DEPLOYERS:
             await PROVIDER_DEPLOYERS[provider](engine, db, script_content, adapter_type)
         else:
-            await _deploy_docker(engine_url, script_content, source_hash)
+            await _deploy_docker(engine, engine_url, script_content, source_hash)
 
         # 3. Initialize Supabase state DB at deploy time (provider-agnostic).
         #    If the engine's state DB is on Supabase, create schema + tables
@@ -122,7 +123,7 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
 
         # Flush cache only when a cache resource is actually connected
         if engine.edge_cache_id is not None:
-            cache_flushed = await _flush_cache(engine_url)
+            cache_flushed = await _flush_cache(engine, engine_url)
         else:
             cache_flushed = False
 
@@ -193,12 +194,13 @@ async def _deploy_cloudflare(
         await cloudflare_api.set_secrets(api_token, account_id, worker_name, secrets)
 
 
-async def _deploy_docker(engine_url: str, script_content: str, source_hash: str) -> None:
+async def _deploy_docker(engine: EdgeEngine, engine_url: str, script_content: str, source_hash: str) -> None:
     """Docker/Node.js deploy: POST bundle to engine /api/update → wait for restart."""
+    auth_headers = get_edge_headers(engine)
     async with httpx.AsyncClient() as client:
         # Health check first
         try:
-            health = await client.get(f"{engine_url}/api/health", timeout=5.0)
+            health = await client.get(f"{engine_url}/api/health", headers=auth_headers, timeout=5.0)
             if health.status_code != 200:
                 raise HTTPException(503, f"Engine unreachable: health check returned {health.status_code}")
         except httpx.ConnectError:
@@ -212,6 +214,7 @@ async def _deploy_docker(engine_url: str, script_content: str, source_hash: str)
                 "source_hash": source_hash,
                 "version": "latest",
             },
+            headers=auth_headers,
             timeout=30.0,
         )
 
@@ -225,7 +228,7 @@ async def _deploy_docker(engine_url: str, script_content: str, source_hash: str)
         await asyncio.sleep(3)
         try:
             async with httpx.AsyncClient() as client:
-                resp = await client.get(f"{engine_url}/api/health", timeout=5.0)
+                resp = await client.get(f"{engine_url}/api/health", headers=auth_headers, timeout=5.0)
                 if resp.status_code == 200:
                     engine_healthy = True
                     break
@@ -305,11 +308,12 @@ async def _init_supabase_state_db_if_needed(engine: EdgeEngine, db: Session) -> 
 
 
 
-async def _flush_cache(engine_url: str) -> bool:
+async def _flush_cache(engine: EdgeEngine, engine_url: str) -> bool:
     """Flush the edge cache on a target engine."""
     try:
+        auth_headers = get_edge_headers(engine)
         async with httpx.AsyncClient() as client:
-            resp = await client.post(f"{engine_url}/api/cache/flush", timeout=10.0)
+            resp = await client.post(f"{engine_url}/api/cache/flush", headers=auth_headers, timeout=10.0)
             return resp.status_code in (200, 204)
     except Exception:
         return False

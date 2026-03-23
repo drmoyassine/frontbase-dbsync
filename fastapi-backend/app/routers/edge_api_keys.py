@@ -35,12 +35,14 @@ router = APIRouter(prefix="/api/edge-api-keys", tags=["edge-api-keys"])
 class APIKeyCreate(BaseModel):
     name: str
     edge_engine_id: Optional[str] = None  # null = all engines
+    scope: str = 'user'                   # user | management | all
     expires_at: Optional[str] = None       # ISO datetime or null = never
 
 
 class APIKeyUpdate(BaseModel):
     name: Optional[str] = None
     is_active: Optional[bool] = None
+    scope: Optional[str] = None            # user | management | all
     expires_at: Optional[str] = None
 
 
@@ -51,6 +53,7 @@ class APIKeyResponse(BaseModel):
     edge_engine_id: Optional[str]
     engine_name: Optional[str] = None
     is_active: bool
+    scope: str
     expires_at: Optional[str]
     last_used_at: Optional[str]
     created_at: str
@@ -84,6 +87,7 @@ def _serialize(key: EdgeAPIKey, engine: Optional[EdgeEngine] = None) -> dict:
         "edge_engine_id": str(key.edge_engine_id) if key.edge_engine_id else None,  # type: ignore[truthy-bool]
         "engine_name": str(engine.name) if engine else None,
         "is_active": bool(key.is_active),
+        "scope": str(key.scope) if key.scope else 'user',  # type: ignore[truthy-bool]
         "expires_at": str(key.expires_at) if key.expires_at else None,  # type: ignore[truthy-bool]
         "last_used_at": str(key.last_used_at) if key.last_used_at else None,  # type: ignore[truthy-bool]
         "created_at": str(key.created_at),
@@ -157,6 +161,7 @@ def _build_key_secrets(engine: EdgeEngine, db: Session) -> dict:
     keys_data = [{
         "prefix": str(k.prefix),
         "hash": str(k.key_hash),
+        "scope": str(k.scope) if k.scope else 'user',  # type: ignore[truthy-bool]
         "expires_at": str(k.expires_at) if k.expires_at else None,  # type: ignore[truthy-bool]
     } for k in api_keys]
     return {'FRONTBASE_API_KEY_HASHES': json.dumps(keys_data)}
@@ -199,6 +204,11 @@ def create_api_key(
     full_key, prefix, key_hash = _generate_key()
     now = datetime.utcnow().isoformat()
 
+    # Validate scope
+    valid_scopes = ('user', 'management', 'all')
+    if payload.scope not in valid_scopes:
+        raise HTTPException(400, f"Invalid scope '{payload.scope}'. Must be one of: {', '.join(valid_scopes)}")
+
     api_key = EdgeAPIKey(
         id=str(uuid.uuid4()),
         name=payload.name,
@@ -206,6 +216,7 @@ def create_api_key(
         key_hash=key_hash,
         edge_engine_id=payload.edge_engine_id,
         is_active=True,
+        scope=payload.scope,
         expires_at=payload.expires_at,
         created_at=now,
         updated_at=now,
@@ -240,9 +251,10 @@ def update_api_key(
     if not api_key:
         raise HTTPException(404, "API key not found")
 
-    # Track whether we need to sync (only if active status or expiry changed)
+    # Track whether we need to sync (only if active status, scope, or expiry changed)
     needs_sync = (
         (payload.is_active is not None and payload.is_active != api_key.is_active)
+        or (payload.scope is not None and payload.scope != str(api_key.scope))
         or (payload.expires_at is not None and payload.expires_at != str(api_key.expires_at))
     )
 
@@ -250,6 +262,11 @@ def update_api_key(
         api_key.name = payload.name  # type: ignore[assignment]
     if payload.is_active is not None:
         api_key.is_active = payload.is_active  # type: ignore[assignment]
+    if payload.scope is not None:
+        valid_scopes = ('user', 'management', 'all')
+        if payload.scope not in valid_scopes:
+            raise HTTPException(400, f"Invalid scope '{payload.scope}'. Must be one of: {', '.join(valid_scopes)}")
+        api_key.scope = payload.scope  # type: ignore[assignment]
     if payload.expires_at is not None:
         api_key.expires_at = payload.expires_at  # type: ignore[assignment]
 

@@ -211,7 +211,7 @@ async def reconfigure(
             print(f"[Reconfigure] Redeploy failed for {provider_label} engine '{engine.name}': {e}")
 
     # 5. Flush edge cache on target
-    cache_flushed = await engine_deploy._flush_cache(str(engine.url).rstrip('/'))
+    cache_flushed = await engine_deploy._flush_cache(engine, str(engine.url).rstrip('/'))
 
     return {
         "success": True,

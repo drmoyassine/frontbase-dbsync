@@ -13,6 +13,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
     AlertTriangle, CheckCircle2, Cloud, Loader2,
     Shield, XCircle, Zap,
@@ -61,6 +62,7 @@ export const ConnectProviderDialog: React.FC<ConnectProviderDialogProps> = ({
     editProvider,
 }) => {
     const effectiveLockedProvider = editProvider?.provider || lockedProvider;
+    const queryClient = useQueryClient();
     const state = useConnectProvider(effectiveLockedProvider, open, editProvider);
     const {
         providers, refetch,
@@ -169,7 +171,9 @@ export const ConnectProviderDialog: React.FC<ConnectProviderDialogProps> = ({
                 newAccountId = await handleGenericSave(extraCreds);
             }
 
-            await refetch();
+            // Invalidate the shared cache so ALL observers (including parent
+            // AccountResourcePicker) re-fetch immediately, bypassing staleTime.
+            await queryClient.invalidateQueries({ queryKey: ['edge-providers'] });
             resetForm();
             resetDiscovery();
             onOpenChange(false);

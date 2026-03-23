@@ -28,8 +28,10 @@ async def sync_engine_manifest(engine: EdgeEngine, db: Session) -> dict:
 
     # Fetch manifest from the running engine
     try:
+        from ..services.edge_client import get_edge_headers
+        auth_headers = get_edge_headers(engine)
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(f"{engine_url}/api/manifest")
+            resp = await client.get(f"{engine_url}/api/manifest", headers=auth_headers)
             if resp.status_code != 200:
                 return {"synced": False, "reason": f"Manifest returned {resp.status_code}"}
             manifest = resp.json()

@@ -42,9 +42,12 @@ import { executionsRoute } from '../routes/executions.js';
 import { updateRoute } from '../routes/update.js';
 import { cacheRoute } from '../routes/cache.js';
 import { edgeLogsRoute } from '../routes/edge-logs.js';
+import { workflowsRoute } from '../routes/workflows.js';
+import { queueRoute } from '../routes/queue.js';
+import { configRoute } from '../routes/config.js';
 // ai.ts still provides setAIBinding/setGPUModels/getGPUModels used by adapters + openai.ts
 import { openaiRoute } from '../routes/openai.js';
-import { apiKeyAuth, aiApiKeyAuth } from '../middleware/auth.js';
+import { systemKeyAuth, userApiKeyAuth, aiApiKeyAuth } from '../middleware/auth.js';
 
 // =============================================================================
 // Liquid Engine (shared singleton for template rendering)
@@ -79,6 +82,7 @@ const ENGINE_PROFILES: Record<EngineMode, EngineProfile> = {
             { name: 'Execution', description: 'Execute workflows and inspect runs' },
             { name: 'Webhooks', description: 'Trigger workflows via incoming webhooks' },
             { name: 'Cache', description: 'Redis/Upstash cache management — test connection, invalidate keys, flush, and stats' },
+            { name: 'Queue', description: 'Message queue management — stats and publishing (QStash/CF Queue)' },
             { name: 'AI', description: 'OpenAI-compatible inference (GPU models required)' },
         ],
     },
@@ -94,6 +98,7 @@ const ENGINE_PROFILES: Record<EngineMode, EngineProfile> = {
             { name: 'Execution', description: 'Execute workflows and inspect runs' },
             { name: 'Webhooks', description: 'Trigger workflows via incoming webhooks' },
             { name: 'Cache', description: 'Redis/Upstash cache management — test connection, invalidate keys, flush, and stats' },
+            { name: 'Queue', description: 'Message queue management — stats and publishing (QStash/CF Queue)' },
             { name: 'AI', description: 'OpenAI-compatible inference (GPU models required)' },
         ],
     },
@@ -165,9 +170,24 @@ export function createLiteApp(mode: EngineMode = 'lite') {
     app.use('*', cors({ origin: '*' }));
 
     // Auth
-    app.use('/api/webhook/*', apiKeyAuth);
 
     // ── Automation Routes ──────────────────────────────────────────────
+
+    // System key auth — management endpoints (M2M from FastAPI + management-scoped user keys)
+    app.use('/api/deploy/*', systemKeyAuth);
+    app.use('/api/execute/*', systemKeyAuth);
+    app.use('/api/update/*', systemKeyAuth);
+    app.use('/api/cache/*', systemKeyAuth);
+    app.use('/api/edge-logs/*', systemKeyAuth);
+    app.use('/api/manifest/*', systemKeyAuth);
+    app.use('/api/executions/*', systemKeyAuth);
+    app.use('/api/workflows/*', systemKeyAuth);
+    app.use('/api/queue/*', systemKeyAuth);
+    app.use('/api/config/*', systemKeyAuth);
+
+    // User API key auth — webhooks (unified with AI key system)
+    app.use('/api/webhook/*', userApiKeyAuth);
+
     app.route('/api/health', healthRoute);
     app.route('/api/manifest', manifestRoute);
     app.route('/api/deploy', deployRoute);
@@ -177,8 +197,11 @@ export function createLiteApp(mode: EngineMode = 'lite') {
     app.route('/api/update', updateRoute);
     app.route('/api/cache', cacheRoute);
     app.route('/api/edge-logs', edgeLogsRoute);
+    app.route('/api/workflows', workflowsRoute);
+    app.route('/api/queue', queueRoute);
+    app.route('/api/config', configRoute);
 
-    // OpenAI-compatible AI routes (secured by API key auth)
+    // OpenAI-compatible AI routes (secured by user API key auth)
     app.use('/v1/*', aiApiKeyAuth);
     app.route('/v1', openaiRoute);
 

@@ -139,6 +139,12 @@ export interface IStateProvider {
     getWorkflowById(id: string): Promise<WorkflowData | null>;
     /** Get an active webhook-triggered workflow by ID */
     getActiveWebhookWorkflow(id: string): Promise<WorkflowData | null>;
+    /** List all deployed workflows */
+    listWorkflows(): Promise<WorkflowData[]>;
+    /** Delete a workflow by ID */
+    deleteWorkflow(id: string): Promise<boolean>;
+    /** Toggle workflow active/inactive */
+    toggleWorkflow(id: string, isActive: boolean): Promise<void>;
 
     // --- Executions ---
     /** Create a new execution record */

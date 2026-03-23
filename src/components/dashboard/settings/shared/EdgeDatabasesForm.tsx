@@ -31,6 +31,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { AccountResourcePicker, DiscoveredResource } from './AccountResourcePicker';
 import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
 import { PROVIDER_ICONS, EDGE_DATABASE_PROVIDERS, ProviderBadge } from './edgeConstants';
+import { EdgeResourceRow } from './EdgeResourceRow';
 
 const API_BASE = '';
 
@@ -651,19 +652,20 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                     )}
                 </div>
                 <div className="space-y-3">
-                    {databases.map((db) => (
-                        <div key={db.id} className={`flex items-center justify-between p-3 rounded-lg border bg-card ${selectedIds.has(db.id) ? 'ring-1 ring-primary border-primary' : ''}`}>
-                            <div className="flex items-center gap-3">
-                                {!db.is_system ? (
-                                    <Checkbox
-                                        checked={selectedIds.has(db.id)}
-                                        onCheckedChange={() => toggleSelect(db.id)}
-                                    />
-                                ) : (
-                                    <div className="w-4 shrink-0" />
-                                )}
-                                <ProviderBadge provider={db.provider} label={DB_PROVIDER_OPTIONS.find(p => p.value === db.provider)?.label} />
-                                <span className="font-medium text-sm">{db.name}</span>
+                    {databases.map((db) => {
+                        const providerLabel = DB_PROVIDER_OPTIONS.find(p => p.value === db.provider)?.label;
+                        const Icon = PROVIDER_ICONS[db.provider] || Database;
+                        return (
+                        <EdgeResourceRow
+                            key={db.id}
+                            icon={<Icon className="w-5 h-5" />}
+                            name={db.name}
+                            subtitle={providerLabel}
+                            selectable={!db.is_system}
+                            selected={selectedIds.has(db.id)}
+                            onSelectChange={() => toggleSelect(db.id)}
+                            showSelectSpacer={db.is_system}
+                            badges={<>
                                 {db.is_default && !db.is_system && (
                                     <Badge variant="secondary" className="text-[10px] gap-1">
                                         <Star className="h-3 w-3" /> Default
@@ -674,8 +676,13 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                         <Shield className="h-3 w-3" /> System
                                     </Badge>
                                 )}
-                            </div>
-                            <div className="flex items-center gap-3">
+                                {db.has_token && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 gap-0.5 border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+                                        <Shield className="w-2.5 h-2.5" /> Encrypted
+                                    </Badge>
+                                )}
+                            </>}
+                            metadata={<>
                                 <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                                     Created {new Date(db.created_at).toLocaleDateString()}
                                 </span>
@@ -698,6 +705,8 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                         </Tooltip>
                                     </TooltipProvider>
                                 )}
+                            </>}
+                            actions={<>
                                 <Button
                                     variant="ghost" size="icon"
                                     onClick={() => handleTest(db.id)}
@@ -724,9 +733,10 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                         />
                                     </>
                                 )}
-                            </div>
-                        </div>
-                    ))}
+                            </>}
+                        />
+                        );
+                    })}
                 </div>
             </>
             )}

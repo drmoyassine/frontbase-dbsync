@@ -108,28 +108,28 @@
 
 ### Resilience & Status
  
-- [ ] 🔧 **Publish-state sync check** — On Settings save, compare backend vs edge DB rows, warn about drift.
+- [x] ~~🔧 **Publish-state sync check**~~ — ✅ `batch/sync-check` endpoint, `sync_status` field (`synced`/`stale`/`unknown`), `bundle_checksum` drift detection in `engine_serializer.py`.
 - [x] ~~**Skip redundant publishes (content hash)**~~ — ✅ Implemented via `page_hash.py`, Drizzle schema `content_hash` column, migration v3. Hash `layoutData + cssBundle`, skip writes if unchanged.
 - [ ] 🔧 **Edge DB quota guard** — Monitor row reads/writes (Turso/Neon), warn in UI, auto-fallback to local SQLite.
 - [ ] 🔧 **Cache quota guard** — Monitor commands/month (Upstash), reduce TTL or disable L2 cache gracefully.
 - [ ] 🔧 **Graceful provider downgrade** — Fall back to local SQLite/no-cache on edge DB/cache failure. Log and surface in status panel.
-- [ ] ✨ **Edge provider badge** — Show provider icon + name (e.g. "☁️ Turso", "🐘 Neon", "💾 Local SQLite") on published pages and resource cards.
+- [x] ~~**Edge provider badge**~~ — ✅ Show provider icon + name on resource cards. Implemented via `EdgeResourceRow` + `PROVIDER_ICONS` + `ProviderBadge` in `edgeConstants.tsx`.
 - [ ] ✨ **Live status panel** — Settings widget showing edge DB/cache/queue quotas, connection status, hit rate.
 - [ ] ✨ **Provider switch confirmation** — Confirmation dialog when changing edge DB/cache/queue provider.
 
 ### Deployment & Adapters
-- [ ] 🔌 **Postgres Edge State Provider** — `NeonEdgeProvider` + `SupabaseEdgeProvider` implementing `IStateProvider`. Dialect-aware migration runner (SQLite vs Postgres syntax). `_frontbase` schema isolation.
-- [ ] ✨ **Capability-driven resource forms** — Derive DB/Cache/Queue provider options from `PROVIDER_CONFIGS` capabilities metadata instead of hardcoding. Show capability badges in connect dialogs.
+- [x] ~~🔌 **Postgres Edge State Provider**~~ — ✅ `NeonHttpProvider` + `SupabaseRestProvider` + `CfD1HttpProvider` implementing `IStateProvider`. Dialect-aware PG migrations with `frontbase_edge` schema isolation. Provider factory dispatch in `storage/index.ts`.
+- [ ] ✨ **Capability-driven resource forms** — Derive DB/Cache/Queue provider options from `PROVIDER_CONFIGS` capabilities metadata instead of hardcoding. `EDGE_*_PROVIDERS` arrays exist in `edgeConstants.tsx` but forms still use local `PROVIDER_OPTIONS`. Show capability badges in connect dialogs.
 - [ ] ✨ **Local Data Proxy (Hybrid Edge)** — Connect Edge workers to local/private infra via `serverless-redis-http` or Cloudflare Tunnels.
-- [ ] 🔌 **One-Click Integrations** — Auto-create resources via provider management APIs (Upstash Redis, Neon projects, etc.).
+- [x] ~~🔌 **One-Click Integrations**~~ — ✅ Auto-create resources via `AccountResourcePicker` + `POST /api/edge-providers/create-resource-by-account/`. Supports Upstash Redis, CF D1/KV/Queues, Turso DBs.
 - [ ] ✨ **Multi-Provider Load Balancing** — DNS-level weighted routing across CF + Vercel + Netlify.
 - [ ] 🔧 **Extract Shared Edge Core** — Refactor into `shared/edge-core.ts` + thin adapter wrappers per provider.
-- [ ] ✨ **Edge `/api/config` Endpoint** — Receive settings updates without redeploying the Worker.
+- [x] ~~✨ **Edge `/api/config` Endpoint**~~ — ✅ `routes/config.ts`: GET current config (redacted), POST hot-reload cache/queue. Registered in `lite.ts` with `systemKeyAuth`.
 - [x] ~~**Edge CORS Origin Configuration**~~ — ✅ Implemented in `engine/lite.ts` CORS middleware.
-- [ ] 🔧 **Edge Request Logging** — Structured logs with timestamp, slug, response time, cache hit/miss.
-- [ ] ✨ **Engine Type Selector in Deploy Dialog** — Full vs Lite bundle type picker when deploying to a new engine.
-- [ ] 🔧 **Git Tree Hash for CI/CD Staleness Detection** — Use `git rev-parse HEAD:services/edge` as an alternative source hash for CI/CD pipelines where all changes are committed. Faster than direct file hashing, ignores `.gitignore`d files. Complements the current direct file hash approach which is better for local dev (detects uncommitted changes).
-- [ ] 🔧 **`build_worker()` mocked integration tests** — Mock the CF API and Docker update endpoint, verify `engine_deploy.py` orchestration logic handles error paths (partial deploy failures, timeout, secret injection failures). Estimated: 5–8 tests.
+- [x] ~~🔧 **Edge Request Logging**~~ — ✅ `edge-logs.ts` route: `POST /api/edge-logs` (bulk insert), `GET /api/edge-logs` (paginated read with level filter).
+- [x] ~~✨ **Engine Type Selector in Deploy Dialog**~~ — ✅ Full Bundle toggle exists in the Deploy Engine Wizard.
+- [x] ~~🔧 **Source Hash Staleness Detection**~~ — ✅ `get_source_hash()` in `bundle.py` hashes all `.ts` files in `services/edge/src/` for drift detection. Used by `engine_serializer.py` for `sync_status` comparison and `engine_deploy.py` for build caching.
+- [x] ~~🔧 **`build_worker()` mocked integration tests**~~ — ✅ `test_engine_deploy.py`: 29 tests covering CF/Docker/Vercel deploy, GPU bindings, cache flush, provider routing, partial failures, tsup configs.
 
 ### Inspector & DX
 - [x] ~~**Edge Inspector Dialog**~~ — ✅ Provider-agnostic inspector with split-pane layout: files + secrets + bindings (left), Monaco Editor (right). Source snapshot from backend DB.
@@ -172,6 +172,32 @@
 ---
 
 ## ✅ Completed
+
+### 2026-03-23 — Edge Management API & DRY Refactor
+- [x] `DrizzleStateProvider` base class — deduplicated ~280 lines across LocalSqlite + Turso providers
+- [x] 4 new edge routes: `/api/workflows`, `/api/manage`, `/api/queue`, `/api/config` (all systemKeyAuth)
+- [x] `IStateProvider` extended: `listWorkflows()`, `deleteWorkflow()`, `toggleWorkflow()` — all 5 providers
+- [x] Edge `/api/config` endpoint — hot-reload cache/queue without redeploying
+- [x] Source hash staleness detection — `get_source_hash()` + `sync_status` drift comparison
+- [x] `test_engine_deploy.py` — 29 mocked integration tests
+
+### 2026-03-23 — Edge Resources UI & UX
+- [x] `EdgeResourceRow` shared component — icon box, subtitle, badges, metadata, actions
+- [x] All 4 resource tabs unified (Compute, Database, Caching, Queues)
+- [x] Provider icons + labels centralized (`PROVIDER_ICONS`, `ENGINE_PROVIDER_LABELS`, `ProviderBadge`)
+- [x] Fixed `AccountResourcePicker` auto-select hiding "Create New" option
+- [x] Fixed provider cache invalidation — `queryClient.invalidateQueries` replaces `refetch()` across all resource modals
+- [x] Health endpoint `?key=` parameter support
+- [x] `test_edge_auth.py` — 8 pytest tests for API key auth middleware
+
+### 2026-03-14–16 — Engine Auth & Provider Discovery
+- [x] `aiApiKeyAuth` middleware fixed for `FRONTBASE_API_KEY_HASHES`
+- [x] Auto-redeploy engines on API key CRUD (CF patch + full redeploy for others)
+- [x] Provider discovery refactor — registry pattern dispatch
+- [x] Supabase pooler URI connection fix
+- [x] Postgres Edge State Provider — `NeonHttpProvider`, `SupabaseRestProvider`, `CfD1HttpProvider` with `frontbase_edge` schema isolation
+- [x] Edge request logging — `edge-logs.ts` route (POST bulk insert, GET paginated read)
+- [x] Publish-state sync check — `batch/sync-check` endpoint, `sync_status`/`bundle_checksum` drift detection
 
 ### 2026-03-07 — Inspector IDE & Test Fixes
 - [x] Source snapshot storage (`source_snapshot` column + `capture_source_snapshot()` + `GET /source` endpoint)

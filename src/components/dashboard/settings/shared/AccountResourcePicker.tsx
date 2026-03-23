@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -99,7 +100,8 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
     resourceLabel,
     hideConnectDisplayName,
 }) => {
-    const { data: allProviders = [], refetch: refetchProviders } = useEdgeProviders();
+    const { data: allProviders = [] } = useEdgeProviders();
+    const queryClient = useQueryClient();
     const [selectedAccount, setSelectedAccount] = useState<string>(selectedAccountId || '');
     const [resources, setResources] = useState<DiscoveredResource[]>([]);
     const [selectedResourceId, setSelectedResourceId] = useState<string>('');
@@ -286,7 +288,7 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
                     onOpenChange={setShowConnectDialog}
                     hideDisplayName={hideConnectDisplayName}
                     onConnected={async (newAccountId) => {
-                        await refetchProviders();
+                        await queryClient.invalidateQueries({ queryKey: ['edge-providers'] });
                         setSelectedAccount(newAccountId);
                         // Force re-discover even if account ID is the same (Turso adds DB to existing account)
                         discoverResources(newAccountId);
@@ -358,8 +360,10 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
                         const available = resources.filter(r => !isAlreadyImported(r));
                         const autoSelected = available.length === 1 && selectedResourceId === available[0].id;
 
-                        // Hide dropdown entirely when auto-selected with single resource
-                        if (autoSelected) {
+                        // Auto-select shortcut: hide dropdown when exactly 1 resource is available
+                        // BUT only when creation is not possible — if createResourceType is set,
+                        // always show dropdown so users can access "+ Create New".
+                        if (autoSelected && !createResourceType) {
                             const r = available[0];
                             return (
                                 <div className="flex items-center gap-2 py-1.5 px-3 rounded-md bg-muted/50 border text-sm">
@@ -441,7 +445,7 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
                 onOpenChange={setShowConnectDialog}
                 hideDisplayName={hideConnectDisplayName}
                 onConnected={async (newAccountId) => {
-                    await refetchProviders();
+                    await queryClient.invalidateQueries({ queryKey: ['edge-providers'] });
                     setSelectedAccount(newAccountId);
                     // Force re-discover even if account ID is the same
                     discoverResources(newAccountId);

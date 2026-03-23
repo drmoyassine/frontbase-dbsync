@@ -24,6 +24,7 @@ import { DeployEngineWizard } from './DeployEngineWizard';
 import { FetchEnginesDialog } from './FetchEnginesDialog';
 import { AITestDialog } from './AITestDialog';
 import { EdgeEndpointDialog } from './EdgeEndpointDialog';
+import { EdgeResourceRow } from './EdgeResourceRow';
 import { toast } from 'sonner';
 
 
@@ -225,70 +226,46 @@ export function EdgeEnginesSection() {
                                     const providerName = providers.find(p => p.id === engine.edge_provider_id)?.name || engine.provider;
                                     const isSelected = selectedIds.has(engine.id);
                                     const engineUrl = engine.url?.startsWith('http') ? engine.url : `https://${engine.url}`;
+                                    const Icon = engine.provider ? (PROVIDER_ICONS[engine.provider] || Server) : Server;
                                     return (
-                                        <div key={engine.id} className={`flex items-start justify-between p-4 border rounded-lg bg-card hover:border-border transition-colors ${isSelected ? 'ring-1 ring-primary border-primary' : ''}`}>
-                                            <div className="flex items-start gap-3 flex-1 min-w-0">
-                                                {/* Checkbox spacer for alignment */}
-                                                {!engine.is_system ? (
-                                                    <Checkbox
-                                                        checked={isSelected}
-                                                        onCheckedChange={() => toggleSelect(engine.id)}
-                                                        className="mt-1"
-                                                    />
-                                                ) : (
-                                                    <div className="w-4 shrink-0" />
+                                        <EdgeResourceRow
+                                            key={engine.id}
+                                            icon={<Icon className="w-5 h-5" />}
+                                            name={engine.name}
+                                            subtitle={engine.provider ? (ENGINE_PROVIDER_LABELS[engine.provider] || engine.provider) : undefined}
+                                            selectable={!engine.is_system}
+                                            selected={isSelected}
+                                            onSelectChange={() => toggleSelect(engine.id)}
+                                            showSelectSpacer={engine.is_system}
+                                            badges={<>
+                                                {!engine.is_active && (
+                                                    <Badge variant="secondary" className="text-[10px] h-5 py-0 bg-muted text-muted-foreground">Paused</Badge>
                                                 )}
-                                                <div className="space-y-1 flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        {engine.provider && (
-                                                            <ProviderBadge provider={engine.provider} label={ENGINE_PROVIDER_LABELS[engine.provider]} />
-                                                        )}
-                                                        <h4 className="font-medium text-sm">{engine.name}</h4>
-                                                        {!engine.is_active && (
-                                                            <Badge variant="secondary" className="text-[10px] h-5 py-0 bg-muted text-muted-foreground">Paused</Badge>
-                                                        )}
-                                                        {engine.adapter_type && (
-                                                            <EdgeEndpointDialog engineName={engine.name} engineUrl={engine.url} engineId={engine.id} trigger={
-                                                                <button className="inline-flex items-center no-underline" title="Edge Endpoint Details">
-                                                                    <Badge variant="outline" className="text-[10px] h-5 py-0 cursor-pointer hover:opacity-80 transition-opacity bg-blue-500/5 border-blue-500/20 text-blue-400">
-                                                                        <Cpu className="w-3 h-3 mr-1" />
-                                                                        {engine.adapter_type === 'full' ? 'Full' : 'Lite'} Bundle
-                                                                    </Badge>
-                                                                </button>
-                                                            } />
-                                                        )}
-                                                        {engine.gpu_models && engine.gpu_models.length > 0 && (
-                                                            <AITestDialog gpuModels={engine.gpu_models} trigger={
-                                                                <button className="inline-flex items-center no-underline" title="AI Endpoint Details">
-                                                                    <Badge variant="outline" className="text-[10px] h-5 py-0 cursor-pointer hover:opacity-80 transition-opacity bg-purple-500/5 border-purple-500/20 text-purple-400">
-                                                                        <Brain className="w-3 h-3 mr-1" />
-                                                                        {engine.gpu_models.length === 1
-                                                                            ? engine.gpu_models[0].name
-                                                                            : `${engine.gpu_models.length} AI Models`
-                                                                        }
-                                                                    </Badge>
-                                                                </button>
-                                                            } />
-                                                        )}
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                                        <span className="text-sm text-muted-foreground font-medium">Bindings:</span>
-                                                        <Badge variant="outline" className="text-[10px] h-5 py-0 bg-muted/50 border-border text-muted-foreground">
-                                                            DB: {engine.edge_db_name || 'None'}
-                                                        </Badge>
-                                                        <Badge variant="outline" className="text-[10px] h-5 py-0 bg-muted/50 border-border text-muted-foreground">
-                                                            Cache: {engine.edge_cache_name || 'None'}
-                                                        </Badge>
-                                                        <Badge variant="outline" className="text-[10px] h-5 py-0 bg-muted/50 border-border text-muted-foreground">
-                                                            Queue: {engine.edge_queue_name || 'None'}
-                                                        </Badge>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Right column: status + actions */}
-                                            <div className="flex flex-col items-end gap-2 shrink-0 ml-4">
-                                                {/* Status row: synced/stale/outdated + deployed time */}
+                                                {engine.adapter_type && (
+                                                    <EdgeEndpointDialog engineName={engine.name} engineUrl={engine.url} engineId={engine.id} trigger={
+                                                        <button className="inline-flex items-center no-underline" title="Edge Endpoint Details">
+                                                            <Badge variant="outline" className="text-[10px] h-5 py-0 cursor-pointer hover:opacity-80 transition-opacity bg-blue-500/5 border-blue-500/20 text-blue-400">
+                                                                <Cpu className="w-3 h-3 mr-1" />
+                                                                {engine.adapter_type === 'full' ? 'Full' : 'Lite'} Bundle
+                                                            </Badge>
+                                                        </button>
+                                                    } />
+                                                )}
+                                                {engine.gpu_models && engine.gpu_models.length > 0 && (
+                                                    <AITestDialog gpuModels={engine.gpu_models} trigger={
+                                                        <button className="inline-flex items-center no-underline" title="AI Endpoint Details">
+                                                            <Badge variant="outline" className="text-[10px] h-5 py-0 cursor-pointer hover:opacity-80 transition-opacity bg-purple-500/5 border-purple-500/20 text-purple-400">
+                                                                <Brain className="w-3 h-3 mr-1" />
+                                                                {engine.gpu_models.length === 1
+                                                                    ? engine.gpu_models[0].name
+                                                                    : `${engine.gpu_models.length} AI Models`
+                                                                }
+                                                            </Badge>
+                                                        </button>
+                                                    } />
+                                                )}
+                                            </>}
+                                            metadata={
                                                 <div className="flex items-center gap-1.5 text-[10px]">
                                                     {engine.sync_status === 'synced' && (
                                                         <Badge variant="outline" className="text-[10px] h-5 py-0 bg-green-500/5 border-green-500/20 text-green-400">✓ Synced</Badge>
@@ -303,56 +280,67 @@ export function EdgeEnginesSection() {
                                                         <span className="text-muted-foreground whitespace-nowrap">Deployed {timeAgo(engine.last_deployed_at)}</span>
                                                     )}
                                                 </div>
-                                                {/* Actions */}
-                                                <div className="flex items-center gap-1.5">
-                                                    {/* Engine actions */}
-                                                    <div className="flex items-center space-x-2 mr-1">
-                                                        <Switch
-                                                            title={engine.is_active ? "Pause Engine" : "Activate Engine"}
-                                                            id={`active-${engine.id}`}
-                                                            checked={engine.is_active}
-                                                            onCheckedChange={() => handleToggle(engine)}
-                                                        />
-
-                                                        {!engine.is_system && (
-                                                            <>
-                                                                <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    title="Redeploy with latest code"
-                                                                    disabled={redeployingId === engine.id}
-                                                                    onClick={async () => {
-                                                                        setRedeployingId(engine.id);
-                                                                        try {
-                                                                            await edgeInfrastructureApi.redeployEngine(engine.id);
-                                                                            await refetchEngines();
-                                                                        } catch (e: any) {
-                                                                            setError(e.message);
-                                                                        } finally {
-                                                                            setRedeployingId(null);
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    {redeployingId === engine.id
-                                                                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                                                                        : <Upload className={`h-4 w-4 ${engine.is_outdated ? 'text-orange-400' : 'text-muted-foreground'}`} />
+                                            }
+                                            actions={
+                                                <div className="flex items-center space-x-2">
+                                                    <Switch
+                                                        title={engine.is_active ? "Pause Engine" : "Activate Engine"}
+                                                        id={`active-${engine.id}`}
+                                                        checked={engine.is_active}
+                                                        onCheckedChange={() => handleToggle(engine)}
+                                                    />
+                                                    {!engine.is_system && (
+                                                        <>
+                                                            <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                title="Redeploy with latest code"
+                                                                disabled={redeployingId === engine.id}
+                                                                onClick={async () => {
+                                                                    setRedeployingId(engine.id);
+                                                                    try {
+                                                                        await edgeInfrastructureApi.redeployEngine(engine.id);
+                                                                        await refetchEngines();
+                                                                    } catch (e: any) {
+                                                                        setError(e.message);
+                                                                    } finally {
+                                                                        setRedeployingId(null);
                                                                     }
-                                                                </Button>
-                                                                <ReconfigureEngineDialog engine={engine} />
-                                                                <DeleteResourceDialog
-                                                                    resourceName={engine.name}
-                                                                    resourceTypeLabel="engine"
-                                                                    provider={engine.provider || ''}
-                                                                    supportsRemoteDelete={!!engine.provider && engine.provider !== 'unknown'}
-                                                                    onDelete={(deleteRemote) => handleDelete(engine, deleteRemote)}
-                                                                />
-                                                            </>
-                                                        )}
-                                                    </div>
+                                                                }}
+                                                            >
+                                                                {redeployingId === engine.id
+                                                                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                                                                    : <Upload className={`h-4 w-4 ${engine.is_outdated ? 'text-orange-400' : 'text-muted-foreground'}`} />
+                                                                }
+                                                            </Button>
+                                                            <ReconfigureEngineDialog engine={engine} />
+                                                            <DeleteResourceDialog
+                                                                resourceName={engine.name}
+                                                                resourceTypeLabel="engine"
+                                                                provider={engine.provider || ''}
+                                                                supportsRemoteDelete={!!engine.provider && engine.provider !== 'unknown'}
+                                                                onDelete={(deleteRemote) => handleDelete(engine, deleteRemote)}
+                                                            />
+                                                        </>
+                                                    )}
                                                 </div>
+                                            }
+                                        >
+                                            {/* Bindings row */}
+                                            <div className="flex items-center gap-1.5 flex-wrap px-4 pb-3 -mt-1">
+                                                <span className="text-sm text-muted-foreground font-medium ml-[calc(1rem+0.75rem+2.5rem+0.75rem)]">Bindings:</span>
+                                                <Badge variant="outline" className="text-[10px] h-5 py-0 bg-muted/50 border-border text-muted-foreground">
+                                                    DB: {engine.edge_db_name || 'None'}
+                                                </Badge>
+                                                <Badge variant="outline" className="text-[10px] h-5 py-0 bg-muted/50 border-border text-muted-foreground">
+                                                    Cache: {engine.edge_cache_name || 'None'}
+                                                </Badge>
+                                                <Badge variant="outline" className="text-[10px] h-5 py-0 bg-muted/50 border-border text-muted-foreground">
+                                                    Queue: {engine.edge_queue_name || 'None'}
+                                                </Badge>
                                             </div>
-                                        </div>
+                                        </EdgeResourceRow>
                                     );
                                 })}
                             </div>

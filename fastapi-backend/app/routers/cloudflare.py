@@ -183,6 +183,10 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
                 "worker_name": payload.worker_name,
                 "secret_names": list(secrets.keys()),
             })
+            # Inject system key for M2M auth
+            from ..services.edge_client import inject_system_key
+            engine_cfg = inject_system_key(engine_cfg)
+
             deployed_at = datetime.utcnow().isoformat() + "Z"
 
             if existing:
@@ -191,6 +195,16 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
                 existing.edge_db_id = edge_db_id  # type: ignore[assignment]
                 existing.edge_cache_id = edge_cache_id  # type: ignore[assignment]
                 existing.edge_queue_id = edge_queue_id  # type: ignore[assignment]
+                # Preserve existing system key if present
+                if str(existing.engine_config or ''):
+                    try:
+                        old_cfg = json.loads(str(existing.engine_config))
+                        new_cfg = json.loads(engine_cfg)
+                        if 'system_key' in old_cfg and 'system_key' not in new_cfg:
+                            new_cfg['system_key'] = old_cfg['system_key']
+                        engine_cfg = json.dumps(new_cfg)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
                 existing.engine_config = engine_cfg  # type: ignore[assignment]
                 existing.bundle_checksum = source_hash  # type: ignore[assignment]
                 existing.last_deployed_at = deployed_at  # type: ignore[assignment]

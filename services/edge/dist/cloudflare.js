@@ -37367,6 +37367,145 @@ var init_redis = __esm({
   }
 });
 
+// src/cache/DenoKvProvider.ts
+var DenoKvProvider_exports = {};
+__export(DenoKvProvider_exports, {
+  DenoKvProvider: () => DenoKvProvider
+});
+var DenoKvProvider;
+var init_DenoKvProvider = __esm({
+  "src/cache/DenoKvProvider.ts"() {
+    DenoKvProvider = class {
+      kvPromise;
+      constructor() {
+        this.kvPromise = Deno.openKv();
+      }
+      toKey(key) {
+        return ["frontbase", "cache", key];
+      }
+      async get(key) {
+        const kv = await this.kvPromise;
+        const result = await kv.get(this.toKey(key));
+        if (result.value === null) return null;
+        try {
+          return JSON.parse(result.value);
+        } catch {
+          return result.value;
+        }
+      }
+      async set(key, value) {
+        const kv = await this.kvPromise;
+        await kv.set(this.toKey(key), value);
+      }
+      async setex(key, seconds, value) {
+        const kv = await this.kvPromise;
+        await kv.set(this.toKey(key), value, { expireIn: seconds * 1e3 });
+      }
+      async del(...keys) {
+        const kv = await this.kvPromise;
+        let count = 0;
+        for (const key of keys) {
+          await kv.delete(this.toKey(key));
+          count++;
+        }
+        return count;
+      }
+      async keys(pattern) {
+        const kv = await this.kvPromise;
+        const results = [];
+        const prefix = pattern.replace(/\*.*$/, "");
+        for await (const entry of kv.list({ prefix: ["frontbase", "cache", ...prefix ? [prefix] : []] })) {
+          const keyParts = entry.key;
+          if (keyParts.length >= 3) {
+            results.push(keyParts.slice(2).join(":"));
+          }
+        }
+        return results;
+      }
+      async ping() {
+        await this.kvPromise;
+        return "PONG";
+      }
+      // ── Queue operations (list-based, using KV sorted keys) ──────────
+      async lpush(key, ...elements) {
+        const kv = await this.kvPromise;
+        const listKey = ["frontbase", "queue", key];
+        for (const el of elements) {
+          const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+          await kv.set([...listKey, id], el);
+        }
+        return elements.length;
+      }
+      async rpop(key) {
+        const kv = await this.kvPromise;
+        const listKey = ["frontbase", "queue", key];
+        let oldest = null;
+        for await (const entry of kv.list({ prefix: listKey })) {
+          oldest = entry;
+          break;
+        }
+        if (!oldest) return null;
+        await kv.delete(oldest.key);
+        return oldest.value;
+      }
+      async llen(key) {
+        const kv = await this.kvPromise;
+        const listKey = ["frontbase", "queue", key];
+        let count = 0;
+        for await (const _ of kv.list({ prefix: listKey })) {
+          count++;
+        }
+        return count;
+      }
+      // ── Rate limiting ────────────────────────────────────────────────
+      async incr(key) {
+        const kv = await this.kvPromise;
+        const k = this.toKey(key);
+        const current = await kv.get(k);
+        const newVal = (current.value ?? 0) + 1;
+        await kv.set(k, newVal);
+        return newVal;
+      }
+      async decr(key) {
+        const kv = await this.kvPromise;
+        const k = this.toKey(key);
+        const current = await kv.get(k);
+        const newVal = (current.value ?? 0) - 1;
+        await kv.set(k, newVal);
+        return newVal;
+      }
+      async expire(key, seconds) {
+        const kv = await this.kvPromise;
+        const k = this.toKey(key);
+        const current = await kv.get(k);
+        if (current.value === null) return 0;
+        await kv.set(k, current.value, { expireIn: seconds * 1e3 });
+        return 1;
+      }
+      // ── Sorted set (priority queue) ──────────────────────────────────
+      async zadd(key, score, member) {
+        const kv = await this.kvPromise;
+        const zKey = ["frontbase", "zset", key, score.toString().padStart(15, "0"), member];
+        await kv.set(zKey, member);
+        return 1;
+      }
+      async zpopmax(key) {
+        const kv = await this.kvPromise;
+        const prefix = ["frontbase", "zset", key];
+        let last2 = null;
+        for await (const entry of kv.list({ prefix })) {
+          last2 = entry;
+        }
+        if (!last2) return null;
+        await kv.delete(last2.key);
+        const keyParts = last2.key;
+        const score = parseFloat(keyParts[keyParts.length - 2]);
+        return { member: last2.value, score };
+      }
+    };
+  }
+});
+
 // src/cache/CfKvHttpProvider.ts
 var CfKvHttpProvider_exports = {};
 __export(CfKvHttpProvider_exports, {
@@ -37551,6 +37690,16 @@ async function createInitialProvider2() {
   const cacheUrl = process.env.FRONTBASE_CACHE_URL;
   const cacheToken = process.env.FRONTBASE_CACHE_TOKEN;
   const cacheProvider2 = process.env.FRONTBASE_CACHE_PROVIDER?.toLowerCase();
+  if (cacheProvider2 === "deno_kv") {
+    try {
+      const { DenoKvProvider: DenoKvProvider2 } = (init_DenoKvProvider(), __toCommonJS(DenoKvProvider_exports));
+      console.log("\u{1F995} Cache: DenoKvProvider (Deno.openKv)");
+      return new DenoKvProvider2();
+    } catch (e) {
+      console.warn(`\u26A0\uFE0F Failed to init Deno KV cache adapter: ${e.message}`);
+      return new NullCacheProvider();
+    }
+  }
   if (cacheProvider2 === "cloudflare" || cacheProvider2 === "cloudflare_kv") {
     try {
       const { CfKvHttpProvider: CfKvHttpProvider2 } = (init_CfKvHttpProvider(), __toCommonJS(CfKvHttpProvider_exports));
@@ -64051,6 +64200,23 @@ var route = createRoute({
   }
 });
 healthRoute.openapi(route, async (c) => {
+  const systemKey = process.env.FRONTBASE_SYSTEM_KEY;
+  const provided = c.req.header("x-system-key");
+  const isAuthenticated = !systemKey || provided === systemKey;
+  if (!isAuthenticated) {
+    return c.json({
+      status: "ok",
+      service: "frontbase-edge",
+      version: "0.1.0",
+      provider: getPlatform(),
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      bindings: {
+        stateDb: { provider: "hidden", status: "ok" },
+        cache: { provider: "hidden", status: "ok" },
+        queue: { provider: "hidden", status: "ok" }
+      }
+    });
+  }
   const platform2 = getPlatform();
   const isServerless = platform2 !== "docker";
   const [stateDb, cache, queue] = await Promise.all([
@@ -66468,38 +66634,77 @@ new TextDecoder();
 ];
 
 // src/middleware/auth.ts
-var apiKeyAuth = async (c, next) => {
-  const validKeys = (process.env.API_KEYS || "").split(",").map((k) => k.trim()).filter(Boolean);
-  if (validKeys.length === 0) {
-    console.warn("\u26A0\uFE0F No API_KEYS configured - webhook auth disabled");
+function parseKeyHashes() {
+  const envHashes = process.env.FRONTBASE_API_KEY_HASHES;
+  if (!envHashes) return null;
+  try {
+    return JSON.parse(envHashes);
+  } catch {
+    console.error("[Auth] Failed to parse FRONTBASE_API_KEY_HASHES");
+    return null;
+  }
+}
+function extractBearerToken(c) {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  return authHeader.slice(7).trim();
+}
+async function sha2562(input) {
+  const data = new TextEncoder().encode(input);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b2) => b2.toString(16).padStart(2, "0")).join("");
+}
+async function validateApiKey(token, allowedScopes) {
+  const keyEntries = parseKeyHashes();
+  if (!keyEntries || keyEntries.length === 0) return null;
+  const tokenHash = await sha2562(token);
+  const matched = keyEntries.find((k) => k.hash === tokenHash);
+  if (!matched) return null;
+  const keyScope = matched.scope || "user";
+  if (!allowedScopes.includes(keyScope) && keyScope !== "all") {
+    return null;
+  }
+  if (matched.expires_at) {
+    if (new Date(matched.expires_at) < /* @__PURE__ */ new Date()) return null;
+  }
+  return matched;
+}
+var systemKeyAuth = async (c, next) => {
+  const systemKey = process.env.FRONTBASE_SYSTEM_KEY;
+  if (!systemKey) {
     return next();
   }
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return c.json({ error: "Unauthorized", message: "Missing or invalid Authorization header" }, 401);
+  const sysHeader = c.req.header("x-system-key");
+  if (sysHeader && sysHeader === systemKey) {
+    return next();
   }
-  const token = authHeader.slice(7).trim();
-  if (!validKeys.includes(token)) {
-    return c.json({ error: "Unauthorized", message: "Invalid API key" }, 401);
+  const bearerToken = extractBearerToken(c);
+  if (bearerToken) {
+    const matched = await validateApiKey(bearerToken, ["management", "all"]);
+    if (matched) return next();
   }
-  return next();
+  return c.json({
+    error: {
+      message: "Unauthorized. Provide x-system-key header or a management-scoped API key.",
+      type: "invalid_request_error",
+      code: "unauthorized"
+    }
+  }, 401);
 };
-var aiApiKeyAuth = async (c, next) => {
+var userApiKeyAuth = async (c, next) => {
   const envHashes = process.env.FRONTBASE_API_KEY_HASHES;
   if (!envHashes) {
     return c.json({
       error: {
-        message: "AI endpoints are not configured. No API keys have been deployed to this engine.",
+        message: "No API keys configured for this engine.",
         type: "invalid_request_error",
         code: "no_api_keys_configured"
       }
     }, 403);
   }
-  let keyEntries;
-  try {
-    keyEntries = JSON.parse(envHashes);
-  } catch {
-    console.error("[AI Auth] Failed to parse FRONTBASE_API_KEY_HASHES");
+  const keyEntries = parseKeyHashes();
+  if (!keyEntries) {
     return c.json({
       error: {
         message: "API key configuration error. Contact administrator.",
@@ -66517,8 +66722,8 @@ var aiApiKeyAuth = async (c, next) => {
       }
     }, 403);
   }
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  const token = extractBearerToken(c);
+  if (!token) {
     return c.json({
       error: {
         message: "Missing or invalid Authorization header. Use: Authorization: Bearer <api_key>",
@@ -66527,43 +66732,57 @@ var aiApiKeyAuth = async (c, next) => {
       }
     }, 401);
   }
-  const token = authHeader.slice(7).trim();
-  const encoder = new TextEncoder();
-  const data = encoder.encode(token);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const tokenHash = hashArray.map((b2) => b2.toString(16).padStart(2, "0")).join("");
-  const matchedKey = keyEntries.find((k) => k.hash === tokenHash);
-  if (!matchedKey) {
+  const matched = await validateApiKey(token, ["user", "all"]);
+  if (!matched) {
     return c.json({
       error: {
-        message: "Invalid API key.",
+        message: "Invalid API key or insufficient scope.",
         type: "invalid_request_error",
         code: "invalid_api_key"
       }
     }, 401);
   }
-  if (matchedKey.expires_at) {
-    const expiresAt2 = new Date(matchedKey.expires_at);
-    if (expiresAt2 < /* @__PURE__ */ new Date()) {
-      return c.json({
-        error: {
-          message: "API key has expired.",
-          type: "invalid_request_error",
-          code: "expired_api_key"
-        }
-      }, 401);
-    }
-  }
   return next();
 };
+var aiApiKeyAuth = userApiKeyAuth;
 
 // src/engine/lite.ts
 new Liquid({
   strictVariables: false,
   strictFilters: false
 });
-function createLiteApp() {
+var ENGINE_PROFILES = {
+  lite: {
+    description: "Self-sufficient edge runtime for workflow automation, webhooks, and AI inference.",
+    techStack: "Hono \xB7 Drizzle ORM \xB7 LiquidJS \xB7 Zod",
+    badge: "Lite Engine",
+    tags: [
+      { name: "System", description: "Health checks, manifest, and self-update" },
+      { name: "Workflows", description: "Deploy, list, and manage published workflows" },
+      { name: "Execution", description: "Execute workflows and inspect runs" },
+      { name: "Webhooks", description: "Trigger workflows via incoming webhooks" },
+      { name: "Cache", description: "Redis/Upstash cache management \u2014 test connection, invalidate keys, flush, and stats" },
+      { name: "AI", description: "OpenAI-compatible inference (GPU models required)" }
+    ]
+  },
+  full: {
+    description: "Self-sufficient edge runtime for SSR pages, workflow automation, data proxy, webhooks, and AI inference.",
+    techStack: "Hono \xB7 React \xB7 Drizzle ORM \xB7 LiquidJS \xB7 Zod",
+    badge: "Full Engine",
+    tags: [
+      { name: "System", description: "Health checks, manifest, and self-update" },
+      { name: "Pages", description: "Published page SSR and homepage rendering" },
+      { name: "Data", description: "Datasource proxy \u2014 fetches data from connected backends (Supabase, Neon, etc.)" },
+      { name: "Workflows", description: "Deploy, list, and manage published workflows" },
+      { name: "Execution", description: "Execute workflows and inspect runs" },
+      { name: "Webhooks", description: "Trigger workflows via incoming webhooks" },
+      { name: "Cache", description: "Redis/Upstash cache management \u2014 test connection, invalidate keys, flush, and stats" },
+      { name: "AI", description: "OpenAI-compatible inference (GPU models required)" }
+    ]
+  }
+};
+function createLiteApp(mode = "lite") {
+  const profile = ENGINE_PROFILES[mode];
   const app2 = new OpenAPIHono({
     defaultHook: (result, c) => {
       if (!result.success) {
@@ -66612,7 +66831,14 @@ function createLiteApp() {
   });
   app2.use("/api/*", cors({ origin: "*" }));
   app2.use("*", cors({ origin: "*" }));
-  app2.use("/api/webhook/*", apiKeyAuth);
+  app2.use("/api/deploy/*", systemKeyAuth);
+  app2.use("/api/execute/*", systemKeyAuth);
+  app2.use("/api/update/*", systemKeyAuth);
+  app2.use("/api/cache/*", systemKeyAuth);
+  app2.use("/api/edge-logs/*", systemKeyAuth);
+  app2.use("/api/manifest/*", systemKeyAuth);
+  app2.use("/api/executions/*", systemKeyAuth);
+  app2.use("/api/webhook/*", userApiKeyAuth);
   app2.route("/api/health", healthRoute);
   app2.route("/api/manifest", manifestRoute);
   app2.route("/api/deploy", deployRoute);
@@ -66631,9 +66857,9 @@ function createLiteApp() {
       title: "Frontbase Edge Engine",
       version: EDGE_VERSION,
       description: [
-        "Self-sufficient edge runtime for SSR pages, workflow automation, webhooks, and AI inference.",
+        profile.description,
         "",
-        "**Tech Stack:** Hono \xB7 Drizzle ORM \xB7 LiquidJS \xB7 Zod",
+        `**Tech Stack:** ${profile.techStack}`,
         "",
         "**Authentication:** Protected routes require an API key via the `x-api-key` header."
       ].join("\n")
@@ -66644,17 +66870,7 @@ function createLiteApp() {
         description: "Current server"
       }
     ],
-    tags: [
-      { name: "System", description: "Health checks, manifest, and self-update" },
-      { name: "Workflows", description: "Deploy, list, and manage published workflows" },
-      { name: "Execution", description: "Execute workflows and inspect runs" },
-      { name: "Webhooks", description: "Trigger workflows via incoming webhooks" },
-      { name: "Pages", description: "Published page management (Full engine only)" },
-      { name: "Data", description: "Datasource proxy \u2014 fetches data from connected backends (Supabase, Neon, etc.) for published pages (Full engine only)" },
-      { name: "Cache", description: "Redis/Upstash cache management \u2014 test connection, invalidate keys, flush, and stats" },
-      { name: "Queue", description: "QStash message queue management (coming soon)" },
-      { name: "AI", description: "OpenAI-compatible inference (GPU models required)" }
-    ],
+    tags: profile.tags,
     security: [{ ApiKeyAuth: [] }],
     components: {
       securitySchemes: {
@@ -66784,13 +67000,17 @@ function createLiteApp() {
 </head>
 <body>
     <div class="fb-header">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect width="24" height="24" rx="6" fill="#6366f1"/>
-            <path d="M7 8h10M7 12h7M7 16h4" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            <g transform="scale(0.7) translate(5.1 5.1)" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+                <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/>
+                <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/>
+                <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/>
+            </g>
         </svg>
         <h1>Frontbase Edge API</h1>
         <span class="badge badge-version">v${EDGE_VERSION}</span>
-        <span class="badge badge-engine">Edge Engine</span>
+        <span class="badge badge-engine">${profile.badge}</span>
     </div>
     <div id="swagger-ui"></div>
     <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
@@ -76459,7 +76679,7 @@ function generatePKCEVerifier() {
   crypto.getRandomValues(array2);
   return Array.from(array2, dec2hex).join("");
 }
-async function sha2562(randomString) {
+async function sha2563(randomString) {
   const encoder = new TextEncoder();
   const encodedData = encoder.encode(randomString);
   const hash = await crypto.subtle.digest("SHA-256", encodedData);
@@ -76472,7 +76692,7 @@ async function generatePKCEChallenge(verifier) {
     console.warn("WebCrypto API is not supported. Code challenge method will default to use plain instead of sha256.");
     return verifier;
   }
-  const hashed = await sha2562(verifier);
+  const hashed = await sha2563(verifier);
   return btoa(hashed).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 async function getCodeChallengeAndMethod(storage, storageKey, isPasswordRecovery = false) {
@@ -82351,7 +82571,9 @@ dataRoute.post("/clear-cache", async (c) => {
 });
 
 // src/engine/full.ts
-var app = createLiteApp();
+var app = createLiteApp("full");
+app.use("/api/import/*", systemKeyAuth);
+app.use("/api/data/*", systemKeyAuth);
 app.route("/api/import", importRoute);
 app.route("/api/data", dataRoute);
 app.route("", pagesRoute);

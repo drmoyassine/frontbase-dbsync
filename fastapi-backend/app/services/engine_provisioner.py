@@ -197,8 +197,8 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session) -> di
                 provider_account_id=payload.provider_id,
                 is_default=False,
                 is_system=True,  # System-managed, not user-deletable
-                created_at=now,
-                updated_at=now,
+                created_at=datetime.utcnow().isoformat(),
+                updated_at=datetime.utcnow().isoformat(),
             )
             db.add(kv_cache)
             db.commit()
@@ -213,7 +213,9 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session) -> di
 
     # --- Engine config (provider-specific key name) ---
     config_key = PROVIDER_CONFIG_KEY.get(provider_type, "worker_name")
-    engine_cfg = json.dumps({config_key: payload.worker_name})
+    # Inject system key for M2M auth
+    from ..services.edge_client import inject_system_key
+    engine_cfg = inject_system_key(json.dumps({config_key: payload.worker_name}))
 
     # --- Create or update engine record ---
     now = datetime.utcnow().isoformat()

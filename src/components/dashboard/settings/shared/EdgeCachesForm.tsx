@@ -21,18 +21,12 @@ import { DeleteResourceDialog, BulkDeleteResourceDialog } from './DeleteResource
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
 import { useQueryClient } from '@tanstack/react-query';
-import { EDGE_CACHE_PROVIDERS, ProviderBadge } from './edgeConstants';
+import { EDGE_CACHE_PROVIDERS, PROVIDER_ICONS, ProviderBadge } from './edgeConstants';
+import { EdgeResourceRow } from './EdgeResourceRow';
 
 interface EdgeCachesFormProps {
     withCard?: boolean;
 }
-
-
-const PROVIDER_ICONS: Record<string, React.ElementType> = {
-    upstash: Cloud,
-    redis: Server,
-    dragonfly: Server,
-};
 
 // Cache-specific icon
 const CacheIcon = ({ className }: { className?: string }) => (
@@ -138,19 +132,20 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
                     )}
                 </div>
                 <div className="space-y-3">
-                    {caches.map((cache) => (
-                        <div key={cache.id} className={`flex items-center justify-between p-4 border rounded-lg bg-card hover:border-primary/50 transition-colors ${selectedIds.has(cache.id) ? 'ring-1 ring-primary border-primary' : ''}`}>
-                            <div className="flex items-center gap-3">
-                                {!cache.is_system ? (
-                                    <Checkbox
-                                        checked={selectedIds.has(cache.id)}
-                                        onCheckedChange={() => toggleSelect(cache.id)}
-                                    />
-                                ) : (
-                                    <div className="w-4 shrink-0" />
-                                )}
-                                <ProviderBadge provider={cache.provider} label={EDGE_CACHE_PROVIDERS.find(p => p.value === cache.provider)?.label} />
-                                <h4 className="font-medium text-sm">{cache.name}</h4>
+                    {caches.map((cache) => {
+                        const providerLabel = EDGE_CACHE_PROVIDERS.find(p => p.value === cache.provider)?.label;
+                        const Icon = PROVIDER_ICONS[cache.provider] || CacheIcon;
+                        return (
+                        <EdgeResourceRow
+                            key={cache.id}
+                            icon={<Icon className="w-5 h-5" />}
+                            name={cache.name}
+                            subtitle={providerLabel}
+                            selectable={!cache.is_system}
+                            selected={selectedIds.has(cache.id)}
+                            onSelectChange={() => toggleSelect(cache.id)}
+                            showSelectSpacer={cache.is_system}
+                            badges={<>
                                 {cache.is_default && !cache.is_system && (
                                     <Badge variant="secondary" className="text-[10px] gap-1">
                                         <Star className="h-3 w-3" /> Default
@@ -161,8 +156,8 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
                                         <Shield className="h-3 w-3" /> System
                                     </Badge>
                                 )}
-                            </div>
-                            <div className="flex items-center gap-2">
+                            </>}
+                            metadata={<>
                                 <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                                     Created {new Date(cache.created_at).toLocaleDateString()}
                                 </span>
@@ -185,6 +180,8 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
                                         </Tooltip>
                                     </TooltipProvider>
                                 )}
+                            </>}
+                            actions={<>
                                 <Button
                                     variant="ghost" size="icon"
                                     onClick={() => handleTest(cache.id)}
@@ -211,9 +208,10 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
                                         />
                                     </>
                                 )}
-                            </div>
-                        </div>
-                    ))}
+                            </>}
+                        />
+                        );
+                    })}
                 </div>
                 </>
             )}

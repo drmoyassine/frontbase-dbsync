@@ -188,6 +188,7 @@ class EdgeAPIKey(Base):
     key_hash = Column(String(128), nullable=False, unique=True)  # SHA-256 of full key
     edge_engine_id = Column(String, ForeignKey('edge_engines.id'), nullable=True)  # null = all engines
     is_active = Column(Boolean, default=True)
+    scope = Column(String(20), nullable=False, default='user')  # user | management | all
     expires_at = Column(String, nullable=True)             # ISO datetime or null = never
     last_used_at = Column(String, nullable=True)
     created_at = Column(String, nullable=False)

@@ -36,6 +36,7 @@ FRONTBASE_BINDING_NAMES = frozenset([
     'FRONTBASE_CF_ACCOUNT_ID',
     # Auth
     'FRONTBASE_API_KEY_HASHES',
+    'FRONTBASE_SYSTEM_KEY',
     # GPU
     'FRONTBASE_GPU_MODELS',
 ])
@@ -78,6 +79,21 @@ def build_engine_secrets(
     from ..core.security import decrypt_field
     secrets: dict[str, str] = {}
 
+    # System Key — per-engine M2M auth key
+    if engine_id:
+        from ..models.models import EdgeEngine as _EdgeEngine
+        _engine = db.query(_EdgeEngine).filter(_EdgeEngine.id == engine_id).first()
+        if _engine and str(_engine.engine_config or ''):
+            try:
+                _cfg = json.loads(str(_engine.engine_config))
+                _encrypted_key = _cfg.get('system_key')
+                if _encrypted_key:
+                    _raw_key = decrypt_field(_encrypted_key)
+                    if _raw_key:
+                        secrets['FRONTBASE_SYSTEM_KEY'] = _raw_key
+            except (json.JSONDecodeError, TypeError):
+                pass
+
     # GPU Models — serialize model registry for the AI route
     if engine_id:
         from ..models.models import EdgeGPUModel
@@ -105,6 +121,7 @@ def build_engine_secrets(
             keys_data = [{
                 "prefix": str(k.prefix),
                 "hash": str(k.key_hash),
+                "scope": str(k.scope) if k.scope else 'user',  # type: ignore[truthy-bool]
                 "expires_at": str(k.expires_at) if k.expires_at else None,  # type: ignore[truthy-bool]
             } for k in api_keys]
             secrets['FRONTBASE_API_KEY_HASHES'] = json.dumps(keys_data)
@@ -162,12 +179,12 @@ def build_engine_secrets(
 
                 # Fallback: if no scoped token in provider_config, use the
                 # linked provider account's API token (CF-on-CF deploys)
-                if 'FRONTBASE_CF_API_TOKEN' not in secrets and edge_db.provider_account_id:
+                if 'FRONTBASE_CF_API_TOKEN' not in secrets and str(edge_db.provider_account_id or ''):
                     from ..models.models import EdgeProviderAccount
                     provider_acct = db.query(EdgeProviderAccount).filter(
                         EdgeProviderAccount.id == edge_db.provider_account_id
                     ).first()
-                    if provider_acct and provider_acct.provider_credentials:
+                    if provider_acct and str(provider_acct.provider_credentials or ''):
                         from ..core.security import decrypt_credentials
                         creds = decrypt_credentials(str(provider_acct.provider_credentials))
                         if creds.get('api_token'):
@@ -216,12 +233,12 @@ def build_engine_secrets(
                     secrets['FRONTBASE_CF_ACCOUNT_ID'] = cf_account
 
                 # Fallback: resolve from linked provider account
-                if 'FRONTBASE_CF_API_TOKEN' not in secrets and edge_cache.provider_account_id:
+                if 'FRONTBASE_CF_API_TOKEN' not in secrets and str(edge_cache.provider_account_id or ''):
                     from ..models.models import EdgeProviderAccount
                     provider_acct = db.query(EdgeProviderAccount).filter(
                         EdgeProviderAccount.id == edge_cache.provider_account_id
                     ).first()
-                    if provider_acct and provider_acct.provider_credentials:
+                    if provider_acct and str(provider_acct.provider_credentials or ''):
                         from ..core.security import decrypt_credentials
                         creds = decrypt_credentials(str(provider_acct.provider_credentials))
                         if creds.get('api_token'):
@@ -263,12 +280,12 @@ def build_engine_secrets(
                     secrets['FRONTBASE_CF_ACCOUNT_ID'] = cf_account
 
                 # Fallback: resolve from linked provider account
-                if 'FRONTBASE_CF_API_TOKEN' not in secrets and edge_queue.provider_account_id:
+                if 'FRONTBASE_CF_API_TOKEN' not in secrets and str(edge_queue.provider_account_id or ''):
                     from ..models.models import EdgeProviderAccount
                     provider_acct = db.query(EdgeProviderAccount).filter(
                         EdgeProviderAccount.id == edge_queue.provider_account_id
                     ).first()
-                    if provider_acct and provider_acct.provider_credentials:
+                    if provider_acct and str(provider_acct.provider_credentials or ''):
                         from ..core.security import decrypt_credentials
                         creds = decrypt_credentials(str(provider_acct.provider_credentials))
                         if creds.get('api_token'):

@@ -362,6 +362,34 @@ export class SupabaseRestProvider implements IStateProvider {
         };
     }
 
+    async listWorkflows(): Promise<WorkflowData[]> {
+        const client = getClient();
+        const { data, error } = await client
+            .from('workflows')
+            .select('*');
+        if (error) throw new Error(`[SupabaseRest] listWorkflows: ${error.message}`);
+        return (data || []).map(r => this.rowToWorkflow(r));
+    }
+
+    async deleteWorkflow(id: string): Promise<boolean> {
+        const client = getClient();
+        const result = await client
+            .from('workflows')
+            .delete()
+            .eq('id', id);
+        throwIfError(result, `deleteWorkflow(${id})`);
+        return true;
+    }
+
+    async toggleWorkflow(id: string, isActive: boolean): Promise<void> {
+        const client = getClient();
+        const result = await client
+            .from('workflows')
+            .update({ is_active: isActive, updated_at: new Date().toISOString() })
+            .eq('id', id);
+        throwIfError(result, `toggleWorkflow(${id})`);
+    }
+
     // =========================================================================
     // Executions
     // =========================================================================

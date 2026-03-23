@@ -7,7 +7,7 @@ Provides:
 - `inject_system_key(engine_config_json)` — inject a system key into engine_config JSON
 
 Used by: engine_deploy, actions, pages/crud, edge_engines, engine_manifest,
-engine_test, engine_reconfigure, upstash_deploy_api, engine_provisioner, cloudflare.
+engine_test, engine_reconfigure, engine_provisioner, cloudflare.
 """
 
 import json

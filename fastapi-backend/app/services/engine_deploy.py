@@ -3,7 +3,7 @@ Engine Deploy Service — Provider-Agnostic Router.
 
 Routes deploy/redeploy operations to the correct provider strategy:
 - Cloudflare: upload bundle → set secrets via CF API
-- Supabase/Upstash/Vercel/Netlify/Deno: delegated to *_deploy_api.deploy()
+- Supabase/Vercel/Netlify/Deno: delegated to *_deploy_api.deploy()
 - Docker/Node: POST bundle to engine /api/update → wait for restart
 
 Uses secrets_builder.build_engine_secrets() — no duplication.
@@ -28,7 +28,6 @@ from ..services.secrets_builder import build_engine_secrets
 from ..services.edge_client import get_edge_headers
 from ..services import cloudflare_api
 from ..services import supabase_deploy_api
-from ..services import upstash_deploy_api
 from ..services import vercel_deploy_api
 from ..services import netlify_deploy_api
 from ..services import deno_deploy_api
@@ -38,7 +37,6 @@ from ..services import deno_deploy_api
 # Each entry maps a provider name → async deploy(engine, db, script_content, adapter_type)
 PROVIDER_DEPLOYERS = {
     'supabase': supabase_deploy_api.deploy,
-    'upstash':  upstash_deploy_api.deploy,
     'vercel':   vercel_deploy_api.deploy,
     'netlify':  netlify_deploy_api.deploy,
     'deno':     deno_deploy_api.deploy,

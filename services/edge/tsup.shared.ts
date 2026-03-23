@@ -4,7 +4,7 @@
  * Two runtime profiles — each encapsulates the full alias/shim map
  * so individual tsup configs become one-line consumers.
  * 
- * - tsupConfigNode: CF Workers, Upstash, Vercel (shim unsupported Node builtins)
+ * - tsupConfigNode: CF Workers, Vercel (shim unsupported Node builtins)
  * - tsupConfigDeno: Supabase, Netlify, Deno Deploy (minimal shims)
  * 
  * To add a new provider:
@@ -47,7 +47,7 @@ const BASE: Partial<Options> = {
     define: { 'process.env.NODE_ENV': '"production"' },
 };
 
-// ── Node builtins alias map (CF Workers, Upstash, Vercel) ────────────
+// ── Node builtins alias map (CF Workers, Vercel) ────────────────
 
 const NODE_ALIASES: Record<string, string> = {
     // NPM packages — force edge-compatible variants
@@ -91,7 +91,7 @@ const DENO_ALIASES: Record<string, string> = {
 
 // ── Exported factories ───────────────────────────────────────────────
 
-/** Node/V8 isolate config — for Cloudflare Workers, Upstash, Vercel */
+/** Node/V8 isolate config — for Cloudflare Workers, Vercel */
 export function tsupConfigNode(entry: string) {
     return defineConfig({
         ...BASE,

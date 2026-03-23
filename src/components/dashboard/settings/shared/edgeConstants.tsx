@@ -56,7 +56,7 @@ export const PROVIDER_ICONS: Record<string, React.FC<any>> = {
 // ============================================================================
 
 export const KNOWN_EDGE_PROVIDERS = new Set([
-    'cloudflare', 'supabase', 'upstash', 'vercel', 'netlify', 'deno',
+    'cloudflare', 'supabase', 'vercel', 'netlify', 'deno',
 ]);
 
 
@@ -70,7 +70,6 @@ export const PROVIDER_RESOURCE_LABELS: Record<string, { inputLabel: string; urlS
     vercel: { inputLabel: 'Project Name', urlSuffix: '.vercel.app' },
     netlify: { inputLabel: 'Site Name', urlSuffix: '.netlify.app' },
     deno: { inputLabel: 'Project Name', urlSuffix: '' },
-    upstash: { inputLabel: 'Resource Name', urlSuffix: '.upstash.app' },
 };
 
 // ============================================================================

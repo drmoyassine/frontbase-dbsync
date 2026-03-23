@@ -37,9 +37,6 @@ PROVIDER_TSUP_CONFIGS = {
     # Supabase Edge Functions
     "supabase":        {"config": "tsup.supabase-edge-lite.ts",     "output": "supabase-edge-lite.js"},
     "supabase-full":   {"config": "tsup.supabase-edge.ts",          "output": "supabase-edge.js"},
-    # Upstash Workflows
-    "upstash":         {"config": "tsup.upstash-workflow-lite.ts",  "output": "upstash-workflow-lite.js"},
-    "upstash-full":    {"config": "tsup.upstash-workflow.ts",       "output": "upstash-workflow.js"},
     # Vercel Edge Functions
     "vercel":          {"config": "tsup.vercel-edge-lite.ts",       "output": "vercel-edge-lite.js"},
     "vercel-full":     {"config": "tsup.vercel-edge.ts",            "output": "vercel-edge.js"},
@@ -115,7 +112,7 @@ def capture_source_snapshot(provider: str = "", adapter_type: str = "") -> dict[
         return None
 
     # Build exclusion list: adapters for OTHER providers
-    all_providers = {"cloudflare", "supabase", "vercel", "netlify", "deno", "upstash", "docker"}
+    all_providers = {"cloudflare", "supabase", "vercel", "netlify", "deno", "docker"}
     other_providers = all_providers - {provider} if provider else set()
 
     # Folders only used by full bundles (SSR/pages) — exclude from lite

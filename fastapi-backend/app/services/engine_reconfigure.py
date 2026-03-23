@@ -198,7 +198,7 @@ async def reconfigure(
         )
     elif engine.edge_provider_id is not None:
         # Non-CF providers: trigger redeploy to push new secrets
-        # (Supabase, Vercel, Netlify, Deno, Upstash all set secrets during deploy)
+        # (Supabase, Vercel, Netlify, Deno all set secrets during deploy)
         prov = db.query(EdgeProviderAccount).filter(
             EdgeProviderAccount.id == engine.edge_provider_id
         ).first()

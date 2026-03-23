@@ -3,7 +3,10 @@ Sync configuration model - defines how data syncs between master and slave.
 """
 
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.services.sync.models.view import DatasourceView
 from sqlalchemy import String, Text, DateTime, Enum as SQLEnum, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum

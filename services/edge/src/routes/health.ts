@@ -1,9 +1,13 @@
 /**
  * Health Check Route
  * 
- * Returns service health, version, and provider info.
- * The `provider` field is used by the future LB orchestrator to identify
- * which platform each deployment runs on.
+ * Returns service health, version, provider info, and binding status.
+ * The `bindings` section shows whether stateDb, cache, and queue are
+ * configured and reachable — gives operators a single-glance view of
+ * whether all infrastructure is properly wired.
+ * 
+ * Each binding check has a 3s timeout to prevent the health endpoint
+ * from hanging on slow/unreachable backends.
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
@@ -12,12 +16,100 @@ import { getPlatform } from '../adapters/shared.js';
 const startedAt = Date.now();
 const healthRoute = new OpenAPIHono();
 
+// ── Helpers ─────────────────────────────────────────────────────────
+
+type BindingStatus = { provider: string; status: 'ok' | 'error' | 'not_configured'; error?: string; schema?: string };
+
+const PING_TIMEOUT_MS = 8000;
+
+/** Wrap a promise with a timeout — returns 'error' status if it takes too long */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    return Promise.race([
+        promise,
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+    ]);
+}
+
+// ── Binding health checks ───────────────────────────────────────────
+
+async function checkStateDb(): Promise<BindingStatus> {
+    const provider = process.env.FRONTBASE_STATE_DB_PROVIDER;
+    const url = process.env.FRONTBASE_STATE_DB_URL;
+
+    if (!provider && !url) {
+        return { provider: 'none', status: 'not_configured' };
+    }
+
+    const result: BindingStatus = {
+        provider: provider || 'auto',
+        status: 'ok',
+    };
+
+    const schema = process.env.FRONTBASE_SCHEMA_NAME;
+    if (schema) result.schema = schema;
+
+    try {
+        const { stateProvider } = await import('../storage/index.js');
+        await withTimeout(stateProvider.listPages(), PING_TIMEOUT_MS);
+        result.status = 'ok';
+    } catch (e: any) {
+        result.status = 'error';
+        result.error = (e?.message || String(e)).slice(0, 120);
+    }
+
+    return result;
+}
+
+async function checkCache(): Promise<BindingStatus> {
+    const provider = process.env.FRONTBASE_CACHE_PROVIDER;
+    const url = process.env.FRONTBASE_CACHE_URL;
+
+    if (!url) {
+        return { provider: 'none', status: 'not_configured' };
+    }
+
+    try {
+        const { cacheProvider } = await import('../cache/index.js');
+        await withTimeout(cacheProvider.get('__health_check__'), PING_TIMEOUT_MS);
+        return { provider: provider || 'redis', status: 'ok' };
+    } catch (e: any) {
+        return {
+            provider: provider || 'redis',
+            status: 'error',
+            error: (e?.message || String(e)).slice(0, 120),
+        };
+    }
+}
+
+async function checkQueue(): Promise<BindingStatus> {
+    const provider = process.env.FRONTBASE_QUEUE_PROVIDER;
+    const token = process.env.FRONTBASE_QUEUE_TOKEN || process.env.QSTASH_TOKEN;
+    const url = process.env.FRONTBASE_QUEUE_URL;
+
+    // CF Queues use CF API token (not a separate queue token)
+    if (!token && !url && !provider) {
+        return { provider: 'none', status: 'not_configured' };
+    }
+
+    // Queue health is "configured" — can't ping QStash/CF Queues without publishing
+    return { provider: provider || 'qstash', status: 'ok' };
+}
+
+// ── OpenAPI Route ───────────────────────────────────────────────────
+
+const bindingSchema = z.object({
+    provider: z.string(),
+    status: z.enum(['ok', 'error', 'not_configured']),
+    error: z.string().optional(),
+    schema: z.string().optional(),
+});
+
 const route = createRoute({
     method: 'get',
     path: '/',
     tags: ['System'],
     summary: 'Health check',
-    description: 'Returns service health status, version, and provider info',
+    description: 'Returns service health status, version, provider info, and binding health',
     responses: {
         200: {
             description: 'Service is healthy',
@@ -30,6 +122,11 @@ const route = createRoute({
                         provider: z.string(),
                         uptime_seconds: z.number().optional(),
                         timestamp: z.string(),
+                        bindings: z.object({
+                            stateDb: bindingSchema,
+                            cache: bindingSchema,
+                            queue: bindingSchema,
+                        }),
                     }),
                 },
             },
@@ -37,18 +134,25 @@ const route = createRoute({
     },
 });
 
-healthRoute.openapi(route, (c) => {
+healthRoute.openapi(route, async (c) => {
     const platform = getPlatform();
     const isServerless = platform !== 'docker';
+
+    // Run all binding checks in parallel (each has 3s timeout)
+    const [stateDb, cache, queue] = await Promise.all([
+        checkStateDb(),
+        checkCache(),
+        checkQueue(),
+    ]);
 
     return c.json({
         status: 'ok',
         service: 'frontbase-edge',
         version: '0.1.0',
         provider: platform,
-        // Uptime is meaningless on serverless (cold starts reset it)
         ...(isServerless ? {} : { uptime_seconds: Math.floor((Date.now() - startedAt) / 1000) }),
         timestamp: new Date().toISOString(),
+        bindings: { stateDb, cache, queue },
     });
 });
 

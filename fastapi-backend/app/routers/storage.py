@@ -41,8 +41,8 @@ async def list_storage_providers():
                 "account_name": account_name,
                 "config": json.loads(str(sp.config or "{}")),
                 "is_active": bool(sp.is_active),
-                "created_at": sp.created_at.isoformat() if sp.created_at else None,
-                "updated_at": sp.updated_at.isoformat() if sp.updated_at else None,
+                "created_at": sp.created_at.isoformat() if sp.created_at is not None else None,
+                "updated_at": sp.updated_at.isoformat() if sp.updated_at is not None else None,
             })
         return result
     finally:
@@ -82,10 +82,10 @@ async def create_storage_provider(request: dict):
             "name": str(sp.name),
             "provider": str(sp.provider),
             "provider_account_id": str(sp.provider_account_id),
-            "account_name": str(account.name) if account.name else "",
+            "account_name": str(account.name) if account.name is not None else "",
             "config": json.loads(str(sp.config or "{}")),
             "is_active": True,
-            "created_at": sp.created_at.isoformat() if sp.created_at else None,
+            "created_at": sp.created_at.isoformat() if sp.created_at is not None else None,
         }
     except HTTPException:
         raise

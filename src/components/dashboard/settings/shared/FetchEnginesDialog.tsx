@@ -191,7 +191,7 @@ export function FetchEnginesDialog() {
                 };
                 const configKey = configKeyMap[eng.provider] || 'worker_name';
                 const created = await edgeInfrastructureApi.createEngine({
-                    name: `${providerLabel(eng.provider)}: ${eng.name}`,
+                    name: eng.name,
                     provider: eng.provider,
                     edge_provider_id: selectedAccountId || undefined,
                     adapter_type: 'edge',

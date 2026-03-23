@@ -81,7 +81,7 @@ export function ImportCloudflareWorkers({ providerId }: { providerId: string }) 
         setImportingId(worker.name);
         try {
             const created = await edgeInfrastructureApi.createEngine({
-                name: `Cloudflare: ${worker.name}`,
+                name: worker.name,
                 provider: 'cloudflare',
                 edge_provider_id: providerId,
                 adapter_type: 'edge',

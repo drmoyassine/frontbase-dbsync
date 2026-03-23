@@ -81,18 +81,17 @@ async def _cf_pre_deploy(ctx: dict, provider: EdgeProviderAccount, worker_name: 
 
 
 async def _deno_pre_deploy(ctx: dict, provider: EdgeProviderAccount, worker_name: str, db: Session) -> str:
-    """Deno Deploy: detect org subdomain and build the correct URL.
+    """Deno Deploy: build the correct URL using org_slug from credentials.
     
-    Org tokens (ddo_...) → https://{slug}.{org}.deno.net
-    Personal tokens → https://{slug}.deno.dev
+    Org accounts: https://{slug}.{org_slug}.deno.net
+    Personal/missing org_slug: https://{slug}.deno.dev
     """
     from ..services import deno_deploy_api
 
-    access_token = ctx.get('access_token', '')
-    org_sub = await deno_deploy_api.detect_org_subdomain(access_token)
-    url = deno_deploy_api.get_project_url(worker_name, org_sub)
-    if org_sub:
-        print(f"[Deno Deploy] Detected org subdomain: {org_sub} → {url}")
+    org_slug = ctx.get('org_slug', '')
+    url = deno_deploy_api.get_project_url(worker_name, org_slug or None)
+    if org_slug:
+        print(f"[Deno Deploy] Using org slug from credentials: {org_slug} → {url}")
     return url
 
 
@@ -177,6 +176,34 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session) -> di
         default_db = db.query(EdgeDatabase).filter(EdgeDatabase.is_default == True).first()  # noqa: E712
         if default_db:
             edge_db_id = str(default_db.id)
+
+    # Deno engines: auto-provision Deno KV cache if no cache specified
+    if provider_type == "deno" and not edge_cache_id and payload.edge_cache_id != "__none__":
+        from ..models.models import EdgeCache
+        # Check if a Deno KV cache already exists for this provider
+        existing_kv = db.query(EdgeCache).filter(
+            EdgeCache.provider == "deno_kv",
+            EdgeCache.provider_account_id == payload.provider_id,
+        ).first()
+        if existing_kv:
+            edge_cache_id = str(existing_kv.id)
+        else:
+            kv_cache = EdgeCache(
+                id=str(uuid.uuid4()),
+                name=f"Deno KV ({payload.worker_name})",
+                provider="deno_kv",
+                cache_url="deno://kv",  # Placeholder — Deno KV is runtime-native
+                cache_token=None,
+                provider_account_id=payload.provider_id,
+                is_default=False,
+                is_system=True,  # System-managed, not user-deletable
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(kv_cache)
+            db.commit()
+            edge_cache_id = str(kv_cache.id)
+            print(f"[Deno Deploy] Auto-provisioned Deno KV cache: {kv_cache.id}")
 
     # --- Construct engine URL (with optional per-provider hook) ---
     engine_url = _build_engine_url(provider_type, ctx, payload.worker_name)

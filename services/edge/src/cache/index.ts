@@ -33,6 +33,30 @@ let _provider: ICacheProvider | null = null;
 async function createInitialProvider(): Promise<ICacheProvider> {
     const cacheUrl = process.env.FRONTBASE_CACHE_URL;
     const cacheToken = process.env.FRONTBASE_CACHE_TOKEN;
+    const cacheProvider = process.env.FRONTBASE_CACHE_PROVIDER?.toLowerCase();
+
+    // Provider-specific dispatch (explicit FRONTBASE_CACHE_PROVIDER)
+    if (cacheProvider === 'deno_kv') {
+        try {
+            const { DenoKvProvider } = require('./DenoKvProvider.js');
+            console.log('🦕 Cache: DenoKvProvider (Deno.openKv)');
+            return new DenoKvProvider();
+        } catch (e: any) {
+            console.warn(`⚠️ Failed to init Deno KV cache adapter: ${e.message}`);
+            return new NullCacheProvider();
+        }
+    }
+
+    if (cacheProvider === 'cloudflare' || cacheProvider === 'cloudflare_kv') {
+        try {
+            const { CfKvHttpProvider } = require('./CfKvHttpProvider.js');
+            console.log('🔶 Cache: CfKvHttpProvider (KV via HTTP)');
+            return new CfKvHttpProvider();
+        } catch (e: any) {
+            console.warn(`⚠️ Failed to init CF KV cache adapter: ${e.message}`);
+            return new NullCacheProvider();
+        }
+    }
 
     if (cacheUrl && cacheUrl.startsWith('http') && cacheToken) {
         // HTTP cache (Upstash, SRH proxy, Dragonfly HTTP, etc.)

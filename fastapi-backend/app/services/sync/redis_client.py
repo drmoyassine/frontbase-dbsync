@@ -165,7 +165,7 @@ async def _http_redis_set(url: str, token: str, key: str, value: str, ttl: int) 
 # Unified Cache Interface
 # =============================================================================
 
-async def cache_get(redis_url: str, key: str) -> Optional[Any]:
+async def cache_get(redis_url: Optional[str], key: str) -> Optional[Any]:
     """Get value from Redis cache. Supports both TCP and HTTP Redis."""
     settings = await get_configured_redis_settings()
     
@@ -196,7 +196,7 @@ async def cache_get(redis_url: str, key: str) -> Optional[Any]:
         return None
 
 
-async def cache_set(redis_url: str, key: str, value: Any, ttl: int = 300) -> bool:
+async def cache_set(redis_url: Optional[str], key: str, value: Any, ttl: int = 300) -> bool:
     """Set value in Redis cache with TTL. Supports both TCP and HTTP Redis."""
     json_value = json.dumps(value, default=str)
     settings = await get_configured_redis_settings()
@@ -222,7 +222,7 @@ async def cache_set(redis_url: str, key: str, value: Any, ttl: int = 300) -> boo
         return False
 
 
-async def cache_delete_pattern(redis_url: str, pattern: str) -> int:
+async def cache_delete_pattern(redis_url: Optional[str], pattern: str) -> int:
     """Delete all keys matching pattern. Returns count of deleted keys."""
     client = await get_redis_client(redis_url)
     if not client:
@@ -240,7 +240,7 @@ async def cache_delete_pattern(redis_url: str, pattern: str) -> int:
 
 async def test_redis_connection(
     redis_url: str,
-    redis_token: str = None,
+    redis_token: Optional[str] = None,
     redis_type: str = "upstash"
 ) -> tuple[bool, str]:
     """Test Redis connection. Supports both Upstash (HTTP) and TCP connections."""

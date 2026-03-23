@@ -66,6 +66,10 @@ export function useEdgeEngineActions({ providers, refetchEngines }: UseEdgeEngin
         try {
             await edgeInfrastructureApi.deleteEngine(engine.id, alsoDeleteRemote);
             await refetchEngines();
+            // Invalidate resource queries so target counts refresh
+            queryClient.invalidateQueries({ queryKey: ['edge-databases'] });
+            queryClient.invalidateQueries({ queryKey: ['edge-caches'] });
+            queryClient.invalidateQueries({ queryKey: ['edge-queues'] });
         } catch (e: any) {
             alert(e.message);
         }
@@ -82,6 +86,10 @@ export function useEdgeEngineActions({ providers, refetchEngines }: UseEdgeEngin
             }
             setSelectedIds(new Set());
             await refetchEngines();
+            // Invalidate resource queries so target counts refresh
+            queryClient.invalidateQueries({ queryKey: ['edge-databases'] });
+            queryClient.invalidateQueries({ queryKey: ['edge-caches'] });
+            queryClient.invalidateQueries({ queryKey: ['edge-queues'] });
         } catch (e: any) { setError(e.message); } finally { setBulkLoading(false); }
     };
 

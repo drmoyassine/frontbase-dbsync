@@ -27,9 +27,15 @@ class MySQLAdapter(SQLAdapter):
         self._pool: Optional[aiomysql.Pool] = None
         self._prefix = datasource.table_prefix or "wp_"
     
+    def _ensure_pool(self) -> aiomysql.Pool:
+        """Return the pool, raising if not connected."""
+        if self._pool is None:
+            raise RuntimeError("Not connected – call connect() first")
+        return self._pool
+    
     async def connect(self) -> None:
         """Establish connection pool to MySQL."""
-        host = self._sanitize_host(self.datasource.host)
+        host = self._sanitize_host(self.datasource.host or "")
         port = self.datasource.port
         
         from app.core.security import decrypt_field
@@ -53,7 +59,7 @@ class MySQLAdapter(SQLAdapter):
     
     async def get_tables(self) -> List[str]:
         """Get list of WordPress tables."""
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("SHOW TABLES")
                 rows = await cur.fetchall()
@@ -61,7 +67,7 @@ class MySQLAdapter(SQLAdapter):
     
     async def get_schema(self, table: str) -> Dict[str, Any]:
         """Get column information for a table, including foreign key relationships."""
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(f"DESCRIBE `{table}`")
                 rows = await cur.fetchall()
@@ -119,7 +125,7 @@ class MySQLAdapter(SQLAdapter):
     
     async def get_all_relationships(self) -> List[Dict[str, Any]]:
         """Get ALL foreign key relationships across all tables in one query (fast)."""
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 # Single query to get all FK relationships in this database
                 await cur.execute("""
@@ -252,7 +258,7 @@ class MySQLAdapter(SQLAdapter):
             except Exception:
                 return 0
         
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(sql, params)
                 row = await cur.fetchone()
@@ -264,13 +270,13 @@ class MySQLAdapter(SQLAdapter):
         """
         sql = f"SELECT DISTINCT `{column}` FROM `{table}` WHERE `{column}` IS NOT NULL ORDER BY `{column}` LIMIT %s"
         
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(sql, [limit])
                 rows = await cur.fetchall()
                 return [str(row[0]) for row in rows if row[0] is not None]
 
-    async def search_records(self, table: str, query: str) -> List[Dict[str, Any]]:
+    async def search_records(self, table: str, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         """
         Search for records by text content. 
         For WordPress, we search post_title and post_content.
@@ -314,7 +320,7 @@ class MySQLAdapter(SQLAdapter):
         limit = 50
         sql += f" LIMIT {limit}"
         
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(sql, params)
                 return await cur.fetchall()
@@ -342,7 +348,7 @@ class MySQLAdapter(SQLAdapter):
         query += f" LIMIT %s OFFSET %s"
         params.extend([limit, offset])
         
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(query, params)
                 return list(await cur.fetchall())
@@ -476,7 +482,7 @@ class MySQLAdapter(SQLAdapter):
         query += f" LIMIT %s OFFSET %s"
         params.extend([limit, offset])
         
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(query, params)
                 return list(await cur.fetchall())
@@ -538,7 +544,7 @@ class MySQLAdapter(SQLAdapter):
                 query += where_clause
                 params.extend(p)
                 
-            async with self._pool.acquire() as conn:
+            async with self._ensure_pool().acquire() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute(query, params)
                     row = await cur.fetchone()
@@ -547,7 +553,7 @@ class MySQLAdapter(SQLAdapter):
         # Legacy logic (WP support)
         query, params = await self._build_filtered_query(table, "SELECT COUNT(*)", where)
         
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(query, params)
                 row = await cur.fetchone()
@@ -560,7 +566,7 @@ class MySQLAdapter(SQLAdapter):
         key_value: Any,
     ) -> Optional[Dict[str, Any]]:
         """Read a single record by primary key."""
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(
                     f"SELECT * FROM `{table}` WHERE `{key_column}` = %s",
@@ -591,7 +597,7 @@ class MySQLAdapter(SQLAdapter):
             ON DUPLICATE KEY UPDATE {update_clause}
         """
         
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(query, values)
                 
@@ -612,7 +618,7 @@ class MySQLAdapter(SQLAdapter):
         key_value: Any,
     ) -> bool:
         """Delete a record by key."""
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             async with conn.cursor() as cur:
                 result = await cur.execute(
                     f"DELETE FROM `{table}` WHERE `{key_column}` = %s",
@@ -634,7 +640,7 @@ class MySQLAdapter(SQLAdapter):
         posts_table = f"{self._prefix}posts"
         meta_table = f"{self._prefix}postmeta"
         
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 # Get posts
                 await cur.execute(f"""
@@ -675,7 +681,7 @@ class MySQLAdapter(SQLAdapter):
         post_id = post.get("ID")
         
         if post_id and meta_data:
-            async with self._pool.acquire() as conn:
+            async with self._ensure_pool().acquire() as conn:
                 async with conn.cursor() as cur:
                     for key, value in meta_data.items():
                         # Serialize objects/arrays

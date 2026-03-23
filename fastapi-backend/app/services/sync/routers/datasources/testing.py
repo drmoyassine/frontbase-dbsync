@@ -126,7 +126,7 @@ async def test_new_datasource(data: DatasourceTestRequest):
 
         # If direct DB URI provided, set it
         if data.connection_uri:
-            datasource.connection_uri = data.connection_uri
+            setattr(datasource, 'connection_uri', data.connection_uri)  # Dynamic attr for test-raw only
 
         adapter = get_adapter(datasource)
         await adapter.connect()

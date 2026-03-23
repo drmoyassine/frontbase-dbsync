@@ -24,7 +24,7 @@ def _resolve_cf_credentials(engine: EdgeEngine, db: Session) -> dict | None:
     Returns dict with api_token, account_id, worker_name or None if not CF.
     """
     provider_id = engine.edge_provider_id
-    if not provider_id:
+    if provider_id is None:
         return None
 
     provider = db.query(EdgeProviderAccount).filter(
@@ -95,7 +95,7 @@ async def _patch_cf_settings(
                 b.get("name") for b in existing_bindings
                 if b.get("name") in FRONTBASE_BINDING_NAMES
             }
-            bindings_removed = list(existing_fb_names - set(new_bindings.keys()))
+            bindings_removed: list[str] = [str(n) for n in existing_fb_names - set(new_bindings.keys())]
 
             # Add our new bindings as secret_text
             for name, value in new_bindings.items():
@@ -162,7 +162,7 @@ async def reconfigure(
 
     # Resolve deploy provider for dual-path secrets
     deploy_provider: str | None = None
-    if engine.edge_provider_id:
+    if engine.edge_provider_id is not None:
         prov = db.query(EdgeProviderAccount).filter(
             EdgeProviderAccount.id == engine.edge_provider_id
         ).first()
@@ -178,16 +178,25 @@ async def reconfigure(
         deploy_provider=deploy_provider,
     )
 
-    # 3. PATCH CF Worker settings
+    # 3. For non-CF providers, update DB FIRST then redeploy
+    # (redeploy reads edge_cache_id / edge_queue_id from the engine record)
     settings_patched = False
     bindings_set = list(new_bindings.keys())
     bindings_removed: list[str] = []
+
+    # 4. Update local DB record (must happen BEFORE redeploy for non-CF engines)
+    engine.edge_db_id = payload.edge_db_id  # type: ignore[assignment]
+    engine.edge_cache_id = payload.edge_cache_id  # type: ignore[assignment]
+    engine.edge_queue_id = payload.edge_queue_id  # type: ignore[assignment]
+    engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+    db.commit()
+    db.refresh(engine)
 
     if cf_creds:
         settings_patched, bindings_set, bindings_removed = await _patch_cf_settings(
             cf_creds, new_bindings
         )
-    elif engine.edge_provider_id:
+    elif engine.edge_provider_id is not None:
         # Non-CF providers: trigger redeploy to push new secrets
         # (Supabase, Vercel, Netlify, Deno, Upstash all set secrets during deploy)
         prov = db.query(EdgeProviderAccount).filter(
@@ -200,14 +209,6 @@ async def reconfigure(
             print(f"[Reconfigure] Redeployed {provider_label} engine '{engine.name}' to push new bindings")
         except Exception as e:
             print(f"[Reconfigure] Redeploy failed for {provider_label} engine '{engine.name}': {e}")
-
-    # 4. Update local DB record
-    engine.edge_db_id = payload.edge_db_id  # type: ignore[assignment]
-    engine.edge_cache_id = payload.edge_cache_id  # type: ignore[assignment]
-    engine.edge_queue_id = payload.edge_queue_id  # type: ignore[assignment]
-    engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
-    db.commit()
-    db.refresh(engine)
 
     # 5. Flush edge cache on target
     cache_flushed = await engine_deploy._flush_cache(str(engine.url).rstrip('/'))

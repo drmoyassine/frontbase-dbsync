@@ -36,6 +36,12 @@ class SupabaseAdapter(SQLAdapter):
         self._schema_cache: Optional[Dict] = None
         self.logger = logging.getLogger(f"app.adapters.supabase.{self.datasource.name}")
     
+    def _ensure_client(self) -> httpx.AsyncClient:
+        """Return the HTTP client, raising if not connected."""
+        if self._client is None:
+            raise RuntimeError("Not connected – call connect() first")
+        return self._client
+    
     @property
     def has_db_connection(self) -> bool:
         """Check if direct DB connection is available."""
@@ -209,7 +215,7 @@ class SupabaseAdapter(SQLAdapter):
         if self._schema_cache:
             return self._schema_cache
         try:
-            response = await self._client.post(
+            response = await self._ensure_client().post(
                 "/rest/v1/rpc/frontbase_get_schema_info",
                 json={}
             )
@@ -240,7 +246,7 @@ class SupabaseAdapter(SQLAdapter):
         if self._has_db_connection and self._postgres_adapter:
             return await self._postgres_adapter.read_records(table, columns, where, limit, offset, order_by, order_direction)
         return await read_records_via_api(
-            self._client, table, self.get_schema,
+            self._ensure_client(), table, self.get_schema,
             columns=columns, where=where, limit=limit, offset=offset,
             order_by=order_by, order_direction=order_direction,
         )
@@ -262,7 +268,7 @@ class SupabaseAdapter(SQLAdapter):
         Returns flattened records with keys like "programs.degree_name".
         """
         records = await read_records_via_api(
-            self._client, table, self.get_schema,
+            self._ensure_client(), table, self.get_schema,
             where=where, limit=limit, offset=offset,
             order_by=order_by, order_direction=order_direction,
             select_param=select_param, search=search,
@@ -292,11 +298,11 @@ class SupabaseAdapter(SQLAdapter):
         """Count records - uses DB if available, else REST API."""
         if self._has_db_connection and self._postgres_adapter:
             try:
-                return await self._postgres_adapter.count_records(table, where, related_specs, search=search)
+                return await self._postgres_adapter.count_records(table, where, related_specs, search=search)  # type: ignore[call-arg]
             except TypeError:
                 return await self._postgres_adapter.count_records(table, where, related_specs)
         return await count_records_via_api(
-            self._client, table, self.get_schema,
+            self._ensure_client(), table, self.get_schema,
             where=where, related_specs=related_specs, search=search,
         )
     
@@ -309,7 +315,7 @@ class SupabaseAdapter(SQLAdapter):
         """Read single record by key."""
         if self._has_db_connection and self._postgres_adapter:
             return await self._postgres_adapter.read_record_by_key(table, key_column, key_value)
-        response = await self._client.get(
+        response = await self._ensure_client().get(
             f"/rest/v1/{table}",
             params={key_column: f"eq.{key_value}", "limit": "1"}
         )
@@ -326,7 +332,7 @@ class SupabaseAdapter(SQLAdapter):
         """Upsert record - uses DB if available, else REST API."""
         if self._has_db_connection and self._postgres_adapter:
             return await self._postgres_adapter.upsert_record(table, record, key_column)
-        response = await self._client.post(
+        response = await self._ensure_client().post(
             f"/rest/v1/{table}",
             json=record,
             headers={"Prefer": "resolution=merge-duplicates,return=representation"}
@@ -344,7 +350,7 @@ class SupabaseAdapter(SQLAdapter):
         """Delete record by key."""
         if self._has_db_connection and self._postgres_adapter:
             return await self._postgres_adapter.delete_record(table, key_column, key_value)
-        response = await self._client.delete(
+        response = await self._ensure_client().delete(
             f"/rest/v1/{table}",
             params={key_column: f"eq.{key_value}"}
         )
@@ -355,7 +361,7 @@ class SupabaseAdapter(SQLAdapter):
         if self._has_db_connection and self._postgres_adapter:
             return await self._postgres_adapter.search_records(table, query)
         return await read_records_via_api(
-            self._client, table, self.get_schema,
+            self._ensure_client(), table, self.get_schema,
             limit=limit, offset=offset, search=query,
         )
     
@@ -373,7 +379,7 @@ class SupabaseAdapter(SQLAdapter):
     async def check_migration_status(self) -> Dict[str, Any]:
         """Check if Frontbase migration has been applied."""
         try:
-            response = await self._client.post(
+            response = await self._ensure_client().post(
                 "/rest/v1/rpc/frontbase_get_schema_info",
                 json={}
             )
@@ -388,14 +394,14 @@ class SupabaseAdapter(SQLAdapter):
         """Apply SQL migration via exec_sql RPC or direct DB."""
         if self._has_db_connection and self._postgres_adapter:
             try:
-                async with self._postgres_adapter._pool.acquire() as conn:
+                async with self._postgres_adapter._ensure_pool().acquire() as conn:
                     await conn.execute(sql)
                 return {"success": True, "method": "direct_db"}
             except Exception as e:
                 return {"success": False, "error": str(e), "method": "direct_db"}
         
         try:
-            response = await self._client.post(
+            response = await self._ensure_client().post(
                 "/rest/v1/rpc/exec_sql",
                 json={"query": sql}
             )

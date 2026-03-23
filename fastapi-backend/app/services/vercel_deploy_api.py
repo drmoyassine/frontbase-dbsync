@@ -59,11 +59,12 @@ async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_t
     # Deploy the bundle
     deployment = await create_deployment(api_token, project_name, script_content, script_filename, team_id)
 
-    # If secrets weren't pushed (first deploy), push now and note that a redeploy
-    # may be needed for the function to pick them up
+    # If secrets weren't pushed (first deploy), push now and redeploy so the
+    # function picks up env vars immediately (Vercel reads env vars at build time).
     if secrets and not secrets_pushed:
-        print("[Vercel] First deploy: pushing secrets after project creation")
+        print("[Vercel] First deploy: pushing secrets after project creation, then redeploying")
         await set_env_vars(api_token, project_name, secrets, team_id)
+        await create_deployment(api_token, project_name, script_content, script_filename, team_id)
 
 
 

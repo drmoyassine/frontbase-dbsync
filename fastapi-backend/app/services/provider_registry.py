@@ -65,6 +65,12 @@ def build_engine_url(provider_type: str, creds: dict, worker_name: str) -> str:
         project_ref = creds.get("project_ref", "")
         return f"https://{project_ref}.supabase.co/functions/v1/{worker_name}"
 
+    if provider_type == "deno":
+        org_slug = creds.get("org_slug", "")
+        if org_slug:
+            return f"https://{worker_name}.{org_slug}.deno.net"
+        return f"https://{worker_name}.deno.dev"
+
     template = _URL_TEMPLATES.get(provider_type)
     if template:
         return template.format(name=worker_name, ref=creds.get("project_ref", ""))

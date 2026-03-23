@@ -3,11 +3,12 @@ Test field mapper functionality.
 """
 
 import pytest
+from typing import Optional
 from app.services.sync.engine.field_mapper import FieldMapper
 from app.services.sync.models.sync_config import FieldMapping
 
 
-def create_mapping(master: str, slave: str, transform: str = None, is_key: bool = False):
+def create_mapping(master: str, slave: str, transform: Optional[str] = None, is_key: bool = False):
     """Helper to create a mock FieldMapping."""
     mapping = FieldMapping()
     mapping.master_column = master

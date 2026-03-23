@@ -3,7 +3,10 @@ Datasource model - represents a database connection configuration.
 """
 
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.services.sync.models.view import DatasourceView
 from sqlalchemy import String, Text, DateTime, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum

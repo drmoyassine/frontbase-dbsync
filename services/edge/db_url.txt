@@ -1,0 +1,1 @@
+postgresql://frontbase_edge_role.uwzosvzynnpbxpnwqgkm:IE_pVPPCHnMO3Ofsy3ylJ_jQ71y0lp9N4DsbcfJ-e3s@aws-0-eu-central-1.pooler.supabase.com:6543/postgres

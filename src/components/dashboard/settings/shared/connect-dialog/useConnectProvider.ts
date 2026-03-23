@@ -148,7 +148,7 @@ export function useConnectProvider(
             // Auto-name on success (generic — no provider-specific logic here)
             if (data.success && data.detail && effectiveProvider !== 'supabase' && effectiveProvider !== 'neon' && effectiveProvider !== 'turso') {
                 const detailName = data.detail.replace(/^Connected (as |to (project: )?)?/, '').replace(/— .*/, '').trim();
-                if (detailName) setName(`${currentConfig.label}: ${detailName}`);
+                if (detailName) setName(detailName);
             }
 
             return data;
@@ -190,7 +190,25 @@ export function useConnectProvider(
                     if (data.success && data.account_name) {
                         await edgeInfrastructureApi.updateProvider({
                             id: editProvider.id,
-                            data: { name: `Cloudflare: ${data.account_name}` },
+                            data: { name: data.account_name },
+                        });
+                    }
+                } catch { /* non-fatal */ }
+            }
+
+            // Deno: auto-detect org_slug + user_id from personal token
+            if (hasNewCreds && effectiveProvider === 'deno') {
+                try {
+                    const res = await fetch(`${API_BASE}/api/deno/connect`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ provider_id: editProvider.id }),
+                    });
+                    const data = await res.json();
+                    if (data.success && data.account_name) {
+                        await edgeInfrastructureApi.updateProvider({
+                            id: editProvider.id,
+                            data: { name: data.account_name },
                         });
                     }
                 } catch { /* non-fatal */ }
@@ -219,7 +237,25 @@ export function useConnectProvider(
                 if (data.success && data.account_name) {
                     await edgeInfrastructureApi.updateProvider({
                         id: newProvider.id,
-                        data: { name: `Cloudflare: ${data.account_name}` },
+                        data: { name: data.account_name },
+                    });
+                }
+            } catch { /* non-fatal */ }
+        }
+
+        // Deno: auto-detect org_slug + user_id from personal token
+        if (effectiveProvider === 'deno') {
+            try {
+                const res = await fetch(`${API_BASE}/api/deno/connect`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ provider_id: newProvider.id }),
+                });
+                const data = await res.json();
+                if (data.success && data.account_name) {
+                    await edgeInfrastructureApi.updateProvider({
+                        id: newProvider.id,
+                        data: { name: data.account_name },
                     });
                 }
             } catch { /* non-fatal */ }

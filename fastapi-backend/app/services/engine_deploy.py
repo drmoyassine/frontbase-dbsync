@@ -100,6 +100,11 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
         else:
             await _deploy_docker(engine_url, script_content, source_hash)
 
+        # 3. Initialize Supabase state DB at deploy time (provider-agnostic).
+        #    If the engine's state DB is on Supabase, create schema + tables
+        #    via Management API since the pooler URL has [YOUR-PASSWORD] placeholder.
+        await _init_supabase_state_db_if_needed(engine, db)
+
         # Update local record
         deployed_at = datetime.utcnow().isoformat() + "Z"
         engine.bundle_checksum = source_hash  # type: ignore[assignment]
@@ -229,6 +234,75 @@ async def _deploy_docker(engine_url: str, script_content: str, source_hash: str)
 
     if not engine_healthy:
         print(f"[Redeploy] Warning: Engine {engine_url} did not come back healthy after update")
+
+
+async def _init_supabase_state_db_if_needed(engine: EdgeEngine, db: Session) -> None:
+    """If the engine's state DB is Supabase, ensure schema + tables + RLS are initialized.
+
+    Runs at deploy time for ALL engine providers. The Supabase state provider
+    now uses PostgREST (HTTP), so this just ensures the schema/tables/grants exist.
+    """
+    import re
+    from ..models.models import EdgeDatabase
+    from ..core.security import get_provider_creds
+
+    if engine.edge_db_id is None:
+        return
+
+    edge_db = db.query(EdgeDatabase).filter(EdgeDatabase.id == engine.edge_db_id).first()
+    if not edge_db or str(edge_db.provider) != 'supabase':
+        return
+    if not str(edge_db.provider_account_id or ''):
+        return
+
+    # Get project_ref from provider_config (set during provisioning)
+    config = json.loads(str(edge_db.provider_config or '{}')) if str(edge_db.provider_config or '') else {}
+    project_ref = ''
+
+    # Try provider_config first (PostgREST stores supabase_url)
+    supabase_url = config.get('supabase_url', '')
+    ref_match = re.search(r'([a-z0-9]+)\.supabase\.co', supabase_url) if supabase_url else None
+    if ref_match:
+        project_ref = ref_match.group(1)
+
+    if not project_ref:
+        # Try creds metadata (has project_ref from account connection)
+        creds = get_provider_creds(str(edge_db.provider_account_id), db)
+        project_ref = (creds or {}).get('project_ref', '')
+
+    if not project_ref:
+        # Fallback: parse from db_url
+        raw_url = str(edge_db.db_url or '')
+        # Match <ref>.supabase.co or db.<ref>.supabase.com (exclude 'pooler')
+        ref_match = re.search(r'([a-z0-9]{10,})\.supabase\.co', raw_url)
+        if not ref_match:
+            ref_match = re.search(r'db\.([a-z0-9]+)\.supabase', raw_url)
+        if ref_match:
+            project_ref = ref_match.group(1)
+
+    if not project_ref:
+        print(f"[StateDB Init] Cannot extract project ref")
+        return
+
+    # Get access token
+    creds = get_provider_creds(str(edge_db.provider_account_id), db)
+    if not creds:
+        print(f"[StateDB Init] No creds for account {edge_db.provider_account_id}")
+        return
+    token = creds.get("access_token", "")
+    if not token:
+        print(f"[StateDB Init] No access_token for account {edge_db.provider_account_id}")
+        return
+
+    schema_name = config.get('schema_name', 'frontbase_edge')
+
+    from ..services.supabase_state_db import init_supabase_state_db
+    result = await init_supabase_state_db(token, project_ref, schema_name)
+    if result.get('success'):
+        print(f"[StateDB Init] ✅ Schema '{schema_name}' + tables + RLS ready for {project_ref}")
+    else:
+        print(f"[StateDB Init] ⚠️ Init warning: {result.get('detail', 'unknown')}")
+
 
 
 async def _flush_cache(engine_url: str) -> bool:

@@ -63,6 +63,7 @@ export interface EdgeCache {
     created_at: string;
     updated_at: string;
     engine_count: number;
+    linked_engines?: { id: string; name: string; provider: string }[];
     supports_remote_delete?: boolean;
 }
 
@@ -78,6 +79,7 @@ export interface EdgeQueue {
     created_at: string;
     updated_at: string;
     engine_count: number;
+    linked_engines?: { id: string; name: string; provider: string }[];
     provider_account_id?: string | null;
     supports_remote_delete?: boolean;
 }

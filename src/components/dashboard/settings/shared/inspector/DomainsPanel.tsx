@@ -242,7 +242,8 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
                 )}
             </div>
 
-            {/* Add domain form */}
+            {/* Add domain form — hidden when a custom domain already exists (1 per engine) */}
+            {allDomains.length === 0 && (
             <div className="px-4 py-3 border-b border-border shrink-0">
                 <form
                     onSubmit={(e) => {
@@ -269,6 +270,7 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
                     </Button>
                 </form>
             </div>
+            )}
 
             {/* Domain list */}
             <ScrollArea className="flex-1">
@@ -295,22 +297,6 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
                                         <StatusBadge status={d.status} />
                                     </div>
                                     <div className="flex items-center gap-1">
-                                        {d.status === 'pending' && !isDeno && (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-6 w-6"
-                                                onClick={() => verifyMutation.mutate(d.id)}
-                                                disabled={verifyingId === d.id}
-                                                title="Verify DNS"
-                                            >
-                                                {verifyingId === d.id ? (
-                                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                                ) : (
-                                                    <RefreshCw className="h-3 w-3" />
-                                                )}
-                                            </Button>
-                                        )}
                                         <Button
                                             variant="ghost"
                                             size="icon"
@@ -373,48 +359,80 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
                                     </div>
                                 )}
 
-                                {/* Non-Deno: DNS instructions (for pending domains) */}
-                                {!isDeno && (d.dns_records?.length || d.dns_target) && (
-                                    <div className="mt-1.5 p-2 rounded-md bg-muted/50 border border-border">
-                                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-1">
-                                            <Info className="h-3 w-3" />
-                                            DNS Configuration
-                                        </div>
-
-                                        {d.dns_records && d.dns_records.length > 0 ? (
-                                            <div className="space-y-1">
-                                                {d.dns_records.map((rec, ri) => (
-                                                    <div key={ri} className="flex items-center justify-between">
-                                                        <code className="text-[11px] font-mono text-foreground">
-                                                            <span className="text-muted-foreground">{rec.type}</span> {rec.name} → {rec.content}
-                                                        </code>
-                                                        <CopyButton text={rec.content} />
-                                                    </div>
-                                                ))}
+                                {/* Non-Deno: Step-by-step DNS setup (pending) or success (active) */}
+                                {!isDeno && d.status !== 'active' && (
+                                    <div className="mt-2 p-2.5 rounded-md bg-blue-500/5 border border-blue-500/20">
+                                        <div className="flex items-start gap-2">
+                                            <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
+                                            <div className="space-y-1.5 flex-1">
+                                                {d.provider === 'cloudflare' ? (
+                                                    <>
+                                                        <p className="text-[11px] font-medium text-blue-700 dark:text-blue-400">
+                                                            Verify domain to activate
+                                                        </p>
+                                                        <p className="text-[10px] text-muted-foreground">
+                                                            DNS is automatically configured by Cloudflare Workers. Click verify to confirm your domain is resolving.
+                                                        </p>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <p className="text-[11px] font-medium text-blue-700 dark:text-blue-400">
+                                                            Configure DNS to activate
+                                                        </p>
+                                                        <ol className="text-[10px] text-muted-foreground space-y-1 list-decimal list-inside">
+                                                            <li>
+                                                                Go to your DNS provider and add a record:
+                                                                {d.dns_records && d.dns_records.length > 0 ? (
+                                                                    <div className="mt-1 ml-3 space-y-0.5">
+                                                                        {d.dns_records.map((rec, ri) => (
+                                                                            <div key={ri} className="flex items-center gap-1.5">
+                                                                                <code className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded">
+                                                                                    {rec.type} {rec.name} → {rec.content}
+                                                                                </code>
+                                                                                <CopyButton text={rec.content} />
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : d.dns_target ? (
+                                                                    <div className="mt-1 ml-3 flex items-center gap-1.5">
+                                                                        <code className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded">
+                                                                            CNAME → {d.dns_target}
+                                                                        </code>
+                                                                        <CopyButton text={d.dns_target} />
+                                                                    </div>
+                                                                ) : null}
+                                                            </li>
+                                                            <li>Wait a few minutes for DNS propagation</li>
+                                                        </ol>
+                                                        <p className="text-[10px] text-amber-600 mt-1">⚠ DNS-only (do not proxy) — required for SSL verification</p>
+                                                    </>
+                                                )}
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-7 text-[11px] gap-1.5 mt-2 w-full"
+                                                    onClick={() => verifyMutation.mutate(d.id)}
+                                                    disabled={verifyingId === d.id}
+                                                >
+                                                    {verifyingId === d.id ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                        <CheckCircle2 className="h-3 w-3" />
+                                                    )}
+                                                    Verify DNS
+                                                </Button>
                                             </div>
-                                        ) : d.dns_target ? (
-                                            <div className="flex items-center justify-between">
-                                                <code className="text-[11px] font-mono text-foreground">
-                                                    CNAME → {d.dns_target}
-                                                </code>
-                                                <CopyButton text={d.dns_target} />
-                                            </div>
-                                        ) : null}
-
-                                        <div className="mt-1.5 text-[10px] text-muted-foreground">
-                                            {d.provider === 'cloudflare' ? (
-                                                <span className="text-emerald-600">✓ Proxy OK — traffic stays on Cloudflare's edge network</span>
-                                            ) : (
-                                                <span className="text-amber-600">⚠ DNS-only (do not proxy) — required for SSL verification</span>
-                                            )}
                                         </div>
                                     </div>
                                 )}
 
-                                {/* SSL status */}
-                                {d.ssl_status && (
-                                    <div className="mt-1 text-[10px] text-muted-foreground flex items-center gap-1">
-                                        SSL: <span className={d.ssl_status === 'active' || d.ssl_status === 'success' ? 'text-emerald-600' : 'text-amber-600'}>{d.ssl_status}</span>
+                                {/* Non-Deno: Active / verified confirmation */}
+                                {!isDeno && d.status === 'active' && (
+                                    <div className="mt-1.5 p-2 rounded-md bg-emerald-500/5 border border-emerald-500/20">
+                                        <div className="flex items-center gap-1.5 text-[10px] text-emerald-600">
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            Custom domain active — used as Endpoint URL
+                                        </div>
                                     </div>
                                 )}
 

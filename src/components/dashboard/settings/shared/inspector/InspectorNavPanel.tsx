@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import type {
     SourceSnapshotResponse, InspectSettingsResponse, InspectSecretsResponse,
+    InspectDomainsResponse,
     NavSection, SelectedItem, HierNode,
 } from './types';
 
@@ -46,6 +47,9 @@ interface InspectorNavPanelProps {
     dirtyFiles?: Set<string>;
     // OpenAPI spec (for dynamic endpoint count)
     openApiSpec?: any;
+    // Domains
+    domainsData?: InspectDomainsResponse;
+    loadingDomains?: boolean;
 }
 
 export const InspectorNavPanel: React.FC<InspectorNavPanelProps> = ({
@@ -55,6 +59,7 @@ export const InspectorNavPanel: React.FC<InspectorNavPanelProps> = ({
     expandedSections, toggleSection,
     selectedItem, setSelectedItem,
     dirtyFiles, openApiSpec,
+    domainsData, loadingDomains,
 }) => {
     const isSelected = (section: NavSection, key: string) =>
         selectedItem.section === section && selectedItem.key === key;
@@ -323,20 +328,23 @@ export const InspectorNavPanel: React.FC<InspectorNavPanelProps> = ({
                                     <Skeleton className="h-4 w-3/4" />
                                 </div>
                             )}
-                        </div>
-                    )}
 
-                    {/* ── Logs Section (all providers) ───────────────── */}
-                    <button
-                        onClick={() => toggleSection('logs')}
-                        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors mt-1"
-                    >
-                        {expandedSections.has('logs') ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                        <FileCode className="h-3.5 w-3.5" />
-                        LOGS
-                    </button>
-                    {expandedSections.has('logs') && (
-                        <div className="ml-2">
+                            {/* Manage Domains (all providers) */}
+                            <button
+                                onClick={() => setSelectedItem({ section: 'domains', key: 'manager' })}
+                                className={`w-full flex items-center gap-2 px-3 py-1 text-xs rounded-md transition-colors ${isSelected('domains', 'manager')
+                                    ? 'bg-primary/10 text-primary font-medium'
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                                    }`}
+                            >
+                                <Globe className="h-3 w-3 shrink-0" />
+                                <span className="truncate">Manage Domains</span>
+                                {domainsData?.domains && domainsData.domains.length > 0 && (
+                                    <Badge variant="secondary" className="ml-auto text-[10px] h-4 px-1.5">{domainsData.domains.length}</Badge>
+                                )}
+                            </button>
+
+                            {/* Runtime Logs (all providers) */}
                             <button
                                 onClick={() => setSelectedItem({ section: 'logs', key: 'viewer' })}
                                 className={`w-full flex items-center gap-2 px-3 py-1 text-xs rounded-md transition-colors ${isSelected('logs', 'viewer')

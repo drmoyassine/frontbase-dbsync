@@ -18,6 +18,7 @@ import { useEdgeCacheForm } from '@/hooks/useEdgeCacheForm';
 import { EdgeCache } from '@/hooks/useEdgeInfrastructure';
 import { EdgeCacheDialog } from './EdgeCacheDialog';
 import { DeleteResourceDialog, BulkDeleteResourceDialog } from './DeleteResourceDialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
 import { useQueryClient } from '@tanstack/react-query';
 import { EDGE_CACHE_PROVIDERS, ProviderBadge } from './edgeConstants';
@@ -166,9 +167,23 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
                                     Created {new Date(cache.created_at).toLocaleDateString()}
                                 </span>
                                 {cache.engine_count > 0 && (
-                                    <Badge variant="secondary" className="text-xs">
-                                        {cache.engine_count} engine{cache.engine_count > 1 ? 's' : ''}
-                                    </Badge>
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Badge variant="secondary" className="text-xs cursor-default">
+                                                    {cache.engine_count} engine{cache.engine_count > 1 ? 's' : ''}
+                                                </Badge>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="text-xs">
+                                                <p className="font-medium mb-1">Connected Engines:</p>
+                                                {(cache.linked_engines || []).map(e => (
+                                                    <p key={e.id} className="text-muted-foreground">
+                                                        {e.name} <span className="opacity-60">({e.provider})</span>
+                                                    </p>
+                                                ))}
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
                                 )}
                                 <Button
                                     variant="ghost" size="icon"

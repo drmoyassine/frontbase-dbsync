@@ -52,6 +52,7 @@ const BASE: Partial<Options> = {
 const NODE_ALIASES: Record<string, string> = {
     // NPM packages — force edge-compatible variants
     '@libsql/client': '@libsql/client/web',
+    '@upstash/redis': '@upstash/redis/cloudflare',
     'ws': shim('ws'),
     // UNSUPPORTED builtins → shim stubs
     'fs': shim('fs'), 'node:fs': shim('fs'), 'node:fs/promises': shim('fs'),

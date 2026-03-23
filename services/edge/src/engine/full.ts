@@ -21,7 +21,7 @@ import { dataRoute } from '../routes/data.js';
 // Full App = Lite + Pages/SSR
 // =============================================================================
 
-const app = createLiteApp();
+const app = createLiteApp('full');
 
 // ── Page / SSR Routes ──────────────────────────────────────────────────
 app.route('/api/import', importRoute);

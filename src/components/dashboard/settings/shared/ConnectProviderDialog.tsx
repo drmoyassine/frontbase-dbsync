@@ -106,12 +106,12 @@ export const ConnectProviderDialog: React.FC<ConnectProviderDialogProps> = ({
         if (result.projects && result.projects.length > 0) {
             setDiscoveredProjects(result.projects);
             setSelectedProjectRef(result.projects[0].ref);
-            setName(`Supabase: ${result.projects[0].name}`);
+            setName(result.projects[0].name);
         }
 
         // Turso: auto-name from db_name
         if (effectiveProvider === 'turso' && result.db_name) {
-            setName(`Turso: ${result.db_name}`);
+            setName(result.db_name);
             setCredFields(prev => ({ ...prev, _db_name: result.db_name! }));
         }
 
@@ -120,7 +120,7 @@ export const ConnectProviderDialog: React.FC<ConnectProviderDialogProps> = ({
             setNeonOrgs(result.neon_orgs);
             const firstOrg = result.neon_orgs[0];
             setSelectedNeonOrg(firstOrg.id);
-            setName(`Neon: ${firstOrg.name}`);
+            setName(firstOrg.name);
         }
     }, [handleTestConnection, resetDiscovery, effectiveProvider, setName, setCredFields]);
 
@@ -310,7 +310,7 @@ export const ConnectProviderDialog: React.FC<ConnectProviderDialogProps> = ({
                         selectedProjectRef={selectedProjectRef}
                         onProjectChange={(ref, projectName) => {
                             setSelectedProjectRef(ref);
-                            if (projectName) setName(`Supabase: ${projectName}`);
+                            if (projectName) setName(projectName);
                         }}
                     />
                 )}
@@ -325,11 +325,11 @@ export const ConnectProviderDialog: React.FC<ConnectProviderDialogProps> = ({
                         onOrgChange={(orgId, orgName) => {
                             setSelectedNeonOrg(orgId);
                             setSelectedNeonProject('');
-                            if (orgName) setName(`Neon: ${orgName}`);
+                            if (orgName) setName(orgName);
                         }}
                         onProjectChange={(projectId, projectName) => {
                             setSelectedNeonProject(projectId);
-                            if (projectName) setName(`Neon: ${projectName}`);
+                            if (projectName) setName(projectName);
                         }}
                     />
                 )}

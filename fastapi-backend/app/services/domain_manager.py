@@ -145,6 +145,43 @@ def _remove_custom_domain(engine: EdgeEngine, db: Optional[Session]) -> None:
         print(f"[Domains] Custom domain removed for engine {engine.name}")
 
 
+async def _verify_domain_health(engine: EdgeEngine, domain: str, db: Optional[Session]) -> DomainResult:
+    """Shared verify: HTTP health-check, then save on success.
+
+    Used by ALL providers (CF, Vercel, Netlify, Deno) to confirm that the
+    custom domain actually resolves before updating the engine URL.
+    """
+    is_resolving = False
+    try:
+        # verify=False: SSL cert may not be provisioned yet — we just need
+        # to confirm the domain routes to the right server, not validate cert.
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, verify=False) as client:
+            probe = await client.get(f"https://{domain}/api/health")
+            is_resolving = probe.status_code < 500
+    except Exception:
+        # HTTPS failed entirely — try HTTP as last resort
+        try:
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                probe = await client.get(f"http://{domain}/api/health")
+                is_resolving = probe.status_code < 500
+        except Exception:
+            pass
+
+    if is_resolving:
+        _save_custom_domain(engine, domain, db)
+        return DomainResult(
+            success=True,
+            domain=DomainInfo(id=domain, domain=domain, status="active", provider="").to_dict(),
+            detail="Domain verified and saved!",
+        )
+    else:
+        return DomainResult(
+            success=True,
+            domain=DomainInfo(id=domain, domain=domain, status="pending", provider="").to_dict(),
+            detail="DNS not yet resolving — add the DNS record and try again.",
+        )
+
+
 # =============================================================================
 # Cloudflare — Workers Custom Domains
 # =============================================================================
@@ -171,11 +208,19 @@ async def _cf_list(engine: EdgeEngine, creds: dict, **kwargs: Any) -> DomainResu
         return DomainResult(success=False, detail=f"CF API error: {resp.status_code}")
 
     data = resp.json().get("result", [])
+    # Check which domain (if any) has been verified and saved
+    try:
+        engine_cfg = json.loads(str(engine.engine_config or '{}'))
+    except (json.JSONDecodeError, TypeError):
+        engine_cfg = {}
+    saved_domain = engine_cfg.get("custom_domain", "")
+
     domains = [DomainInfo(
         id=d.get("id", ""),
         domain=d.get("hostname", ""),
-        status="active" if d.get("hostname") else "pending",
-        ssl_status="active",  # CF auto-manages SSL
+        status="active" if d.get("hostname") == saved_domain else "pending",
+        ssl_status="active" if d.get("hostname") == saved_domain else "pending",
+        dns_target=f"{worker_name}.workers.dev",
         provider="cloudflare",
     ).to_dict() for d in data]
 
@@ -209,14 +254,12 @@ async def _cf_add(engine: EdgeEngine, creds: dict, domain: str, **kwargs: Any) -
 
     d = resp.json().get("result", {})
     domain_name = d.get("hostname", domain)
-    # CF domains are active immediately — save as custom domain
-    db: Optional[Session] = kwargs.get("db")
-    _save_custom_domain(engine, domain_name, db)
+    # Don't save custom domain yet — wait for user to verify DNS resolution
     return DomainResult(success=True, domain=DomainInfo(
         id=d.get("id", ""),
         domain=domain_name,
-        status="active",
-        ssl_status="active",
+        status="pending",
+        ssl_status="pending",
         dns_target=f"{worker_name}.workers.dev",
         provider="cloudflare",
     ).to_dict())
@@ -240,8 +283,20 @@ async def _cf_delete(engine: EdgeEngine, creds: dict, domain_id: str, **kwargs: 
 
 
 async def _cf_verify(engine: EdgeEngine, creds: dict, domain_id: str, **kwargs: Any) -> DomainResult:
-    """CF domains are auto-verified via DNS."""
-    return DomainResult(success=True, detail="Cloudflare auto-verifies domains via DNS. No manual verification needed.")
+    """Verify CF domain resolves via shared health check."""
+    # domain_id for CF is the API domain UUID — look up hostname from list
+    token = creds.get("api_token", "")
+    account_id = creds.get("account_id", "")
+    headers = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            f"{CF_API}/accounts/{account_id}/workers/domains/{domain_id}",
+            headers=headers,
+        )
+    if resp.status_code != 200:
+        return DomainResult(success=False, detail=f"CF API error: {resp.status_code}")
+    domain_name = resp.json().get("result", {}).get("hostname", domain_id)
+    return await _verify_domain_health(engine, domain_name, kwargs.get("db"))
 
 
 # =============================================================================
@@ -273,11 +328,20 @@ async def _vercel_list(engine: EdgeEngine, creds: dict, **kwargs: Any) -> Domain
         return DomainResult(success=False, detail=f"Vercel API error: {resp.status_code}")
 
     data = resp.json().get("domains", [])
+    # Filter out the default .vercel.app domain — not a custom domain
+    data = [d for d in data if not d.get("name", "").endswith(".vercel.app")]
+    # Check which domain (if any) has been verified and saved
+    try:
+        engine_cfg = json.loads(str(engine.engine_config or '{}'))
+    except (json.JSONDecodeError, TypeError):
+        engine_cfg = {}
+    saved_domain = engine_cfg.get("custom_domain", "")
+
     domains = [DomainInfo(
         id=d.get("name", ""),  # Vercel uses domain name as ID
         domain=d.get("name", ""),
-        status="active" if d.get("verified") else "pending",
-        ssl_status="active" if d.get("verified") else "pending",
+        status="active" if d.get("name") == saved_domain else "pending",
+        ssl_status="active" if d.get("name") == saved_domain else "pending",
         verification_type=d.get("verification", [{}])[0].get("type", "") if d.get("verification") else "",
         verification_value=d.get("verification", [{}])[0].get("value", "") if d.get("verification") else "",
         dns_target="cname.vercel-dns.com",
@@ -311,9 +375,11 @@ async def _vercel_add(engine: EdgeEngine, creds: dict, domain: str, **kwargs: An
         return DomainResult(success=False, detail=f"Vercel API error: {err}")
 
     d = resp.json()
+    domain_name = d.get("name", domain)
+    # Don't save custom domain yet — wait for user to verify DNS resolution
     return DomainResult(success=True, domain=DomainInfo(
-        id=d.get("name", domain),
-        domain=d.get("name", domain),
+        id=domain_name,
+        domain=domain_name,
         status="pending",
         dns_target="cname.vercel-dns.com",
         provider="vercel",
@@ -343,35 +409,9 @@ async def _vercel_delete(engine: EdgeEngine, creds: dict, domain_id: str, **kwar
 
 
 async def _vercel_verify(engine: EdgeEngine, creds: dict, domain_id: str, **kwargs: Any) -> DomainResult:
-    """Trigger domain verification for a Vercel project."""
-    token = creds.get("api_token", "")
-    team_id = creds.get("team_id")
-    project_name = _get_engine_name(engine)
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    params: dict[str, Any] = {}
-    if team_id:
-        params["teamId"] = team_id
-
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(
-            f"{VERCEL_API}/v9/projects/{project_name}/domains/{domain_id}/verify",
-            headers=headers, params=params,
-        )
-    if resp.status_code != 200:
-        return DomainResult(success=False, detail=f"Vercel API error: {resp.status_code}")
-    d = resp.json()
-    domain_name = d.get("name", domain_id)
-    is_active = d.get("verified", False)
-    if is_active:
-        # Domain verified — save as custom domain
-        db: Optional[Session] = kwargs.get("db")
-        _save_custom_domain(engine, domain_name, db)
-    return DomainResult(success=True, domain=DomainInfo(
-        id=domain_name,
-        domain=domain_name,
-        status="active" if is_active else "pending",
-        provider="vercel",
-    ).to_dict())
+    """Verify Vercel domain resolves via shared health check."""
+    # domain_id for Vercel is the domain name itself
+    return await _verify_domain_health(engine, domain_id, kwargs.get("db"))
 
 
 # =============================================================================
@@ -402,11 +442,25 @@ async def _netlify_list(engine: EdgeEngine, creds: dict, **kwargs: Any) -> Domai
     aliases = site.get("domain_aliases", []) or []
     all_domains = ([custom_domain] if custom_domain else []) + aliases
 
+    # Check which domain (if any) has been verified and saved
+    try:
+        engine_cfg = json.loads(str(engine.engine_config or '{}'))
+    except (json.JSONDecodeError, TypeError):
+        engine_cfg = {}
+    saved_domain = engine_cfg.get("custom_domain", "")
+
+    # ssl can be a bool or a dict — handle both
+    ssl_val = site.get("ssl")
+    ssl_provisioned = (
+        ssl_val.get("state") == "provisioned"
+        if isinstance(ssl_val, dict) else bool(ssl_val)
+    )
+
     domains = [DomainInfo(
         id=d,  # Netlify uses domain name as ID
         domain=d,
-        status="active" if site.get("ssl") else "pending",
-        ssl_status="active" if site.get("ssl", {}).get("state") == "provisioned" else "pending",
+        status="active" if d == saved_domain else "pending",
+        ssl_status="active" if ssl_provisioned else "pending",
         dns_target=f"{site_name}.netlify.app",
         provider="netlify",
     ).to_dict() for d in all_domains if d]
@@ -461,8 +515,9 @@ async def _netlify_delete(engine: EdgeEngine, creds: dict, domain_id: str, **kwa
 
 
 async def _netlify_verify(engine: EdgeEngine, creds: dict, domain_id: str, **kwargs: Any) -> DomainResult:
-    """Netlify auto-verifies domains."""
-    return DomainResult(success=True, detail="Netlify auto-verifies domains after DNS propagation.")
+    """Verify Netlify domain resolves via shared health check."""
+    # domain_id for Netlify is the domain name itself
+    return await _verify_domain_health(engine, domain_id, kwargs.get("db"))
 
 
 # =============================================================================

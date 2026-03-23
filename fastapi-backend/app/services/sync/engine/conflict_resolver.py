@@ -131,7 +131,7 @@ class ConflictResolver:
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 response = await client.post(
-                    self.webhook_url,
+                    self.webhook_url or "",
                     json={
                         "record_key": record_key,
                         "master_data": master_data,

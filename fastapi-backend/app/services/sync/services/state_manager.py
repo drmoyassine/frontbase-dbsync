@@ -51,7 +51,7 @@ class StateManager:
         )
         
         # Add to the set of captured records for this job
-        await self.redis.sadd(self._get_job_captured_set_key(), record_id)
+        await self.redis.sadd(self._get_job_captured_set_key(), record_id)  # type: ignore[misc]
         await self.redis.expire(self._get_job_captured_set_key(), int(self.ttl.total_seconds()))
 
     async def get_record(self, record_id: str) -> Optional[Dict[str, Any]]:
@@ -91,7 +91,7 @@ class StateManager:
         if not self.redis:
             return []
             
-        ids = await self.redis.smembers(self._get_job_captured_set_key())
+        ids = await self.redis.smembers(self._get_job_captured_set_key())  # type: ignore[misc]
         return [id_bytes.decode('utf-8') if isinstance(id_bytes, bytes) else id_bytes for id_bytes in ids]
 
     async def cleanup_job(self):

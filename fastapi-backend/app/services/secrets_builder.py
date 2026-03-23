@@ -29,6 +29,8 @@ FRONTBASE_BINDING_NAMES = frozenset([
     'FRONTBASE_QUEUE_TOKEN',
     'FRONTBASE_QUEUE_SIGNING_KEY',
     'FRONTBASE_QUEUE_NEXT_SIGNING_KEY',
+    # PG schema isolation
+    'FRONTBASE_SCHEMA_NAME',
     # CF cross-platform (injected for CF resources on non-CF engines)
     'FRONTBASE_CF_API_TOKEN',
     'FRONTBASE_CF_ACCOUNT_ID',
@@ -113,13 +115,41 @@ def build_engine_secrets(
         if edge_db:
             db_provider = str(edge_db.provider)
             secrets['FRONTBASE_STATE_DB_PROVIDER'] = db_provider
-            secrets['FRONTBASE_STATE_DB_URL'] = str(edge_db.db_url)
-            token = decrypt_field(str(edge_db.db_token)) if edge_db.db_token else None  # type: ignore[truthy-bool]
-            if token:
-                secrets['FRONTBASE_STATE_DB_TOKEN'] = token
 
-            # CF resources on non-CF engines: inject scoped token for HTTP API access
-            if db_provider == 'cloudflare' and deploy_provider != 'cloudflare':
+            config = _get_provider_config(edge_db)
+
+            if db_provider == 'supabase':
+                # PostgREST via @supabase/postgrest-js — env vars from provider_config
+                supabase_url = config.get('supabase_url', str(edge_db.db_url))
+                anon_key = config.get('anon_key', '')
+                scoped_jwt = config.get('scoped_jwt', '')
+                schema_name = config.get('schema_name', 'frontbase_edge')
+
+                secrets['FRONTBASE_SUPABASE_URL'] = supabase_url
+                if anon_key:
+                    secrets['FRONTBASE_SUPABASE_ANON_KEY'] = anon_key
+                if scoped_jwt:
+                    secrets['FRONTBASE_SUPABASE_JWT'] = scoped_jwt
+                if schema_name:
+                    secrets['FRONTBASE_SCHEMA_NAME'] = str(schema_name)
+            else:
+                # Non-Supabase providers: PG wire protocol URL
+                secrets['FRONTBASE_STATE_DB_URL'] = str(edge_db.db_url)
+
+                token = decrypt_field(str(edge_db.db_token)) if edge_db.db_token else None  # type: ignore[truthy-bool]
+                if token:
+                    secrets['FRONTBASE_STATE_DB_TOKEN'] = token
+
+                # PG schema isolation
+                if db_provider in ('neon', 'postgres'):
+                    schema_name = config.get('schema_name')
+                    if schema_name:
+                        secrets['FRONTBASE_SCHEMA_NAME'] = str(schema_name)
+
+            # CF D1 databases: always inject CF API credentials.
+            # CfD1HttpProvider uses HTTP REST API (not native bindings),
+            # so it needs these env vars regardless of deploy target.
+            if db_provider == 'cloudflare':
                 config = _get_provider_config(edge_db)
                 scoped_value = config.get('scoped_token_value')
                 if scoped_value:
@@ -130,19 +160,51 @@ def build_engine_secrets(
                 if cf_account:
                     secrets['FRONTBASE_CF_ACCOUNT_ID'] = cf_account
 
+                # Fallback: if no scoped token in provider_config, use the
+                # linked provider account's API token (CF-on-CF deploys)
+                if 'FRONTBASE_CF_API_TOKEN' not in secrets and edge_db.provider_account_id:
+                    from ..models.models import EdgeProviderAccount
+                    provider_acct = db.query(EdgeProviderAccount).filter(
+                        EdgeProviderAccount.id == edge_db.provider_account_id
+                    ).first()
+                    if provider_acct and provider_acct.provider_credentials:
+                        from ..core.security import decrypt_credentials
+                        creds = decrypt_credentials(str(provider_acct.provider_credentials))
+                        if creds.get('api_token'):
+                            secrets['FRONTBASE_CF_API_TOKEN'] = creds['api_token']
+                        if creds.get('account_id') and 'FRONTBASE_CF_ACCOUNT_ID' not in secrets:
+                            secrets['FRONTBASE_CF_ACCOUNT_ID'] = creds['account_id']
+
     # ─── Cache ───────────────────────────────────────────────────────────
     if edge_cache_id:
         edge_cache = db.query(EdgeCache).filter(EdgeCache.id == edge_cache_id).first()
         if edge_cache:
             cache_provider = str(edge_cache.provider)
             secrets['FRONTBASE_CACHE_PROVIDER'] = cache_provider
-            secrets['FRONTBASE_CACHE_URL'] = str(edge_cache.cache_url)
-            token = decrypt_field(str(edge_cache.cache_token)) if edge_cache.cache_token else None  # type: ignore[truthy-bool]
-            if token:
-                secrets['FRONTBASE_CACHE_TOKEN'] = token
 
-            # CF KV on non-CF engines: inject scoped token
-            if cache_provider == 'cloudflare' and deploy_provider != 'cloudflare':
+            # Deno KV: built-in runtime feature, no URL/token needed
+            if cache_provider == 'deno_kv':
+                pass  # Only FRONTBASE_CACHE_PROVIDER is needed
+            elif cache_provider == 'cloudflare':
+                cache_url = str(edge_cache.cache_url)
+                # CF KV: normalize namespace ID to kv:// convention
+                if not cache_url.startswith('kv://'):
+                    cache_url = f'kv://{cache_url}'
+                secrets['FRONTBASE_CACHE_URL'] = cache_url
+                token = decrypt_field(str(edge_cache.cache_token)) if edge_cache.cache_token else None  # type: ignore[truthy-bool]
+                if token:
+                    secrets['FRONTBASE_CACHE_TOKEN'] = token
+            else:
+                cache_url = str(edge_cache.cache_url)
+                secrets['FRONTBASE_CACHE_URL'] = cache_url
+                token = decrypt_field(str(edge_cache.cache_token)) if edge_cache.cache_token else None  # type: ignore[truthy-bool]
+                if token:
+                    secrets['FRONTBASE_CACHE_TOKEN'] = token
+
+            # CF KV cache: inject CF API credentials if not already set by DB section.
+            # All CF resources share FRONTBASE_CF_API_TOKEN — first (broadest) token wins
+            # to prevent narrowly-scoped KV tokens from breaking D1 access.
+            if cache_provider == 'cloudflare' and 'FRONTBASE_CF_API_TOKEN' not in secrets:
                 config = _get_provider_config(edge_cache)
                 scoped_value = config.get('scoped_token_value')
                 if scoped_value:
@@ -150,8 +212,22 @@ def build_engine_secrets(
                     if decrypted:
                         secrets['FRONTBASE_CF_API_TOKEN'] = decrypted
                 cf_account = config.get('cf_account_id')
-                if cf_account:
+                if cf_account and 'FRONTBASE_CF_ACCOUNT_ID' not in secrets:
                     secrets['FRONTBASE_CF_ACCOUNT_ID'] = cf_account
+
+                # Fallback: resolve from linked provider account
+                if 'FRONTBASE_CF_API_TOKEN' not in secrets and edge_cache.provider_account_id:
+                    from ..models.models import EdgeProviderAccount
+                    provider_acct = db.query(EdgeProviderAccount).filter(
+                        EdgeProviderAccount.id == edge_cache.provider_account_id
+                    ).first()
+                    if provider_acct and provider_acct.provider_credentials:
+                        from ..core.security import decrypt_credentials
+                        creds = decrypt_credentials(str(provider_acct.provider_credentials))
+                        if creds.get('api_token'):
+                            secrets['FRONTBASE_CF_API_TOKEN'] = creds['api_token']
+                        if creds.get('account_id') and 'FRONTBASE_CF_ACCOUNT_ID' not in secrets:
+                            secrets['FRONTBASE_CF_ACCOUNT_ID'] = creds['account_id']
 
     # ─── Queue (provider-agnostic) ───────────────────────────────────────
     if edge_queue_id:
@@ -159,7 +235,11 @@ def build_engine_secrets(
         if edge_queue:
             queue_provider = str(edge_queue.provider)
             secrets['FRONTBASE_QUEUE_PROVIDER'] = queue_provider
-            secrets['FRONTBASE_QUEUE_URL'] = str(edge_queue.queue_url)
+            queue_url = str(edge_queue.queue_url)
+            # CF Queues: normalize queue ID to cfq:// convention (matches d1:// for D1)
+            if queue_provider == 'cloudflare' and not queue_url.startswith('cfq://'):
+                queue_url = f'cfq://{queue_url}'
+            secrets['FRONTBASE_QUEUE_URL'] = queue_url
             token = decrypt_field(str(edge_queue.queue_token)) if edge_queue.queue_token else None  # type: ignore[truthy-bool]
             if token:
                 secrets['FRONTBASE_QUEUE_TOKEN'] = token
@@ -170,8 +250,8 @@ def build_engine_secrets(
             if nsk:
                 secrets['FRONTBASE_QUEUE_NEXT_SIGNING_KEY'] = nsk
 
-            # CF Queues on non-CF engines: inject scoped token
-            if queue_provider == 'cloudflare' and deploy_provider != 'cloudflare':
+            # CF Queues: inject CF API credentials if not already set.
+            if queue_provider == 'cloudflare' and 'FRONTBASE_CF_API_TOKEN' not in secrets:
                 config = _get_provider_config(edge_queue)
                 scoped_value = config.get('scoped_token_value')
                 if scoped_value:
@@ -179,7 +259,21 @@ def build_engine_secrets(
                     if decrypted:
                         secrets['FRONTBASE_CF_API_TOKEN'] = decrypted
                 cf_account = config.get('cf_account_id')
-                if cf_account:
+                if cf_account and 'FRONTBASE_CF_ACCOUNT_ID' not in secrets:
                     secrets['FRONTBASE_CF_ACCOUNT_ID'] = cf_account
+
+                # Fallback: resolve from linked provider account
+                if 'FRONTBASE_CF_API_TOKEN' not in secrets and edge_queue.provider_account_id:
+                    from ..models.models import EdgeProviderAccount
+                    provider_acct = db.query(EdgeProviderAccount).filter(
+                        EdgeProviderAccount.id == edge_queue.provider_account_id
+                    ).first()
+                    if provider_acct and provider_acct.provider_credentials:
+                        from ..core.security import decrypt_credentials
+                        creds = decrypt_credentials(str(provider_acct.provider_credentials))
+                        if creds.get('api_token'):
+                            secrets['FRONTBASE_CF_API_TOKEN'] = creds['api_token']
+                        if creds.get('account_id') and 'FRONTBASE_CF_ACCOUNT_ID' not in secrets:
+                            secrets['FRONTBASE_CF_ACCOUNT_ID'] = creds['account_id']
 
     return secrets

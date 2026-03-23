@@ -88,7 +88,7 @@ async def get_table_schema(
                 except (json.JSONDecodeError, TypeError):
                     fk_data = []
             
-            return TableSchema(columns=columns, foreign_keys=fk_data)
+            return TableSchema(columns=columns, foreign_keys=fk_data)  # type: ignore[arg-type]
     
     # No cache or refresh requested - fetch from source
     try:

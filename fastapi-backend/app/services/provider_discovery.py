@@ -50,6 +50,13 @@ async def create_resource(provider: str, resource_type: str, creds: dict, **kwar
         return {"success": False, "detail": f"Create failed: {str(e)}"}
 
 
+# NOTE: PG schema helpers (discover_pg_schemas, create_pg_schema) and
+# Supabase lifecycle functions (init_supabase_state_db, cleanup_supabase_state_db,
+# mint_supabase_scoped_jwt, reset_supabase_role_password, delete_supabase_schema_and_role)
+# have been extracted to services/supabase_state_db.py
+
+
+
 # =============================================================================
 # Per-Provider Discoverers
 # =============================================================================
@@ -559,37 +566,27 @@ async def _discover_vercel(creds: dict) -> dict:
 
 
 async def _discover_deno(creds: dict) -> dict:
-    """Discover Deno Deploy resources: organizations, projects."""
+    """Discover Deno Deploy resources: apps (each app gets its own KV)."""
     token = creds.get("access_token", "")
     headers = {"Authorization": f"Bearer {token}"}
     resources: list[dict] = []
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        # 1. Get organizations
-        org_resp = await client.get(
-            "https://api.deno.com/v1/organizations", headers=headers,
+        # v2 API — list apps (works with ddo_ org tokens)
+        resp = await client.get(
+            "https://api.deno.com/v2/apps", headers=headers,
+            params={"limit": 50},
         )
-        if org_resp.status_code != 200:
-            return {"success": False, "detail": f"Deno API error: {org_resp.status_code}"}
+        if resp.status_code != 200:
+            return {"success": False, "detail": f"Deno API error: {resp.status_code}"}
 
-        orgs = org_resp.json()
-        for org in (orgs if isinstance(orgs, list) else []):
-            org_id = org.get("id", "")
-
-            # 2. Projects per org (each project gets its own KV)
-            proj_resp = await client.get(
-                f"https://api.deno.com/v1/organizations/{org_id}/projects",
-                headers=headers,
-            )
-            if proj_resp.status_code == 200:
-                projects = proj_resp.json()
-                for p in (projects if isinstance(projects, list) else []):
-                    resources.append({
-                        "id": p.get("id", ""), "name": p.get("name", ""),
-                        "type": "deno_project",
-                        "org_id": org_id,
-                        "has_kv": True,  # Every Deno project gets KV
-                    })
+        apps = resp.json()
+        for app in (apps if isinstance(apps, list) else []):
+            resources.append({
+                "id": app.get("id", ""), "name": app.get("slug", ""),
+                "type": "deno_project",
+                "has_kv": True,  # Every Deno Deploy app gets KV
+            })
 
     return {"success": True, "resources": resources}
 

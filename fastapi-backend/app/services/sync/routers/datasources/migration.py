@@ -39,7 +39,7 @@ async def check_datasource_migration(
         adapter = get_adapter(datasource)
         async with adapter:
             if hasattr(adapter, 'check_migration_status'):
-                status = await adapter.check_migration_status()
+                status = await adapter.check_migration_status()  # type: ignore[attr-defined]
                 return {"applicable": True, **status}
             else:
                 return {"applicable": False, "reason": "Adapter does not support migration check"}
@@ -86,7 +86,7 @@ async def apply_datasource_migration(
         adapter = get_adapter(datasource)
         async with adapter:
             if hasattr(adapter, 'apply_migration'):
-                result = await adapter.apply_migration(migration_sql)
+                result = await adapter.apply_migration(migration_sql)  # type: ignore[attr-defined]
                 if result.get("success"):
                     return {"success": True, "message": "Migration applied successfully", **result}
                 else:

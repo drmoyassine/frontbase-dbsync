@@ -167,6 +167,19 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
         }
     };
 
+    // Auto-select when discovery returns exactly 1 available (non-imported) resource.
+    // This handles the common case where a Supabase account is scoped to a single project
+    // — no need to re-pick what was already selected during account creation.
+    useEffect(() => {
+        if (resources.length > 0 && !selectedResourceId && !isDiscovering) {
+            const available = resources.filter(r => !isAlreadyImported(r));
+            if (available.length === 1) {
+                setSelectedResourceId(available[0].id);
+                onResourceSelected(available[0], selectedAccount);
+            }
+        }
+    }, [resources, isDiscovering]);
+
     const handleAccountChange = (value: string) => {
         if (value === '__connect_new__') {
             setShowConnectDialog(true);
@@ -341,7 +354,27 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
                                 <RefreshCw className="h-3 w-3 mr-1" /> Retry
                             </Button>
                         </div>
-                    ) : (
+                    ) : (() => {
+                        const available = resources.filter(r => !isAlreadyImported(r));
+                        const autoSelected = available.length === 1 && selectedResourceId === available[0].id;
+
+                        // Hide dropdown entirely when auto-selected with single resource
+                        if (autoSelected) {
+                            const r = available[0];
+                            return (
+                                <div className="flex items-center gap-2 py-1.5 px-3 rounded-md bg-muted/50 border text-sm">
+                                    <span className="font-medium">{r.name}</span>
+                                    <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                        {r.type}
+                                    </Badge>
+                                    {r.region && (
+                                        <span className="text-[10px] text-muted-foreground">{r.region}</span>
+                                    )}
+                                </div>
+                            );
+                        }
+
+                        return (
                         <div className="space-y-1.5">
                             <Label className="text-xs text-muted-foreground">
                                 {resourceLabel || `Select a resource`} ({resources.length} found)
@@ -397,7 +430,8 @@ export const AccountResourcePicker: React.FC<AccountResourcePickerProps> = ({
                                 </SelectContent>
                             </Select>
                         </div>
-                    )}
+                        );
+                    })()}
                 </div>
             )}
 

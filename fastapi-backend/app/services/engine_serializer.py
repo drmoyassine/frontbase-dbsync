@@ -24,7 +24,7 @@ def serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) -> 
     current_hashes: optional {"lite": "abc...", "full": "def..."} to compute is_outdated.
     """
     config = None
-    if engine.engine_config:
+    if engine.engine_config is not None:
         try:
             config = json.loads(str(engine.engine_config))
         except (json.JSONDecodeError, TypeError):
@@ -47,10 +47,10 @@ def serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) -> 
         provider_name = str(engine.edge_provider.provider)
 
     # Drift detection fields
-    bundle_checksum_val = str(engine.bundle_checksum) if engine.bundle_checksum else None
-    config_checksum_val = str(engine.config_checksum) if engine.config_checksum else None
-    last_deployed_at_val = str(engine.last_deployed_at) if engine.last_deployed_at else None
-    last_synced_at_val = str(engine.last_synced_at) if engine.last_synced_at else None
+    bundle_checksum_val = str(engine.bundle_checksum) if engine.bundle_checksum is not None else None
+    config_checksum_val = str(engine.config_checksum) if engine.config_checksum is not None else None
+    last_deployed_at_val = str(engine.last_deployed_at) if engine.last_deployed_at is not None else None
+    last_synced_at_val = str(engine.last_synced_at) if engine.last_synced_at is not None else None
 
     # Compute sync_status
     sync_status = "unknown"
@@ -62,12 +62,12 @@ def serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) -> 
     is_outdated = False
     is_engine_forked = bool(engine.is_forked) if hasattr(engine, 'is_forked') else False
     if current_hashes and not is_engine_forked:
-        adapter = str(engine.adapter_type) if engine.adapter_type else "automations"
+        adapter = str(engine.adapter_type) if engine.adapter_type is not None else "automations"
         is_full = adapter == "full"
         current_hash = current_hashes.get("full" if is_full else "lite")
 
         if not bundle_checksum_val:
-            if engine.edge_provider_id and not getattr(engine, 'is_system', False):
+            if engine.edge_provider_id is not None and not getattr(engine, 'is_system', False):
                 is_outdated = True
                 sync_status = "stale"
         elif current_hash and current_hash != bundle_checksum_val:
@@ -90,15 +90,15 @@ def serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) -> 
     return {
         "id": str(engine.id),
         "name": str(engine.name),
-        "edge_provider_id": str(engine.edge_provider_id) if engine.edge_provider_id else None,
+        "edge_provider_id": str(engine.edge_provider_id) if engine.edge_provider_id is not None else None,
         "provider": provider_name,
         "adapter_type": str(engine.adapter_type),
         "url": str(engine.url),
-        "edge_db_id": str(engine.edge_db_id) if engine.edge_db_id else None,
+        "edge_db_id": str(engine.edge_db_id) if engine.edge_db_id is not None else None,
         "edge_db_name": edge_db_name,
-        "edge_cache_id": str(engine.edge_cache_id) if engine.edge_cache_id else None,
+        "edge_cache_id": str(engine.edge_cache_id) if engine.edge_cache_id is not None else None,
         "edge_cache_name": edge_cache_name,
-        "edge_queue_id": str(engine.edge_queue_id) if engine.edge_queue_id else None,
+        "edge_queue_id": str(engine.edge_queue_id) if engine.edge_queue_id is not None else None,
         "edge_queue_name": edge_queue_name,
         "engine_config": config,
         "gpu_models": gpu_models_data,

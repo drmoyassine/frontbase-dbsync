@@ -70,11 +70,16 @@ function createInitialProvider(): IStateProvider {
             return new CfD1HttpProvider();
         }
 
-        case 'neon':
-        case 'supabase': {
+        case 'neon': {
             const { NeonHttpProvider } = require('./NeonHttpProvider');
             console.log(`🐘 Using NeonHttpProvider (${provider})`);
             return new NeonHttpProvider();
+        }
+
+        case 'supabase': {
+            const { SupabaseRestProvider } = require('./SupabaseRestProvider');
+            console.log(`🐘 Using SupabaseRestProvider (PostgREST)`);
+            return new SupabaseRestProvider();
         }
 
         default:

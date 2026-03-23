@@ -4,12 +4,14 @@
  * Used for both Neon and Supabase databases as the edge state provider.
  * Uses the Neon serverless adapter over HTTP (no TCP sockets needed).
  * 
- * All tables are created in a dedicated `frontbase_edge` schema to avoid
- * polluting the user's `public` schema.
+ * All tables are created in a dedicated PG schema (default: `frontbase_edge`)
+ * to avoid polluting the user's `public` schema. Multiple deployments can
+ * share the same database by using different schemas (e.g. `frontbase_edge_staging`).
  * 
  * Env vars:
  * - FRONTBASE_STATE_DB_URL: PostgreSQL connection string (pooler URL)
  * - FRONTBASE_STATE_DB_TOKEN: Not needed (auth embedded in URL)
+ * - FRONTBASE_SCHEMA_NAME: PG schema to use (default: frontbase_edge)
  * 
  * AGENTS.md §2.1: Edge Self-Sufficiency — no calls to FastAPI at runtime.
  * 
@@ -24,7 +26,7 @@ import type {
 } from './IStateProvider';
 
 const DEFAULT_FAVICON = '/static/icon.png';
-const SCHEMA = 'frontbase_edge';
+const SCHEMA = process.env.FRONTBASE_SCHEMA_NAME || 'frontbase_edge';
 
 // =============================================================================
 // PG HTTP Client (uses @neondatabase/serverless)
@@ -37,8 +39,8 @@ interface PgResult {
 
 /**
  * Lazy-loaded Neon serverless client.
- * Import is deferred to avoid failing when the dep isn't installed
- * (the storage factory won't create this provider unless PROVIDER=neon/supabase).
+ * Uses Pool from @neondatabase/serverless which supports standard
+ * pool.query(sql, params) syntax — compatible with all versions.
  */
 let _neonSql: ((sqlStr: string, params?: unknown[]) => Promise<PgResult>) | null = null;
 
@@ -52,13 +54,12 @@ async function getNeonClient(): Promise<(sqlStr: string, params?: unknown[]) => 
 
     try {
         // Dynamic import to avoid build-time failures when dep not installed
-        const { neon } = await import('@neondatabase/serverless');
-        const client = neon(dbUrl);
+        const { Pool } = await import('@neondatabase/serverless');
+
+        const pool = new Pool({ connectionString: dbUrl });
         _neonSql = async (sqlStr: string, params: unknown[] = []): Promise<PgResult> => {
-            // neon() returns a tagged template function, but also supports
-            // sql(query, params) call syntax at runtime. Cast to any.
-            const rows = await (client as any)(sqlStr, params);
-            return { rows: rows as Record<string, unknown>[], rowCount: rows.length };
+            const result = await pool.query(sqlStr, params);
+            return { rows: result.rows as Record<string, unknown>[], rowCount: result.rows.length };
         };
         console.log(`🐘 NeonHttpProvider connected to: ${dbUrl.substring(0, 40)}...`);
         return _neonSql;

@@ -33,7 +33,21 @@ router = APIRouter(prefix="/api/edge-databases", tags=["edge-databases"])
 # Helpers
 # =============================================================================
 
-def _serialize_edge_db(edb, db, target_count: int = 0, warning: Optional[str] = None) -> EdgeDatabaseResponse:
+def _query_linked_engines(db, fk_column, resource_id) -> tuple[int, list[dict]]:
+    """Return (count, [{id, name, provider}]) for engines referencing a resource."""
+    engines = db.query(EdgeEngine).filter(fk_column == resource_id).all()
+    linked = [
+        {
+            "id": str(e.id),
+            "name": str(e.name),
+            "provider": str(e.edge_provider.provider) if e.edge_provider else "unknown",
+        }
+        for e in engines
+    ]
+    return len(linked), linked
+
+
+def _serialize_edge_db(edb, db, target_count: int = 0, linked_engines: Optional[list] = None, warning: Optional[str] = None) -> EdgeDatabaseResponse:
     """Serialize an EdgeDatabase ORM object."""
     from ..models.models import EdgeProviderAccount
     account_name = None
@@ -69,6 +83,7 @@ def _serialize_edge_db(edb, db, target_count: int = 0, warning: Optional[str] = 
         created_at=str(edb.created_at),
         updated_at=str(edb.updated_at),
         target_count=target_count,
+        linked_engines=linked_engines or [],
         warning=warning,
         supports_remote_delete=can_remote_delete,
         schema_name=config_schema_name,
@@ -87,10 +102,8 @@ async def list_edge_databases():
         edge_dbs = db.query(EdgeDatabase).order_by(EdgeDatabase.created_at.desc()).all()
         result = []
         for edb in edge_dbs:
-            target_count = db.query(EdgeEngine).filter(
-                EdgeEngine.edge_db_id == edb.id
-            ).count()
-            result.append(_serialize_edge_db(edb, db, target_count))
+            target_count, linked = _query_linked_engines(db, EdgeEngine.edge_db_id, edb.id)
+            result.append(_serialize_edge_db(edb, db, target_count, linked))
         return result
     finally:
         db.close()
@@ -205,11 +218,9 @@ async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate):
         db.commit()
         db.refresh(edge_db)
         
-        target_count = db.query(EdgeEngine).filter(
-            EdgeEngine.edge_db_id == db_id
-        ).count()
+        target_count, linked = _query_linked_engines(db, EdgeEngine.edge_db_id, db_id)
         
-        return _serialize_edge_db(edge_db, db, target_count)
+        return _serialize_edge_db(edge_db, db, target_count, linked)
     finally:
         db.close()
 

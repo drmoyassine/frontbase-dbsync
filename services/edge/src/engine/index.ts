@@ -5,7 +5,7 @@
  */
 
 // Pre-configured engine apps
-export { liteApp, createLiteApp } from './lite.js';
+export { liteApp, createLiteApp, type EngineMode } from './lite.js';
 export { fullApp } from './full.js';
 
 // Workflow runtime (engine-agnostic)

@@ -75,8 +75,8 @@ sync_app = FastAPI(
 )
 
 # Exception handlers
-sync_app.add_exception_handler(RequestValidationError, validation_exception_handler)
-sync_app.add_exception_handler(SQLAlchemyError, database_exception_handler)
+sync_app.add_exception_handler(RequestValidationError, validation_exception_handler)  # type: ignore[arg-type]
+sync_app.add_exception_handler(SQLAlchemyError, database_exception_handler)  # type: ignore[arg-type]
 sync_app.add_exception_handler(Exception, global_exception_handler)
 
 # Custom middleware to internally add trailing slash to paths
@@ -239,7 +239,7 @@ async def views_swagger_ui():
         swagger_ui_parameters={"defaultModelsExpandDepth": -1, "deepLinking": True},
         swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
         swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
-        swagger_favicon_url=None,
+        swagger_favicon_url="",
     ).body.decode()
     
     # Inject CSS and JS

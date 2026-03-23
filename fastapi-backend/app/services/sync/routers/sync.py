@@ -4,7 +4,7 @@ Sync operations API router - execute syncs, check status, manage conflicts.
 
 import json
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -202,7 +202,7 @@ async def resolve_conflict(
 
 @router.get("/jobs/", response_model=List[SyncJobResponse])
 async def list_jobs(
-    config_id: str = None,
+    config_id: Optional[str] = None,
     limit: int = 20,
     db: AsyncSession = Depends(get_db)
 ):

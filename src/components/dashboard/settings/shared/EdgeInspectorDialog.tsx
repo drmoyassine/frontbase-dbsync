@@ -26,9 +26,11 @@ import { SecretViewer } from './inspector/SecretViewer';
 import { SettingsPanel } from './inspector/SettingsPanel';
 import { EndpointsPanel } from './inspector/EndpointsPanel';
 import { LogsPanel } from './inspector/LogsPanel';
+import { DomainsPanel } from './inspector/DomainsPanel';
 import {
     type NavSection, type SelectedItem, type HierNode,
     type SourceSnapshotResponse, type InspectSettingsResponse, type InspectSecretsResponse,
+    type InspectDomainsResponse,
     API_BASE, PROVIDER_LABELS,
     extractWorkerName, getWorkerBaseUrl, engineInspectFetch,
 } from './inspector/types';
@@ -47,7 +49,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
     const queryClient = useQueryClient();
 
     // Navigation state
-    const [expandedSections, setExpandedSections] = useState<Set<NavSection>>(new Set(['files']));
+    const [expandedSections, setExpandedSections] = useState<Set<NavSection>>(new Set(['files', 'settings']));
     const [selectedItem, setSelectedItem] = useState<SelectedItem>({ section: 'files', key: '' });
     const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
 
@@ -136,6 +138,20 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         refetchOnWindowFocus: false,
     });
 
+    // ── Domains (multi-provider via domain_manager) ───────────────────
+
+    const {
+        data: domainsData,
+        isLoading: loadingDomains,
+    } = useQuery<InspectDomainsResponse>({
+        queryKey: ['edge-inspector', 'domains', engine.id],
+        queryFn: () => engineInspectFetch<InspectDomainsResponse>(engine.id, 'domains'),
+        enabled: open && hasProvider,
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+
     const error = sourceError ? (sourceError as Error).message : null;
 
     // ─── Build hierarchical file tree from snapshot keys ─────────────────
@@ -192,8 +208,6 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
     React.useEffect(() => {
         if (firstFile && !selectedItem.key) {
             setSelectedItem({ section: 'files', key: firstFile });
-            const dir = firstFile.includes('/') ? firstFile.substring(0, firstFile.lastIndexOf('/')) : '.';
-            setExpandedDirs(new Set([dir]));
         }
     }, [firstFile]);
 
@@ -378,6 +392,19 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
             return <LogsPanel engineId={engine.id} engineName={engine.name} />;
         }
 
+        // Domains (multi-provider)
+        if (selectedItem.section === 'domains') {
+            return (
+                <DomainsPanel
+                    engineId={engine.id}
+                    domainsData={domainsData}
+                    loadingDomains={loadingDomains}
+                    providerLabel={providerLabel}
+                    engineUrl={engine.url}
+                />
+            );
+        }
+
         // Default empty state
         return (
             <div className="flex-1 flex items-center justify-center">
@@ -492,6 +519,8 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
                         setSelectedItem={setSelectedItem}
                         dirtyFiles={dirtyFileSet}
                         openApiSpec={openApiSpec}
+                        domainsData={domainsData}
+                        loadingDomains={loadingDomains}
                     />
                     {renderRightPanel()}
                 </div>

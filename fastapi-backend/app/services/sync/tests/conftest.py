@@ -6,7 +6,7 @@ import pytest
 import asyncio
 from httpx import AsyncClient, ASGITransport
 
-from app.services.sync.main import app
+from app.services.sync.main import sync_app as app
 from app.services.sync.database import engine, Base, async_session
 
 
@@ -31,7 +31,7 @@ async def setup_database():
 @pytest.fixture
 async def client():
     """Async HTTP client for testing API endpoints."""
-    transport = ASGITransport(app=app)
+    transport = ASGITransport(app=app)  # type: ignore[arg-type]
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 

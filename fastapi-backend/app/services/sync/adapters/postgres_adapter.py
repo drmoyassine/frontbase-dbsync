@@ -8,6 +8,7 @@ import asyncpg
 import ssl
 
 from app.services.sync.adapters.base import SQLAdapter
+from app.services.sync.models.datasource import Datasource
 
 class PostgresAdapter(SQLAdapter):
     """PostgreSQL database adapter using asyncpg."""
@@ -17,6 +18,12 @@ class PostgresAdapter(SQLAdapter):
         self._pool: Optional[asyncpg.Pool] = None
         self.logger = logging.getLogger(f"app.adapters.postgres.{self.datasource.name}")
     
+    def _ensure_pool(self) -> asyncpg.Pool:
+        """Return the pool, raising if not connected."""
+        if self._pool is None:
+            raise RuntimeError("Not connected – call connect() first")
+        return self._pool
+    
     def _decrypt_password(self) -> Optional[str]:
         """Decrypt password from storage — handles legacy plaintext gracefully."""
         from app.core.security import decrypt_field
@@ -24,7 +31,7 @@ class PostgresAdapter(SQLAdapter):
     
     async def connect(self) -> None:
         """Establish connection pool to PostgreSQL."""
-        host = self._sanitize_host(self.datasource.host)
+        host = self._sanitize_host(self.datasource.host or "")
         port = self.datasource.port
         db_name = self.datasource.database
         user = self.datasource.username
@@ -92,7 +99,7 @@ class PostgresAdapter(SQLAdapter):
     
     async def get_tables(self) -> List[str]:
         """Get list of tables in public schema."""
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             rows = await conn.fetch("""
                 SELECT table_name 
                 FROM information_schema.tables 
@@ -104,7 +111,7 @@ class PostgresAdapter(SQLAdapter):
     
     async def get_schema(self, table: str) -> Dict[str, Any]:
         """Get column information for a table, including foreign key relationships."""
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             # Get columns with primary key info
             rows = await conn.fetch("""
                 SELECT 
@@ -173,9 +180,9 @@ class PostgresAdapter(SQLAdapter):
                 "foreign_keys": foreign_keys_list
             }
     
-    async def get_all_relationships(self) -> Dict[str, Any]:
+    async def get_all_relationships(self) -> List[Dict[str, Any]]:
         """Get ALL foreign key relationships across all tables in one query (fast)."""
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             # Single query to get all FK relationships in the database
             fk_rows = await conn.fetch("""
                 SELECT 
@@ -229,7 +236,7 @@ class PostgresAdapter(SQLAdapter):
         
         query += f" LIMIT {limit} OFFSET {offset}"
         
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             rows = await conn.fetch(query, *params)
             return [dict(row) for row in rows]
     
@@ -367,7 +374,7 @@ class PostgresAdapter(SQLAdapter):
         
         self.logger.debug(f"FK JOIN query: {query}")
         
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             rows = await conn.fetch(query, *params)
             return [dict(row) for row in rows]
     
@@ -378,7 +385,7 @@ class PostgresAdapter(SQLAdapter):
         key_value: Any,
     ) -> Optional[Dict[str, Any]]:
         """Read a single record by primary key."""
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             row = await conn.fetchrow(
                 f'SELECT * FROM "{table}" WHERE "{key_column}" = $1',
                 key_value
@@ -409,7 +416,7 @@ class PostgresAdapter(SQLAdapter):
             RETURNING *
         """
         
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             row = await conn.fetchrow(query, *values)
             return dict(row)
     
@@ -420,7 +427,7 @@ class PostgresAdapter(SQLAdapter):
         key_value: Any,
     ) -> bool:
         """Delete a record by key."""
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             result = await conn.execute(
                 f'DELETE FROM "{table}" WHERE "{key_column}" = $1',
                 key_value
@@ -481,7 +488,7 @@ class PostgresAdapter(SQLAdapter):
             
         query += where_clause
         
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             return await conn.fetchval(query, *params)
     
     async def count_search_matches(self, table: str, query: str) -> int:
@@ -500,7 +507,7 @@ class PostgresAdapter(SQLAdapter):
         where_clause = " OR ".join(conditions)
         sql = f'SELECT COUNT(*) FROM "{table}" WHERE {where_clause}'
         
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             return await conn.fetchval(sql, *params)
 
     async def search_records(
@@ -528,6 +535,6 @@ class PostgresAdapter(SQLAdapter):
         where_clause = " OR ".join(conditions)
         query_sql = f'SELECT * FROM "{table}" WHERE {where_clause} LIMIT {limit} OFFSET {offset}'
         
-        async with self._pool.acquire() as conn:
+        async with self._ensure_pool().acquire() as conn:
             rows = await conn.fetch(query_sql, *params)
             return [dict(row) for row in rows]

@@ -51,6 +51,7 @@ class EdgeCacheResponse(BaseModel):
     created_at: str
     updated_at: str
     engine_count: int = 0  # Number of edge engines using this cache
+    linked_engines: list[dict] = []  # [{id, name, provider}] for tooltip display
     warning: Optional[str] = None
     supports_remote_delete: bool = False
 
@@ -59,7 +60,21 @@ class EdgeCacheResponse(BaseModel):
 # Helpers
 # =============================================================================
 
-def _serialize_cache(cache, db, engine_count: int = 0, warning: Optional[str] = None) -> EdgeCacheResponse:
+def _query_linked_engines(db, fk_column, resource_id) -> tuple[int, list[dict]]:
+    """Return (count, [{id, name, provider}]) for engines referencing a resource."""
+    engines = db.query(EdgeEngine).filter(fk_column == resource_id).all()
+    linked = [
+        {
+            "id": str(e.id),
+            "name": str(e.name),
+            "provider": str(e.edge_provider.provider) if e.edge_provider else "unknown",
+        }
+        for e in engines
+    ]
+    return len(linked), linked
+
+
+def _serialize_cache(cache, db, engine_count: int = 0, linked_engines: Optional[list] = None, warning: Optional[str] = None) -> EdgeCacheResponse:
     """Serialize an EdgeCache ORM object."""
     from ..models.models import EdgeProviderAccount
     account_name = None
@@ -86,6 +101,7 @@ def _serialize_cache(cache, db, engine_count: int = 0, warning: Optional[str] = 
         created_at=str(cache.created_at),
         updated_at=str(cache.updated_at),
         engine_count=engine_count,
+        linked_engines=linked_engines or [],
         warning=warning,
         supports_remote_delete=can_remote_delete,
     )
@@ -103,10 +119,8 @@ async def list_edge_caches():
         caches = db.query(EdgeCache).order_by(EdgeCache.created_at.desc()).all()
         result = []
         for cache in caches:
-            engine_count = db.query(EdgeEngine).filter(
-                EdgeEngine.edge_cache_id == cache.id
-            ).count()
-            result.append(_serialize_cache(cache, db, engine_count))
+            engine_count, linked = _query_linked_engines(db, EdgeEngine.edge_cache_id, cache.id)
+            result.append(_serialize_cache(cache, db, engine_count, linked))
         return result
     finally:
         db.close()
@@ -205,11 +219,9 @@ async def update_edge_cache(cache_id: str, payload: EdgeCacheUpdate):
         db.commit()
         db.refresh(cache)
         
-        engine_count = db.query(EdgeEngine).filter(
-            EdgeEngine.edge_cache_id == cache_id
-        ).count()
+        engine_count, linked = _query_linked_engines(db, EdgeEngine.edge_cache_id, cache_id)
         
-        return _serialize_cache(cache, db, engine_count)
+        return _serialize_cache(cache, db, engine_count, linked)
     finally:
         db.close()
 

@@ -23,6 +23,9 @@ from app.services.sync.engine.conflict_resolver import ConflictResolver, Conflic
 from app.services.sync.services.state_manager import StateManager
 from app.services.sync.services.expression_engine import ExpressionEngine
 
+import logging
+logger = logging.getLogger(__name__)
+
 async def execute_sync(job_id: str, config_id: str) -> None:
     """
     Execute a sync job from master to slave using Redis as an intermediate buffer.
@@ -80,7 +83,7 @@ async def execute_sync(job_id: str, config_id: str) -> None:
                 if config.master_view:
                     for f in config.master_view.filters:
                         if isinstance(f, dict) and f.get("field") and f.get("value"):
-                            master_filters[f["field"]] = f["value"]
+                            master_filters[f["field"]] = f["value"]  # type: ignore[index]
                 
                 # Get total record count (applying filters)
                 job.total_records = await master_adapter.count_records(config.master_table, where=master_filters)

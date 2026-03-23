@@ -62,7 +62,9 @@ _RESOURCE_TYPE_MAP: dict[str, dict[str, str]] = {
     "database": {
         "cloudflare": "d1",
         "turso": "turso_db",
-        "neon": "neon_project",
+        "neon": "pg_schema",
+        "supabase": "pg_schema",
+        "postgres": "pg_schema",
     },
     # edge_caches provider → resource_type
     "cache": {
@@ -350,6 +352,73 @@ async def _delete_neon_project(creds: dict[str, object], **kwargs: object) -> di
         return {"success": True}
     return {"success": False, "detail": f"Neon delete error {resp.status_code}: {resp.text[:200]}"}
 
+# =============================================================================
+# PostgreSQL Schema Deleter — Neon, Postgres (asyncpg-based)
+# =============================================================================
+
+async def _delete_pg_schema(creds: dict[str, object], **kwargs: object) -> dict[str, object]:
+    """Drop a frontbase_edge_* schema from a PostgreSQL database.
+    
+    The schema name comes from provider_config.schema_name.
+    Only schemas starting with 'frontbase_edge' are allowed to be dropped.
+    Uses CASCADE to remove all objects within the schema.
+    """
+    import asyncpg
+
+    config: dict[str, object] = dict(kwargs.get("config", {}))  # type: ignore[arg-type]
+    schema_name = str(config.get("schema_name", ""))
+    db_url = str(kwargs.get("resource_url", ""))
+
+    if not schema_name or not schema_name.startswith("frontbase_edge"):
+        return {"success": False, "detail": "Invalid or missing schema name — must start with 'frontbase_edge'"}
+    if not db_url:
+        return {"success": False, "detail": "No database URL provided"}
+
+    try:
+        conn = await asyncpg.connect(db_url, timeout=10)
+        try:
+            await conn.execute(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE')
+            return {"success": True}
+        finally:
+            await conn.close()
+    except Exception as e:
+        return {"success": False, "detail": f"Schema drop failed: {str(e)}"}
+
+
+# =============================================================================
+# Supabase Schema + Role Deleter — uses Management API (no DB password needed)
+# =============================================================================
+
+async def _delete_supabase_pg_schema(creds: dict[str, object], **kwargs: object) -> dict[str, object]:
+    """Drop a Supabase schema + its scoped role via the Management API.
+
+    Uses delete_supabase_schema_and_role() from provider_discovery.
+    """
+    import re
+
+    config: dict[str, object] = dict(kwargs.get("config", {}))  # type: ignore[arg-type]
+    schema_name = str(config.get("schema_name", ""))
+    db_url = str(kwargs.get("resource_url", ""))
+
+    if not schema_name or not schema_name.startswith("frontbase_edge"):
+        return {"success": False, "detail": "Invalid or missing schema name — must start with 'frontbase_edge'"}
+
+    token = str(creds.get("access_token", ""))
+    if not token:
+        return {"success": False, "detail": "No access_token in Supabase credentials"}
+
+    # Extract project ref from pooler URL
+    ref_match = re.search(r'postgres\.([a-z0-9]+)', db_url)
+    if not ref_match:
+        return {"success": False, "detail": "Could not extract project ref from Supabase URL"}
+    project_ref = ref_match.group(1)
+
+    from .supabase_state_db import delete_supabase_schema_and_role
+    result = await delete_supabase_schema_and_role(token, project_ref, schema_name)
+    if result.get("success"):
+        return {"success": True}
+    return {"success": False, "detail": result.get("detail", "Supabase schema+role drop failed")}
+
 
 # =============================================================================
 # Registry — add new provider deleters here
@@ -368,6 +437,12 @@ _DELETERS: dict[str, dict[str, object]] = {
         "turso_db": _delete_turso_db,
     },
     "neon": {
-        "neon_project": _delete_neon_project,
+        "pg_schema": _delete_pg_schema,
+    },
+    "supabase": {
+        "pg_schema": _delete_supabase_pg_schema,
+    },
+    "postgres": {
+        "pg_schema": _delete_pg_schema,
     },
 }

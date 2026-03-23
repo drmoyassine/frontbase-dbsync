@@ -41,6 +41,7 @@ class EdgeDatabaseResponse(BaseModel):
     created_at: str
     updated_at: str
     target_count: int = 0  # Number of deployment targets using this DB
+    linked_engines: List[dict] = []  # [{id, name, provider}] for tooltip display
     warning: Optional[str] = None  # Scoped token creation warnings
     supports_remote_delete: bool = False  # Whether this resource can be deleted remotely
     schema_name: Optional[str] = None  # PG schema name for state isolation

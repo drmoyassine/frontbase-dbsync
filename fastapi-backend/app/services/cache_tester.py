@@ -29,7 +29,7 @@ async def test_cache(provider: str, cache_url: str, cache_token: Optional[str], 
         start = time.time()
         success, message = await test_redis_connection(
             redis_url=cache_url,
-            redis_token=cache_token,
+            redis_token=cache_token or "",
             redis_type=provider,
         )
         latency = round((time.time() - start) * 1000, 1)

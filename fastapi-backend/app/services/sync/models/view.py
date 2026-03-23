@@ -3,7 +3,10 @@ DatasourceView model - represents a filtered view of a datasource resource.
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.services.sync.models.datasource import Datasource
 from sqlalchemy import String, Text, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import uuid

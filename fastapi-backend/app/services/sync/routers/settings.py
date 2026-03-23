@@ -121,8 +121,8 @@ async def update_redis_settings(
 async def test_redis(data: RedisSettingsUpdate):
     """Test Redis connection with provided URL and token."""
     success, message = await test_redis_connection(
-        redis_url=data.redis_url,
-        redis_token=data.redis_token,
+        redis_url=data.redis_url or "",
+        redis_token=data.redis_token or "",
         redis_type=data.redis_type
     )
     return RedisTestResult(success=success, message=message)

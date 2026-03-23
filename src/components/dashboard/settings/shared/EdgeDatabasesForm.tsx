@@ -22,6 +22,7 @@ import {
     DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useEdgeDatabases } from '@/hooks/useEdgeInfrastructure';
 import { useQueryClient } from '@tanstack/react-query';
 import { showTestToast, TestResult } from './edgeTestToast';
@@ -46,6 +47,7 @@ interface EdgeDatabase {
     created_at: string;
     updated_at: string;
     target_count: number;
+    linked_engines?: { id: string; name: string; provider: string }[];
     supports_remote_delete?: boolean;
     schema_name?: string | null;
 }
@@ -678,9 +680,23 @@ export const EdgeDatabasesForm: React.FC<EdgeDatabasesFormProps> = ({ withCard =
                                     Created {new Date(db.created_at).toLocaleDateString()}
                                 </span>
                                 {db.target_count > 0 && (
-                                    <Badge variant="secondary" className="text-xs">
-                                        {db.target_count} target{db.target_count > 1 ? 's' : ''}
-                                    </Badge>
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Badge variant="secondary" className="text-xs cursor-default">
+                                                    {db.target_count} target{db.target_count > 1 ? 's' : ''}
+                                                </Badge>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="text-xs">
+                                                <p className="font-medium mb-1">Connected Engines:</p>
+                                                {(db.linked_engines || []).map(e => (
+                                                    <p key={e.id} className="text-muted-foreground">
+                                                        {e.name} <span className="opacity-60">({e.provider})</span>
+                                                    </p>
+                                                ))}
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
                                 )}
                                 <Button
                                     variant="ghost" size="icon"

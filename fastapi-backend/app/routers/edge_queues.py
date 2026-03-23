@@ -58,6 +58,7 @@ class EdgeQueueResponse(BaseModel):
     created_at: str
     updated_at: str
     engine_count: int = 0  # Number of edge engines using this queue
+    linked_engines: list[dict] = []  # [{id, name, provider}] for tooltip display
     warning: Optional[str] = None
     supports_remote_delete: bool = False
 
@@ -71,7 +72,21 @@ class TestQueueResult(BaseModel):
 # Helpers
 # =============================================================================
 
-def _serialize_queue(queue, db, engine_count: int = 0, warning: Optional[str] = None) -> EdgeQueueResponse:
+def _query_linked_engines(db, fk_column, resource_id) -> tuple[int, list[dict]]:
+    """Return (count, [{id, name, provider}]) for engines referencing a resource."""
+    engines = db.query(EdgeEngine).filter(fk_column == resource_id).all()
+    linked = [
+        {
+            "id": str(e.id),
+            "name": str(e.name),
+            "provider": str(e.edge_provider.provider) if e.edge_provider else "unknown",
+        }
+        for e in engines
+    ]
+    return len(linked), linked
+
+
+def _serialize_queue(queue, db, engine_count: int = 0, linked_engines: Optional[list] = None, warning: Optional[str] = None) -> EdgeQueueResponse:
     """Serialize an EdgeQueue ORM object."""
     from ..models.models import EdgeProviderAccount
     account_name = None
@@ -99,6 +114,7 @@ def _serialize_queue(queue, db, engine_count: int = 0, warning: Optional[str] = 
         created_at=str(queue.created_at),
         updated_at=str(queue.updated_at),
         engine_count=engine_count,
+        linked_engines=linked_engines or [],
         warning=warning,
         supports_remote_delete=can_remote_delete,
     )
@@ -116,10 +132,8 @@ async def list_edge_queues():
         queues = db.query(EdgeQueue).order_by(EdgeQueue.created_at.desc()).all()
         result = []
         for queue in queues:
-            engine_count = db.query(EdgeEngine).filter(
-                EdgeEngine.edge_queue_id == queue.id
-            ).count()
-            result.append(_serialize_queue(queue, db, engine_count))
+            engine_count, linked = _query_linked_engines(db, EdgeEngine.edge_queue_id, queue.id)
+            result.append(_serialize_queue(queue, db, engine_count, linked))
         return result
     finally:
         db.close()
@@ -246,11 +260,9 @@ async def update_edge_queue(queue_id: str, payload: EdgeQueueUpdate):
         db.commit()
         db.refresh(queue)
         
-        engine_count = db.query(EdgeEngine).filter(
-            EdgeEngine.edge_queue_id == queue_id
-        ).count()
+        engine_count, linked = _query_linked_engines(db, EdgeEngine.edge_queue_id, queue_id)
         
-        return _serialize_queue(queue, db, engine_count)
+        return _serialize_queue(queue, db, engine_count, linked)
     finally:
         db.close()
 

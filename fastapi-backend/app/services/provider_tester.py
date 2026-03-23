@@ -27,7 +27,7 @@ async def test_provider_connection(provider: str, creds: dict) -> dict:
         return {"success": False, "detail": f"Unsupported provider: {provider}"}
 
     try:
-        return await tester(creds)
+        return await tester(creds)  # type: ignore[operator]
     except httpx.TimeoutException:
         return {"success": False, "detail": "Connection timed out — check your network"}
     except Exception as e:

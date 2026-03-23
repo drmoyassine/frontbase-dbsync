@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter,
     DialogHeader, DialogTitle, DialogTrigger,
@@ -481,9 +482,23 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
                                     Created {new Date(queue.created_at).toLocaleDateString()}
                                 </span>
                                 {queue.engine_count > 0 && (
-                                    <Badge variant="secondary" className="text-xs">
-                                        {queue.engine_count} engine{queue.engine_count > 1 ? 's' : ''}
-                                    </Badge>
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Badge variant="secondary" className="text-xs cursor-default">
+                                                    {queue.engine_count} engine{queue.engine_count > 1 ? 's' : ''}
+                                                </Badge>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="text-xs">
+                                                <p className="font-medium mb-1">Connected Engines:</p>
+                                                {(queue.linked_engines || []).map(e => (
+                                                    <p key={e.id} className="text-muted-foreground">
+                                                        {e.name} <span className="opacity-60">({e.provider})</span>
+                                                    </p>
+                                                ))}
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
                                 )}
                                 <Button
                                     variant="ghost" size="icon"

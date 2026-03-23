@@ -104,9 +104,10 @@ def _add_missing_columns(connection):
                 col_type = col.type.compile(connection.dialect)
                 nullable = "" if col.nullable else " NOT NULL"
                 default = ""
-                if col.default is not None and col.default.is_scalar:
+                if col.default is not None and hasattr(col.default, 'is_scalar') and col.default.is_scalar:  # type: ignore[union-attr]
                     from enum import Enum as _Enum
-                    val = col.default.arg.value if isinstance(col.default.arg, _Enum) else col.default.arg
+                    _arg = col.default.arg  # type: ignore[union-attr]
+                    val = _arg.value if isinstance(_arg, _Enum) else _arg
                     default = f" DEFAULT {val!r}"
                 stmt = f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col_type}{nullable}{default}'
                 try:

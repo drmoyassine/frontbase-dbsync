@@ -38,12 +38,13 @@ export function getQueueClient(): any | null {
 
     // Provider-agnostic → fallback to old env vars
     const token = process.env.FRONTBASE_QUEUE_TOKEN || process.env.QSTASH_TOKEN;
-    if (!token) {
+    const provider = getQueueProvider();
+
+    // CF Queues don't use a separate token — they use FRONTBASE_CF_API_TOKEN
+    if (!token && provider !== 'cloudflare' && provider !== 'cloudflare_queues') {
         console.log('⬜ Queue: not configured (no FRONTBASE_QUEUE_TOKEN)');
         return null;
     }
-
-    const provider = getQueueProvider();
 
     if (provider === 'qstash') {
         try {
@@ -55,6 +56,25 @@ export function getQueueClient(): any | null {
             console.warn('⚠️ Queue: @upstash/qstash not installed, durable execution disabled');
             return null;
         }
+    }
+
+    if (provider === 'cloudflare' || provider === 'cloudflare_queues') {
+        // CF Queues use the CF API token + account ID, not a separate token
+        const apiToken = process.env.FRONTBASE_CF_API_TOKEN;
+        const accountId = process.env.FRONTBASE_CF_ACCOUNT_ID;
+        const queueUrl = process.env.FRONTBASE_QUEUE_URL || '';
+        // Parse cfq://<queue-id> → extract queue ID
+        const queueId = queueUrl.startsWith('cfq://') ? queueUrl.replace('cfq://', '') : queueUrl;
+
+        if (!apiToken || !accountId || !queueId) {
+            console.warn('⚠️ Queue: CF Queues missing FRONTBASE_CF_API_TOKEN, FRONTBASE_CF_ACCOUNT_ID, or FRONTBASE_QUEUE_URL');
+            return null;
+        }
+
+        // Store CF Queue config as the "client"
+        queueClient = { provider: 'cloudflare', apiToken, accountId, queueId };
+        console.log(`🔄 Queue: CF Queues enabled (queue ${queueId.substring(0, 8)}...)`);
+        return queueClient;
     }
 
     // Future: RabbitMQ, SQS, BullMQ adapters
@@ -114,6 +134,33 @@ export async function publishExecution(
         }
     }
 
+    if ((provider === 'cloudflare' || provider === 'cloudflare_queues') && client?.provider === 'cloudflare') {
+        try {
+            const cfApi = `https://api.cloudflare.com/client/v4/accounts/${client.accountId}/queues/${client.queueId}/messages`;
+            const resp = await fetch(cfApi, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${client.apiToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    body: JSON.stringify({ destinationUrl, payload }),
+                    content_type: 'json',
+                }),
+            });
+            if (!resp.ok) {
+                const text = await resp.text();
+                console.error(`[Queue] CF Queue publish failed: ${resp.status} ${text.substring(0, 200)}`);
+                return null;
+            }
+            const data = await resp.json() as any;
+            return data?.result?.messageId || 'cf-queued';
+        } catch (error: any) {
+            console.error('[Queue] CF Queue publish failed:', error.message);
+            return null;
+        }
+    }
+
     // Future: other providers
     console.warn(`[Queue] Publishing not implemented for provider "${provider}"`);
     return null;
@@ -154,6 +201,11 @@ export async function verifyQueueSignature(
         } catch {
             return false;
         }
+    }
+
+    // CF Queues don't use external signature verification
+    if (provider === 'cloudflare' || provider === 'cloudflare_queues') {
+        return true;
     }
 
     // Future: other provider signature verification

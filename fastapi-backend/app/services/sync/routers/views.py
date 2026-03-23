@@ -258,12 +258,16 @@ async def create_view_record(
     ds_result = await db.execute(select(Datasource).where(Datasource.id == db_view.datasource_id))
     ds = ds_result.scalar_one_or_none()
     
+    if not ds:
+        raise HTTPException(status_code=404, detail="Associated datasource not found")
+    
     adapter = get_adapter(ds)
     async with adapter:
         # Note: adapters use upsert, but we can call it POST for semantic clarity
         success = await adapter.upsert_record(
             table=db_view.target_table,
-            record=record
+            record=record,
+            key_column="id"
         )
         
     if not success:
@@ -290,6 +294,9 @@ async def patch_view_record(
         
     ds_result = await db.execute(select(Datasource).where(Datasource.id == db_view.datasource_id))
     ds = ds_result.scalar_one_or_none()
+    
+    if not ds:
+        raise HTTPException(status_code=404, detail="Associated datasource not found")
     
     adapter = get_adapter(ds)
     async with adapter:
@@ -365,7 +372,7 @@ async def trigger_view_webhook(
             else:
                 # Handle templates or jinja if engine is available
                 try:
-                    transformed_data[target] = engine.render(source_template, payload)
+                    transformed_data[target] = engine.evaluate(source_template, payload)  # type: ignore[arg-type]
                 except:
                     transformed_data[target] = source_template
     else:

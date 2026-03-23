@@ -104,7 +104,7 @@ class WordPressRestAdapter(WordPressBaseApiAdapter):
                 
             response.raise_for_status()
             data = response.json()
-            return (data if isinstance(data, list) else []), response.headers
+            return (data if isinstance(data, list) else []), dict(response.headers)
         except Exception as e:
             logger.error(f"Error fetching page {params.get('page')}: {str(e)}")
             raise
@@ -345,7 +345,7 @@ class WordPressRestAdapter(WordPressBaseApiAdapter):
             key_hash = hashlib.md5(key_base.encode()).hexdigest()
             cache_key = f"wp:data:{key_hash}"
             
-            cached_data = await cache_get(None, cache_key)
+            cached_data = await cache_get(None, cache_key)  # type: ignore[arg-type]
             if cached_data is not None:
                 return cached_data
 
@@ -430,7 +430,7 @@ class WordPressRestAdapter(WordPressBaseApiAdapter):
             settings = await get_configured_redis_settings()
             ttl = settings["ttl_data"] if settings else 60
             
-            await cache_set(None, cache_key, final_records, ttl=ttl)
+            await cache_set(None, cache_key, final_records, ttl=ttl)  # type: ignore[arg-type]
             
         return final_records
     
@@ -483,10 +483,10 @@ class WordPressRestAdapter(WordPressBaseApiAdapter):
             elif op in [">", "<"]:
                 try:
                     if op == ">":
-                        if not (float(actual_val) > float(target_val)):
+                        if not (float(str(actual_val or 0)) > float(str(target_val or 0))):
                             return False
                     else:
-                        if not (float(actual_val) < float(target_val)):
+                        if not (float(str(actual_val or 0)) < float(str(target_val or 0))):
                             return False
                 except (ValueError, TypeError, AttributeError):
                     return False
@@ -525,8 +525,8 @@ class WordPressRestAdapter(WordPressBaseApiAdapter):
         # Clear cache for this table
         from app.services.sync.redis_client import cache_delete_pattern
         import asyncio
-        await cache_delete_pattern(None, f"wp:data:*{table}*")
-        await cache_delete_pattern(None, f"wp:count:*{table}*")
+        await cache_delete_pattern(None, f"wp:data:*{table}*")  # type: ignore[arg-type]
+        await cache_delete_pattern(None, f"wp:count:*{table}*")  # type: ignore[arg-type]
         
         if not self._client:
             await self.connect()
@@ -558,8 +558,8 @@ class WordPressRestAdapter(WordPressBaseApiAdapter):
         """Delete a record."""
         # Clear cache for this table
         from app.services.sync.redis_client import cache_delete_pattern
-        await cache_delete_pattern(None, f"wp:data:*{table}*")
-        await cache_delete_pattern(None, f"wp:count:*{table}*")
+        await cache_delete_pattern(None, f"wp:data:*{table}*")  # type: ignore[arg-type]
+        await cache_delete_pattern(None, f"wp:count:*{table}*")  # type: ignore[arg-type]
 
         if not self._client:
             await self.connect()
@@ -596,7 +596,7 @@ class WordPressRestAdapter(WordPressBaseApiAdapter):
             key_hash = hashlib.md5(key_base.encode()).hexdigest()
             cache_key = f"wp:count:{key_hash}"
             
-            cached_count = await cache_get(None, cache_key)
+            cached_count = await cache_get(None, cache_key)  # type: ignore[arg-type]
             if cached_count is not None:
                 return int(cached_count)
 
@@ -656,7 +656,7 @@ class WordPressRestAdapter(WordPressBaseApiAdapter):
             settings = await get_configured_redis_settings()
             ttl = settings["ttl_count"] if settings else 300  # Default 5 minutes
             
-            await cache_set(None, cache_key, final_count, ttl=ttl)
+            await cache_set(None, cache_key, final_count, ttl=ttl)  # type: ignore[arg-type]
             
         return final_count
     async def search_records(
@@ -720,7 +720,7 @@ class WordPressGraphQLAdapter(WordPressBaseApiAdapter):
         self,
         table: str,
         columns: Optional[List[str]] = None,
-        where: Optional[Dict[str, Any]] = None,
+        where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
         limit: int = 100,
         offset: int = 0,
         order_by: Optional[str] = None,
@@ -782,7 +782,7 @@ class WordPressGraphQLAdapter(WordPressBaseApiAdapter):
     async def count_records(
         self,
         table: str,
-        where: Optional[Dict[str, Any]] = None,
+        where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
     ) -> int:
         return 0 # GraphQL requires a specific plugin for total counts usually
     

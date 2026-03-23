@@ -56,10 +56,55 @@ export const liquidEngine = new Liquid({
 });
 
 // =============================================================================
+// Engine Mode Profiles (drives OpenAPI docs, badges, descriptions)
+// =============================================================================
+
+export type EngineMode = 'lite' | 'full';
+
+interface EngineProfile {
+    description: string;
+    techStack: string;
+    badge: string;
+    tags: Array<{ name: string; description: string }>;
+}
+
+const ENGINE_PROFILES: Record<EngineMode, EngineProfile> = {
+    lite: {
+        description: 'Self-sufficient edge runtime for workflow automation, webhooks, and AI inference.',
+        techStack: 'Hono · Drizzle ORM · LiquidJS · Zod',
+        badge: 'Lite Engine',
+        tags: [
+            { name: 'System', description: 'Health checks, manifest, and self-update' },
+            { name: 'Workflows', description: 'Deploy, list, and manage published workflows' },
+            { name: 'Execution', description: 'Execute workflows and inspect runs' },
+            { name: 'Webhooks', description: 'Trigger workflows via incoming webhooks' },
+            { name: 'Cache', description: 'Redis/Upstash cache management — test connection, invalidate keys, flush, and stats' },
+            { name: 'AI', description: 'OpenAI-compatible inference (GPU models required)' },
+        ],
+    },
+    full: {
+        description: 'Self-sufficient edge runtime for SSR pages, workflow automation, data proxy, webhooks, and AI inference.',
+        techStack: 'Hono · React · Drizzle ORM · LiquidJS · Zod',
+        badge: 'Full Engine',
+        tags: [
+            { name: 'System', description: 'Health checks, manifest, and self-update' },
+            { name: 'Pages', description: 'Published page SSR and homepage rendering' },
+            { name: 'Data', description: 'Datasource proxy — fetches data from connected backends (Supabase, Neon, etc.)' },
+            { name: 'Workflows', description: 'Deploy, list, and manage published workflows' },
+            { name: 'Execution', description: 'Execute workflows and inspect runs' },
+            { name: 'Webhooks', description: 'Trigger workflows via incoming webhooks' },
+            { name: 'Cache', description: 'Redis/Upstash cache management — test connection, invalidate keys, flush, and stats' },
+            { name: 'AI', description: 'OpenAI-compatible inference (GPU models required)' },
+        ],
+    },
+};
+
+// =============================================================================
 // App Creation & Middleware (shared foundation for Lite + Full)
 // =============================================================================
 
-export function createLiteApp() {
+export function createLiteApp(mode: EngineMode = 'lite') {
+    const profile = ENGINE_PROFILES[mode];
     const app = new OpenAPIHono({
         defaultHook: (result, c) => {
             if (!result.success) {
@@ -138,7 +183,7 @@ export function createLiteApp() {
     app.route('/v1', openaiRoute);
 
     // ── OpenAPI Docs ───────────────────────────────────────────────────
-    // Dynamic server URL, standardized tags, API key auth, Frontbase branding.
+    // Dynamic server URL, mode-aware tags/description, API key auth, Frontbase branding.
 
     const EDGE_VERSION = '0.1.0';
 
@@ -148,9 +193,9 @@ export function createLiteApp() {
             title: 'Frontbase Edge Engine',
             version: EDGE_VERSION,
             description: [
-                'Self-sufficient edge runtime for SSR pages, workflow automation, webhooks, and AI inference.',
+                profile.description,
                 '',
-                '**Tech Stack:** Hono · Drizzle ORM · LiquidJS · Zod',
+                `**Tech Stack:** ${profile.techStack}`,
                 '',
                 '**Authentication:** Protected routes require an API key via the `x-api-key` header.',
             ].join('\n'),
@@ -161,17 +206,7 @@ export function createLiteApp() {
                 description: 'Current server',
             },
         ],
-        tags: [
-            { name: 'System', description: 'Health checks, manifest, and self-update' },
-            { name: 'Workflows', description: 'Deploy, list, and manage published workflows' },
-            { name: 'Execution', description: 'Execute workflows and inspect runs' },
-            { name: 'Webhooks', description: 'Trigger workflows via incoming webhooks' },
-            { name: 'Pages', description: 'Published page management (Full engine only)' },
-            { name: 'Data', description: 'Datasource proxy — fetches data from connected backends (Supabase, Neon, etc.) for published pages (Full engine only)' },
-            { name: 'Cache', description: 'Redis/Upstash cache management — test connection, invalidate keys, flush, and stats' },
-            { name: 'Queue', description: 'QStash message queue management (coming soon)' },
-            { name: 'AI', description: 'OpenAI-compatible inference (GPU models required)' },
-        ],
+        tags: profile.tags,
         security: [{ ApiKeyAuth: [] }],
         components: {
             securitySchemes: {
@@ -303,13 +338,17 @@ export function createLiteApp() {
 </head>
 <body>
     <div class="fb-header">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect width="24" height="24" rx="6" fill="#6366f1"/>
-            <path d="M7 8h10M7 12h7M7 16h4" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            <g transform="scale(0.7) translate(5.1 5.1)" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+                <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/>
+                <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/>
+                <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/>
+            </g>
         </svg>
         <h1>Frontbase Edge API</h1>
         <span class="badge badge-version">v${EDGE_VERSION}</span>
-        <span class="badge badge-engine">Edge Engine</span>
+        <span class="badge badge-engine">${profile.badge}</span>
     </div>
     <div id="swagger-ui"></div>
     <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>

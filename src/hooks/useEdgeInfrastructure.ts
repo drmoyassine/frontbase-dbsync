@@ -367,14 +367,16 @@ export interface EdgeAPIKey {
     last_used_at: string | null;
     created_at: string;
     updated_at: string;
+    can_reveal: boolean;
     key?: string;  // Only present at creation
 }
 
-export function useEdgeAPIKeys() {
+export function useEdgeAPIKeys(engineId?: string) {
     return useQuery({
-        queryKey: ['edge-api-keys'],
+        queryKey: ['edge-api-keys', engineId ?? 'all'],
         queryFn: async (): Promise<EdgeAPIKey[]> => {
-            const res = await fetch(`${API_BASE}/api/edge-api-keys`);
+            const params = engineId ? `?engine_id=${engineId}` : '';
+            const res = await fetch(`${API_BASE}/api/edge-api-keys${params}`);
             if (!res.ok) throw new Error('Failed to fetch API keys');
             const data = await res.json();
             return data.keys;
@@ -382,5 +384,40 @@ export function useEdgeAPIKeys() {
         staleTime: 5 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,
+    });
+}
+
+// ─── Health Check ───────────────────────────────────────────────────────────
+
+export interface BindingStatus {
+    provider: string;
+    status: 'ok' | 'error' | 'not_configured';
+    error?: string;
+    schema?: string;
+}
+
+export interface HealthCheckResponse {
+    status: string;
+    service?: string;
+    version?: string;
+    provider?: string;
+    uptime_seconds?: number;
+    timestamp?: string;
+    error?: string;
+    bindings?: {
+        stateDb: BindingStatus;
+        cache: BindingStatus;
+        queue: BindingStatus;
+    };
+}
+
+export function useEngineHealthCheck(engineId: string) {
+    return useMutation<HealthCheckResponse, Error>({
+        mutationKey: ['engine-health-check', engineId],
+        mutationFn: async () => {
+            const res = await fetch(`${API_BASE}/api/edge-engines/${engineId}/health-check`);
+            if (!res.ok) throw new Error('Health check request failed');
+            return res.json();
+        },
     });
 }

@@ -2,7 +2,8 @@
 Edge API Keys router — CRUD for tenant-facing API key management.
 
 Keys secure the /v1/* OpenAI-compatible endpoints on edge engines.
-Full key is shown once at creation; only the SHA-256 hash is stored.
+The full key is stored Fernet-encrypted (reversible) in the `key_hash` column.
+At push-time, the SHA-256 hash is derived for edge engine validation.
 
 After any mutation (create / toggle / delete), key hashes are automatically
 pushed to the affected CF Workers so changes take effect immediately.
@@ -20,6 +21,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from ..database.config import get_db
+from ..database.utils import encrypt_data, decrypt_data
 from ..models.models import EdgeAPIKey, EdgeEngine, EdgeProviderAccount
 from ..services.secrets_builder import build_engine_secrets
 from ..services.engine_reconfigure import _resolve_cf_credentials, _patch_cf_settings
@@ -70,12 +72,37 @@ class APIKeyCreatedResponse(APIKeyResponse):
 # =============================================================================
 
 def _generate_key() -> tuple[str, str, str]:
-    """Generate a new API key, returning (full_key, prefix, hash)."""
+    """Generate a new API key, returning (full_key, prefix, encrypted_key).
+
+    The full key is Fernet-encrypted (reversible) so it can be revealed later.
+    The SHA-256 hash is derived at push-time via _derive_hash().
+    """
     raw = secrets.token_hex(24)  # 48-char hex string
     full_key = f"fb_sk_{raw}"
     prefix = full_key[:14] + "..."  # "fb_sk_a1b2c3d4..."
-    key_hash = hashlib.sha256(full_key.encode()).hexdigest()
-    return full_key, prefix, key_hash
+    encrypted = encrypt_data(full_key)  # Fernet (reversible)
+    return full_key, prefix, encrypted
+
+
+def _is_encrypted(value: str) -> bool:
+    """Detect whether a key_hash value is Fernet-encrypted vs legacy SHA-256.
+
+    Fernet tokens are base64 and start with 'gAAAAA'.
+    Legacy SHA-256 hashes are 64-char hex strings.
+    """
+    return value.startswith("gAAAAA")
+
+
+def _derive_hash(key_hash: str) -> str:
+    """Derive SHA-256 hex from stored key_hash value.
+
+    For Fernet-encrypted keys: decrypt → sha256.
+    For legacy SHA-256 hashes: return as-is.
+    """
+    if _is_encrypted(key_hash):
+        full_key = decrypt_data(key_hash)
+        return hashlib.sha256(full_key.encode()).hexdigest()
+    return key_hash  # Already a legacy hash
 
 
 def _serialize(key: EdgeAPIKey, engine: Optional[EdgeEngine] = None) -> dict:
@@ -92,6 +119,7 @@ def _serialize(key: EdgeAPIKey, engine: Optional[EdgeEngine] = None) -> dict:
         "last_used_at": str(key.last_used_at) if key.last_used_at else None,  # type: ignore[truthy-bool]
         "created_at": str(key.created_at),
         "updated_at": str(key.updated_at),
+        "can_reveal": _is_encrypted(str(key.key_hash)),
     }
 
 
@@ -160,7 +188,7 @@ def _build_key_secrets(engine: EdgeEngine, db: Session) -> dict:
         return {}
     keys_data = [{
         "prefix": str(k.prefix),
-        "hash": str(k.key_hash),
+        "hash": _derive_hash(str(k.key_hash)),
         "scope": str(k.scope) if k.scope else 'user',  # type: ignore[truthy-bool]
         "expires_at": str(k.expires_at) if k.expires_at else None,  # type: ignore[truthy-bool]
     } for k in api_keys]
@@ -172,9 +200,17 @@ def _build_key_secrets(engine: EdgeEngine, db: Session) -> dict:
 # =============================================================================
 
 @router.get("")
-def list_api_keys(db: Session = Depends(get_db)):
-    """List all API keys (prefix only, never full key)."""
-    keys = db.query(EdgeAPIKey).order_by(EdgeAPIKey.created_at.desc()).all()
+def list_api_keys(
+    engine_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """List API keys. Optionally filter by engine_id (includes 'All Engines' keys)."""
+    query = db.query(EdgeAPIKey)
+    if engine_id:
+        query = query.filter(
+            (EdgeAPIKey.edge_engine_id == engine_id) | (EdgeAPIKey.edge_engine_id == None)
+        )
+    keys = query.order_by(EdgeAPIKey.created_at.desc()).all()
     result = []
     for key in keys:
         engine = None
@@ -307,3 +343,21 @@ def delete_api_key(
 
     # Push updated key hashes (now excluding the deleted key)
     background_tasks.add_task(_sync_keys_to_engines, edge_engine_id)
+
+
+@router.get("/{key_id}/reveal")
+def reveal_api_key(key_id: str, db: Session = Depends(get_db)):
+    """Reveal the full API key (only works for Fernet-encrypted keys)."""
+    api_key = db.query(EdgeAPIKey).filter(EdgeAPIKey.id == key_id).first()
+    if not api_key:
+        raise HTTPException(404, "API key not found")
+
+    stored = str(api_key.key_hash)
+    if not _is_encrypted(stored):
+        raise HTTPException(
+            410,
+            "Legacy key — this key was created before revealable keys were supported and cannot be revealed.",
+        )
+
+    full_key = decrypt_data(stored)
+    return {"key": full_key}

@@ -25,6 +25,7 @@ import { FetchEnginesDialog } from './FetchEnginesDialog';
 import { AITestDialog } from './AITestDialog';
 import { EdgeEndpointDialog } from './EdgeEndpointDialog';
 import { EdgeResourceRow } from './EdgeResourceRow';
+import { HealthCheckPopover } from './HealthCheckPopover';
 import { toast } from 'sonner';
 
 
@@ -291,6 +292,7 @@ export function EdgeEnginesSection() {
                                                     />
                                                     {!engine.is_system && (
                                                         <>
+                                                            <HealthCheckPopover engineId={engine.id} variant="icon" />
                                                             <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
                                                             <Button
                                                                 variant="ghost"

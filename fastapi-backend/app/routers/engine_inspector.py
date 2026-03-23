@@ -27,6 +27,9 @@ router = APIRouter(prefix="/api/edge-engines", tags=["Engine Inspector"])
 
 SUPABASE_API = "https://api.supabase.com/v1"
 
+# Internal secrets hidden from the Inspector UI — users should not see these
+HIDDEN_SECRETS = {'FRONTBASE_SYSTEM_KEY', 'FRONTBASE_API_KEY_HASHES'}
+
 
 # =============================================================================
 # Helpers — resolve engine → provider context
@@ -331,7 +334,8 @@ async def inspect_engine_secrets(engine_id: str, db: Session = Depends(get_db)):
         worker_name = cfg.get("worker_name", engine.name)
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, _cf_inspect_settings, api_token, account_id, worker_name)
-        return {"success": True, "secrets": result.get("secrets", [])}
+        raw = result.get("secrets", [])
+        return {"success": True, "secrets": [s for s in raw if s not in HIDDEN_SECRETS]}
 
     elif provider == "supabase":
         # For Frontbase-deployed engines: show Frontbase-injected secrets (names only)
@@ -354,7 +358,7 @@ async def inspect_engine_secrets(engine_id: str, db: Session = Depends(get_db)):
             )
             result = {
                 "success": True,
-                "secrets": sorted(secrets.keys()),
+                "secrets": sorted(k for k in secrets.keys() if k not in HIDDEN_SECRETS),
             }
 
     elif provider == "vercel":
@@ -477,7 +481,7 @@ async def _vercel_inspect_secrets(ctx: dict, cfg: dict) -> dict:
 
     return {
         "success": True,
-        "secrets": [e.get("key", "") for e in envs],
+        "secrets": [e.get("key", "") for e in envs if e.get("key", "") not in HIDDEN_SECRETS],
         "env_details": [
             {
                 "key": e.get("key"),
@@ -561,4 +565,68 @@ async def verify_engine_domain(engine_id: str, domain_id: str, db: Session = Dep
     engine, provider, creds = _get_creds(engine_id, db)
     result = await dm.verify_domain(engine, creds, provider, domain_id, db=db)
     return result.to_dict()
+
+
+# =============================================================================
+# Health Check — proxy to edge engine /api/health with system key
+# =============================================================================
+
+@router.get("/{engine_id}/health-check")
+async def health_check(engine_id: str, db: Session = Depends(get_db)):
+    """Proxy health check to the edge engine with FRONTBASE_SYSTEM_KEY.
+
+    Resolves the system key from engine_config (Fernet-encrypted),
+    calls GET {engine_url}/api/health with x-system-key header,
+    and returns the full diagnostic response.
+    """
+    from ..core.security import decrypt_field
+
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if not engine:
+        raise HTTPException(404, "Edge engine not found")
+
+    engine_url = str(engine.url or '')
+    if not engine_url:
+        raise HTTPException(400, "Engine has no URL configured")
+
+    # Normalize URL
+    if not engine_url.startswith('http'):
+        engine_url = f'https://{engine_url}'
+
+    # Resolve system key from engine_config
+    system_key: str | None = None
+    if engine.engine_config is not None:
+        try:
+            cfg = json.loads(str(engine.engine_config))
+            encrypted_key = cfg.get('system_key')
+            if encrypted_key:
+                system_key = decrypt_field(encrypted_key)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Release DB connection before slow I/O (AGENTS.md: Release-Before-IO)
+    db.close()
+
+    headers: dict[str, str] = {}
+    if system_key:
+        headers['x-system-key'] = system_key
+
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            resp = await client.get(f"{engine_url}/api/health", headers=headers)
+
+        if resp.status_code != 200:
+            return {
+                "status": "error",
+                "error": f"Engine returned HTTP {resp.status_code}",
+                "raw": resp.text[:500],
+            }
+
+        return resp.json()
+    except httpx.TimeoutException:
+        return {"status": "error", "error": "Health check timed out (12s)"}
+    except httpx.ConnectError:
+        return {"status": "error", "error": "Could not connect to engine"}
+    except Exception as e:
+        return {"status": "error", "error": str(e)[:200]}
 

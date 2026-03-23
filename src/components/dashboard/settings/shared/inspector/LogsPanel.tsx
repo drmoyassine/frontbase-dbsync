@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/tooltip';
 import {
     RefreshCw, Loader2, ChevronDown, AlertTriangle, Info,
-    Database, Server, Clock,
+    Database, Server, Clock, Cpu,
 } from 'lucide-react';
 import { API_BASE } from './types';
 
@@ -63,6 +63,15 @@ interface RetentionResponse {
 interface LogsPanelProps {
     engineId: string;
     engineName: string;
+    /** CF settings — when present, compatibility section is rendered at top */
+    settings?: {
+        settings: {
+            compatibility_date?: string;
+            compatibility_flags?: string[];
+            usage_model?: string;
+            [key: string]: any;
+        };
+    };
 }
 
 // ─── Level Colors ───────────────────────────────────────────────────────────
@@ -83,7 +92,7 @@ const LEVEL_BG: Record<string, string> = {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export const LogsPanel: React.FC<LogsPanelProps> = ({ engineId, engineName }) => {
+export const LogsPanel: React.FC<LogsPanelProps> = ({ engineId, engineName, settings }) => {
     const queryClient = useQueryClient();
     const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -223,6 +232,38 @@ export const LogsPanel: React.FC<LogsPanelProps> = ({ engineId, engineName }) =>
                     </Button>
                 </div>
             </div>
+
+            {/* ── Compatibility Section (from settings) ────────────── */}
+            {settings?.settings && (settings.settings.compatibility_date || (settings.settings.compatibility_flags?.length ?? 0) > 0) && (
+                <div className="px-4 py-2.5 border-b border-border/50 bg-muted/20">
+                    <div className="flex items-center gap-2 mb-1.5">
+                        <Cpu className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Compatibility</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                        {settings.settings.compatibility_date && (
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-muted-foreground">Date:</span>
+                                <Badge variant="outline" className="text-[10px] font-mono">{settings.settings.compatibility_date}</Badge>
+                            </div>
+                        )}
+                        {settings.settings.usage_model && (
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-muted-foreground">Model:</span>
+                                <Badge variant="outline" className="text-[10px] font-mono capitalize">{settings.settings.usage_model}</Badge>
+                            </div>
+                        )}
+                        {(settings.settings.compatibility_flags?.length ?? 0) > 0 && (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] text-muted-foreground">Flags:</span>
+                                {settings.settings.compatibility_flags!.map(flag => (
+                                    <Badge key={flag} variant="secondary" className="text-[10px] font-mono">{flag}</Badge>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* ── Log Viewer (terminal style) ─────────────────────────── */}
             <div

@@ -10,9 +10,10 @@ import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useEdgeAPIKeys } from '@/hooks/useEdgeInfrastructure';
 import {
     FileCode, Lock, Settings2, ChevronDown, ChevronRight,
-    File, Folder, Shield, Globe, Clock, Cpu, Loader2, Zap, Info, Circle,
+    File, Folder, Shield, Globe, Clock, Cpu, Loader2, Zap, Info, Circle, Key, Route,
 } from 'lucide-react';
 import type {
     SourceSnapshotResponse, InspectSettingsResponse, InspectSecretsResponse,
@@ -50,6 +51,8 @@ interface InspectorNavPanelProps {
     // Domains
     domainsData?: InspectDomainsResponse;
     loadingDomains?: boolean;
+    // Engine context (for API keys query)
+    engineId: string;
 }
 
 export const InspectorNavPanel: React.FC<InspectorNavPanelProps> = ({
@@ -60,6 +63,7 @@ export const InspectorNavPanel: React.FC<InspectorNavPanelProps> = ({
     selectedItem, setSelectedItem,
     dirtyFiles, openApiSpec,
     domainsData, loadingDomains,
+    engineId,
 }) => {
     const isSelected = (section: NavSection, key: string) =>
         selectedItem.section === section && selectedItem.key === key;
@@ -69,6 +73,9 @@ export const InspectorNavPanel: React.FC<InspectorNavPanelProps> = ({
     const isSupabase = providerType === 'supabase';
     const isNetlify = providerType === 'netlify';
     const hasSecrets = isCF || isVercel || isSupabase || isNetlify;
+
+    // Fetch API key count for this engine
+    const { data: apiKeys = [] } = useEdgeAPIKeys(engineId);
 
     // Parse endpoint count from live spec
     const endpointCount = React.useMemo(() => {
@@ -184,54 +191,55 @@ export const InspectorNavPanel: React.FC<InspectorNavPanelProps> = ({
                         </div>
                     )}
 
-                    {/* ── Secrets Section (CF + Vercel) ───────────────── */}
-                    {hasSecrets && (
-                        <>
+                    {/* ── Secrets Section ───────────────────────────── */}
+                    <button
+                        onClick={() => toggleSection('secrets')}
+                        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors mt-1"
+                    >
+                        {expandedSections.has('secrets') ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                        <Lock className="h-3.5 w-3.5" />
+                        SECRETS
+                        {loadingSecrets && <Loader2 className="h-3 w-3 animate-spin ml-auto" />}
+                    </button>
+                    {expandedSections.has('secrets') && (
+                        <div className="ml-2">
+                            {/* Environment Variables */}
                             <button
-                                onClick={() => toggleSection('secrets')}
-                                className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors mt-1"
+                                onClick={() => setSelectedItem({ section: 'secrets', key: 'env-vars' })}
+                                className={`w-full flex items-center gap-2 px-3 py-1 text-xs rounded-md transition-colors ${isSelected('secrets', 'env-vars')
+                                    ? 'bg-primary/10 text-primary font-medium'
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                                    }`}
                             >
-                                {expandedSections.has('secrets') ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                                <Lock className="h-3.5 w-3.5" />
-                                SECRETS
+                                <Shield className="h-3 w-3 shrink-0" />
+                                <span className="truncate">Environment Variables</span>
                                 {secrets && (
                                     <Badge variant="secondary" className="ml-auto text-[10px] h-4 px-1.5">{secrets.secrets.length}</Badge>
                                 )}
-                                {loadingSecrets && <Loader2 className="h-3 w-3 animate-spin ml-auto" />}
                             </button>
-                            {expandedSections.has('secrets') && (
-                                <div className="ml-2">
-                                    {secrets?.secrets.map(name => (
-                                        <button
-                                            key={name}
-                                            onClick={() => setSelectedItem({ section: 'secrets', key: name })}
-                                            className={`w-full flex items-center gap-2 px-3 py-1 text-xs rounded-md transition-colors ${isSelected('secrets', name)
-                                                ? 'bg-primary/10 text-primary font-medium'
-                                                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                                                }`}
-                                        >
-                                            <Shield className="h-3 w-3 shrink-0 text-amber-500" />
-                                            <span className="truncate font-mono">{name}</span>
-                                        </button>
-                                    ))}
-                                    {loadingSecrets && (
-                                        <div className="px-3 py-1 space-y-1">
-                                            <Skeleton className="h-4 w-full" />
-                                            <Skeleton className="h-4 w-3/4" />
-                                        </div>
-                                    )}
-                                    {secrets && secrets.secrets.length === 0 && !secrets.imported_notice && (
-                                        <div className="px-3 py-1 text-[10px] text-muted-foreground italic">No secrets deployed</div>
-                                    )}
-                                    {secrets?.imported_notice && (
-                                        <div className="mx-2 my-1 px-2.5 py-2 text-[10px] text-muted-foreground bg-muted/50 rounded-md border border-border leading-relaxed">
-                                            <Info className="h-3 w-3 inline-block mr-1 -mt-0.5 text-blue-400" />
-                                            {secrets.imported_notice}
-                                        </div>
-                                    )}
+
+                            {/* API Keys */}
+                            <button
+                                onClick={() => setSelectedItem({ section: 'secrets', key: 'api-keys' })}
+                                className={`w-full flex items-center gap-2 px-3 py-1 text-xs rounded-md transition-colors ${isSelected('secrets', 'api-keys')
+                                    ? 'bg-primary/10 text-primary font-medium'
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                                    }`}
+                            >
+                                <Key className="h-3 w-3 shrink-0" />
+                                <span className="truncate">API Keys</span>
+                                {apiKeys.length > 0 && (
+                                    <Badge variant="secondary" className="ml-auto text-[10px] h-4 px-1.5">{apiKeys.length}</Badge>
+                                )}
+                            </button>
+
+                            {secrets?.imported_notice && (
+                                <div className="mx-2 my-1 px-2.5 py-2 text-[10px] text-muted-foreground bg-muted/50 rounded-md border border-border leading-relaxed">
+                                    <Info className="h-3 w-3 inline-block mr-1 -mt-0.5 text-blue-400" />
+                                    {secrets.imported_notice}
                                 </div>
                             )}
-                        </>
+                        </div>
                     )}
 
                     {/* ── Settings Section ──────────────────────────── */}
@@ -246,39 +254,31 @@ export const InspectorNavPanel: React.FC<InspectorNavPanelProps> = ({
                     </button>
                     {expandedSections.has('settings') && (
                         <div className="ml-2">
-                            {/* Endpoints — shown only when OpenAPI spec available */}
-                            {(openApiSpec && endpointCount > 0) && (
+                            {/* Routes & Endpoints (combined) */}
+                            <button
+                                onClick={() => setSelectedItem({ section: 'settings', key: 'routes-endpoints' })}
+                                className={`w-full flex items-center gap-2 px-3 py-1 text-xs rounded-md transition-colors ${isSelected('settings', 'routes-endpoints')
+                                    ? 'bg-primary/10 text-primary font-medium'
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                                    }`}
+                            >
+                                <Route className="h-3 w-3 shrink-0" />
+                                <span className="truncate">Routes & Endpoints ({(settings?.settings.routes?.length ?? 0) + endpointCount})</span>
+                            </button>
+
+                            {/* Crons (CF-only) */}
+                            {isCF && settings && (settings.settings.cron_triggers?.length ?? 0) > 0 && (
                                 <button
-                                    onClick={() => setSelectedItem({ section: 'settings', key: 'endpoints' })}
-                                    className={`w-full flex items-center gap-2 px-3 py-1 text-xs rounded-md transition-colors ${isSelected('settings', 'endpoints')
+                                    onClick={() => setSelectedItem({ section: 'settings', key: 'crons' })}
+                                    className={`w-full flex items-center gap-2 px-3 py-1 text-xs rounded-md transition-colors ${isSelected('settings', 'crons')
                                         ? 'bg-primary/10 text-primary font-medium'
                                         : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                                         }`}
                                 >
-                                    <Zap className="h-3 w-3 shrink-0" />
-                                    <span className="truncate">Endpoints ({endpointCount})</span>
+                                    <Clock className="h-3 w-3 shrink-0" />
+                                    <span className="truncate">Crons ({settings.settings.cron_triggers?.length ?? 0})</span>
                                 </button>
                             )}
-
-                            {/* CF-only settings items */}
-                            {isCF && settings && [
-                                { key: 'compatibility', icon: Cpu, label: 'Compatibility' },
-                                { key: 'bindings', icon: Settings2, label: `Bindings (${settings.settings.bindings?.length ?? 0})` },
-                                { key: 'routes', icon: Globe, label: `Routes (${settings.settings.routes?.length ?? 0})` },
-                                { key: 'crons', icon: Clock, label: `Crons (${settings.settings.cron_triggers?.length ?? 0})` },
-                            ].map(item => (
-                                <button
-                                    key={item.key}
-                                    onClick={() => setSelectedItem({ section: 'settings', key: item.key })}
-                                    className={`w-full flex items-center gap-2 px-3 py-1 text-xs rounded-md transition-colors ${isSelected('settings', item.key)
-                                        ? 'bg-primary/10 text-primary font-medium'
-                                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                                        }`}
-                                >
-                                    <item.icon className="h-3 w-3 shrink-0" />
-                                    <span className="truncate">{item.label}</span>
-                                </button>
-                            ))}
 
                             {/* Vercel-specific settings items */}
                             {isVercel && settings && [

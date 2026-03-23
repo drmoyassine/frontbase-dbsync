@@ -173,19 +173,20 @@ class EdgeGPUModel(Base):
     edge_engine = relationship("EdgeEngine", back_populates="gpu_models")
 
 
+
 class EdgeAPIKey(Base):
-    """API key for securing tenant-facing edge endpoints (e.g. /v1/chat/completions).
-    
-    Keys are stored as SHA-256 hashes. The full key (fb_sk_<hex>) is shown
-    once at creation and never stored. The prefix (first 10 chars) is kept
-    for display purposes (e.g. 'fb_sk_a1b2...').
+    """API key for securing tenant-facing edge endpoints.
+
+    Keys are stored Fernet-encrypted (reversible) in key_hash.
+    SHA-256 hash is derived at push-time for edge engine validation.
+    Legacy keys store raw SHA-256 hashes and cannot be revealed.
     """
     __tablename__ = 'edge_api_keys'
-    
+
     id = Column(String, primary_key=True)
     name = Column(String(100), nullable=False)            # "Production Key"
     prefix = Column(String(20), nullable=False)            # "fb_sk_a1b2..." (for display)
-    key_hash = Column(String(128), nullable=False, unique=True)  # SHA-256 of full key
+    key_hash = Column(String(256), nullable=False, unique=True)  # Fernet-encrypted key (or legacy SHA-256)
     edge_engine_id = Column(String, ForeignKey('edge_engines.id'), nullable=True)  # null = all engines
     is_active = Column(Boolean, default=True)
     scope = Column(String(20), nullable=False, default='user')  # user | management | all
@@ -193,6 +194,6 @@ class EdgeAPIKey(Base):
     last_used_at = Column(String, nullable=True)
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
-    
+
     # Relationship
     edge_engine = relationship("EdgeEngine", back_populates="api_keys")

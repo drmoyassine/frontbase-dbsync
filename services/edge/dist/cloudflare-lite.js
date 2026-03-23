@@ -10632,6 +10632,330 @@ var init_drizzle_orm = __esm({
   }
 });
 
+// src/storage/schema.ts
+var publishedPages, projectSettings, workflowsTable, executionsTable, edgeLogsTable;
+var init_schema = __esm({
+  "src/storage/schema.ts"() {
+    init_drizzle_orm();
+    init_sqlite_core();
+    publishedPages = sqliteTable("published_pages", {
+      id: text("id").primaryKey(),
+      slug: text("slug").notNull().unique(),
+      name: text("name").notNull(),
+      title: text("title"),
+      description: text("description"),
+      layoutData: text("layout_data").notNull(),
+      seoData: text("seo_data"),
+      datasources: text("datasources"),
+      cssBundle: text("css_bundle"),
+      version: integer("version").notNull().default(1),
+      publishedAt: text("published_at").notNull(),
+      isPublic: integer("is_public", { mode: "boolean" }).notNull().default(true),
+      isHomepage: integer("is_homepage", { mode: "boolean" }).notNull().default(false),
+      contentHash: text("content_hash"),
+      createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+      updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+    });
+    projectSettings = sqliteTable("project_settings", {
+      id: text("id").primaryKey().default("default"),
+      faviconUrl: text("favicon_url"),
+      logoUrl: text("logo_url"),
+      siteName: text("site_name"),
+      siteDescription: text("site_description"),
+      appUrl: text("app_url"),
+      updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+    });
+    workflowsTable = sqliteTable("workflows", {
+      id: text("id").primaryKey(),
+      name: text("name").notNull(),
+      description: text("description"),
+      triggerType: text("trigger_type").notNull(),
+      triggerConfig: text("trigger_config"),
+      nodes: text("nodes").notNull(),
+      edges: text("edges").notNull(),
+      settings: text("settings"),
+      version: integer("version").notNull().default(1),
+      isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+      createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+      updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+      publishedBy: text("published_by")
+    });
+    executionsTable = sqliteTable("executions", {
+      id: text("id").primaryKey(),
+      workflowId: text("workflow_id").notNull(),
+      status: text("status").notNull(),
+      triggerType: text("trigger_type").notNull(),
+      triggerPayload: text("trigger_payload"),
+      nodeExecutions: text("node_executions"),
+      result: text("result"),
+      error: text("error"),
+      usage: real("usage").default(0),
+      startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+      endedAt: text("ended_at")
+    });
+    edgeLogsTable = sqliteTable("edge_logs", {
+      id: text("id").primaryKey(),
+      timestamp: text("timestamp").notNull(),
+      level: text("level").notNull(),
+      // debug | info | warn | error
+      message: text("message").notNull(),
+      source: text("source").default("runtime"),
+      // runtime | request | error | system
+      metadata: text("metadata"),
+      // JSON string — provider-specific extras
+      createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+    });
+  }
+});
+
+// src/storage/DrizzleStateProvider.ts
+var DEFAULT_FAVICON, DrizzleStateProvider;
+var init_DrizzleStateProvider = __esm({
+  "src/storage/DrizzleStateProvider.ts"() {
+    init_drizzle_orm();
+    init_schema();
+    DEFAULT_FAVICON = "/static/icon.png";
+    DrizzleStateProvider = class {
+      async initSettings() {
+      }
+      // =========================================================================
+      // Pages CRUD
+      // =========================================================================
+      async upsertPage(page) {
+        const database = this.getDb();
+        const record = {
+          id: page.id,
+          slug: page.slug,
+          name: page.name,
+          title: page.title || null,
+          description: page.description || null,
+          layoutData: JSON.stringify(page.layoutData),
+          seoData: page.seoData ? JSON.stringify(page.seoData) : null,
+          datasources: page.datasources ? JSON.stringify(page.datasources) : null,
+          cssBundle: page.cssBundle || null,
+          version: page.version,
+          publishedAt: page.publishedAt,
+          isPublic: page.isPublic,
+          isHomepage: page.isHomepage,
+          contentHash: page.contentHash || null
+        };
+        if (page.isHomepage) {
+          await database.update(publishedPages).set({ isHomepage: false }).where(eq(publishedPages.isHomepage, true));
+        }
+        await database.insert(publishedPages).values(record).onConflictDoUpdate({
+          target: publishedPages.id,
+          set: { ...record, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }
+        });
+        return { success: true, version: page.version };
+      }
+      async getPageBySlug(slug) {
+        const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.slug, slug)).get();
+        return record ? this.recordToPage(record) : null;
+      }
+      async getHomepage() {
+        const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.isHomepage, true)).get();
+        return record ? this.recordToPage(record) : null;
+      }
+      async deletePage(slug) {
+        await this.getDb().delete(publishedPages).where(eq(publishedPages.slug, slug));
+        return true;
+      }
+      async listPages() {
+        return await this.getDb().select({
+          slug: publishedPages.slug,
+          name: publishedPages.name,
+          version: publishedPages.version
+        }).from(publishedPages);
+      }
+      recordToPage(record) {
+        return {
+          id: record.id,
+          slug: record.slug,
+          name: record.name,
+          title: record.title || void 0,
+          description: record.description || void 0,
+          layoutData: JSON.parse(record.layoutData),
+          seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
+          datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
+          cssBundle: record.cssBundle || void 0,
+          version: record.version,
+          publishedAt: record.publishedAt,
+          isPublic: record.isPublic,
+          isHomepage: record.isHomepage
+        };
+      }
+      // =========================================================================
+      // Project Settings
+      // =========================================================================
+      async getProjectSettings() {
+        const record = await this.getDb().select().from(projectSettings).where(eq(projectSettings.id, "default")).get();
+        if (!record) {
+          return {
+            id: "default",
+            faviconUrl: null,
+            logoUrl: null,
+            siteName: null,
+            siteDescription: null,
+            appUrl: null,
+            updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+          };
+        }
+        return record;
+      }
+      async getFaviconUrl() {
+        return (await this.getProjectSettings()).faviconUrl || DEFAULT_FAVICON;
+      }
+      async updateProjectSettings(updates) {
+        const database = this.getDb();
+        const existing = await database.select().from(projectSettings).where(eq(projectSettings.id, "default")).get();
+        if (existing) {
+          await database.update(projectSettings).set({ ...updates, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(eq(projectSettings.id, "default"));
+        } else {
+          await database.insert(projectSettings).values({
+            id: "default",
+            ...updates,
+            updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+          });
+        }
+        return this.getProjectSettings();
+      }
+      // =========================================================================
+      // Workflows CRUD
+      // =========================================================================
+      async upsertWorkflow(workflow) {
+        const database = this.getDb();
+        const existing = await database.select().from(workflowsTable).where(eq(workflowsTable.id, workflow.id)).get();
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        if (existing) {
+          const newVersion = (existing.version || 1) + 1;
+          await database.update(workflowsTable).set({
+            name: workflow.name,
+            description: workflow.description,
+            triggerType: workflow.triggerType,
+            triggerConfig: workflow.triggerConfig,
+            nodes: workflow.nodes,
+            edges: workflow.edges,
+            settings: workflow.settings || null,
+            version: newVersion,
+            updatedAt: now,
+            publishedBy: workflow.publishedBy
+          }).where(eq(workflowsTable.id, workflow.id));
+          return { version: newVersion };
+        } else {
+          await database.insert(workflowsTable).values({
+            id: workflow.id,
+            name: workflow.name,
+            description: workflow.description,
+            triggerType: workflow.triggerType,
+            triggerConfig: workflow.triggerConfig,
+            nodes: workflow.nodes,
+            edges: workflow.edges,
+            settings: workflow.settings || null,
+            version: 1,
+            isActive: true,
+            createdAt: now,
+            updatedAt: now,
+            publishedBy: workflow.publishedBy
+          });
+          return { version: 1 };
+        }
+      }
+      async getWorkflowById(id) {
+        const row = await this.getDb().select().from(workflowsTable).where(eq(workflowsTable.id, id)).get();
+        return row ? { ...row, isActive: !!row.isActive } : null;
+      }
+      async getActiveWebhookWorkflow(id) {
+        const row = await this.getDb().select().from(workflowsTable).where(and(eq(workflowsTable.id, id), eq(workflowsTable.isActive, true))).get();
+        return row ? { ...row, isActive: !!row.isActive } : null;
+      }
+      async listWorkflows() {
+        const rows = await this.getDb().select().from(workflowsTable);
+        return rows.map((r) => ({ ...r, isActive: !!r.isActive }));
+      }
+      async deleteWorkflow(id) {
+        await this.getDb().delete(workflowsTable).where(eq(workflowsTable.id, id));
+        return true;
+      }
+      async toggleWorkflow(id, isActive) {
+        await this.getDb().update(workflowsTable).set({ isActive, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(eq(workflowsTable.id, id));
+      }
+      // =========================================================================
+      // Executions CRUD
+      // =========================================================================
+      async createExecution(execution) {
+        await this.getDb().insert(executionsTable).values({
+          id: execution.id,
+          workflowId: execution.workflowId,
+          status: execution.status,
+          triggerType: execution.triggerType,
+          triggerPayload: execution.triggerPayload || null,
+          nodeExecutions: execution.nodeExecutions || null,
+          startedAt: execution.startedAt
+        });
+      }
+      async getExecutionById(id) {
+        const row = await this.getDb().select().from(executionsTable).where(eq(executionsTable.id, id)).get();
+        return row;
+      }
+      async updateExecution(id, updates) {
+        const setValues = {};
+        if (updates.status !== void 0) setValues.status = updates.status;
+        if (updates.result !== void 0) setValues.result = updates.result;
+        if (updates.error !== void 0) setValues.error = updates.error;
+        if (updates.nodeExecutions !== void 0) setValues.nodeExecutions = updates.nodeExecutions;
+        if (updates.usage !== void 0) setValues.usage = updates.usage;
+        if (updates.endedAt !== void 0) setValues.endedAt = updates.endedAt;
+        if (Object.keys(setValues).length > 0) {
+          await this.getDb().update(executionsTable).set(setValues).where(eq(executionsTable.id, id));
+        }
+      }
+      async listExecutionsByWorkflow(workflowId, limit2 = 20) {
+        return await this.getDb().select().from(executionsTable).where(eq(executionsTable.workflowId, workflowId)).orderBy(desc(executionsTable.startedAt)).limit(limit2);
+      }
+      async listAllExecutions(filters2) {
+        const conditions = [];
+        if (filters2?.workflowId) conditions.push(eq(executionsTable.workflowId, filters2.workflowId));
+        if (filters2?.since) conditions.push(sql`${executionsTable.startedAt} >= ${filters2.since}`);
+        if (filters2?.until) conditions.push(sql`${executionsTable.startedAt} <= ${filters2.until}`);
+        let query = this.getDb().select().from(executionsTable);
+        if (conditions.length > 0) query = query.where(and(...conditions));
+        let rows = await query.orderBy(desc(executionsTable.startedAt)).limit(filters2?.limit || 100);
+        if (filters2?.status && filters2.status.length > 0) {
+          rows = rows.filter((r) => filters2.status.includes(r.status));
+        }
+        return rows;
+      }
+      async getExecutionStats() {
+        const allExecutions = await this.getDb().select().from(executionsTable);
+        const statsMap = /* @__PURE__ */ new Map();
+        for (const exec2 of allExecutions) {
+          const current = statsMap.get(exec2.workflowId) || {
+            workflowId: exec2.workflowId,
+            totalRuns: 0,
+            successfulRuns: 0,
+            failedRuns: 0
+          };
+          current.totalRuns++;
+          if (exec2.status === "completed") current.successfulRuns++;
+          else if (exec2.status === "error") current.failedRuns++;
+          statsMap.set(exec2.workflowId, current);
+        }
+        return Array.from(statsMap.values());
+      }
+      // =========================================================================
+      // Dead Letter Queue
+      // =========================================================================
+      async createDeadLetter(deadLetter) {
+        await this.getDb().run(sql`
+            INSERT INTO dead_letters (id, workflow_id, execution_id, error, payload, retry_count)
+            VALUES (${deadLetter.id}, ${deadLetter.workflowId}, ${deadLetter.executionId},
+                    ${deadLetter.error}, ${deadLetter.payload}, ${deadLetter.retryCount || 0})
+        `);
+      }
+    };
+  }
+});
+
 // src/storage/edge-migrations.ts
 async function runMigrations(execute, providerName) {
   await execute(`CREATE TABLE IF NOT EXISTS _schema_version (
@@ -10802,98 +11126,20 @@ var init_edge_migrations = __esm({
   }
 });
 
-// src/storage/schema.ts
-var publishedPages, projectSettings, workflowsTable, executionsTable, edgeLogsTable;
-var init_schema = __esm({
-  "src/storage/schema.ts"() {
-    init_drizzle_orm();
-    init_sqlite_core();
-    publishedPages = sqliteTable("published_pages", {
-      id: text("id").primaryKey(),
-      slug: text("slug").notNull().unique(),
-      name: text("name").notNull(),
-      title: text("title"),
-      description: text("description"),
-      layoutData: text("layout_data").notNull(),
-      seoData: text("seo_data"),
-      datasources: text("datasources"),
-      cssBundle: text("css_bundle"),
-      version: integer("version").notNull().default(1),
-      publishedAt: text("published_at").notNull(),
-      isPublic: integer("is_public", { mode: "boolean" }).notNull().default(true),
-      isHomepage: integer("is_homepage", { mode: "boolean" }).notNull().default(false),
-      contentHash: text("content_hash"),
-      createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-      updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
-    });
-    projectSettings = sqliteTable("project_settings", {
-      id: text("id").primaryKey().default("default"),
-      faviconUrl: text("favicon_url"),
-      logoUrl: text("logo_url"),
-      siteName: text("site_name"),
-      siteDescription: text("site_description"),
-      appUrl: text("app_url"),
-      updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
-    });
-    workflowsTable = sqliteTable("workflows", {
-      id: text("id").primaryKey(),
-      name: text("name").notNull(),
-      description: text("description"),
-      triggerType: text("trigger_type").notNull(),
-      triggerConfig: text("trigger_config"),
-      nodes: text("nodes").notNull(),
-      edges: text("edges").notNull(),
-      settings: text("settings"),
-      version: integer("version").notNull().default(1),
-      isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-      createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-      updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-      publishedBy: text("published_by")
-    });
-    executionsTable = sqliteTable("executions", {
-      id: text("id").primaryKey(),
-      workflowId: text("workflow_id").notNull(),
-      status: text("status").notNull(),
-      triggerType: text("trigger_type").notNull(),
-      triggerPayload: text("trigger_payload"),
-      nodeExecutions: text("node_executions"),
-      result: text("result"),
-      error: text("error"),
-      usage: real("usage").default(0),
-      startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-      endedAt: text("ended_at")
-    });
-    edgeLogsTable = sqliteTable("edge_logs", {
-      id: text("id").primaryKey(),
-      timestamp: text("timestamp").notNull(),
-      level: text("level").notNull(),
-      // debug | info | warn | error
-      message: text("message").notNull(),
-      source: text("source").default("runtime"),
-      // runtime | request | error | system
-      metadata: text("metadata"),
-      // JSON string — provider-specific extras
-      createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)
-    });
-  }
-});
-
 // src/storage/TursoHttpProvider.ts
-var DEFAULT_FAVICON, TursoHttpProvider;
+var TursoHttpProvider;
 var init_TursoHttpProvider = __esm({
   "src/storage/TursoHttpProvider.ts"() {
     init_libsql();
     init_web();
     init_drizzle_orm();
+    init_DrizzleStateProvider();
     init_edge_migrations();
-    init_schema();
-    DEFAULT_FAVICON = "/static/icon.png";
-    TursoHttpProvider = class {
+    TursoHttpProvider = class extends DrizzleStateProvider {
       _db = null;
       /**
        * Lazy DB accessor — creates client on first use.
        * On CF Workers, env vars aren't available at module eval time.
-       * They're bridged in the fetch() handler BEFORE any provider method runs.
        */
       getDb() {
         if (!this._db) {
@@ -10910,9 +11156,6 @@ var init_TursoHttpProvider = __esm({
         }
         return this._db;
       }
-      // =========================================================================
-      // Lifecycle
-      // =========================================================================
       async init() {
         await runMigrations(
           async (sqlStr) => {
@@ -10924,252 +11167,6 @@ var init_TursoHttpProvider = __esm({
       }
       async initSettings() {
         console.log("\u2601\uFE0F Project settings table initialized (Turso)");
-      }
-      // =========================================================================
-      // Pages CRUD
-      // =========================================================================
-      async upsertPage(page) {
-        const record = {
-          id: page.id,
-          slug: page.slug,
-          name: page.name,
-          title: page.title || null,
-          description: page.description || null,
-          layoutData: JSON.stringify(page.layoutData),
-          seoData: page.seoData ? JSON.stringify(page.seoData) : null,
-          datasources: page.datasources ? JSON.stringify(page.datasources) : null,
-          cssBundle: page.cssBundle || null,
-          version: page.version,
-          publishedAt: page.publishedAt,
-          isPublic: page.isPublic,
-          isHomepage: page.isHomepage,
-          contentHash: page.contentHash || null
-        };
-        if (page.isHomepage) {
-          await this.getDb().update(publishedPages).set({ isHomepage: false }).where(eq(publishedPages.isHomepage, true));
-          console.log(`\u2601\uFE0F Cleared old homepage flag(s) before setting new homepage: ${page.slug}`);
-        }
-        await this.getDb().insert(publishedPages).values(record).onConflictDoUpdate({
-          target: publishedPages.id,
-          set: { ...record, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }
-        });
-        console.log(`\u2601\uFE0F Upserted page (Turso): ${page.slug} (v${page.version})`);
-        return { success: true, version: page.version };
-      }
-      async getPageBySlug(slug) {
-        const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.slug, slug)).get();
-        if (!record) return null;
-        return {
-          id: record.id,
-          slug: record.slug,
-          name: record.name,
-          title: record.title || void 0,
-          description: record.description || void 0,
-          layoutData: JSON.parse(record.layoutData),
-          seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
-          datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
-          cssBundle: record.cssBundle || void 0,
-          version: record.version,
-          publishedAt: record.publishedAt,
-          isPublic: record.isPublic,
-          isHomepage: record.isHomepage
-        };
-      }
-      async getHomepage() {
-        const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.isHomepage, true)).get();
-        if (!record) return null;
-        return {
-          id: record.id,
-          slug: record.slug,
-          name: record.name,
-          title: record.title || void 0,
-          description: record.description || void 0,
-          layoutData: JSON.parse(record.layoutData),
-          seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
-          datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
-          cssBundle: record.cssBundle || void 0,
-          version: record.version,
-          publishedAt: record.publishedAt,
-          isPublic: record.isPublic,
-          isHomepage: record.isHomepage
-        };
-      }
-      async deletePage(slug) {
-        await this.getDb().delete(publishedPages).where(eq(publishedPages.slug, slug));
-        return true;
-      }
-      async listPages() {
-        return await this.getDb().select({
-          slug: publishedPages.slug,
-          name: publishedPages.name,
-          version: publishedPages.version
-        }).from(publishedPages);
-      }
-      // =========================================================================
-      // Project Settings CRUD
-      // =========================================================================
-      async getProjectSettings() {
-        const record = await this.getDb().select().from(projectSettings).where(eq(projectSettings.id, "default")).get();
-        if (!record) {
-          return {
-            id: "default",
-            faviconUrl: null,
-            logoUrl: null,
-            siteName: null,
-            siteDescription: null,
-            appUrl: null,
-            updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-          };
-        }
-        return record;
-      }
-      async getFaviconUrl() {
-        const settings = await this.getProjectSettings();
-        return settings.faviconUrl || DEFAULT_FAVICON;
-      }
-      async updateProjectSettings(updates) {
-        const existing = await this.getDb().select().from(projectSettings).where(eq(projectSettings.id, "default")).get();
-        if (existing) {
-          await this.getDb().update(projectSettings).set({ ...updates, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(eq(projectSettings.id, "default"));
-        } else {
-          await this.getDb().insert(projectSettings).values({
-            id: "default",
-            ...updates,
-            updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-          });
-        }
-        console.log("\u2601\uFE0F Project settings updated (Turso)");
-        return this.getProjectSettings();
-      }
-      // =========================================================================
-      // Workflows CRUD
-      // =========================================================================
-      async upsertWorkflow(workflow) {
-        const existing = await this.getDb().select().from(workflowsTable).where(eq(workflowsTable.id, workflow.id)).get();
-        const now = (/* @__PURE__ */ new Date()).toISOString();
-        if (existing) {
-          const newVersion = (existing.version || 1) + 1;
-          await this.getDb().update(workflowsTable).set({
-            name: workflow.name,
-            description: workflow.description,
-            triggerType: workflow.triggerType,
-            triggerConfig: workflow.triggerConfig,
-            nodes: workflow.nodes,
-            edges: workflow.edges,
-            settings: workflow.settings || null,
-            version: newVersion,
-            updatedAt: now,
-            publishedBy: workflow.publishedBy
-          }).where(eq(workflowsTable.id, workflow.id));
-          return { version: newVersion };
-        } else {
-          await this.getDb().insert(workflowsTable).values({
-            id: workflow.id,
-            name: workflow.name,
-            description: workflow.description,
-            triggerType: workflow.triggerType,
-            triggerConfig: workflow.triggerConfig,
-            nodes: workflow.nodes,
-            edges: workflow.edges,
-            settings: workflow.settings || null,
-            version: 1,
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-            publishedBy: workflow.publishedBy
-          });
-          return { version: 1 };
-        }
-      }
-      async getWorkflowById(id) {
-        const row = await this.getDb().select().from(workflowsTable).where(eq(workflowsTable.id, id)).get();
-        return row ? { ...row, isActive: !!row.isActive } : null;
-      }
-      async getActiveWebhookWorkflow(id) {
-        const row = await this.getDb().select().from(workflowsTable).where(and(eq(workflowsTable.id, id), eq(workflowsTable.isActive, true))).get();
-        return row ? { ...row, isActive: !!row.isActive } : null;
-      }
-      // =========================================================================
-      // Executions CRUD
-      // =========================================================================
-      async createExecution(execution) {
-        await this.getDb().insert(executionsTable).values({
-          id: execution.id,
-          workflowId: execution.workflowId,
-          status: execution.status,
-          triggerType: execution.triggerType,
-          triggerPayload: execution.triggerPayload || null,
-          nodeExecutions: execution.nodeExecutions || null,
-          startedAt: execution.startedAt
-        });
-      }
-      async getExecutionById(id) {
-        const row = await this.getDb().select().from(executionsTable).where(eq(executionsTable.id, id)).get();
-        return row;
-      }
-      async updateExecution(id, updates) {
-        const setValues = {};
-        if (updates.status !== void 0) setValues.status = updates.status;
-        if (updates.result !== void 0) setValues.result = updates.result;
-        if (updates.error !== void 0) setValues.error = updates.error;
-        if (updates.nodeExecutions !== void 0) setValues.nodeExecutions = updates.nodeExecutions;
-        if (updates.usage !== void 0) setValues.usage = updates.usage;
-        if (updates.endedAt !== void 0) setValues.endedAt = updates.endedAt;
-        if (Object.keys(setValues).length > 0) {
-          await this.getDb().update(executionsTable).set(setValues).where(eq(executionsTable.id, id));
-        }
-      }
-      async listExecutionsByWorkflow(workflowId, limit2 = 20) {
-        const rows = await this.getDb().select().from(executionsTable).where(eq(executionsTable.workflowId, workflowId)).orderBy(desc(executionsTable.startedAt)).limit(limit2);
-        return rows;
-      }
-      async listAllExecutions(filters2) {
-        const conditions = [];
-        if (filters2?.workflowId) {
-          conditions.push(eq(executionsTable.workflowId, filters2.workflowId));
-        }
-        if (filters2?.since) {
-          conditions.push(sql`${executionsTable.startedAt} >= ${filters2.since}`);
-        }
-        if (filters2?.until) {
-          conditions.push(sql`${executionsTable.startedAt} <= ${filters2.until}`);
-        }
-        let query = this.getDb().select().from(executionsTable);
-        if (conditions.length > 0) {
-          query = query.where(and(...conditions));
-        }
-        let rows = await query.orderBy(desc(executionsTable.startedAt)).limit(filters2?.limit || 100);
-        if (filters2?.status && filters2.status.length > 0) {
-          rows = rows.filter((r) => filters2.status.includes(r.status));
-        }
-        return rows;
-      }
-      async getExecutionStats() {
-        const allExecutions = await this.getDb().select().from(executionsTable);
-        const statsMap = /* @__PURE__ */ new Map();
-        for (const exec2 of allExecutions) {
-          const current = statsMap.get(exec2.workflowId) || {
-            workflowId: exec2.workflowId,
-            totalRuns: 0,
-            successfulRuns: 0,
-            failedRuns: 0
-          };
-          current.totalRuns++;
-          if (exec2.status === "completed") current.successfulRuns++;
-          else if (exec2.status === "error") current.failedRuns++;
-          statsMap.set(exec2.workflowId, current);
-        }
-        return Array.from(statsMap.values());
-      }
-      // =========================================================================
-      // Dead Letter Queue
-      // =========================================================================
-      async createDeadLetter(deadLetter) {
-        await this.getDb().run(sql`
-            INSERT INTO dead_letters (id, workflow_id, execution_id, error, payload, retry_count)
-            VALUES (${deadLetter.id}, ${deadLetter.workflowId}, ${deadLetter.executionId},
-                    ${deadLetter.error}, ${deadLetter.payload}, ${deadLetter.retryCount || 0})
-        `);
       }
     };
   }
@@ -11522,6 +11519,20 @@ var init_CfD1HttpProvider = __esm({
           updatedAt: row.updated_at,
           publishedBy: row.published_by || null
         };
+      }
+      async listWorkflows() {
+        const rows = await this.all(`SELECT * FROM workflows`);
+        return rows.map((r) => this.rowToWorkflow(r));
+      }
+      async deleteWorkflow(id) {
+        await this.run(`DELETE FROM workflows WHERE id = ?1`, [id]);
+        return true;
+      }
+      async toggleWorkflow(id, isActive) {
+        await this.run(
+          `UPDATE workflows SET is_active = ?1, updated_at = ?2 WHERE id = ?3`,
+          [isActive ? 1 : 0, (/* @__PURE__ */ new Date()).toISOString(), id]
+        );
       }
       // =========================================================================
       // Executions
@@ -17183,9 +17194,20 @@ var init_NeonHttpProvider = __esm({
           publishedBy: row.published_by || null
         };
       }
-      // =========================================================================
-      // Executions
-      // =========================================================================
+      async listWorkflows() {
+        const rows = await this.all(`SELECT * FROM ${SCHEMA}.workflows`);
+        return rows.map((r) => this.rowToWorkflow(r));
+      }
+      async deleteWorkflow(id) {
+        await this.query(`DELETE FROM ${SCHEMA}.workflows WHERE id = $1`, [id]);
+        return true;
+      }
+      async toggleWorkflow(id, isActive) {
+        await this.query(
+          `UPDATE ${SCHEMA}.workflows SET is_active = $1, updated_at = $2 WHERE id = $3`,
+          [isActive, (/* @__PURE__ */ new Date()).toISOString(), id]
+        );
+      }
       async createExecution(execution) {
         await this.query(
           `INSERT INTO ${SCHEMA}.executions (id, workflow_id, status, trigger_type, trigger_payload, node_executions, started_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -22303,6 +22325,23 @@ var init_SupabaseRestProvider = __esm({
           updatedAt: row.updated_at,
           publishedBy: row.published_by || null
         };
+      }
+      async listWorkflows() {
+        const client = getClient();
+        const { data, error } = await client.from("workflows").select("*");
+        if (error) throw new Error(`[SupabaseRest] listWorkflows: ${error.message}`);
+        return (data || []).map((r) => this.rowToWorkflow(r));
+      }
+      async deleteWorkflow(id) {
+        const client = getClient();
+        const result = await client.from("workflows").delete().eq("id", id);
+        throwIfError(result, `deleteWorkflow(${id})`);
+        return true;
+      }
+      async toggleWorkflow(id, isActive) {
+        const client = getClient();
+        const result = await client.from("workflows").update({ is_active: isActive, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", id);
+        throwIfError(result, `toggleWorkflow(${id})`);
       }
       // =========================================================================
       // Executions
@@ -63723,6 +63762,23 @@ var route = createRoute({
   }
 });
 healthRoute.openapi(route, async (c) => {
+  const systemKey = process.env.FRONTBASE_SYSTEM_KEY;
+  const provided = c.req.header("x-system-key");
+  const isAuthenticated = !systemKey || provided === systemKey;
+  if (!isAuthenticated) {
+    return c.json({
+      status: "ok",
+      service: "frontbase-edge",
+      version: "0.1.0",
+      provider: getPlatform(),
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      bindings: {
+        stateDb: { provider: "hidden", status: "ok" },
+        cache: { provider: "hidden", status: "ok" },
+        queue: { provider: "hidden", status: "ok" }
+      }
+    });
+  }
   const platform2 = getPlatform();
   const isServerless = platform2 !== "docker";
   const [stateDb, cache, queue] = await Promise.all([
@@ -65761,6 +65817,441 @@ edgeLogsRoute.get("/", async (c) => {
   }
 });
 
+// src/routes/workflows.ts
+init_storage();
+var workflowsRoute = new OpenAPIHono();
+var WorkflowSummarySchema = external_exports.object({
+  id: external_exports.string(),
+  name: external_exports.string(),
+  triggerType: external_exports.string(),
+  version: external_exports.number(),
+  isActive: external_exports.boolean(),
+  createdAt: external_exports.string(),
+  updatedAt: external_exports.string()
+});
+var listRoute2 = createRoute({
+  method: "get",
+  path: "/",
+  tags: ["Workflows"],
+  summary: "List all deployed workflows",
+  description: "Returns a list of all workflows deployed to this engine",
+  responses: {
+    200: {
+      description: "Workflow list",
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            workflows: external_exports.array(WorkflowSummarySchema),
+            total: external_exports.number()
+          })
+        }
+      }
+    }
+  }
+});
+workflowsRoute.openapi(listRoute2, async (c) => {
+  const workflows = await stateProvider.listWorkflows();
+  return c.json({
+    workflows: workflows.map((w) => ({
+      id: w.id,
+      name: w.name,
+      triggerType: w.triggerType,
+      version: w.version,
+      isActive: w.isActive,
+      createdAt: w.createdAt,
+      updatedAt: w.updatedAt
+    })),
+    total: workflows.length
+  }, 200);
+});
+var getRoute2 = createRoute({
+  method: "get",
+  path: "/:id",
+  tags: ["Workflows"],
+  summary: "Get workflow by ID",
+  description: "Returns the full workflow definition including nodes and edges",
+  request: {
+    params: external_exports.object({
+      id: external_exports.string().uuid().openapi({ description: "Workflow ID" })
+    })
+  },
+  responses: {
+    200: {
+      description: "Workflow detail",
+      content: {
+        "application/json": {
+          schema: external_exports.object({ workflow: external_exports.record(external_exports.unknown()) })
+        }
+      }
+    },
+    404: {
+      description: "Workflow not found",
+      content: {
+        "application/json": { schema: ErrorResponseSchema }
+      }
+    }
+  }
+});
+workflowsRoute.openapi(getRoute2, async (c) => {
+  const { id } = c.req.valid("param");
+  const workflow = await stateProvider.getWorkflowById(id);
+  if (!workflow) {
+    return c.json({ error: "NotFound", message: `Workflow ${id} not found` }, 404);
+  }
+  return c.json({ workflow }, 200);
+});
+var deleteRoute = createRoute({
+  method: "delete",
+  path: "/:id",
+  tags: ["Workflows"],
+  summary: "Delete a workflow",
+  description: "Permanently removes a workflow from this engine",
+  request: {
+    params: external_exports.object({
+      id: external_exports.string().uuid().openapi({ description: "Workflow ID" })
+    })
+  },
+  responses: {
+    200: {
+      description: "Workflow deleted",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema
+        }
+      }
+    }
+  }
+});
+workflowsRoute.openapi(deleteRoute, async (c) => {
+  const { id } = c.req.valid("param");
+  await stateProvider.deleteWorkflow(id);
+  return c.json({ success: true, message: `Workflow ${id} deleted` }, 200);
+});
+var toggleRoute = createRoute({
+  method: "patch",
+  path: "/:id/toggle",
+  tags: ["Workflows"],
+  summary: "Toggle workflow active state",
+  description: "Enable or disable a workflow without deleting it",
+  request: {
+    params: external_exports.object({
+      id: external_exports.string().uuid().openapi({ description: "Workflow ID" })
+    }),
+    body: {
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            isActive: external_exports.boolean().openapi({ description: "Desired active state" })
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Workflow toggled",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema.extend({
+            isActive: external_exports.boolean()
+          })
+        }
+      }
+    }
+  }
+});
+workflowsRoute.openapi(toggleRoute, async (c) => {
+  const { id } = c.req.valid("param");
+  const { isActive } = c.req.valid("json");
+  await stateProvider.toggleWorkflow(id, isActive);
+  return c.json({
+    success: true,
+    message: `Workflow ${id} ${isActive ? "activated" : "deactivated"}`,
+    isActive
+  }, 200);
+});
+
+// src/routes/queue.ts
+var queueRoute = new OpenAPIHono();
+function getQueueConfig() {
+  const url = process.env.FRONTBASE_QUEUE_URL;
+  const token = process.env.FRONTBASE_QUEUE_TOKEN;
+  if (!url || !token) return null;
+  return { url: url.replace(/\/$/, ""), token };
+}
+var statsRoute3 = createRoute({
+  method: "get",
+  path: "/stats",
+  tags: ["Queue"],
+  summary: "Get queue stats",
+  description: "Returns queue connection status and provider info",
+  responses: {
+    200: {
+      description: "Queue stats",
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            configured: external_exports.boolean(),
+            provider: external_exports.string().optional(),
+            connected: external_exports.boolean().optional(),
+            message: external_exports.string()
+          })
+        }
+      }
+    }
+  }
+});
+queueRoute.openapi(statsRoute3, async (c) => {
+  const config = getQueueConfig();
+  if (!config) {
+    return c.json({
+      configured: false,
+      message: "No queue provider configured. Set FRONTBASE_QUEUE_URL and FRONTBASE_QUEUE_TOKEN."
+    }, 200);
+  }
+  const isQStash = config.url.includes("qstash") || config.url.includes("upstash");
+  const provider = isQStash ? "upstash-qstash" : "generic-http";
+  try {
+    const resp = await fetch(config.url, {
+      headers: { "Authorization": `Bearer ${config.token}` }
+    });
+    return c.json({
+      configured: true,
+      provider,
+      connected: resp.ok,
+      message: resp.ok ? "Queue connected" : `Queue returned HTTP ${resp.status}`
+    }, 200);
+  } catch (err2) {
+    return c.json({
+      configured: true,
+      provider,
+      connected: false,
+      message: `Connection failed: ${err2.message}`
+    }, 200);
+  }
+});
+var publishRoute = createRoute({
+  method: "post",
+  path: "/publish",
+  tags: ["Queue"],
+  summary: "Publish a message to the queue",
+  description: "Sends a message to the connected queue provider (QStash/CF Queue)",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            topic: external_exports.string().min(1).openapi({ description: "Queue topic/destination URL" }),
+            payload: external_exports.record(external_exports.unknown()).openapi({ description: "Message body (JSON)" }),
+            delay: external_exports.number().int().min(0).optional().openapi({
+              description: "Delay in seconds before delivery (QStash only)"
+            })
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Message published",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema.extend({
+            messageId: external_exports.string().optional()
+          })
+        }
+      }
+    },
+    400: {
+      description: "Invalid request",
+      content: {
+        "application/json": { schema: ErrorResponseSchema }
+      }
+    },
+    501: {
+      description: "No queue configured",
+      content: {
+        "application/json": { schema: ErrorResponseSchema }
+      }
+    }
+  }
+});
+queueRoute.openapi(publishRoute, async (c) => {
+  const config = getQueueConfig();
+  if (!config) {
+    return c.json({
+      error: "NotConfigured",
+      message: "No queue provider configured"
+    }, 501);
+  }
+  const { topic, payload, delay } = c.req.valid("json");
+  try {
+    const headers = {
+      "Authorization": `Bearer ${config.token}`,
+      "Content-Type": "application/json"
+    };
+    if (delay && delay > 0) {
+      headers["Upstash-Delay"] = `${delay}s`;
+    }
+    const resp = await fetch(`${config.url}/v2/publish/${encodeURIComponent(topic)}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) {
+      const text2 = await resp.text();
+      return c.json({
+        error: "PublishFailed",
+        message: `Queue returned HTTP ${resp.status}: ${text2.substring(0, 200)}`
+      }, 400);
+    }
+    const result = await resp.json();
+    return c.json({
+      success: true,
+      message: "Message published",
+      messageId: result.messageId || result.id || void 0
+    }, 200);
+  } catch (err2) {
+    return c.json({
+      error: "PublishError",
+      message: err2.message || "Failed to publish message"
+    }, 400);
+  }
+});
+
+// src/routes/config.ts
+var configRoute = new OpenAPIHono();
+function redact(value) {
+  if (!value) return null;
+  if (value.length <= 16) return "***";
+  return `${value.substring(0, 8)}...${value.substring(value.length - 4)}`;
+}
+var getConfigRoute = createRoute({
+  method: "get",
+  path: "/",
+  tags: ["System"],
+  summary: "Get current runtime configuration",
+  description: "Returns the active database, cache, and queue settings (secrets redacted)",
+  responses: {
+    200: {
+      description: "Current config",
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            stateDb: external_exports.object({
+              provider: external_exports.string().nullable(),
+              url: external_exports.string().nullable()
+            }),
+            cache: external_exports.object({
+              url: external_exports.string().nullable(),
+              configured: external_exports.boolean()
+            }),
+            queue: external_exports.object({
+              url: external_exports.string().nullable(),
+              configured: external_exports.boolean()
+            }),
+            engineMode: external_exports.string().nullable()
+          })
+        }
+      }
+    }
+  }
+});
+configRoute.openapi(getConfigRoute, async (c) => {
+  return c.json({
+    stateDb: {
+      provider: process.env.FRONTBASE_STATE_DB_PROVIDER || "local-sqlite",
+      url: redact(process.env.FRONTBASE_STATE_DB_URL)
+    },
+    cache: {
+      url: redact(process.env.FRONTBASE_CACHE_URL),
+      configured: !!(process.env.FRONTBASE_CACHE_URL && process.env.FRONTBASE_CACHE_TOKEN)
+    },
+    queue: {
+      url: redact(process.env.FRONTBASE_QUEUE_URL),
+      configured: !!(process.env.FRONTBASE_QUEUE_URL && process.env.FRONTBASE_QUEUE_TOKEN)
+    },
+    engineMode: process.env.FRONTBASE_ADAPTER_PLATFORM || null
+  }, 200);
+});
+var updateConfigRoute = createRoute({
+  method: "post",
+  path: "/",
+  tags: ["System"],
+  summary: "Update runtime configuration",
+  description: "Hot-swap database, cache, or queue configuration without redeploying. Updates process.env and reinitializes affected singletons.",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            cache: external_exports.object({
+              url: external_exports.string().min(1),
+              token: external_exports.string().min(1)
+            }).optional().openapi({ description: "Redis/Upstash cache credentials" }),
+            queue: external_exports.object({
+              url: external_exports.string().min(1),
+              token: external_exports.string().min(1)
+            }).optional().openapi({ description: "QStash/queue credentials" })
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Config updated",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema.extend({
+            updated: external_exports.array(external_exports.string())
+          })
+        }
+      }
+    },
+    400: {
+      description: "Invalid config",
+      content: {
+        "application/json": { schema: ErrorResponseSchema }
+      }
+    }
+  }
+});
+configRoute.openapi(updateConfigRoute, async (c) => {
+  const body = c.req.valid("json");
+  const updated = [];
+  try {
+    if (body.cache) {
+      process.env.FRONTBASE_CACHE_URL = body.cache.url;
+      process.env.FRONTBASE_CACHE_TOKEN = body.cache.token;
+      try {
+        const { initRedis: initRedis2 } = await Promise.resolve().then(() => (init_redis(), redis_exports));
+        initRedis2({ url: body.cache.url, token: body.cache.token });
+        updated.push("cache");
+        console.log("[Config] Cache reinitialized");
+      } catch (err2) {
+        console.error("[Config] Cache reinit failed:", err2.message);
+      }
+    }
+    if (body.queue) {
+      process.env.FRONTBASE_QUEUE_URL = body.queue.url;
+      process.env.FRONTBASE_QUEUE_TOKEN = body.queue.token;
+      updated.push("queue");
+      console.log("[Config] Queue config updated");
+    }
+    return c.json({
+      success: true,
+      message: updated.length > 0 ? `Updated: ${updated.join(", ")}` : "No changes applied",
+      updated
+    }, 200);
+  } catch (err2) {
+    return c.json({
+      error: "ConfigError",
+      message: err2.message || "Failed to apply config"
+    }, 400);
+  }
+});
+
 // src/routes/openai.ts
 var openaiRoute = new OpenAPIHono();
 function resolveModel(modelSlug, c) {
@@ -66140,38 +66631,77 @@ new TextDecoder();
 ];
 
 // src/middleware/auth.ts
-var apiKeyAuth = async (c, next) => {
-  const validKeys = (process.env.API_KEYS || "").split(",").map((k) => k.trim()).filter(Boolean);
-  if (validKeys.length === 0) {
-    console.warn("\u26A0\uFE0F No API_KEYS configured - webhook auth disabled");
+function parseKeyHashes() {
+  const envHashes = process.env.FRONTBASE_API_KEY_HASHES;
+  if (!envHashes) return null;
+  try {
+    return JSON.parse(envHashes);
+  } catch {
+    console.error("[Auth] Failed to parse FRONTBASE_API_KEY_HASHES");
+    return null;
+  }
+}
+function extractBearerToken(c) {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  return authHeader.slice(7).trim();
+}
+async function sha2562(input) {
+  const data = new TextEncoder().encode(input);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b2) => b2.toString(16).padStart(2, "0")).join("");
+}
+async function validateApiKey(token, allowedScopes) {
+  const keyEntries = parseKeyHashes();
+  if (!keyEntries || keyEntries.length === 0) return null;
+  const tokenHash = await sha2562(token);
+  const matched = keyEntries.find((k) => k.hash === tokenHash);
+  if (!matched) return null;
+  const keyScope = matched.scope || "user";
+  if (!allowedScopes.includes(keyScope) && keyScope !== "all") {
+    return null;
+  }
+  if (matched.expires_at) {
+    if (new Date(matched.expires_at) < /* @__PURE__ */ new Date()) return null;
+  }
+  return matched;
+}
+var systemKeyAuth = async (c, next) => {
+  const systemKey = process.env.FRONTBASE_SYSTEM_KEY;
+  if (!systemKey) {
     return next();
   }
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return c.json({ error: "Unauthorized", message: "Missing or invalid Authorization header" }, 401);
+  const sysHeader = c.req.header("x-system-key");
+  if (sysHeader && sysHeader === systemKey) {
+    return next();
   }
-  const token = authHeader.slice(7).trim();
-  if (!validKeys.includes(token)) {
-    return c.json({ error: "Unauthorized", message: "Invalid API key" }, 401);
+  const bearerToken = extractBearerToken(c);
+  if (bearerToken) {
+    const matched = await validateApiKey(bearerToken, ["management", "all"]);
+    if (matched) return next();
   }
-  return next();
+  return c.json({
+    error: {
+      message: "Unauthorized. Provide x-system-key header or a management-scoped API key.",
+      type: "invalid_request_error",
+      code: "unauthorized"
+    }
+  }, 401);
 };
-var aiApiKeyAuth = async (c, next) => {
+var userApiKeyAuth = async (c, next) => {
   const envHashes = process.env.FRONTBASE_API_KEY_HASHES;
   if (!envHashes) {
     return c.json({
       error: {
-        message: "AI endpoints are not configured. No API keys have been deployed to this engine.",
+        message: "No API keys configured for this engine.",
         type: "invalid_request_error",
         code: "no_api_keys_configured"
       }
     }, 403);
   }
-  let keyEntries;
-  try {
-    keyEntries = JSON.parse(envHashes);
-  } catch {
-    console.error("[AI Auth] Failed to parse FRONTBASE_API_KEY_HASHES");
+  const keyEntries = parseKeyHashes();
+  if (!keyEntries) {
     return c.json({
       error: {
         message: "API key configuration error. Contact administrator.",
@@ -66189,8 +66719,8 @@ var aiApiKeyAuth = async (c, next) => {
       }
     }, 403);
   }
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  const token = extractBearerToken(c);
+  if (!token) {
     return c.json({
       error: {
         message: "Missing or invalid Authorization header. Use: Authorization: Bearer <api_key>",
@@ -66199,43 +66729,59 @@ var aiApiKeyAuth = async (c, next) => {
       }
     }, 401);
   }
-  const token = authHeader.slice(7).trim();
-  const encoder = new TextEncoder();
-  const data = encoder.encode(token);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const tokenHash = hashArray.map((b2) => b2.toString(16).padStart(2, "0")).join("");
-  const matchedKey = keyEntries.find((k) => k.hash === tokenHash);
-  if (!matchedKey) {
+  const matched = await validateApiKey(token, ["user", "all"]);
+  if (!matched) {
     return c.json({
       error: {
-        message: "Invalid API key.",
+        message: "Invalid API key or insufficient scope.",
         type: "invalid_request_error",
         code: "invalid_api_key"
       }
     }, 401);
   }
-  if (matchedKey.expires_at) {
-    const expiresAt = new Date(matchedKey.expires_at);
-    if (expiresAt < /* @__PURE__ */ new Date()) {
-      return c.json({
-        error: {
-          message: "API key has expired.",
-          type: "invalid_request_error",
-          code: "expired_api_key"
-        }
-      }, 401);
-    }
-  }
   return next();
 };
+var aiApiKeyAuth = userApiKeyAuth;
 
 // src/engine/lite.ts
 new Liquid({
   strictVariables: false,
   strictFilters: false
 });
-function createLiteApp() {
+var ENGINE_PROFILES = {
+  lite: {
+    description: "Self-sufficient edge runtime for workflow automation, webhooks, and AI inference.",
+    techStack: "Hono \xB7 Drizzle ORM \xB7 LiquidJS \xB7 Zod",
+    badge: "Lite Engine",
+    tags: [
+      { name: "System", description: "Health checks, manifest, and self-update" },
+      { name: "Workflows", description: "Deploy, list, and manage published workflows" },
+      { name: "Execution", description: "Execute workflows and inspect runs" },
+      { name: "Webhooks", description: "Trigger workflows via incoming webhooks" },
+      { name: "Cache", description: "Redis/Upstash cache management \u2014 test connection, invalidate keys, flush, and stats" },
+      { name: "Queue", description: "Message queue management \u2014 stats and publishing (QStash/CF Queue)" },
+      { name: "AI", description: "OpenAI-compatible inference (GPU models required)" }
+    ]
+  },
+  full: {
+    description: "Self-sufficient edge runtime for SSR pages, workflow automation, data proxy, webhooks, and AI inference.",
+    techStack: "Hono \xB7 React \xB7 Drizzle ORM \xB7 LiquidJS \xB7 Zod",
+    badge: "Full Engine",
+    tags: [
+      { name: "System", description: "Health checks, manifest, and self-update" },
+      { name: "Pages", description: "Published page SSR and homepage rendering" },
+      { name: "Data", description: "Datasource proxy \u2014 fetches data from connected backends (Supabase, Neon, etc.)" },
+      { name: "Workflows", description: "Deploy, list, and manage published workflows" },
+      { name: "Execution", description: "Execute workflows and inspect runs" },
+      { name: "Webhooks", description: "Trigger workflows via incoming webhooks" },
+      { name: "Cache", description: "Redis/Upstash cache management \u2014 test connection, invalidate keys, flush, and stats" },
+      { name: "Queue", description: "Message queue management \u2014 stats and publishing (QStash/CF Queue)" },
+      { name: "AI", description: "OpenAI-compatible inference (GPU models required)" }
+    ]
+  }
+};
+function createLiteApp(mode = "lite") {
+  const profile = ENGINE_PROFILES[mode];
   const app = new OpenAPIHono({
     defaultHook: (result, c) => {
       if (!result.success) {
@@ -66284,7 +66830,17 @@ function createLiteApp() {
   });
   app.use("/api/*", cors({ origin: "*" }));
   app.use("*", cors({ origin: "*" }));
-  app.use("/api/webhook/*", apiKeyAuth);
+  app.use("/api/deploy/*", systemKeyAuth);
+  app.use("/api/execute/*", systemKeyAuth);
+  app.use("/api/update/*", systemKeyAuth);
+  app.use("/api/cache/*", systemKeyAuth);
+  app.use("/api/edge-logs/*", systemKeyAuth);
+  app.use("/api/manifest/*", systemKeyAuth);
+  app.use("/api/executions/*", systemKeyAuth);
+  app.use("/api/workflows/*", systemKeyAuth);
+  app.use("/api/queue/*", systemKeyAuth);
+  app.use("/api/config/*", systemKeyAuth);
+  app.use("/api/webhook/*", userApiKeyAuth);
   app.route("/api/health", healthRoute);
   app.route("/api/manifest", manifestRoute);
   app.route("/api/deploy", deployRoute);
@@ -66294,6 +66850,9 @@ function createLiteApp() {
   app.route("/api/update", updateRoute);
   app.route("/api/cache", cacheRoute);
   app.route("/api/edge-logs", edgeLogsRoute);
+  app.route("/api/workflows", workflowsRoute);
+  app.route("/api/queue", queueRoute);
+  app.route("/api/config", configRoute);
   app.use("/v1/*", aiApiKeyAuth);
   app.route("/v1", openaiRoute);
   const EDGE_VERSION = "0.1.0";
@@ -66303,9 +66862,9 @@ function createLiteApp() {
       title: "Frontbase Edge Engine",
       version: EDGE_VERSION,
       description: [
-        "Self-sufficient edge runtime for SSR pages, workflow automation, webhooks, and AI inference.",
+        profile.description,
         "",
-        "**Tech Stack:** Hono \xB7 Drizzle ORM \xB7 LiquidJS \xB7 Zod",
+        `**Tech Stack:** ${profile.techStack}`,
         "",
         "**Authentication:** Protected routes require an API key via the `x-api-key` header."
       ].join("\n")
@@ -66316,17 +66875,7 @@ function createLiteApp() {
         description: "Current server"
       }
     ],
-    tags: [
-      { name: "System", description: "Health checks, manifest, and self-update" },
-      { name: "Workflows", description: "Deploy, list, and manage published workflows" },
-      { name: "Execution", description: "Execute workflows and inspect runs" },
-      { name: "Webhooks", description: "Trigger workflows via incoming webhooks" },
-      { name: "Pages", description: "Published page management (Full engine only)" },
-      { name: "Data", description: "Datasource proxy \u2014 fetches data from connected backends (Supabase, Neon, etc.) for published pages (Full engine only)" },
-      { name: "Cache", description: "Redis/Upstash cache management \u2014 test connection, invalidate keys, flush, and stats" },
-      { name: "Queue", description: "QStash message queue management (coming soon)" },
-      { name: "AI", description: "OpenAI-compatible inference (GPU models required)" }
-    ],
+    tags: profile.tags,
     security: [{ ApiKeyAuth: [] }],
     components: {
       securitySchemes: {
@@ -66456,13 +67005,17 @@ function createLiteApp() {
 </head>
 <body>
     <div class="fb-header">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect width="24" height="24" rx="6" fill="#6366f1"/>
-            <path d="M7 8h10M7 12h7M7 16h4" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            <g transform="scale(0.7) translate(5.1 5.1)" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+                <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/>
+                <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/>
+                <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/>
+            </g>
         </svg>
         <h1>Frontbase Edge API</h1>
         <span class="badge badge-version">v${EDGE_VERSION}</span>
-        <span class="badge badge-engine">Edge Engine</span>
+        <span class="badge badge-engine">${profile.badge}</span>
     </div>
     <div id="swagger-ui"></div>
     <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>

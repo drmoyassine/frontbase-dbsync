@@ -3,8 +3,7 @@
  * 
  * CRUD management for tenant-facing API keys that secure /v1/* endpoints.
  * Follows the same UX pattern as EdgeCachesForm / EdgeQueuesForm.
- * 
- * Key is shown ONCE at creation — user must copy it immediately.
+ * Keys can be revealed anytime via Fernet decryption.
  */
 
 import React, { useState } from 'react';
@@ -37,18 +36,20 @@ const API_BASE = '';
 
 interface EdgeAPIKeysFormProps {
     withCard?: boolean;
+    /** If provided, pre-scope to this engine and filter list accordingly */
+    engineId?: string;
 }
 
-export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = false }) => {
+export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = false, engineId }) => {
     const queryClient = useQueryClient();
-    const { data: keys = [], isLoading } = useEdgeAPIKeys();
+    const { data: keys = [], isLoading } = useEdgeAPIKeys(engineId);
     const { data: engines = [] } = useEdgeEngines();
 
     // Dialog state
     const [dialogOpen, setDialogOpen] = useState(false);
     const [creating, setCreating] = useState(false);
     const [name, setName] = useState('');
-    const [engineId, setEngineId] = useState<string>('all');
+    const [engineSel, setEngineSel] = useState<string>(engineId || 'all');
 
     // Created key reveal state
     const [revealedKey, setRevealedKey] = useState<string | null>(null);
@@ -58,9 +59,13 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
     // Deleting state
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
+    // Per-row reveal state: { keyId: fullKeyString }
+    const [revealedKeys, setRevealedKeys] = useState<Record<string, string>>({});
+    const [revealingId, setRevealingId] = useState<string | null>(null);
+
     const resetForm = () => {
         setName('');
-        setEngineId('all');
+        setEngineSel(engineId || 'all');
         setRevealedKey(null);
         setRevealCopied(false);
         setShowKey(true);
@@ -75,7 +80,7 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: name.trim(),
-                    edge_engine_id: engineId === 'all' ? null : engineId,
+                    edge_engine_id: engineSel === 'all' ? null : engineSel,
                 }),
             });
             if (!res.ok) {
@@ -85,6 +90,8 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
             const data = await res.json();
             setRevealedKey(data.key);
             queryClient.invalidateQueries({ queryKey: ['edge-api-keys'] });
+            // Also invalidate engine-scoped query if applicable
+            if (engineId) queryClient.invalidateQueries({ queryKey: ['edge-api-keys', engineId] });
             toast.success('API key created');
         } catch (err: any) {
             toast.error(err.message || 'Failed to create API key');
@@ -130,6 +137,41 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
         }
     };
 
+    const handleRevealKey = async (keyId: string) => {
+        // Toggle off if already revealed
+        if (revealedKeys[keyId]) {
+            setRevealedKeys(prev => {
+                const next = { ...prev };
+                delete next[keyId];
+                return next;
+            });
+            return;
+        }
+        setRevealingId(keyId);
+        try {
+            const res = await fetch(`${API_BASE}/api/edge-api-keys/${keyId}/reveal`);
+            if (res.status === 410) {
+                toast.error('Legacy key — cannot be revealed');
+                return;
+            }
+            if (!res.ok) throw new Error('Failed to reveal key');
+            const data = await res.json();
+            setRevealedKeys(prev => ({ ...prev, [keyId]: data.key }));
+        } catch (err: any) {
+            toast.error(err.message || 'Failed to reveal key');
+        } finally {
+            setRevealingId(null);
+        }
+    };
+
+    const handleCopyRevealedKey = (keyId: string) => {
+        const fullKey = revealedKeys[keyId];
+        if (fullKey) {
+            navigator.clipboard.writeText(fullKey);
+            toast.success('Copied to clipboard');
+        }
+    };
+
     const createKeyDialog = (
         <Dialog open={dialogOpen} onOpenChange={(open) => {
             setDialogOpen(open);
@@ -145,7 +187,7 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
                     <DialogTitle>Create API Key</DialogTitle>
                     <DialogDescription>
                         {revealedKey
-                            ? 'Copy your API key now. You won\'t be able to see it again.'
+                            ? 'Copy your API key now. You can also reveal it later from the key list.'
                             : 'Create a new API key for authenticating AI endpoint requests.'
                         }
                     </DialogDescription>
@@ -177,8 +219,8 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
                                     </Button>
                                 </div>
                             </div>
-                            <p className="text-xs text-amber-500 flex items-center gap-1">
-                                ⚠️ Store this key securely. It won't be shown again.
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                💡 You can also reveal this key later from the key list.
                             </p>
                         </div>
                         <DialogFooter>
@@ -201,7 +243,7 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
                         </div>
                         <div className="space-y-2">
                             <Label>Assign to Engine</Label>
-                            <Select value={engineId} onValueChange={setEngineId}>
+                            <Select value={engineSel} onValueChange={setEngineSel} disabled={!!engineId}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="All Engines" />
                                 </SelectTrigger>
@@ -267,7 +309,9 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
                                         )}
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                        <p className="text-xs text-muted-foreground font-mono">{key.prefix}</p>
+                                        <p className="text-xs text-muted-foreground font-mono">
+                                            {revealedKeys[key.id] || key.prefix}
+                                        </p>
                                         {key.engine_name ? (
                                             <Badge variant="outline" className="text-[10px] shrink-0">→ {key.engine_name}</Badge>
                                         ) : (
@@ -276,7 +320,32 @@ export const EdgeAPIKeysForm: React.FC<EdgeAPIKeysFormProps> = ({ withCard = fal
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex items-center gap-1 shrink-0">
+                                {key.can_reveal && (
+                                    <>
+                                        <Button
+                                            variant="ghost" size="icon" className="h-7 w-7"
+                                            onClick={() => handleRevealKey(key.id)}
+                                            disabled={revealingId === key.id}
+                                            title={revealedKeys[key.id] ? 'Hide key' : 'Reveal key'}
+                                        >
+                                            {revealingId === key.id
+                                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                : revealedKeys[key.id]
+                                                    ? <EyeOff className="h-3.5 w-3.5" />
+                                                    : <Eye className="h-3.5 w-3.5" />}
+                                        </Button>
+                                        {revealedKeys[key.id] && (
+                                            <Button
+                                                variant="ghost" size="icon" className="h-7 w-7"
+                                                onClick={() => handleCopyRevealedKey(key.id)}
+                                                title="Copy key"
+                                            >
+                                                <Copy className="h-3.5 w-3.5" />
+                                            </Button>
+                                        )}
+                                    </>
+                                )}
                                 <Switch
                                     checked={key.is_active}
                                     onCheckedChange={() => handleToggleActive(key)}

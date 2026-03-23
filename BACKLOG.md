@@ -9,12 +9,17 @@
 ## Backend
 
 ### Edge Infrastructure
+- [ ] ✨ **Provider Discovery Caching (L1/L2)** — Cache `discover_resources_by_account` results (D1, KV, Queues, etc) across forms. Invalidate cache instantly upon provisioning or deleting a resource.
 - [ ] 🔧 **Edge DB quota guard** — Monitor row reads/writes (Turso/Neon), warn in UI, auto-fallback to local SQLite.
 - [ ] 🔧 **Cache quota guard** — Monitor commands/month (Upstash), reduce TTL or disable L2 cache gracefully.
 - [ ] 🔧 **Graceful provider downgrade** — Fall back to local SQLite/no-cache on edge DB/cache failure. Log and surface in status panel.
 - [ ] 🔌 **Enterprise Secrets Management** — Infisical integration for deploy-time secrets injection, E2E encrypted storage, audit logs.
 - [ ] 🔌 **Neon Auth Support** — Add Neon Auth as an auth provider option. Detect when auth provider has database capability and auto-suggest same datasource for contacts table.
 - [ ] 🔌 **Observability** — Axiom/Sentry logging integration, OpenTelemetry tracing.
+
+### API Keys
+- [ ] ✨ **Revealable API Keys (Fernet)** — Store `encrypt_data(full_key)` alongside the SHA-256 hash in `EdgeAPIKey`. Add `GET /api/edge-api-keys/{id}/reveal` endpoint that calls `decrypt_data()` to return the full key. Reuses existing Fernet infra from `database/utils.py` (`ENCRYPTION_KEY` env var / `data/encryption_key.txt`). Frontend: add "Reveal Key" / "Copy" button on key rows.
+- [ ] ✨ **Direct Secret Patching for Vercel/Netlify** — After API key CRUD, patch `FRONTBASE_API_KEY_HASHES` directly via provider API instead of full redeploy. Vercel: `POST /v10/projects/{id}/env`. Netlify: `PATCH /api/v1/sites/{id}` env vars. Docker/self-hosted still requires redeploy. Update `_sync_keys_to_engines()` in `edge_api_keys.py`.
 
 ### Builder / SSR (Backend)
 - [ ] ✨ **Private Page Enforcement** — Page gating (`pages.ts:360`): check `page.isPublic`, redirect unauthenticated. Auth middleware in Hono to verify JWT from cookie.
@@ -57,6 +62,7 @@
 - [ ] ✨ **Live status panel** — Settings widget showing edge DB/cache/queue quotas, connection status, hit rate.
 - [ ] ✨ **Provider switch confirmation** — Confirmation dialog when changing edge DB/cache/queue provider.
 - [ ] ✨ **Inspector Health & Resource Metrics Panel** — Metrics tab: Worker CPU, memory, request count, error rate, Turso/Upstash usage.
+- [ ] ✨ **Inspector API Key Provisioning** — Add "🔑 API Keys" section under Inspector → Settings. Create keys auto-scoped to that engine (`edge_engine_id` pre-filled). Keys appear in both Inspector and Settings → API Keys (shared `EdgeAPIKey` table). Reuses existing `POST /api/edge-api-keys` endpoint.
 
 ### Automations (Frontend)
 - [ ] ✨ **Execution detail view — Pipeline Diagram** — Horizontal pipeline (`Node → Node → Node`) with hover tooltips.

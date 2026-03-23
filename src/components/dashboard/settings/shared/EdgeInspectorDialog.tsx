@@ -14,8 +14,9 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-    Search, Loader2, AlertTriangle, ExternalLink, Save, Rocket, Circle, Check,
+    Search, Loader2, AlertTriangle, ExternalLink, Save, Rocket, Circle, Check, Lock as LockIcon, Info,
 } from 'lucide-react';
 import type { EdgeEngine } from '@/hooks/useEdgeInfrastructure';
 
@@ -27,6 +28,8 @@ import { SettingsPanel } from './inspector/SettingsPanel';
 import { EndpointsPanel } from './inspector/EndpointsPanel';
 import { LogsPanel } from './inspector/LogsPanel';
 import { DomainsPanel } from './inspector/DomainsPanel';
+import { HealthCheckPopover } from './HealthCheckPopover';
+import { ApiKeysPanel } from './inspector/ApiKeysPanel';
 import {
     type NavSection, type SelectedItem, type HierNode,
     type SourceSnapshotResponse, type InspectSettingsResponse, type InspectSecretsResponse,
@@ -372,14 +375,108 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
             );
         }
 
-        // Secret detail
+        // Secret detail panels (under SECRETS section)
         if (selectedItem.section === 'secrets') {
+            // API Keys panel
+            if (selectedItem.key === 'api-keys') {
+                return <ApiKeysPanel engineId={engine.id} />;
+            }
+            // Environment Variables list
+            if (selectedItem.key === 'env-vars') {
+                return (
+                    <div className="flex-1 flex flex-col min-w-0">
+                        <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/50">
+                            <LockIcon className="h-3.5 w-3.5" />
+                            <span className="text-xs font-medium">Environment Variables ({secrets?.secrets?.length ?? 0})</span>
+                        </div>
+                        <ScrollArea className="flex-1">
+                            <div className="p-4 space-y-2">
+                                {loadingSecrets ? (
+                                    <div className="flex items-center justify-center py-8">
+                                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                    </div>
+                                ) : (secrets?.secrets?.length ?? 0) === 0 ? (
+                                    <div className="text-center py-8 text-sm text-muted-foreground">
+                                        No environment variables deployed to this engine.
+                                    </div>
+                                ) : (
+                                    secrets!.secrets.map(name => (
+                                        <div key={name} className="p-3 rounded-lg border bg-card flex items-center gap-3">
+                                            <Badge variant="outline" className="text-[10px] font-mono shrink-0">SECRET</Badge>
+                                            <span className="text-sm font-mono font-medium">{name}</span>
+                                            <span className="text-[10px] text-muted-foreground ml-auto">••••••••</span>
+                                        </div>
+                                    ))
+                                )}
+                                {/* Bindings section */}
+                                {settings?.settings?.bindings && settings.settings.bindings.length > 0 && (
+                                    <>
+                                        <div className="pt-3 pb-1">
+                                            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Bindings</span>
+                                        </div>
+                                        {settings.settings.bindings.map((binding: any, i: number) => (
+                                            <div key={i} className="p-3 rounded-lg border bg-card flex items-center gap-3">
+                                                <Badge variant="outline" className="text-[10px] font-mono shrink-0 uppercase">{binding.type}</Badge>
+                                                <span className="text-sm font-mono font-medium">{binding.name}</span>
+                                                {binding.namespace_id && (
+                                                    <span className="text-[10px] text-muted-foreground font-mono ml-auto truncate max-w-[200px]">{binding.namespace_id}</span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
+                                {secrets?.imported_notice && (
+                                    <div className="p-3 rounded-lg border bg-muted/50 text-xs text-muted-foreground">
+                                        <Info className="h-3.5 w-3.5 inline-block mr-1.5 -mt-0.5 text-blue-400" />
+                                        {secrets.imported_notice}
+                                    </div>
+                                )}
+                            </div>
+                        </ScrollArea>
+                    </div>
+                );
+            }
+            // Legacy: individual secret name (fallback)
             return <SecretViewer secretName={selectedItem.key} providerLabel={providerLabel} />;
         }
 
-        // Endpoints (provider-agnostic)
-        if (selectedItem.section === 'settings' && selectedItem.key === 'endpoints') {
-            return <EndpointsPanel engine={engine} openApiSpec={openApiSpec} />;
+        // Routes & Endpoints (combined panel)
+        if (selectedItem.section === 'settings' && selectedItem.key === 'routes-endpoints') {
+            return (
+                <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/50">
+                        <span className="text-xs font-medium">Routes & Endpoints</span>
+                    </div>
+                    <ScrollArea className="flex-1">
+                        {/* Routes section (CF) */}
+                        {settings?.settings?.routes && settings.settings.routes.length > 0 && (
+                            <div className="p-4 border-b border-border/50">
+                                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                                    Routes ({settings.settings.routes.length})
+                                </div>
+                                <div className="space-y-2">
+                                    {settings.settings.routes.map((route: any, i: number) => (
+                                        <div key={i} className="p-3 rounded-lg border bg-card flex items-center gap-3">
+                                            <Badge variant="outline" className="text-[10px] font-mono shrink-0">{route.type}</Badge>
+                                            <a
+                                                href={`https://${route.pattern}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-sm font-mono text-primary hover:underline flex items-center gap-1.5 transition-colors"
+                                            >
+                                                {route.pattern}
+                                                <ExternalLink className="h-3 w-3 opacity-60" />
+                                            </a>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {/* Endpoints section */}
+                        <EndpointsPanel engine={engine} openApiSpec={openApiSpec} />
+                    </ScrollArea>
+                </div>
+            );
         }
 
         // Settings (CF-only)
@@ -387,9 +484,9 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
             return <SettingsPanel settingsKey={selectedItem.key} settings={settings} />;
         }
 
-        // Logs (all providers)
+        // Logs (all providers) — pass settings for compatibility section
         if (selectedItem.section === 'logs') {
-            return <LogsPanel engineId={engine.id} engineName={engine.name} />;
+            return <LogsPanel engineId={engine.id} engineName={engine.name} settings={settings} />;
         }
 
         // Domains (multi-provider)
@@ -451,9 +548,10 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
                             </div>
                         </div>
 
-                        {/* IDE Toolbar — only show when source is loaded */}
-                        {sourceData && (
-                            <div className="flex items-center gap-2">
+                        {/* Toolbar — health check always visible, IDE actions when source loaded */}
+                        <div className="flex items-center gap-2 pr-6">
+                            {sourceData && (
+                            <>
                                 {/* Status message */}
                                 {statusMessage && (
                                     <span className={`text-[10px] ${statusMessage.type === 'success' ? 'text-emerald-500' : 'text-destructive'}`}>
@@ -493,8 +591,12 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
                                     {deploying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />}
                                     Compile & Deploy
                                 </Button>
-                            </div>
-                        )}
+                            </>
+                            )}
+
+                            {/* Health check — always visible */}
+                            <HealthCheckPopover engineId={engine.id} variant="pill" />
+                        </div>
                     </div>
                 </DialogHeader>
 
@@ -521,6 +623,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
                         openApiSpec={openApiSpec}
                         domainsData={domainsData}
                         loadingDomains={loadingDomains}
+                        engineId={engine.id}
                     />
                     {renderRightPanel()}
                 </div>

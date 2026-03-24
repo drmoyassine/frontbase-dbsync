@@ -87,6 +87,24 @@ export function useAuthForms() {
         }
     };
 
+    const setPrimary = async (id: string) => {
+        try {
+            const res = await fetch(`/api/auth-forms/${id}/set-primary/`, {
+                method: 'PUT'
+            });
+            const json = await res.json();
+            if (json.success) {
+                // Refresh to get updated isPrimary flags on all forms
+                await fetchForms();
+                toast({ title: 'Primary Form Set', description: 'This form will be used for private page authentication.' });
+            } else {
+                throw new Error(json.error);
+            }
+        } catch (err: any) {
+            toast({ title: 'Error', description: err.message, variant: 'destructive' });
+        }
+    };
+
     useEffect(() => {
         fetchForms();
     }, [fetchForms]);
@@ -98,6 +116,7 @@ export function useAuthForms() {
         createForm,
         updateForm,
         deleteForm,
+        setPrimary,
         refresh: fetchForms
     };
 }

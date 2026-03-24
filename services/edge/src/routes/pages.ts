@@ -11,6 +11,8 @@ import { buildTemplateContext, PageData as ContextPageData } from '../ssr/lib/co
 import { getDefaultTrackingConfig, TrackingConfig } from '../ssr/lib/tracking.js';
 import { stateProvider } from '../storage/index.js';
 import { generateHtmlDocument, type HtmlPageData } from '../ssr/htmlDocument.js';
+import { generateGatedPageDocument } from '../ssr/gatedPage.js';
+import { getUserFromSession } from '../ssr/lib/auth.js';
 
 // Type definitions for page data
 interface PageComponent {
@@ -198,10 +200,38 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
         return c.redirect('/', 301);
     }
 
-    // Check if page is public (for now, render all pages - auth handled later)
-    // if (!page.isPublic) {
-    //     return c.json({ error: 'Unauthorized', message: 'This page is private' }, 403);
-    // }
+    // Private page gating — render blurred content with auth overlay
+    if (!page.isPublic) {
+        const user = await getUserFromSession(c.req.raw);
+        if (!user) {
+            // Still render the page fully, but gated behind auth overlay
+            const contextPageData: ContextPageData = {
+                id: page.id, title: page.title || page.name, slug: page.slug,
+                description: page.description, published: page.isPublic,
+                createdAt: (page as any).createdAt || new Date().toISOString(),
+                updatedAt: (page as any).updatedAt || new Date().toISOString(),
+                canonicalUrl: undefined, ogImage: undefined, ogType: 'website', customVariables: {},
+            };
+            const context = await buildTemplateContext(c.req.raw, contextPageData);
+            const bodyHtml = await renderPage(page.layoutData, context);
+            const initialState = { pageVariables: context.local, sessionVariables: context.session, cookies: context.cookies };
+            const trackingConfig = await fetchTrackingConfig();
+            const faviconUrl = await stateProvider.getFaviconUrl();
+
+            // Get primary auth form config if baked into page bundle
+            const authFormConfig = (page as any)._primaryAuthForm || undefined;
+            const supabaseUrl = process.env.SUPABASE_URL || ((page as any).datasources?.[0]?.supabaseUrl);
+            const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || ((page as any).datasources?.[0]?.anonKey);
+
+            const gatedHtml = generateGatedPageDocument(
+                page, bodyHtml, initialState, trackingConfig, faviconUrl,
+                authFormConfig, supabaseUrl, supabaseAnonKey
+            );
+            c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+            c.header('Content-Type', 'text/html; charset=utf-8');
+            return c.html(gatedHtml);
+        }
+    }
 
     // Build page data for template context
     const contextPageData: ContextPageData = {
@@ -339,6 +369,36 @@ pagesRoute.get('/', async (c) => {
 
         // Render the homepage if we have one
         if (homepage) {
+            // Private homepage gating
+            if (!homepage.isPublic) {
+                const user = await getUserFromSession(c.req.raw);
+                if (!user) {
+                    const page: PageData = {
+                        id: homepage.id, slug: homepage.slug, title: homepage.title,
+                        description: homepage.description, name: homepage.name,
+                        isPublic: homepage.isPublic, isHomepage: homepage.isHomepage,
+                        layoutData: homepage.layoutData as unknown as PageLayoutData,
+                        datasources: homepage.datasources as unknown as Record<string, unknown>[] | undefined,
+                        cssBundle: homepage.cssBundle || undefined,
+                    };
+                    const cpd: ContextPageData = {
+                        id: homepage.id, title: homepage.title || homepage.name, slug: homepage.slug,
+                        description: homepage.description, published: homepage.isPublic,
+                        createdAt: homepage.publishedAt || new Date().toISOString(),
+                        updatedAt: homepage.publishedAt || new Date().toISOString(),
+                        canonicalUrl: undefined, ogImage: undefined, ogType: 'website', customVariables: {},
+                    };
+                    const ctx = await buildTemplateContext(c.req.raw, cpd);
+                    const bodyHtml = await renderPage(page.layoutData, ctx);
+                    const is = { pageVariables: ctx.local, sessionVariables: ctx.session, cookies: ctx.cookies };
+                    const tc = await fetchTrackingConfig();
+                    const fav = await stateProvider.getFaviconUrl();
+                    const afc = (homepage as any)._primaryAuthForm || undefined;
+                    const su = process.env.SUPABASE_URL || ((homepage as any).datasources?.[0]?.supabaseUrl);
+                    const sk = process.env.SUPABASE_ANON_KEY || ((homepage as any).datasources?.[0]?.anonKey);
+                    return c.html(generateGatedPageDocument(page, bodyHtml, is, tc, fav, afc, su, sk));
+                }
+            }
             // Prepare page data for the template
             const page: PageData = {
                 id: homepage.id,

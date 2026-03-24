@@ -89,6 +89,8 @@ importRoute.post('/', async (c) => {
                 await redis.del('page:__homepage__');
                 console.log(`[Import] Cache invalidated: page:__homepage__`);
             }
+            // Invalidate SEO caches — sitemap/llms may include new or changed pages
+            await redis.del('seo:sitemap', 'seo:llms');
         } catch {
             // Redis not configured — no-op
         }

@@ -224,6 +224,17 @@ export class CfD1HttpProvider implements IStateProvider {
         return rows;
     }
 
+    async listPublicPageSlugs(): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]> {
+        const rows = await this.all<{ slug: string; updated_at: string; is_homepage: number }>(
+            `SELECT slug, updated_at, is_homepage FROM published_pages WHERE is_public = 1`
+        );
+        return rows.map(r => ({
+            slug: r.slug,
+            updatedAt: r.updated_at,
+            isHomepage: !!r.is_homepage,
+        }));
+    }
+
     // =========================================================================
     // Project Settings
     // =========================================================================

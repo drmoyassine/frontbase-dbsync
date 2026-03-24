@@ -9,7 +9,7 @@ import { AuthFormCard } from './AuthFormCard';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 export function AuthFormsList() {
-    const { forms, loading, createForm, updateForm, deleteForm } = useAuthForms();
+    const { forms, loading, createForm, updateForm, deleteForm, setPrimary } = useAuthForms();
     const [editingForm, setEditingForm] = useState<AuthForm | null>(null);
     const [isBuilderOpen, setIsBuilderOpen] = useState(false);
     const [embedForm, setEmbedForm] = useState<AuthForm | null>(null);
@@ -63,6 +63,7 @@ export function AuthFormsList() {
                         onEdit={handleEdit}
                         onDelete={(id) => setDeleteId(id)}
                         onEmbed={setEmbedForm}
+                        onSetPrimary={setPrimary}
                     />
                 ))}
 

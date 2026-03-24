@@ -119,6 +119,8 @@ export interface IStateProvider {
     deletePage(slug: string): Promise<boolean>;
     /** List all published pages (summary only) */
     listPages(): Promise<PublishedPageSummary[]>;
+    /** List public page slugs for sitemap/llms.txt (excludes private pages) */
+    listPublicPageSlugs(): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]>;
 
     // --- Project Settings ---
     /** Initialize settings storage */

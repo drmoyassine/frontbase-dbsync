@@ -98,6 +98,14 @@ export abstract class DrizzleStateProvider implements IStateProvider {
         }).from(publishedPages);
     }
 
+    async listPublicPageSlugs(): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]> {
+        return await this.getDb().select({
+            slug: publishedPages.slug,
+            updatedAt: publishedPages.updatedAt,
+            isHomepage: publishedPages.isHomepage,
+        }).from(publishedPages).where(eq(publishedPages.isPublic, true));
+    }
+
     private recordToPage(record: any): PublishPage {
         return {
             id: record.id, slug: record.slug, name: record.name,

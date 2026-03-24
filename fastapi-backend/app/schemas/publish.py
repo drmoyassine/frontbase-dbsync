@@ -219,6 +219,9 @@ class PublishPageRequest(BaseModel):
     # Flags
     is_public: bool = Field(True, alias="isPublic")
     is_homepage: bool = Field(False, alias="isHomepage")
+
+    # Auth form config baked at publish time (for private page gating overlay)
+    primary_auth_form: Optional[Dict[str, Any]] = Field(None, alias="_primaryAuthForm")
     
     class Config:
         populate_by_name = True

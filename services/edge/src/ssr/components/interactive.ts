@@ -164,6 +164,9 @@ export function renderInteractiveComponent(
         case 'Tooltip':
             return renderTooltip(id, props, childrenHtml, propsJson);
 
+        case 'AuthForm':
+            return renderAuthForm(id, props, propsJson);
+
         default:
             // Fallback for unknown interactive components
             return `<div data-fb-id="${id}" data-fb-type="${type}" data-fb-hydrate="true" data-fb-props="${escapeHtml(propsJson)}">${childrenHtml}</div>`;
@@ -429,4 +432,59 @@ function renderTooltip(id: string, props: Record<string, unknown>, childrenHtml:
         ${childrenHtml}
         <span class="fb-tooltip-content" data-position="${position}" style="display:none;position:absolute;background:#1f2937;color:#fff;padding:0.25rem 0.5rem;border-radius:0.25rem;font-size:0.75rem;white-space:nowrap;z-index:100">${content}</span>
     </span>`;
+}
+
+function renderAuthForm(id: string, props: Record<string, unknown>, propsJson: string): string {
+    const formType = props.type as string || 'both';
+    const title = escapeHtml(String(props.title || (formType === 'signup' ? 'Create an Account' : 'Sign In')));
+    const description = escapeHtml(String(props.description || ''));
+    const primaryColor = props.primaryColor as string || '#18181b';
+    const providers = (props.providers as string[]) || [];
+    const showToggle = formType === 'both';
+    const defaultIsLogin = formType !== 'signup';
+
+    const socialButtons = providers.map(p => {
+        const name = p.charAt(0).toUpperCase() + p.slice(1);
+        return `<button type="button" class="fb-social-btn" data-provider="${p}" style="width:100%;padding:0.5rem;background:#fff;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.8125rem;cursor:pointer">Continue with ${name}</button>`;
+    }).join('');
+
+    const attrs = getCommonAttributes(id, 'fb-auth-form', props, '', 'authform', propsJson);
+
+    return `<div ${attrs}>
+        <div style="max-width:400px;margin:0 auto;padding:2rem">
+            <h2 style="margin:0 0 0.25rem;font-size:1.5rem;font-weight:700;color:#18181b;text-align:center">${title}</h2>
+            ${description ? `<p style="margin:0 0 1.5rem;color:#71717a;font-size:0.875rem;text-align:center">${description}</p>` : '<div style="margin-bottom:1.5rem"></div>'}
+            ${providers.length > 0 ? `
+                <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem">${socialButtons}</div>
+                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem">
+                    <div style="flex:1;height:1px;background:#e4e4e7"></div>
+                    <span style="color:#a1a1aa;font-size:0.75rem;text-transform:uppercase">or</span>
+                    <div style="flex:1;height:1px;background:#e4e4e7"></div>
+                </div>
+            ` : ''}
+            <div id="${id}-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:0.625rem;border-radius:0.375rem;font-size:0.8125rem;margin-bottom:0.75rem"></div>
+            <form id="${id}-form" style="display:flex;flex-direction:column;gap:0.75rem">
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem">Email</label>
+                    <input type="email" required autocomplete="email" placeholder="you@example.com"
+                        style="width:100%;padding:0.5rem 0.75rem;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.875rem;outline:none;box-sizing:border-box" />
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem">Password</label>
+                    <input type="password" required autocomplete="${defaultIsLogin ? 'current-password' : 'new-password'}" placeholder="••••••••" minlength="6"
+                        style="width:100%;padding:0.5rem 0.75rem;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.875rem;outline:none;box-sizing:border-box" />
+                </div>
+                <button type="submit"
+                    style="width:100%;padding:0.625rem;background:${primaryColor};color:#fff;border:none;border-radius:0.375rem;font-size:0.875rem;font-weight:600;cursor:pointer">
+                    ${defaultIsLogin ? 'Sign In' : 'Sign Up'}
+                </button>
+            </form>
+            ${showToggle ? `
+                <p style="text-align:center;margin-top:1rem;font-size:0.8125rem;color:#71717a">
+                    ${defaultIsLogin ? "Don't have an account?" : 'Already have an account?'}
+                    <a href="#" style="color:${primaryColor};font-weight:500;text-decoration:none;margin-left:0.25rem" data-fb-toggle-auth>${defaultIsLogin ? 'Sign Up' : 'Sign In'}</a>
+                </p>
+            ` : ''}
+        </div>
+    </div>`;
 }

@@ -19,6 +19,7 @@ export interface AuthForm {
     targetContactType?: string; // Legacy/Single (deprecated mostly, but good for fallback)
     redirectUrl?: string;
     isActive: boolean;
+    isPrimary?: boolean;
     createdAt?: string;
 }
 

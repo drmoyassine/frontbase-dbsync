@@ -281,6 +281,39 @@ async def convert_to_publish_schema(page: Page, datasources: list) -> PublishPag
                 seo_raw = {}
         seo_data = SeoData(**seo_raw) if isinstance(seo_raw, dict) and seo_raw else None
     
+    # ==== PRIMARY AUTH FORM (for private page gating) ====
+    primary_auth_form_config = None
+    if not bool(page.is_public):
+        try:
+            from sqlalchemy import text as sa_text
+            from app.database.config import SessionLocal as PubSessionLocal
+            pub_db = PubSessionLocal()
+            try:
+                # Get primary form, fallback to first active
+                row = pub_db.execute(
+                    sa_text("SELECT * FROM auth_forms WHERE is_primary = 1 LIMIT 1")
+                ).fetchone()
+                if not row:
+                    row = pub_db.execute(
+                        sa_text("SELECT * FROM auth_forms WHERE is_active = 1 ORDER BY created_at ASC LIMIT 1")
+                    ).fetchone()
+                if row:
+                    import json as _json
+                    primary_auth_form_config = {
+                        "type": row.type,
+                        "title": row.name,
+                        "primaryColor": _json.loads(row.config).get("primaryColor") if row.config else None,
+                        "providers": _json.loads(row.config).get("providers", []) if row.config else [],
+                        "magicLink": _json.loads(row.config).get("magicLink", False) if row.config else False,
+                        "showLinks": True,
+                    }
+                    print(f"[publish] Baked primary auth form '{row.name}' for private page")
+            finally:
+                pub_db.close()
+        except Exception as e:
+            print(f"[publish] Could not fetch primary auth form: {e}")
+    # ======================================================
+    
     return PublishPageRequest(
         id=str(page.id),
         slug=str(page.slug),
@@ -296,4 +329,5 @@ async def convert_to_publish_schema(page: Page, datasources: list) -> PublishPag
         contentHash=getattr(page, 'content_hash', None),
         isPublic=bool(page.is_public),
         isHomepage=bool(page.is_homepage),
+        primary_auth_form=primary_auth_form_config,  # type: ignore[call-arg]
     )

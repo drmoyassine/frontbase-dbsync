@@ -281,6 +281,17 @@ export class NeonHttpProvider implements IStateProvider {
         );
     }
 
+    async listPublicPageSlugs(): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]> {
+        const rows = await this.all<{ slug: string; updated_at: string; is_homepage: boolean }>(
+            `SELECT slug, updated_at, is_homepage FROM ${SCHEMA}.published_pages WHERE is_public = TRUE`
+        );
+        return rows.map(r => ({
+            slug: r.slug,
+            updatedAt: r.updated_at as string,
+            isHomepage: !!r.is_homepage,
+        }));
+    }
+
     // =========================================================================
     // Project Settings
     // =========================================================================

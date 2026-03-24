@@ -216,6 +216,20 @@ export class SupabaseRestProvider implements IStateProvider {
         return (data || []) as PublishedPageSummary[];
     }
 
+    async listPublicPageSlugs(): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]> {
+        const client = getClient();
+        const { data, error } = await client
+            .from('published_pages')
+            .select('slug, updated_at, is_homepage')
+            .eq('is_public', true);
+        if (error) throw new Error(`[SupabaseRest] listPublicPageSlugs: ${error.message}`);
+        return (data || []).map((r: any) => ({
+            slug: r.slug as string,
+            updatedAt: r.updated_at as string,
+            isHomepage: !!r.is_homepage,
+        }));
+    }
+
     // =========================================================================
     // Project Settings
     // =========================================================================

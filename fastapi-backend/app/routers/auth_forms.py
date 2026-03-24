@@ -23,6 +23,7 @@ class AuthFormBase(BaseModel):
     allowed_contact_types: Optional[List[str]] = []
     redirect_url: Optional[str] = None
     is_active: bool = True
+    is_primary: bool = False
 
 
 class AuthFormCreate(AuthFormBase):
@@ -37,6 +38,7 @@ class AuthFormUpdate(BaseModel):
     allowed_contact_types: Optional[List[str]] = None
     redirect_url: Optional[str] = None
     is_active: Optional[bool] = None
+    is_primary: Optional[bool] = None
 
 
 class AuthFormResponse(AuthFormBase):
@@ -79,6 +81,7 @@ def row_to_dict(row):
         "allowed_contact_types": parse_json_field(row.allowed_contact_types, []),
         "redirect_url": row.redirect_url,
         "is_active": bool(row.is_active),
+        "is_primary": bool(getattr(row, 'is_primary', 0)),
         "created_at": row.created_at,
         "updated_at": row.updated_at
     }
@@ -130,10 +133,10 @@ async def create_auth_form(form: AuthFormCreate, db: Session = Depends(get_db)):
             text("""
                 INSERT INTO auth_forms (id, name, type, config, target_contact_type, 
                                         allowed_contact_types, redirect_url, is_active, 
-                                        created_at, updated_at)
+                                        is_primary, created_at, updated_at)
                 VALUES (:id, :name, :type, :config, :target_contact_type, 
                         :allowed_contact_types, :redirect_url, :is_active, 
-                        :created_at, :updated_at)
+                        :is_primary, :created_at, :updated_at)
             """),
             {
                 "id": form_id,
@@ -144,6 +147,7 @@ async def create_auth_form(form: AuthFormCreate, db: Session = Depends(get_db)):
                 "allowed_contact_types": json.dumps(form.allowed_contact_types) if form.allowed_contact_types else "[]",
                 "redirect_url": form.redirect_url,
                 "is_active": 1 if form.is_active else 0,
+                "is_primary": 1 if form.is_primary else 0,
                 "created_at": now,
                 "updated_at": now
             }
@@ -161,6 +165,7 @@ async def create_auth_form(form: AuthFormCreate, db: Session = Depends(get_db)):
                 "allowed_contact_types": form.allowed_contact_types or [],
                 "redirect_url": form.redirect_url,
                 "is_active": form.is_active,
+                "is_primary": form.is_primary,
                 "created_at": now,
                 "updated_at": now
             }
@@ -209,6 +214,9 @@ async def update_auth_form(form_id: str, form: AuthFormUpdate, db: Session = Dep
         if form.is_active is not None:
             updates.append("is_active = :is_active")
             params["is_active"] = str(1 if form.is_active else 0)
+        if form.is_primary is not None:
+            updates.append("is_primary = :is_primary")
+            params["is_primary"] = str(1 if form.is_primary else 0)
         
         updates.append("updated_at = :updated_at")
         
@@ -250,6 +258,64 @@ async def delete_auth_form(form_id: str, db: Session = Depends(get_db)):
         db.commit()
         
         return {"success": True, "data": None}
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/primary/")
+async def get_primary_auth_form(db: Session = Depends(get_db)):
+    """Get the primary auth form (used for private page gating)"""
+    try:
+        result = db.execute(
+            text("SELECT * FROM auth_forms WHERE is_primary = 1 LIMIT 1")
+        )
+        row = result.fetchone()
+
+        if not row:
+            # Fallback: return the first active form
+            result = db.execute(
+                text("SELECT * FROM auth_forms WHERE is_active = 1 ORDER BY created_at ASC LIMIT 1")
+            )
+            row = result.fetchone()
+
+        if not row:
+            return {"success": False, "error": "No auth forms configured"}
+
+        return {"success": True, "data": row_to_dict(row)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.put("/{form_id}/set-primary/")
+async def set_primary_auth_form(form_id: str, db: Session = Depends(get_db)):
+    """Set a form as primary (clears primary from all others)"""
+    try:
+        # Verify form exists
+        result = db.execute(
+            text("SELECT id FROM auth_forms WHERE id = :id"),
+            {"id": form_id}
+        )
+        if not result.fetchone():
+            return {"success": False, "error": "Auth form not found"}
+
+        # Clear primary from all
+        db.execute(text("UPDATE auth_forms SET is_primary = 0"))
+        # Set target as primary
+        db.execute(
+            text("UPDATE auth_forms SET is_primary = 1 WHERE id = :id"),
+            {"id": form_id}
+        )
+        db.commit()
+
+        # Return updated form
+        result = db.execute(
+            text("SELECT * FROM auth_forms WHERE id = :id"),
+            {"id": form_id}
+        )
+        row = result.fetchone()
+
+        return {"success": True, "data": row_to_dict(row)}
     except Exception as e:
         db.rollback()
         return {"success": False, "error": str(e)}

@@ -3,7 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Pencil, Trash2, Code, FileKey } from 'lucide-react';
+import { Pencil, Trash2, Code, FileKey, Star } from 'lucide-react';
 import { AuthForm } from '@/types/auth-form';
 
 interface AuthFormCardProps {
@@ -11,9 +11,10 @@ interface AuthFormCardProps {
     onEdit: (form: AuthForm) => void;
     onDelete: (id: string) => void;
     onEmbed: (form: AuthForm) => void;
+    onSetPrimary?: (id: string) => void;
 }
 
-export function AuthFormCard({ form, onEdit, onDelete, onEmbed }: AuthFormCardProps) {
+export function AuthFormCard({ form, onEdit, onDelete, onEmbed, onSetPrimary }: AuthFormCardProps) {
     return (
         <Card className="hover:border-slate-400 transition-colors">
             <CardHeader className="pb-3">
@@ -23,6 +24,7 @@ export function AuthFormCard({ form, onEdit, onDelete, onEmbed }: AuthFormCardPr
                         {form.name}
                     </CardTitle>
                     <div className="flex gap-1">
+                        {form.isPrimary && <Badge className="text-xs bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100"><Star className="h-3 w-3 mr-0.5" />Primary</Badge>}
                         {form.isActive && <Badge variant="secondary" className="text-xs">Active</Badge>}
                         <Badge variant="outline" className="text-xs uppercase">{form.type}</Badge>
                     </div>
@@ -62,6 +64,12 @@ export function AuthFormCard({ form, onEdit, onDelete, onEmbed }: AuthFormCardPr
             </CardHeader>
             <CardContent>
                 <div className="flex justify-end gap-2 pt-2">
+                    {!form.isPrimary && onSetPrimary && (
+                        <Button variant="outline" size="sm" onClick={() => onSetPrimary(form.id)} className="text-amber-600 hover:text-amber-700 border-amber-200 hover:border-amber-300 hover:bg-amber-50">
+                            <Star className="h-3.5 w-3.5 mr-1" />
+                            Set Primary
+                        </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={() => onEmbed(form)}>
                         <Code className="h-3.5 w-3.5 mr-1" />
                         Embed

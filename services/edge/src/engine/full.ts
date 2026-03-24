@@ -18,6 +18,7 @@ import { pagesRoute } from '../routes/pages.js';
 import { importRoute } from '../routes/import.js';
 import { dataRoute } from '../routes/data.js';
 import { manageRoute } from '../routes/manage.js';
+import { seoRoute } from '../routes/seo.js';
 
 // =============================================================================
 // Full App = Lite + Pages/SSR
@@ -34,6 +35,7 @@ app.use('/api/manage/*', systemKeyAuth);
 app.route('/api/import', importRoute);
 app.route('/api/data', dataRoute);
 app.route('/api/manage', manageRoute);
+app.route('', seoRoute);       // /sitemap.xml, /robots.txt, /llms.txt
 app.route('', pagesRoute); // SSR pages at /{slug}
 
 export { app as fullApp };

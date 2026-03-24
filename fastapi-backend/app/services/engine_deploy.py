@@ -69,6 +69,8 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
     - Otherwise, build from the shared source tree
     """
     engine_url = str(engine.url).rstrip('/')
+    # DEPRECATION NOTE (2026-03-24): Frontend now always deploys "full".
+    # Legacy engines may still have "automations" adapter_type — kept for backward compat.
     adapter_type = str(engine.adapter_type) if engine.adapter_type is not None else "automations"
     provider = _resolve_provider(engine, db)
 

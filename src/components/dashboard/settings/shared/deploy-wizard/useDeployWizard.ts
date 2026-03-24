@@ -73,7 +73,8 @@ export function useDeployWizard() {
 
 
     // Step 3: Engine config
-    const [engineType, setEngineType] = useState<'lite' | 'full'>('lite');
+    // NOTE: Lite bundle deprecated in frontend (2026-03-24). Always deploy full.
+    const [engineType, setEngineType] = useState<'lite' | 'full'>('full');
     const [workerName, setWorkerName] = useState('frontbase-edge');
     const [selectedDbId, setSelectedDbId] = useState('none');
     const [selectedCacheId, setSelectedCacheId] = useState('none');
@@ -131,7 +132,7 @@ export function useDeployWizard() {
             setError(null);
             setComputeType(null);
             setSelectedProviderId('');
-            setEngineType('lite');
+            setEngineType('full');
             setWorkerName('frontbase-edge');
             setSelectedDbId('none');
             setSelectedCacheId('none');

@@ -30,6 +30,11 @@ if not EDGE_DIR.exists():
 # ── Provider → tsup config map ────────────────────────────────────────
 # Each entry: {"config": tsup config filename, "output": built JS filename}
 # Key format: "{provider}" for lite, "{provider}-full" for full bundle.
+#
+# DEPRECATION NOTE (2026-03-24): The frontend no longer offers "lite" bundle selection.
+# All new engines deploy as "full". The lite configs, adapters, and tsup files remain
+# for backward compatibility with existing deployed lite engines and potential future
+# re-introduction. Do not delete the lite paths without migrating existing engines.
 PROVIDER_TSUP_CONFIGS = {
     # Cloudflare (existing)
     "cloudflare":      {"config": "tsup.cloudflare-lite.ts",        "output": "cloudflare-lite.js"},

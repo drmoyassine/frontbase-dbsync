@@ -96,6 +96,8 @@ async def detect_account_id(api_token: str) -> str:
 
 async def upload_worker(
     api_token: str, account_id: str, worker_name: str,
+    # DEPRECATION NOTE (2026-03-24): Default kept as "cloudflare-lite.js" for backward compat.
+    # Frontend now always deploys "full" (cloudflare.js). callers pass the correct filename.
     script_content: str, script_filename: str = "cloudflare-lite.js",
     bindings: list[dict] | None = None,
 ) -> dict:

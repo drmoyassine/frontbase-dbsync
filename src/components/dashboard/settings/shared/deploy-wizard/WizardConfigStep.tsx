@@ -3,19 +3,19 @@
  *
  * Handles both CPU and GPU flows, including:
  * - GPU: New vs Existing toggle + engine picker
- * - Engine type (Lite / Full)
  * - Resource name (provider-aware label from PROVIDER_RESOURCE_LABELS)
  * - Edge DB / Cache / Queue selectors with "Connect New" option
  *
  * This is the main customization point for per-provider features.
+ * NOTE: Engine type selection (Lite/Full) was removed 2026-03-24 — always deploys full.
  */
 
 import { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Cpu, Layers, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PROVIDER_RESOURCE_LABELS, PROVIDER_CONFIGS } from '../edgeConstants';
 import { ConnectProviderDialog } from '../ConnectProviderDialog';
@@ -25,7 +25,6 @@ const CONNECT_NEW_VALUE = '__connect_new__';
 
 export function WizardConfigStep({
     computeType,
-    engineType, setEngineType,
     workerName, setWorkerName,
     selectedProviderType,
     selectedDbId, setSelectedDbId,
@@ -63,52 +62,6 @@ export function WizardConfigStep({
 
     return (
         <div className="space-y-4">
-            {/* Engine Type */}
-            <div className="space-y-2">
-                <Label>Engine Type</Label>
-                <div className="grid grid-cols-2 gap-3">
-                    <button
-                        type="button"
-                        onClick={() => setEngineType('lite')}
-                        className={`flex flex-col items-start gap-1.5 rounded-lg border-2 p-3 text-left transition-all ${engineType === 'lite'
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border hover:border-muted-foreground/50'
-                            }`}
-                    >
-                        <div className="flex items-center gap-2">
-                            <Cpu className="w-4 h-4 text-blue-500" />
-                            <span className="font-medium text-sm">Lite</span>
-                            <Badge variant="secondary" className="text-[10px] h-4 py-0 bg-blue-500/10 text-blue-500">~880 KB</Badge>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground leading-tight">
-                            Automations, webhooks, workflows, LiquidJS templates, API gateway. No page rendering.
-                        </p>
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => { if (selectedProviderType !== 'supabase') setEngineType('full'); }}
-                        className={`flex flex-col items-start gap-1.5 rounded-lg border-2 p-3 text-left transition-all ${
-                            selectedProviderType === 'supabase'
-                                ? 'border-border opacity-60 cursor-not-allowed'
-                                : engineType === 'full'
-                                    ? 'border-primary bg-primary/5'
-                                    : 'border-border hover:border-muted-foreground/50'
-                            }`}
-                    >
-                        <div className="flex items-center gap-2">
-                            <Layers className="w-4 h-4 text-purple-500" />
-                            <span className="font-medium text-sm">Full</span>
-                            <Badge variant="secondary" className="text-[10px] h-4 py-0 bg-purple-500/10 text-purple-500">~2.2 MB</Badge>
-                            {selectedProviderType === 'supabase' && (
-                                <Badge variant="outline" className="text-[10px] h-4 py-0 border-amber-500/50 text-amber-500">Soon</Badge>
-                            )}
-                        </div>
-                        <p className="text-[11px] text-muted-foreground leading-tight">
-                            Everything in Lite + SSR pages, React rendering, component library, data routes.
-                        </p>
-                    </button>
-                </div>
-            </div>
 
             {/* Resource Name — provider-aware label */}
             <div className="space-y-2">

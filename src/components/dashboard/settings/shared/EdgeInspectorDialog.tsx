@@ -595,7 +595,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
                             )}
 
                             {/* Health check — always visible */}
-                            <HealthCheckPopover engineId={engine.id} variant="pill" />
+                            <HealthCheckPopover engineId={engine.id} engineUrl={engine.url} variant="pill" />
                         </div>
                     </div>
                 </DialogHeader>

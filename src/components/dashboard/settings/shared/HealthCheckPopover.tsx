@@ -18,8 +18,25 @@ import {
 import {
     Tooltip, TooltipContent, TooltipTrigger, TooltipProvider,
 } from '@/components/ui/tooltip';
-import { Zap, Loader2, Database, HardDrive, Layers } from 'lucide-react';
+import { Zap, Loader2, Database, HardDrive, Layers, Copy, Check, ExternalLink } from 'lucide-react';
 import { useEngineHealthCheck, type BindingStatus } from '@/hooks/useEdgeInfrastructure';
+
+// ─── Provider label mapping ────────────────────────────────────────────────
+// Maps raw platform strings from health.ts → human-readable labels.
+const PROVIDER_DISPLAY_LABELS: Record<string, string> = {
+    'cloudflare': 'Cloudflare Workers',
+    'cloudflare-lite': 'Cloudflare Workers',
+    'vercel-edge': 'Vercel Edge',
+    'vercel-edge-lite': 'Vercel Edge',
+    'supabase-edge': 'Supabase Edge',
+    'supabase-edge-lite': 'Supabase Edge',
+    'netlify-edge': 'Netlify Edge',
+    'netlify-edge-lite': 'Netlify Edge',
+    'deno-deploy': 'Deno Deploy',
+    'deno-deploy-lite': 'Deno Deploy',
+    'docker': 'Docker (Local)',
+    'node': 'Node.js',
+};
 
 // ─── Binding status helpers ─────────────────────────────────────────────────
 
@@ -69,16 +86,20 @@ function formatUptime(seconds: number): string {
 
 interface HealthCheckPopoverProps {
     engineId: string;
+    /** Engine endpoint URL — displayed in health card with copy/open actions */
+    engineUrl?: string;
     /** 'pill' = Inspector header style, 'icon' = engine card minimal icon */
     variant?: 'pill' | 'icon';
 }
 
 export const HealthCheckPopover: React.FC<HealthCheckPopoverProps> = ({
     engineId,
+    engineUrl,
     variant = 'icon',
 }) => {
     const { mutate: checkHealth, data, isPending, reset } = useEngineHealthCheck(engineId);
     const [open, setOpen] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     // Reset stale data when engine changes
     useEffect(() => {
@@ -176,12 +197,48 @@ export const HealthCheckPopover: React.FC<HealthCheckPopoverProps> = ({
                             </div>
                             <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
                                 {data.provider && (
-                                    <span>Provider: <span className="text-foreground capitalize">{data.provider}</span></span>
+                                    <span>Provider: <span className="text-foreground">{PROVIDER_DISPLAY_LABELS[data.provider] || data.provider}</span></span>
                                 )}
                                 {data.uptime_seconds != null && (
                                     <span>Uptime: <span className="text-foreground">{formatUptime(data.uptime_seconds)}</span></span>
                                 )}
                             </div>
+                            {/* Endpoint URL — copy + open */}
+                            {engineUrl && (
+                                <div className="flex items-center gap-1.5 mt-2 bg-muted/50 rounded-md px-2 py-1.5 border border-border/50">
+                                    <span className="flex-1 min-w-0 truncate text-[10px] font-mono text-blue-400">
+                                        {engineUrl.startsWith('http') ? engineUrl : `https://${engineUrl}`}
+                                    </span>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5 shrink-0"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            const url = engineUrl.startsWith('http') ? engineUrl : `https://${engineUrl}`;
+                                            navigator.clipboard.writeText(url);
+                                            setCopied(true);
+                                            setTimeout(() => setCopied(false), 2000);
+                                        }}
+                                        title="Copy URL"
+                                    >
+                                        {copied ? <Check className="h-2.5 w-2.5 text-green-500" /> : <Copy className="h-2.5 w-2.5" />}
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5 shrink-0"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            const url = engineUrl.startsWith('http') ? engineUrl : `https://${engineUrl}`;
+                                            window.open(url, '_blank', 'noreferrer');
+                                        }}
+                                        title="Open in browser"
+                                    >
+                                        <ExternalLink className="h-2.5 w-2.5" />
+                                    </Button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Bindings */}

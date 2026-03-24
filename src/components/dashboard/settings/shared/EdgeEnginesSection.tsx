@@ -63,23 +63,17 @@ export function EdgeEnginesSection() {
     // ── Search & filter state (stays in component — drives render) ───────
     const [searchQuery, setSearchQuery] = useState('');
     const [filterProvider, setFilterProvider] = useState<string>('all');
-    const [filterBundle, setFilterBundle] = useState<string>('all');
     const [filterStatus, setFilterStatus] = useState<string>('all');
 
     const filteredEngines = useMemo(() => {
         return engines.filter(e => {
             if (searchQuery && !e.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
             if (filterProvider !== 'all' && e.provider !== filterProvider) return false;
-            if (filterBundle !== 'all') {
-                const isLite = e.adapter_type === 'automations' || e.adapter_type === 'edge';
-                if (filterBundle === 'lite' && !isLite) return false;
-                if (filterBundle === 'full' && isLite) return false;
-            }
             if (filterStatus === 'active' && !e.is_active) return false;
             if (filterStatus === 'inactive' && e.is_active) return false;
             return true;
         });
-    }, [engines, searchQuery, filterProvider, filterBundle, filterStatus]);
+    }, [engines, searchQuery, filterProvider, filterStatus]);
 
     const providerOptions = useMemo(
         () => [...new Set(engines.map(e => e.provider).filter(Boolean))],
@@ -142,16 +136,6 @@ export function EdgeEnginesSection() {
                                     {providerOptions.map(p => (
                                         <SelectItem key={p} value={p}>{p}</SelectItem>
                                     ))}
-                                </SelectContent>
-                            </Select>
-                            <Select value={filterBundle} onValueChange={setFilterBundle}>
-                                <SelectTrigger className="h-8 w-[110px] text-xs">
-                                    <SelectValue placeholder="Bundle" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Bundles</SelectItem>
-                                    <SelectItem value="lite">Lite</SelectItem>
-                                    <SelectItem value="full">Full</SelectItem>
                                 </SelectContent>
                             </Select>
                             <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -242,12 +226,12 @@ export function EdgeEnginesSection() {
                                                 {!engine.is_active && (
                                                     <Badge variant="secondary" className="text-[10px] h-5 py-0 bg-muted text-muted-foreground">Paused</Badge>
                                                 )}
-                                                {engine.adapter_type && (
+                                                {engine.adapter_type && engine.adapter_type !== 'full' && (
                                                     <EdgeEndpointDialog engineName={engine.name} engineUrl={engine.url} engineId={engine.id} trigger={
                                                         <button className="inline-flex items-center no-underline" title="Edge Endpoint Details">
                                                             <Badge variant="outline" className="text-[10px] h-5 py-0 cursor-pointer hover:opacity-80 transition-opacity bg-blue-500/5 border-blue-500/20 text-blue-400">
                                                                 <Cpu className="w-3 h-3 mr-1" />
-                                                                {engine.adapter_type === 'full' ? 'Full' : 'Lite'} Bundle
+                                                                Lite Bundle
                                                             </Badge>
                                                         </button>
                                                     } />
@@ -292,7 +276,7 @@ export function EdgeEnginesSection() {
                                                     />
                                                     {!engine.is_system && (
                                                         <>
-                                                            <HealthCheckPopover engineId={engine.id} variant="icon" />
+                                                            <HealthCheckPopover engineId={engine.id} engineUrl={engine.url} variant="icon" />
                                                             <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
                                                             <Button
                                                                 variant="ghost"

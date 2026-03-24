@@ -66,12 +66,20 @@ async def publish_to_target(page_id: str, engine_id: str):
         if not engine_url:
             raise HTTPException(status_code=400, detail="Engine URL is missing")
             
+        # Force load ALL engine attributes before detaching
+        _ = engine.url
+        _ = engine.engine_config
+        _ = engine.edge_provider_id
+        _ = engine.id
+        _ = engine.name
+
         page_content_hash = compute_page_hash(page)
         # Update the backend source of truth hash
         page.content_hash = page_content_hash  # type: ignore[assignment]
         db.commit()
         
         db.expunge(page)
+        db.expunge(engine)
         datasources = get_datasources_for_publish(db)
     finally:
         db.close()
@@ -192,13 +200,17 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
         if not engines:
             raise HTTPException(status_code=404, detail="No engines found for the given IDs")
 
-        # Build lookup: id → url/name
+        # Build lookup: id → url/name, and pre-compute auth headers while session is open
         engine_map: dict[str, dict[str, str]] = {}
+        auth_headers_map: dict[str, dict[str, str]] = {}
         for eng in engines:
             url = getattr(eng, 'url', None)
             name = getattr(eng, 'name', '') or str(eng.id)
+            # Force-load engine_config for get_edge_headers (requires active session)
+            _ = eng.engine_config
             if url:
                 engine_map[str(eng.id)] = {"url": str(url), "name": str(name)}
+                auth_headers_map[str(eng.id)] = get_edge_headers(eng)
 
         # Force-load page attributes before detaching
         _ = page.layout_data
@@ -233,9 +245,8 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
     # 3. FAN OUT to all engines in parallel
     async def _send_to_engine(eid: str, info: dict[str, str]) -> dict[str, object]:
         import_url = f"{str(info['url']).rstrip('/')}/api/import"
-        # Get auth headers for this specific engine
-        eng_obj = next((e for e in engines if str(e.id) == eid), None)
-        auth_hdrs = get_edge_headers(eng_obj) if eng_obj else {}
+        # Use pre-computed auth headers (computed while session was open)
+        auth_hdrs = auth_headers_map.get(eid, {})
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(

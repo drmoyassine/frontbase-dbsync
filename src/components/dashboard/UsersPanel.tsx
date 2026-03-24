@@ -7,15 +7,26 @@ import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuthFormsList } from './AuthFormsList';
 import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
-import { AUTH_CAPABLE_PROVIDERS } from '@/components/dashboard/settings/shared/edgeConstants';
-import { ConnectProviderDialog } from '@/components/dashboard/settings/shared/ConnectProviderDialog';
-import { useQueryClient } from '@tanstack/react-query';
+import { ShieldCheck } from 'lucide-react';
+import { AuthProviderDialog } from './AuthProviderDialog';
 
 export function UsersPanel() {
-  const { isConfigured } = useUserContactConfig();
-  const queryClient = useQueryClient();
-  const [connectOpen, setConnectOpen] = React.useState(false);
+  const { isConfigured, config, saveConfig } = useUserContactConfig();
+  const [configureOpen, setConfigureOpen] = React.useState(false);
+
+  const handleProviderSelected = (accountId: string) => {
+    const newConfig = config
+      ? { ...config, authDataSourceId: accountId }
+      : {
+          contactsTable: '',
+          columnMapping: { authUserIdColumn: '', contactIdColumn: '', contactTypeColumn: '', permissionLevelColumn: '' },
+          contactTypes: {},
+          permissionLevels: {},
+          enabled: false,
+          authDataSourceId: accountId,
+        };
+    saveConfig(newConfig);
+  };
 
   return (
     <div className="space-y-6">
@@ -26,9 +37,9 @@ export function UsersPanel() {
             Manage your application users and sync their contact data with auth providers.
           </p>
         </div>
-        <Button onClick={() => setConnectOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Auth
+        <Button onClick={() => setConfigureOpen(true)}>
+          <ShieldCheck className="mr-2 h-4 w-4" />
+          Configure Auth
         </Button>
       </div>
 
@@ -58,14 +69,12 @@ export function UsersPanel() {
         </TabsContent>
       </Tabs>
 
-      {/* Connect Auth Provider Dialog */}
-      <ConnectProviderDialog
-        open={connectOpen}
-        onOpenChange={setConnectOpen}
-        allowedProviders={AUTH_CAPABLE_PROVIDERS}
-        onConnected={() => {
-          queryClient.invalidateQueries({ queryKey: ['edge-providers'] });
-        }}
+      {/* Unified Auth Provider Dialog */}
+      <AuthProviderDialog
+        open={configureOpen}
+        onOpenChange={setConfigureOpen}
+        currentProviderId={config?.authDataSourceId}
+        onProviderSelected={handleProviderSelected}
       />
     </div>
   );

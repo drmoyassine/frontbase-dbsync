@@ -12,7 +12,7 @@ export function useAuthForms() {
         setLoading(true);
         setError(null);
         try {
-            const res = await fetch('/api/auth-forms');
+            const res = await fetch('/api/auth-forms/');
             const json = await res.json();
             if (json.success) {
                 setForms(json.data);
@@ -29,7 +29,7 @@ export function useAuthForms() {
 
     const createForm = async (data: Partial<AuthForm>) => {
         try {
-            const res = await fetch('/api/auth-forms', {
+            const res = await fetch('/api/auth-forms/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -50,7 +50,7 @@ export function useAuthForms() {
 
     const updateForm = async (id: string, data: Partial<AuthForm>) => {
         try {
-            const res = await fetch(`/api/auth-forms/${id}`, {
+            const res = await fetch(`/api/auth-forms/${id}/`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -71,7 +71,7 @@ export function useAuthForms() {
 
     const deleteForm = async (id: string) => {
         try {
-            const res = await fetch(`/api/auth-forms/${id}`, {
+            const res = await fetch(`/api/auth-forms/${id}/`, {
                 method: 'DELETE'
             });
             const json = await res.json();

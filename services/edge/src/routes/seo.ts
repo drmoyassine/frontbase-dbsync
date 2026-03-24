@@ -13,6 +13,16 @@ import { stateProvider } from '../storage/index.js';
 
 const seoRoute = new Hono();
 
+// Middleware: Copy Content-Type → X-Content-Type on every response.
+// Enables Cloudflare Transform Rules to restore original type on Supabase.
+seoRoute.use('*', async (c, next) => {
+    await next();
+    const ct = c.res.headers.get('Content-Type');
+    if (ct) {
+        c.res.headers.set('X-Content-Type', ct);
+    }
+});
+
 // =============================================================================
 // Helper: Resolve base URL from env or request
 // =============================================================================

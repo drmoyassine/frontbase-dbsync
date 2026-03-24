@@ -50,6 +50,17 @@ const ErrorResponseSchema = z.object({
 // Create the pages route
 const pagesRoute = new OpenAPIHono();
 
+// Middleware: Copy Content-Type → X-Content-Type on every response.
+// Supabase Edge Functions strip text/html → text/plain. This header
+// lets reverse proxies (CF Transform Rules) restore the original type.
+pagesRoute.use('*', async (c, next) => {
+    await next();
+    const ct = c.res.headers.get('Content-Type');
+    if (ct) {
+        c.res.headers.set('X-Content-Type', ct);
+    }
+});
+
 // OpenAPI route definition
 const renderPageRoute = createRoute({
     method: 'get',

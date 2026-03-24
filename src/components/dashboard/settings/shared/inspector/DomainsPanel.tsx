@@ -24,6 +24,7 @@ interface DomainsPanelProps {
     domainsData: InspectDomainsResponse | undefined;
     loadingDomains: boolean;
     providerLabel: string;
+    providerType?: string;   // e.g. 'supabase', 'cloudflare', 'deno'
     engineUrl?: string;  // e.g. "https://frontbase-edgenew.drmoyassine.deno.net"
 }
 
@@ -74,7 +75,7 @@ function CopyButton({ text }: { text: string }) {
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export const DomainsPanel: React.FC<DomainsPanelProps> = ({
-    engineId, domainsData, loadingDomains, providerLabel, engineUrl,
+    engineId, domainsData, loadingDomains, providerLabel, providerType, engineUrl,
 }) => {
     const queryClient = useQueryClient();
     const [newDomain, setNewDomain] = useState('');
@@ -82,6 +83,7 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
     // Deno: track pending domain locally (backend doesn't persist until health-check passes)
     const [denoPendingDomain, setDenoPendingDomain] = useState<string | null>(null);
     const isDeno = providerLabel?.toLowerCase().includes('deno');
+    const isSupabase = providerType === 'supabase';
 
     const invalidateDomains = () => {
         queryClient.invalidateQueries({ queryKey: ['edge-inspector', 'domains', engineId] });
@@ -241,6 +243,55 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
                     </div>
                 )}
             </div>
+
+            {/* Supabase SSR Guide — shown when provider is Supabase */}
+            {isSupabase && (
+                <div className="px-4 py-3 border-b border-border shrink-0">
+                    <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 space-y-2">
+                        <div className="flex items-start gap-2">
+                            <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                            <div className="space-y-2">
+                                <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                                    SSR Requires Custom Domain with Cloudflare Proxy
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">
+                                    Supabase Edge Functions rewrite <code className="text-[10px] bg-muted px-1 rounded font-mono">Content-Type: text/html</code> to <code className="text-[10px] bg-muted px-1 rounded font-mono">text/plain</code>. 
+                                    Pages will display as raw text without a reverse proxy that restores the header.
+                                </p>
+                                <details className="text-[11px]">
+                                    <summary className="cursor-pointer text-primary font-medium hover:underline">Setup Guide (Cloudflare)</summary>
+                                    <ol className="mt-2 space-y-1.5 text-muted-foreground list-decimal list-inside">
+                                        <li>
+                                            Add your domain to Cloudflare (free plan works)
+                                        </li>
+                                        <li>
+                                            Create a <strong>CNAME</strong> record pointing to your Supabase function URL:
+                                            <div className="mt-0.5 ml-3 flex items-center gap-1.5">
+                                                <code className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded">
+                                                    CNAME → {engineUrl ? new URL(engineUrl).hostname : '<project-ref>.supabase.co'}
+                                                </code>
+                                                {engineUrl && <CopyButton text={new URL(engineUrl).hostname} />}
+                                            </div>
+                                            <p className="text-[10px] text-amber-600 ml-3 mt-0.5">⚡ Enable Cloudflare Proxy (orange cloud) — required</p>
+                                        </li>
+                                        <li>
+                                            Add an <strong>HTTP Response Header Modification</strong> rule in Cloudflare dashboard:
+                                            <div className="mt-1 ml-3 space-y-0.5 text-[10px] bg-muted/60 p-2 rounded">
+                                                <p><strong>Expression:</strong> <code className="font-mono">(http.host eq "your-domain.com")</code></p>
+                                                <p><strong>Action:</strong> Set <code className="font-mono">Content-Type</code> to dynamic value <code className="font-mono">http.response.headers["x-content-type"][0]</code></p>
+                                            </div>
+                                        </li>
+                                        <li>Visit <code className="bg-muted px-1 rounded font-mono">https://your-domain.com/</code> to verify HTML renders</li>
+                                    </ol>
+                                    <p className="mt-2 text-[10px] text-muted-foreground/70">
+                                        Using a different CDN? Any reverse proxy that can set <code className="font-mono">Content-Type</code> from <code className="font-mono">X-Content-Type</code> will work (CloudFront Response Headers Policy, Fastly VCL, etc.).
+                                    </p>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Add domain form — hidden when a custom domain already exists (1 per engine) */}
             {allDomains.length === 0 && (

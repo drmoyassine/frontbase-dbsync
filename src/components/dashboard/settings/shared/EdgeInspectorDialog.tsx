@@ -497,6 +497,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
                     domainsData={domainsData}
                     loadingDomains={loadingDomains}
                     providerLabel={providerLabel}
+                    providerType={providerStr}
                     engineUrl={engine.url}
                 />
             );

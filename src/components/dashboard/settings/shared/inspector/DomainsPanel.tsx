@@ -245,53 +245,76 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
             </div>
 
             {/* Supabase SSR Guide — shown when provider is Supabase */}
-            {isSupabase && (
+            {isSupabase && (() => {
+                // Extract hostname and function path from engine URL
+                // e.g. https://abcdef.supabase.co/functions/v1/frontbase-edge → hostname + /functions/v1/frontbase-edge
+                let supaHostname = '<project-ref>.supabase.co';
+                let functionPath = '/functions/v1/<function-name>';
+                if (engineUrl) {
+                    try {
+                        const u = new URL(engineUrl);
+                        supaHostname = u.hostname;
+                        functionPath = u.pathname.replace(/\/$/, '') || functionPath;
+                    } catch { /* fallback */ }
+                }
+                return (
                 <div className="px-4 py-3 border-b border-border shrink-0">
                     <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 space-y-2">
                         <div className="flex items-start gap-2">
                             <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
                             <div className="space-y-2">
                                 <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
-                                    SSR Requires Custom Domain with Cloudflare Proxy
+                                    SSR Requires Custom Domain with Cloudflare DNS Proxy
                                 </p>
                                 <p className="text-[11px] text-muted-foreground">
                                     Supabase Edge Functions rewrite <code className="text-[10px] bg-muted px-1 rounded font-mono">Content-Type: text/html</code> to <code className="text-[10px] bg-muted px-1 rounded font-mono">text/plain</code>. 
-                                    Pages will display as raw text without a reverse proxy that restores the header.
+                                    A Cloudflare-proxied custom domain with Transform Rules is required for SSR pages to render.
                                 </p>
                                 <details className="text-[11px]">
                                     <summary className="cursor-pointer text-primary font-medium hover:underline">Setup Guide (Cloudflare)</summary>
-                                    <ol className="mt-2 space-y-1.5 text-muted-foreground list-decimal list-inside">
+                                    <ol className="mt-2 space-y-2.5 text-muted-foreground list-decimal list-inside">
                                         <li>
                                             Add your domain to Cloudflare (free plan works)
                                         </li>
                                         <li>
-                                            Create a <strong>CNAME</strong> record pointing to your Supabase function URL:
+                                            Create a <strong>CNAME</strong> record pointing to your Supabase project:
                                             <div className="mt-0.5 ml-3 flex items-center gap-1.5">
                                                 <code className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded">
-                                                    CNAME → {engineUrl ? new URL(engineUrl).hostname : '<project-ref>.supabase.co'}
+                                                    CNAME → {supaHostname}
                                                 </code>
-                                                {engineUrl && <CopyButton text={new URL(engineUrl).hostname} />}
+                                                <CopyButton text={supaHostname} />
                                             </div>
-                                            <p className="text-[10px] text-amber-600 ml-3 mt-0.5">⚡ Enable Cloudflare Proxy (orange cloud) — required</p>
+                                            <p className="text-[10px] text-emerald-600 ml-3 mt-0.5">🟠 Proxy: <strong>ON</strong> (orange cloud) — required for Transform Rules to work</p>
                                         </li>
                                         <li>
-                                            Add an <strong>HTTP Response Header Modification</strong> rule in Cloudflare dashboard:
+                                            Add an <strong>Origin Rule</strong> to rewrite the URL path (Rules → Origin Rules → Create):
+                                            <div className="mt-1 ml-3 space-y-0.5 text-[10px] bg-muted/60 p-2 rounded">
+                                                <p><strong>Expression:</strong> <code className="font-mono">(http.host eq "your-domain.com")</code></p>
+                                                <p><strong>Path rewrite:</strong> Prepend <code className="font-mono">{functionPath}</code></p>
+                                            </div>
+                                            <p className="text-[10px] text-muted-foreground/70 ml-3 mt-0.5">
+                                                This maps <code className="font-mono">/p/page</code> → <code className="font-mono">{functionPath}/p/page</code>
+                                            </p>
+                                        </li>
+                                        <li>
+                                            Add an <strong>HTTP Response Header Modification</strong> rule (Rules → Transform Rules → Modify Response Header):
                                             <div className="mt-1 ml-3 space-y-0.5 text-[10px] bg-muted/60 p-2 rounded">
                                                 <p><strong>Expression:</strong> <code className="font-mono">(http.host eq "your-domain.com")</code></p>
                                                 <p><strong>Action:</strong> Set <code className="font-mono">Content-Type</code> to dynamic value <code className="font-mono">http.response.headers["x-content-type"][0]</code></p>
                                             </div>
                                         </li>
-                                        <li>Visit <code className="bg-muted px-1 rounded font-mono">https://your-domain.com/</code> to verify HTML renders</li>
+                                        <li>Visit <code className="bg-muted px-1 rounded font-mono">https://your-domain.com/</code> to verify HTML renders correctly</li>
                                     </ol>
                                     <p className="mt-2 text-[10px] text-muted-foreground/70">
-                                        Using a different CDN? Any reverse proxy that can set <code className="font-mono">Content-Type</code> from <code className="font-mono">X-Content-Type</code> will work (CloudFront Response Headers Policy, Fastly VCL, etc.).
+                                        Using a different CDN? You need two things: (1) path rewriting to prepend the function path, and (2) Content-Type restoration from the X-Content-Type header.
                                     </p>
                                 </details>
                             </div>
                         </div>
                     </div>
                 </div>
-            )}
+                );
+            })()}
 
             {/* Add domain form — hidden when a custom domain already exists (1 per engine) */}
             {allDomains.length === 0 && (

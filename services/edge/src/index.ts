@@ -112,6 +112,149 @@ fullApp.post('/api/build-bundle', async (c) => {
 });
 
 // =============================================================================
+// Source Snapshot Endpoint (Docker-only — backend delegates here)
+// =============================================================================
+fullApp.get('/api/source-snapshot', async (c) => {
+    const fs = await import('fs');
+    const crypto = await import('crypto');
+
+    const provider = c.req.query('provider') || '';
+    const adapterType = c.req.query('adapter_type') || 'full';
+    const isLite = ['automations', 'lite', ''].includes(adapterType);
+
+    const edgeRoot = path.resolve(__dirname, '..');
+    const srcDir = path.join(edgeRoot, 'src');
+
+    if (!fs.existsSync(srcDir)) {
+        return c.json({ success: false, error: 'Source directory not found' }, 404);
+    }
+
+    const CORE_PREFIX = 'frontbase-core';
+    const allProviders = new Set(['cloudflare', 'supabase', 'vercel', 'netlify', 'deno', 'docker']);
+    const otherProviders = provider ? new Set([...allProviders].filter(p => p !== provider)) : new Set<string>();
+    const fullOnlyDirs = ['ssr/', 'components/', 'db/_archived/'];
+
+    const files: Record<string, string> = {};
+    let totalSize = 0;
+
+    function walkDir(dir: string, prefix: string = '') {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries.sort((a: any, b: any) => a.name.localeCompare(b.name))) {
+            const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+            if (entry.isDirectory()) {
+                if (entry.name === '__tests__' || entry.name === 'node_modules') continue;
+                walkDir(path.join(dir, entry.name), rel);
+            } else if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) {
+                // Skip backups
+                if (rel.includes('.bak')) continue;
+                // Skip other providers' adapter files
+                if (rel.startsWith('adapters/') && otherProviders.size > 0) {
+                    const baseName = entry.name.replace(/\.[^.]+$/, '').toLowerCase();
+                    if ([...otherProviders].some(p => baseName.includes(p))) continue;
+                }
+                // Skip SSR-only folders for lite bundles
+                if (isLite && fullOnlyDirs.some(d => rel.startsWith(d))) continue;
+
+                try {
+                    const content = fs.readFileSync(path.join(dir, entry.name), 'utf-8');
+                    files[`${CORE_PREFIX}/${rel}`] = content;
+                    totalSize += content.length;
+                } catch { /* skip unreadable */ }
+            }
+        }
+    }
+
+    walkDir(srcDir);
+
+    if (Object.keys(files).length === 0) {
+        return c.json({ success: false, error: 'No source files found' }, 404);
+    }
+
+    // Inject README.md
+    const bundleMode = isLite ? 'Lite (Automations only)' : 'Full (SSR + Automations)';
+    const providerLabel = provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : 'Unknown';
+    files[`${CORE_PREFIX}/README.md`] = `# Frontbase Edge Engine
+
+**Provider**: ${providerLabel}
+**Bundle**: ${bundleMode}
+**Adapter**: ${adapterType || 'automations'}
+
+## Folder Structure
+
+| Folder | Description |
+|:-------|:------------|
+| \`adapters/\` | Platform entry point — wires the Hono app to the runtime |
+| \`engine/\` | Core Hono app creation, middleware, route registration |
+| \`routes/\` | API routes: health, deploy, execute, webhook, executions |
+| \`cache/\` | Redis/Upstash cache adapter with ICacheProvider interface |
+| \`middleware/\` | Auth (API key, JWT), rate limiting |
+| \`db/\` | State provider (SQLite/Turso), datasource adapters |
+| \`schemas/\` | Zod validation schemas for API payloads |
+| \`startup/\` | Backend sync on boot (Redis, Turso, JWT settings) |
+| \`lib/\` | Shared utilities |
+${!isLite ? '| `ssr/` | Server-side page rendering (React/Hono) |' : ''}
+## Data vs Code
+
+This Inspector shows the **engine source code** — how the runtime works.
+
+Published **pages and workflows** are stored in the attached state database
+(SQLite or Turso), not in these source files. They are deployed via the
+\`/api/deploy\` endpoint and served by the routes defined here.
+`;
+
+    return c.json({
+        success: true,
+        files,
+        file_count: Object.keys(files).length,
+        total_size: totalSize,
+    });
+});
+
+// =============================================================================
+// Source Hash Endpoint (Docker-only — backend delegates for drift detection)
+// =============================================================================
+fullApp.get('/api/source-hash', async (c) => {
+    const fs = await import('fs');
+    const crypto = await import('crypto');
+
+    const edgeRoot = path.resolve(__dirname, '..');
+    const srcDir = path.join(edgeRoot, 'src');
+
+    if (!fs.existsSync(srcDir)) {
+        return c.json({ success: false, hash: null }, 404);
+    }
+
+    const hasher = crypto.createHash('sha256');
+    let fileCount = 0;
+
+    function walkDir(dir: string, prefix: string = '') {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries.sort((a: any, b: any) => a.name.localeCompare(b.name))) {
+            const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+            if (entry.isDirectory()) {
+                if (entry.name === '__tests__' || entry.name === 'node_modules') continue;
+                walkDir(path.join(dir, entry.name), rel);
+            } else if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) {
+                try {
+                    hasher.update(rel);
+                    hasher.update(fs.readFileSync(path.join(dir, entry.name)));
+                    fileCount++;
+                } catch { /* skip */ }
+            }
+        }
+    }
+
+    walkDir(srcDir);
+
+    if (fileCount === 0) {
+        return c.json({ success: false, hash: null }, 404);
+    }
+
+    const hash = hasher.digest('hex').substring(0, 12);
+    return c.json({ success: true, hash, file_count: fileCount });
+});
+
+// =============================================================================
 // Start Server
 // =============================================================================
 const port = parseInt(process.env.PORT || '3002');

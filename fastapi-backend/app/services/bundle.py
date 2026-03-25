@@ -72,16 +72,93 @@ _build_cache: dict[str, tuple[str, str, str]] = {}
 # Everything else at snapshot root is user-customizable code.
 CORE_PREFIX = "frontbase-core"
 
+# ── Remote Delegation (Docker / VPS) ─────────────────────────────────
+# When the backend runs in a separate container from the edge service
+# (Docker/VPS), EDGE_DIR/src/ doesn't exist locally. These functions
+# delegate snapshot and hash queries to the edge container.
+
+# Cache for remote source hash (avoids hammering edge on every request)
+_remote_hash_cache: tuple[float, str] | None = None  # (timestamp, hash)
+
+def _get_edge_url() -> str:
+    """Resolve EDGE_URL from environment. Returns '' if not set."""
+    return os.environ.get("EDGE_URL", os.environ.get("EDGE_SSR_URL", ""))
+
+
+def _fetch_remote_source_hash() -> str | None:
+    """Fetch source hash from edge container via GET /api/source-hash.
+
+    Caches for 60 seconds to avoid repeated calls on engine list loads.
+    Returns None if edge container is unreachable or doesn't have sources.
+    """
+    import time
+    global _remote_hash_cache
+
+    edge_url = _get_edge_url()
+    if not edge_url:
+        return None
+
+    # Check cache (60s TTL)
+    if _remote_hash_cache:
+        cached_at, cached_hash = _remote_hash_cache
+        if time.time() - cached_at < 60:
+            return cached_hash
+
+    try:
+        import requests as req
+        resp = req.get(f"{edge_url}/api/source-hash", timeout=10.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success") and data.get("hash"):
+                _remote_hash_cache = (time.time(), data["hash"])
+                return data["hash"]
+    except Exception as e:
+        print(f"[Bundle] Remote source-hash failed: {e}")
+    return None
+
+
+def _fetch_remote_snapshot(provider: str = "", adapter_type: str = "") -> dict[str, str] | None:
+    """Fetch source snapshot from edge container via GET /api/source-snapshot.
+
+    Returns the same { path: content } dict that capture_source_snapshot() returns,
+    or None if the edge container is unreachable.
+    """
+    edge_url = _get_edge_url()
+    if not edge_url:
+        return None
+
+    try:
+        import requests as req
+        params: dict[str, str] = {}
+        if provider:
+            params["provider"] = provider
+        if adapter_type:
+            params["adapter_type"] = adapter_type
+        resp = req.get(f"{edge_url}/api/source-snapshot", params=params, timeout=30.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success") and data.get("files"):
+                print(f"[Bundle] Remote snapshot: {data.get('file_count', '?')} files, {data.get('total_size', '?')} bytes")
+                return data["files"]
+    except Exception as e:
+        print(f"[Bundle] Remote source-snapshot failed: {e}")
+    return None
+
+
 
 def get_source_hash() -> str | None:
     """Hash all .ts source files in services/edge/src/ for drift detection.
     
     Returns a 12-char SHA-256 digest, or None if the source dir doesn't exist.
     This hashes the CORE source tree — drift means Frontbase has a new core version.
+    
+    In Docker/VPS: delegates to the edge container via GET /api/source-hash
+    when local src/ doesn't exist (same pattern as build_worker delegation).
     """
     src_dir = EDGE_DIR / "src"
     if not src_dir.exists():
-        return None
+        # Docker mode: delegate to edge container
+        return _fetch_remote_source_hash()
 
     hasher = hashlib.sha256()
     # Sort for determinism across OS/filesystem orderings
@@ -108,13 +185,17 @@ def capture_source_snapshot(provider: str = "", adapter_type: str = "") -> dict[
     - provider: excludes adapter files for OTHER providers
     - adapter_type: excludes ssr/, components/ for lite bundles (automations-only)
     Excludes __tests__/, backup files, and type declaration stubs.
-    All paths are prefixed with 'frontbase-edge/' for branding.
+    All paths are prefixed with 'frontbase-core/' for branding.
     Injects a README.md at the root for DX context.
     Returns None if src/ directory doesn't exist.
+
+    In Docker/VPS: delegates to the edge container via GET /api/source-snapshot
+    when local src/ doesn't exist (same pattern as build_worker delegation).
     """
     src_dir = EDGE_DIR / "src"
     if not src_dir.exists():
-        return None
+        # Docker mode: delegate to edge container
+        return _fetch_remote_snapshot(provider, adapter_type)
 
     # Build exclusion list: adapters for OTHER providers
     all_providers = {"cloudflare", "supabase", "vercel", "netlify", "deno", "docker"}

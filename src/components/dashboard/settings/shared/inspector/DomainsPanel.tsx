@@ -287,10 +287,10 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
                                             <p className="text-[10px] text-emerald-600 ml-3 mt-0.5">🟠 Proxy: <strong>ON</strong> (orange cloud) — required for Transform Rules to work</p>
                                         </li>
                                         <li>
-                                            Add an <strong>Origin Rule</strong> to rewrite the URL path (Rules → Origin Rules → Create):
+                                            Add a <strong>URL Rewrite Rule</strong> to prepend the function path (Rules → Transform Rules → URL Rewrite → Create):
                                             <div className="mt-1 ml-3 space-y-0.5 text-[10px] bg-muted/60 p-2 rounded">
                                                 <p><strong>Expression:</strong> <code className="font-mono">(http.host eq "your-domain.com")</code></p>
-                                                <p><strong>Path rewrite:</strong> Prepend <code className="font-mono">{functionPath}</code></p>
+                                                <p><strong>Path:</strong> Rewrite to → Dynamic: <code className="font-mono">concat("{functionPath}", http.request.uri.path)</code></p>
                                             </div>
                                             <p className="text-[10px] text-muted-foreground/70 ml-3 mt-0.5">
                                                 This maps <code className="font-mono">/p/page</code> → <code className="font-mono">{functionPath}/p/page</code>

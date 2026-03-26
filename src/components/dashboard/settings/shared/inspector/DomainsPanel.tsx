@@ -84,6 +84,19 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
     const [denoPendingDomain, setDenoPendingDomain] = useState<string | null>(null);
     const isDeno = providerLabel?.toLowerCase().includes('deno');
     const isSupabase = providerType === 'supabase';
+    // Supabase: track pending domain locally (same ephemeral pattern as Deno)
+    const [supabasePendingDomain, setSupabasePendingDomain] = useState<string | null>(null);
+
+    // Extract Supabase hostname + function path from engine URL
+    const supaInfo = React.useMemo(() => {
+        if (!isSupabase || !engineUrl) return { hostname: '', funcPath: '', funcSlug: '' };
+        try {
+            const u = new URL(engineUrl);
+            const pathname = u.pathname.replace(/\/$/, '');
+            const slug = pathname.split('/').pop() || '';
+            return { hostname: u.hostname, funcPath: pathname, funcSlug: slug };
+        } catch { return { hostname: '', funcPath: '', funcSlug: '' }; }
+    }, [isSupabase, engineUrl]);
 
     const invalidateDomains = () => {
         queryClient.invalidateQueries({ queryKey: ['edge-inspector', 'domains', engineId] });
@@ -120,6 +133,10 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
                     // Deno: ephemeral — track pending domain locally
                     setDenoPendingDomain(data.domain?.domain || newDomain);
                     setStatusMsg({ type: 'success', text: data.detail || 'Configure this domain on the Deno console, then click Test.' });
+                } else if (isSupabase) {
+                    // Supabase: ephemeral — track pending domain locally
+                    setSupabasePendingDomain(data.domain?.domain || newDomain);
+                    setStatusMsg({ type: 'success', text: data.detail || 'Configure Cloudflare DNS and Transform Rules, then click Verify.' });
                 } else {
                     invalidateDomains();
                     setStatusMsg({ type: 'success', text: `Domain added successfully` });
@@ -144,7 +161,8 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
         },
         onSuccess: (data) => {
             if (data.success) {
-                if (isDeno) setDenoPendingDomain(null); // Clear local pending on delete
+                if (isDeno) setDenoPendingDomain(null);
+                if (isSupabase) setSupabasePendingDomain(null);
                 invalidateDomains();
                 setStatusMsg({ type: 'success', text: 'Domain removed' });
                 setTimeout(() => setStatusMsg(null), 3000);
@@ -168,8 +186,10 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
             setVerifyingId(null);
             if (data.success) {
                 if (isDeno && data.domain?.status === 'active') {
-                    // Deno health check passed — domain saved, clear pending
                     setDenoPendingDomain(null);
+                }
+                if (isSupabase && data.domain?.status === 'active') {
+                    setSupabasePendingDomain(null);
                 }
                 invalidateDomains();
                 const msg = data.detail || (data.domain?.status === 'active' ? 'Domain verified!' : 'DNS not yet propagated — try again shortly');
@@ -202,17 +222,28 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
     const domains = domainsData?.domains ?? [];
     // For Deno, merge in the local pending domain if not already in server list
     const allDomains = React.useMemo(() => {
-        if (!isDeno || !denoPendingDomain) return domains;
-        const alreadySaved = domains.some((d: DomainInfo) => d.domain === denoPendingDomain);
-        if (alreadySaved) return domains;
-        return [{ id: denoPendingDomain, domain: denoPendingDomain, status: 'pending', provider: 'deno' } as DomainInfo, ...domains];
-    }, [domains, denoPendingDomain, isDeno]);
-    // Auto-clear pending if server already has it (runs after render, not inside useMemo)
+        let result = domains;
+        // Deno: merge pending
+        if (isDeno && denoPendingDomain) {
+            const alreadySaved = result.some((d: DomainInfo) => d.domain === denoPendingDomain);
+            if (!alreadySaved) result = [{ id: denoPendingDomain, domain: denoPendingDomain, status: 'pending', provider: 'deno' } as DomainInfo, ...result];
+        }
+        // Supabase: merge pending
+        if (isSupabase && supabasePendingDomain) {
+            const alreadySaved = result.some((d: DomainInfo) => d.domain === supabasePendingDomain);
+            if (!alreadySaved) result = [{ id: supabasePendingDomain, domain: supabasePendingDomain, status: 'pending', provider: 'supabase' } as DomainInfo, ...result];
+        }
+        return result;
+    }, [domains, denoPendingDomain, supabasePendingDomain, isDeno, isSupabase]);
+    // Auto-clear pending if server already has it
     React.useEffect(() => {
         if (isDeno && denoPendingDomain && domains.some((d: DomainInfo) => d.domain === denoPendingDomain)) {
             setDenoPendingDomain(null);
         }
-    }, [domains, denoPendingDomain, isDeno]);
+        if (isSupabase && supabasePendingDomain && domains.some((d: DomainInfo) => d.domain === supabasePendingDomain)) {
+            setSupabasePendingDomain(null);
+        }
+    }, [domains, denoPendingDomain, supabasePendingDomain, isDeno, isSupabase]);
 
     return (
         <div className="flex-1 flex flex-col min-h-0">
@@ -244,81 +275,22 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
                 )}
             </div>
 
-            {/* Supabase SSR Guide — shown when provider is Supabase */}
-            {isSupabase && (() => {
-                // Extract hostname and function path from engine URL
-                // e.g. https://abcdef.supabase.co/functions/v1/frontbase-edge → hostname + /functions/v1/frontbase-edge
-                let supaHostname = '<project-ref>.supabase.co';
-                let functionPath = '/functions/v1/<function-name>';
-                if (engineUrl) {
-                    try {
-                        const u = new URL(engineUrl);
-                        supaHostname = u.hostname;
-                        functionPath = u.pathname.replace(/\/$/, '') || functionPath;
-                    } catch { /* fallback */ }
-                }
-                return (
-                <div className="px-4 py-3 border-b border-border shrink-0">
-                    <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 space-y-2">
-                        <div className="flex items-start gap-2">
-                            <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
-                            <div className="space-y-2">
-                                <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
-                                    SSR Requires Custom Domain with Cloudflare DNS Proxy
-                                </p>
-                                <p className="text-[11px] text-muted-foreground">
-                                    Supabase Edge Functions rewrite <code className="text-[10px] bg-muted px-1 rounded font-mono">Content-Type: text/html</code> to <code className="text-[10px] bg-muted px-1 rounded font-mono">text/plain</code>. 
-                                    A Cloudflare-proxied custom domain with Transform Rules is required for SSR pages to render.
-                                </p>
-                                <details className="text-[11px]">
-                                    <summary className="cursor-pointer text-primary font-medium hover:underline">Setup Guide (Cloudflare)</summary>
-                                    <ol className="mt-2 space-y-2.5 text-muted-foreground list-decimal list-inside">
-                                        <li>
-                                            Add your domain to Cloudflare (free plan works)
-                                        </li>
-                                        <li>
-                                            Create a <strong>CNAME</strong> record pointing to your Supabase project:
-                                            <div className="mt-0.5 ml-3 flex items-center gap-1.5">
-                                                <code className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded">
-                                                    CNAME → {supaHostname}
-                                                </code>
-                                                <CopyButton text={supaHostname} />
-                                            </div>
-                                            <p className="text-[10px] text-emerald-600 ml-3 mt-0.5">🟠 Proxy: <strong>ON</strong> (orange cloud) — required for Transform Rules to work</p>
-                                        </li>
-                                        <li>
-                                            Add a <strong>URL Rewrite Rule</strong> to prepend the function path (Rules → Transform Rules → URL Rewrite → Create):
-                                            <div className="mt-1 ml-3 space-y-0.5 text-[10px] bg-muted/60 p-2 rounded">
-                                                <p><strong>Expression:</strong> <code className="font-mono">(http.host eq "your-domain.com")</code></p>
-                                                <p><strong>Path:</strong> Rewrite to → Dynamic: <code className="font-mono">concat("{functionPath}", http.request.uri.path)</code></p>
-                                            </div>
-                                            <p className="text-[10px] text-muted-foreground/70 ml-3 mt-0.5">
-                                                This maps <code className="font-mono">/p/page</code> → <code className="font-mono">{functionPath}/p/page</code>
-                                            </p>
-                                        </li>
-                                        <li>
-                                            Add an <strong>HTTP Response Header Modification</strong> rule (Rules → Transform Rules → Modify Response Header):
-                                            <div className="mt-1 ml-3 space-y-0.5 text-[10px] bg-muted/60 p-2 rounded">
-                                                <p><strong>Expression:</strong> <code className="font-mono">(http.host eq "your-domain.com")</code></p>
-                                                <p><strong>Action:</strong> Set <code className="font-mono">Content-Type</code> to dynamic value <code className="font-mono">http.response.headers["x-content-type"][0]</code></p>
-                                            </div>
-                                        </li>
-                                        <li>Visit <code className="bg-muted px-1 rounded font-mono">https://your-domain.com/</code> to verify HTML renders correctly</li>
-                                    </ol>
-                                    <p className="mt-2 text-[10px] text-muted-foreground/70">
-                                        Using a different CDN? You need two things: (1) path rewriting to prepend the function path, and (2) Content-Type restoration from the X-Content-Type header.
-                                    </p>
-                                </details>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                );
-            })()}
+
 
             {/* Add domain form — hidden when a custom domain already exists (1 per engine) */}
             {allDomains.length === 0 && (
             <div className="px-4 py-3 border-b border-border shrink-0">
+                {/* Supabase: small explainer above the input */}
+                {isSupabase && (
+                    <div className="mb-2 p-2 rounded-md bg-amber-500/5 border border-amber-500/20">
+                        <div className="flex items-start gap-1.5">
+                            <AlertCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
+                            <p className="text-[10px] text-muted-foreground">
+                                Supabase rewrites <code className="text-[9px] bg-muted px-0.5 rounded font-mono">Content-Type: text/html</code> → <code className="text-[9px] bg-muted px-0.5 rounded font-mono">text/plain</code>. A CF Worker proxy with a custom domain fixes SSR rendering.
+                            </p>
+                        </div>
+                    </div>
+                )}
                 <form
                     onSubmit={(e) => {
                         e.preventDefault();
@@ -337,7 +309,7 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
                         type="submit"
                         size="sm"
                         className="h-8 text-xs gap-1.5"
-                        disabled={!newDomain.trim() || addMutation.isPending || (isDeno && !!denoPendingDomain)}
+                        disabled={!newDomain.trim() || addMutation.isPending || (isDeno && !!denoPendingDomain) || (isSupabase && !!supabasePendingDomain)}
                     >
                         {addMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
                         Add
@@ -433,8 +405,115 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
                                     </div>
                                 )}
 
-                                {/* Non-Deno: Step-by-step DNS setup (pending) or success (active) */}
-                                {!isDeno && d.status !== 'active' && (
+                                {/* Supabase: CF Worker setup instructions (pending) */}
+                                {isSupabase && d.status === 'pending' && (() => {
+                                    // Auto-generate CF Worker script with correct values
+                                    const workerScript = `export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    url.hostname = "${supaInfo.hostname}";
+    url.pathname = "${supaInfo.funcPath}" + url.pathname;
+
+    const resp = await fetch(url.toString(), {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
+    });
+
+    const headers = new Headers(resp.headers);
+
+    // Restore Content-Type from X-Content-Type (Supabase strips it)
+    const xct = headers.get("x-content-type");
+    if (xct) headers.set("Content-Type", xct);
+
+    // Remove Supabase's restrictive CSP that blocks inline styles/scripts
+    headers.delete("content-security-policy");
+    headers.delete("x-content-type-options");
+
+    return new Response(resp.body, {
+      status: resp.status,
+      headers,
+    });
+  }
+};`;
+                                    return (
+                                    <div className="mt-2 p-2.5 rounded-md bg-blue-500/5 border border-blue-500/20">
+                                        <div className="flex items-start gap-2">
+                                            <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
+                                            <div className="space-y-2 flex-1">
+                                                <p className="text-[11px] font-medium text-blue-700 dark:text-blue-400">
+                                                    Set up a Cloudflare Worker as reverse proxy
+                                                </p>
+                                                <p className="text-[10px] text-muted-foreground">
+                                                    A CF Worker is required because Supabase itself uses Cloudflare, blocking direct CNAME proxying (Error 1014).
+                                                </p>
+
+                                                {/* Step 1: Create Worker */}
+                                                <div className="space-y-0.5">
+                                                    <p className="text-[10px] font-medium text-foreground">1. Create a CF Worker</p>
+                                                    <p className="text-[10px] text-muted-foreground ml-2">CF Dashboard → Workers & Pages → Create</p>
+                                                    <p className="text-[10px] text-muted-foreground ml-2">Click <strong>"Start with Hello World!"</strong> → name it → click <strong>Deploy</strong></p>
+                                                    <p className="text-[10px] text-muted-foreground ml-2">Then click <strong>"Edit Code"</strong> and replace everything with:</p>
+                                                    <div className="ml-2 relative">
+                                                        <pre className="text-[9px] font-mono bg-muted p-2 rounded overflow-x-auto max-h-40 whitespace-pre">{workerScript}</pre>
+                                                        <div className="absolute top-1 right-1">
+                                                            <CopyButton text={workerScript} />
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-[10px] text-muted-foreground ml-2">Click <strong>Deploy</strong> to save.</p>
+                                                </div>
+
+                                                {/* Step 2: Add Custom Domain */}
+                                                <div className="space-y-0.5">
+                                                    <p className="text-[10px] font-medium text-foreground">2. Add Custom Domain to the Worker</p>
+                                                    <p className="text-[10px] text-muted-foreground ml-2">Worker Settings → Domains & Routes → Add → Custom Domain</p>
+                                                    <div className="ml-2 flex items-center gap-1.5">
+                                                        <code className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded">
+                                                            {d.domain}
+                                                        </code>
+                                                        <CopyButton text={d.domain} />
+                                                    </div>
+                                                    <p className="text-[9px] text-muted-foreground/70 ml-2">CF automatically creates the DNS record and provisions SSL.</p>
+                                                </div>
+
+                                                {/* Step 3: Verify */}
+                                                <div className="space-y-0.5">
+                                                    <p className="text-[10px] font-medium text-foreground">3. Click Verify below</p>
+                                                    <p className="text-[10px] text-muted-foreground ml-2">We'll check if your domain resolves and update the engine URL.</p>
+                                                </div>
+
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-7 text-[11px] gap-1.5 mt-1 w-full"
+                                                    onClick={() => verifyMutation.mutate(d.id)}
+                                                    disabled={verifyingId === d.id}
+                                                >
+                                                    {verifyingId === d.id ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                        <CheckCircle2 className="h-3 w-3" />
+                                                    )}
+                                                    Verify Domain
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    );
+                                })()}
+
+                                {/* Supabase: Active domain confirmation */}
+                                {isSupabase && d.status === 'active' && (
+                                    <div className="mt-1.5 p-2 rounded-md bg-emerald-500/5 border border-emerald-500/20">
+                                        <div className="flex items-center gap-1.5 text-[10px] text-emerald-600">
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            Custom domain active — used as Endpoint URL
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Non-Deno/non-Supabase: Step-by-step DNS setup (pending) or success (active) */}
+                                {!isDeno && !isSupabase && d.status !== 'active' && (
                                     <div className="mt-2 p-2.5 rounded-md bg-blue-500/5 border border-blue-500/20">
                                         <div className="flex items-start gap-2">
                                             <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
@@ -500,8 +579,8 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
                                     </div>
                                 )}
 
-                                {/* Non-Deno: Active / verified confirmation */}
-                                {!isDeno && d.status === 'active' && (
+                                {/* Non-Deno/non-Supabase: Active / verified confirmation */}
+                                {!isDeno && !isSupabase && d.status === 'active' && (
                                     <div className="mt-1.5 p-2 rounded-md bg-emerald-500/5 border border-emerald-500/20">
                                         <div className="flex items-center gap-1.5 text-[10px] text-emerald-600">
                                             <CheckCircle2 className="h-3 w-3" />

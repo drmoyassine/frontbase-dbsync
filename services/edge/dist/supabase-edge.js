@@ -3943,7 +3943,7 @@ var init_stream3 = __esm({
         this.#cursor = cursor;
         this.#flush(() => this.#createCursorRequest(entry, endpoint), (resp) => cursor.open(resp), (respBody) => respBody.baton, (respBody) => respBody.baseUrl, (_respBody) => entry.cursorCallback(cursor), (error) => entry.errorCallback(error));
       }
-      #flush(createRequest, decodeResponse, getBaton, getBaseUrl, handleResponse, handleError3) {
+      #flush(createRequest, decodeResponse, getBaton, getBaseUrl2, handleResponse, handleError3) {
         let promise;
         try {
           const request = createRequest();
@@ -3962,7 +3962,7 @@ var init_stream3 = __esm({
           return decodeResponse(resp);
         }).then((r) => {
           this.#baton = getBaton(r);
-          this.#baseUrl = getBaseUrl(r) ?? this.#baseUrl;
+          this.#baseUrl = getBaseUrl2(r) ?? this.#baseUrl;
           handleResponse(r);
         }).catch((error) => {
           this._setClosed(error);
@@ -10345,6 +10345,337 @@ var init_drizzle_orm = __esm({
   }
 });
 
+// src/storage/schema.ts
+var publishedPages, projectSettings, workflowsTable, executionsTable, edgeLogsTable;
+var init_schema = __esm({
+  "src/storage/schema.ts"() {
+    init_drizzle_orm();
+    init_sqlite_core();
+    publishedPages = sqliteTable("published_pages", {
+      id: text("id").primaryKey(),
+      slug: text("slug").notNull().unique(),
+      name: text("name").notNull(),
+      title: text("title"),
+      description: text("description"),
+      layoutData: text("layout_data").notNull(),
+      seoData: text("seo_data"),
+      datasources: text("datasources"),
+      cssBundle: text("css_bundle"),
+      version: integer("version").notNull().default(1),
+      publishedAt: text("published_at").notNull(),
+      isPublic: integer("is_public", { mode: "boolean" }).notNull().default(true),
+      isHomepage: integer("is_homepage", { mode: "boolean" }).notNull().default(false),
+      contentHash: text("content_hash"),
+      createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+      updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+    });
+    projectSettings = sqliteTable("project_settings", {
+      id: text("id").primaryKey().default("default"),
+      faviconUrl: text("favicon_url"),
+      logoUrl: text("logo_url"),
+      siteName: text("site_name"),
+      siteDescription: text("site_description"),
+      appUrl: text("app_url"),
+      updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+    });
+    workflowsTable = sqliteTable("workflows", {
+      id: text("id").primaryKey(),
+      name: text("name").notNull(),
+      description: text("description"),
+      triggerType: text("trigger_type").notNull(),
+      triggerConfig: text("trigger_config"),
+      nodes: text("nodes").notNull(),
+      edges: text("edges").notNull(),
+      settings: text("settings"),
+      version: integer("version").notNull().default(1),
+      isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+      createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+      updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+      publishedBy: text("published_by")
+    });
+    executionsTable = sqliteTable("executions", {
+      id: text("id").primaryKey(),
+      workflowId: text("workflow_id").notNull(),
+      status: text("status").notNull(),
+      triggerType: text("trigger_type").notNull(),
+      triggerPayload: text("trigger_payload"),
+      nodeExecutions: text("node_executions"),
+      result: text("result"),
+      error: text("error"),
+      usage: real("usage").default(0),
+      startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+      endedAt: text("ended_at")
+    });
+    edgeLogsTable = sqliteTable("edge_logs", {
+      id: text("id").primaryKey(),
+      timestamp: text("timestamp").notNull(),
+      level: text("level").notNull(),
+      // debug | info | warn | error
+      message: text("message").notNull(),
+      source: text("source").default("runtime"),
+      // runtime | request | error | system
+      metadata: text("metadata"),
+      // JSON string — provider-specific extras
+      createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+    });
+  }
+});
+
+// src/storage/DrizzleStateProvider.ts
+var DEFAULT_FAVICON, DrizzleStateProvider;
+var init_DrizzleStateProvider = __esm({
+  "src/storage/DrizzleStateProvider.ts"() {
+    init_drizzle_orm();
+    init_schema();
+    DEFAULT_FAVICON = "/static/icon.png";
+    DrizzleStateProvider = class {
+      async initSettings() {
+      }
+      // =========================================================================
+      // Pages CRUD
+      // =========================================================================
+      async upsertPage(page) {
+        const database = this.getDb();
+        const record = {
+          id: page.id,
+          slug: page.slug,
+          name: page.name,
+          title: page.title || null,
+          description: page.description || null,
+          layoutData: JSON.stringify(page.layoutData),
+          seoData: page.seoData ? JSON.stringify(page.seoData) : null,
+          datasources: page.datasources ? JSON.stringify(page.datasources) : null,
+          cssBundle: page.cssBundle || null,
+          version: page.version,
+          publishedAt: page.publishedAt,
+          isPublic: page.isPublic,
+          isHomepage: page.isHomepage,
+          contentHash: page.contentHash || null
+        };
+        if (page.isHomepage) {
+          await database.update(publishedPages).set({ isHomepage: false }).where(eq(publishedPages.isHomepage, true));
+        }
+        await database.insert(publishedPages).values(record).onConflictDoUpdate({
+          target: publishedPages.id,
+          set: { ...record, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }
+        });
+        return { success: true, version: page.version };
+      }
+      async getPageBySlug(slug) {
+        const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.slug, slug)).get();
+        return record ? this.recordToPage(record) : null;
+      }
+      async getHomepage() {
+        const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.isHomepage, true)).get();
+        return record ? this.recordToPage(record) : null;
+      }
+      async deletePage(slug) {
+        await this.getDb().delete(publishedPages).where(eq(publishedPages.slug, slug));
+        return true;
+      }
+      async listPages() {
+        return await this.getDb().select({
+          slug: publishedPages.slug,
+          name: publishedPages.name,
+          version: publishedPages.version
+        }).from(publishedPages);
+      }
+      async listPublicPageSlugs() {
+        return await this.getDb().select({
+          slug: publishedPages.slug,
+          updatedAt: publishedPages.updatedAt,
+          isHomepage: publishedPages.isHomepage
+        }).from(publishedPages).where(eq(publishedPages.isPublic, true));
+      }
+      recordToPage(record) {
+        return {
+          id: record.id,
+          slug: record.slug,
+          name: record.name,
+          title: record.title || void 0,
+          description: record.description || void 0,
+          layoutData: JSON.parse(record.layoutData),
+          seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
+          datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
+          cssBundle: record.cssBundle || void 0,
+          version: record.version,
+          publishedAt: record.publishedAt,
+          isPublic: record.isPublic,
+          isHomepage: record.isHomepage
+        };
+      }
+      // =========================================================================
+      // Project Settings
+      // =========================================================================
+      async getProjectSettings() {
+        const record = await this.getDb().select().from(projectSettings).where(eq(projectSettings.id, "default")).get();
+        if (!record) {
+          return {
+            id: "default",
+            faviconUrl: null,
+            logoUrl: null,
+            siteName: null,
+            siteDescription: null,
+            appUrl: null,
+            updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+          };
+        }
+        return record;
+      }
+      async getFaviconUrl() {
+        return (await this.getProjectSettings()).faviconUrl || DEFAULT_FAVICON;
+      }
+      async updateProjectSettings(updates) {
+        const database = this.getDb();
+        const existing = await database.select().from(projectSettings).where(eq(projectSettings.id, "default")).get();
+        if (existing) {
+          await database.update(projectSettings).set({ ...updates, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(eq(projectSettings.id, "default"));
+        } else {
+          await database.insert(projectSettings).values({
+            id: "default",
+            ...updates,
+            updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+          });
+        }
+        return this.getProjectSettings();
+      }
+      // =========================================================================
+      // Workflows CRUD
+      // =========================================================================
+      async upsertWorkflow(workflow) {
+        const database = this.getDb();
+        const existing = await database.select().from(workflowsTable).where(eq(workflowsTable.id, workflow.id)).get();
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        if (existing) {
+          const newVersion = (existing.version || 1) + 1;
+          await database.update(workflowsTable).set({
+            name: workflow.name,
+            description: workflow.description,
+            triggerType: workflow.triggerType,
+            triggerConfig: workflow.triggerConfig,
+            nodes: workflow.nodes,
+            edges: workflow.edges,
+            settings: workflow.settings || null,
+            version: newVersion,
+            updatedAt: now,
+            publishedBy: workflow.publishedBy
+          }).where(eq(workflowsTable.id, workflow.id));
+          return { version: newVersion };
+        } else {
+          await database.insert(workflowsTable).values({
+            id: workflow.id,
+            name: workflow.name,
+            description: workflow.description,
+            triggerType: workflow.triggerType,
+            triggerConfig: workflow.triggerConfig,
+            nodes: workflow.nodes,
+            edges: workflow.edges,
+            settings: workflow.settings || null,
+            version: 1,
+            isActive: true,
+            createdAt: now,
+            updatedAt: now,
+            publishedBy: workflow.publishedBy
+          });
+          return { version: 1 };
+        }
+      }
+      async getWorkflowById(id) {
+        const row = await this.getDb().select().from(workflowsTable).where(eq(workflowsTable.id, id)).get();
+        return row ? { ...row, isActive: !!row.isActive } : null;
+      }
+      async getActiveWebhookWorkflow(id) {
+        const row = await this.getDb().select().from(workflowsTable).where(and(eq(workflowsTable.id, id), eq(workflowsTable.isActive, true))).get();
+        return row ? { ...row, isActive: !!row.isActive } : null;
+      }
+      async listWorkflows() {
+        const rows = await this.getDb().select().from(workflowsTable);
+        return rows.map((r) => ({ ...r, isActive: !!r.isActive }));
+      }
+      async deleteWorkflow(id) {
+        await this.getDb().delete(workflowsTable).where(eq(workflowsTable.id, id));
+        return true;
+      }
+      async toggleWorkflow(id, isActive) {
+        await this.getDb().update(workflowsTable).set({ isActive, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(eq(workflowsTable.id, id));
+      }
+      // =========================================================================
+      // Executions CRUD
+      // =========================================================================
+      async createExecution(execution) {
+        await this.getDb().insert(executionsTable).values({
+          id: execution.id,
+          workflowId: execution.workflowId,
+          status: execution.status,
+          triggerType: execution.triggerType,
+          triggerPayload: execution.triggerPayload || null,
+          nodeExecutions: execution.nodeExecutions || null,
+          startedAt: execution.startedAt
+        });
+      }
+      async getExecutionById(id) {
+        const row = await this.getDb().select().from(executionsTable).where(eq(executionsTable.id, id)).get();
+        return row;
+      }
+      async updateExecution(id, updates) {
+        const setValues = {};
+        if (updates.status !== void 0) setValues.status = updates.status;
+        if (updates.result !== void 0) setValues.result = updates.result;
+        if (updates.error !== void 0) setValues.error = updates.error;
+        if (updates.nodeExecutions !== void 0) setValues.nodeExecutions = updates.nodeExecutions;
+        if (updates.usage !== void 0) setValues.usage = updates.usage;
+        if (updates.endedAt !== void 0) setValues.endedAt = updates.endedAt;
+        if (Object.keys(setValues).length > 0) {
+          await this.getDb().update(executionsTable).set(setValues).where(eq(executionsTable.id, id));
+        }
+      }
+      async listExecutionsByWorkflow(workflowId, limit2 = 20) {
+        return await this.getDb().select().from(executionsTable).where(eq(executionsTable.workflowId, workflowId)).orderBy(desc(executionsTable.startedAt)).limit(limit2);
+      }
+      async listAllExecutions(filters2) {
+        const conditions = [];
+        if (filters2?.workflowId) conditions.push(eq(executionsTable.workflowId, filters2.workflowId));
+        if (filters2?.since) conditions.push(sql`${executionsTable.startedAt} >= ${filters2.since}`);
+        if (filters2?.until) conditions.push(sql`${executionsTable.startedAt} <= ${filters2.until}`);
+        let query = this.getDb().select().from(executionsTable);
+        if (conditions.length > 0) query = query.where(and(...conditions));
+        let rows = await query.orderBy(desc(executionsTable.startedAt)).limit(filters2?.limit || 100);
+        if (filters2?.status && filters2.status.length > 0) {
+          rows = rows.filter((r) => filters2.status.includes(r.status));
+        }
+        return rows;
+      }
+      async getExecutionStats() {
+        const allExecutions = await this.getDb().select().from(executionsTable);
+        const statsMap = /* @__PURE__ */ new Map();
+        for (const exec of allExecutions) {
+          const current = statsMap.get(exec.workflowId) || {
+            workflowId: exec.workflowId,
+            totalRuns: 0,
+            successfulRuns: 0,
+            failedRuns: 0
+          };
+          current.totalRuns++;
+          if (exec.status === "completed") current.successfulRuns++;
+          else if (exec.status === "error") current.failedRuns++;
+          statsMap.set(exec.workflowId, current);
+        }
+        return Array.from(statsMap.values());
+      }
+      // =========================================================================
+      // Dead Letter Queue
+      // =========================================================================
+      async createDeadLetter(deadLetter) {
+        await this.getDb().run(sql`
+            INSERT INTO dead_letters (id, workflow_id, execution_id, error, payload, retry_count)
+            VALUES (${deadLetter.id}, ${deadLetter.workflowId}, ${deadLetter.executionId},
+                    ${deadLetter.error}, ${deadLetter.payload}, ${deadLetter.retryCount || 0})
+        `);
+      }
+    };
+  }
+});
+
 // src/storage/edge-migrations.ts
 async function runMigrations(execute, providerName) {
   await execute(`CREATE TABLE IF NOT EXISTS _schema_version (
@@ -10515,98 +10846,20 @@ var init_edge_migrations = __esm({
   }
 });
 
-// src/storage/schema.ts
-var publishedPages, projectSettings, workflowsTable, executionsTable, edgeLogsTable;
-var init_schema = __esm({
-  "src/storage/schema.ts"() {
-    init_drizzle_orm();
-    init_sqlite_core();
-    publishedPages = sqliteTable("published_pages", {
-      id: text("id").primaryKey(),
-      slug: text("slug").notNull().unique(),
-      name: text("name").notNull(),
-      title: text("title"),
-      description: text("description"),
-      layoutData: text("layout_data").notNull(),
-      seoData: text("seo_data"),
-      datasources: text("datasources"),
-      cssBundle: text("css_bundle"),
-      version: integer("version").notNull().default(1),
-      publishedAt: text("published_at").notNull(),
-      isPublic: integer("is_public", { mode: "boolean" }).notNull().default(true),
-      isHomepage: integer("is_homepage", { mode: "boolean" }).notNull().default(false),
-      contentHash: text("content_hash"),
-      createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-      updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
-    });
-    projectSettings = sqliteTable("project_settings", {
-      id: text("id").primaryKey().default("default"),
-      faviconUrl: text("favicon_url"),
-      logoUrl: text("logo_url"),
-      siteName: text("site_name"),
-      siteDescription: text("site_description"),
-      appUrl: text("app_url"),
-      updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
-    });
-    workflowsTable = sqliteTable("workflows", {
-      id: text("id").primaryKey(),
-      name: text("name").notNull(),
-      description: text("description"),
-      triggerType: text("trigger_type").notNull(),
-      triggerConfig: text("trigger_config"),
-      nodes: text("nodes").notNull(),
-      edges: text("edges").notNull(),
-      settings: text("settings"),
-      version: integer("version").notNull().default(1),
-      isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-      createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-      updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-      publishedBy: text("published_by")
-    });
-    executionsTable = sqliteTable("executions", {
-      id: text("id").primaryKey(),
-      workflowId: text("workflow_id").notNull(),
-      status: text("status").notNull(),
-      triggerType: text("trigger_type").notNull(),
-      triggerPayload: text("trigger_payload"),
-      nodeExecutions: text("node_executions"),
-      result: text("result"),
-      error: text("error"),
-      usage: real("usage").default(0),
-      startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-      endedAt: text("ended_at")
-    });
-    edgeLogsTable = sqliteTable("edge_logs", {
-      id: text("id").primaryKey(),
-      timestamp: text("timestamp").notNull(),
-      level: text("level").notNull(),
-      // debug | info | warn | error
-      message: text("message").notNull(),
-      source: text("source").default("runtime"),
-      // runtime | request | error | system
-      metadata: text("metadata"),
-      // JSON string — provider-specific extras
-      createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)
-    });
-  }
-});
-
 // src/storage/TursoHttpProvider.ts
-var DEFAULT_FAVICON, TursoHttpProvider;
+var TursoHttpProvider;
 var init_TursoHttpProvider = __esm({
   "src/storage/TursoHttpProvider.ts"() {
     init_libsql();
     init_web3();
     init_drizzle_orm();
+    init_DrizzleStateProvider();
     init_edge_migrations();
-    init_schema();
-    DEFAULT_FAVICON = "/static/icon.png";
-    TursoHttpProvider = class {
+    TursoHttpProvider = class extends DrizzleStateProvider {
       _db = null;
       /**
        * Lazy DB accessor — creates client on first use.
        * On CF Workers, env vars aren't available at module eval time.
-       * They're bridged in the fetch() handler BEFORE any provider method runs.
        */
       getDb() {
         if (!this._db) {
@@ -10623,9 +10876,6 @@ var init_TursoHttpProvider = __esm({
         }
         return this._db;
       }
-      // =========================================================================
-      // Lifecycle
-      // =========================================================================
       async init() {
         await runMigrations(
           async (sqlStr) => {
@@ -10637,252 +10887,6 @@ var init_TursoHttpProvider = __esm({
       }
       async initSettings() {
         console.log("\u2601\uFE0F Project settings table initialized (Turso)");
-      }
-      // =========================================================================
-      // Pages CRUD
-      // =========================================================================
-      async upsertPage(page) {
-        const record = {
-          id: page.id,
-          slug: page.slug,
-          name: page.name,
-          title: page.title || null,
-          description: page.description || null,
-          layoutData: JSON.stringify(page.layoutData),
-          seoData: page.seoData ? JSON.stringify(page.seoData) : null,
-          datasources: page.datasources ? JSON.stringify(page.datasources) : null,
-          cssBundle: page.cssBundle || null,
-          version: page.version,
-          publishedAt: page.publishedAt,
-          isPublic: page.isPublic,
-          isHomepage: page.isHomepage,
-          contentHash: page.contentHash || null
-        };
-        if (page.isHomepage) {
-          await this.getDb().update(publishedPages).set({ isHomepage: false }).where(eq(publishedPages.isHomepage, true));
-          console.log(`\u2601\uFE0F Cleared old homepage flag(s) before setting new homepage: ${page.slug}`);
-        }
-        await this.getDb().insert(publishedPages).values(record).onConflictDoUpdate({
-          target: publishedPages.id,
-          set: { ...record, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }
-        });
-        console.log(`\u2601\uFE0F Upserted page (Turso): ${page.slug} (v${page.version})`);
-        return { success: true, version: page.version };
-      }
-      async getPageBySlug(slug) {
-        const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.slug, slug)).get();
-        if (!record) return null;
-        return {
-          id: record.id,
-          slug: record.slug,
-          name: record.name,
-          title: record.title || void 0,
-          description: record.description || void 0,
-          layoutData: JSON.parse(record.layoutData),
-          seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
-          datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
-          cssBundle: record.cssBundle || void 0,
-          version: record.version,
-          publishedAt: record.publishedAt,
-          isPublic: record.isPublic,
-          isHomepage: record.isHomepage
-        };
-      }
-      async getHomepage() {
-        const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.isHomepage, true)).get();
-        if (!record) return null;
-        return {
-          id: record.id,
-          slug: record.slug,
-          name: record.name,
-          title: record.title || void 0,
-          description: record.description || void 0,
-          layoutData: JSON.parse(record.layoutData),
-          seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
-          datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
-          cssBundle: record.cssBundle || void 0,
-          version: record.version,
-          publishedAt: record.publishedAt,
-          isPublic: record.isPublic,
-          isHomepage: record.isHomepage
-        };
-      }
-      async deletePage(slug) {
-        await this.getDb().delete(publishedPages).where(eq(publishedPages.slug, slug));
-        return true;
-      }
-      async listPages() {
-        return await this.getDb().select({
-          slug: publishedPages.slug,
-          name: publishedPages.name,
-          version: publishedPages.version
-        }).from(publishedPages);
-      }
-      // =========================================================================
-      // Project Settings CRUD
-      // =========================================================================
-      async getProjectSettings() {
-        const record = await this.getDb().select().from(projectSettings).where(eq(projectSettings.id, "default")).get();
-        if (!record) {
-          return {
-            id: "default",
-            faviconUrl: null,
-            logoUrl: null,
-            siteName: null,
-            siteDescription: null,
-            appUrl: null,
-            updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-          };
-        }
-        return record;
-      }
-      async getFaviconUrl() {
-        const settings = await this.getProjectSettings();
-        return settings.faviconUrl || DEFAULT_FAVICON;
-      }
-      async updateProjectSettings(updates) {
-        const existing = await this.getDb().select().from(projectSettings).where(eq(projectSettings.id, "default")).get();
-        if (existing) {
-          await this.getDb().update(projectSettings).set({ ...updates, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(eq(projectSettings.id, "default"));
-        } else {
-          await this.getDb().insert(projectSettings).values({
-            id: "default",
-            ...updates,
-            updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-          });
-        }
-        console.log("\u2601\uFE0F Project settings updated (Turso)");
-        return this.getProjectSettings();
-      }
-      // =========================================================================
-      // Workflows CRUD
-      // =========================================================================
-      async upsertWorkflow(workflow) {
-        const existing = await this.getDb().select().from(workflowsTable).where(eq(workflowsTable.id, workflow.id)).get();
-        const now = (/* @__PURE__ */ new Date()).toISOString();
-        if (existing) {
-          const newVersion = (existing.version || 1) + 1;
-          await this.getDb().update(workflowsTable).set({
-            name: workflow.name,
-            description: workflow.description,
-            triggerType: workflow.triggerType,
-            triggerConfig: workflow.triggerConfig,
-            nodes: workflow.nodes,
-            edges: workflow.edges,
-            settings: workflow.settings || null,
-            version: newVersion,
-            updatedAt: now,
-            publishedBy: workflow.publishedBy
-          }).where(eq(workflowsTable.id, workflow.id));
-          return { version: newVersion };
-        } else {
-          await this.getDb().insert(workflowsTable).values({
-            id: workflow.id,
-            name: workflow.name,
-            description: workflow.description,
-            triggerType: workflow.triggerType,
-            triggerConfig: workflow.triggerConfig,
-            nodes: workflow.nodes,
-            edges: workflow.edges,
-            settings: workflow.settings || null,
-            version: 1,
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-            publishedBy: workflow.publishedBy
-          });
-          return { version: 1 };
-        }
-      }
-      async getWorkflowById(id) {
-        const row = await this.getDb().select().from(workflowsTable).where(eq(workflowsTable.id, id)).get();
-        return row ? { ...row, isActive: !!row.isActive } : null;
-      }
-      async getActiveWebhookWorkflow(id) {
-        const row = await this.getDb().select().from(workflowsTable).where(and(eq(workflowsTable.id, id), eq(workflowsTable.isActive, true))).get();
-        return row ? { ...row, isActive: !!row.isActive } : null;
-      }
-      // =========================================================================
-      // Executions CRUD
-      // =========================================================================
-      async createExecution(execution) {
-        await this.getDb().insert(executionsTable).values({
-          id: execution.id,
-          workflowId: execution.workflowId,
-          status: execution.status,
-          triggerType: execution.triggerType,
-          triggerPayload: execution.triggerPayload || null,
-          nodeExecutions: execution.nodeExecutions || null,
-          startedAt: execution.startedAt
-        });
-      }
-      async getExecutionById(id) {
-        const row = await this.getDb().select().from(executionsTable).where(eq(executionsTable.id, id)).get();
-        return row;
-      }
-      async updateExecution(id, updates) {
-        const setValues = {};
-        if (updates.status !== void 0) setValues.status = updates.status;
-        if (updates.result !== void 0) setValues.result = updates.result;
-        if (updates.error !== void 0) setValues.error = updates.error;
-        if (updates.nodeExecutions !== void 0) setValues.nodeExecutions = updates.nodeExecutions;
-        if (updates.usage !== void 0) setValues.usage = updates.usage;
-        if (updates.endedAt !== void 0) setValues.endedAt = updates.endedAt;
-        if (Object.keys(setValues).length > 0) {
-          await this.getDb().update(executionsTable).set(setValues).where(eq(executionsTable.id, id));
-        }
-      }
-      async listExecutionsByWorkflow(workflowId, limit2 = 20) {
-        const rows = await this.getDb().select().from(executionsTable).where(eq(executionsTable.workflowId, workflowId)).orderBy(desc(executionsTable.startedAt)).limit(limit2);
-        return rows;
-      }
-      async listAllExecutions(filters2) {
-        const conditions = [];
-        if (filters2?.workflowId) {
-          conditions.push(eq(executionsTable.workflowId, filters2.workflowId));
-        }
-        if (filters2?.since) {
-          conditions.push(sql`${executionsTable.startedAt} >= ${filters2.since}`);
-        }
-        if (filters2?.until) {
-          conditions.push(sql`${executionsTable.startedAt} <= ${filters2.until}`);
-        }
-        let query = this.getDb().select().from(executionsTable);
-        if (conditions.length > 0) {
-          query = query.where(and(...conditions));
-        }
-        let rows = await query.orderBy(desc(executionsTable.startedAt)).limit(filters2?.limit || 100);
-        if (filters2?.status && filters2.status.length > 0) {
-          rows = rows.filter((r) => filters2.status.includes(r.status));
-        }
-        return rows;
-      }
-      async getExecutionStats() {
-        const allExecutions = await this.getDb().select().from(executionsTable);
-        const statsMap = /* @__PURE__ */ new Map();
-        for (const exec of allExecutions) {
-          const current = statsMap.get(exec.workflowId) || {
-            workflowId: exec.workflowId,
-            totalRuns: 0,
-            successfulRuns: 0,
-            failedRuns: 0
-          };
-          current.totalRuns++;
-          if (exec.status === "completed") current.successfulRuns++;
-          else if (exec.status === "error") current.failedRuns++;
-          statsMap.set(exec.workflowId, current);
-        }
-        return Array.from(statsMap.values());
-      }
-      // =========================================================================
-      // Dead Letter Queue
-      // =========================================================================
-      async createDeadLetter(deadLetter) {
-        await this.getDb().run(sql`
-            INSERT INTO dead_letters (id, workflow_id, execution_id, error, payload, retry_count)
-            VALUES (${deadLetter.id}, ${deadLetter.workflowId}, ${deadLetter.executionId},
-                    ${deadLetter.error}, ${deadLetter.payload}, ${deadLetter.retryCount || 0})
-        `);
       }
     };
   }
@@ -11111,6 +11115,16 @@ var init_CfD1HttpProvider = __esm({
         );
         return rows;
       }
+      async listPublicPageSlugs() {
+        const rows = await this.all(
+          `SELECT slug, updated_at, is_homepage FROM published_pages WHERE is_public = 1`
+        );
+        return rows.map((r) => ({
+          slug: r.slug,
+          updatedAt: r.updated_at,
+          isHomepage: !!r.is_homepage
+        }));
+      }
       // =========================================================================
       // Project Settings
       // =========================================================================
@@ -11235,6 +11249,20 @@ var init_CfD1HttpProvider = __esm({
           updatedAt: row.updated_at,
           publishedBy: row.published_by || null
         };
+      }
+      async listWorkflows() {
+        const rows = await this.all(`SELECT * FROM workflows`);
+        return rows.map((r) => this.rowToWorkflow(r));
+      }
+      async deleteWorkflow(id) {
+        await this.run(`DELETE FROM workflows WHERE id = ?1`, [id]);
+        return true;
+      }
+      async toggleWorkflow(id, isActive) {
+        await this.run(
+          `UPDATE workflows SET is_active = ?1, updated_at = ?2 WHERE id = ?3`,
+          [isActive ? 1 : 0, (/* @__PURE__ */ new Date()).toISOString(), id]
+        );
       }
       // =========================================================================
       // Executions
@@ -16774,6 +16802,16 @@ var init_NeonHttpProvider = __esm({
           `SELECT slug, name, version FROM ${SCHEMA}.published_pages`
         );
       }
+      async listPublicPageSlugs() {
+        const rows = await this.all(
+          `SELECT slug, updated_at, is_homepage FROM ${SCHEMA}.published_pages WHERE is_public = TRUE`
+        );
+        return rows.map((r) => ({
+          slug: r.slug,
+          updatedAt: r.updated_at,
+          isHomepage: !!r.is_homepage
+        }));
+      }
       // =========================================================================
       // Project Settings
       // =========================================================================
@@ -16896,9 +16934,20 @@ var init_NeonHttpProvider = __esm({
           publishedBy: row.published_by || null
         };
       }
-      // =========================================================================
-      // Executions
-      // =========================================================================
+      async listWorkflows() {
+        const rows = await this.all(`SELECT * FROM ${SCHEMA}.workflows`);
+        return rows.map((r) => this.rowToWorkflow(r));
+      }
+      async deleteWorkflow(id) {
+        await this.query(`DELETE FROM ${SCHEMA}.workflows WHERE id = $1`, [id]);
+        return true;
+      }
+      async toggleWorkflow(id, isActive) {
+        await this.query(
+          `UPDATE ${SCHEMA}.workflows SET is_active = $1, updated_at = $2 WHERE id = $3`,
+          [isActive, (/* @__PURE__ */ new Date()).toISOString(), id]
+        );
+      }
       async createExecution(execution) {
         await this.query(
           `INSERT INTO ${SCHEMA}.executions (id, workflow_id, status, trigger_type, trigger_payload, node_executions, started_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -17026,6 +17075,5128 @@ var init_NeonHttpProvider = __esm({
   }
 });
 
+// node_modules/@supabase/postgrest-js/dist/index.cjs
+var require_dist = __commonJS({
+  "node_modules/@supabase/postgrest-js/dist/index.cjs"(exports$1) {
+    Object.defineProperty(exports$1, "__esModule", { value: true });
+    var PostgrestError2 = class extends Error {
+      /**
+      * @example
+      * ```ts
+      * import PostgrestError from '@supabase/postgrest-js'
+      *
+      * throw new PostgrestError({
+      *   message: 'Row level security prevented the request',
+      *   details: 'RLS denied the insert',
+      *   hint: 'Check your policies',
+      *   code: 'PGRST301',
+      * })
+      * ```
+      */
+      constructor(context) {
+        super(context.message);
+        this.name = "PostgrestError";
+        this.details = context.details;
+        this.hint = context.hint;
+        this.code = context.code;
+      }
+    };
+    var PostgrestBuilder2 = class {
+      /**
+      * Creates a builder configured for a specific PostgREST request.
+      *
+      * @example
+      * ```ts
+      * import { PostgrestQueryBuilder } from '@supabase/postgrest-js'
+      *
+      * const builder = new PostgrestQueryBuilder(
+      *   new URL('https://xyzcompany.supabase.co/rest/v1/users'),
+      *   { headers: new Headers({ apikey: 'public-anon-key' }) }
+      * )
+      * ```
+      *
+      * @category Database
+      *
+      * @example Example 1
+      * ```ts
+      * import { PostgrestQueryBuilder } from '@supabase/postgrest-js'
+      *
+      * const builder = new PostgrestQueryBuilder(
+      *   new URL('https://xyzcompany.supabase.co/rest/v1/users'),
+      *   { headers: new Headers({ apikey: 'public-anon-key' }) }
+      * )
+      * ```
+      */
+      constructor(builder) {
+        var _builder$shouldThrowO, _builder$isMaybeSingl, _builder$urlLengthLim;
+        this.shouldThrowOnError = false;
+        this.method = builder.method;
+        this.url = builder.url;
+        this.headers = new Headers(builder.headers);
+        this.schema = builder.schema;
+        this.body = builder.body;
+        this.shouldThrowOnError = (_builder$shouldThrowO = builder.shouldThrowOnError) !== null && _builder$shouldThrowO !== void 0 ? _builder$shouldThrowO : false;
+        this.signal = builder.signal;
+        this.isMaybeSingle = (_builder$isMaybeSingl = builder.isMaybeSingle) !== null && _builder$isMaybeSingl !== void 0 ? _builder$isMaybeSingl : false;
+        this.urlLengthLimit = (_builder$urlLengthLim = builder.urlLengthLimit) !== null && _builder$urlLengthLim !== void 0 ? _builder$urlLengthLim : 8e3;
+        if (builder.fetch) this.fetch = builder.fetch;
+        else this.fetch = fetch;
+      }
+      /**
+      * If there's an error with the query, throwOnError will reject the promise by
+      * throwing the error instead of returning it as part of a successful response.
+      *
+      * {@link https://github.com/supabase/supabase-js/issues/92}
+      *
+      * @category Database
+      */
+      throwOnError() {
+        this.shouldThrowOnError = true;
+        return this;
+      }
+      /**
+      * Set an HTTP header for the request.
+      *
+      * @category Database
+      */
+      setHeader(name, value) {
+        this.headers = new Headers(this.headers);
+        this.headers.set(name, value);
+        return this;
+      }
+      /**  *
+      * @category Database
+      */
+      then(onfulfilled, onrejected) {
+        var _this = this;
+        if (this.schema === void 0) ; else if (["GET", "HEAD"].includes(this.method)) this.headers.set("Accept-Profile", this.schema);
+        else this.headers.set("Content-Profile", this.schema);
+        if (this.method !== "GET" && this.method !== "HEAD") this.headers.set("Content-Type", "application/json");
+        const _fetch2 = this.fetch;
+        let res = _fetch2(this.url.toString(), {
+          method: this.method,
+          headers: this.headers,
+          body: JSON.stringify(this.body),
+          signal: this.signal
+        }).then(async (res$1) => {
+          let error = null;
+          let data = null;
+          let count = null;
+          let status = res$1.status;
+          let statusText = res$1.statusText;
+          if (res$1.ok) {
+            var _this$headers$get2, _res$headers$get;
+            if (_this.method !== "HEAD") {
+              var _this$headers$get;
+              const body = await res$1.text();
+              if (body === "") ; else if (_this.headers.get("Accept") === "text/csv") data = body;
+              else if (_this.headers.get("Accept") && ((_this$headers$get = _this.headers.get("Accept")) === null || _this$headers$get === void 0 ? void 0 : _this$headers$get.includes("application/vnd.pgrst.plan+text"))) data = body;
+              else data = JSON.parse(body);
+            }
+            const countHeader = (_this$headers$get2 = _this.headers.get("Prefer")) === null || _this$headers$get2 === void 0 ? void 0 : _this$headers$get2.match(/count=(exact|planned|estimated)/);
+            const contentRange = (_res$headers$get = res$1.headers.get("content-range")) === null || _res$headers$get === void 0 ? void 0 : _res$headers$get.split("/");
+            if (countHeader && contentRange && contentRange.length > 1) count = parseInt(contentRange[1]);
+            if (_this.isMaybeSingle && _this.method === "GET" && Array.isArray(data)) if (data.length > 1) {
+              error = {
+                code: "PGRST116",
+                details: `Results contain ${data.length} rows, application/vnd.pgrst.object+json requires 1 row`,
+                hint: null,
+                message: "JSON object requested, multiple (or no) rows returned"
+              };
+              data = null;
+              count = null;
+              status = 406;
+              statusText = "Not Acceptable";
+            } else if (data.length === 1) data = data[0];
+            else data = null;
+          } else {
+            var _error$details;
+            const body = await res$1.text();
+            try {
+              error = JSON.parse(body);
+              if (Array.isArray(error) && res$1.status === 404) {
+                data = [];
+                error = null;
+                status = 200;
+                statusText = "OK";
+              }
+            } catch (_unused) {
+              if (res$1.status === 404 && body === "") {
+                status = 204;
+                statusText = "No Content";
+              } else error = { message: body };
+            }
+            if (error && _this.isMaybeSingle && (error === null || error === void 0 || (_error$details = error.details) === null || _error$details === void 0 ? void 0 : _error$details.includes("0 rows"))) {
+              error = null;
+              status = 200;
+              statusText = "OK";
+            }
+            if (error && _this.shouldThrowOnError) throw new PostgrestError2(error);
+          }
+          return {
+            error,
+            data,
+            count,
+            status,
+            statusText
+          };
+        });
+        if (!this.shouldThrowOnError) res = res.catch((fetchError) => {
+          var _fetchError$name2;
+          let errorDetails = "";
+          let hint = "";
+          let code = "";
+          const cause = fetchError === null || fetchError === void 0 ? void 0 : fetchError.cause;
+          if (cause) {
+            var _cause$message, _cause$code, _fetchError$name, _cause$name;
+            const causeMessage = (_cause$message = cause === null || cause === void 0 ? void 0 : cause.message) !== null && _cause$message !== void 0 ? _cause$message : "";
+            const causeCode = (_cause$code = cause === null || cause === void 0 ? void 0 : cause.code) !== null && _cause$code !== void 0 ? _cause$code : "";
+            errorDetails = `${(_fetchError$name = fetchError === null || fetchError === void 0 ? void 0 : fetchError.name) !== null && _fetchError$name !== void 0 ? _fetchError$name : "FetchError"}: ${fetchError === null || fetchError === void 0 ? void 0 : fetchError.message}`;
+            errorDetails += `
+
+Caused by: ${(_cause$name = cause === null || cause === void 0 ? void 0 : cause.name) !== null && _cause$name !== void 0 ? _cause$name : "Error"}: ${causeMessage}`;
+            if (causeCode) errorDetails += ` (${causeCode})`;
+            if (cause === null || cause === void 0 ? void 0 : cause.stack) errorDetails += `
+${cause.stack}`;
+          } else {
+            var _fetchError$stack;
+            errorDetails = (_fetchError$stack = fetchError === null || fetchError === void 0 ? void 0 : fetchError.stack) !== null && _fetchError$stack !== void 0 ? _fetchError$stack : "";
+          }
+          const urlLength = this.url.toString().length;
+          if ((fetchError === null || fetchError === void 0 ? void 0 : fetchError.name) === "AbortError" || (fetchError === null || fetchError === void 0 ? void 0 : fetchError.code) === "ABORT_ERR") {
+            code = "";
+            hint = "Request was aborted (timeout or manual cancellation)";
+            if (urlLength > this.urlLengthLimit) hint += `. Note: Your request URL is ${urlLength} characters, which may exceed server limits. If selecting many fields, consider using views. If filtering with large arrays (e.g., .in('id', [many IDs])), consider using an RPC function to pass values server-side.`;
+          } else if ((cause === null || cause === void 0 ? void 0 : cause.name) === "HeadersOverflowError" || (cause === null || cause === void 0 ? void 0 : cause.code) === "UND_ERR_HEADERS_OVERFLOW") {
+            code = "";
+            hint = "HTTP headers exceeded server limits (typically 16KB)";
+            if (urlLength > this.urlLengthLimit) hint += `. Your request URL is ${urlLength} characters. If selecting many fields, consider using views. If filtering with large arrays (e.g., .in('id', [200+ IDs])), consider using an RPC function instead.`;
+          }
+          return {
+            error: {
+              message: `${(_fetchError$name2 = fetchError === null || fetchError === void 0 ? void 0 : fetchError.name) !== null && _fetchError$name2 !== void 0 ? _fetchError$name2 : "FetchError"}: ${fetchError === null || fetchError === void 0 ? void 0 : fetchError.message}`,
+              details: errorDetails,
+              hint,
+              code
+            },
+            data: null,
+            count: null,
+            status: 0,
+            statusText: ""
+          };
+        });
+        return res.then(onfulfilled, onrejected);
+      }
+      /**
+      * Override the type of the returned `data`.
+      *
+      * @typeParam NewResult - The new result type to override with
+      * @deprecated Use overrideTypes<yourType, { merge: false }>() method at the end of your call chain instead
+      *
+      * @category Database
+      */
+      returns() {
+        return this;
+      }
+      /**
+      * Override the type of the returned `data` field in the response.
+      *
+      * @typeParam NewResult - The new type to cast the response data to
+      * @typeParam Options - Optional type configuration (defaults to { merge: true })
+      * @typeParam Options.merge - When true, merges the new type with existing return type. When false, replaces the existing types entirely (defaults to true)
+      * @example
+      * ```typescript
+      * // Merge with existing types (default behavior)
+      * const query = supabase
+      *   .from('users')
+      *   .select()
+      *   .overrideTypes<{ custom_field: string }>()
+      *
+      * // Replace existing types completely
+      * const replaceQuery = supabase
+      *   .from('users')
+      *   .select()
+      *   .overrideTypes<{ id: number; name: string }, { merge: false }>()
+      * ```
+      * @returns A PostgrestBuilder instance with the new type
+      *
+      * @category Database
+      *
+      * @example Complete Override type of successful response
+      * ```ts
+      * const { data } = await supabase
+      *   .from('countries')
+      *   .select()
+      *   .overrideTypes<Array<MyType>, { merge: false }>()
+      * ```
+      *
+      * @exampleResponse Complete Override type of successful response
+      * ```ts
+      * let x: typeof data // MyType[]
+      * ```
+      *
+      * @example Complete Override type of object response
+      * ```ts
+      * const { data } = await supabase
+      *   .from('countries')
+      *   .select()
+      *   .maybeSingle()
+      *   .overrideTypes<MyType, { merge: false }>()
+      * ```
+      *
+      * @exampleResponse Complete Override type of object response
+      * ```ts
+      * let x: typeof data // MyType | null
+      * ```
+      *
+      * @example Partial Override type of successful response
+      * ```ts
+      * const { data } = await supabase
+      *   .from('countries')
+      *   .select()
+      *   .overrideTypes<Array<{ status: "A" | "B" }>>()
+      * ```
+      *
+      * @exampleResponse Partial Override type of successful response
+      * ```ts
+      * let x: typeof data // Array<CountryRowProperties & { status: "A" | "B" }>
+      * ```
+      *
+      * @example Partial Override type of object response
+      * ```ts
+      * const { data } = await supabase
+      *   .from('countries')
+      *   .select()
+      *   .maybeSingle()
+      *   .overrideTypes<{ status: "A" | "B" }>()
+      * ```
+      *
+      * @exampleResponse Partial Override type of object response
+      * ```ts
+      * let x: typeof data // CountryRowProperties & { status: "A" | "B" } | null
+      * ```
+      *
+      * @example Example 5
+      * ```typescript
+      * // Merge with existing types (default behavior)
+      * const query = supabase
+      *   .from('users')
+      *   .select()
+      *   .overrideTypes<{ custom_field: string }>()
+      *
+      * // Replace existing types completely
+      * const replaceQuery = supabase
+      *   .from('users')
+      *   .select()
+      *   .overrideTypes<{ id: number; name: string }, { merge: false }>()
+      * ```
+      */
+      overrideTypes() {
+        return this;
+      }
+    };
+    var PostgrestTransformBuilder2 = class extends PostgrestBuilder2 {
+      /**
+      * Perform a SELECT on the query result.
+      *
+      * By default, `.insert()`, `.update()`, `.upsert()`, and `.delete()` do not
+      * return modified rows. By calling this method, modified rows are returned in
+      * `data`.
+      *
+      * @param columns - The columns to retrieve, separated by commas
+      *
+      * @category Database
+      *
+      * @example With `upsert()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .upsert({ id: 1, name: 'Han Solo' })
+      *   .select()
+      * ```
+      *
+      * @exampleSql With `upsert()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Han');
+      * ```
+      *
+      * @exampleResponse With `upsert()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "name": "Han Solo"
+      *     }
+      *   ],
+      *   "status": 201,
+      *   "statusText": "Created"
+      * }
+      * ```
+      */
+      select(columns) {
+        let quoted = false;
+        const cleanedColumns = (columns !== null && columns !== void 0 ? columns : "*").split("").map((c) => {
+          if (/\s/.test(c) && !quoted) return "";
+          if (c === '"') quoted = !quoted;
+          return c;
+        }).join("");
+        this.url.searchParams.set("select", cleanedColumns);
+        this.headers.append("Prefer", "return=representation");
+        return this;
+      }
+      /**
+      * Order the query result by `column`.
+      *
+      * You can call this method multiple times to order by multiple columns.
+      *
+      * You can order referenced tables, but it only affects the ordering of the
+      * parent table if you use `!inner` in the query.
+      *
+      * @param column - The column to order by
+      * @param options - Named parameters
+      * @param options.ascending - If `true`, the result will be in ascending order
+      * @param options.nullsFirst - If `true`, `null`s appear first. If `false`,
+      * `null`s appear last.
+      * @param options.referencedTable - Set this to order a referenced table by
+      * its columns
+      * @param options.foreignTable - Deprecated, use `options.referencedTable`
+      * instead
+      *
+      * @category Database
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select('id, name')
+      *   .order('id', { ascending: false })
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 3,
+      *       "name": "Han"
+      *     },
+      *     {
+      *       "id": 2,
+      *       "name": "Leia"
+      *     },
+      *     {
+      *       "id": 1,
+      *       "name": "Luke"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription On a referenced table
+      * Ordering with `referencedTable` doesn't affect the ordering of the
+      * parent table.
+      *
+      * @example On a referenced table
+      * ```ts
+      *   const { data, error } = await supabase
+      *     .from('orchestral_sections')
+      *     .select(`
+      *       name,
+      *       instruments (
+      *         name
+      *       )
+      *     `)
+      *     .order('name', { referencedTable: 'instruments', ascending: false })
+      *
+      * ```
+      *
+      * @exampleSql On a referenced table
+      * ```sql
+      * create table
+      *   orchestral_sections (id int8 primary key, name text);
+      * create table
+      *   instruments (
+      *     id int8 primary key,
+      *     section_id int8 not null references orchestral_sections,
+      *     name text
+      *   );
+      *
+      * insert into
+      *   orchestral_sections (id, name)
+      * values
+      *   (1, 'strings'),
+      *   (2, 'woodwinds');
+      * insert into
+      *   instruments (id, section_id, name)
+      * values
+      *   (1, 1, 'harp'),
+      *   (2, 1, 'violin');
+      * ```
+      *
+      * @exampleResponse On a referenced table
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "strings",
+      *       "instruments": [
+      *         {
+      *           "name": "violin"
+      *         },
+      *         {
+      *           "name": "harp"
+      *         }
+      *       ]
+      *     },
+      *     {
+      *       "name": "woodwinds",
+      *       "instruments": []
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription Order parent table by a referenced table
+      * Ordering with `referenced_table(col)` affects the ordering of the
+      * parent table.
+      *
+      * @example Order parent table by a referenced table
+      * ```ts
+      *   const { data, error } = await supabase
+      *     .from('instruments')
+      *     .select(`
+      *       name,
+      *       section:orchestral_sections (
+      *         name
+      *       )
+      *     `)
+      *     .order('section(name)', { ascending: true })
+      *
+      * ```
+      *
+      * @exampleSql Order parent table by a referenced table
+      * ```sql
+      * create table
+      *   orchestral_sections (id int8 primary key, name text);
+      * create table
+      *   instruments (
+      *     id int8 primary key,
+      *     section_id int8 not null references orchestral_sections,
+      *     name text
+      *   );
+      *
+      * insert into
+      *   orchestral_sections (id, name)
+      * values
+      *   (1, 'strings'),
+      *   (2, 'woodwinds');
+      * insert into
+      *   instruments (id, section_id, name)
+      * values
+      *   (1, 2, 'flute'),
+      *   (2, 1, 'violin');
+      * ```
+      *
+      * @exampleResponse Order parent table by a referenced table
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "violin",
+      *       "orchestral_sections": {"name": "strings"}
+      *     },
+      *     {
+      *       "name": "flute",
+      *       "orchestral_sections": {"name": "woodwinds"}
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      order(column, { ascending = true, nullsFirst, foreignTable, referencedTable = foreignTable } = {}) {
+        const key = referencedTable ? `${referencedTable}.order` : "order";
+        const existingOrder = this.url.searchParams.get(key);
+        this.url.searchParams.set(key, `${existingOrder ? `${existingOrder},` : ""}${column}.${ascending ? "asc" : "desc"}${nullsFirst === void 0 ? "" : nullsFirst ? ".nullsfirst" : ".nullslast"}`);
+        return this;
+      }
+      /**
+      * Limit the query result by `count`.
+      *
+      * @param count - The maximum number of rows to return
+      * @param options - Named parameters
+      * @param options.referencedTable - Set this to limit rows of referenced
+      * tables instead of the parent table
+      * @param options.foreignTable - Deprecated, use `options.referencedTable`
+      * instead
+      *
+      * @category Database
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select('name')
+      *   .limit(1)
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "Luke"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @example On a referenced table
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('orchestral_sections')
+      *   .select(`
+      *     name,
+      *     instruments (
+      *       name
+      *     )
+      *   `)
+      *   .limit(1, { referencedTable: 'instruments' })
+      * ```
+      *
+      * @exampleSql On a referenced table
+      * ```sql
+      * create table
+      *   orchestral_sections (id int8 primary key, name text);
+      * create table
+      *   instruments (
+      *     id int8 primary key,
+      *     section_id int8 not null references orchestral_sections,
+      *     name text
+      *   );
+      *
+      * insert into
+      *   orchestral_sections (id, name)
+      * values
+      *   (1, 'strings');
+      * insert into
+      *   instruments (id, section_id, name)
+      * values
+      *   (1, 1, 'harp'),
+      *   (2, 1, 'violin');
+      * ```
+      *
+      * @exampleResponse On a referenced table
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "strings",
+      *       "instruments": [
+      *         {
+      *           "name": "violin"
+      *         }
+      *       ]
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      limit(count, { foreignTable, referencedTable = foreignTable } = {}) {
+        const key = typeof referencedTable === "undefined" ? "limit" : `${referencedTable}.limit`;
+        this.url.searchParams.set(key, `${count}`);
+        return this;
+      }
+      /**
+      * Limit the query result by starting at an offset `from` and ending at the offset `to`.
+      * Only records within this range are returned.
+      * This respects the query order and if there is no order clause the range could behave unexpectedly.
+      * The `from` and `to` values are 0-based and inclusive: `range(1, 3)` will include the second, third
+      * and fourth rows of the query.
+      *
+      * @param from - The starting index from which to limit the result
+      * @param to - The last index to which to limit the result
+      * @param options - Named parameters
+      * @param options.referencedTable - Set this to limit rows of referenced
+      * tables instead of the parent table
+      * @param options.foreignTable - Deprecated, use `options.referencedTable`
+      * instead
+      *
+      * @category Database
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select('name')
+      *   .range(0, 1)
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "Luke"
+      *     },
+      *     {
+      *       "name": "Leia"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      range(from, to, { foreignTable, referencedTable = foreignTable } = {}) {
+        const keyOffset = typeof referencedTable === "undefined" ? "offset" : `${referencedTable}.offset`;
+        const keyLimit = typeof referencedTable === "undefined" ? "limit" : `${referencedTable}.limit`;
+        this.url.searchParams.set(keyOffset, `${from}`);
+        this.url.searchParams.set(keyLimit, `${to - from + 1}`);
+        return this;
+      }
+      /**
+      * Set the AbortSignal for the fetch request.
+      *
+      * @param signal - The AbortSignal to use for the fetch request
+      *
+      * @category Database
+      *
+      * @remarks
+      * You can use this to set a timeout for the request.
+      *
+      * @exampleDescription Aborting requests in-flight
+      * You can use an [`AbortController`](https://developer.mozilla.org/en-US/docs/Web/API/AbortController) to abort requests.
+      * Note that `status` and `statusText` don't mean anything for aborted requests as the request wasn't fulfilled.
+      *
+      * @example Aborting requests in-flight
+      * ```ts
+      * const ac = new AbortController()
+      *
+      * const { data, error } = await supabase
+      *   .from('very_big_table')
+      *   .select()
+      *   .abortSignal(ac.signal)
+      *
+      * // Abort the request after 100 ms
+      * setTimeout(() => ac.abort(), 100)
+      * ```
+      *
+      * @exampleResponse Aborting requests in-flight
+      * ```json
+      *   {
+      *     "error": {
+      *       "message": "AbortError: The user aborted a request.",
+      *       "details": "",
+      *       "hint": "The request was aborted locally via the provided AbortSignal.",
+      *       "code": ""
+      *     },
+      *     "status": 0,
+      *     "statusText": ""
+      *   }
+      *
+      * ```
+      *
+      * @example Set a timeout
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('very_big_table')
+      *   .select()
+      *   .abortSignal(AbortSignal.timeout(1000 /* ms *\/))
+      * ```
+      *
+      * @exampleResponse Set a timeout
+      * ```json
+      *   {
+      *     "error": {
+      *       "message": "FetchError: The user aborted a request.",
+      *       "details": "",
+      *       "hint": "",
+      *       "code": ""
+      *     },
+      *     "status": 400,
+      *     "statusText": "Bad Request"
+      *   }
+      *
+      * ```
+      */
+      abortSignal(signal) {
+        this.signal = signal;
+        return this;
+      }
+      /**
+      * Return `data` as a single object instead of an array of objects.
+      *
+      * Query result must be one row (e.g. using `.limit(1)`), otherwise this
+      * returns an error.
+      *
+      * @category Database
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select('name')
+      *   .limit(1)
+      *   .single()
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": {
+      *     "name": "Luke"
+      *   },
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      single() {
+        this.headers.set("Accept", "application/vnd.pgrst.object+json");
+        return this;
+      }
+      /**
+      * Return `data` as a single object instead of an array of objects.
+      *
+      * Query result must be zero or one row (e.g. using `.limit(1)`), otherwise
+      * this returns an error.
+      *
+      * @category Database
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      *   .eq('name', 'Katniss')
+      *   .maybeSingle()
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      maybeSingle() {
+        if (this.method === "GET") this.headers.set("Accept", "application/json");
+        else this.headers.set("Accept", "application/vnd.pgrst.object+json");
+        this.isMaybeSingle = true;
+        return this;
+      }
+      /**
+      * Return `data` as a string in CSV format.
+      *
+      * @category Database
+      *
+      * @exampleDescription Return data as CSV
+      * By default, the data is returned in JSON format, but can also be returned as Comma Separated Values.
+      *
+      * @example Return data as CSV
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      *   .csv()
+      * ```
+      *
+      * @exampleSql Return data as CSV
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse Return data as CSV
+      * ```json
+      * {
+      *   "data": "id,name\n1,Luke\n2,Leia\n3,Han",
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      csv() {
+        this.headers.set("Accept", "text/csv");
+        return this;
+      }
+      /**
+      * Return `data` as an object in [GeoJSON](https://geojson.org) format.
+      *
+      * @category Database
+      */
+      geojson() {
+        this.headers.set("Accept", "application/geo+json");
+        return this;
+      }
+      /**
+      * Return `data` as the EXPLAIN plan for the query.
+      *
+      * You need to enable the
+      * [db_plan_enabled](https://supabase.com/docs/guides/database/debugging-performance#enabling-explain)
+      * setting before using this method.
+      *
+      * @param options - Named parameters
+      *
+      * @param options.analyze - If `true`, the query will be executed and the
+      * actual run time will be returned
+      *
+      * @param options.verbose - If `true`, the query identifier will be returned
+      * and `data` will include the output columns of the query
+      *
+      * @param options.settings - If `true`, include information on configuration
+      * parameters that affect query planning
+      *
+      * @param options.buffers - If `true`, include information on buffer usage
+      *
+      * @param options.wal - If `true`, include information on WAL record generation
+      *
+      * @param options.format - The format of the output, can be `"text"` (default)
+      * or `"json"`
+      *
+      * @category Database
+      *
+      * @exampleDescription Get the execution plan
+      * By default, the data is returned in TEXT format, but can also be returned as JSON by using the `format` parameter.
+      *
+      * @example Get the execution plan
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      *   .explain()
+      * ```
+      *
+      * @exampleSql Get the execution plan
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse Get the execution plan
+      * ```js
+      * Aggregate  (cost=33.34..33.36 rows=1 width=112)
+      *   ->  Limit  (cost=0.00..18.33 rows=1000 width=40)
+      *         ->  Seq Scan on characters  (cost=0.00..22.00 rows=1200 width=40)
+      * ```
+      *
+      * @exampleDescription Get the execution plan with analyze and verbose
+      * By default, the data is returned in TEXT format, but can also be returned as JSON by using the `format` parameter.
+      *
+      * @example Get the execution plan with analyze and verbose
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      *   .explain({analyze:true,verbose:true})
+      * ```
+      *
+      * @exampleSql Get the execution plan with analyze and verbose
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse Get the execution plan with analyze and verbose
+      * ```js
+      * Aggregate  (cost=33.34..33.36 rows=1 width=112) (actual time=0.041..0.041 rows=1 loops=1)
+      *   Output: NULL::bigint, count(ROW(characters.id, characters.name)), COALESCE(json_agg(ROW(characters.id, characters.name)), '[]'::json), NULLIF(current_setting('response.headers'::text, true), ''::text), NULLIF(current_setting('response.status'::text, true), ''::text)
+      *   ->  Limit  (cost=0.00..18.33 rows=1000 width=40) (actual time=0.005..0.006 rows=3 loops=1)
+      *         Output: characters.id, characters.name
+      *         ->  Seq Scan on public.characters  (cost=0.00..22.00 rows=1200 width=40) (actual time=0.004..0.005 rows=3 loops=1)
+      *               Output: characters.id, characters.name
+      * Query Identifier: -4730654291623321173
+      * Planning Time: 0.407 ms
+      * Execution Time: 0.119 ms
+      * ```
+      */
+      explain({ analyze: analyze2 = false, verbose = false, settings = false, buffers = false, wal = false, format: format4 = "text" } = {}) {
+        var _this$headers$get;
+        const options = [
+          analyze2 ? "analyze" : null,
+          verbose ? "verbose" : null,
+          settings ? "settings" : null,
+          buffers ? "buffers" : null,
+          wal ? "wal" : null
+        ].filter(Boolean).join("|");
+        const forMediatype = (_this$headers$get = this.headers.get("Accept")) !== null && _this$headers$get !== void 0 ? _this$headers$get : "application/json";
+        this.headers.set("Accept", `application/vnd.pgrst.plan+${format4}; for="${forMediatype}"; options=${options};`);
+        if (format4 === "json") return this;
+        else return this;
+      }
+      /**
+      * Rollback the query.
+      *
+      * `data` will still be returned, but the query is not committed.
+      *
+      * @category Database
+      */
+      rollback() {
+        this.headers.append("Prefer", "tx=rollback");
+        return this;
+      }
+      /**
+      * Override the type of the returned `data`.
+      *
+      * @typeParam NewResult - The new result type to override with
+      * @deprecated Use overrideTypes<yourType, { merge: false }>() method at the end of your call chain instead
+      *
+      * @category Database
+      *
+      * @remarks
+      * - Deprecated: use overrideTypes method instead
+      *
+      * @example Override type of successful response
+      * ```ts
+      * const { data } = await supabase
+      *   .from('countries')
+      *   .select()
+      *   .returns<Array<MyType>>()
+      * ```
+      *
+      * @exampleResponse Override type of successful response
+      * ```js
+      * let x: typeof data // MyType[]
+      * ```
+      *
+      * @example Override type of object response
+      * ```ts
+      * const { data } = await supabase
+      *   .from('countries')
+      *   .select()
+      *   .maybeSingle()
+      *   .returns<MyType>()
+      * ```
+      *
+      * @exampleResponse Override type of object response
+      * ```js
+      * let x: typeof data // MyType | null
+      * ```
+      */
+      returns() {
+        return this;
+      }
+      /**
+      * Set the maximum number of rows that can be affected by the query.
+      * Only available in PostgREST v13+ and only works with PATCH and DELETE methods.
+      *
+      * @param value - The maximum number of rows that can be affected
+      *
+      * @category Database
+      */
+      maxAffected(value) {
+        this.headers.append("Prefer", "handling=strict");
+        this.headers.append("Prefer", `max-affected=${value}`);
+        return this;
+      }
+    };
+    var PostgrestReservedCharsRegexp2 = /* @__PURE__ */ new RegExp("[,()]");
+    var PostgrestFilterBuilder2 = class extends PostgrestTransformBuilder2 {
+      /**
+      * Match only rows where `column` is equal to `value`.
+      *
+      * To check if the value of `column` is NULL, you should use `.is()` instead.
+      *
+      * @param column - The column to filter on
+      * @param value - The value to filter with
+      *
+      * @category Database
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      *   .eq('name', 'Leia')
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 2,
+      *       "name": "Leia"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      eq(column, value) {
+        this.url.searchParams.append(column, `eq.${value}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` is not equal to `value`.
+      *
+      * @param column - The column to filter on
+      * @param value - The value to filter with
+      *
+      * @category Database
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      *   .neq('name', 'Leia')
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "name": "Luke"
+      *     },
+      *     {
+      *       "id": 3,
+      *       "name": "Han"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      neq(column, value) {
+        this.url.searchParams.append(column, `neq.${value}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` is greater than `value`.
+      *
+      * @param column - The column to filter on
+      * @param value - The value to filter with
+      *
+      * @category Database
+      *
+      * @exampleDescription With `select()`
+      * When using [reserved words](https://www.postgresql.org/docs/current/sql-keywords-appendix.html) for column names you need
+      * to add double quotes e.g. `.gt('"order"', 2)`
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      *   .gt('id', 2)
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 3,
+      *       "name": "Han"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      gt(column, value) {
+        this.url.searchParams.append(column, `gt.${value}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` is greater than or equal to `value`.
+      *
+      * @param column - The column to filter on
+      * @param value - The value to filter with
+      *
+      * @category Database
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      *   .gte('id', 2)
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 2,
+      *       "name": "Leia"
+      *     },
+      *     {
+      *       "id": 3,
+      *       "name": "Han"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      gte(column, value) {
+        this.url.searchParams.append(column, `gte.${value}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` is less than `value`.
+      *
+      * @param column - The column to filter on
+      * @param value - The value to filter with
+      *
+      * @category Database
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      *   .lt('id', 2)
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "name": "Luke"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      lt(column, value) {
+        this.url.searchParams.append(column, `lt.${value}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` is less than or equal to `value`.
+      *
+      * @param column - The column to filter on
+      * @param value - The value to filter with
+      *
+      * @category Database
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      *   .lte('id', 2)
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "name": "Luke"
+      *     },
+      *     {
+      *       "id": 2,
+      *       "name": "Leia"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      lte(column, value) {
+        this.url.searchParams.append(column, `lte.${value}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` matches `pattern` case-sensitively.
+      *
+      * @param column - The column to filter on
+      * @param pattern - The pattern to match with
+      *
+      * @category Database
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      *   .like('name', '%Lu%')
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "name": "Luke"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      like(column, pattern) {
+        this.url.searchParams.append(column, `like.${pattern}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` matches all of `patterns` case-sensitively.
+      *
+      * @param column - The column to filter on
+      * @param patterns - The patterns to match with
+      *
+      * @category Database
+      */
+      likeAllOf(column, patterns) {
+        this.url.searchParams.append(column, `like(all).{${patterns.join(",")}}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` matches any of `patterns` case-sensitively.
+      *
+      * @param column - The column to filter on
+      * @param patterns - The patterns to match with
+      *
+      * @category Database
+      */
+      likeAnyOf(column, patterns) {
+        this.url.searchParams.append(column, `like(any).{${patterns.join(",")}}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` matches `pattern` case-insensitively.
+      *
+      * @param column - The column to filter on
+      * @param pattern - The pattern to match with
+      *
+      * @category Database
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      *   .ilike('name', '%lu%')
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "name": "Luke"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      ilike(column, pattern) {
+        this.url.searchParams.append(column, `ilike.${pattern}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` matches all of `patterns` case-insensitively.
+      *
+      * @param column - The column to filter on
+      * @param patterns - The patterns to match with
+      *
+      * @category Database
+      */
+      ilikeAllOf(column, patterns) {
+        this.url.searchParams.append(column, `ilike(all).{${patterns.join(",")}}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` matches any of `patterns` case-insensitively.
+      *
+      * @param column - The column to filter on
+      * @param patterns - The patterns to match with
+      *
+      * @category Database
+      */
+      ilikeAnyOf(column, patterns) {
+        this.url.searchParams.append(column, `ilike(any).{${patterns.join(",")}}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` matches the PostgreSQL regex `pattern`
+      * case-sensitively (using the `~` operator).
+      *
+      * @param column - The column to filter on
+      * @param pattern - The PostgreSQL regular expression pattern to match with
+      */
+      regexMatch(column, pattern) {
+        this.url.searchParams.append(column, `match.${pattern}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` matches the PostgreSQL regex `pattern`
+      * case-insensitively (using the `~*` operator).
+      *
+      * @param column - The column to filter on
+      * @param pattern - The PostgreSQL regular expression pattern to match with
+      */
+      regexIMatch(column, pattern) {
+        this.url.searchParams.append(column, `imatch.${pattern}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` IS `value`.
+      *
+      * For non-boolean columns, this is only relevant for checking if the value of
+      * `column` is NULL by setting `value` to `null`.
+      *
+      * For boolean columns, you can also set `value` to `true` or `false` and it
+      * will behave the same way as `.eq()`.
+      *
+      * @param column - The column to filter on
+      * @param value - The value to filter with
+      *
+      * @category Database
+      *
+      * @exampleDescription Checking for nullness, true or false
+      * Using the `eq()` filter doesn't work when filtering for `null`.
+      *
+      * Instead, you need to use `is()`.
+      *
+      * @example Checking for nullness, true or false
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('countries')
+      *   .select()
+      *   .is('name', null)
+      * ```
+      *
+      * @exampleSql Checking for nullness, true or false
+      * ```sql
+      * create table
+      *   countries (id int8 primary key, name text);
+      *
+      * insert into
+      *   countries (id, name)
+      * values
+      *   (1, 'null'),
+      *   (2, null);
+      * ```
+      *
+      * @exampleResponse Checking for nullness, true or false
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 2,
+      *       "name": "null"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      is(column, value) {
+        this.url.searchParams.append(column, `is.${value}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` IS DISTINCT FROM `value`.
+      *
+      * Unlike `.neq()`, this treats `NULL` as a comparable value. Two `NULL` values
+      * are considered equal (not distinct), and comparing `NULL` with any non-NULL
+      * value returns true (distinct).
+      *
+      * @param column - The column to filter on
+      * @param value - The value to filter with
+      */
+      isDistinct(column, value) {
+        this.url.searchParams.append(column, `isdistinct.${value}`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` is included in the `values` array.
+      *
+      * @param column - The column to filter on
+      * @param values - The values array to filter with
+      *
+      * @category Database
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      *   .in('name', ['Leia', 'Han'])
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 2,
+      *       "name": "Leia"
+      *     },
+      *     {
+      *       "id": 3,
+      *       "name": "Han"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      in(column, values) {
+        const cleanedValues = Array.from(new Set(values)).map((s) => {
+          if (typeof s === "string" && PostgrestReservedCharsRegexp2.test(s)) return `"${s}"`;
+          else return `${s}`;
+        }).join(",");
+        this.url.searchParams.append(column, `in.(${cleanedValues})`);
+        return this;
+      }
+      /**
+      * Match only rows where `column` is NOT included in the `values` array.
+      *
+      * @param column - The column to filter on
+      * @param values - The values array to filter with
+      */
+      notIn(column, values) {
+        const cleanedValues = Array.from(new Set(values)).map((s) => {
+          if (typeof s === "string" && PostgrestReservedCharsRegexp2.test(s)) return `"${s}"`;
+          else return `${s}`;
+        }).join(",");
+        this.url.searchParams.append(column, `not.in.(${cleanedValues})`);
+        return this;
+      }
+      /**
+      * Only relevant for jsonb, array, and range columns. Match only rows where
+      * `column` contains every element appearing in `value`.
+      *
+      * @param column - The jsonb, array, or range column to filter on
+      * @param value - The jsonb, array, or range value to filter with
+      *
+      * @category Database
+      *
+      * @example On array columns
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('issues')
+      *   .select()
+      *   .contains('tags', ['is:open', 'priority:low'])
+      * ```
+      *
+      * @exampleSql On array columns
+      * ```sql
+      * create table
+      *   issues (
+      *     id int8 primary key,
+      *     title text,
+      *     tags text[]
+      *   );
+      *
+      * insert into
+      *   issues (id, title, tags)
+      * values
+      *   (1, 'Cache invalidation is not working', array['is:open', 'severity:high', 'priority:low']),
+      *   (2, 'Use better names', array['is:open', 'severity:low', 'priority:medium']);
+      * ```
+      *
+      * @exampleResponse On array columns
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "title": "Cache invalidation is not working"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription On range columns
+      * Postgres supports a number of [range
+      * types](https://www.postgresql.org/docs/current/rangetypes.html). You
+      * can filter on range columns using the string representation of range
+      * values.
+      *
+      * @example On range columns
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('reservations')
+      *   .select()
+      *   .contains('during', '[2000-01-01 13:00, 2000-01-01 13:30)')
+      * ```
+      *
+      * @exampleSql On range columns
+      * ```sql
+      * create table
+      *   reservations (
+      *     id int8 primary key,
+      *     room_name text,
+      *     during tsrange
+      *   );
+      *
+      * insert into
+      *   reservations (id, room_name, during)
+      * values
+      *   (1, 'Emerald', '[2000-01-01 13:00, 2000-01-01 15:00)'),
+      *   (2, 'Topaz', '[2000-01-02 09:00, 2000-01-02 10:00)');
+      * ```
+      *
+      * @exampleResponse On range columns
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "room_name": "Emerald",
+      *       "during": "[\"2000-01-01 13:00:00\",\"2000-01-01 15:00:00\")"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @example On `jsonb` columns
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('users')
+      *   .select('name')
+      *   .contains('address', { postcode: 90210 })
+      * ```
+      *
+      * @exampleSql On `jsonb` columns
+      * ```sql
+      * create table
+      *   users (
+      *     id int8 primary key,
+      *     name text,
+      *     address jsonb
+      *   );
+      *
+      * insert into
+      *   users (id, name, address)
+      * values
+      *   (1, 'Michael', '{ "postcode": 90210, "street": "Melrose Place" }'),
+      *   (2, 'Jane', '{}');
+      * ```
+      *
+      * @exampleResponse On `jsonb` columns
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "Michael"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      contains(column, value) {
+        if (typeof value === "string") this.url.searchParams.append(column, `cs.${value}`);
+        else if (Array.isArray(value)) this.url.searchParams.append(column, `cs.{${value.join(",")}}`);
+        else this.url.searchParams.append(column, `cs.${JSON.stringify(value)}`);
+        return this;
+      }
+      /**
+      * Only relevant for jsonb, array, and range columns. Match only rows where
+      * every element appearing in `column` is contained by `value`.
+      *
+      * @param column - The jsonb, array, or range column to filter on
+      * @param value - The jsonb, array, or range value to filter with
+      *
+      * @category Database
+      *
+      * @example On array columns
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('classes')
+      *   .select('name')
+      *   .containedBy('days', ['monday', 'tuesday', 'wednesday', 'friday'])
+      * ```
+      *
+      * @exampleSql On array columns
+      * ```sql
+      * create table
+      *   classes (
+      *     id int8 primary key,
+      *     name text,
+      *     days text[]
+      *   );
+      *
+      * insert into
+      *   classes (id, name, days)
+      * values
+      *   (1, 'Chemistry', array['monday', 'friday']),
+      *   (2, 'History', array['monday', 'wednesday', 'thursday']);
+      * ```
+      *
+      * @exampleResponse On array columns
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "Chemistry"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription On range columns
+      * Postgres supports a number of [range
+      * types](https://www.postgresql.org/docs/current/rangetypes.html). You
+      * can filter on range columns using the string representation of range
+      * values.
+      *
+      * @example On range columns
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('reservations')
+      *   .select()
+      *   .containedBy('during', '[2000-01-01 00:00, 2000-01-01 23:59)')
+      * ```
+      *
+      * @exampleSql On range columns
+      * ```sql
+      * create table
+      *   reservations (
+      *     id int8 primary key,
+      *     room_name text,
+      *     during tsrange
+      *   );
+      *
+      * insert into
+      *   reservations (id, room_name, during)
+      * values
+      *   (1, 'Emerald', '[2000-01-01 13:00, 2000-01-01 15:00)'),
+      *   (2, 'Topaz', '[2000-01-02 09:00, 2000-01-02 10:00)');
+      * ```
+      *
+      * @exampleResponse On range columns
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "room_name": "Emerald",
+      *       "during": "[\"2000-01-01 13:00:00\",\"2000-01-01 15:00:00\")"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @example On `jsonb` columns
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('users')
+      *   .select('name')
+      *   .containedBy('address', {})
+      * ```
+      *
+      * @exampleSql On `jsonb` columns
+      * ```sql
+      * create table
+      *   users (
+      *     id int8 primary key,
+      *     name text,
+      *     address jsonb
+      *   );
+      *
+      * insert into
+      *   users (id, name, address)
+      * values
+      *   (1, 'Michael', '{ "postcode": 90210, "street": "Melrose Place" }'),
+      *   (2, 'Jane', '{}');
+      * ```
+      *
+      * @exampleResponse On `jsonb` columns
+      * ```json
+      *   {
+      *     "data": [
+      *       {
+      *         "name": "Jane"
+      *       }
+      *     ],
+      *     "status": 200,
+      *     "statusText": "OK"
+      *   }
+      *
+      * ```
+      */
+      containedBy(column, value) {
+        if (typeof value === "string") this.url.searchParams.append(column, `cd.${value}`);
+        else if (Array.isArray(value)) this.url.searchParams.append(column, `cd.{${value.join(",")}}`);
+        else this.url.searchParams.append(column, `cd.${JSON.stringify(value)}`);
+        return this;
+      }
+      /**
+      * Only relevant for range columns. Match only rows where every element in
+      * `column` is greater than any element in `range`.
+      *
+      * @param column - The range column to filter on
+      * @param range - The range to filter with
+      *
+      * @category Database
+      *
+      * @exampleDescription With `select()`
+      * Postgres supports a number of [range
+      * types](https://www.postgresql.org/docs/current/rangetypes.html). You
+      * can filter on range columns using the string representation of range
+      * values.
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('reservations')
+      *   .select()
+      *   .rangeGt('during', '[2000-01-02 08:00, 2000-01-02 09:00)')
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   reservations (
+      *     id int8 primary key,
+      *     room_name text,
+      *     during tsrange
+      *   );
+      *
+      * insert into
+      *   reservations (id, room_name, during)
+      * values
+      *   (1, 'Emerald', '[2000-01-01 13:00, 2000-01-01 15:00)'),
+      *   (2, 'Topaz', '[2000-01-02 09:00, 2000-01-02 10:00)');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      *   {
+      *     "data": [
+      *       {
+      *         "id": 2,
+      *         "room_name": "Topaz",
+      *         "during": "[\"2000-01-02 09:00:00\",\"2000-01-02 10:00:00\")"
+      *       }
+      *     ],
+      *     "status": 200,
+      *     "statusText": "OK"
+      *   }
+      *
+      * ```
+      */
+      rangeGt(column, range2) {
+        this.url.searchParams.append(column, `sr.${range2}`);
+        return this;
+      }
+      /**
+      * Only relevant for range columns. Match only rows where every element in
+      * `column` is either contained in `range` or greater than any element in
+      * `range`.
+      *
+      * @param column - The range column to filter on
+      * @param range - The range to filter with
+      *
+      * @category Database
+      *
+      * @exampleDescription With `select()`
+      * Postgres supports a number of [range
+      * types](https://www.postgresql.org/docs/current/rangetypes.html). You
+      * can filter on range columns using the string representation of range
+      * values.
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('reservations')
+      *   .select()
+      *   .rangeGte('during', '[2000-01-02 08:30, 2000-01-02 09:30)')
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   reservations (
+      *     id int8 primary key,
+      *     room_name text,
+      *     during tsrange
+      *   );
+      *
+      * insert into
+      *   reservations (id, room_name, during)
+      * values
+      *   (1, 'Emerald', '[2000-01-01 13:00, 2000-01-01 15:00)'),
+      *   (2, 'Topaz', '[2000-01-02 09:00, 2000-01-02 10:00)');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      *   {
+      *     "data": [
+      *       {
+      *         "id": 2,
+      *         "room_name": "Topaz",
+      *         "during": "[\"2000-01-02 09:00:00\",\"2000-01-02 10:00:00\")"
+      *       }
+      *     ],
+      *     "status": 200,
+      *     "statusText": "OK"
+      *   }
+      *
+      * ```
+      */
+      rangeGte(column, range2) {
+        this.url.searchParams.append(column, `nxl.${range2}`);
+        return this;
+      }
+      /**
+      * Only relevant for range columns. Match only rows where every element in
+      * `column` is less than any element in `range`.
+      *
+      * @param column - The range column to filter on
+      * @param range - The range to filter with
+      *
+      * @category Database
+      *
+      * @exampleDescription With `select()`
+      * Postgres supports a number of [range
+      * types](https://www.postgresql.org/docs/current/rangetypes.html). You
+      * can filter on range columns using the string representation of range
+      * values.
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('reservations')
+      *   .select()
+      *   .rangeLt('during', '[2000-01-01 15:00, 2000-01-01 16:00)')
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   reservations (
+      *     id int8 primary key,
+      *     room_name text,
+      *     during tsrange
+      *   );
+      *
+      * insert into
+      *   reservations (id, room_name, during)
+      * values
+      *   (1, 'Emerald', '[2000-01-01 13:00, 2000-01-01 15:00)'),
+      *   (2, 'Topaz', '[2000-01-02 09:00, 2000-01-02 10:00)');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "room_name": "Emerald",
+      *       "during": "[\"2000-01-01 13:00:00\",\"2000-01-01 15:00:00\")"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      rangeLt(column, range2) {
+        this.url.searchParams.append(column, `sl.${range2}`);
+        return this;
+      }
+      /**
+      * Only relevant for range columns. Match only rows where every element in
+      * `column` is either contained in `range` or less than any element in
+      * `range`.
+      *
+      * @param column - The range column to filter on
+      * @param range - The range to filter with
+      *
+      * @category Database
+      *
+      * @exampleDescription With `select()`
+      * Postgres supports a number of [range
+      * types](https://www.postgresql.org/docs/current/rangetypes.html). You
+      * can filter on range columns using the string representation of range
+      * values.
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('reservations')
+      *   .select()
+      *   .rangeLte('during', '[2000-01-01 14:00, 2000-01-01 16:00)')
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   reservations (
+      *     id int8 primary key,
+      *     room_name text,
+      *     during tsrange
+      *   );
+      *
+      * insert into
+      *   reservations (id, room_name, during)
+      * values
+      *   (1, 'Emerald', '[2000-01-01 13:00, 2000-01-01 15:00)'),
+      *   (2, 'Topaz', '[2000-01-02 09:00, 2000-01-02 10:00)');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      *   {
+      *     "data": [
+      *       {
+      *         "id": 1,
+      *         "room_name": "Emerald",
+      *         "during": "[\"2000-01-01 13:00:00\",\"2000-01-01 15:00:00\")"
+      *       }
+      *     ],
+      *     "status": 200,
+      *     "statusText": "OK"
+      *   }
+      *
+      * ```
+      */
+      rangeLte(column, range2) {
+        this.url.searchParams.append(column, `nxr.${range2}`);
+        return this;
+      }
+      /**
+      * Only relevant for range columns. Match only rows where `column` is
+      * mutually exclusive to `range` and there can be no element between the two
+      * ranges.
+      *
+      * @param column - The range column to filter on
+      * @param range - The range to filter with
+      *
+      * @category Database
+      *
+      * @exampleDescription With `select()`
+      * Postgres supports a number of [range
+      * types](https://www.postgresql.org/docs/current/rangetypes.html). You
+      * can filter on range columns using the string representation of range
+      * values.
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('reservations')
+      *   .select()
+      *   .rangeAdjacent('during', '[2000-01-01 12:00, 2000-01-01 13:00)')
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   reservations (
+      *     id int8 primary key,
+      *     room_name text,
+      *     during tsrange
+      *   );
+      *
+      * insert into
+      *   reservations (id, room_name, during)
+      * values
+      *   (1, 'Emerald', '[2000-01-01 13:00, 2000-01-01 15:00)'),
+      *   (2, 'Topaz', '[2000-01-02 09:00, 2000-01-02 10:00)');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "room_name": "Emerald",
+      *       "during": "[\"2000-01-01 13:00:00\",\"2000-01-01 15:00:00\")"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      rangeAdjacent(column, range2) {
+        this.url.searchParams.append(column, `adj.${range2}`);
+        return this;
+      }
+      /**
+      * Only relevant for array and range columns. Match only rows where
+      * `column` and `value` have an element in common.
+      *
+      * @param column - The array or range column to filter on
+      * @param value - The array or range value to filter with
+      *
+      * @category Database
+      *
+      * @example On array columns
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('issues')
+      *   .select('title')
+      *   .overlaps('tags', ['is:closed', 'severity:high'])
+      * ```
+      *
+      * @exampleSql On array columns
+      * ```sql
+      * create table
+      *   issues (
+      *     id int8 primary key,
+      *     title text,
+      *     tags text[]
+      *   );
+      *
+      * insert into
+      *   issues (id, title, tags)
+      * values
+      *   (1, 'Cache invalidation is not working', array['is:open', 'severity:high', 'priority:low']),
+      *   (2, 'Use better names', array['is:open', 'severity:low', 'priority:medium']);
+      * ```
+      *
+      * @exampleResponse On array columns
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "title": "Cache invalidation is not working"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription On range columns
+      * Postgres supports a number of [range
+      * types](https://www.postgresql.org/docs/current/rangetypes.html). You
+      * can filter on range columns using the string representation of range
+      * values.
+      *
+      * @example On range columns
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('reservations')
+      *   .select()
+      *   .overlaps('during', '[2000-01-01 12:45, 2000-01-01 13:15)')
+      * ```
+      *
+      * @exampleSql On range columns
+      * ```sql
+      * create table
+      *   reservations (
+      *     id int8 primary key,
+      *     room_name text,
+      *     during tsrange
+      *   );
+      *
+      * insert into
+      *   reservations (id, room_name, during)
+      * values
+      *   (1, 'Emerald', '[2000-01-01 13:00, 2000-01-01 15:00)'),
+      *   (2, 'Topaz', '[2000-01-02 09:00, 2000-01-02 10:00)');
+      * ```
+      *
+      * @exampleResponse On range columns
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "room_name": "Emerald",
+      *       "during": "[\"2000-01-01 13:00:00\",\"2000-01-01 15:00:00\")"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      overlaps(column, value) {
+        if (typeof value === "string") this.url.searchParams.append(column, `ov.${value}`);
+        else this.url.searchParams.append(column, `ov.{${value.join(",")}}`);
+        return this;
+      }
+      /**
+      * Only relevant for text and tsvector columns. Match only rows where
+      * `column` matches the query string in `query`.
+      *
+      * @param column - The text or tsvector column to filter on
+      * @param query - The query text to match with
+      * @param options - Named parameters
+      * @param options.config - The text search configuration to use
+      * @param options.type - Change how the `query` text is interpreted
+      *
+      * @category Database
+      *
+      * @remarks
+      * - For more information, see [Postgres full text search](/docs/guides/database/full-text-search).
+      *
+      * @example Text search
+      * ```ts
+      * const result = await supabase
+      *   .from("texts")
+      *   .select("content")
+      *   .textSearch("content", `'eggs' & 'ham'`, {
+      *     config: "english",
+      *   });
+      * ```
+      *
+      * @exampleSql Text search
+      * ```sql
+      * create table texts (
+      *   id      bigint
+      *           primary key
+      *           generated always as identity,
+      *   content text
+      * );
+      *
+      * insert into texts (content) values
+      *     ('Four score and seven years ago'),
+      *     ('The road goes ever on and on'),
+      *     ('Green eggs and ham')
+      * ;
+      * ```
+      *
+      * @exampleResponse Text search
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "content": "Green eggs and ham"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription Basic normalization
+      * Uses PostgreSQL's `plainto_tsquery` function.
+      *
+      * @example Basic normalization
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('quotes')
+      *   .select('catchphrase')
+      *   .textSearch('catchphrase', `'fat' & 'cat'`, {
+      *     type: 'plain',
+      *     config: 'english'
+      *   })
+      * ```
+      *
+      * @exampleDescription Full normalization
+      * Uses PostgreSQL's `phraseto_tsquery` function.
+      *
+      * @example Full normalization
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('quotes')
+      *   .select('catchphrase')
+      *   .textSearch('catchphrase', `'fat' & 'cat'`, {
+      *     type: 'phrase',
+      *     config: 'english'
+      *   })
+      * ```
+      *
+      * @exampleDescription Websearch
+      * Uses PostgreSQL's `websearch_to_tsquery` function.
+      * This function will never raise syntax errors, which makes it possible to use raw user-supplied input for search, and can be used
+      * with advanced operators.
+      *
+      * - `unquoted text`: text not inside quote marks will be converted to terms separated by & operators, as if processed by plainto_tsquery.
+      * - `"quoted text"`: text inside quote marks will be converted to terms separated by `<->` operators, as if processed by phraseto_tsquery.
+      * - `OR`: the word “or” will be converted to the | operator.
+      * - `-`: a dash will be converted to the ! operator.
+      *
+      * @example Websearch
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('quotes')
+      *   .select('catchphrase')
+      *   .textSearch('catchphrase', `'fat or cat'`, {
+      *     type: 'websearch',
+      *     config: 'english'
+      *   })
+      * ```
+      */
+      textSearch(column, query, { config, type } = {}) {
+        let typePart = "";
+        if (type === "plain") typePart = "pl";
+        else if (type === "phrase") typePart = "ph";
+        else if (type === "websearch") typePart = "w";
+        const configPart = config === void 0 ? "" : `(${config})`;
+        this.url.searchParams.append(column, `${typePart}fts${configPart}.${query}`);
+        return this;
+      }
+      /**
+      * Match only rows where each column in `query` keys is equal to its
+      * associated value. Shorthand for multiple `.eq()`s.
+      *
+      * @param query - The object to filter with, with column names as keys mapped
+      * to their filter values
+      *
+      * @category Database
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select('name')
+      *   .match({ id: 2, name: 'Leia' })
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "Leia"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      match(query) {
+        Object.entries(query).filter(([_, value]) => value !== void 0).forEach(([column, value]) => {
+          this.url.searchParams.append(column, `eq.${value}`);
+        });
+        return this;
+      }
+      /**
+      * Match only rows which doesn't satisfy the filter.
+      *
+      * Unlike most filters, `opearator` and `value` are used as-is and need to
+      * follow [PostgREST
+      * syntax](https://postgrest.org/en/stable/api.html#operators). You also need
+      * to make sure they are properly sanitized.
+      *
+      * @param column - The column to filter on
+      * @param operator - The operator to be negated to filter with, following
+      * PostgREST syntax
+      * @param value - The value to filter with, following PostgREST syntax
+      *
+      * @category Database
+      *
+      * @remarks
+      * not() expects you to use the raw PostgREST syntax for the filter values.
+      *
+      * ```ts
+      * .not('id', 'in', '(5,6,7)')  // Use `()` for `in` filter
+      * .not('arraycol', 'cs', '{"a","b"}')  // Use `cs` for `contains()`, `{}` for array values
+      * ```
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('countries')
+      *   .select()
+      *   .not('name', 'is', null)
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   countries (id int8 primary key, name text);
+      *
+      * insert into
+      *   countries (id, name)
+      * values
+      *   (1, 'null'),
+      *   (2, null);
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      *   {
+      *     "data": [
+      *       {
+      *         "id": 1,
+      *         "name": "null"
+      *       }
+      *     ],
+      *     "status": 200,
+      *     "statusText": "OK"
+      *   }
+      *
+      * ```
+      */
+      not(column, operator, value) {
+        this.url.searchParams.append(column, `not.${operator}.${value}`);
+        return this;
+      }
+      /**
+      * Match only rows which satisfy at least one of the filters.
+      *
+      * Unlike most filters, `filters` is used as-is and needs to follow [PostgREST
+      * syntax](https://postgrest.org/en/stable/api.html#operators). You also need
+      * to make sure it's properly sanitized.
+      *
+      * It's currently not possible to do an `.or()` filter across multiple tables.
+      *
+      * @param filters - The filters to use, following PostgREST syntax
+      * @param options - Named parameters
+      * @param options.referencedTable - Set this to filter on referenced tables
+      * instead of the parent table
+      * @param options.foreignTable - Deprecated, use `referencedTable` instead
+      *
+      * @category Database
+      *
+      * @remarks
+      * or() expects you to use the raw PostgREST syntax for the filter names and values.
+      *
+      * ```ts
+      * .or('id.in.(5,6,7), arraycol.cs.{"a","b"}')  // Use `()` for `in` filter, `{}` for array values and `cs` for `contains()`.
+      * .or('id.in.(5,6,7), arraycol.cd.{"a","b"}')  // Use `cd` for `containedBy()`
+      * ```
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select('name')
+      *   .or('id.eq.2,name.eq.Han')
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "Leia"
+      *     },
+      *     {
+      *       "name": "Han"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @example Use `or` with `and`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select('name')
+      *   .or('id.gt.3,and(id.eq.1,name.eq.Luke)')
+      * ```
+      *
+      * @exampleSql Use `or` with `and`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse Use `or` with `and`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "Luke"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @example Use `or` on referenced tables
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('orchestral_sections')
+      *   .select(`
+      *     name,
+      *     instruments!inner (
+      *       name
+      *     )
+      *   `)
+      *   .or('section_id.eq.1,name.eq.guzheng', { referencedTable: 'instruments' })
+      * ```
+      *
+      * @exampleSql Use `or` on referenced tables
+      * ```sql
+      * create table
+      *   orchestral_sections (id int8 primary key, name text);
+      * create table
+      *   instruments (
+      *     id int8 primary key,
+      *     section_id int8 not null references orchestral_sections,
+      *     name text
+      *   );
+      *
+      * insert into
+      *   orchestral_sections (id, name)
+      * values
+      *   (1, 'strings'),
+      *   (2, 'woodwinds');
+      * insert into
+      *   instruments (id, section_id, name)
+      * values
+      *   (1, 2, 'flute'),
+      *   (2, 1, 'violin');
+      * ```
+      *
+      * @exampleResponse Use `or` on referenced tables
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "strings",
+      *       "instruments": [
+      *         {
+      *           "name": "violin"
+      *         }
+      *       ]
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      or(filters2, { foreignTable, referencedTable = foreignTable } = {}) {
+        const key = referencedTable ? `${referencedTable}.or` : "or";
+        this.url.searchParams.append(key, `(${filters2})`);
+        return this;
+      }
+      /**
+      * Match only rows which satisfy the filter. This is an escape hatch - you
+      * should use the specific filter methods wherever possible.
+      *
+      * Unlike most filters, `opearator` and `value` are used as-is and need to
+      * follow [PostgREST
+      * syntax](https://postgrest.org/en/stable/api.html#operators). You also need
+      * to make sure they are properly sanitized.
+      *
+      * @param column - The column to filter on
+      * @param operator - The operator to filter with, following PostgREST syntax
+      * @param value - The value to filter with, following PostgREST syntax
+      *
+      * @category Database
+      *
+      * @remarks
+      * filter() expects you to use the raw PostgREST syntax for the filter values.
+      *
+      * ```ts
+      * .filter('id', 'in', '(5,6,7)')  // Use `()` for `in` filter
+      * .filter('arraycol', 'cs', '{"a","b"}')  // Use `cs` for `contains()`, `{}` for array values
+      * ```
+      *
+      * @example With `select()`
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      *   .filter('name', 'in', '("Han","Yoda")')
+      * ```
+      *
+      * @exampleSql With `select()`
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse With `select()`
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 3,
+      *       "name": "Han"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @example On a referenced table
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('orchestral_sections')
+      *   .select(`
+      *     name,
+      *     instruments!inner (
+      *       name
+      *     )
+      *   `)
+      *   .filter('instruments.name', 'eq', 'flute')
+      * ```
+      *
+      * @exampleSql On a referenced table
+      * ```sql
+      * create table
+      *   orchestral_sections (id int8 primary key, name text);
+      * create table
+      *    instruments (
+      *     id int8 primary key,
+      *     section_id int8 not null references orchestral_sections,
+      *     name text
+      *   );
+      *
+      * insert into
+      *   orchestral_sections (id, name)
+      * values
+      *   (1, 'strings'),
+      *   (2, 'woodwinds');
+      * insert into
+      *   instruments (id, section_id, name)
+      * values
+      *   (1, 2, 'flute'),
+      *   (2, 1, 'violin');
+      * ```
+      *
+      * @exampleResponse On a referenced table
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "woodwinds",
+      *       "instruments": [
+      *         {
+      *           "name": "flute"
+      *         }
+      *       ]
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      filter(column, operator, value) {
+        this.url.searchParams.append(column, `${operator}.${value}`);
+        return this;
+      }
+    };
+    var PostgrestQueryBuilder2 = class {
+      /**
+      * Creates a query builder scoped to a Postgres table or view.
+      *
+      * @example
+      * ```ts
+      * import { PostgrestQueryBuilder } from '@supabase/postgrest-js'
+      *
+      * const query = new PostgrestQueryBuilder(
+      *   new URL('https://xyzcompany.supabase.co/rest/v1/users'),
+      *   { headers: { apikey: 'public-anon-key' } }
+      * )
+      * ```
+      *
+      * @category Database
+      *
+      * @example Example 1
+      * ```ts
+      * import { PostgrestQueryBuilder } from '@supabase/postgrest-js'
+      *
+      * const query = new PostgrestQueryBuilder(
+      *   new URL('https://xyzcompany.supabase.co/rest/v1/users'),
+      *   { headers: { apikey: 'public-anon-key' } }
+      * )
+      * ```
+      */
+      constructor(url, { headers = {}, schema, fetch: fetch$1, urlLengthLimit = 8e3 }) {
+        this.url = url;
+        this.headers = new Headers(headers);
+        this.schema = schema;
+        this.fetch = fetch$1;
+        this.urlLengthLimit = urlLengthLimit;
+      }
+      /**
+      * Clone URL and headers to prevent shared state between operations.
+      */
+      cloneRequestState() {
+        return {
+          url: new URL(this.url.toString()),
+          headers: new Headers(this.headers)
+        };
+      }
+      /**
+      * Perform a SELECT query on the table or view.
+      *
+      * @param columns - The columns to retrieve, separated by commas. Columns can be renamed when returned with `customName:columnName`
+      *
+      * @param options - Named parameters
+      *
+      * @param options.head - When set to `true`, `data` will not be returned.
+      * Useful if you only need the count.
+      *
+      * @param options.count - Count algorithm to use to count rows in the table or view.
+      *
+      * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
+      * hood.
+      *
+      * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
+      * statistics under the hood.
+      *
+      * `"estimated"`: Uses exact count for low numbers and planned count for high
+      * numbers.
+      *
+      * @remarks
+      * When using `count` with `.range()` or `.limit()`, the returned `count` is the total number of rows
+      * that match your filters, not the number of rows in the current page. Use this to build pagination UI.
+      
+      * - By default, Supabase projects return a maximum of 1,000 rows. This setting can be changed in your project's [API settings](/dashboard/project/_/settings/api). It's recommended that you keep it low to limit the payload size of accidental or malicious requests. You can use `range()` queries to paginate through your data.
+      * - `select()` can be combined with [Filters](/docs/reference/javascript/using-filters)
+      * - `select()` can be combined with [Modifiers](/docs/reference/javascript/using-modifiers)
+      * - `apikey` is a reserved keyword if you're using the [Supabase Platform](/docs/guides/platform) and [should be avoided as a column name](https://github.com/supabase/supabase/issues/5465). *
+      * @category Database
+      *
+      * @example Getting your data
+      * ```js
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select()
+      * ```
+      *
+      * @exampleSql Getting your data
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Harry'),
+      *   (2, 'Frodo'),
+      *   (3, 'Katniss');
+      * ```
+      *
+      * @exampleResponse Getting your data
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "name": "Harry"
+      *     },
+      *     {
+      *       "id": 2,
+      *       "name": "Frodo"
+      *     },
+      *     {
+      *       "id": 3,
+      *       "name": "Katniss"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @example Selecting specific columns
+      * ```js
+      * const { data, error } = await supabase
+      *   .from('characters')
+      *   .select('name')
+      * ```
+      *
+      * @exampleSql Selecting specific columns
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Frodo'),
+      *   (2, 'Harry'),
+      *   (3, 'Katniss');
+      * ```
+      *
+      * @exampleResponse Selecting specific columns
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "Frodo"
+      *     },
+      *     {
+      *       "name": "Harry"
+      *     },
+      *     {
+      *       "name": "Katniss"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription Query referenced tables
+      * If your database has foreign key relationships, you can query related tables too.
+      *
+      * @example Query referenced tables
+      * ```js
+      * const { data, error } = await supabase
+      *   .from('orchestral_sections')
+      *   .select(`
+      *     name,
+      *     instruments (
+      *       name
+      *     )
+      *   `)
+      * ```
+      *
+      * @exampleSql Query referenced tables
+      * ```sql
+      * create table
+      *   orchestral_sections (id int8 primary key, name text);
+      * create table
+      *   instruments (
+      *     id int8 primary key,
+      *     section_id int8 not null references orchestral_sections,
+      *     name text
+      *   );
+      *
+      * insert into
+      *   orchestral_sections (id, name)
+      * values
+      *   (1, 'strings'),
+      *   (2, 'woodwinds');
+      * insert into
+      *   instruments (id, section_id, name)
+      * values
+      *   (1, 2, 'flute'),
+      *   (2, 1, 'violin');
+      * ```
+      *
+      * @exampleResponse Query referenced tables
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "strings",
+      *       "instruments": [
+      *         {
+      *           "name": "violin"
+      *         }
+      *       ]
+      *     },
+      *     {
+      *       "name": "woodwinds",
+      *       "instruments": [
+      *         {
+      *           "name": "flute"
+      *         }
+      *       ]
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription Query referenced tables with spaces in their names
+      * If your table name contains spaces, you must use double quotes in the `select` statement to reference the table.
+      *
+      * @example Query referenced tables with spaces in their names
+      * ```js
+      * const { data, error } = await supabase
+      *   .from('orchestral sections')
+      *   .select(`
+      *     name,
+      *     "musical instruments" (
+      *       name
+      *     )
+      *   `)
+      * ```
+      *
+      * @exampleSql Query referenced tables with spaces in their names
+      * ```sql
+      * create table
+      *   "orchestral sections" (id int8 primary key, name text);
+      * create table
+      *   "musical instruments" (
+      *     id int8 primary key,
+      *     section_id int8 not null references "orchestral sections",
+      *     name text
+      *   );
+      *
+      * insert into
+      *   "orchestral sections" (id, name)
+      * values
+      *   (1, 'strings'),
+      *   (2, 'woodwinds');
+      * insert into
+      *   "musical instruments" (id, section_id, name)
+      * values
+      *   (1, 2, 'flute'),
+      *   (2, 1, 'violin');
+      * ```
+      *
+      * @exampleResponse Query referenced tables with spaces in their names
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "strings",
+      *       "musical instruments": [
+      *         {
+      *           "name": "violin"
+      *         }
+      *       ]
+      *     },
+      *     {
+      *       "name": "woodwinds",
+      *       "musical instruments": [
+      *         {
+      *           "name": "flute"
+      *         }
+      *       ]
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription Query referenced tables through a join table
+      * If you're in a situation where your tables are **NOT** directly
+      * related, but instead are joined by a _join table_, you can still use
+      * the `select()` method to query the related data. The join table needs
+      * to have the foreign keys as part of its composite primary key.
+      *
+      * @example Query referenced tables through a join table
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('users')
+      *   .select(`
+      *     name,
+      *     teams (
+      *       name
+      *     )
+      *   `)
+      *   
+      * ```
+      *
+      * @exampleSql Query referenced tables through a join table
+      * ```sql
+      * create table
+      *   users (
+      *     id int8 primary key,
+      *     name text
+      *   );
+      * create table
+      *   teams (
+      *     id int8 primary key,
+      *     name text
+      *   );
+      * -- join table
+      * create table
+      *   users_teams (
+      *     user_id int8 not null references users,
+      *     team_id int8 not null references teams,
+      *     -- both foreign keys must be part of a composite primary key
+      *     primary key (user_id, team_id)
+      *   );
+      *
+      * insert into
+      *   users (id, name)
+      * values
+      *   (1, 'Kiran'),
+      *   (2, 'Evan');
+      * insert into
+      *   teams (id, name)
+      * values
+      *   (1, 'Green'),
+      *   (2, 'Blue');
+      * insert into
+      *   users_teams (user_id, team_id)
+      * values
+      *   (1, 1),
+      *   (1, 2),
+      *   (2, 2);
+      * ```
+      *
+      * @exampleResponse Query referenced tables through a join table
+      * ```json
+      *   {
+      *     "data": [
+      *       {
+      *         "name": "Kiran",
+      *         "teams": [
+      *           {
+      *             "name": "Green"
+      *           },
+      *           {
+      *             "name": "Blue"
+      *           }
+      *         ]
+      *       },
+      *       {
+      *         "name": "Evan",
+      *         "teams": [
+      *           {
+      *             "name": "Blue"
+      *           }
+      *         ]
+      *       }
+      *     ],
+      *     "status": 200,
+      *     "statusText": "OK"
+      *   }
+      *   
+      * ```
+      *
+      * @exampleDescription Query the same referenced table multiple times
+      * If you need to query the same referenced table twice, use the name of the
+      * joined column to identify which join to use. You can also give each
+      * column an alias.
+      *
+      * @example Query the same referenced table multiple times
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('messages')
+      *   .select(`
+      *     content,
+      *     from:sender_id(name),
+      *     to:receiver_id(name)
+      *   `)
+      *
+      * // To infer types, use the name of the table (in this case `users`) and
+      * // the name of the foreign key constraint.
+      * const { data, error } = await supabase
+      *   .from('messages')
+      *   .select(`
+      *     content,
+      *     from:users!messages_sender_id_fkey(name),
+      *     to:users!messages_receiver_id_fkey(name)
+      *   `)
+      * ```
+      *
+      * @exampleSql Query the same referenced table multiple times
+      * ```sql
+      *  create table
+      *  users (id int8 primary key, name text);
+      *
+      *  create table
+      *    messages (
+      *      sender_id int8 not null references users,
+      *      receiver_id int8 not null references users,
+      *      content text
+      *    );
+      *
+      *  insert into
+      *    users (id, name)
+      *  values
+      *    (1, 'Kiran'),
+      *    (2, 'Evan');
+      *
+      *  insert into
+      *    messages (sender_id, receiver_id, content)
+      *  values
+      *    (1, 2, '👋');
+      *  ```
+      * ```
+      *
+      * @exampleResponse Query the same referenced table multiple times
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "content": "👋",
+      *       "from": {
+      *         "name": "Kiran"
+      *       },
+      *       "to": {
+      *         "name": "Evan"
+      *       }
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription Query nested foreign tables through a join table
+      * You can use the result of a joined table to gather data in
+      * another foreign table. With multiple references to the same foreign
+      * table you must specify the column on which to conduct the join.
+      *
+      * @example Query nested foreign tables through a join table
+      * ```ts
+      *   const { data, error } = await supabase
+      *     .from('games')
+      *     .select(`
+      *       game_id:id,
+      *       away_team:teams!games_away_team_fkey (
+      *         users (
+      *           id,
+      *           name
+      *         )
+      *       )
+      *     `)
+      *   
+      * ```
+      *
+      * @exampleSql Query nested foreign tables through a join table
+      * ```sql
+      * ```sql
+      * create table
+      *   users (
+      *     id int8 primary key,
+      *     name text
+      *   );
+      * create table
+      *   teams (
+      *     id int8 primary key,
+      *     name text
+      *   );
+      * -- join table
+      * create table
+      *   users_teams (
+      *     user_id int8 not null references users,
+      *     team_id int8 not null references teams,
+      *
+      *     primary key (user_id, team_id)
+      *   );
+      * create table
+      *   games (
+      *     id int8 primary key,
+      *     home_team int8 not null references teams,
+      *     away_team int8 not null references teams,
+      *     name text
+      *   );
+      *
+      * insert into users (id, name)
+      * values
+      *   (1, 'Kiran'),
+      *   (2, 'Evan');
+      * insert into
+      *   teams (id, name)
+      * values
+      *   (1, 'Green'),
+      *   (2, 'Blue');
+      * insert into
+      *   users_teams (user_id, team_id)
+      * values
+      *   (1, 1),
+      *   (1, 2),
+      *   (2, 2);
+      * insert into
+      *   games (id, home_team, away_team, name)
+      * values
+      *   (1, 1, 2, 'Green vs Blue'),
+      *   (2, 2, 1, 'Blue vs Green');
+      * ```
+      *
+      * @exampleResponse Query nested foreign tables through a join table
+      * ```json
+      *   {
+      *     "data": [
+      *       {
+      *         "game_id": 1,
+      *         "away_team": {
+      *           "users": [
+      *             {
+      *               "id": 1,
+      *               "name": "Kiran"
+      *             },
+      *             {
+      *               "id": 2,
+      *               "name": "Evan"
+      *             }
+      *           ]
+      *         }
+      *       },
+      *       {
+      *         "game_id": 2,
+      *         "away_team": {
+      *           "users": [
+      *             {
+      *               "id": 1,
+      *               "name": "Kiran"
+      *             }
+      *           ]
+      *         }
+      *       }
+      *     ],
+      *     "status": 200,
+      *     "statusText": "OK"
+      *   }
+      *   
+      * ```
+      *
+      * @exampleDescription Filtering through referenced tables
+      * If the filter on a referenced table's column is not satisfied, the referenced
+      * table returns `[]` or `null` but the parent table is not filtered out.
+      * If you want to filter out the parent table rows, use the `!inner` hint
+      *
+      * @example Filtering through referenced tables
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('instruments')
+      *   .select('name, orchestral_sections(*)')
+      *   .eq('orchestral_sections.name', 'percussion')
+      * ```
+      *
+      * @exampleSql Filtering through referenced tables
+      * ```sql
+      * create table
+      *   orchestral_sections (id int8 primary key, name text);
+      * create table
+      *   instruments (
+      *     id int8 primary key,
+      *     section_id int8 not null references orchestral_sections,
+      *     name text
+      *   );
+      *
+      * insert into
+      *   orchestral_sections (id, name)
+      * values
+      *   (1, 'strings'),
+      *   (2, 'woodwinds');
+      * insert into
+      *   instruments (id, section_id, name)
+      * values
+      *   (1, 2, 'flute'),
+      *   (2, 1, 'violin');
+      * ```
+      *
+      * @exampleResponse Filtering through referenced tables
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "flute",
+      *       "orchestral_sections": null
+      *     },
+      *     {
+      *       "name": "violin",
+      *       "orchestral_sections": null
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription Querying referenced table with count
+      * You can get the number of rows in a related table by using the
+      * **count** property.
+      *
+      * @example Querying referenced table with count
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('orchestral_sections')
+      *   .select(`*, instruments(count)`)
+      * ```
+      *
+      * @exampleSql Querying referenced table with count
+      * ```sql
+      * create table orchestral_sections (
+      *   "id" "uuid" primary key default "extensions"."uuid_generate_v4"() not null,
+      *   "name" text
+      * );
+      *
+      * create table characters (
+      *   "id" "uuid" primary key default "extensions"."uuid_generate_v4"() not null,
+      *   "name" text,
+      *   "section_id" "uuid" references public.orchestral_sections on delete cascade
+      * );
+      *
+      * with section as (
+      *   insert into orchestral_sections (name)
+      *   values ('strings') returning id
+      * )
+      * insert into instruments (name, section_id) values
+      * ('violin', (select id from section)),
+      * ('viola', (select id from section)),
+      * ('cello', (select id from section)),
+      * ('double bass', (select id from section));
+      * ```
+      *
+      * @exampleResponse Querying referenced table with count
+      * ```json
+      * [
+      *   {
+      *     "id": "693694e7-d993-4360-a6d7-6294e325d9b6",
+      *     "name": "strings",
+      *     "instruments": [
+      *       {
+      *         "count": 4
+      *       }
+      *     ]
+      *   }
+      * ]
+      * ```
+      *
+      * @exampleDescription Querying with count option
+      * You can get the number of rows by using the
+      * [count](/docs/reference/javascript/select#parameters) option.
+      *
+      * @example Querying with count option
+      * ```ts
+      * const { count, error } = await supabase
+      *   .from('characters')
+      *   .select('*', { count: 'exact', head: true })
+      * ```
+      *
+      * @exampleSql Querying with count option
+      * ```sql
+      * create table
+      *   characters (id int8 primary key, name text);
+      *
+      * insert into
+      *   characters (id, name)
+      * values
+      *   (1, 'Luke'),
+      *   (2, 'Leia'),
+      *   (3, 'Han');
+      * ```
+      *
+      * @exampleResponse Querying with count option
+      * ```json
+      * {
+      *   "count": 3,
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription Querying JSON data
+      * You can select and filter data inside of
+      * [JSON](/docs/guides/database/json) columns. Postgres offers some
+      * [operators](/docs/guides/database/json#query-the-jsonb-data) for
+      * querying JSON data.
+      *
+      * @example Querying JSON data
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('users')
+      *   .select(`
+      *     id, name,
+      *     address->city
+      *   `)
+      * ```
+      *
+      * @exampleSql Querying JSON data
+      * ```sql
+      * create table
+      *   users (
+      *     id int8 primary key,
+      *     name text,
+      *     address jsonb
+      *   );
+      *
+      * insert into
+      *   users (id, name, address)
+      * values
+      *   (1, 'Frodo', '{"city":"Hobbiton"}');
+      * ```
+      *
+      * @exampleResponse Querying JSON data
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "name": "Frodo",
+      *       "city": "Hobbiton"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription Querying referenced table with inner join
+      * If you don't want to return the referenced table contents, you can leave the parenthesis empty.
+      * Like `.select('name, orchestral_sections!inner()')`.
+      *
+      * @example Querying referenced table with inner join
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('instruments')
+      *   .select('name, orchestral_sections!inner(name)')
+      *   .eq('orchestral_sections.name', 'woodwinds')
+      *   .limit(1)
+      * ```
+      *
+      * @exampleSql Querying referenced table with inner join
+      * ```sql
+      * create table orchestral_sections (
+      *   "id" "uuid" primary key default "extensions"."uuid_generate_v4"() not null,
+      *   "name" text
+      * );
+      *
+      * create table instruments (
+      *   "id" "uuid" primary key default "extensions"."uuid_generate_v4"() not null,
+      *   "name" text,
+      *   "section_id" "uuid" references public.orchestral_sections on delete cascade
+      * );
+      *
+      * with section as (
+      *   insert into orchestral_sections (name)
+      *   values ('woodwinds') returning id
+      * )
+      * insert into instruments (name, section_id) values
+      * ('flute', (select id from section)),
+      * ('clarinet', (select id from section)),
+      * ('bassoon', (select id from section)),
+      * ('piccolo', (select id from section));
+      * ```
+      *
+      * @exampleResponse Querying referenced table with inner join
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "name": "flute",
+      *       "orchestral_sections": {"name": "woodwinds"}
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription Switching schemas per query
+      * In addition to setting the schema during initialization, you can also switch schemas on a per-query basis.
+      * Make sure you've set up your [database privileges and API settings](/docs/guides/api/using-custom-schemas).
+      *
+      * @example Switching schemas per query
+      * ```ts
+      * const { data, error } = await supabase
+      *   .schema('myschema')
+      *   .from('mytable')
+      *   .select()
+      * ```
+      *
+      * @exampleSql Switching schemas per query
+      * ```sql
+      * create schema myschema;
+      *
+      * create table myschema.mytable (
+      *   id uuid primary key default gen_random_uuid(),
+      *   data text
+      * );
+      *
+      * insert into myschema.mytable (data) values ('mydata');
+      * ```
+      *
+      * @exampleResponse Switching schemas per query
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": "4162e008-27b0-4c0f-82dc-ccaeee9a624d",
+      *       "data": "mydata"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      select(columns, options) {
+        const { head: head2 = false, count } = options !== null && options !== void 0 ? options : {};
+        const method = head2 ? "HEAD" : "GET";
+        let quoted = false;
+        const cleanedColumns = (columns !== null && columns !== void 0 ? columns : "*").split("").map((c) => {
+          if (/\s/.test(c) && !quoted) return "";
+          if (c === '"') quoted = !quoted;
+          return c;
+        }).join("");
+        const { url, headers } = this.cloneRequestState();
+        url.searchParams.set("select", cleanedColumns);
+        if (count) headers.append("Prefer", `count=${count}`);
+        return new PostgrestFilterBuilder2({
+          method,
+          url,
+          headers,
+          schema: this.schema,
+          fetch: this.fetch,
+          urlLengthLimit: this.urlLengthLimit
+        });
+      }
+      /**
+      * Perform an INSERT into the table or view.
+      *
+      * By default, inserted rows are not returned. To return it, chain the call
+      * with `.select()`.
+      *
+      * @param values - The values to insert. Pass an object to insert a single row
+      * or an array to insert multiple rows.
+      *
+      * @param options - Named parameters
+      *
+      * @param options.count - Count algorithm to use to count inserted rows.
+      *
+      * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
+      * hood.
+      *
+      * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
+      * statistics under the hood.
+      *
+      * `"estimated"`: Uses exact count for low numbers and planned count for high
+      * numbers.
+      *
+      * @param options.defaultToNull - Make missing fields default to `null`.
+      * Otherwise, use the default value for the column. Only applies for bulk
+      * inserts.
+      *
+      * @category Database
+      *
+      * @example Create a record
+      * ```ts
+      * const { error } = await supabase
+      *   .from('countries')
+      *   .insert({ id: 1, name: 'Mordor' })
+      * ```
+      *
+      * @exampleSql Create a record
+      * ```sql
+      * create table
+      *   countries (id int8 primary key, name text);
+      * ```
+      *
+      * @exampleResponse Create a record
+      * ```json
+      * {
+      *   "status": 201,
+      *   "statusText": "Created"
+      * }
+      * ```
+      *
+      * @example Create a record and return it
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('countries')
+      *   .insert({ id: 1, name: 'Mordor' })
+      *   .select()
+      * ```
+      *
+      * @exampleSql Create a record and return it
+      * ```sql
+      * create table
+      *   countries (id int8 primary key, name text);
+      * ```
+      *
+      * @exampleResponse Create a record and return it
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "name": "Mordor"
+      *     }
+      *   ],
+      *   "status": 201,
+      *   "statusText": "Created"
+      * }
+      * ```
+      *
+      * @exampleDescription Bulk create
+      * A bulk create operation is handled in a single transaction.
+      * If any of the inserts fail, none of the rows are inserted.
+      *
+      * @example Bulk create
+      * ```ts
+      * const { error } = await supabase
+      *   .from('countries')
+      *   .insert([
+      *     { id: 1, name: 'Mordor' },
+      *     { id: 1, name: 'The Shire' },
+      *   ])
+      * ```
+      *
+      * @exampleSql Bulk create
+      * ```sql
+      * create table
+      *   countries (id int8 primary key, name text);
+      * ```
+      *
+      * @exampleResponse Bulk create
+      * ```json
+      * {
+      *   "error": {
+      *     "code": "23505",
+      *     "details": "Key (id)=(1) already exists.",
+      *     "hint": null,
+      *     "message": "duplicate key value violates unique constraint \"countries_pkey\""
+      *   },
+      *   "status": 409,
+      *   "statusText": "Conflict"
+      * }
+      * ```
+      */
+      insert(values, { count, defaultToNull = true } = {}) {
+        var _this$fetch;
+        const method = "POST";
+        const { url, headers } = this.cloneRequestState();
+        if (count) headers.append("Prefer", `count=${count}`);
+        if (!defaultToNull) headers.append("Prefer", `missing=default`);
+        if (Array.isArray(values)) {
+          const columns = values.reduce((acc, x2) => acc.concat(Object.keys(x2)), []);
+          if (columns.length > 0) {
+            const uniqueColumns = [...new Set(columns)].map((column) => `"${column}"`);
+            url.searchParams.set("columns", uniqueColumns.join(","));
+          }
+        }
+        return new PostgrestFilterBuilder2({
+          method,
+          url,
+          headers,
+          schema: this.schema,
+          body: values,
+          fetch: (_this$fetch = this.fetch) !== null && _this$fetch !== void 0 ? _this$fetch : fetch,
+          urlLengthLimit: this.urlLengthLimit
+        });
+      }
+      /**
+      * Perform an UPSERT on the table or view. Depending on the column(s) passed
+      * to `onConflict`, `.upsert()` allows you to perform the equivalent of
+      * `.insert()` if a row with the corresponding `onConflict` columns doesn't
+      * exist, or if it does exist, perform an alternative action depending on
+      * `ignoreDuplicates`.
+      *
+      * By default, upserted rows are not returned. To return it, chain the call
+      * with `.select()`.
+      *
+      * @param values - The values to upsert with. Pass an object to upsert a
+      * single row or an array to upsert multiple rows.
+      *
+      * @param options - Named parameters
+      *
+      * @param options.onConflict - Comma-separated UNIQUE column(s) to specify how
+      * duplicate rows are determined. Two rows are duplicates if all the
+      * `onConflict` columns are equal.
+      *
+      * @param options.ignoreDuplicates - If `true`, duplicate rows are ignored. If
+      * `false`, duplicate rows are merged with existing rows.
+      *
+      * @param options.count - Count algorithm to use to count upserted rows.
+      *
+      * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
+      * hood.
+      *
+      * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
+      * statistics under the hood.
+      *
+      * `"estimated"`: Uses exact count for low numbers and planned count for high
+      * numbers.
+      *
+      * @param options.defaultToNull - Make missing fields default to `null`.
+      * Otherwise, use the default value for the column. This only applies when
+      * inserting new rows, not when merging with existing rows under
+      * `ignoreDuplicates: false`. This also only applies when doing bulk upserts.
+      *
+      * @example Upsert a single row using a unique key
+      * ```ts
+      * // Upserting a single row, overwriting based on the 'username' unique column
+      * const { data, error } = await supabase
+      *   .from('users')
+      *   .upsert({ username: 'supabot' }, { onConflict: 'username' })
+      *
+      * // Example response:
+      * // {
+      * //   data: [
+      * //     { id: 4, message: 'bar', username: 'supabot' }
+      * //   ],
+      * //   error: null
+      * // }
+      * ```
+      *
+      * @example Upsert with conflict resolution and exact row counting
+      * ```ts
+      * // Upserting and returning exact count
+      * const { data, error, count } = await supabase
+      *   .from('users')
+      *   .upsert(
+      *     {
+      *       id: 3,
+      *       message: 'foo',
+      *       username: 'supabot'
+      *     },
+      *     {
+      *       onConflict: 'username',
+      *       count: 'exact'
+      *     }
+      *   )
+      *
+      * // Example response:
+      * // {
+      * //   data: [
+      * //     {
+      * //       id: 42,
+      * //       handle: "saoirse",
+      * //       display_name: "Saoirse"
+      * //     }
+      * //   ],
+      * //   count: 1,
+      * //   error: null
+      * // }
+      * ```
+      *
+      * @category Database
+      *
+      * @remarks
+      * - Primary keys must be included in `values` to use upsert.
+      *
+      * @example Upsert your data
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('instruments')
+      *   .upsert({ id: 1, name: 'piano' })
+      *   .select()
+      * ```
+      *
+      * @exampleSql Upsert your data
+      * ```sql
+      * create table
+      *   instruments (id int8 primary key, name text);
+      *
+      * insert into
+      *   instruments (id, name)
+      * values
+      *   (1, 'harpsichord');
+      * ```
+      *
+      * @exampleResponse Upsert your data
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "name": "piano"
+      *     }
+      *   ],
+      *   "status": 201,
+      *   "statusText": "Created"
+      * }
+      * ```
+      *
+      * @example Bulk Upsert your data
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('instruments')
+      *   .upsert([
+      *     { id: 1, name: 'piano' },
+      *     { id: 2, name: 'harp' },
+      *   ])
+      *   .select()
+      * ```
+      *
+      * @exampleSql Bulk Upsert your data
+      * ```sql
+      * create table
+      *   instruments (id int8 primary key, name text);
+      *
+      * insert into
+      *   instruments (id, name)
+      * values
+      *   (1, 'harpsichord');
+      * ```
+      *
+      * @exampleResponse Bulk Upsert your data
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "name": "piano"
+      *     },
+      *     {
+      *       "id": 2,
+      *       "name": "harp"
+      *     }
+      *   ],
+      *   "status": 201,
+      *   "statusText": "Created"
+      * }
+      * ```
+      *
+      * @exampleDescription Upserting into tables with constraints
+      * In the following query, `upsert()` implicitly uses the `id`
+      * (primary key) column to determine conflicts. If there is no existing
+      * row with the same `id`, `upsert()` inserts a new row, which
+      * will fail in this case as there is already a row with `handle` `"saoirse"`.
+      * Using the `onConflict` option, you can instruct `upsert()` to use
+      * another column with a unique constraint to determine conflicts.
+      *
+      * @example Upserting into tables with constraints
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('users')
+      *   .upsert({ id: 42, handle: 'saoirse', display_name: 'Saoirse' })
+      *   .select()
+      * ```
+      *
+      * @exampleSql Upserting into tables with constraints
+      * ```sql
+      * create table
+      *   users (
+      *     id int8 generated by default as identity primary key,
+      *     handle text not null unique,
+      *     display_name text
+      *   );
+      *
+      * insert into
+      *   users (id, handle, display_name)
+      * values
+      *   (1, 'saoirse', null);
+      * ```
+      *
+      * @exampleResponse Upserting into tables with constraints
+      * ```json
+      * {
+      *   "error": {
+      *     "code": "23505",
+      *     "details": "Key (handle)=(saoirse) already exists.",
+      *     "hint": null,
+      *     "message": "duplicate key value violates unique constraint \"users_handle_key\""
+      *   },
+      *   "status": 409,
+      *   "statusText": "Conflict"
+      * }
+      * ```
+      */
+      upsert(values, { onConflict, ignoreDuplicates = false, count, defaultToNull = true } = {}) {
+        var _this$fetch2;
+        const method = "POST";
+        const { url, headers } = this.cloneRequestState();
+        headers.append("Prefer", `resolution=${ignoreDuplicates ? "ignore" : "merge"}-duplicates`);
+        if (onConflict !== void 0) url.searchParams.set("on_conflict", onConflict);
+        if (count) headers.append("Prefer", `count=${count}`);
+        if (!defaultToNull) headers.append("Prefer", "missing=default");
+        if (Array.isArray(values)) {
+          const columns = values.reduce((acc, x2) => acc.concat(Object.keys(x2)), []);
+          if (columns.length > 0) {
+            const uniqueColumns = [...new Set(columns)].map((column) => `"${column}"`);
+            url.searchParams.set("columns", uniqueColumns.join(","));
+          }
+        }
+        return new PostgrestFilterBuilder2({
+          method,
+          url,
+          headers,
+          schema: this.schema,
+          body: values,
+          fetch: (_this$fetch2 = this.fetch) !== null && _this$fetch2 !== void 0 ? _this$fetch2 : fetch,
+          urlLengthLimit: this.urlLengthLimit
+        });
+      }
+      /**
+      * Perform an UPDATE on the table or view.
+      *
+      * By default, updated rows are not returned. To return it, chain the call
+      * with `.select()` after filters.
+      *
+      * @param values - The values to update with
+      *
+      * @param options - Named parameters
+      *
+      * @param options.count - Count algorithm to use to count updated rows.
+      *
+      * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
+      * hood.
+      *
+      * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
+      * statistics under the hood.
+      *
+      * `"estimated"`: Uses exact count for low numbers and planned count for high
+      * numbers.
+      *
+      * @category Database
+      *
+      * @remarks
+      * - `update()` should always be combined with [Filters](/docs/reference/javascript/using-filters) to target the item(s) you wish to update.
+      *
+      * @example Updating your data
+      * ```ts
+      * const { error } = await supabase
+      *   .from('instruments')
+      *   .update({ name: 'piano' })
+      *   .eq('id', 1)
+      * ```
+      *
+      * @exampleSql Updating your data
+      * ```sql
+      * create table
+      *   instruments (id int8 primary key, name text);
+      *
+      * insert into
+      *   instruments (id, name)
+      * values
+      *   (1, 'harpsichord');
+      * ```
+      *
+      * @exampleResponse Updating your data
+      * ```json
+      * {
+      *   "status": 204,
+      *   "statusText": "No Content"
+      * }
+      * ```
+      *
+      * @example Update a record and return it
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('instruments')
+      *   .update({ name: 'piano' })
+      *   .eq('id', 1)
+      *   .select()
+      * ```
+      *
+      * @exampleSql Update a record and return it
+      * ```sql
+      * create table
+      *   instruments (id int8 primary key, name text);
+      *
+      * insert into
+      *   instruments (id, name)
+      * values
+      *   (1, 'harpsichord');
+      * ```
+      *
+      * @exampleResponse Update a record and return it
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "name": "piano"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription Updating JSON data
+      * Postgres offers some
+      * [operators](/docs/guides/database/json#query-the-jsonb-data) for
+      * working with JSON data. Currently, it is only possible to update the entire JSON document.
+      *
+      * @example Updating JSON data
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('users')
+      *   .update({
+      *     address: {
+      *       street: 'Melrose Place',
+      *       postcode: 90210
+      *     }
+      *   })
+      *   .eq('address->postcode', 90210)
+      *   .select()
+      * ```
+      *
+      * @exampleSql Updating JSON data
+      * ```sql
+      * create table
+      *   users (
+      *     id int8 primary key,
+      *     name text,
+      *     address jsonb
+      *   );
+      *
+      * insert into
+      *   users (id, name, address)
+      * values
+      *   (1, 'Michael', '{ "postcode": 90210 }');
+      * ```
+      *
+      * @exampleResponse Updating JSON data
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "name": "Michael",
+      *       "address": {
+      *         "street": "Melrose Place",
+      *         "postcode": 90210
+      *       }
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      update(values, { count } = {}) {
+        var _this$fetch3;
+        const method = "PATCH";
+        const { url, headers } = this.cloneRequestState();
+        if (count) headers.append("Prefer", `count=${count}`);
+        return new PostgrestFilterBuilder2({
+          method,
+          url,
+          headers,
+          schema: this.schema,
+          body: values,
+          fetch: (_this$fetch3 = this.fetch) !== null && _this$fetch3 !== void 0 ? _this$fetch3 : fetch,
+          urlLengthLimit: this.urlLengthLimit
+        });
+      }
+      /**
+      * Perform a DELETE on the table or view.
+      *
+      * By default, deleted rows are not returned. To return it, chain the call
+      * with `.select()` after filters.
+      *
+      * @param options - Named parameters
+      *
+      * @param options.count - Count algorithm to use to count deleted rows.
+      *
+      * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
+      * hood.
+      *
+      * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
+      * statistics under the hood.
+      *
+      * `"estimated"`: Uses exact count for low numbers and planned count for high
+      * numbers.
+      *
+      * @category Database
+      *
+      * @remarks
+      * - `delete()` should always be combined with [filters](/docs/reference/javascript/using-filters) to target the item(s) you wish to delete.
+      * - If you use `delete()` with filters and you have
+      *   [RLS](/docs/learn/auth-deep-dive/auth-row-level-security) enabled, only
+      *   rows visible through `SELECT` policies are deleted. Note that by default
+      *   no rows are visible, so you need at least one `SELECT`/`ALL` policy that
+      *   makes the rows visible.
+      * - When using `delete().in()`, specify an array of values to target multiple rows with a single query. This is particularly useful for batch deleting entries that share common criteria, such as deleting users by their IDs. Ensure that the array you provide accurately represents all records you intend to delete to avoid unintended data removal.
+      *
+      * @example Delete a single record
+      * ```ts
+      * const response = await supabase
+      *   .from('countries')
+      *   .delete()
+      *   .eq('id', 1)
+      * ```
+      *
+      * @exampleSql Delete a single record
+      * ```sql
+      * create table
+      *   countries (id int8 primary key, name text);
+      *
+      * insert into
+      *   countries (id, name)
+      * values
+      *   (1, 'Mordor');
+      * ```
+      *
+      * @exampleResponse Delete a single record
+      * ```json
+      * {
+      *   "status": 204,
+      *   "statusText": "No Content"
+      * }
+      * ```
+      *
+      * @example Delete a record and return it
+      * ```ts
+      * const { data, error } = await supabase
+      *   .from('countries')
+      *   .delete()
+      *   .eq('id', 1)
+      *   .select()
+      * ```
+      *
+      * @exampleSql Delete a record and return it
+      * ```sql
+      * create table
+      *   countries (id int8 primary key, name text);
+      *
+      * insert into
+      *   countries (id, name)
+      * values
+      *   (1, 'Mordor');
+      * ```
+      *
+      * @exampleResponse Delete a record and return it
+      * ```json
+      * {
+      *   "data": [
+      *     {
+      *       "id": 1,
+      *       "name": "Mordor"
+      *     }
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @example Delete multiple records
+      * ```ts
+      * const response = await supabase
+      *   .from('countries')
+      *   .delete()
+      *   .in('id', [1, 2, 3])
+      * ```
+      *
+      * @exampleSql Delete multiple records
+      * ```sql
+      * create table
+      *   countries (id int8 primary key, name text);
+      *
+      * insert into
+      *   countries (id, name)
+      * values
+      *   (1, 'Rohan'), (2, 'The Shire'), (3, 'Mordor');
+      * ```
+      *
+      * @exampleResponse Delete multiple records
+      * ```json
+      * {
+      *   "status": 204,
+      *   "statusText": "No Content"
+      * }
+      * ```
+      */
+      delete({ count } = {}) {
+        var _this$fetch4;
+        const method = "DELETE";
+        const { url, headers } = this.cloneRequestState();
+        if (count) headers.append("Prefer", `count=${count}`);
+        return new PostgrestFilterBuilder2({
+          method,
+          url,
+          headers,
+          schema: this.schema,
+          fetch: (_this$fetch4 = this.fetch) !== null && _this$fetch4 !== void 0 ? _this$fetch4 : fetch,
+          urlLengthLimit: this.urlLengthLimit
+        });
+      }
+    };
+    function _typeof3(o) {
+      "@babel/helpers - typeof";
+      return _typeof3 = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o$1) {
+        return typeof o$1;
+      } : function(o$1) {
+        return o$1 && "function" == typeof Symbol && o$1.constructor === Symbol && o$1 !== Symbol.prototype ? "symbol" : typeof o$1;
+      }, _typeof3(o);
+    }
+    function toPrimitive3(t, r) {
+      if ("object" != _typeof3(t) || !t) return t;
+      var e = t[Symbol.toPrimitive];
+      if (void 0 !== e) {
+        var i = e.call(t, r);
+        if ("object" != _typeof3(i)) return i;
+        throw new TypeError("@@toPrimitive must return a primitive value.");
+      }
+      return ("string" === r ? String : Number)(t);
+    }
+    function toPropertyKey3(t) {
+      var i = toPrimitive3(t, "string");
+      return "symbol" == _typeof3(i) ? i : i + "";
+    }
+    function _defineProperty3(e, r, t) {
+      return (r = toPropertyKey3(r)) in e ? Object.defineProperty(e, r, {
+        value: t,
+        enumerable: true,
+        configurable: true,
+        writable: true
+      }) : e[r] = t, e;
+    }
+    function ownKeys3(e, r) {
+      var t = Object.keys(e);
+      if (Object.getOwnPropertySymbols) {
+        var o = Object.getOwnPropertySymbols(e);
+        r && (o = o.filter(function(r$1) {
+          return Object.getOwnPropertyDescriptor(e, r$1).enumerable;
+        })), t.push.apply(t, o);
+      }
+      return t;
+    }
+    function _objectSpread23(e) {
+      for (var r = 1; r < arguments.length; r++) {
+        var t = null != arguments[r] ? arguments[r] : {};
+        r % 2 ? ownKeys3(Object(t), true).forEach(function(r$1) {
+          _defineProperty3(e, r$1, t[r$1]);
+        }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(e, Object.getOwnPropertyDescriptors(t)) : ownKeys3(Object(t)).forEach(function(r$1) {
+          Object.defineProperty(e, r$1, Object.getOwnPropertyDescriptor(t, r$1));
+        });
+      }
+      return e;
+    }
+    var PostgrestClient3 = class PostgrestClient4 {
+      /**
+      * Creates a PostgREST client.
+      *
+      * @param url - URL of the PostgREST endpoint
+      * @param options - Named parameters
+      * @param options.headers - Custom headers
+      * @param options.schema - Postgres schema to switch to
+      * @param options.fetch - Custom fetch
+      * @param options.timeout - Optional timeout in milliseconds for all requests. When set, requests will automatically abort after this duration to prevent indefinite hangs.
+      * @param options.urlLengthLimit - Maximum URL length in characters before warnings/errors are triggered. Defaults to 8000.
+      * @example
+      * ```ts
+      * import { PostgrestClient } from '@supabase/postgrest-js'
+      *
+      * const postgrest = new PostgrestClient('https://xyzcompany.supabase.co/rest/v1', {
+      *   headers: { apikey: 'public-anon-key' },
+      *   schema: 'public',
+      *   timeout: 30000, // 30 second timeout
+      * })
+      * ```
+      *
+      * @category Database
+      *
+      * @remarks
+      * - A `timeout` option (in milliseconds) can be set to automatically abort requests that take too long.
+      * - A `urlLengthLimit` option (default: 8000) can be set to control when URL length warnings are included in error messages for aborted requests.
+      *
+      * @example Example 1
+      * ```ts
+      * import { PostgrestClient } from '@supabase/postgrest-js'
+      *
+      * const postgrest = new PostgrestClient('https://xyzcompany.supabase.co/rest/v1', {
+      *   headers: { apikey: 'public-anon-key' },
+      *   schema: 'public',
+      * })
+      * ```
+      *
+      * @example With timeout
+      * ```ts
+      * import { PostgrestClient } from '@supabase/postgrest-js'
+      *
+      * const postgrest = new PostgrestClient('https://xyzcompany.supabase.co/rest/v1', {
+      *   headers: { apikey: 'public-anon-key' },
+      *   schema: 'public',
+      *   timeout: 30000, // 30 second timeout
+      * })
+      * ```
+      */
+      constructor(url, { headers = {}, schema, fetch: fetch$1, timeout: timeout2, urlLengthLimit = 8e3 } = {}) {
+        this.url = url;
+        this.headers = new Headers(headers);
+        this.schemaName = schema;
+        this.urlLengthLimit = urlLengthLimit;
+        const originalFetch = fetch$1 !== null && fetch$1 !== void 0 ? fetch$1 : globalThis.fetch;
+        if (timeout2 !== void 0 && timeout2 > 0) this.fetch = (input, init) => {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeout2);
+          const existingSignal = init === null || init === void 0 ? void 0 : init.signal;
+          if (existingSignal) {
+            if (existingSignal.aborted) {
+              clearTimeout(timeoutId);
+              return originalFetch(input, init);
+            }
+            const abortHandler = () => {
+              clearTimeout(timeoutId);
+              controller.abort();
+            };
+            existingSignal.addEventListener("abort", abortHandler, { once: true });
+            return originalFetch(input, _objectSpread23(_objectSpread23({}, init), {}, { signal: controller.signal })).finally(() => {
+              clearTimeout(timeoutId);
+              existingSignal.removeEventListener("abort", abortHandler);
+            });
+          }
+          return originalFetch(input, _objectSpread23(_objectSpread23({}, init), {}, { signal: controller.signal })).finally(() => clearTimeout(timeoutId));
+        };
+        else this.fetch = originalFetch;
+      }
+      /**
+      * Perform a query on a table or a view.
+      *
+      * @param relation - The table or view name to query
+      *
+      * @category Database
+      */
+      from(relation) {
+        if (!relation || typeof relation !== "string" || relation.trim() === "") throw new Error("Invalid relation name: relation must be a non-empty string.");
+        return new PostgrestQueryBuilder2(new URL(`${this.url}/${relation}`), {
+          headers: new Headers(this.headers),
+          schema: this.schemaName,
+          fetch: this.fetch,
+          urlLengthLimit: this.urlLengthLimit
+        });
+      }
+      /**
+      * Select a schema to query or perform an function (rpc) call.
+      *
+      * The schema needs to be on the list of exposed schemas inside Supabase.
+      *
+      * @param schema - The schema to query
+      *
+      * @category Database
+      */
+      schema(schema) {
+        return new PostgrestClient4(this.url, {
+          headers: this.headers,
+          schema,
+          fetch: this.fetch,
+          urlLengthLimit: this.urlLengthLimit
+        });
+      }
+      /**
+      * Perform a function call.
+      *
+      * @param fn - The function name to call
+      * @param args - The arguments to pass to the function call
+      * @param options - Named parameters
+      * @param options.head - When set to `true`, `data` will not be returned.
+      * Useful if you only need the count.
+      * @param options.get - When set to `true`, the function will be called with
+      * read-only access mode.
+      * @param options.count - Count algorithm to use to count rows returned by the
+      * function. Only applicable for [set-returning
+      * functions](https://www.postgresql.org/docs/current/functions-srf.html).
+      *
+      * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
+      * hood.
+      *
+      * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
+      * statistics under the hood.
+      *
+      * `"estimated"`: Uses exact count for low numbers and planned count for high
+      * numbers.
+      *
+      * @example
+      * ```ts
+      * // For cross-schema functions where type inference fails, use overrideTypes:
+      * const { data } = await supabase
+      *   .schema('schema_b')
+      *   .rpc('function_a', {})
+      *   .overrideTypes<{ id: string; user_id: string }[]>()
+      * ```
+      *
+      * @category Database
+      *
+      * @example Call a Postgres function without arguments
+      * ```ts
+      * const { data, error } = await supabase.rpc('hello_world')
+      * ```
+      *
+      * @exampleSql Call a Postgres function without arguments
+      * ```sql
+      * create function hello_world() returns text as $$
+      *   select 'Hello world';
+      * $$ language sql;
+      * ```
+      *
+      * @exampleResponse Call a Postgres function without arguments
+      * ```json
+      * {
+      *   "data": "Hello world",
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @example Call a Postgres function with arguments
+      * ```ts
+      * const { data, error } = await supabase.rpc('echo', { say: '👋' })
+      * ```
+      *
+      * @exampleSql Call a Postgres function with arguments
+      * ```sql
+      * create function echo(say text) returns text as $$
+      *   select say;
+      * $$ language sql;
+      * ```
+      *
+      * @exampleResponse Call a Postgres function with arguments
+      * ```json
+      *   {
+      *     "data": "👋",
+      *     "status": 200,
+      *     "statusText": "OK"
+      *   }
+      *
+      * ```
+      *
+      * @exampleDescription Bulk processing
+      * You can process large payloads by passing in an array as an argument.
+      *
+      * @example Bulk processing
+      * ```ts
+      * const { data, error } = await supabase.rpc('add_one_each', { arr: [1, 2, 3] })
+      * ```
+      *
+      * @exampleSql Bulk processing
+      * ```sql
+      * create function add_one_each(arr int[]) returns int[] as $$
+      *   select array_agg(n + 1) from unnest(arr) as n;
+      * $$ language sql;
+      * ```
+      *
+      * @exampleResponse Bulk processing
+      * ```json
+      * {
+      *   "data": [
+      *     2,
+      *     3,
+      *     4
+      *   ],
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @exampleDescription Call a Postgres function with filters
+      * Postgres functions that return tables can also be combined with [Filters](/docs/reference/javascript/using-filters) and [Modifiers](/docs/reference/javascript/using-modifiers).
+      *
+      * @example Call a Postgres function with filters
+      * ```ts
+      * const { data, error } = await supabase
+      *   .rpc('list_stored_countries')
+      *   .eq('id', 1)
+      *   .single()
+      * ```
+      *
+      * @exampleSql Call a Postgres function with filters
+      * ```sql
+      * create table
+      *   countries (id int8 primary key, name text);
+      *
+      * insert into
+      *   countries (id, name)
+      * values
+      *   (1, 'Rohan'),
+      *   (2, 'The Shire');
+      *
+      * create function list_stored_countries() returns setof countries as $$
+      *   select * from countries;
+      * $$ language sql;
+      * ```
+      *
+      * @exampleResponse Call a Postgres function with filters
+      * ```json
+      * {
+      *   "data": {
+      *     "id": 1,
+      *     "name": "Rohan"
+      *   },
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      *
+      * @example Call a read-only Postgres function
+      * ```ts
+      * const { data, error } = await supabase.rpc('hello_world', undefined, { get: true })
+      * ```
+      *
+      * @exampleSql Call a read-only Postgres function
+      * ```sql
+      * create function hello_world() returns text as $$
+      *   select 'Hello world';
+      * $$ language sql;
+      * ```
+      *
+      * @exampleResponse Call a read-only Postgres function
+      * ```json
+      * {
+      *   "data": "Hello world",
+      *   "status": 200,
+      *   "statusText": "OK"
+      * }
+      * ```
+      */
+      rpc(fn, args = {}, { head: head2 = false, get: get3 = false, count } = {}) {
+        var _this$fetch;
+        let method;
+        const url = new URL(`${this.url}/rpc/${fn}`);
+        let body;
+        const _isObject = (v2) => v2 !== null && typeof v2 === "object" && (!Array.isArray(v2) || v2.some(_isObject));
+        const _hasObjectArg = head2 && Object.values(args).some(_isObject);
+        if (_hasObjectArg) {
+          method = "POST";
+          body = args;
+        } else if (head2 || get3) {
+          method = head2 ? "HEAD" : "GET";
+          Object.entries(args).filter(([_, value]) => value !== void 0).map(([name, value]) => [name, Array.isArray(value) ? `{${value.join(",")}}` : `${value}`]).forEach(([name, value]) => {
+            url.searchParams.append(name, value);
+          });
+        } else {
+          method = "POST";
+          body = args;
+        }
+        const headers = new Headers(this.headers);
+        if (_hasObjectArg) headers.set("Prefer", count ? `count=${count},return=minimal` : "return=minimal");
+        else if (count) headers.set("Prefer", `count=${count}`);
+        return new PostgrestFilterBuilder2({
+          method,
+          url,
+          headers,
+          schema: this.schemaName,
+          body,
+          fetch: (_this$fetch = this.fetch) !== null && _this$fetch !== void 0 ? _this$fetch : fetch,
+          urlLengthLimit: this.urlLengthLimit
+        });
+      }
+    };
+    var src_default = {
+      PostgrestClient: PostgrestClient3,
+      PostgrestQueryBuilder: PostgrestQueryBuilder2,
+      PostgrestFilterBuilder: PostgrestFilterBuilder2,
+      PostgrestTransformBuilder: PostgrestTransformBuilder2,
+      PostgrestBuilder: PostgrestBuilder2,
+      PostgrestError: PostgrestError2
+    };
+    exports$1.PostgrestBuilder = PostgrestBuilder2;
+    exports$1.PostgrestClient = PostgrestClient3;
+    exports$1.PostgrestError = PostgrestError2;
+    exports$1.PostgrestFilterBuilder = PostgrestFilterBuilder2;
+    exports$1.PostgrestQueryBuilder = PostgrestQueryBuilder2;
+    exports$1.PostgrestTransformBuilder = PostgrestTransformBuilder2;
+    exports$1.default = src_default;
+  }
+});
+
+// src/storage/SupabaseRestProvider.ts
+var SupabaseRestProvider_exports = {};
+__export(SupabaseRestProvider_exports, {
+  SupabaseRestProvider: () => SupabaseRestProvider
+});
+function getClient() {
+  if (_client) return _client;
+  const supabaseUrl = process.env.FRONTBASE_SUPABASE_URL;
+  const anonKey = process.env.FRONTBASE_SUPABASE_ANON_KEY;
+  const scopedJwt = process.env.FRONTBASE_SUPABASE_JWT;
+  if (!supabaseUrl || !anonKey || !scopedJwt) {
+    throw new Error(
+      "[SupabaseRestProvider] Missing env vars: FRONTBASE_SUPABASE_URL, FRONTBASE_SUPABASE_ANON_KEY, FRONTBASE_SUPABASE_JWT"
+    );
+  }
+  const { PostgrestClient: PostgrestClient3 } = require_dist();
+  _client = new PostgrestClient3(`${supabaseUrl}/rest/v1`, {
+    headers: {
+      apikey: anonKey,
+      // API gateway auth
+      Authorization: `Bearer ${scopedJwt}`
+      // PG role = frontbase_edge_role
+    },
+    schema: SCHEMA2
+  });
+  console.log(`\u{1F418} SupabaseRestProvider initialized: ${supabaseUrl} (schema: ${SCHEMA2})`);
+  return _client;
+}
+function throwIfError(result, context) {
+  if (result.error) {
+    const e = result.error;
+    const msg = e.message || e.details || e.hint || e.code || JSON.stringify(e);
+    throw new Error(`[SupabaseRest] ${context}: ${msg}`);
+  }
+}
+var DEFAULT_FAVICON4, SCHEMA2, _client, SupabaseRestProvider;
+var init_SupabaseRestProvider = __esm({
+  "src/storage/SupabaseRestProvider.ts"() {
+    DEFAULT_FAVICON4 = "/static/icon.png";
+    SCHEMA2 = process.env.FRONTBASE_SCHEMA_NAME || "frontbase_edge";
+    _client = null;
+    SupabaseRestProvider = class {
+      // =========================================================================
+      // Lifecycle
+      // =========================================================================
+      async init() {
+        const client = getClient();
+        const { error } = await client.from("published_pages").select("slug", { count: "exact", head: true });
+        if (error) {
+          const e = error;
+          const detail = [e.message, e.details, e.hint, e.code].filter(Boolean).join(" | ");
+          throw new Error(`[SupabaseRest] init failed: ${detail || JSON.stringify(e)}`);
+        }
+        console.log(`\u{1F418} SupabaseRestProvider ready (PostgREST) \u2014 schema: ${SCHEMA2}`);
+      }
+      async initSettings() {
+      }
+      // =========================================================================
+      // Pages CRUD
+      // =========================================================================
+      async upsertPage(page) {
+        const client = getClient();
+        if (page.isHomepage) {
+          await client.from("published_pages").update({ is_homepage: false }).eq("is_homepage", true);
+        }
+        const row = {
+          id: page.id,
+          slug: page.slug,
+          name: page.name,
+          title: page.title || null,
+          description: page.description || null,
+          layout_data: JSON.stringify(page.layoutData),
+          seo_data: page.seoData ? JSON.stringify(page.seoData) : null,
+          datasources: page.datasources ? JSON.stringify(page.datasources) : null,
+          css_bundle: page.cssBundle || null,
+          version: page.version,
+          published_at: page.publishedAt,
+          is_public: page.isPublic,
+          is_homepage: page.isHomepage,
+          content_hash: page.contentHash || null,
+          updated_at: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        const result = await client.from("published_pages").upsert(row, { onConflict: "id" });
+        throwIfError(result, `upsertPage(${page.slug})`);
+        console.log(`\u{1F418} Upserted page (PostgREST): ${page.slug} (v${page.version})`);
+        return { success: true, version: page.version };
+      }
+      rowToPage(row) {
+        return {
+          id: row.id,
+          slug: row.slug,
+          name: row.name,
+          title: row.title || void 0,
+          description: row.description || void 0,
+          layoutData: typeof row.layout_data === "string" ? JSON.parse(row.layout_data) : row.layout_data,
+          seoData: row.seo_data ? typeof row.seo_data === "string" ? JSON.parse(row.seo_data) : row.seo_data : void 0,
+          datasources: row.datasources ? typeof row.datasources === "string" ? JSON.parse(row.datasources) : row.datasources : void 0,
+          cssBundle: row.css_bundle || void 0,
+          version: row.version,
+          publishedAt: row.published_at,
+          isPublic: !!row.is_public,
+          isHomepage: !!row.is_homepage
+        };
+      }
+      async getPageBySlug(slug) {
+        const client = getClient();
+        const { data, error } = await client.from("published_pages").select("*").eq("slug", slug).maybeSingle();
+        if (error) throw new Error(`[SupabaseRest] getPageBySlug: ${error.message}`);
+        return data ? this.rowToPage(data) : null;
+      }
+      async getHomepage() {
+        const client = getClient();
+        const { data, error } = await client.from("published_pages").select("*").eq("is_homepage", true).maybeSingle();
+        if (error) throw new Error(`[SupabaseRest] getHomepage: ${error.message}`);
+        return data ? this.rowToPage(data) : null;
+      }
+      async deletePage(slug) {
+        const client = getClient();
+        const result = await client.from("published_pages").delete().eq("slug", slug);
+        throwIfError(result, `deletePage(${slug})`);
+        return true;
+      }
+      async listPages() {
+        const client = getClient();
+        const { data, error } = await client.from("published_pages").select("slug, name, version");
+        if (error) throw new Error(`[SupabaseRest] listPages: ${error.message}`);
+        return data || [];
+      }
+      async listPublicPageSlugs() {
+        const client = getClient();
+        const { data, error } = await client.from("published_pages").select("slug, updated_at, is_homepage").eq("is_public", true);
+        if (error) throw new Error(`[SupabaseRest] listPublicPageSlugs: ${error.message}`);
+        return (data || []).map((r) => ({
+          slug: r.slug,
+          updatedAt: r.updated_at,
+          isHomepage: !!r.is_homepage
+        }));
+      }
+      // =========================================================================
+      // Project Settings
+      // =========================================================================
+      async getProjectSettings() {
+        const client = getClient();
+        const { data, error } = await client.from("project_settings").select("*").eq("id", "default").maybeSingle();
+        if (error) throw new Error(`[SupabaseRest] getProjectSettings: ${error.message}`);
+        if (!data) {
+          return {
+            id: "default",
+            faviconUrl: null,
+            logoUrl: null,
+            siteName: null,
+            siteDescription: null,
+            appUrl: null,
+            updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+          };
+        }
+        return {
+          id: data.id,
+          faviconUrl: data.favicon_url || null,
+          logoUrl: data.logo_url || null,
+          siteName: data.site_name || null,
+          siteDescription: data.site_description || null,
+          appUrl: data.app_url || null,
+          updatedAt: data.updated_at
+        };
+      }
+      async getFaviconUrl() {
+        return (await this.getProjectSettings()).faviconUrl || DEFAULT_FAVICON4;
+      }
+      async updateProjectSettings(updates) {
+        const client = getClient();
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        const row = {
+          id: "default",
+          updated_at: now
+        };
+        if (updates.faviconUrl !== void 0) row.favicon_url = updates.faviconUrl;
+        if (updates.logoUrl !== void 0) row.logo_url = updates.logoUrl;
+        if (updates.siteName !== void 0) row.site_name = updates.siteName;
+        if (updates.siteDescription !== void 0) row.site_description = updates.siteDescription;
+        if (updates.appUrl !== void 0) row.app_url = updates.appUrl;
+        const result = await client.from("project_settings").upsert(row, { onConflict: "id" });
+        throwIfError(result, "updateProjectSettings");
+        return this.getProjectSettings();
+      }
+      // =========================================================================
+      // Workflows
+      // =========================================================================
+      async upsertWorkflow(workflow) {
+        const client = getClient();
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        const { data: existing } = await client.from("workflows").select("version").eq("id", workflow.id).maybeSingle();
+        const newVersion = existing ? (existing.version || 1) + 1 : 1;
+        const row = {
+          id: workflow.id,
+          name: workflow.name,
+          description: workflow.description,
+          trigger_type: workflow.triggerType,
+          trigger_config: workflow.triggerConfig,
+          nodes: workflow.nodes,
+          edges: workflow.edges,
+          settings: workflow.settings || null,
+          version: newVersion,
+          is_active: existing ? void 0 : true,
+          // Only set on insert
+          created_at: existing ? void 0 : now,
+          // Only set on insert
+          updated_at: now,
+          published_by: workflow.publishedBy
+        };
+        const cleanRow = Object.fromEntries(
+          Object.entries(row).filter(([_, v2]) => v2 !== void 0)
+        );
+        const result = await client.from("workflows").upsert(cleanRow, { onConflict: "id" });
+        throwIfError(result, `upsertWorkflow(${workflow.id})`);
+        return { version: newVersion };
+      }
+      async getWorkflowById(id) {
+        const client = getClient();
+        const { data, error } = await client.from("workflows").select("*").eq("id", id).maybeSingle();
+        if (error) throw new Error(`[SupabaseRest] getWorkflowById: ${error.message}`);
+        return data ? this.rowToWorkflow(data) : null;
+      }
+      async getActiveWebhookWorkflow(id) {
+        const client = getClient();
+        const { data, error } = await client.from("workflows").select("*").eq("id", id).eq("is_active", true).maybeSingle();
+        if (error) throw new Error(`[SupabaseRest] getActiveWebhookWorkflow: ${error.message}`);
+        return data ? this.rowToWorkflow(data) : null;
+      }
+      rowToWorkflow(row) {
+        return {
+          id: row.id,
+          name: row.name,
+          description: row.description || null,
+          triggerType: row.trigger_type,
+          triggerConfig: row.trigger_config || null,
+          nodes: row.nodes,
+          edges: row.edges,
+          settings: row.settings || null,
+          version: row.version,
+          isActive: !!row.is_active,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+          publishedBy: row.published_by || null
+        };
+      }
+      async listWorkflows() {
+        const client = getClient();
+        const { data, error } = await client.from("workflows").select("*");
+        if (error) throw new Error(`[SupabaseRest] listWorkflows: ${error.message}`);
+        return (data || []).map((r) => this.rowToWorkflow(r));
+      }
+      async deleteWorkflow(id) {
+        const client = getClient();
+        const result = await client.from("workflows").delete().eq("id", id);
+        throwIfError(result, `deleteWorkflow(${id})`);
+        return true;
+      }
+      async toggleWorkflow(id, isActive) {
+        const client = getClient();
+        const result = await client.from("workflows").update({ is_active: isActive, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", id);
+        throwIfError(result, `toggleWorkflow(${id})`);
+      }
+      // =========================================================================
+      // Executions
+      // =========================================================================
+      async createExecution(execution) {
+        const client = getClient();
+        const result = await client.from("executions").insert({
+          id: execution.id,
+          workflow_id: execution.workflowId,
+          status: execution.status,
+          trigger_type: execution.triggerType,
+          trigger_payload: execution.triggerPayload || null,
+          node_executions: execution.nodeExecutions || null,
+          started_at: execution.startedAt
+        });
+        throwIfError(result, "createExecution");
+      }
+      async getExecutionById(id) {
+        const client = getClient();
+        const { data, error } = await client.from("executions").select("*").eq("id", id).maybeSingle();
+        if (error) throw new Error(`[SupabaseRest] getExecutionById: ${error.message}`);
+        return data ? this.rowToExecution(data) : null;
+      }
+      async updateExecution(id, updates) {
+        const client = getClient();
+        const row = {};
+        if (updates.status !== void 0) row.status = updates.status;
+        if (updates.result !== void 0) row.result = updates.result;
+        if (updates.error !== void 0) row.error = updates.error;
+        if (updates.nodeExecutions !== void 0) row.node_executions = updates.nodeExecutions;
+        if (updates.usage !== void 0) row.usage = updates.usage;
+        if (updates.endedAt !== void 0) row.ended_at = updates.endedAt;
+        if (Object.keys(row).length > 0) {
+          const result = await client.from("executions").update(row).eq("id", id);
+          throwIfError(result, `updateExecution(${id})`);
+        }
+      }
+      async listExecutionsByWorkflow(workflowId, limit2 = 20) {
+        const client = getClient();
+        const { data, error } = await client.from("executions").select("*").eq("workflow_id", workflowId).order("started_at", { ascending: false }).limit(limit2);
+        if (error) throw new Error(`[SupabaseRest] listExecutionsByWorkflow: ${error.message}`);
+        return (data || []).map((r) => this.rowToExecution(r));
+      }
+      async listAllExecutions(filters2) {
+        const client = getClient();
+        let query = client.from("executions").select("*").order("started_at", { ascending: false }).limit(filters2?.limit || 100);
+        if (filters2?.workflowId) query = query.eq("workflow_id", filters2.workflowId);
+        if (filters2?.since) query = query.gte("started_at", filters2.since);
+        if (filters2?.until) query = query.lte("started_at", filters2.until);
+        if (filters2?.status && filters2.status.length > 0) {
+          query = query.in("status", filters2.status);
+        }
+        const { data, error } = await query;
+        if (error) throw new Error(`[SupabaseRest] listAllExecutions: ${error.message}`);
+        return (data || []).map((r) => this.rowToExecution(r));
+      }
+      async getExecutionStats() {
+        const client = getClient();
+        const { data, error } = await client.from("executions").select("workflow_id, status");
+        if (error) throw new Error(`[SupabaseRest] getExecutionStats: ${error.message}`);
+        const statsMap = /* @__PURE__ */ new Map();
+        for (const row of data || []) {
+          const wid = row.workflow_id;
+          const current = statsMap.get(wid) || { workflowId: wid, totalRuns: 0, successfulRuns: 0, failedRuns: 0 };
+          current.totalRuns++;
+          if (row.status === "completed") current.successfulRuns++;
+          else if (row.status === "error") current.failedRuns++;
+          statsMap.set(wid, current);
+        }
+        return Array.from(statsMap.values());
+      }
+      rowToExecution(row) {
+        return {
+          id: row.id,
+          workflowId: row.workflow_id,
+          status: row.status,
+          triggerType: row.trigger_type,
+          triggerPayload: row.trigger_payload || null,
+          nodeExecutions: row.node_executions || null,
+          result: row.result || null,
+          error: row.error || null,
+          usage: row.usage || null,
+          startedAt: row.started_at,
+          endedAt: row.ended_at || null
+        };
+      }
+      // =========================================================================
+      // Dead Letter Queue
+      // =========================================================================
+      async createDeadLetter(deadLetter) {
+        const client = getClient();
+        const result = await client.from("dead_letters").insert({
+          id: deadLetter.id,
+          workflow_id: deadLetter.workflowId,
+          execution_id: deadLetter.executionId,
+          error: deadLetter.error,
+          payload: deadLetter.payload,
+          retry_count: deadLetter.retryCount || 0
+        });
+        throwIfError(result, "createDeadLetter");
+      }
+    };
+  }
+});
+
 // src/storage/index.ts
 var storage_exports = {};
 __export(storage_exports, {
@@ -17048,11 +22219,15 @@ function createInitialProvider() {
       console.log("\u{1F536} Using CfD1HttpProvider (D1 via HTTP)");
       return new CfD1HttpProvider2();
     }
-    case "neon":
-    case "supabase": {
+    case "neon": {
       const { NeonHttpProvider: NeonHttpProvider2 } = (init_NeonHttpProvider(), __toCommonJS(NeonHttpProvider_exports));
       console.log(`\u{1F418} Using NeonHttpProvider (${provider})`);
       return new NeonHttpProvider2();
+    }
+    case "supabase": {
+      const { SupabaseRestProvider: SupabaseRestProvider2 } = (init_SupabaseRestProvider(), __toCommonJS(SupabaseRestProvider_exports));
+      console.log(`\u{1F418} Using SupabaseRestProvider (PostgREST)`);
+      return new SupabaseRestProvider2();
     }
     default:
       if (isCloudRuntime()) {
@@ -21855,6 +27030,309 @@ var init_redis = __esm({
   }
 });
 
+// src/cache/DenoKvProvider.ts
+var DenoKvProvider_exports = {};
+__export(DenoKvProvider_exports, {
+  DenoKvProvider: () => DenoKvProvider
+});
+var DenoKvProvider;
+var init_DenoKvProvider = __esm({
+  "src/cache/DenoKvProvider.ts"() {
+    DenoKvProvider = class {
+      kvPromise;
+      constructor() {
+        this.kvPromise = Deno.openKv();
+      }
+      toKey(key) {
+        return ["frontbase", "cache", key];
+      }
+      async get(key) {
+        const kv = await this.kvPromise;
+        const result = await kv.get(this.toKey(key));
+        if (result.value === null) return null;
+        try {
+          return JSON.parse(result.value);
+        } catch {
+          return result.value;
+        }
+      }
+      async set(key, value) {
+        const kv = await this.kvPromise;
+        await kv.set(this.toKey(key), value);
+      }
+      async setex(key, seconds, value) {
+        const kv = await this.kvPromise;
+        await kv.set(this.toKey(key), value, { expireIn: seconds * 1e3 });
+      }
+      async del(...keys) {
+        const kv = await this.kvPromise;
+        let count = 0;
+        for (const key of keys) {
+          await kv.delete(this.toKey(key));
+          count++;
+        }
+        return count;
+      }
+      async keys(pattern) {
+        const kv = await this.kvPromise;
+        const results = [];
+        const prefix = pattern.replace(/\*.*$/, "");
+        for await (const entry of kv.list({ prefix: ["frontbase", "cache", ...prefix ? [prefix] : []] })) {
+          const keyParts = entry.key;
+          if (keyParts.length >= 3) {
+            results.push(keyParts.slice(2).join(":"));
+          }
+        }
+        return results;
+      }
+      async ping() {
+        await this.kvPromise;
+        return "PONG";
+      }
+      // ── Queue operations (list-based, using KV sorted keys) ──────────
+      async lpush(key, ...elements) {
+        const kv = await this.kvPromise;
+        const listKey = ["frontbase", "queue", key];
+        for (const el of elements) {
+          const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+          await kv.set([...listKey, id], el);
+        }
+        return elements.length;
+      }
+      async rpop(key) {
+        const kv = await this.kvPromise;
+        const listKey = ["frontbase", "queue", key];
+        let oldest = null;
+        for await (const entry of kv.list({ prefix: listKey })) {
+          oldest = entry;
+          break;
+        }
+        if (!oldest) return null;
+        await kv.delete(oldest.key);
+        return oldest.value;
+      }
+      async llen(key) {
+        const kv = await this.kvPromise;
+        const listKey = ["frontbase", "queue", key];
+        let count = 0;
+        for await (const _ of kv.list({ prefix: listKey })) {
+          count++;
+        }
+        return count;
+      }
+      // ── Rate limiting ────────────────────────────────────────────────
+      async incr(key) {
+        const kv = await this.kvPromise;
+        const k = this.toKey(key);
+        const current = await kv.get(k);
+        const newVal = (current.value ?? 0) + 1;
+        await kv.set(k, newVal);
+        return newVal;
+      }
+      async decr(key) {
+        const kv = await this.kvPromise;
+        const k = this.toKey(key);
+        const current = await kv.get(k);
+        const newVal = (current.value ?? 0) - 1;
+        await kv.set(k, newVal);
+        return newVal;
+      }
+      async expire(key, seconds) {
+        const kv = await this.kvPromise;
+        const k = this.toKey(key);
+        const current = await kv.get(k);
+        if (current.value === null) return 0;
+        await kv.set(k, current.value, { expireIn: seconds * 1e3 });
+        return 1;
+      }
+      // ── Sorted set (priority queue) ──────────────────────────────────
+      async zadd(key, score, member) {
+        const kv = await this.kvPromise;
+        const zKey = ["frontbase", "zset", key, score.toString().padStart(15, "0"), member];
+        await kv.set(zKey, member);
+        return 1;
+      }
+      async zpopmax(key) {
+        const kv = await this.kvPromise;
+        const prefix = ["frontbase", "zset", key];
+        let last2 = null;
+        for await (const entry of kv.list({ prefix })) {
+          last2 = entry;
+        }
+        if (!last2) return null;
+        await kv.delete(last2.key);
+        const keyParts = last2.key;
+        const score = parseFloat(keyParts[keyParts.length - 2]);
+        return { member: last2.value, score };
+      }
+    };
+  }
+});
+
+// src/cache/CfKvHttpProvider.ts
+var CfKvHttpProvider_exports = {};
+__export(CfKvHttpProvider_exports, {
+  CfKvHttpProvider: () => CfKvHttpProvider
+});
+function kvUrl(accountId, namespaceId, path) {
+  return `${CF_API}/accounts/${accountId}/storage/kv/namespaces/${namespaceId}${path}`;
+}
+function authHeaders(apiToken) {
+  return {
+    "Authorization": `Bearer ${apiToken}`
+  };
+}
+var CF_API, CfKvHttpProvider;
+var init_CfKvHttpProvider = __esm({
+  "src/cache/CfKvHttpProvider.ts"() {
+    CF_API = "https://api.cloudflare.com/client/v4";
+    CfKvHttpProvider = class {
+      accountId = "";
+      namespaceId = "";
+      apiToken = "";
+      ensureConfig() {
+        if (this.accountId) return;
+        const cacheUrl = process.env.FRONTBASE_CACHE_URL || "";
+        this.apiToken = process.env.FRONTBASE_CF_API_TOKEN || "";
+        this.accountId = process.env.FRONTBASE_CF_ACCOUNT_ID || "";
+        if (cacheUrl.startsWith("kv://")) {
+          this.namespaceId = cacheUrl.replace("kv://", "");
+        } else {
+          this.namespaceId = cacheUrl;
+        }
+        if (!this.namespaceId || !this.apiToken || !this.accountId) {
+          throw new Error(
+            "[CfKvHttpProvider] Missing env vars. Required: FRONTBASE_CACHE_URL (kv://namespace-id), FRONTBASE_CF_API_TOKEN, FRONTBASE_CF_ACCOUNT_ID"
+          );
+        }
+        console.log(`\u{1F536} CfKvHttpProvider configured: KV ${this.namespaceId.substring(0, 8)}...`);
+      }
+      // =========================================================================
+      // Core Key-Value Operations
+      // =========================================================================
+      async get(key) {
+        this.ensureConfig();
+        const url = kvUrl(this.accountId, this.namespaceId, `/values/${encodeURIComponent(key)}`);
+        const resp = await fetch(url, {
+          headers: authHeaders(this.apiToken)
+        });
+        if (resp.status === 404) return null;
+        if (!resp.ok) {
+          console.error(`[CfKvHttpProvider] GET ${key} failed: ${resp.status}`);
+          return null;
+        }
+        const text2 = await resp.text();
+        try {
+          return JSON.parse(text2);
+        } catch {
+          return text2;
+        }
+      }
+      async set(key, value) {
+        this.ensureConfig();
+        const url = kvUrl(this.accountId, this.namespaceId, `/values/${encodeURIComponent(key)}`);
+        const resp = await fetch(url, {
+          method: "PUT",
+          headers: {
+            ...authHeaders(this.apiToken),
+            "Content-Type": "text/plain"
+          },
+          body: value
+        });
+        if (!resp.ok) {
+          const text2 = await resp.text();
+          console.error(`[CfKvHttpProvider] SET ${key} failed: ${resp.status} ${text2.substring(0, 200)}`);
+        }
+      }
+      async setex(key, seconds, value) {
+        this.ensureConfig();
+        const url = kvUrl(
+          this.accountId,
+          this.namespaceId,
+          `/values/${encodeURIComponent(key)}?expiration_ttl=${seconds}`
+        );
+        const resp = await fetch(url, {
+          method: "PUT",
+          headers: {
+            ...authHeaders(this.apiToken),
+            "Content-Type": "text/plain"
+          },
+          body: value
+        });
+        if (!resp.ok) {
+          const text2 = await resp.text();
+          console.error(`[CfKvHttpProvider] SETEX ${key} failed: ${resp.status} ${text2.substring(0, 200)}`);
+        }
+      }
+      async del(...keys) {
+        this.ensureConfig();
+        let deleted = 0;
+        for (const key of keys) {
+          const url = kvUrl(this.accountId, this.namespaceId, `/values/${encodeURIComponent(key)}`);
+          const resp = await fetch(url, {
+            method: "DELETE",
+            headers: authHeaders(this.apiToken)
+          });
+          if (resp.ok) deleted++;
+        }
+        return deleted;
+      }
+      async keys(pattern) {
+        this.ensureConfig();
+        const prefix = pattern.endsWith("*") ? pattern.slice(0, -1) : pattern;
+        const url = kvUrl(
+          this.accountId,
+          this.namespaceId,
+          `/keys?prefix=${encodeURIComponent(prefix)}&limit=1000`
+        );
+        const resp = await fetch(url, {
+          headers: authHeaders(this.apiToken)
+        });
+        if (!resp.ok) return [];
+        const data = await resp.json();
+        const result = data?.result || [];
+        return result.map((item) => item.name);
+      }
+      async ping() {
+        this.ensureConfig();
+        const url = kvUrl(this.accountId, this.namespaceId, "/keys?limit=1");
+        const resp = await fetch(url, {
+          headers: authHeaders(this.apiToken)
+        });
+        if (resp.ok) return "PONG (CF KV)";
+        throw new Error(`[CfKvHttpProvider] Ping failed: ${resp.status}`);
+      }
+      // =========================================================================
+      // Unsupported Operations (no-op — KV is not a data structure server)
+      // =========================================================================
+      async lpush(_key, ..._elements) {
+        return 0;
+      }
+      async rpop(_key) {
+        return null;
+      }
+      async llen(_key) {
+        return 0;
+      }
+      async incr(_key) {
+        return 1;
+      }
+      async decr(_key) {
+        return 0;
+      }
+      async expire(_key, _seconds) {
+        return 1;
+      }
+      async zadd(_key, _score, _member) {
+        return 1;
+      }
+      async zpopmax(_key) {
+        return null;
+      }
+    };
+  }
+});
+
 // src/cache/index.ts
 var cache_exports = {};
 __export(cache_exports, {
@@ -21874,6 +27352,27 @@ __export(cache_exports, {
 async function createInitialProvider2() {
   const cacheUrl = process.env.FRONTBASE_CACHE_URL;
   const cacheToken = process.env.FRONTBASE_CACHE_TOKEN;
+  const cacheProvider2 = process.env.FRONTBASE_CACHE_PROVIDER?.toLowerCase();
+  if (cacheProvider2 === "deno_kv") {
+    try {
+      const { DenoKvProvider: DenoKvProvider2 } = (init_DenoKvProvider(), __toCommonJS(DenoKvProvider_exports));
+      console.log("\u{1F995} Cache: DenoKvProvider (Deno.openKv)");
+      return new DenoKvProvider2();
+    } catch (e) {
+      console.warn(`\u26A0\uFE0F Failed to init Deno KV cache adapter: ${e.message}`);
+      return new NullCacheProvider();
+    }
+  }
+  if (cacheProvider2 === "cloudflare" || cacheProvider2 === "cloudflare_kv") {
+    try {
+      const { CfKvHttpProvider: CfKvHttpProvider2 } = (init_CfKvHttpProvider(), __toCommonJS(CfKvHttpProvider_exports));
+      console.log("\u{1F536} Cache: CfKvHttpProvider (KV via HTTP)");
+      return new CfKvHttpProvider2();
+    } catch (e) {
+      console.warn(`\u26A0\uFE0F Failed to init CF KV cache adapter: ${e.message}`);
+      return new NullCacheProvider();
+    }
+  }
   if (cacheUrl && cacheUrl.startsWith("http") && cacheToken) {
     try {
       const { initRedis: initRedis2 } = (init_redis(), __toCommonJS(redis_exports));
@@ -34974,7 +40473,7 @@ var init_fs = __esm({
 // src/db/project-settings.ts
 var project_settings_exports = {};
 __export(project_settings_exports, {
-  DEFAULT_FAVICON: () => DEFAULT_FAVICON4,
+  DEFAULT_FAVICON: () => DEFAULT_FAVICON5,
   getFaviconUrl: () => getFaviconUrl,
   getProjectSettings: () => getProjectSettings,
   initProjectSettingsDb: () => initProjectSettingsDb,
@@ -35023,7 +40522,7 @@ async function getProjectSettings() {
 }
 async function getFaviconUrl() {
   const settings = await getProjectSettings();
-  return settings.faviconUrl || DEFAULT_FAVICON4;
+  return settings.faviconUrl || DEFAULT_FAVICON5;
 }
 async function updateProjectSettings(updates) {
   const database = getSettingsDb();
@@ -35043,7 +40542,7 @@ async function updateProjectSettings(updates) {
   console.log("\u2699\uFE0F Project settings updated");
   return getProjectSettings();
 }
-var projectSettings2, DEFAULT_FAVICON4, db;
+var projectSettings2, DEFAULT_FAVICON5, db;
 var init_project_settings = __esm({
   "src/db/project-settings.ts"() {
     init_libsql();
@@ -35065,7 +40564,7 @@ var init_project_settings = __esm({
       // Timestamps
       updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
     });
-    DEFAULT_FAVICON4 = "/static/icon.png";
+    DEFAULT_FAVICON5 = "/static/icon.png";
     db = null;
   }
 });
@@ -48320,6 +53819,13 @@ function createDenoHandler(app2, platform, options) {
 // src/routes/health.ts
 var startedAt = Date.now();
 var healthRoute = new OpenAPIHono();
+var PING_TIMEOUT_MS = 8e3;
+function withTimeout(promise, ms2) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject2) => setTimeout(() => reject2(new Error("timeout")), ms2))
+  ]);
+}
 async function checkStateDb() {
   const provider = process.env.FRONTBASE_STATE_DB_PROVIDER;
   const url = process.env.FRONTBASE_STATE_DB_URL;
@@ -48334,7 +53840,7 @@ async function checkStateDb() {
   if (schema) result.schema = schema;
   try {
     const { stateProvider: stateProvider2 } = await Promise.resolve().then(() => (init_storage(), storage_exports));
-    await stateProvider2.listPages();
+    await withTimeout(stateProvider2.listPages(), PING_TIMEOUT_MS);
     result.status = "ok";
   } catch (e) {
     result.status = "error";
@@ -48350,7 +53856,7 @@ async function checkCache() {
   }
   try {
     const { cacheProvider: cacheProvider2 } = await Promise.resolve().then(() => (init_cache(), cache_exports));
-    await cacheProvider2.get("__health_check__");
+    await withTimeout(cacheProvider2.get("__health_check__"), PING_TIMEOUT_MS);
     return { provider: provider || "redis", status: "ok" };
   } catch (e) {
     return {
@@ -48363,7 +53869,8 @@ async function checkCache() {
 async function checkQueue() {
   const provider = process.env.FRONTBASE_QUEUE_PROVIDER;
   const token = process.env.FRONTBASE_QUEUE_TOKEN || process.env.QSTASH_TOKEN;
-  if (!token) {
+  const url = process.env.FRONTBASE_QUEUE_URL;
+  if (!token && !url && !provider) {
     return { provider: "none", status: "not_configured" };
   }
   return { provider: provider || "qstash", status: "ok" };
@@ -48404,6 +53911,23 @@ var route = createRoute({
   }
 });
 healthRoute.openapi(route, async (c) => {
+  const systemKey = process.env.FRONTBASE_SYSTEM_KEY;
+  const provided = c.req.header("x-system-key");
+  const isAuthenticated = !systemKey || provided === systemKey;
+  if (!isAuthenticated) {
+    return c.json({
+      status: "ok",
+      service: "frontbase-edge",
+      version: "0.1.0",
+      provider: getPlatform(),
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      bindings: {
+        stateDb: { provider: "hidden", status: "ok" },
+        cache: { provider: "hidden", status: "ok" },
+        queue: { provider: "hidden", status: "ok" }
+      }
+    });
+  }
   const platform = getPlatform();
   const isServerless = platform !== "docker";
   const [stateDb, cache, queue] = await Promise.all([
@@ -48416,7 +53940,6 @@ healthRoute.openapi(route, async (c) => {
     service: "frontbase-edge",
     version: "0.1.0",
     provider: platform,
-    // Uptime is meaningless on serverless (cold starts reset it)
     ...isServerless ? {} : { uptime_seconds: Math.floor((Date.now() - startedAt) / 1e3) },
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
     bindings: { stateDb, cache, queue }
@@ -48445,7 +53968,7 @@ function getGPUModels() {
 var manifestRoute = new OpenAPIHono();
 function getAdapterType() {
   const platform = process.env.FRONTBASE_ADAPTER_PLATFORM || "docker";
-  if (platform === "cloudflare-lite") return "lite";
+  if (platform.endsWith("-lite")) return "lite";
   return "full";
 }
 function getCapabilities() {
@@ -49265,11 +54788,11 @@ function getQueueClient() {
   if (queueInitialized) return queueClient;
   queueInitialized = true;
   const token = process.env.FRONTBASE_QUEUE_TOKEN || process.env.QSTASH_TOKEN;
-  if (!token) {
+  const provider = getQueueProvider();
+  if (!token && provider !== "cloudflare" && provider !== "cloudflare_queues") {
     console.log("\u2B1C Queue: not configured (no FRONTBASE_QUEUE_TOKEN)");
     return null;
   }
-  const provider = getQueueProvider();
   if (provider === "qstash") {
     try {
       const { Client: Client3 } = require_qstash();
@@ -49280,6 +54803,19 @@ function getQueueClient() {
       console.warn("\u26A0\uFE0F Queue: @upstash/qstash not installed, durable execution disabled");
       return null;
     }
+  }
+  if (provider === "cloudflare" || provider === "cloudflare_queues") {
+    const apiToken = process.env.FRONTBASE_CF_API_TOKEN;
+    const accountId = process.env.FRONTBASE_CF_ACCOUNT_ID;
+    const queueUrl = process.env.FRONTBASE_QUEUE_URL || "";
+    const queueId = queueUrl.startsWith("cfq://") ? queueUrl.replace("cfq://", "") : queueUrl;
+    if (!apiToken || !accountId || !queueId) {
+      console.warn("\u26A0\uFE0F Queue: CF Queues missing FRONTBASE_CF_API_TOKEN, FRONTBASE_CF_ACCOUNT_ID, or FRONTBASE_QUEUE_URL");
+      return null;
+    }
+    queueClient = { provider: "cloudflare", apiToken, accountId, queueId };
+    console.log(`\u{1F504} Queue: CF Queues enabled (queue ${queueId.substring(0, 8)}...)`);
+    return queueClient;
   }
   console.warn(`\u26A0\uFE0F Queue: unsupported provider "${provider}", durable execution disabled`);
   return null;
@@ -49302,6 +54838,32 @@ async function publishExecution(destinationUrl, payload, options) {
       return result.messageId || null;
     } catch (error) {
       console.error("[Queue] Publish failed:", error.message);
+      return null;
+    }
+  }
+  if ((provider === "cloudflare" || provider === "cloudflare_queues") && client?.provider === "cloudflare") {
+    try {
+      const cfApi = `https://api.cloudflare.com/client/v4/accounts/${client.accountId}/queues/${client.queueId}/messages`;
+      const resp = await fetch(cfApi, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${client.apiToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          body: JSON.stringify({ destinationUrl, payload }),
+          content_type: "json"
+        })
+      });
+      if (!resp.ok) {
+        const text2 = await resp.text();
+        console.error(`[Queue] CF Queue publish failed: ${resp.status} ${text2.substring(0, 200)}`);
+        return null;
+      }
+      const data = await resp.json();
+      return data?.result?.messageId || "cf-queued";
+    } catch (error) {
+      console.error("[Queue] CF Queue publish failed:", error.message);
       return null;
     }
   }
@@ -49328,6 +54890,9 @@ async function verifyQueueSignature(signature, _body) {
     } catch {
       return false;
     }
+  }
+  if (provider === "cloudflare" || provider === "cloudflare_queues") {
+    return true;
   }
   return false;
 }
@@ -50399,6 +55964,441 @@ edgeLogsRoute.get("/", async (c) => {
   }
 });
 
+// src/routes/workflows.ts
+init_storage();
+var workflowsRoute = new OpenAPIHono();
+var WorkflowSummarySchema = external_exports.object({
+  id: external_exports.string(),
+  name: external_exports.string(),
+  triggerType: external_exports.string(),
+  version: external_exports.number(),
+  isActive: external_exports.boolean(),
+  createdAt: external_exports.string(),
+  updatedAt: external_exports.string()
+});
+var listRoute2 = createRoute({
+  method: "get",
+  path: "/",
+  tags: ["Workflows"],
+  summary: "List all deployed workflows",
+  description: "Returns a list of all workflows deployed to this engine",
+  responses: {
+    200: {
+      description: "Workflow list",
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            workflows: external_exports.array(WorkflowSummarySchema),
+            total: external_exports.number()
+          })
+        }
+      }
+    }
+  }
+});
+workflowsRoute.openapi(listRoute2, async (c) => {
+  const workflows = await stateProvider.listWorkflows();
+  return c.json({
+    workflows: workflows.map((w) => ({
+      id: w.id,
+      name: w.name,
+      triggerType: w.triggerType,
+      version: w.version,
+      isActive: w.isActive,
+      createdAt: w.createdAt,
+      updatedAt: w.updatedAt
+    })),
+    total: workflows.length
+  }, 200);
+});
+var getRoute2 = createRoute({
+  method: "get",
+  path: "/:id",
+  tags: ["Workflows"],
+  summary: "Get workflow by ID",
+  description: "Returns the full workflow definition including nodes and edges",
+  request: {
+    params: external_exports.object({
+      id: external_exports.string().uuid().openapi({ description: "Workflow ID" })
+    })
+  },
+  responses: {
+    200: {
+      description: "Workflow detail",
+      content: {
+        "application/json": {
+          schema: external_exports.object({ workflow: external_exports.record(external_exports.unknown()) })
+        }
+      }
+    },
+    404: {
+      description: "Workflow not found",
+      content: {
+        "application/json": { schema: ErrorResponseSchema }
+      }
+    }
+  }
+});
+workflowsRoute.openapi(getRoute2, async (c) => {
+  const { id } = c.req.valid("param");
+  const workflow = await stateProvider.getWorkflowById(id);
+  if (!workflow) {
+    return c.json({ error: "NotFound", message: `Workflow ${id} not found` }, 404);
+  }
+  return c.json({ workflow }, 200);
+});
+var deleteRoute = createRoute({
+  method: "delete",
+  path: "/:id",
+  tags: ["Workflows"],
+  summary: "Delete a workflow",
+  description: "Permanently removes a workflow from this engine",
+  request: {
+    params: external_exports.object({
+      id: external_exports.string().uuid().openapi({ description: "Workflow ID" })
+    })
+  },
+  responses: {
+    200: {
+      description: "Workflow deleted",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema
+        }
+      }
+    }
+  }
+});
+workflowsRoute.openapi(deleteRoute, async (c) => {
+  const { id } = c.req.valid("param");
+  await stateProvider.deleteWorkflow(id);
+  return c.json({ success: true, message: `Workflow ${id} deleted` }, 200);
+});
+var toggleRoute = createRoute({
+  method: "patch",
+  path: "/:id/toggle",
+  tags: ["Workflows"],
+  summary: "Toggle workflow active state",
+  description: "Enable or disable a workflow without deleting it",
+  request: {
+    params: external_exports.object({
+      id: external_exports.string().uuid().openapi({ description: "Workflow ID" })
+    }),
+    body: {
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            isActive: external_exports.boolean().openapi({ description: "Desired active state" })
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Workflow toggled",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema.extend({
+            isActive: external_exports.boolean()
+          })
+        }
+      }
+    }
+  }
+});
+workflowsRoute.openapi(toggleRoute, async (c) => {
+  const { id } = c.req.valid("param");
+  const { isActive } = c.req.valid("json");
+  await stateProvider.toggleWorkflow(id, isActive);
+  return c.json({
+    success: true,
+    message: `Workflow ${id} ${isActive ? "activated" : "deactivated"}`,
+    isActive
+  }, 200);
+});
+
+// src/routes/queue.ts
+var queueRoute = new OpenAPIHono();
+function getQueueConfig() {
+  const url = process.env.FRONTBASE_QUEUE_URL;
+  const token = process.env.FRONTBASE_QUEUE_TOKEN;
+  if (!url || !token) return null;
+  return { url: url.replace(/\/$/, ""), token };
+}
+var statsRoute3 = createRoute({
+  method: "get",
+  path: "/stats",
+  tags: ["Queue"],
+  summary: "Get queue stats",
+  description: "Returns queue connection status and provider info",
+  responses: {
+    200: {
+      description: "Queue stats",
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            configured: external_exports.boolean(),
+            provider: external_exports.string().optional(),
+            connected: external_exports.boolean().optional(),
+            message: external_exports.string()
+          })
+        }
+      }
+    }
+  }
+});
+queueRoute.openapi(statsRoute3, async (c) => {
+  const config = getQueueConfig();
+  if (!config) {
+    return c.json({
+      configured: false,
+      message: "No queue provider configured. Set FRONTBASE_QUEUE_URL and FRONTBASE_QUEUE_TOKEN."
+    }, 200);
+  }
+  const isQStash = config.url.includes("qstash") || config.url.includes("upstash");
+  const provider = isQStash ? "upstash-qstash" : "generic-http";
+  try {
+    const resp = await fetch(config.url, {
+      headers: { "Authorization": `Bearer ${config.token}` }
+    });
+    return c.json({
+      configured: true,
+      provider,
+      connected: resp.ok,
+      message: resp.ok ? "Queue connected" : `Queue returned HTTP ${resp.status}`
+    }, 200);
+  } catch (err2) {
+    return c.json({
+      configured: true,
+      provider,
+      connected: false,
+      message: `Connection failed: ${err2.message}`
+    }, 200);
+  }
+});
+var publishRoute = createRoute({
+  method: "post",
+  path: "/publish",
+  tags: ["Queue"],
+  summary: "Publish a message to the queue",
+  description: "Sends a message to the connected queue provider (QStash/CF Queue)",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            topic: external_exports.string().min(1).openapi({ description: "Queue topic/destination URL" }),
+            payload: external_exports.record(external_exports.unknown()).openapi({ description: "Message body (JSON)" }),
+            delay: external_exports.number().int().min(0).optional().openapi({
+              description: "Delay in seconds before delivery (QStash only)"
+            })
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Message published",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema.extend({
+            messageId: external_exports.string().optional()
+          })
+        }
+      }
+    },
+    400: {
+      description: "Invalid request",
+      content: {
+        "application/json": { schema: ErrorResponseSchema }
+      }
+    },
+    501: {
+      description: "No queue configured",
+      content: {
+        "application/json": { schema: ErrorResponseSchema }
+      }
+    }
+  }
+});
+queueRoute.openapi(publishRoute, async (c) => {
+  const config = getQueueConfig();
+  if (!config) {
+    return c.json({
+      error: "NotConfigured",
+      message: "No queue provider configured"
+    }, 501);
+  }
+  const { topic, payload, delay } = c.req.valid("json");
+  try {
+    const headers = {
+      "Authorization": `Bearer ${config.token}`,
+      "Content-Type": "application/json"
+    };
+    if (delay && delay > 0) {
+      headers["Upstash-Delay"] = `${delay}s`;
+    }
+    const resp = await fetch(`${config.url}/v2/publish/${encodeURIComponent(topic)}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) {
+      const text2 = await resp.text();
+      return c.json({
+        error: "PublishFailed",
+        message: `Queue returned HTTP ${resp.status}: ${text2.substring(0, 200)}`
+      }, 400);
+    }
+    const result = await resp.json();
+    return c.json({
+      success: true,
+      message: "Message published",
+      messageId: result.messageId || result.id || void 0
+    }, 200);
+  } catch (err2) {
+    return c.json({
+      error: "PublishError",
+      message: err2.message || "Failed to publish message"
+    }, 400);
+  }
+});
+
+// src/routes/config.ts
+var configRoute = new OpenAPIHono();
+function redact(value) {
+  if (!value) return null;
+  if (value.length <= 16) return "***";
+  return `${value.substring(0, 8)}...${value.substring(value.length - 4)}`;
+}
+var getConfigRoute = createRoute({
+  method: "get",
+  path: "/",
+  tags: ["System"],
+  summary: "Get current runtime configuration",
+  description: "Returns the active database, cache, and queue settings (secrets redacted)",
+  responses: {
+    200: {
+      description: "Current config",
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            stateDb: external_exports.object({
+              provider: external_exports.string().nullable(),
+              url: external_exports.string().nullable()
+            }),
+            cache: external_exports.object({
+              url: external_exports.string().nullable(),
+              configured: external_exports.boolean()
+            }),
+            queue: external_exports.object({
+              url: external_exports.string().nullable(),
+              configured: external_exports.boolean()
+            }),
+            engineMode: external_exports.string().nullable()
+          })
+        }
+      }
+    }
+  }
+});
+configRoute.openapi(getConfigRoute, async (c) => {
+  return c.json({
+    stateDb: {
+      provider: process.env.FRONTBASE_STATE_DB_PROVIDER || "local-sqlite",
+      url: redact(process.env.FRONTBASE_STATE_DB_URL)
+    },
+    cache: {
+      url: redact(process.env.FRONTBASE_CACHE_URL),
+      configured: !!(process.env.FRONTBASE_CACHE_URL && process.env.FRONTBASE_CACHE_TOKEN)
+    },
+    queue: {
+      url: redact(process.env.FRONTBASE_QUEUE_URL),
+      configured: !!(process.env.FRONTBASE_QUEUE_URL && process.env.FRONTBASE_QUEUE_TOKEN)
+    },
+    engineMode: process.env.FRONTBASE_ADAPTER_PLATFORM || null
+  }, 200);
+});
+var updateConfigRoute = createRoute({
+  method: "post",
+  path: "/",
+  tags: ["System"],
+  summary: "Update runtime configuration",
+  description: "Hot-swap database, cache, or queue configuration without redeploying. Updates process.env and reinitializes affected singletons.",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            cache: external_exports.object({
+              url: external_exports.string().min(1),
+              token: external_exports.string().min(1)
+            }).optional().openapi({ description: "Redis/Upstash cache credentials" }),
+            queue: external_exports.object({
+              url: external_exports.string().min(1),
+              token: external_exports.string().min(1)
+            }).optional().openapi({ description: "QStash/queue credentials" })
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Config updated",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema.extend({
+            updated: external_exports.array(external_exports.string())
+          })
+        }
+      }
+    },
+    400: {
+      description: "Invalid config",
+      content: {
+        "application/json": { schema: ErrorResponseSchema }
+      }
+    }
+  }
+});
+configRoute.openapi(updateConfigRoute, async (c) => {
+  const body = c.req.valid("json");
+  const updated = [];
+  try {
+    if (body.cache) {
+      process.env.FRONTBASE_CACHE_URL = body.cache.url;
+      process.env.FRONTBASE_CACHE_TOKEN = body.cache.token;
+      try {
+        const { initRedis: initRedis2 } = await Promise.resolve().then(() => (init_redis(), redis_exports));
+        initRedis2({ url: body.cache.url, token: body.cache.token });
+        updated.push("cache");
+        console.log("[Config] Cache reinitialized");
+      } catch (err2) {
+        console.error("[Config] Cache reinit failed:", err2.message);
+      }
+    }
+    if (body.queue) {
+      process.env.FRONTBASE_QUEUE_URL = body.queue.url;
+      process.env.FRONTBASE_QUEUE_TOKEN = body.queue.token;
+      updated.push("queue");
+      console.log("[Config] Queue config updated");
+    }
+    return c.json({
+      success: true,
+      message: updated.length > 0 ? `Updated: ${updated.join(", ")}` : "No changes applied",
+      updated
+    }, 200);
+  } catch (err2) {
+    return c.json({
+      error: "ConfigError",
+      message: err2.message || "Failed to apply config"
+    }, 400);
+  }
+});
+
 // src/routes/openai.ts
 var openaiRoute = new OpenAPIHono();
 function resolveModel(modelSlug, c) {
@@ -50776,38 +56776,77 @@ new TextDecoder();
 ];
 
 // src/middleware/auth.ts
-var apiKeyAuth = async (c, next) => {
-  const validKeys = (process.env.API_KEYS || "").split(",").map((k) => k.trim()).filter(Boolean);
-  if (validKeys.length === 0) {
-    console.warn("\u26A0\uFE0F No API_KEYS configured - webhook auth disabled");
+function parseKeyHashes() {
+  const envHashes = process.env.FRONTBASE_API_KEY_HASHES;
+  if (!envHashes) return null;
+  try {
+    return JSON.parse(envHashes);
+  } catch {
+    console.error("[Auth] Failed to parse FRONTBASE_API_KEY_HASHES");
+    return null;
+  }
+}
+function extractBearerToken(c) {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  return authHeader.slice(7).trim();
+}
+async function sha2562(input) {
+  const data = new TextEncoder().encode(input);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b2) => b2.toString(16).padStart(2, "0")).join("");
+}
+async function validateApiKey(token, allowedScopes) {
+  const keyEntries = parseKeyHashes();
+  if (!keyEntries || keyEntries.length === 0) return null;
+  const tokenHash = await sha2562(token);
+  const matched = keyEntries.find((k) => k.hash === tokenHash);
+  if (!matched) return null;
+  const keyScope = matched.scope || "user";
+  if (!allowedScopes.includes(keyScope) && keyScope !== "all") {
+    return null;
+  }
+  if (matched.expires_at) {
+    if (new Date(matched.expires_at) < /* @__PURE__ */ new Date()) return null;
+  }
+  return matched;
+}
+var systemKeyAuth = async (c, next) => {
+  const systemKey = process.env.FRONTBASE_SYSTEM_KEY;
+  if (!systemKey) {
     return next();
   }
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return c.json({ error: "Unauthorized", message: "Missing or invalid Authorization header" }, 401);
+  const sysHeader = c.req.header("x-system-key");
+  if (sysHeader && sysHeader === systemKey) {
+    return next();
   }
-  const token = authHeader.slice(7).trim();
-  if (!validKeys.includes(token)) {
-    return c.json({ error: "Unauthorized", message: "Invalid API key" }, 401);
+  const bearerToken = extractBearerToken(c);
+  if (bearerToken) {
+    const matched = await validateApiKey(bearerToken, ["management", "all"]);
+    if (matched) return next();
   }
-  return next();
+  return c.json({
+    error: {
+      message: "Unauthorized. Provide x-system-key header or a management-scoped API key.",
+      type: "invalid_request_error",
+      code: "unauthorized"
+    }
+  }, 401);
 };
-var aiApiKeyAuth = async (c, next) => {
+var userApiKeyAuth = async (c, next) => {
   const envHashes = process.env.FRONTBASE_API_KEY_HASHES;
   if (!envHashes) {
     return c.json({
       error: {
-        message: "AI endpoints are not configured. No API keys have been deployed to this engine.",
+        message: "No API keys configured for this engine.",
         type: "invalid_request_error",
         code: "no_api_keys_configured"
       }
     }, 403);
   }
-  let keyEntries;
-  try {
-    keyEntries = JSON.parse(envHashes);
-  } catch {
-    console.error("[AI Auth] Failed to parse FRONTBASE_API_KEY_HASHES");
+  const keyEntries = parseKeyHashes();
+  if (!keyEntries) {
     return c.json({
       error: {
         message: "API key configuration error. Contact administrator.",
@@ -50825,8 +56864,8 @@ var aiApiKeyAuth = async (c, next) => {
       }
     }, 403);
   }
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  const token = extractBearerToken(c);
+  if (!token) {
     return c.json({
       error: {
         message: "Missing or invalid Authorization header. Use: Authorization: Bearer <api_key>",
@@ -50835,43 +56874,59 @@ var aiApiKeyAuth = async (c, next) => {
       }
     }, 401);
   }
-  const token = authHeader.slice(7).trim();
-  const encoder2 = new TextEncoder();
-  const data = encoder2.encode(token);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const tokenHash = hashArray.map((b2) => b2.toString(16).padStart(2, "0")).join("");
-  const matchedKey = keyEntries.find((k) => k.hash === tokenHash);
-  if (!matchedKey) {
+  const matched = await validateApiKey(token, ["user", "all"]);
+  if (!matched) {
     return c.json({
       error: {
-        message: "Invalid API key.",
+        message: "Invalid API key or insufficient scope.",
         type: "invalid_request_error",
         code: "invalid_api_key"
       }
     }, 401);
   }
-  if (matchedKey.expires_at) {
-    const expiresAt2 = new Date(matchedKey.expires_at);
-    if (expiresAt2 < /* @__PURE__ */ new Date()) {
-      return c.json({
-        error: {
-          message: "API key has expired.",
-          type: "invalid_request_error",
-          code: "expired_api_key"
-        }
-      }, 401);
-    }
-  }
   return next();
 };
+var aiApiKeyAuth = userApiKeyAuth;
 
 // src/engine/lite.ts
 new Liquid({
   strictVariables: false,
   strictFilters: false
 });
-function createLiteApp() {
+var ENGINE_PROFILES = {
+  lite: {
+    description: "Self-sufficient edge runtime for workflow automation, webhooks, and AI inference.",
+    techStack: "Hono \xB7 Drizzle ORM \xB7 LiquidJS \xB7 Zod",
+    badge: "Lite Engine",
+    tags: [
+      { name: "System", description: "Health checks, manifest, and self-update" },
+      { name: "Workflows", description: "Deploy, list, and manage published workflows" },
+      { name: "Execution", description: "Execute workflows and inspect runs" },
+      { name: "Webhooks", description: "Trigger workflows via incoming webhooks" },
+      { name: "Cache", description: "Redis/Upstash cache management \u2014 test connection, invalidate keys, flush, and stats" },
+      { name: "Queue", description: "Message queue management \u2014 stats and publishing (QStash/CF Queue)" },
+      { name: "AI", description: "OpenAI-compatible inference (GPU models required)" }
+    ]
+  },
+  full: {
+    description: "Self-sufficient edge runtime for SSR pages, workflow automation, data proxy, webhooks, and AI inference.",
+    techStack: "Hono \xB7 React \xB7 Drizzle ORM \xB7 LiquidJS \xB7 Zod",
+    badge: "Full Engine",
+    tags: [
+      { name: "System", description: "Health checks, manifest, and self-update" },
+      { name: "Pages", description: "Published page SSR and homepage rendering" },
+      { name: "Data", description: "Datasource proxy \u2014 fetches data from connected backends (Supabase, Neon, etc.)" },
+      { name: "Workflows", description: "Deploy, list, and manage published workflows" },
+      { name: "Execution", description: "Execute workflows and inspect runs" },
+      { name: "Webhooks", description: "Trigger workflows via incoming webhooks" },
+      { name: "Cache", description: "Redis/Upstash cache management \u2014 test connection, invalidate keys, flush, and stats" },
+      { name: "Queue", description: "Message queue management \u2014 stats and publishing (QStash/CF Queue)" },
+      { name: "AI", description: "OpenAI-compatible inference (GPU models required)" }
+    ]
+  }
+};
+function createLiteApp(mode = "lite") {
+  const profile = ENGINE_PROFILES[mode];
   const app2 = new OpenAPIHono({
     defaultHook: (result, c) => {
       if (!result.success) {
@@ -50920,7 +56975,17 @@ function createLiteApp() {
   });
   app2.use("/api/*", cors({ origin: "*" }));
   app2.use("*", cors({ origin: "*" }));
-  app2.use("/api/webhook/*", apiKeyAuth);
+  app2.use("/api/deploy/*", systemKeyAuth);
+  app2.use("/api/execute/*", systemKeyAuth);
+  app2.use("/api/update/*", systemKeyAuth);
+  app2.use("/api/cache/*", systemKeyAuth);
+  app2.use("/api/edge-logs/*", systemKeyAuth);
+  app2.use("/api/manifest/*", systemKeyAuth);
+  app2.use("/api/executions/*", systemKeyAuth);
+  app2.use("/api/workflows/*", systemKeyAuth);
+  app2.use("/api/queue/*", systemKeyAuth);
+  app2.use("/api/config/*", systemKeyAuth);
+  app2.use("/api/webhook/*", userApiKeyAuth);
   app2.route("/api/health", healthRoute);
   app2.route("/api/manifest", manifestRoute);
   app2.route("/api/deploy", deployRoute);
@@ -50930,6 +56995,9 @@ function createLiteApp() {
   app2.route("/api/update", updateRoute);
   app2.route("/api/cache", cacheRoute);
   app2.route("/api/edge-logs", edgeLogsRoute);
+  app2.route("/api/workflows", workflowsRoute);
+  app2.route("/api/queue", queueRoute);
+  app2.route("/api/config", configRoute);
   app2.use("/v1/*", aiApiKeyAuth);
   app2.route("/v1", openaiRoute);
   const EDGE_VERSION = "0.1.0";
@@ -50939,9 +57007,9 @@ function createLiteApp() {
       title: "Frontbase Edge Engine",
       version: EDGE_VERSION,
       description: [
-        "Self-sufficient edge runtime for SSR pages, workflow automation, webhooks, and AI inference.",
+        profile.description,
         "",
-        "**Tech Stack:** Hono \xB7 Drizzle ORM \xB7 LiquidJS \xB7 Zod",
+        `**Tech Stack:** ${profile.techStack}`,
         "",
         "**Authentication:** Protected routes require an API key via the `x-api-key` header."
       ].join("\n")
@@ -50952,17 +57020,7 @@ function createLiteApp() {
         description: "Current server"
       }
     ],
-    tags: [
-      { name: "System", description: "Health checks, manifest, and self-update" },
-      { name: "Workflows", description: "Deploy, list, and manage published workflows" },
-      { name: "Execution", description: "Execute workflows and inspect runs" },
-      { name: "Webhooks", description: "Trigger workflows via incoming webhooks" },
-      { name: "Pages", description: "Published page management (Full engine only)" },
-      { name: "Data", description: "Datasource proxy \u2014 fetches data from connected backends (Supabase, Neon, etc.) for published pages (Full engine only)" },
-      { name: "Cache", description: "Redis/Upstash cache management \u2014 test connection, invalidate keys, flush, and stats" },
-      { name: "Queue", description: "QStash message queue management (coming soon)" },
-      { name: "AI", description: "OpenAI-compatible inference (GPU models required)" }
-    ],
+    tags: profile.tags,
     security: [{ ApiKeyAuth: [] }],
     components: {
       securitySchemes: {
@@ -51092,13 +57150,17 @@ function createLiteApp() {
 </head>
 <body>
     <div class="fb-header">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect width="24" height="24" rx="6" fill="#6366f1"/>
-            <path d="M7 8h10M7 12h7M7 16h4" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            <g transform="scale(0.7) translate(5.1 5.1)" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+                <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/>
+                <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/>
+                <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/>
+            </g>
         </svg>
         <h1>Frontbase Edge API</h1>
         <span class="badge badge-version">v${EDGE_VERSION}</span>
-        <span class="badge badge-engine">Edge Engine</span>
+        <span class="badge badge-engine">${profile.badge}</span>
     </div>
     <div id="swagger-ui"></div>
     <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"><\/script>
@@ -51538,6 +57600,8 @@ function renderInteractiveComponent(type, id, props, childrenHtml) {
       return renderRadio(id, props, propsJson);
     case "Tooltip":
       return renderTooltip(id, props, childrenHtml, propsJson);
+    case "AuthForm":
+      return renderAuthForm(id, props, propsJson);
     default:
       return `<div data-fb-id="${id}" data-fb-type="${type}" data-fb-hydrate="true" data-fb-props="${escapeHtml2(propsJson)}">${childrenHtml}</div>`;
   }
@@ -51735,6 +57799,57 @@ function renderTooltip(id, props, childrenHtml, propsJson) {
         ${childrenHtml}
         <span class="fb-tooltip-content" data-position="${position}" style="display:none;position:absolute;background:#1f2937;color:#fff;padding:0.25rem 0.5rem;border-radius:0.25rem;font-size:0.75rem;white-space:nowrap;z-index:100">${content}</span>
     </span>`;
+}
+function renderAuthForm(id, props, propsJson) {
+  const formType = props.type || "both";
+  const title = escapeHtml2(String(props.title || (formType === "signup" ? "Create an Account" : "Sign In")));
+  const description = escapeHtml2(String(props.description || ""));
+  const primaryColor = props.primaryColor || "#18181b";
+  const providers = props.providers || [];
+  const showToggle = formType === "both";
+  const defaultIsLogin = formType !== "signup";
+  const socialButtons = providers.map((p2) => {
+    const name = p2.charAt(0).toUpperCase() + p2.slice(1);
+    return `<button type="button" class="fb-social-btn" data-provider="${p2}" style="width:100%;padding:0.5rem;background:#fff;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.8125rem;cursor:pointer">Continue with ${name}</button>`;
+  }).join("");
+  const attrs = getCommonAttributes2(id, "fb-auth-form", props, "", "authform", propsJson);
+  return `<div ${attrs}>
+        <div style="max-width:400px;margin:0 auto;padding:2rem">
+            <h2 style="margin:0 0 0.25rem;font-size:1.5rem;font-weight:700;color:#18181b;text-align:center">${title}</h2>
+            ${description ? `<p style="margin:0 0 1.5rem;color:#71717a;font-size:0.875rem;text-align:center">${description}</p>` : '<div style="margin-bottom:1.5rem"></div>'}
+            ${providers.length > 0 ? `
+                <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem">${socialButtons}</div>
+                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem">
+                    <div style="flex:1;height:1px;background:#e4e4e7"></div>
+                    <span style="color:#a1a1aa;font-size:0.75rem;text-transform:uppercase">or</span>
+                    <div style="flex:1;height:1px;background:#e4e4e7"></div>
+                </div>
+            ` : ""}
+            <div id="${id}-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:0.625rem;border-radius:0.375rem;font-size:0.8125rem;margin-bottom:0.75rem"></div>
+            <form id="${id}-form" style="display:flex;flex-direction:column;gap:0.75rem">
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem">Email</label>
+                    <input type="email" required autocomplete="email" placeholder="you@example.com"
+                        style="width:100%;padding:0.5rem 0.75rem;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.875rem;outline:none;box-sizing:border-box" />
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem">Password</label>
+                    <input type="password" required autocomplete="${defaultIsLogin ? "current-password" : "new-password"}" placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" minlength="6"
+                        style="width:100%;padding:0.5rem 0.75rem;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.875rem;outline:none;box-sizing:border-box" />
+                </div>
+                <button type="submit"
+                    style="width:100%;padding:0.625rem;background:${primaryColor};color:#fff;border:none;border-radius:0.375rem;font-size:0.875rem;font-weight:600;cursor:pointer">
+                    ${defaultIsLogin ? "Sign In" : "Sign Up"}
+                </button>
+            </form>
+            ${showToggle ? `
+                <p style="text-align:center;margin-top:1rem;font-size:0.8125rem;color:#71717a">
+                    ${defaultIsLogin ? "Don't have an account?" : "Already have an account?"}
+                    <a href="#" style="color:${primaryColor};font-weight:500;text-decoration:none;margin-left:0.25rem" data-fb-toggle-auth>${defaultIsLogin ? "Sign Up" : "Sign In"}</a>
+                </p>
+            ` : ""}
+        </div>
+    </div>`;
 }
 
 // src/ssr/components/data.ts
@@ -53698,7 +59813,7 @@ var FunctionsClient = class {
   }
 };
 
-// node_modules/@supabase/postgrest-js/dist/index.mjs
+// node_modules/@supabase/supabase-js/node_modules/@supabase/postgrest-js/dist/index.mjs
 var PostgrestError = class extends Error {
   /**
   * @example
@@ -57141,12 +63256,12 @@ function createFetchClient(options) {
       headers
     }) {
       const url = buildUrl(options.baseUrl, path, query);
-      const authHeaders = await buildAuthHeaders(options.auth);
+      const authHeaders2 = await buildAuthHeaders(options.auth);
       const res = await fetchFn(url, {
         method,
         headers: {
           ...body ? { "Content-Type": "application/json" } : {},
-          ...authHeaders,
+          ...authHeaders2,
           ...headers
         },
         body: body ? JSON.stringify(body) : void 0
@@ -60767,7 +66882,7 @@ function generatePKCEVerifier() {
   crypto.getRandomValues(array2);
   return Array.from(array2, dec2hex).join("");
 }
-async function sha2562(randomString) {
+async function sha2563(randomString) {
   const encoder2 = new TextEncoder();
   const encodedData = encoder2.encode(randomString);
   const hash = await crypto.subtle.digest("SHA-256", encodedData);
@@ -60780,7 +66895,7 @@ async function generatePKCEChallenge(verifier) {
     console.warn("WebCrypto API is not supported. Code challenge method will default to use plain instead of sha256.");
     return verifier;
   }
-  const hashed = await sha2562(verifier);
+  const hashed = await sha2563(verifier);
   return btoa(hashed).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 async function getCodeChallengeAndMethod(storage, storageKey, isPasswordRecovery = false) {
@@ -65097,13 +71212,13 @@ var SupabaseClient = class {
     return (_data$session$access_ = (_data$session = data.session) === null || _data$session === void 0 ? void 0 : _data$session.access_token) !== null && _data$session$access_ !== void 0 ? _data$session$access_ : _this.supabaseKey;
   }
   _initSupabaseAuthClient({ autoRefreshToken, persistSession, detectSessionInUrl, storage, userStorage, storageKey, flowType, lock, debug, throwOnError }, headers, fetch$1) {
-    const authHeaders = {
+    const authHeaders2 = {
       Authorization: `Bearer ${this.supabaseKey}`,
       apikey: `${this.supabaseKey}`
     };
     return new SupabaseAuthClient({
       url: this.authUrl.href,
-      headers: _objectSpread22(_objectSpread22({}, authHeaders), headers),
+      headers: _objectSpread22(_objectSpread22({}, authHeaders2), headers),
       storageKey,
       autoRefreshToken,
       persistSession,
@@ -65506,8 +71621,8 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height
 
 // src/ssr/htmlDocument.ts
 var HYDRATE_VERSION = "20260205h";
-var DEFAULT_FAVICON5 = "/static/icon.png";
-function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl = DEFAULT_FAVICON5) {
+var DEFAULT_FAVICON6 = "/static/icon.png";
+function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl = DEFAULT_FAVICON6) {
   const title = page.title || page.name;
   const description = page.description || "";
   const keywords = page.keywords || "";
@@ -65596,12 +71711,200 @@ function escapeHtml5(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
+// src/ssr/gatedPage.ts
+function generateGatedPageDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl, authFormConfig, supabaseUrl, supabaseAnonKey) {
+  const normalHtml = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl ?? void 0);
+  const formConfig = authFormConfig || {
+    type: "both",
+    title: "Welcome"};
+  const authOverlayHtml = buildAuthOverlay(formConfig, supabaseUrl, supabaseAnonKey);
+  const modifiedHtml = normalHtml.replace(
+    /<div id="root">/,
+    '<div id="root" style="filter:blur(8px);pointer-events:none;user-select:none;-webkit-filter:blur(8px)">'
+  ).replace(
+    "</body>",
+    `${authOverlayHtml}
+</body>`
+  );
+  return modifiedHtml;
+}
+function buildAuthOverlay(config, supabaseUrl, supabaseAnonKey) {
+  const primaryColor = config.primaryColor || "#18181b";
+  const title = config.title || (config.type === "signup" ? "Create an Account" : "Sign In");
+  const description = config.description || "";
+  const showToggle = config.type === "both";
+  const defaultIsLogin = config.type !== "signup";
+  const socialButtons = (config.providers || []).map((provider) => {
+    const name = provider.charAt(0).toUpperCase() + provider.slice(1);
+    return `<button type="button" class="fb-social-btn" data-provider="${provider}">
+            Continue with ${name}
+        </button>`;
+  }).join("\n");
+  const hasSocial = (config.providers || []).length > 0;
+  return `
+<!-- Frontbase Auth Overlay (Private Page Gating) -->
+<div id="fb-auth-overlay" style="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.4);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:1rem">
+
+<!-- Toast notification -->
+<div id="fb-auth-toast" style="position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:#18181b;color:#fff;padding:0.75rem 1.5rem;border-radius:0.5rem;font-size:0.875rem;font-family:system-ui,-apple-system,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:100000;animation:fb-toast-in 0.5s ease-out">
+    Please log in or sign up to access this page
+</div>
+
+<!-- Auth Card -->
+<div style="background:#fff;border-radius:0.75rem;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-width:400px;width:100%;padding:2rem;font-family:system-ui,-apple-system,sans-serif;animation:fb-card-in 0.4s ease-out">
+
+    ${config.logoUrl ? `<div style="text-align:center;margin-bottom:1.5rem"><img src="${escapeHtml6(config.logoUrl)}" alt="Logo" style="max-height:48px;max-width:200px"></div>` : ""}
+
+    <h2 id="fb-auth-title" style="margin:0 0 0.25rem;font-size:1.5rem;font-weight:700;color:#18181b;text-align:center">${escapeHtml6(title)}</h2>
+    ${description ? `<p style="margin:0 0 1.5rem;color:#71717a;font-size:0.875rem;text-align:center">${escapeHtml6(description)}</p>` : '<div style="margin-bottom:1.5rem"></div>'}
+
+    ${hasSocial ? `
+    <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem">
+        ${socialButtons}
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem">
+        <div style="flex:1;height:1px;background:#e4e4e7"></div>
+        <span style="color:#a1a1aa;font-size:0.75rem;text-transform:uppercase">or</span>
+        <div style="flex:1;height:1px;background:#e4e4e7"></div>
+    </div>
+    ` : ""}
+
+    <div id="fb-auth-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:0.625rem;border-radius:0.375rem;font-size:0.8125rem;margin-bottom:0.75rem"></div>
+
+    <form id="fb-auth-form" style="display:flex;flex-direction:column;gap:0.75rem" onsubmit="return false">
+        <div>
+            <label for="fb-email" style="display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem">Email</label>
+            <input id="fb-email" type="email" required autocomplete="email" placeholder="you@example.com"
+                style="width:100%;padding:0.5rem 0.75rem;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.875rem;outline:none;transition:border-color 0.2s;box-sizing:border-box"
+                onfocus="this.style.borderColor='${primaryColor}'" onblur="this.style.borderColor='#d4d4d8'">
+        </div>
+        <div>
+            <label for="fb-password" style="display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem">Password</label>
+            <input id="fb-password" type="password" required autocomplete="current-password" placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" minlength="6"
+                style="width:100%;padding:0.5rem 0.75rem;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.875rem;outline:none;transition:border-color 0.2s;box-sizing:border-box"
+                onfocus="this.style.borderColor='${primaryColor}'" onblur="this.style.borderColor='#d4d4d8'">
+        </div>
+        <button id="fb-auth-submit" type="submit"
+            style="width:100%;padding:0.625rem;background:${primaryColor};color:#fff;border:none;border-radius:0.375rem;font-size:0.875rem;font-weight:600;cursor:pointer;transition:opacity 0.2s"
+            onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+            ${defaultIsLogin ? "Sign In" : "Sign Up"}
+        </button>
+    </form>
+
+    ${showToggle ? `
+    <p id="fb-auth-toggle" style="text-align:center;margin-top:1rem;font-size:0.8125rem;color:#71717a">
+        <span id="fb-toggle-text">${defaultIsLogin ? "Don't have an account?" : "Already have an account?"}</span>
+        <a href="#" id="fb-toggle-link" style="color:${primaryColor};font-weight:500;text-decoration:none;margin-left:0.25rem"
+            onclick="fbToggleMode();return false">${defaultIsLogin ? "Sign Up" : "Sign In"}</a>
+    </p>
+    ` : ""}
+
+</div>
+</div>
+
+<style>
+@keyframes fb-toast-in{from{opacity:0;transform:translateX(-50%) translateY(-1rem)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes fb-card-in{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
+.fb-social-btn{width:100%;padding:0.5rem;background:#fff;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.8125rem;cursor:pointer;transition:background 0.2s;font-family:inherit}
+.fb-social-btn:hover{background:#f4f4f5}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"><\/script>
+<script>
+(function(){
+    var SUPABASE_URL = ${supabaseUrl ? `'${supabaseUrl}'` : "window.__PAGE_DATA__?.datasources?.[0]?.supabaseUrl || ''"};
+    var SUPABASE_ANON_KEY = ${supabaseAnonKey ? `'${supabaseAnonKey}'` : "window.__PAGE_DATA__?.datasources?.[0]?.anonKey || ''"};
+
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        console.error('[Frontbase Auth] Missing Supabase configuration');
+        return;
+    }
+
+    var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    var isLoginMode = ${defaultIsLogin ? "true" : "false"};
+
+    var form = document.getElementById('fb-auth-form');
+    var errorDiv = document.getElementById('fb-auth-error');
+    var submitBtn = document.getElementById('fb-auth-submit');
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        errorDiv.style.display = 'none';
+        submitBtn.disabled = true;
+        submitBtn.textContent = isLoginMode ? 'Signing in...' : 'Signing up...';
+
+        var email = document.getElementById('fb-email').value;
+        var password = document.getElementById('fb-password').value;
+
+        try {
+            var result;
+            if (isLoginMode) {
+                result = await supabase.auth.signInWithPassword({ email: email, password: password });
+            } else {
+                result = await supabase.auth.signUp({ email: email, password: password });
+            }
+
+            if (result.error) throw result.error;
+
+            // Success \u2014 reload to render the page without the overlay
+            window.location.reload();
+        } catch (err) {
+            errorDiv.textContent = err.message || 'Authentication failed';
+            errorDiv.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
+        }
+    });
+
+    // Social provider auth
+    document.querySelectorAll('.fb-social-btn').forEach(function(btn) {
+        btn.addEventListener('click', async function() {
+            var provider = this.getAttribute('data-provider');
+            try {
+                await supabase.auth.signInWithOAuth({ provider: provider });
+            } catch (err) {
+                errorDiv.textContent = err.message || 'OAuth failed';
+                errorDiv.style.display = 'block';
+            }
+        });
+    });
+
+    // Toggle login/signup mode
+    window.fbToggleMode = function() {
+        isLoginMode = !isLoginMode;
+        document.getElementById('fb-auth-title').textContent = isLoginMode ? '${escapeHtml6(config.type === "both" ? "Welcome Back" : title)}' : 'Create an Account';
+        submitBtn.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
+        document.getElementById('fb-toggle-text').textContent = isLoginMode ? "Don't have an account?" : 'Already have an account?';
+        document.getElementById('fb-toggle-link').textContent = isLoginMode ? 'Sign Up' : 'Sign In';
+        document.getElementById('fb-password').autocomplete = isLoginMode ? 'current-password' : 'new-password';
+    };
+
+    // Auto-dismiss toast after 5s
+    setTimeout(function() {
+        var toast = document.getElementById('fb-auth-toast');
+        if (toast) toast.style.opacity = '0';
+        setTimeout(function() { if (toast) toast.remove(); }, 500);
+    }, 5000);
+})();
+<\/script>`;
+}
+function escapeHtml6(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 // src/routes/pages.ts
 var ErrorResponseSchema2 = external_exports.object({
   error: external_exports.string(),
   message: external_exports.string().optional()
 });
 var pagesRoute = new OpenAPIHono();
+pagesRoute.use("*", async (c, next) => {
+  await next();
+  const ct2 = c.res.headers.get("Content-Type");
+  if (ct2) {
+    c.res.headers.set("X-Content-Type", ct2);
+  }
+});
 var renderPageRoute = createRoute({
   method: "get",
   path: "/:slug",
@@ -65722,6 +72025,45 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
   if (page.isHomepage) {
     return c.redirect("/", 301);
   }
+  if (!page.isPublic) {
+    const user = await getUserFromSession(c.req.raw);
+    if (!user) {
+      const contextPageData2 = {
+        id: page.id,
+        title: page.title || page.name,
+        slug: page.slug,
+        description: page.description,
+        published: page.isPublic,
+        createdAt: page.createdAt || (/* @__PURE__ */ new Date()).toISOString(),
+        updatedAt: page.updatedAt || (/* @__PURE__ */ new Date()).toISOString(),
+        canonicalUrl: void 0,
+        ogImage: void 0,
+        ogType: "website",
+        customVariables: {}
+      };
+      const context2 = await buildTemplateContext(c.req.raw, contextPageData2);
+      const bodyHtml2 = await renderPage(page.layoutData, context2);
+      const initialState2 = { pageVariables: context2.local, sessionVariables: context2.session, cookies: context2.cookies };
+      const trackingConfig2 = await fetchTrackingConfig();
+      const faviconUrl2 = await stateProvider.getFaviconUrl();
+      const authFormConfig = page._primaryAuthForm || void 0;
+      const supabaseUrl = process.env.SUPABASE_URL || page.datasources?.[0]?.supabaseUrl;
+      const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || page.datasources?.[0]?.anonKey;
+      const gatedHtml = generateGatedPageDocument(
+        page,
+        bodyHtml2,
+        initialState2,
+        trackingConfig2,
+        faviconUrl2,
+        authFormConfig,
+        supabaseUrl,
+        supabaseAnonKey
+      );
+      c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+      c.header("Content-Type", "text/html; charset=utf-8");
+      return c.html(gatedHtml);
+    }
+  }
   const contextPageData = {
     id: page.id,
     title: page.title || page.name,
@@ -65824,6 +72166,45 @@ pagesRoute.get("/", async (c) => {
       }
     }
     if (homepage) {
+      if (!homepage.isPublic) {
+        const user = await getUserFromSession(c.req.raw);
+        if (!user) {
+          const page2 = {
+            id: homepage.id,
+            slug: homepage.slug,
+            title: homepage.title,
+            description: homepage.description,
+            name: homepage.name,
+            isPublic: homepage.isPublic,
+            isHomepage: homepage.isHomepage,
+            layoutData: homepage.layoutData,
+            datasources: homepage.datasources,
+            cssBundle: homepage.cssBundle || void 0
+          };
+          const cpd = {
+            id: homepage.id,
+            title: homepage.title || homepage.name,
+            slug: homepage.slug,
+            description: homepage.description,
+            published: homepage.isPublic,
+            createdAt: homepage.publishedAt || (/* @__PURE__ */ new Date()).toISOString(),
+            updatedAt: homepage.publishedAt || (/* @__PURE__ */ new Date()).toISOString(),
+            canonicalUrl: void 0,
+            ogImage: void 0,
+            ogType: "website",
+            customVariables: {}
+          };
+          const ctx = await buildTemplateContext(c.req.raw, cpd);
+          const bodyHtml2 = await renderPage(page2.layoutData, ctx);
+          const is3 = { pageVariables: ctx.local, sessionVariables: ctx.session, cookies: ctx.cookies };
+          const tc = await fetchTrackingConfig();
+          const fav = await stateProvider.getFaviconUrl();
+          const afc = homepage._primaryAuthForm || void 0;
+          const su = process.env.SUPABASE_URL || homepage.datasources?.[0]?.supabaseUrl;
+          const sk = process.env.SUPABASE_ANON_KEY || homepage.datasources?.[0]?.anonKey;
+          return c.html(generateGatedPageDocument(page2, bodyHtml2, is3, tc, fav, afc, su, sk));
+        }
+      }
       const page = {
         id: homepage.id,
         slug: homepage.slug,
@@ -66070,7 +72451,9 @@ var PublishPageSchema = external_exports.object({
   isPublic: external_exports.boolean().default(true),
   isHomepage: external_exports.boolean().default(false),
   // Content hash for drift detection (SHA-256 of publishable attributes)
-  contentHash: external_exports.string().nullable().optional()
+  contentHash: external_exports.string().nullable().optional(),
+  // Auth form config baked at publish time (for private page gating overlay)
+  _primaryAuthForm: external_exports.record(external_exports.string(), external_exports.unknown()).nullable().optional()
 });
 var ImportPageRequestSchema = external_exports.object({
   page: PublishPageSchema,
@@ -66146,6 +72529,7 @@ importRoute.post("/", async (c) => {
         await redis.del("page:__homepage__");
         console.log(`[Import] Cache invalidated: page:__homepage__`);
       }
+      await redis.del("seo:sitemap", "seo:llms");
     } catch {
     }
     const publicUrl = process.env.PUBLIC_URL;
@@ -66658,10 +73042,232 @@ dataRoute.post("/clear-cache", async (c) => {
   return c.json({ success: true, message: "Cache cleared" });
 });
 
+// src/routes/manage.ts
+init_storage();
+var manageRoute = new OpenAPIHono();
+var listPagesRoute = createRoute({
+  method: "get",
+  path: "/pages",
+  tags: ["Pages"],
+  summary: "List all published pages",
+  description: "Returns slug, name, and version for each published page on this engine",
+  responses: {
+    200: {
+      description: "Page list",
+      content: {
+        "application/json": {
+          schema: external_exports.object({
+            pages: external_exports.array(external_exports.object({
+              slug: external_exports.string(),
+              name: external_exports.string(),
+              version: external_exports.number()
+            })),
+            total: external_exports.number()
+          })
+        }
+      }
+    }
+  }
+});
+manageRoute.openapi(listPagesRoute, async (c) => {
+  const pages = await stateProvider.listPages();
+  return c.json({ pages, total: pages.length }, 200);
+});
+var getPageRoute = createRoute({
+  method: "get",
+  path: "/pages/:slug",
+  tags: ["Pages"],
+  summary: "Get page by slug",
+  description: "Returns the full page bundle including layout, SEO, datasources, and CSS",
+  request: {
+    params: external_exports.object({
+      slug: external_exports.string().openapi({ description: "Page slug" })
+    })
+  },
+  responses: {
+    200: {
+      description: "Page bundle",
+      content: {
+        "application/json": {
+          schema: external_exports.object({ page: external_exports.record(external_exports.unknown()) })
+        }
+      }
+    },
+    404: {
+      description: "Page not found",
+      content: {
+        "application/json": { schema: ErrorResponseSchema }
+      }
+    }
+  }
+});
+manageRoute.openapi(getPageRoute, async (c) => {
+  const { slug } = c.req.valid("param");
+  const page = await stateProvider.getPageBySlug(slug);
+  if (!page) {
+    return c.json({ error: "NotFound", message: `Page "${slug}" not found` }, 404);
+  }
+  return c.json({ page }, 200);
+});
+var deletePageRoute = createRoute({
+  method: "delete",
+  path: "/pages/:slug",
+  tags: ["Pages"],
+  summary: "Delete a page",
+  description: "Removes a published page from this engine and invalidates Redis cache",
+  request: {
+    params: external_exports.object({
+      slug: external_exports.string().openapi({ description: "Page slug" })
+    })
+  },
+  responses: {
+    200: {
+      description: "Page deleted",
+      content: {
+        "application/json": { schema: SuccessResponseSchema }
+      }
+    }
+  }
+});
+manageRoute.openapi(deletePageRoute, async (c) => {
+  const { slug } = c.req.valid("param");
+  await stateProvider.deletePage(slug);
+  try {
+    const { getRedis: getRedis2 } = await Promise.resolve().then(() => (init_redis(), redis_exports));
+    const redis = getRedis2();
+    await redis.del(`page:${slug}`);
+  } catch {
+  }
+  return c.json({ success: true, message: `Page "${slug}" deleted` }, 200);
+});
+
+// src/routes/seo.ts
+init_storage();
+var seoRoute = new Hono2();
+seoRoute.use("*", async (c, next) => {
+  await next();
+  const ct2 = c.res.headers.get("Content-Type");
+  if (ct2) {
+    c.res.headers.set("X-Content-Type", ct2);
+  }
+});
+function getBaseUrl(request) {
+  const publicUrl = process.env.PUBLIC_URL;
+  if (publicUrl) return publicUrl.replace(/\/$/, "");
+  try {
+    const url = new URL(request.url);
+    return url.origin;
+  } catch {
+    return "http://localhost:3002";
+  }
+}
+seoRoute.get("/sitemap.xml", async (c) => {
+  try {
+    const { getRedis: getRedis2 } = await Promise.resolve().then(() => (init_redis(), redis_exports));
+    const redis = getRedis2();
+    const cached2 = await redis.get("seo:sitemap");
+    if (cached2) {
+      c.header("Content-Type", "application/xml");
+      c.header("Cache-Control", "public, max-age=3600");
+      c.header("X-Cache", "HIT");
+      return c.body(cached2);
+    }
+  } catch {
+  }
+  const baseUrl = getBaseUrl(c.req.raw);
+  const pages = await stateProvider.listPublicPageSlugs();
+  const urls = pages.map((page) => {
+    const loc = page.isHomepage ? baseUrl + "/" : `${baseUrl}/${page.slug}`;
+    const priority = page.isHomepage ? "1.0" : "0.8";
+    const lastmod = page.updatedAt ? page.updatedAt.split("T")[0] : (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+    return `  <url>
+    <loc>${escapeXml(loc)}</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>${priority}</priority>
+  </url>`;
+  }).join("\n");
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`;
+  try {
+    const { getRedis: getRedis2 } = await Promise.resolve().then(() => (init_redis(), redis_exports));
+    const redis = getRedis2();
+    await redis.setex("seo:sitemap", 3600, xml);
+  } catch {
+  }
+  c.header("Content-Type", "application/xml");
+  c.header("Cache-Control", "public, max-age=3600");
+  c.header("X-Cache", "MISS");
+  return c.body(xml);
+});
+seoRoute.get("/robots.txt", async (c) => {
+  const baseUrl = getBaseUrl(c.req.raw);
+  const robotsTxt = `User-agent: *
+Allow: /
+
+Sitemap: ${baseUrl}/sitemap.xml
+`;
+  c.header("Content-Type", "text/plain");
+  c.header("Cache-Control", "public, max-age=600");
+  return c.body(robotsTxt);
+});
+seoRoute.get("/llms.txt", async (c) => {
+  try {
+    const { getRedis: getRedis2 } = await Promise.resolve().then(() => (init_redis(), redis_exports));
+    const redis = getRedis2();
+    const cached2 = await redis.get("seo:llms");
+    if (cached2) {
+      c.header("Content-Type", "text/plain");
+      c.header("Cache-Control", "public, max-age=3600");
+      c.header("X-Cache", "HIT");
+      return c.body(cached2);
+    }
+  } catch {
+  }
+  const baseUrl = getBaseUrl(c.req.raw);
+  const pages = await stateProvider.listPublicPageSlugs();
+  const settings = await stateProvider.getProjectSettings();
+  const siteName = settings.siteName || "Frontbase Site";
+  const siteDescription = settings.siteDescription || "";
+  const lines = [
+    `# ${siteName}`
+  ];
+  if (siteDescription) {
+    lines.push(`> ${siteDescription}`);
+  }
+  lines.push("", "## Pages", "");
+  for (const page of pages) {
+    const url = page.isHomepage ? baseUrl + "/" : `${baseUrl}/${page.slug}`;
+    const label = page.slug.replace(/-/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
+    lines.push(`- [${label}](${url})`);
+  }
+  const llmsTxt = lines.join("\n") + "\n";
+  try {
+    const { getRedis: getRedis2 } = await Promise.resolve().then(() => (init_redis(), redis_exports));
+    const redis = getRedis2();
+    await redis.setex("seo:llms", 3600, llmsTxt);
+  } catch {
+  }
+  c.header("Content-Type", "text/plain");
+  c.header("Cache-Control", "public, max-age=3600");
+  c.header("X-Cache", "MISS");
+  return c.body(llmsTxt);
+});
+function escapeXml(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
 // src/engine/full.ts
-var app = createLiteApp();
+var app = createLiteApp("full");
+app.use("/api/import/*", systemKeyAuth);
+app.use("/api/data/*", systemKeyAuth);
+app.use("/api/manage/*", systemKeyAuth);
 app.route("/api/import", importRoute);
 app.route("/api/data", dataRoute);
+app.route("/api/manage", manageRoute);
+app.route("", seoRoute);
 app.route("", pagesRoute);
 
 // src/startup/sync.ts

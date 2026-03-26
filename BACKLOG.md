@@ -16,15 +16,12 @@
 - [ ] 🔌 **Enterprise Secrets Management** — Infisical integration for deploy-time secrets injection, E2E encrypted storage, audit logs.
 - [ ] 🔌 **Neon Auth Support** — Add Neon Auth as an auth provider option. Detect when auth provider has database capability and auto-suggest same datasource for contacts table.
 - [ ] 🔌 **Observability** — Axiom/Sentry logging integration, OpenTelemetry tracing.
+- [ ] ✨ **Stateless Edge Engine (DB-less Mode)** _(very low priority)_ — Bake pages and automations directly into the JS bundle as static exports (`BAKED_PAGES`, `BAKED_WORKFLOWS`). Edge SSR falls back to baked data when no state DB is connected. Enables serverless landing pages + webhook automations without D1/Turso. Trade-offs: every edit requires redeploy (~10-30s), limited to ~2-5 pages per bundle (50-200KB each), no execution logs. Remove `edge_db_id` filter for "baked" engines in Publish dropdown.
 
 ### API Keys
-- [ ] ✨ **Revealable API Keys (Fernet)** — Store `encrypt_data(full_key)` alongside the SHA-256 hash in `EdgeAPIKey`. Add `GET /api/edge-api-keys/{id}/reveal` endpoint that calls `decrypt_data()` to return the full key. Reuses existing Fernet infra from `database/utils.py` (`ENCRYPTION_KEY` env var / `data/encryption_key.txt`). Frontend: add "Reveal Key" / "Copy" button on key rows.
 - [ ] ✨ **Direct Secret Patching for Vercel/Netlify** — After API key CRUD, patch `FRONTBASE_API_KEY_HASHES` directly via provider API instead of full redeploy. Vercel: `POST /v10/projects/{id}/env`. Netlify: `PATCH /api/v1/sites/{id}` env vars. Docker/self-hosted still requires redeploy. Update `_sync_keys_to_engines()` in `edge_api_keys.py`.
 
 ### Builder / SSR (Backend)
-- [ ] ✨ **Private Page Enforcement** — Page gating (`pages.ts:360`): check `page.isPublic`, redirect unauthenticated. Auth middleware in Hono to verify JWT from cookie.
-- [ ] ✨ **`/robots.txt` on Edge** — Auto-generated from project settings, served by Edge Worker.
-- [ ] ✨ **`/sitemap.xml` on Edge** — Auto-generated from published page slugs in Turso, served by Edge Worker.
 - [ ] ✨ **Version History & Rollback (Pages)** — Snapshot table (`page_versions`) with rollback, diff view, audit trail.
 
 ### Automations (Backend)
@@ -50,11 +47,10 @@
 
 ### Builder / SSR (Frontend)
 - [ ] 🐛 **SSR page width issue** — Page content doesn't span full viewport. Debug `renderPage()` viewport width, `containerStyles.values.size`, `.fb-page` width.
-- [ ] ✨ **Auth Form component** — Login/Signup builder component with Edge SSR. Client-side auth via `supabase.auth.signInWithPassword()`/`signUp()`. JWT in httpOnly cookie.
 - [ ] ✨ **Role-Based Visibility** — Component-level access rules ("Visible to roles"). Server-side filtering. User-scoped data queries via JWT for Supabase RLS.
 - [ ] ✨ **PWA Support for Published Apps** — Dynamic Manifest, Service Worker, offline support, "Add to Home Screen" prompt.
 - [ ] 🐛 **Better error toasts** — Parse and display structured error details from backend.
-- [ ] ✨ **SSR/HTML Support for Supabase Edge Full Bundle** — Supabase rewrites `Content-Type: text/html` → `text/plain`. Requires reverse proxy, absolute CDN URLs for static assets, SSR setup guide in Inspector.
+
 
 ### Edge Infrastructure (Frontend)
 - [ ] ✨ **Local Data Proxy (Hybrid Edge)** — Connect Edge workers to local/private infra via `serverless-redis-http` or Cloudflare Tunnels.
@@ -62,7 +58,6 @@
 - [ ] ✨ **Live status panel** — Settings widget showing edge DB/cache/queue quotas, connection status, hit rate.
 - [ ] ✨ **Provider switch confirmation** — Confirmation dialog when changing edge DB/cache/queue provider.
 - [ ] ✨ **Inspector Health & Resource Metrics Panel** — Metrics tab: Worker CPU, memory, request count, error rate, Turso/Upstash usage.
-- [ ] ✨ **Inspector API Key Provisioning** — Add "🔑 API Keys" section under Inspector → Settings. Create keys auto-scoped to that engine (`edge_engine_id` pre-filled). Keys appear in both Inspector and Settings → API Keys (shared `EdgeAPIKey` table). Reuses existing `POST /api/edge-api-keys` endpoint.
 
 ### Automations (Frontend)
 - [ ] ✨ **Execution detail view — Pipeline Diagram** — Horizontal pipeline (`Node → Node → Node`) with hover tooltips.
@@ -91,6 +86,12 @@
 # ✅ Completed
 
 ## Backend
+### 2026-03-24 — Private Page Enforcement & SEO Routes
+- [x] ✨ **Private Page Enforcement** — Page gating (`pages.ts:360`): check `page.isPublic`, redirect unauthenticated. Auth middleware in Hono to verify JWT from cookie.
+- [x] ✨ **`/robots.txt` on Edge** — Auto-generated from project settings, served by Edge Worker.
+- [x] ✨ **`/sitemap.xml` on Edge** — Auto-generated from published page slugs in Edge.
+- [x] ✨ **Auth Form component** — Login/Signup builder component with Edge SSR. Client-side auth via `supabase.auth.signInWithPassword()`/`signUp()`. JWT in httpOnly cookie.
+- [x] ✨ **SSR/HTML Support for Supabase Edge Full Bundle** — Supabase rewrites `Content-Type: text/html` → `text/plain`. Requires reverse proxy, absolute CDN URLs for static assets, SSR setup guide in Inspector.
 
 ### 2026-03-23 — Edge Management API & DRY Refactor
 - [x] `DrizzleStateProvider` base class — deduplicated ~280 lines across LocalSqlite + Turso providers
@@ -100,6 +101,8 @@
 - [x] Source hash staleness detection — `get_source_hash()` + `sync_status` drift comparison
 - [x] `test_engine_deploy.py` — 29 mocked integration tests
 - [x] Removed Upstash as deploy provider (SDK, not hosting platform) — cleaned 5 files + 9 references
+- [x] ✨ **Inspector API Key Provisioning** — Add "🔑 API Keys" section under Inspector → Settings. Create keys auto-scoped to that engine (`edge_engine_id` pre-filled). Keys appear in both Inspector and Settings → API Keys (shared `EdgeAPIKey` table). Reuses existing `POST /api/edge-api-keys` endpoint.
+
 
 ### 2026-03-14–16 — Engine Auth & Provider Discovery
 - [x] `aiApiKeyAuth` middleware fixed for `FRONTBASE_API_KEY_HASHES`
@@ -111,6 +114,7 @@
 - [x] Publish-state sync check — `batch/sync-check` endpoint, `sync_status`/`bundle_checksum` drift detection
 - [x] `test_edge_auth.py` — 8 pytest tests for API key auth middleware
 - [x] Storage Adapters — `base.py` (ABC), `supabase_adapter.py`, `cloudflare_adapter.py` (R2), `vercel_adapter.py`, `netlify_adapter.py`, `factory.py`
+- [x] ✨ **Revealable API Keys (Fernet)** — Store `encrypt_data(full_key)` alongside the SHA-256 hash in `EdgeAPIKey`. Add `GET /api/edge-api-keys/{id}/reveal` endpoint that calls `decrypt_data()` to return the full key. Reuses existing Fernet infra from `database/utils.py` (`ENCRYPTION_KEY` env var / `data/encryption_key.txt`). Frontend: add "Reveal Key" / "Copy" button on key rows.
 
 ### 2026-03-07 — Refactoring & Testing Batch
 - [x] Extract Shared Edge Core — Refactored edge runtime into shared core + thin adapter wrappers (CF, Netlify, Vercel, Deno, etc)

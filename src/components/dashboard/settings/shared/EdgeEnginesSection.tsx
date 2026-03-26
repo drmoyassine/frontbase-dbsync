@@ -216,7 +216,7 @@ export function EdgeEnginesSection() {
                                         <EdgeResourceRow
                                             key={engine.id}
                                             icon={<Icon className="w-5 h-5" />}
-                                            name={engine.name}
+                                            name={engine.name.includes(': ') ? engine.name.split(': ').slice(1).join(': ') : engine.name}
                                             subtitle={engine.provider ? (ENGINE_PROVIDER_LABELS[engine.provider] || engine.provider) : undefined}
                                             selectable={!engine.is_system}
                                             selected={isSelected}

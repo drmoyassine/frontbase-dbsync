@@ -237,7 +237,7 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session) -> di
     else:
         engine = EdgeEngine(
             id=str(uuid.uuid4()),
-            name=f"{label}: {payload.worker_name}",
+            name=payload.worker_name,
             edge_provider_id=payload.provider_id,
             adapter_type=payload.adapter_type,
             url=engine_url,

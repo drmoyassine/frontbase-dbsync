@@ -628,6 +628,130 @@ async def _deno_verify(engine: EdgeEngine, creds: dict, domain_id: str, **kwargs
 
 
 # =============================================================================
+# Supabase — Cloudflare-proxied custom domain (same ephemeral pattern as Deno)
+#
+# Supabase Edge Functions rewrite Content-Type: text/html → text/plain.
+# A Cloudflare-proxied custom domain with URL Rewrite + Response Header
+# Transform Rules fixes this. The flow:
+#   1. User enters domain in Frontbase (ephemeral — no Supabase API call)
+#   2. Inline steps show exact CF dashboard fields to configure
+#   3. User sets up CNAME, URL Rewrite Rule, and Response Header Rule on CF
+#   4. User clicks "Verify" in Frontbase → health check on custom domain
+#   5. Health check passes → domain saved to engine_config.custom_domain
+#   6. custom_domain replaces the engine Endpoint URL
+# =============================================================================
+
+
+def _sb_extract_info(engine: EdgeEngine) -> tuple[str, str]:
+    """Extract Supabase hostname and function path from engine URL.
+
+    e.g. https://abcdef.supabase.co/functions/v1/frontbase-edge
+      → ('abcdef.supabase.co', '/functions/v1/frontbase-edge')
+    """
+    import urllib.parse
+    url = str(engine.url or "")
+    if not url:
+        return ("", "")
+    try:
+        parsed = urllib.parse.urlparse(url)
+        return (parsed.hostname or "", parsed.path.rstrip("/") or "")
+    except Exception:
+        return ("", "")
+
+
+async def _supabase_list(engine: EdgeEngine, creds: dict, **kwargs: Any) -> DomainResult:
+    """Return the saved custom domain from engine_config, if any."""
+    engine_cfg = json.loads(str(engine.engine_config or '{}'))
+    custom = engine_cfg.get("custom_domain")
+    if not custom:
+        return DomainResult(success=True, domains=[])
+
+    hostname, func_path = _sb_extract_info(engine)
+    return DomainResult(success=True, domains=[DomainInfo(
+        id="custom",
+        domain=custom,
+        status="active",
+        ssl_status="active",
+        dns_target=hostname,
+        provider="supabase",
+    ).to_dict()])
+
+
+async def _supabase_add(engine: EdgeEngine, creds: dict, domain: str, **kwargs: Any) -> DomainResult:
+    """Ephemeral add — return domain with 'pending' + CF setup metadata.
+
+    No API call. The domain is NOT persisted yet — the user must configure
+    CF rules and then click 'Verify' to health-check and save.
+    """
+    hostname, func_path = _sb_extract_info(engine)
+    return DomainResult(
+        success=True,
+        domain=DomainInfo(
+            id=domain,
+            domain=domain,
+            status="pending",
+            dns_target=hostname,
+            provider="supabase",
+        ).to_dict(),
+        detail="Configure Cloudflare DNS and Transform Rules, then click Verify.",
+    )
+
+
+async def _supabase_delete(engine: EdgeEngine, creds: dict, domain_id: str, **kwargs: Any) -> DomainResult:
+    """Remove the saved custom domain from engine_config and restore original URL."""
+    db: Optional[Session] = kwargs.get("db")
+    _remove_custom_domain(engine, db)
+    return DomainResult(success=True, detail="Custom domain removed")
+
+
+async def _supabase_verify(engine: EdgeEngine, creds: dict, domain_id: str, **kwargs: Any) -> DomainResult:
+    """Health-check the custom domain, save to engine_config on success."""
+    db: Optional[Session] = kwargs.get("db")
+    domain = domain_id
+
+    health_url = f"https://{domain}/api/health"
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, verify=False) as client:
+            resp = await client.get(health_url)
+    except httpx.ConnectError:
+        return DomainResult(
+            success=False,
+            detail=f"Cannot connect to {domain} — check CNAME record and CF proxy status.",
+        )
+    except httpx.TimeoutException:
+        return DomainResult(
+            success=False,
+            detail=f"Connection to {domain} timed out — domain may not be ready.",
+        )
+    except Exception as e:
+        return DomainResult(
+            success=False,
+            detail=f"Health check failed: {str(e)[:120]}",
+        )
+
+    # Accept any status < 500 as "resolving" — Supabase may return 403
+    # (JWT verification) which still proves the domain + rewrite are working.
+    if resp.status_code >= 500:
+        return DomainResult(
+            success=False,
+            detail=f"Health check returned {resp.status_code} — check URL Rewrite rule is routing to the function path.",
+        )
+
+    _save_custom_domain(engine, domain, db)
+    return DomainResult(
+        success=True,
+        domain=DomainInfo(
+            id="custom",
+            domain=domain,
+            status="active",
+            ssl_status="active",
+            provider="supabase",
+        ).to_dict(),
+        detail=f"Health check passed! {domain} is now your custom domain.",
+    )
+
+
+# =============================================================================
 # Registry
 # =============================================================================
 
@@ -636,6 +760,7 @@ _LIST_HANDLERS: dict = {
     "vercel":     _vercel_list,
     "netlify":    _netlify_list,
     "deno":       _deno_list,
+    "supabase":   _supabase_list,
 }
 
 _ADD_HANDLERS: dict = {
@@ -643,6 +768,7 @@ _ADD_HANDLERS: dict = {
     "vercel":     _vercel_add,
     "netlify":    _netlify_add,
     "deno":       _deno_add,
+    "supabase":   _supabase_add,
 }
 
 _DELETE_HANDLERS: dict = {
@@ -650,6 +776,7 @@ _DELETE_HANDLERS: dict = {
     "vercel":     _vercel_delete,
     "netlify":    _netlify_delete,
     "deno":       _deno_delete,
+    "supabase":   _supabase_delete,
 }
 
 _VERIFY_HANDLERS: dict = {
@@ -657,4 +784,5 @@ _VERIFY_HANDLERS: dict = {
     "vercel":     _vercel_verify,
     "netlify":    _netlify_verify,
     "deno":       _deno_verify,
+    "supabase":   _supabase_verify,
 }

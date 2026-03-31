@@ -199,14 +199,23 @@ importRoute.post('/settings', async (c) => {
 
         console.log('[Import Settings] Received:', Object.keys(body));
 
+        const updates: any = {};
+        if (body.faviconUrl !== undefined) updates.faviconUrl = body.faviconUrl || null;
+        if (body.logoUrl !== undefined) updates.logoUrl = body.logoUrl || null;
+        if (body.siteName !== undefined) updates.siteName = body.siteName || null;
+        else if (body.name !== undefined) updates.siteName = body.name || null;
+        if (body.siteDescription !== undefined) updates.siteDescription = body.siteDescription || null;
+        else if (body.description !== undefined) updates.siteDescription = body.description || null;
+        if (body.appUrl !== undefined) updates.appUrl = body.appUrl || null;
+        if (body.authForms !== undefined) updates.authForms = body.authForms || null;
+        if (body.usersConfig !== undefined) {
+            updates.usersConfig = body.usersConfig
+                ? (typeof body.usersConfig === 'string' ? body.usersConfig : JSON.stringify(body.usersConfig))
+                : null;
+        }
+
         // Update project settings in local store
-        await stateProvider.updateProjectSettings({
-            faviconUrl: body.faviconUrl || null,
-            logoUrl: body.logoUrl || null,
-            siteName: body.siteName || body.name || null,
-            siteDescription: body.siteDescription || body.description || null,
-            appUrl: body.appUrl || null,
-        });
+        await stateProvider.updateProjectSettings(updates);
 
         return c.json({
             success: true,

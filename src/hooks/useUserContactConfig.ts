@@ -1,11 +1,10 @@
 import { useBuilderStore } from '@/stores/builder';
 import { UserContactConfig } from '@/types/builder';
 import { projectAPI } from '@/lib/api';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 export const useUserContactConfig = () => {
   const { project, updateProject } = useBuilderStore();
-  const { toast } = useToast();
 
   const config = project?.usersConfig || null;
 
@@ -26,14 +25,20 @@ export const useUserContactConfig = () => {
       if (!result.success) {
         throw new Error(result.error);
       }
+      
+      // 3. Single DRY toast: save confirmation + Realtime status
+      const data = result.data;
+      const realtimeMsg = data?._realtimeMessage;
+      const description = realtimeMsg
+        ? `Configuration saved. ${realtimeMsg}`
+        : 'User contact data configuration has been updated';
+      
+      toast.success('Configuration Saved', { description });
     } catch (error) {
       console.error('Failed to save users config:', error);
-      toast({
-        title: "Error saving configuration",
-        description: "Failed to persist changes to the server.",
-        variant: "destructive"
+      toast.error('Error saving configuration', {
+        description: 'Failed to persist changes to the server.',
       });
-      // Revert would go here if we tracked previous state
     }
   };
 

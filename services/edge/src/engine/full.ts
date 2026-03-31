@@ -19,6 +19,8 @@ import { importRoute } from '../routes/import.js';
 import { dataRoute } from '../routes/data.js';
 import { manageRoute } from '../routes/manage.js';
 import { seoRoute } from '../routes/seo.js';
+import { embedRoute } from '../routes/embed.js';
+import { authRoute } from '../routes/auth.js';
 
 // =============================================================================
 // Full App = Lite + Pages/SSR
@@ -36,6 +38,8 @@ app.route('/api/import', importRoute);
 app.route('/api/data', dataRoute);
 app.route('/api/manage', manageRoute);
 app.route('', seoRoute);       // /sitemap.xml, /robots.txt, /llms.txt
+app.route('/api/embed', embedRoute);  // /api/embed/embed.js, /api/embed/auth/:formId (public, no auth)
+app.route('/api/auth', authRoute);    // /api/auth/login, /signup, /logout (public)
 app.route('', pagesRoute); // SSR pages at /{slug}
 
 export { app as fullApp };

@@ -287,24 +287,31 @@ async def convert_to_publish_schema(page: Page, datasources: list) -> PublishPag
         try:
             from sqlalchemy import text as sa_text
             from app.database.config import SessionLocal as PubSessionLocal
+            import json as _json
             pub_db = PubSessionLocal()
             try:
-                # Get primary form, fallback to first active
-                row = pub_db.execute(
-                    sa_text("SELECT * FROM auth_forms WHERE is_primary = 1 LIMIT 1")
-                ).fetchone()
-                if not row:
-                    row = pub_db.execute(
-                        sa_text("SELECT * FROM auth_forms WHERE is_active = 1 ORDER BY created_at ASC LIMIT 1")
-                    ).fetchone()
+                # Python filtering: fetch all active, find primary in config JSON
+                rows = pub_db.execute(
+                    sa_text("SELECT * FROM auth_forms WHERE is_active = 1 ORDER BY created_at ASC")
+                ).fetchall()
+                primary_row = None
+                first_row = None
+                for row in rows:
+                    if first_row is None:
+                        first_row = row
+                    config = _json.loads(row.config) if row.config else {}
+                    if config.get("is_primary"):
+                        primary_row = row
+                        break
+                row = primary_row or first_row
                 if row:
-                    import json as _json
+                    config = _json.loads(row.config) if row.config else {}
                     primary_auth_form_config = {
                         "type": row.type,
                         "title": row.name,
-                        "primaryColor": _json.loads(row.config).get("primaryColor") if row.config else None,
-                        "providers": _json.loads(row.config).get("providers", []) if row.config else [],
-                        "magicLink": _json.loads(row.config).get("magicLink", False) if row.config else False,
+                        "primaryColor": config.get("primaryColor"),
+                        "providers": config.get("providers", []),
+                        "magicLink": config.get("magicLink", False),
                         "showLinks": True,
                     }
                     print(f"[publish] Baked primary auth form '{row.name}' for private page")

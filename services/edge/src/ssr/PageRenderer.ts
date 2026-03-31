@@ -453,7 +453,16 @@ export async function renderPage(
     const edition = process.env.FRONTBASE_EDITION || 'community';
     // If it's community edition and no license key is provided, inject the badge
     if (edition === 'community' && !process.env.FRONTBASE_LICENSE_KEY) {
-        badgeHtml = `
+        // Floating sign-out pill (only when user is logged in)
+        const signOutHtml = context.user ? `
+            <div style="position:fixed;bottom:48px;right:16px;z-index:9999;font-family:system-ui,-apple-system,sans-serif;">
+                <button onclick="frontbase.signOut()" style="display:flex;align-items:center;gap:5px;background:white;padding:5px 10px;border-radius:6px;box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);border:1px solid #e5e7eb;color:#374151;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    <span>Sign Out</span>
+                </button>
+            </div>
+        ` : '';
+        badgeHtml = `${signOutHtml}
             <div style="position:fixed;bottom:16px;right:16px;z-index:9999;font-family:system-ui,-apple-system,sans-serif;">
                 <a href="https://frontbase.dev?ref=badge" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:6px;background:white;padding:6px 10px;border-radius:6px;box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);text-decoration:none;color:#374151;font-size:12px;font-weight:500;border:1px solid #e5e7eb;transition:all 0.2s;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

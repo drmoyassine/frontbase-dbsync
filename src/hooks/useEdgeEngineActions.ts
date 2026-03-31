@@ -25,7 +25,7 @@ export function useEdgeEngineActions({ providers, refetchEngines }: UseEdgeEngin
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [bulkLoading, setBulkLoading] = useState(false);
     const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-    const [redeployingId, setRedeployingId] = useState<string | null>(null);
+    const [redeployingIds, setRedeployingIds] = useState<Set<string>>(new Set());
     const [deletingAIId, setDeletingAIId] = useState<string | null>(null);
 
     // ── Selection ────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ export function useEdgeEngineActions({ providers, refetchEngines }: UseEdgeEngin
         selectedIds, setSelectedIds,
         bulkLoading,
         bulkDeleteOpen, setBulkDeleteOpen,
-        redeployingId, setRedeployingId,
+        redeployingIds, setRedeployingIds,
         deletingAIId,
 
         // Selection

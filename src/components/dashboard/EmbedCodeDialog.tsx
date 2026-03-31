@@ -3,8 +3,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, AlertTriangle } from 'lucide-react';
 import { AuthForm } from '@/types/auth-form';
+import { useEdgeEngines } from '@/hooks/useEdgeInfrastructure';
 
 interface EmbedCodeDialogProps {
     form: AuthForm | null;
@@ -14,23 +15,24 @@ interface EmbedCodeDialogProps {
 
 export function EmbedCodeDialog({ form, open, onOpenChange }: EmbedCodeDialogProps) {
     const [copied, setCopied] = React.useState(false);
+    const { data: engines = [] } = useEdgeEngines();
 
     if (!form) return null;
 
-    const baseUrl = window.location.origin; // In dev this is localhost:5173, in prod it's the domain
-    // Note: For production, this should ideally be the API server URL if different.
-    // Assuming builder and API are same origin for now or proxied.
+    // Use the first active engine's URL as the embed base URL.
+    // In production, this is the edge engine where pages are published.
+    // Falls back to the current origin for local dev.
+    const activeEngine = engines.find(e => e.is_active && e.url);
+    const edgeUrl = activeEngine?.url?.replace(/\/$/, '') || '';
+    const hasEdgeEngine = !!edgeUrl;
 
-    // Actually, the embed.js should be served from the BACKEND port in dev (3000), not the frontend vite port (5173).
-    // But we typically proxy /embed.js -> localhost:3000/embed.js via vite.config.ts?
-    // Let's assume relative path works if proxy is set up, or absolute path if we know the server URL.
-    // Since we are in the browser, let's try to construct it.
+    // For local dev, fallback to the edge engine dev port (3002)
+    const baseUrl = hasEdgeEngine
+        ? edgeUrl
+        : `${window.location.protocol}//${window.location.hostname}:3002`;
 
-    const serverUrl = window.location.origin;
-    const scriptSrc = `${serverUrl}/embed.js`;
-
-    const scriptCode = `<script src="${scriptSrc}" data-form-id="${form.id}" data-width="100%"></script>`;
-    const directLink = `${serverUrl}/embed/auth/${form.id}`;
+    const scriptCode = `<script src="${baseUrl}/api/embed/embed.js" data-form-id="${form.id}" data-width="100%"></script>`;
+    const directLink = `${baseUrl}/api/embed/auth/${form.id}`;
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
@@ -47,6 +49,16 @@ export function EmbedCodeDialog({ form, open, onOpenChange }: EmbedCodeDialogPro
                         Use the code below to embed this form on any website.
                     </DialogDescription>
                 </DialogHeader>
+
+                {!hasEdgeEngine && (
+                    <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/20 dark:text-amber-400 border border-amber-200 dark:border-amber-800 rounded-md p-3">
+                        <AlertTriangle className="h-4 w-4 shrink-0" />
+                        <p>
+                            No active edge engine found. The embed code uses your local dev server.
+                            Publish to an edge engine first for production use.
+                        </p>
+                    </div>
+                )}
 
                 <Tabs defaultValue="script">
                     <TabsList className="w-full">

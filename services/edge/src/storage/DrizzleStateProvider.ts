@@ -94,7 +94,7 @@ export abstract class DrizzleStateProvider implements IStateProvider {
 
     async listPages(): Promise<PublishedPageSummary[]> {
         return await this.getDb().select({
-            slug: publishedPages.slug, name: publishedPages.name, version: publishedPages.version,
+            id: publishedPages.id, slug: publishedPages.slug, name: publishedPages.name, version: publishedPages.version,
         }).from(publishedPages);
     }
 
@@ -130,6 +130,7 @@ export abstract class DrizzleStateProvider implements IStateProvider {
             return {
                 id: 'default', faviconUrl: null, logoUrl: null,
                 siteName: null, siteDescription: null, appUrl: null,
+                authForms: null, usersConfig: null,
                 updatedAt: new Date().toISOString(),
             };
         }

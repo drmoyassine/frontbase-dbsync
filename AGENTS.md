@@ -85,8 +85,8 @@ Runtime code may interpret it, but must not reshape or enrich it.
 | Production | PostgreSQL | `asyncpg` (async) |
 | Migrations | Both | Sync drivers via Alembic |
 
-> [!NOTE]
-> **Local Dev Database Path Resolution:** The FastAPI config (`config.py`) checks if `/app/data` exists. On Docker Desktop setups (or Windows machines where this path exists), it connects to `/app/data/frontbase.db`. Otherwise it defaults to `./frontbase.db` in the backend directory. **Always verify which file is actively being used** before running local manual migrations or scripts, as stale `*.db` files can accumulate in the backend folder.
+> [!CAUTION]
+> **Local Dev Database Path Resolution:** The FastAPI config (`config.py`) and Alembic both check `os.path.isdir('/app/data')`. On Docker Desktop setups (or Windows machines where `/app/data` was created by a previous Docker volume mount), **both the app and Alembic connect to `/app/data/frontbase.db`** — NOT `./frontbase.db` in the backend directory. This is the #1 source of DB debugging confusion. **Before any manual migration, schema inspection, or debugging, run:** `python -c "from app.database.config import SYNC_DATABASE_URL; print(SYNC_DATABASE_URL)"` from the `fastapi-backend/` directory to confirm the actual path. Stale 0-byte `*.db` files in the backend folder are decoys — archive them to `_archived_dbs/` (gitignored).
 
 **Rule**: All SQL operations must work on both dialects. Use `render_as_batch=True` for SQLite ALTER TABLE compatibility.
 
@@ -138,6 +138,8 @@ The Edge Engine has no knowledge of:
 | **Assuming deployed CF Worker bundles reflect local source changes** | **Cloudflare Workers run a built/deployed bundle. Local code fixes only take effect after a rebuild + redeploy (`wrangler deploy`). Always check whether the target is a live service or a deployed artifact before debugging "why isn't my fix working".** |
 | **Deleting code paths without querying dependent infrastructure** | **Before removing an endpoint, strategy, or Zustand action, query the actual database (e.g. `edge_engines`, `edge_databases`) to understand how many targets, providers, and deployment paths exist. Never assume from the UI — always verify with data.** |
 | **Deploying/reconfiguring an engine when same CF account is on multiple Frontbase instances** | **`secrets_builder` pushes `FRONTBASE_API_KEY_HASHES` from the local DB only — this replaces the entire env var on the worker, wiping keys created by other instances. Each CF Worker should be managed by exactly one Frontbase instance.** |
+| **Writing Alembic `add_column` / `create_table` without existence guards** | **Always check `if column not in columns` / `if table not in inspector.get_table_names()` before schema changes. Without guards, migrations fail with `duplicate column` or `table already exists` on DBs where the schema was bootstrapped outside Alembic (common with `if not table_exists` in migration 0001). This blocks ALL subsequent migrations.** |
+| **Assuming `./frontbase.db` is the active database on local dev** | **On machines with `/app/data` (Docker Desktop), the config resolves to `/app/data/frontbase.db`. Stale 0-byte `.db` files in the backend directory are decoys that waste debugging time. Always verify the resolved URL before inspecting or migrating.** |
 
 ---
 
@@ -426,10 +428,19 @@ Example workflow:
 
 ### 6.5 Best Practices
 
-1. Check table existence before CREATE
+1. **Guard every schema change** — check table/column existence before CREATE/ADD:
+   ```python
+   from sqlalchemy import inspect
+   inspector = inspect(op.get_bind())
+   if 'my_table' in inspector.get_table_names():
+       columns = [c['name'] for c in inspector.get_columns('my_table')]
+       if 'new_col' not in columns:
+           # safe to add
+   ```
 2. Include both `upgrade()` and `downgrade()`
 3. Never edit deployed migrations
-4. Test locally before deploying
+4. Test locally with `alembic upgrade head` before deploying
+5. **Verify the active DB path first** — run `python -c "from app.database.config import SYNC_DATABASE_URL; print(SYNC_DATABASE_URL)"` before any migration work
 
 ---
 
@@ -851,5 +862,5 @@ Env vars or settings needed to enable the feature.
 
 ---
 
-*Last Updated: 2026-03-07*
+*Last Updated: 2026-03-26*
 

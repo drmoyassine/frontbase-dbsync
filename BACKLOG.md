@@ -12,6 +12,7 @@
 - [ ] ✨ **Provider Discovery Caching (L1/L2)** — Cache `discover_resources_by_account` results (D1, KV, Queues, etc) across forms. Invalidate cache instantly upon provisioning or deleting a resource.
 - [ ] 🔧 **Edge DB quota guard** — Monitor row reads/writes (Turso/Neon), warn in UI, auto-fallback to local SQLite.
 - [ ] 🔧 **Cache quota guard** — Monitor commands/month (Upstash), reduce TTL or disable L2 cache gracefully.
+- [ ] 🔧 **Local Queue Provider (BullMQ)** — Wire BullMQ as a local queue provider for Docker/self-hosted engines. Reuses existing Local Redis container — zero additional infrastructure. Implements `IQueueProvider` interface with retries, DLQ, rate limiting, delayed jobs, and cron scheduling. Replaces "Queue: None" badge on Local Edge engines.
 - [ ] 🔧 **Graceful provider downgrade** — Fall back to local SQLite/no-cache on edge DB/cache failure. Log and surface in status panel.
 - [ ] 🔌 **Enterprise Secrets Management** — Infisical integration for deploy-time secrets injection, E2E encrypted storage, audit logs.
 - [ ] 🔌 **Neon Auth Support** — Add Neon Auth as an auth provider option. Detect when auth provider has database capability and auto-suggest same datasource for contacts table.
@@ -58,6 +59,7 @@
 - [ ] ✨ **Live status panel** — Settings widget showing edge DB/cache/queue quotas, connection status, hit rate.
 - [ ] ✨ **Provider switch confirmation** — Confirmation dialog when changing edge DB/cache/queue provider.
 - [ ] ✨ **Inspector Health & Resource Metrics Panel** — Metrics tab: Worker CPU, memory, request count, error rate, Turso/Upstash usage.
+- [ ] 🔌 **Vector DB Integrations** — New resource type under Edge Infrastructure. Leverage existing DB providers where possible (CF Vectorize, pgvector via Supabase/Neon, Turso vector extensions). Add cloud vector DB integrations for brand exposure and power users: ChromaDB Cloud, LanceDB Cloud, Pinecone, Weaviate Cloud. Self-hosted option: embedded LanceDB for Local Edge (zero infra, files on disk).
 
 ### Automations (Frontend)
 - [ ] ✨ **Execution detail view — Pipeline Diagram** — Horizontal pipeline (`Node → Node → Node`) with hover tooltips.

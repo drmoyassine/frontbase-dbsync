@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +37,7 @@ const Info = ({ className }: { className?: string }) => (
 export function EdgeEnginesSection() {
     const { data: engines = [], isLoading: loadingEngines, refetch: refetchEngines } = useEdgeEngines();
     const { data: providers = [] } = useEdgeProviders();
+    const queryClient = useQueryClient();
 
     // Memoize to avoid new array ref on every render (AGENTS.md: no unstable deps in useEffect)
     const validProviders = useMemo(
@@ -48,7 +50,7 @@ export function EdgeEnginesSection() {
         selectedIds, setSelectedIds,
         bulkLoading,
         bulkDeleteOpen, setBulkDeleteOpen,
-        redeployingId, setRedeployingId,
+        redeployingIds, setRedeployingIds,
         deletingAIId,
         toggleSelect,
         toggleSelectAll: toggleSelectAllFn,
@@ -212,6 +214,7 @@ export function EdgeEnginesSection() {
                                     const isSelected = selectedIds.has(engine.id);
                                     const engineUrl = engine.url?.startsWith('http') ? engine.url : `https://${engine.url}`;
                                     const Icon = engine.provider ? (PROVIDER_ICONS[engine.provider] || Server) : Server;
+                                    const isRedeploying = redeployingIds.has(engine.id);
                                     return (
                                         <EdgeResourceRow
                                             key={engine.id}
@@ -282,20 +285,26 @@ export function EdgeEnginesSection() {
                                                                 variant="ghost"
                                                                 size="icon"
                                                                 title="Redeploy with latest code"
-                                                                disabled={redeployingId === engine.id}
+                                                                disabled={isRedeploying}
                                                                 onClick={async () => {
-                                                                    setRedeployingId(engine.id);
+                                                                    setRedeployingIds(prev => new Set(prev).add(engine.id));
                                                                     try {
                                                                         await edgeInfrastructureApi.redeployEngine(engine.id);
-                                                                        await refetchEngines();
                                                                     } catch (e: any) {
                                                                         setError(e.message);
                                                                     } finally {
-                                                                        setRedeployingId(null);
+                                                                        setRedeployingIds(prev => {
+                                                                            const next = new Set(prev);
+                                                                            next.delete(engine.id);
+                                                                            return next;
+                                                                        });
+                                                                        // Invalidate instead of refetch — avoids React Query deduplication
+                                                                        // when multiple engines redeploy concurrently
+                                                                        queryClient.invalidateQueries({ queryKey: ['edge-engines'] });
                                                                     }
                                                                 }}
                                                             >
-                                                                {redeployingId === engine.id
+                                                                {isRedeploying
                                                                     ? <Loader2 className="h-4 w-4 animate-spin" />
                                                                     : <Upload className={`h-4 w-4 ${engine.is_outdated ? 'text-orange-400' : 'text-muted-foreground'}`} />
                                                                 }

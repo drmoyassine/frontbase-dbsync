@@ -23,6 +23,15 @@ def upgrade():
     conn = op.get_bind()
     dialect = conn.dialect.name
 
+    from sqlalchemy import inspect
+    inspector = inspect(conn)
+
+    # Guard: skip if column already exists
+    if 'edge_api_keys' in inspector.get_table_names():
+        columns = [c['name'] for c in inspector.get_columns('edge_api_keys')]
+        if 'scope' in columns:
+            return
+
     if dialect == 'sqlite':
         with op.batch_alter_table('edge_api_keys') as batch_op:
             batch_op.add_column(

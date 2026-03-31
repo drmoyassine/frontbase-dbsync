@@ -12,7 +12,73 @@ import { getDefaultTrackingConfig, TrackingConfig } from '../ssr/lib/tracking.js
 import { stateProvider } from '../storage/index.js';
 import { generateHtmlDocument, type HtmlPageData } from '../ssr/htmlDocument.js';
 import { generateGatedPageDocument } from '../ssr/gatedPage.js';
-import { getUserFromSession } from '../ssr/lib/auth.js';
+import { refreshSession } from '../ssr/lib/auth.js';
+import type { AuthConfig } from '../ssr/htmlDocument.js';
+
+const DEFAULT_FAVICON = '/static/icon.png';
+const SETTINGS_TTL_MS = 30_000;   // Cache settings for 30s
+const SETTINGS_TIMEOUT_MS = 3_000; // Abort if state DB is slow
+
+interface CachedSettings {
+    faviconUrl: string;
+    authConfig: AuthConfig | null;
+    ts: number;
+}
+let _settingsCache: CachedSettings | null = null;
+
+/**
+ * Get project settings with in-memory cache + timeout guard.
+ * Consolidates getFaviconUrl() + getProjectSettings() into one call.
+ * On timeout or error, returns safe defaults so the page still renders.
+ */
+async function getCachedSettings(sessionAccessToken?: string): Promise<CachedSettings> {
+    if (_settingsCache && (Date.now() - _settingsCache.ts) < SETTINGS_TTL_MS) {
+        // Return cached copy, but update the accessToken (per-request)
+        if (sessionAccessToken && _settingsCache.authConfig) {
+            return { ..._settingsCache, authConfig: { ..._settingsCache.authConfig, accessToken: sessionAccessToken } };
+        }
+        return _settingsCache;
+    }
+    try {
+        const settings = await Promise.race([
+            stateProvider.getProjectSettings(),
+            new Promise<null>((_, reject) =>
+                setTimeout(() => reject(new Error('settings_timeout')), SETTINGS_TIMEOUT_MS)
+            ),
+        ]);
+
+        let authConfig: AuthConfig | null = null;
+        if (settings?.usersConfig) {
+            try {
+                const config = JSON.parse(settings.usersConfig);
+                if (config.authProvider?.url && config.authProvider?.anonKey && config.contactsTable) {
+                    authConfig = {
+                        url: config.authProvider.url,
+                        anonKey: config.authProvider.anonKey,
+                        contactsTable: config.contactsTable,
+                        authUserIdColumn: config.columnMapping?.authUserIdColumn || 'auth_user_id',
+                        accessToken: sessionAccessToken,
+                    };
+                }
+            } catch { /* unparsable usersConfig — skip */ }
+        }
+
+        _settingsCache = {
+            faviconUrl: settings?.faviconUrl || DEFAULT_FAVICON,
+            authConfig,
+            ts: Date.now(),
+        };
+        return _settingsCache;
+    } catch (e) {
+        console.warn('[Pages] Settings fetch failed/timeout:', (e as Error).message);
+        // Return safe defaults — page renders without auth config
+        return {
+            faviconUrl: _settingsCache?.faviconUrl || DEFAULT_FAVICON,
+            authConfig: null,
+            ts: Date.now(),
+        };
+    }
+}
 
 // Type definitions for page data
 interface PageComponent {
@@ -212,8 +278,18 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     }
 
     // Private page gating — render blurred content with auth overlay
+    let sessionAccessToken: string | undefined;
     if (!page.isPublic) {
-        const user = await getUserFromSession(c.req.raw);
+        // Use refreshSession to validate + renew tokens in one call
+        const refreshResult = await refreshSession(c.req.raw);
+        const { user, setCookieHeaders } = refreshResult;
+        sessionAccessToken = refreshResult.accessToken;
+
+        // Apply any token-refresh cookies to the response
+        for (const header of setCookieHeaders) {
+            c.header('Set-Cookie', header, { append: true });
+        }
+
         if (!user) {
             // Still render the page fully, but gated behind auth overlay
             const contextPageData: ContextPageData = {
@@ -225,18 +301,16 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
             };
             const context = await buildTemplateContext(c.req.raw, contextPageData);
             const bodyHtml = await renderPage(page.layoutData, context);
-            const initialState = { pageVariables: context.local, sessionVariables: context.session, cookies: context.cookies };
+            const initialState = { pageVariables: context.local, sessionVariables: context.session, cookies: context.cookies, user: context.user };
             const trackingConfig = await fetchTrackingConfig();
-            const faviconUrl = await stateProvider.getFaviconUrl();
+            const { faviconUrl } = await getCachedSettings();
 
             // Get primary auth form config if baked into page bundle
             const authFormConfig = (page as any)._primaryAuthForm || undefined;
-            const supabaseUrl = process.env.SUPABASE_URL || ((page as any).datasources?.[0]?.supabaseUrl);
-            const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || ((page as any).datasources?.[0]?.anonKey);
 
             const gatedHtml = generateGatedPageDocument(
                 page, bodyHtml, initialState, trackingConfig, faviconUrl,
-                authFormConfig, supabaseUrl, supabaseAnonKey
+                authFormConfig
             );
             c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
             c.header('Content-Type', 'text/html; charset=utf-8');
@@ -284,16 +358,17 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
         pageVariables: context.local,
         sessionVariables: context.session,
         cookies: context.cookies,
+        user: context.user,
     };
 
     // Fetch tracking config
     const trackingConfig = await fetchTrackingConfig();
 
-    // Get favicon from local project settings (self-sufficient, no FastAPI call)
-    const faviconUrl = await stateProvider.getFaviconUrl();
+    // Get settings (favicon + auth config) from cached helper — single DB call, 3s timeout
+    const { faviconUrl, authConfig } = await getCachedSettings(sessionAccessToken);
 
     // Generate full HTML document
-    const htmlDoc = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl);
+    const htmlDoc = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl, authConfig);
 
     // Set cache headers (Disabled for debugging/immediate updates)
     c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -382,7 +457,10 @@ pagesRoute.get('/', async (c) => {
         if (homepage) {
             // Private homepage gating
             if (!homepage.isPublic) {
-                const user = await getUserFromSession(c.req.raw);
+                const { user, setCookieHeaders } = await refreshSession(c.req.raw);
+                for (const header of setCookieHeaders) {
+                    c.header('Set-Cookie', header, { append: true });
+                }
                 if (!user) {
                     const page: PageData = {
                         id: homepage.id, slug: homepage.slug, title: homepage.title,
@@ -403,11 +481,9 @@ pagesRoute.get('/', async (c) => {
                     const bodyHtml = await renderPage(page.layoutData, ctx);
                     const is = { pageVariables: ctx.local, sessionVariables: ctx.session, cookies: ctx.cookies };
                     const tc = await fetchTrackingConfig();
-                    const fav = await stateProvider.getFaviconUrl();
+                    const { faviconUrl: fav } = await getCachedSettings();
                     const afc = (homepage as any)._primaryAuthForm || undefined;
-                    const su = process.env.SUPABASE_URL || ((homepage as any).datasources?.[0]?.supabaseUrl);
-                    const sk = process.env.SUPABASE_ANON_KEY || ((homepage as any).datasources?.[0]?.anonKey);
-                    return c.html(generateGatedPageDocument(page, bodyHtml, is, tc, fav, afc, su, sk));
+                    return c.html(generateGatedPageDocument(page, bodyHtml, is, tc, fav, afc));
                 }
             }
             // Prepare page data for the template
@@ -461,7 +537,7 @@ pagesRoute.get('/', async (c) => {
             const trackingConfig = await fetchTrackingConfig();
 
             // Get favicon from local project settings (self-sufficient)
-            const faviconUrl = await stateProvider.getFaviconUrl();
+            const { faviconUrl } = await getCachedSettings();
 
             // Return full HTML page
             const fullHtml = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl);

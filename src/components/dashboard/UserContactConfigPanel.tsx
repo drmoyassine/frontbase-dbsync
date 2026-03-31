@@ -13,7 +13,7 @@ import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useBuilderStore } from '@/stores/builder';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { Settings, Save, RotateCcw, Plus, Trash2, HelpCircle } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -215,7 +215,7 @@ function ContactTypeEditor({
       <div className="grid grid-cols-[1fr,1.5fr,1.5fr,auto] gap-2 px-1 text-xs text-muted-foreground font-medium uppercase tracking-wider">
         <div>Value (DB)</div>
         <div>Label (UI)</div>
-        <div>Home Page</div>
+        <div>Gated Homepage</div>
         <div className="w-8"></div>
       </div>
 
@@ -266,7 +266,7 @@ export function UserContactConfigPanel() {
   const { schemas, loadTableSchema, initialize, connected, connectionError } = useDataBindingStore();
   const { fetchConnections } = useDashboardStore();
   const { pages } = useBuilderStore();
-  const { toast } = useToast();
+
 
   const { data: allProviders = [] } = useEdgeProviders();
 
@@ -368,10 +368,8 @@ export function UserContactConfigPanel() {
 
   const handleSave = () => {
     if (!selectedTable || !columns.authUserIdColumn || !columns.contactIdColumn || !columns.contactTypeColumn || !columns.permissionLevelColumn) {
-      toast({
-        title: "Missing Configuration",
-        description: "Please select a table and all required columns (marked with *)",
-        variant: "destructive"
+      toast.error('Missing Configuration', {
+        description: 'Please select a table and all required columns (marked with *)',
       });
       return;
     }
@@ -391,11 +389,6 @@ export function UserContactConfigPanel() {
       contactTypeHomePages,
       permissionLevels,
       enabled
-    });
-
-    toast({
-      title: "Configuration Saved",
-      description: "User contact data configuration has been updated",
     });
   };
 

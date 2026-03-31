@@ -20,6 +20,7 @@ import type { PublishPage, DatasourceConfig } from '../schemas/publish';
 // =============================================================================
 
 export interface PublishedPageSummary {
+    id: string;
     slug: string;
     name: string;
     version: number;
@@ -36,6 +37,8 @@ export interface ProjectSettingsData {
     siteName: string | null;
     siteDescription: string | null;
     appUrl: string | null;
+    authForms: string | null;  // JSON map: { [formId]: AuthFormConfig }
+    usersConfig: string | null; // JSON map: { contactsTable, authDataSourceId, ... }
     updatedAt: string;
 }
 

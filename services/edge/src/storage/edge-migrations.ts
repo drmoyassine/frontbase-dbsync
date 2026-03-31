@@ -158,6 +158,20 @@ export const MIGRATIONS: Migration[] = [
             `CREATE INDEX IF NOT EXISTS idx_edge_logs_level ON edge_logs(level)`,
         ],
     },
+    {
+        version: 7,
+        description: 'Add auth_forms column to project_settings',
+        sql: [
+            `ALTER TABLE project_settings ADD COLUMN auth_forms TEXT`,
+        ],
+    },
+    {
+        version: 8,
+        description: 'Add users_config column to project_settings',
+        sql: [
+            `ALTER TABLE project_settings ADD COLUMN users_config TEXT`,
+        ],
+    },
 ];
 
 // =============================================================================

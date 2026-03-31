@@ -218,8 +218,8 @@ export class CfD1HttpProvider implements IStateProvider {
     }
 
     async listPages(): Promise<PublishedPageSummary[]> {
-        const rows = await this.all<{ slug: string; name: string; version: number }>(
-            `SELECT slug, name, version FROM published_pages`
+        const rows = await this.all<{ id: string; slug: string; name: string; version: number }>(
+            `SELECT id, slug, name, version FROM published_pages`
         );
         return rows;
     }
@@ -247,6 +247,7 @@ export class CfD1HttpProvider implements IStateProvider {
             return {
                 id: 'default', faviconUrl: null, logoUrl: null,
                 siteName: null, siteDescription: null, appUrl: null,
+                authForms: null, usersConfig: null,
                 updatedAt: new Date().toISOString(),
             };
         }
@@ -257,6 +258,8 @@ export class CfD1HttpProvider implements IStateProvider {
             siteName: (row.site_name as string) || null,
             siteDescription: (row.site_description as string) || null,
             appUrl: (row.app_url as string) || null,
+            authForms: (row.auth_forms as string) || null,
+            usersConfig: (row.users_config as string) || null,
             updatedAt: row.updated_at as string,
         };
     }
@@ -281,11 +284,13 @@ export class CfD1HttpProvider implements IStateProvider {
             if (updates.siteName !== undefined) { setClauses.push(`site_name = ?${idx}`); params.push(updates.siteName); idx++; }
             if (updates.siteDescription !== undefined) { setClauses.push(`site_description = ?${idx}`); params.push(updates.siteDescription); idx++; }
             if (updates.appUrl !== undefined) { setClauses.push(`app_url = ?${idx}`); params.push(updates.appUrl); idx++; }
+            if (updates.authForms !== undefined) { setClauses.push(`auth_forms = ?${idx}`); params.push(updates.authForms); idx++; }
+            if (updates.usersConfig !== undefined) { setClauses.push(`users_config = ?${idx}`); params.push(updates.usersConfig); idx++; }
             await this.run(`UPDATE project_settings SET ${setClauses.join(', ')} WHERE id = 'default'`, params);
         } else {
             await this.run(
-                `INSERT INTO project_settings (id, favicon_url, logo_url, site_name, site_description, app_url, updated_at) VALUES ('default', ?1, ?2, ?3, ?4, ?5, ?6)`,
-                [updates.faviconUrl || null, updates.logoUrl || null, updates.siteName || null, updates.siteDescription || null, updates.appUrl || null, now]
+                `INSERT INTO project_settings (id, favicon_url, logo_url, site_name, site_description, app_url, auth_forms, users_config, updated_at) VALUES ('default', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+                [updates.faviconUrl || null, updates.logoUrl || null, updates.siteName || null, updates.siteDescription || null, updates.appUrl || null, updates.authForms || null, updates.usersConfig || null, now]
             );
         }
         return this.getProjectSettings();

@@ -74,3 +74,40 @@ async def validate_token(token: str) -> dict:
             for p in projects
         ],
     }
+
+
+async def ensure_realtime_enabled(token: str, project_ref: str, table_name: str, schema: str = "public") -> dict:
+    """Ensure a table is in the supabase_realtime publication.
+    
+    Checks if the table is already subscribed, and if not, adds it.
+    Uses the Management API SQL endpoint.
+    Returns {enabled: bool, already_enabled: bool, error?: str}.
+    """
+    from .supabase_state_db import _supabase_run_sql
+
+    # 1. Check if table is already in the publication
+    check_sql = (
+        f"SELECT 1 FROM pg_publication_tables "
+        f"WHERE pubname = 'supabase_realtime' "
+        f"AND schemaname = '{schema}' "
+        f"AND tablename = '{table_name}'"
+    )
+    check_result = await _supabase_run_sql(token, project_ref, check_sql)
+    
+    if check_result.get("success"):
+        rows = check_result.get("data", [])
+        if rows and len(rows) > 0:
+            return {"enabled": True, "already_enabled": True}
+    
+    # 2. Add table to publication
+    add_sql = f'ALTER PUBLICATION supabase_realtime ADD TABLE "{schema}"."{table_name}"'
+    add_result = await _supabase_run_sql(token, project_ref, add_sql)
+    
+    if add_result.get("success"):
+        return {"enabled": True, "already_enabled": False}
+    
+    return {
+        "enabled": False,
+        "already_enabled": False,
+        "error": add_result.get("detail", "Unknown error enabling Realtime"),
+    }

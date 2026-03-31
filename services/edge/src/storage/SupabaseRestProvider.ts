@@ -211,7 +211,7 @@ export class SupabaseRestProvider implements IStateProvider {
         const client = getClient();
         const { data, error } = await client
             .from('published_pages')
-            .select('slug, name, version');
+            .select('id, slug, name, version');
         if (error) throw new Error(`[SupabaseRest] listPages: ${error.message}`);
         return (data || []) as PublishedPageSummary[];
     }
@@ -247,6 +247,7 @@ export class SupabaseRestProvider implements IStateProvider {
             return {
                 id: 'default', faviconUrl: null, logoUrl: null,
                 siteName: null, siteDescription: null, appUrl: null,
+                authForms: null, usersConfig: null,
                 updatedAt: new Date().toISOString(),
             };
         }
@@ -257,6 +258,8 @@ export class SupabaseRestProvider implements IStateProvider {
             siteName: (data.site_name as string) || null,
             siteDescription: (data.site_description as string) || null,
             appUrl: (data.app_url as string) || null,
+            authForms: (data.auth_forms as string) || null,
+            usersConfig: (data.users_config as string) || null,
             updatedAt: data.updated_at as string,
         };
     }
@@ -280,6 +283,8 @@ export class SupabaseRestProvider implements IStateProvider {
         if (updates.siteName !== undefined) row.site_name = updates.siteName;
         if (updates.siteDescription !== undefined) row.site_description = updates.siteDescription;
         if (updates.appUrl !== undefined) row.app_url = updates.appUrl;
+        if (updates.authForms !== undefined) row.auth_forms = updates.authForms;
+        if (updates.usersConfig !== undefined) row.users_config = updates.usersConfig;
 
         const result = await client
             .from('project_settings')

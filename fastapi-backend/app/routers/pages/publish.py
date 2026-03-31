@@ -27,6 +27,52 @@ from app.schemas.publish import ImportPagePayload
 router = APIRouter()
 
 
+# ---------------------------------------------------------------------------
+# Settings sync helper — Option B of the hybrid settings sync strategy.
+# When a PRIVATE page is published, sync project settings (auth credentials,
+# usersConfig) to the target engine so it can handle authentication and
+# render {{ user.xxx }} variables in SSR.
+# ---------------------------------------------------------------------------
+
+async def _sync_settings_to_engine(
+    engine_url: str,
+    auth_headers: dict[str, str],
+) -> None:
+    """Sync enriched project settings to a specific engine (non-fatal)."""
+    from app.routers.project import _enrich_users_config_for_edge
+    from app.database.utils import get_project
+
+    db = SessionLocal()
+    try:
+        project = get_project(db)
+        if not project:
+            return
+        users_config = getattr(project, 'users_config', None)
+    finally:
+        db.close()
+
+    enriched = _enrich_users_config_for_edge(users_config)
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(
+                f"{engine_url.rstrip('/')}/api/import/settings",
+                json={
+                    "faviconUrl": getattr(project, 'favicon_url', None),
+                    "logoUrl": getattr(project, 'logo_url', None),
+                    "siteName": project.name,
+                    "siteDescription": project.description,
+                    "appUrl": project.app_url,
+                    "usersConfig": enriched,
+                },
+                headers={"Content-Type": "application/json", **auth_headers},
+            )
+            print(f"[Publish] ✅ Settings synced to {engine_url}")
+    except Exception as e:
+        print(f"[Publish] Settings sync failed for {engine_url} (non-fatal): {e}")
+
+
+
 @router.post("/{page_id}/publish/{engine_id}/")
 async def publish_to_target(page_id: str, engine_id: str):
     """
@@ -149,6 +195,10 @@ async def publish_to_target(page_id: str, engine_id: str):
             deploy_db.close()
             
         if success:
+            # Option B: sync project settings for private pages
+            if not bool(page.is_public):
+                await _sync_settings_to_engine(str(engine_url), auth_headers)
+
             res_json = response.json() if response.status_code == 200 else {}
             return {
                 "success": True,
@@ -306,6 +356,14 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
     succeeded = [r for r in results if r["success"]]
     failed = [r for r in results if not r["success"]]
     names = ", ".join(str(r["name"]) for r in succeeded)
+
+    # Option B: sync project settings for private pages (fan-out to all successful engines)
+    if not bool(page.is_public) and succeeded:
+        for r in succeeded:
+            eid = str(r["engineId"])
+            if eid in engine_map:
+                eng_hdrs = auth_headers_map.get(eid, {})
+                await _sync_settings_to_engine(engine_map[eid]["url"], eng_hdrs)
 
     return {
         "success": len(failed) == 0,

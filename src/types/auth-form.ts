@@ -8,6 +8,8 @@ export interface AuthFormConfig {
     showLinks?: boolean; // Show "Don't have an account?" etc.
     defaultView?: 'sign_in' | 'sign_up'; // For 'both' type
     magicLink?: boolean; // Enable passwordless magic link
+    is_primary?: boolean; // Used for private page gating
+    is_embeddable?: boolean; // Allow embedding on external sites
 }
 
 export interface AuthForm {
@@ -19,7 +21,8 @@ export interface AuthForm {
     targetContactType?: string; // Legacy/Single (deprecated mostly, but good for fallback)
     redirectUrl?: string;
     isActive: boolean;
-    isPrimary?: boolean;
+    isPrimary?: boolean; // Derived from config.is_primary for backward compat
+    isEmbeddable?: boolean; // Derived from config.is_embeddable
     createdAt?: string;
 }
 

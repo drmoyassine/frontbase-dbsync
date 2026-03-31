@@ -433,7 +433,6 @@ def build_worker(adapter_type: str = "automations", provider: str = "cloudflare"
         raise HTTPException(400, f"Unknown provider/adapter_type: {config_key}")
     config_file = cfg["config"]
     output_file = cfg["output"]
-    dist_file = EDGE_DIR / "dist" / output_file
 
     # --- Strategy 1: Delegate to edge container (Docker/VPS) ---
     edge_url = os.environ.get("EDGE_URL", os.environ.get("EDGE_SSR_URL", ""))
@@ -461,27 +460,69 @@ def build_worker(adapter_type: str = "automations", provider: str = "cloudflare"
         except Exception as e:
             print(f"[Bundle] Edge build delegation failed: {e}, trying local fallback...")
 
-    # --- Strategy 2: Local build (development) ---
+    # --- Strategy 2: Local build (development / single-host) ---
     if not EDGE_DIR.exists():
         raise HTTPException(500, f"Edge service not available for building. EDGE_DIR={EDGE_DIR} does not exist and EDGE_URL is not set.")
 
     # Cache check: skip rebuild if source hasn't changed since last build
     current_src_hash = get_source_hash() or ""
     cached = _build_cache.get(config_key)
-    if cached and dist_file.exists():
+    if cached:
         cached_hash, cached_content, cached_bundle_hash = cached
         if cached_hash == current_src_hash:
             print(f"[Bundle] {label} cache hit (hash={cached_bundle_hash}), skipping rebuild")
             return cached_content, cached_bundle_hash
 
-    if dist_file.exists():
-        dist_file.unlink()
-
-    print(f"[Bundle] Building {label} Worker bundle locally in {EDGE_DIR}...")
+    # ── Isolated build in temp dir ────────────────────────────────────
+    # Each build gets its own directory so concurrent builds for any
+    # provider never interfere (shared cwd causes esbuild/tsup conflicts).
+    # Same pattern as build_worker_from_snapshot(), safe for multitenant.
+    tmp_dir = None
     try:
+        tmp_dir = Path(tempfile.mkdtemp(prefix="frontbase-build-"))
+        tmp_src = tmp_dir / "src"
+
+        # Copy source tree to temp dir
+        shutil.copytree(EDGE_DIR / "src", tmp_src)
+
+        # Copy build scaffolding
+        for f in ("package.json", "tsconfig.json", config_file):
+            src_f = EDGE_DIR / f
+            if src_f.exists():
+                shutil.copy2(src_f, tmp_dir / f)
+
+        # Copy scripts/ directory if it exists (needed by onSuccess hooks)
+        scripts_dir = EDGE_DIR / "scripts"
+        if scripts_dir.exists():
+            shutil.copytree(scripts_dir, tmp_dir / "scripts")
+
+        # Copy shims/ directory (needed by esbuild alias resolution)
+        shims_dir = EDGE_DIR / "shims"
+        if shims_dir.exists():
+            shutil.copytree(shims_dir, tmp_dir / "shims")
+
+        # Copy shared tsup config (imported by provider-specific configs)
+        for shared_cfg in EDGE_DIR.glob("tsup.shared.*"):
+            shutil.copy2(shared_cfg, tmp_dir / shared_cfg.name)
+
+        # Symlink node_modules (fast, safe — read-only from builds)
+        nm_src = EDGE_DIR / "node_modules"
+        nm_dst = tmp_dir / "node_modules"
+        if nm_src.exists():
+            if os.name == 'nt':
+                subprocess.run(
+                    ["cmd", "/c", "mklink", "/J", str(nm_dst), str(nm_src)],
+                    capture_output=True, shell=False
+                )
+            else:
+                nm_dst.symlink_to(nm_src)
+
+        dist_file = tmp_dir / "dist" / output_file
+        print(f"[Bundle] Building {label} Worker bundle in isolated dir {tmp_dir}...")
+
         result = subprocess.run(
             ["npx", "tsup", "--config", config_file],
-            cwd=str(EDGE_DIR),
+            cwd=str(tmp_dir),
             capture_output=True,
             text=True,
             encoding='utf-8',
@@ -492,18 +533,25 @@ def build_worker(adapter_type: str = "automations", provider: str = "cloudflare"
         if result.returncode != 0:
             err = result.stderr.strip() or result.stdout.strip() or "Unknown build error"
             raise HTTPException(500, f"Build failed: {err[:500]}")
+
+        if not dist_file.exists():
+            raise HTTPException(500, f"Build output not found at {dist_file}")
+
+        content = dist_file.read_text(encoding="utf-8")
+        bundle_hash = compute_bundle_hash(content)
+        _build_cache[config_key] = (current_src_hash, content, bundle_hash)
+        print(f"[Bundle] {label} bundle built: {len(content)} bytes ({len(content)//1024} KB) hash={bundle_hash}")
+        return content, bundle_hash
+
     except subprocess.TimeoutExpired:
         raise HTTPException(500, f"Build timed out")
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(500, f"Build process failed: {str(e)}")
-
-    if not dist_file.exists():
-        raise HTTPException(500, f"Build output not found at {dist_file}")
-
-    content = dist_file.read_text(encoding="utf-8")
-    bundle_hash = compute_bundle_hash(content)
-    _build_cache[config_key] = (current_src_hash, content, bundle_hash)
-    print(f"[Bundle] {label} bundle built: {len(content)} bytes ({len(content)//1024} KB) hash={bundle_hash}")
-    return content, bundle_hash
+    finally:
+        if tmp_dir and tmp_dir.exists():
+            try:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            except Exception:
+                pass  # Best-effort cleanup

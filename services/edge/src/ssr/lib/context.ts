@@ -5,7 +5,8 @@
  * Collects variables from: page, user, visitor, url, system, cookies, local, session
  */
 
-import { getUserFromSession, UserContext } from './auth.js';
+import { getUserFromSession } from './auth.js';
+import type { UserContext } from './IAuthProvider.js';
 import { applyVisitorTracking, TrackingConfig, VisitorContext, getDefaultTrackingConfig } from './tracking.js';
 
 // =============================================================================

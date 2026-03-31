@@ -210,7 +210,7 @@ async def get_template_registry(page_id: Optional[str] = None, db: Session = Dep
         if project and project.users_config:  # type: ignore[truthy-bool]
             users_config = json.loads(str(project.users_config))
             contacts_table = users_config.get('contactsTable')
-            datasource_id = users_config.get('authDataSourceId')
+            datasource_id = users_config.get('contactsDbId') or users_config.get('authDataSourceId')
             
             if contacts_table and datasource_id:
                 # Query SQLite cache for table schema

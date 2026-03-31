@@ -32,7 +32,19 @@ async def deploy(engine: EdgeEngine, db: Session, script_content: str, adapter_t
     api_token = ctx.get('api_token')
     team_id = ctx.get('team_id')
     cfg = json.loads(str(engine.engine_config or '{}'))
-    project_name = cfg.get('project_name', 'frontbase-edge')
+
+    # Derive Vercel project name from engine URL so it matches the dashboard.
+    # URL format: https://<project-name>.vercel.app (set by provider_registry)
+    project_name = cfg.get('vercel_project_name', '')
+    if not project_name and str(engine.url or ''):
+        from urllib.parse import urlparse
+        hostname = urlparse(str(engine.url)).hostname or ''
+        if hostname.endswith('.vercel.app'):
+            project_name = hostname.removesuffix('.vercel.app')
+    if not project_name:
+        # Fallback: slug from engine name
+        import re
+        project_name = re.sub(r'[^a-z0-9-]', '-', str(engine.name or '').lower()).strip('-') or f"frontbase-edge-{str(engine.id)[:8]}"
 
     if not api_token:
         raise HTTPException(400, "Missing Vercel api_token")

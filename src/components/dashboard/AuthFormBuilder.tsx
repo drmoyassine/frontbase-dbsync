@@ -267,6 +267,23 @@ export function AuthFormBuilder({ form, open, onOpenChange, onSave }: AuthFormBu
                                     </div>
                                 </div>
 
+                                <div className="space-y-4 rounded-md border p-4">
+                                    <div className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id="is-embeddable"
+                                            checked={formData.config?.is_embeddable}
+                                            onCheckedChange={(checked) => updateConfig('is_embeddable', checked)}
+                                        />
+                                        <div className="grid gap-1.5 leading-none">
+                                            <Label htmlFor="is-embeddable" className="font-medium">Embeddable on External Sites</Label>
+                                            <p className="text-sm text-muted-foreground">
+                                                Allow this form to be embedded on external websites via a script tag.
+                                                When enabled, the form config is synced to your edge engine.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <Separator />
 
                                 <div className="space-y-2">

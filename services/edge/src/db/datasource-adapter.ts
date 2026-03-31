@@ -18,6 +18,7 @@ export interface QueryOptions {
     limit?: number;
     offset?: number;
     orderBy?: { column: string; direction: 'asc' | 'desc' };
+    accessToken?: string; // User's JWT for RLS-protected queries
 }
 
 export interface QueryResult {
@@ -65,10 +66,12 @@ class SupabaseAdapter implements DatasourceAdapter {
         console.log(`[Supabase] Using key: ${this.anonKey ? this.anonKey.substring(0, 20) + '...' : 'MISSING'}`);
 
         try {
+            // Use accessToken for Authorization if provided (RLS-protected queries)
+            const authToken = options.accessToken || this.anonKey;
             const response = await fetch(url, {
                 headers: {
                     'apikey': this.anonKey,
-                    'Authorization': `Bearer ${this.anonKey}`,
+                    'Authorization': `Bearer ${authToken}`,
                     'Accept': 'application/json',
                     'Prefer': 'count=exact',
                 },

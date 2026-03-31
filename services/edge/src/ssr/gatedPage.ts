@@ -35,8 +35,6 @@ export function generateGatedPageDocument(
     trackingConfig: any,
     faviconUrl: string | null | undefined,
     authFormConfig?: AuthFormConfig,
-    supabaseUrl?: string,
-    supabaseAnonKey?: string,
 ): string {
     // Generate the normal page HTML first
     const normalHtml = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl ?? undefined);
@@ -48,7 +46,10 @@ export function generateGatedPageDocument(
         showLinks: true,
     };
 
-    const authOverlayHtml = buildAuthOverlay(formConfig, supabaseUrl, supabaseAnonKey);
+    // Determine current path for redirect after login
+    // If it's the homepage, the url is '/'. Otherwise '/slug'
+    const currentPath = (page as any).isHomepage ? '/' : `/${page.slug}`;
+    const authOverlayHtml = buildAuthOverlay(formConfig, currentPath);
 
     // Inject: wrap #root content in blur container, append overlay before </body>
     const modifiedHtml = normalHtml
@@ -69,8 +70,7 @@ export function generateGatedPageDocument(
  */
 function buildAuthOverlay(
     config: AuthFormConfig,
-    supabaseUrl?: string,
-    supabaseAnonKey?: string,
+    currentPath: string = '/',
 ): string {
     const primaryColor = config.primaryColor || '#18181b';
     const title = config.title || (config.type === 'signup' ? 'Create an Account' : 'Sign In');
@@ -118,16 +118,17 @@ function buildAuthOverlay(
 
     <div id="fb-auth-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:0.625rem;border-radius:0.375rem;font-size:0.8125rem;margin-bottom:0.75rem"></div>
 
-    <form id="fb-auth-form" style="display:flex;flex-direction:column;gap:0.75rem" onsubmit="return false">
+    <form id="fb-auth-form" action="/api/auth/login" method="POST" style="display:flex;flex-direction:column;gap:0.75rem">
+        <input type="hidden" name="redirectTo" value="${escapeHtml(currentPath)}">
         <div>
             <label for="fb-email" style="display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem">Email</label>
-            <input id="fb-email" type="email" required autocomplete="email" placeholder="you@example.com"
+            <input id="fb-email" name="email" type="email" required autocomplete="email" placeholder="you@example.com"
                 style="width:100%;padding:0.5rem 0.75rem;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.875rem;outline:none;transition:border-color 0.2s;box-sizing:border-box"
                 onfocus="this.style.borderColor='${primaryColor}'" onblur="this.style.borderColor='#d4d4d8'">
         </div>
         <div>
             <label for="fb-password" style="display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem">Password</label>
-            <input id="fb-password" type="password" required autocomplete="current-password" placeholder="••••••••" minlength="6"
+            <input id="fb-password" name="password" type="password" required autocomplete="current-password" placeholder="••••••••" minlength="6"
                 style="width:100%;padding:0.5rem 0.75rem;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.875rem;outline:none;transition:border-color 0.2s;box-sizing:border-box"
                 onfocus="this.style.borderColor='${primaryColor}'" onblur="this.style.borderColor='#d4d4d8'">
         </div>
@@ -156,69 +157,39 @@ function buildAuthOverlay(
 .fb-social-btn:hover{background:#f4f4f5}
 </style>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 (function(){
-    var SUPABASE_URL = ${supabaseUrl ? `'${supabaseUrl}'` : "window.__PAGE_DATA__?.datasources?.[0]?.supabaseUrl || ''"};
-    var SUPABASE_ANON_KEY = ${supabaseAnonKey ? `'${supabaseAnonKey}'` : "window.__PAGE_DATA__?.datasources?.[0]?.anonKey || ''"};
-
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        console.error('[Frontbase Auth] Missing Supabase configuration');
-        return;
-    }
-
-    var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     var isLoginMode = ${defaultIsLogin ? 'true' : 'false'};
-
     var form = document.getElementById('fb-auth-form');
     var errorDiv = document.getElementById('fb-auth-error');
     var submitBtn = document.getElementById('fb-auth-submit');
 
-    form.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        errorDiv.style.display = 'none';
+    // Show error from URL params (server-side redirect on auth failure)
+    var urlParams = new URLSearchParams(window.location.search);
+    var authError = urlParams.get('auth_error');
+    var authMessage = urlParams.get('auth_message');
+    if (authError) {
+        errorDiv.textContent = authError;
+        errorDiv.style.display = 'block';
+    }
+    if (authMessage) {
+        errorDiv.style.background = '#f0fdf4';
+        errorDiv.style.borderColor = '#bbf7d0';
+        errorDiv.style.color = '#16a34a';
+        errorDiv.textContent = authMessage;
+        errorDiv.style.display = 'block';
+    }
+
+    // Loading state on submit
+    form.addEventListener('submit', function() {
         submitBtn.disabled = true;
         submitBtn.textContent = isLoginMode ? 'Signing in...' : 'Signing up...';
-
-        var email = document.getElementById('fb-email').value;
-        var password = document.getElementById('fb-password').value;
-
-        try {
-            var result;
-            if (isLoginMode) {
-                result = await supabase.auth.signInWithPassword({ email: email, password: password });
-            } else {
-                result = await supabase.auth.signUp({ email: email, password: password });
-            }
-
-            if (result.error) throw result.error;
-
-            // Success — reload to render the page without the overlay
-            window.location.reload();
-        } catch (err) {
-            errorDiv.textContent = err.message || 'Authentication failed';
-            errorDiv.style.display = 'block';
-            submitBtn.disabled = false;
-            submitBtn.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
-        }
-    });
-
-    // Social provider auth
-    document.querySelectorAll('.fb-social-btn').forEach(function(btn) {
-        btn.addEventListener('click', async function() {
-            var provider = this.getAttribute('data-provider');
-            try {
-                await supabase.auth.signInWithOAuth({ provider: provider });
-            } catch (err) {
-                errorDiv.textContent = err.message || 'OAuth failed';
-                errorDiv.style.display = 'block';
-            }
-        });
     });
 
     // Toggle login/signup mode
     window.fbToggleMode = function() {
         isLoginMode = !isLoginMode;
+        form.action = isLoginMode ? '/api/auth/login' : '/api/auth/signup';
         document.getElementById('fb-auth-title').textContent = isLoginMode ? '${escapeHtml(config.type === 'both' ? 'Welcome Back' : title)}' : 'Create an Account';
         submitBtn.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
         document.getElementById('fb-toggle-text').textContent = isLoginMode ? "Don't have an account?" : 'Already have an account?';

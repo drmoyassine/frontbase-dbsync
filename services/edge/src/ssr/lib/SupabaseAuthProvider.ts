@@ -13,42 +13,16 @@ import { createServerClient } from '@supabase/ssr';
 import type { IAuthProvider, UserContext, SessionRefreshResult } from './IAuthProvider.js';
 
 // =============================================================================
-// Credential Resolution (env vars → baked project settings fallback)
+// Credential Resolution — reads FRONTBASE_AUTH env var (single source of truth)
 // =============================================================================
 
-// Cache to avoid re-reading project settings on every request
-let _cachedAuthProvider: { url: string; anonKey: string } | null = null;
+import { getAuthConfig } from '../../config/env.js';
 
-async function getSupabaseConfig(): Promise<{ url: string; anonKey: string } | null> {
-    // 1. Prefer environment variables (cloud Edge / Docker)
-    const url = process.env.SUPABASE_URL || process.env.FRONTBASE_SUPABASE_URL;
-    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.FRONTBASE_SUPABASE_ANON_KEY;
-
-    if (url && anonKey) {
-        return { url, anonKey };
+function getSupabaseConfig(): { url: string; anonKey: string } | null {
+    const auth = getAuthConfig();
+    if (auth.provider === 'supabase' && auth.url && auth.anonKey) {
+        return { url: auth.url, anonKey: auth.anonKey };
     }
-
-    // 2. Fallback: read baked credentials from project settings (local Edge)
-    if (_cachedAuthProvider) return _cachedAuthProvider;
-
-    try {
-        const { stateProvider } = await import('../../storage/index.js');
-        const settings = await stateProvider.getProjectSettings();
-        if (settings?.usersConfig) {
-            const config = JSON.parse(settings.usersConfig);
-            if (config.authProvider?.url && config.authProvider?.anonKey) {
-                _cachedAuthProvider = {
-                    url: config.authProvider.url,
-                    anonKey: config.authProvider.anonKey,
-                };
-                console.log(`[Auth] Using baked authProvider from project settings: ${_cachedAuthProvider.url.substring(0, 30)}...`);
-                return _cachedAuthProvider;
-            }
-        }
-    } catch (err) {
-        console.warn('[Auth] Failed to read authProvider from project settings:', err);
-    }
-
     return null;
 }
 
@@ -182,27 +156,25 @@ export class SupabaseAuthProvider implements IAuthProvider {
         };
 
         try {
-            const { stateProvider } = await import('../../storage/index.js');
-            const { createDatasourceAdapter } = await import('../../db/datasource-adapter.js');
-
-            const settings = await stateProvider.getProjectSettings();
-            if (!settings?.usersConfig) return baseContext;
-
-            const config = JSON.parse(settings.usersConfig);
-            const { contactsTable, contactsDatasource, columnMapping } = config;
-
-            if (!contactsTable || !contactsDatasource || !columnMapping) {
-                console.warn('[Auth] Missing contactsTable, contactsDatasource, or columnMapping in usersConfig');
+            // Read contacts config from FRONTBASE_AUTH env var (not state DB)
+            const authCfg = getAuthConfig();
+            const contacts = authCfg.contacts;
+            if (!contacts?.table || !contacts?.datasource || !contacts?.columnMapping) {
                 return baseContext;
             }
 
-            const authUserCol = columnMapping.authUserIdColumn || 'auth_user_id';
+            const authUserCol = contacts.columnMapping.authUserIdColumn || 'auth_user_id';
 
             // Create the correct adapter from baked credentials (Supabase, Neon, Turso, etc.)
-            const adapter = createDatasourceAdapter(contactsDatasource);
+            const { createDatasourceAdapter } = await import('../../db/datasource-adapter.js');
+            const adapter = createDatasourceAdapter({
+                ...contacts.datasource,
+                id: 'contacts',
+                name: 'Contacts Datasource',
+            } as any);
 
             const result = await adapter.query({
-                table: contactsTable,
+                table: contacts.table,
                 filters: { [authUserCol]: user.id },
                 limit: 1,
                 accessToken, // Pass user's JWT so RLS policies work
@@ -216,13 +188,13 @@ export class SupabaseAuthProvider implements IAuthProvider {
 
                 // Protect critical auth fields from being overwritten
                 enrichedContext.id = baseContext.id;
-                enrichedContext.contactId = record[columnMapping.contactIdColumn] || '';
+                enrichedContext.contactId = record[contacts.columnMapping.contactIdColumn] || '';
 
-                if (columnMapping.emailColumn && record[columnMapping.emailColumn]) {
-                    enrichedContext.email = record[columnMapping.emailColumn] as string;
+                if (contacts.columnMapping.emailColumn && record[contacts.columnMapping.emailColumn]) {
+                    enrichedContext.email = record[contacts.columnMapping.emailColumn] as string;
                 }
-                if (columnMapping.nameColumn && record[columnMapping.nameColumn]) {
-                    enrichedContext.name = record[columnMapping.nameColumn] as string;
+                if (contacts.columnMapping.nameColumn && record[contacts.columnMapping.nameColumn]) {
+                    enrichedContext.name = record[contacts.columnMapping.nameColumn] as string;
                 }
 
                 console.log(`[Auth] Enriched user context with contact record for ${user.id}`);

@@ -46,7 +46,6 @@ export const projectSettings = sqliteTable('project_settings', {
     siteDescription: text('site_description'),
     appUrl: text('app_url'),
     authForms: text('auth_forms'),  // JSON map: { [formId]: { type, title, primaryColor, providers, ... } }
-    usersConfig: text('users_config'), // JSON map: { contactsTable, authDataSourceId, columnMapping... }
     updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 

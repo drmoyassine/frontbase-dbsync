@@ -113,9 +113,11 @@ async def create_deployment(
     }
 
     async with httpx.AsyncClient() as client:
+        # Split timeout: 30s connect (fast fail on network issues),
+        # 180s read (Vercel's server-side build for ~3MB bundles can take >60s)
         resp = await client.post(
             url, headers=_headers(api_token), json=payload,
-            params=params, timeout=60.0,
+            params=params, timeout=httpx.Timeout(connect=30.0, read=180.0, write=30.0, pool=30.0),
         )
         if resp.status_code not in (200, 201):
             raise HTTPException(400, f"Vercel deployment failed: {resp.text[:300]}")

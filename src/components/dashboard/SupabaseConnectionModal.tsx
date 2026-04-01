@@ -89,17 +89,6 @@ export const SupabaseConnectionModal: React.FC = () => {
 
       const data = response.data;
       if (data.success) {
-        // Auto-save JWT secret to settings if provided
-        if (formData.jwtSecret) {
-          try {
-            await api.put('/api/settings/supabase/', {
-              supabase_jwt_secret: formData.jwtSecret,
-            });
-          } catch {
-            // Non-blocking — JWT secret save failure shouldn't block connection
-            console.warn('Failed to save Supabase JWT secret to settings');
-          }
-        }
         toast({
           title: "Connection saved",
           description: "Supabase connection configured successfully",

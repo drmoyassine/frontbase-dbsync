@@ -18,6 +18,8 @@
  * When not configured, falls back to direct execution.
  */
 
+import { getQueueConfig } from '../config/env.js';
+
 let queueClient: any | null = null;
 let queueInitialized = false;
 
@@ -25,7 +27,7 @@ let queueInitialized = false;
  * Get the queue provider name.
  */
 export function getQueueProvider(): string {
-    return process.env.FRONTBASE_QUEUE_PROVIDER || 'qstash';
+    return getQueueConfig().provider || 'none';
 }
 
 /**
@@ -36,13 +38,13 @@ export function getQueueClient(): any | null {
     if (queueInitialized) return queueClient;
     queueInitialized = true;
 
-    // Provider-agnostic → fallback to old env vars
-    const token = process.env.FRONTBASE_QUEUE_TOKEN || process.env.QSTASH_TOKEN;
-    const provider = getQueueProvider();
+    const cfg = getQueueConfig();
+    const token = cfg.token;
+    const provider = cfg.provider || 'none';
 
-    // CF Queues don't use a separate token — they use FRONTBASE_CF_API_TOKEN
+    // CF Queues don't use a separate token — they use cfApiToken from the blob
     if (!token && provider !== 'cloudflare' && provider !== 'cloudflare_queues') {
-        console.log('⬜ Queue: not configured (no FRONTBASE_QUEUE_TOKEN)');
+        console.log('⬜ Queue: not configured (no token in FRONTBASE_QUEUE)');
         return null;
     }
 
@@ -59,15 +61,14 @@ export function getQueueClient(): any | null {
     }
 
     if (provider === 'cloudflare' || provider === 'cloudflare_queues') {
-        // CF Queues use the CF API token + account ID, not a separate token
-        const apiToken = process.env.FRONTBASE_CF_API_TOKEN;
-        const accountId = process.env.FRONTBASE_CF_ACCOUNT_ID;
-        const queueUrl = process.env.FRONTBASE_QUEUE_URL || '';
+        const apiToken = cfg.cfApiToken;
+        const accountId = cfg.cfAccountId;
+        const queueUrl = cfg.url || '';
         // Parse cfq://<queue-id> → extract queue ID
         const queueId = queueUrl.startsWith('cfq://') ? queueUrl.replace('cfq://', '') : queueUrl;
 
         if (!apiToken || !accountId || !queueId) {
-            console.warn('⚠️ Queue: CF Queues missing FRONTBASE_CF_API_TOKEN, FRONTBASE_CF_ACCOUNT_ID, or FRONTBASE_QUEUE_URL');
+            console.warn('⚠️ Queue: CF Queues missing cfApiToken, cfAccountId, or url in FRONTBASE_QUEUE');
             return null;
         }
 
@@ -182,9 +183,10 @@ export async function verifyQueueSignature(
     const provider = getQueueProvider();
 
     if (provider === 'qstash') {
-        // Provider-agnostic → fallback to old env vars
-        const currentKey = process.env.FRONTBASE_QUEUE_SIGNING_KEY || process.env.QSTASH_CURRENT_SIGNING_KEY;
-        const nextKey = process.env.FRONTBASE_QUEUE_NEXT_SIGNING_KEY || process.env.QSTASH_NEXT_SIGNING_KEY;
+        // Use signing keys from FRONTBASE_QUEUE config
+        const cfg = getQueueConfig();
+        const currentKey = cfg.signingKey;
+        const nextKey = cfg.nextSigningKey;
 
         if (!currentKey && !nextKey) {
             console.warn('[Queue] No signing keys configured, skipping verification');

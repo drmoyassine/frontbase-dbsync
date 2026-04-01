@@ -26,6 +26,12 @@ import type {
 } from './IStateProvider';
 
 const DEFAULT_FAVICON = '/static/icon.png';
+
+// Lazy schema getter — getStateDbConfig() may not be ready at module eval on CF
+function getSchema(): string {
+    const { getStateDbConfig } = require('../config/env.js');
+    return getStateDbConfig().schema || 'frontbase_edge';
+}
 const SCHEMA = process.env.FRONTBASE_SCHEMA_NAME || 'frontbase_edge';
 
 // =============================================================================
@@ -47,9 +53,11 @@ let _neonSql: ((sqlStr: string, params?: unknown[]) => Promise<PgResult>) | null
 async function getNeonClient(): Promise<(sqlStr: string, params?: unknown[]) => Promise<PgResult>> {
     if (_neonSql) return _neonSql;
 
-    const dbUrl = process.env.FRONTBASE_STATE_DB_URL;
+    const { getStateDbConfig } = require('../config/env.js');
+    const cfg = getStateDbConfig();
+    const dbUrl = cfg.url;
     if (!dbUrl) {
-        throw new Error('[NeonHttpProvider] FRONTBASE_STATE_DB_URL is required');
+        throw new Error('[NeonHttpProvider] FRONTBASE_STATE_DB.url is required');
     }
 
     try {
@@ -302,7 +310,7 @@ export class NeonHttpProvider implements IStateProvider {
             return {
                 id: 'default', faviconUrl: null, logoUrl: null,
                 siteName: null, siteDescription: null, appUrl: null,
-                authForms: null, usersConfig: null,
+                authForms: null,
                 updatedAt: new Date().toISOString(),
             };
         }
@@ -314,7 +322,6 @@ export class NeonHttpProvider implements IStateProvider {
             siteDescription: (row.site_description as string) || null,
             appUrl: (row.app_url as string) || null,
             authForms: (row.auth_forms as string) || null,
-            usersConfig: (row.users_config as string) || null,
             updatedAt: row.updated_at as string,
         };
     }
@@ -339,12 +346,12 @@ export class NeonHttpProvider implements IStateProvider {
             if (updates.siteDescription !== undefined) { setClauses.push(`site_description = $${idx}`); params.push(updates.siteDescription); idx++; }
             if (updates.appUrl !== undefined) { setClauses.push(`app_url = $${idx}`); params.push(updates.appUrl); idx++; }
             if (updates.authForms !== undefined) { setClauses.push(`auth_forms = $${idx}`); params.push(updates.authForms); idx++; }
-            if (updates.usersConfig !== undefined) { setClauses.push(`users_config = $${idx}`); params.push(updates.usersConfig); idx++; }
+
             await this.query(`UPDATE ${SCHEMA}.project_settings SET ${setClauses.join(', ')} WHERE id = 'default'`, params);
         } else {
             await this.query(
-                `INSERT INTO ${SCHEMA}.project_settings (id, favicon_url, logo_url, site_name, site_description, app_url, auth_forms, users_config, updated_at) VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8)`,
-                [updates.faviconUrl || null, updates.logoUrl || null, updates.siteName || null, updates.siteDescription || null, updates.appUrl || null, updates.authForms || null, updates.usersConfig || null, now]
+                `INSERT INTO ${SCHEMA}.project_settings (id, favicon_url, logo_url, site_name, site_description, app_url, auth_forms, updated_at) VALUES ('default', $1, $2, $3, $4, $5, $6, $7)`,
+                [updates.faviconUrl || null, updates.logoUrl || null, updates.siteName || null, updates.siteDescription || null, updates.appUrl || null, updates.authForms || null, now]
             );
         }
         return this.getProjectSettings();

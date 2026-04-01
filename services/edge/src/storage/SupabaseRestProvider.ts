@@ -31,6 +31,12 @@ import type {
 } from './IStateProvider';
 
 const DEFAULT_FAVICON = '/static/icon.png';
+
+// Lazy schema — getStateDbConfig() may not be ready at module eval
+function getSchema(): string {
+    const { getStateDbConfig } = require('../config/env.js');
+    return getStateDbConfig().schema || 'frontbase_edge';
+}
 const SCHEMA = process.env.FRONTBASE_SCHEMA_NAME || 'frontbase_edge';
 
 // =============================================================================
@@ -43,14 +49,16 @@ let _client: PgrestClient | null = null;
 function getClient(): PgrestClient {
     if (_client) return _client;
 
-    const supabaseUrl = process.env.FRONTBASE_SUPABASE_URL;
-    const anonKey = process.env.FRONTBASE_SUPABASE_ANON_KEY;
-    const scopedJwt = process.env.FRONTBASE_SUPABASE_JWT;
+    const { getStateDbConfig } = require('../config/env.js');
+    const cfg = getStateDbConfig();
+    const supabaseUrl = cfg.url;
+    const anonKey = cfg.anonKey;
+    const scopedJwt = cfg.jwt;
 
     if (!supabaseUrl || !anonKey || !scopedJwt) {
         throw new Error(
-            '[SupabaseRestProvider] Missing env vars: FRONTBASE_SUPABASE_URL, ' +
-            'FRONTBASE_SUPABASE_ANON_KEY, FRONTBASE_SUPABASE_JWT'
+            '[SupabaseRestProvider] Missing config in FRONTBASE_STATE_DB: ' +
+            'url, anonKey, jwt'
         );
     }
 
@@ -247,7 +255,7 @@ export class SupabaseRestProvider implements IStateProvider {
             return {
                 id: 'default', faviconUrl: null, logoUrl: null,
                 siteName: null, siteDescription: null, appUrl: null,
-                authForms: null, usersConfig: null,
+                authForms: null,
                 updatedAt: new Date().toISOString(),
             };
         }
@@ -259,7 +267,6 @@ export class SupabaseRestProvider implements IStateProvider {
             siteDescription: (data.site_description as string) || null,
             appUrl: (data.app_url as string) || null,
             authForms: (data.auth_forms as string) || null,
-            usersConfig: (data.users_config as string) || null,
             updatedAt: data.updated_at as string,
         };
     }
@@ -284,7 +291,7 @@ export class SupabaseRestProvider implements IStateProvider {
         if (updates.siteDescription !== undefined) row.site_description = updates.siteDescription;
         if (updates.appUrl !== undefined) row.app_url = updates.appUrl;
         if (updates.authForms !== undefined) row.auth_forms = updates.authForms;
-        if (updates.usersConfig !== undefined) row.users_config = updates.usersConfig;
+
 
         const result = await client
             .from('project_settings')

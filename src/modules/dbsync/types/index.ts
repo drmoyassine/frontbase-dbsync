@@ -128,9 +128,8 @@ export interface RedisTestResult {
     message: string
 }
 
-export interface SupabaseSettings {
-    supabase_jwt_secret: string | null
-}
+
+
 
 export interface AdvancedVariableConfig {
     collect: boolean

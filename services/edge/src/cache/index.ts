@@ -16,6 +16,7 @@
 
 import type { ICacheProvider } from './ICacheProvider.js';
 import { NullCacheProvider } from './NullCacheProvider.js';
+import { getCacheConfig } from '../config/env.js';
 
 // Re-export for convenience
 export type { ICacheProvider } from './ICacheProvider.js';
@@ -31,12 +32,13 @@ let _provider: ICacheProvider | null = null;
  * Create the initial cache provider from environment variables.
  */
 async function createInitialProvider(): Promise<ICacheProvider> {
-    const cacheUrl = process.env.FRONTBASE_CACHE_URL;
-    const cacheToken = process.env.FRONTBASE_CACHE_TOKEN;
-    const cacheProvider = process.env.FRONTBASE_CACHE_PROVIDER?.toLowerCase();
+    const cfg = getCacheConfig();
+    const cacheUrl = cfg.url;
+    const cacheToken = cfg.token;
+    const cacheProviderName = cfg.provider?.toLowerCase();
 
     // Provider-specific dispatch (explicit FRONTBASE_CACHE_PROVIDER)
-    if (cacheProvider === 'deno_kv') {
+    if (cacheProviderName === 'deno_kv') {
         try {
             const { DenoKvProvider } = require('./DenoKvProvider.js');
             console.log('🦕 Cache: DenoKvProvider (Deno.openKv)');
@@ -47,7 +49,7 @@ async function createInitialProvider(): Promise<ICacheProvider> {
         }
     }
 
-    if (cacheProvider === 'cloudflare' || cacheProvider === 'cloudflare_kv') {
+    if (cacheProviderName === 'cloudflare' || cacheProviderName === 'cloudflare_kv') {
         try {
             const { CfKvHttpProvider } = require('./CfKvHttpProvider.js');
             console.log('🔶 Cache: CfKvHttpProvider (KV via HTTP)');

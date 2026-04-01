@@ -47,9 +47,11 @@ export class CfKvHttpProvider implements ICacheProvider {
     private ensureConfig(): void {
         if (this.accountId) return;
 
-        const cacheUrl = process.env.FRONTBASE_CACHE_URL || '';
-        this.apiToken = process.env.FRONTBASE_CF_API_TOKEN || '';
-        this.accountId = process.env.FRONTBASE_CF_ACCOUNT_ID || '';
+        const { getCacheConfig } = require('../config/env.js');
+        const cfg = getCacheConfig();
+        const cacheUrl = cfg.url || '';
+        this.apiToken = cfg.cfApiToken || '';
+        this.accountId = cfg.cfAccountId || '';
 
         // Parse kv://<namespace-id> → extract namespace ID
         if (cacheUrl.startsWith('kv://')) {
@@ -60,8 +62,8 @@ export class CfKvHttpProvider implements ICacheProvider {
 
         if (!this.namespaceId || !this.apiToken || !this.accountId) {
             throw new Error(
-                '[CfKvHttpProvider] Missing env vars. Required: ' +
-                'FRONTBASE_CACHE_URL (kv://namespace-id), FRONTBASE_CF_API_TOKEN, FRONTBASE_CF_ACCOUNT_ID'
+                '[CfKvHttpProvider] Missing config in FRONTBASE_CACHE: ' +
+                'url (kv://namespace-id), cfApiToken, cfAccountId'
             );
         }
 

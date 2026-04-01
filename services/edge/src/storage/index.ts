@@ -25,6 +25,7 @@
 import type { IStateProvider } from './IStateProvider';
 import { TursoHttpProvider } from './TursoHttpProvider';
 import { LocalSqliteProvider } from './LocalSqliteProvider';
+import { getStateDbConfig } from '../config/env.js';
 
 // =============================================================================
 // Mutable Singleton (supports hot-swap after startup sync)
@@ -37,10 +38,12 @@ let _provider: IStateProvider | null = null;
  * On CF, LocalSqliteProvider is never used — Turso is the only option.
  */
 function isCloudRuntime(): boolean {
+    const cfg = getStateDbConfig();
     return (
         process.env.FRONTBASE_ADAPTER_PLATFORM === 'cloudflare' ||
         process.env.FRONTBASE_DEPLOYMENT_MODE === 'cloud' ||
-        !!process.env.FRONTBASE_STATE_DB_URL
+        cfg.provider !== 'local' ||
+        !!cfg.url
     );
 }
 
@@ -55,7 +58,7 @@ function isCloudRuntime(): boolean {
  *   (unset)    → Auto-detect: cloud → Turso, docker → LocalSqlite
  */
 function createInitialProvider(): IStateProvider {
-    const provider = process.env.FRONTBASE_STATE_DB_PROVIDER?.toLowerCase();
+    const provider = getStateDbConfig().provider?.toLowerCase();
 
     switch (provider) {
         case 'turso':

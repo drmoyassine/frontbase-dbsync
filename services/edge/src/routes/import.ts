@@ -208,11 +208,6 @@ importRoute.post('/settings', async (c) => {
         else if (body.description !== undefined) updates.siteDescription = body.description || null;
         if (body.appUrl !== undefined) updates.appUrl = body.appUrl || null;
         if (body.authForms !== undefined) updates.authForms = body.authForms || null;
-        if (body.usersConfig !== undefined) {
-            updates.usersConfig = body.usersConfig
-                ? (typeof body.usersConfig === 'string' ? body.usersConfig : JSON.stringify(body.usersConfig))
-                : null;
-        }
 
         // Update project settings in local store
         await stateProvider.updateProjectSettings(updates);

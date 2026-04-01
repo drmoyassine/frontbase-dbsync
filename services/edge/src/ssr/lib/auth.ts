@@ -1,15 +1,5 @@
-/**
- * Auth Module — Provider Factory + Facade
- * 
- * Resolves the active auth provider from env vars and exposes
- * backward-compatible functions (getUserFromSession).
- * 
- * Provider selection:
- * - SUPABASE_URL / FRONTBASE_SUPABASE_URL → SupabaseAuthProvider
- * - Future: CLERK_SECRET_KEY → ClerkAuthProvider
- */
-
 import type { IAuthProvider, UserContext, SessionRefreshResult } from './IAuthProvider.js';
+import { getAuthConfig } from '../../config/env.js';
 
 // Re-export types for consumers
 export type { UserContext, SessionRefreshResult, IAuthProvider };
@@ -23,29 +13,14 @@ let _provider: IAuthProvider | null | undefined = undefined; // undefined = not 
 async function getAuthProvider(): Promise<IAuthProvider | null> {
     if (_provider !== undefined) return _provider;
 
-    // 1. Supabase: check for URL env var (cloud Edge / Docker)
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.FRONTBASE_SUPABASE_URL;
-    if (supabaseUrl) {
+    const authCfg = getAuthConfig();
+
+    // Supabase auth provider
+    if (authCfg.provider === 'supabase' && authCfg.url && authCfg.anonKey) {
         const { SupabaseAuthProvider } = await import('./SupabaseAuthProvider.js');
         _provider = new SupabaseAuthProvider();
+        console.log(`[Auth Factory] Resolved SupabaseAuthProvider from FRONTBASE_AUTH: ${authCfg.url.substring(0, 30)}...`);
         return _provider;
-    }
-
-    // 2. Fallback: check baked authProvider in project settings (local Edge)
-    try {
-        const { stateProvider } = await import('../../storage/index.js');
-        const settings = await stateProvider.getProjectSettings();
-        if (settings?.usersConfig) {
-            const config = JSON.parse(settings.usersConfig);
-            if (config.authProvider?.url && config.authProvider?.anonKey) {
-                const { SupabaseAuthProvider } = await import('./SupabaseAuthProvider.js');
-                _provider = new SupabaseAuthProvider();
-                console.log('[Auth Factory] Resolved SupabaseAuthProvider from baked project settings');
-                return _provider;
-            }
-        }
-    } catch (err) {
-        console.warn('[Auth Factory] Failed to check project settings:', err);
     }
 
     // Future: Clerk, Auth0, etc.

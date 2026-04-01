@@ -15,28 +15,23 @@
 import { jwt } from 'hono/jwt';
 import { csrf } from 'hono/csrf';
 import type { Context, Next } from 'hono';
+import { getAuthConfig } from '../config/env.js';
 
 // =============================================================================
 // Shared Helpers
 // =============================================================================
 
 interface APIKeyHashEntry {
-    prefix: string;
+    prefix?: string;
     hash: string;
-    scope: string;       // 'user' | 'management' | 'all'
-    expires_at: string | null;
+    scope?: string;       // 'user' | 'management' | 'all'
+    expires_at?: string | null;
 }
 
-/** Parse FRONTBASE_API_KEY_HASHES env var into typed entries. Returns null on error. */
+/** Parse API key hashes from FRONTBASE_AUTH config. Returns null if not configured. */
 function parseKeyHashes(): APIKeyHashEntry[] | null {
-    const envHashes = process.env.FRONTBASE_API_KEY_HASHES;
-    if (!envHashes) return null;
-    try {
-        return JSON.parse(envHashes);
-    } catch {
-        console.error('[Auth] Failed to parse FRONTBASE_API_KEY_HASHES');
-        return null;
-    }
+    const auth = getAuthConfig();
+    return auth.apiKeyHashes || null;
 }
 
 /** Extract Bearer token from Authorization header. */
@@ -94,7 +89,7 @@ async function validateApiKey(
  * Dev mode: if no FRONTBASE_SYSTEM_KEY is configured, all requests pass through.
  */
 export const systemKeyAuth = async (c: Context, next: Next) => {
-    const systemKey = process.env.FRONTBASE_SYSTEM_KEY;
+    const systemKey = getAuthConfig().systemKey;
 
     if (!systemKey) {
         // No system key configured — allow all (dev mode / local Docker)
@@ -137,10 +132,10 @@ export const systemKeyAuth = async (c: Context, next: Next) => {
  * Dev mode: if no API key hashes are configured, all requests pass through.
  */
 export const userApiKeyAuth = async (c: Context, next: Next) => {
-    const envHashes = process.env.FRONTBASE_API_KEY_HASHES;
+    const auth = getAuthConfig();
     const isDev = (process.env.NODE_ENV || 'development') === 'development';
 
-    if (!envHashes) {
+    if (!auth.apiKeyHashes) {
         if (isDev) return next();
         return c.json({
             error: {
@@ -221,10 +216,10 @@ export const createSupabaseJwtAuth = (secret: string) => jwt({
  * Falls back to allowing all if no secret configured (dev mode).
  */
 export const supabaseJwtAuth = (c: Context, next: Next) => {
-    const secret = process.env.SUPABASE_JWT_SECRET;
+    const secret = getAuthConfig().jwtSecret;
 
     if (!secret) {
-        console.warn('⚠️ No SUPABASE_JWT_SECRET configured - JWT auth disabled');
+        console.warn('⚠️ No jwtSecret in FRONTBASE_AUTH - JWT auth disabled');
         return next();
     }
 

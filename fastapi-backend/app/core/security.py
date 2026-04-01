@@ -162,7 +162,7 @@ def is_encrypted(blob: str) -> bool:
 PROVIDER_SECRET_KEYS: dict[str, set[str]] = {
     # ── Edge Providers (deploy targets) ──
     "cloudflare": {"api_token"},
-    "supabase":   {"access_token", "anon_key", "service_role_key"},
+    "supabase":   {"access_token", "anon_key", "service_role_key", "jwt_secret"},
     "vercel":     {"api_token"},
     "netlify":    {"api_token"},
     "deno":       {"access_token"},

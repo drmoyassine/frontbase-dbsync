@@ -187,18 +187,28 @@ export function useDeployWizard() {
             let targetEngineId: string | null = null;
 
             // ----- Deploy new engine ----------------------------------------
-            const res = await fetch(`${API_BASE}/api/edge-engines/deploy`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    provider_id: selectedProviderId,
-                    worker_name: workerName,
-                    adapter_type: engineType === 'full' ? 'full' : 'automations',
-                    edge_db_id: selectedDbId === 'none' ? '__none__' : selectedDbId === 'default' ? undefined : selectedDbId,
-                    edge_cache_id: selectedCacheId === 'none' ? '__none__' : selectedCacheId,
-                    edge_queue_id: selectedQueueId === 'none' ? '__none__' : selectedQueueId,
-                }),
-            });
+            // Netlify/Vercel deploys can take 3-5 min (CLI download + build).
+            // 5-minute timeout prevents premature "Failed to fetch".
+            const deployController = new AbortController();
+            const deployTimeout = setTimeout(() => deployController.abort(), 5 * 60 * 1000);
+            let res: Response;
+            try {
+                res = await fetch(`${API_BASE}/api/edge-engines/deploy`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: deployController.signal,
+                    body: JSON.stringify({
+                        provider_id: selectedProviderId,
+                        worker_name: workerName,
+                        adapter_type: engineType === 'full' ? 'full' : 'automations',
+                        edge_db_id: selectedDbId === 'none' ? '__none__' : selectedDbId === 'default' ? undefined : selectedDbId,
+                        edge_cache_id: selectedCacheId === 'none' ? '__none__' : selectedCacheId,
+                        edge_queue_id: selectedQueueId === 'none' ? '__none__' : selectedQueueId,
+                    }),
+                });
+            } finally {
+                clearTimeout(deployTimeout);
+            }
             const data = await res.json();
             if (!res.ok || !data.success) {
                 throw new Error(data.detail || data.error || 'Deploy failed');

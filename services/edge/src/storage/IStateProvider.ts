@@ -38,7 +38,6 @@ export interface ProjectSettingsData {
     siteDescription: string | null;
     appUrl: string | null;
     authForms: string | null;  // JSON map: { [formId]: AuthFormConfig }
-    usersConfig: string | null; // JSON map: { contactsTable, authDataSourceId, ... }
     updatedAt: string;
 }
 

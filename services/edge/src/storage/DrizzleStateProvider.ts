@@ -130,7 +130,7 @@ export abstract class DrizzleStateProvider implements IStateProvider {
             return {
                 id: 'default', faviconUrl: null, logoUrl: null,
                 siteName: null, siteDescription: null, appUrl: null,
-                authForms: null, usersConfig: null,
+                authForms: null,
                 updatedAt: new Date().toISOString(),
             };
         }

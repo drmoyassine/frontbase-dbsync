@@ -206,6 +206,20 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
             except Exception as e:
                 print(f"Warning: Could not auto-fetch Supabase API keys: {e}")
 
+            # Also fetch JWT secret from postgrest config
+            try:
+                from ..services.supabase_management import get_jwt_secret
+                jwt_secret = await get_jwt_secret(access_token, project_ref)
+                if jwt_secret:
+                    existing_secrets = decrypt_credentials(str(provider.provider_credentials or "{}"))
+                    existing_secrets["jwt_secret"] = jwt_secret
+                    provider.provider_credentials = encrypt_credentials(existing_secrets)  # type: ignore[assignment]
+                    db.commit()
+                    db.refresh(provider)
+                    print(f"[Supabase Connect] JWT secret stored in encrypted credentials")
+            except Exception as e:
+                print(f"Warning: Could not auto-fetch Supabase JWT secret: {e}")
+
     # ── Plan tier detection ──────────────────────────────────────────────
     # Detect the user's plan tier at connect time and persist in metadata.
     # Used by log persistence to determine retention limits.

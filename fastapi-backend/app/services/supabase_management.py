@@ -47,6 +47,24 @@ async def get_api_keys(token: str, project_ref: str) -> dict:
     return result
 
 
+async def get_jwt_secret(token: str, project_ref: str) -> Optional[str]:
+    """GET /v1/projects/{ref}/postgrest → {jwt_secret: "..."}
+
+    Returns the JWT secret string, or None if unavailable.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"{SUPABASE_API}/projects/{project_ref}/postgrest",
+                headers=_headers(token),
+            )
+        if resp.status_code == 200:
+            return resp.json().get("jwt_secret")
+    except Exception:
+        pass
+    return None
+
+
 async def list_functions(token: str, project_ref: str) -> list[dict]:
     """GET /v1/projects/{ref}/functions → [{id, slug, name, status, ...}]"""
     async with httpx.AsyncClient(timeout=15.0) as client:

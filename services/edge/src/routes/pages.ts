@@ -13,6 +13,7 @@ import { stateProvider } from '../storage/index.js';
 import { generateHtmlDocument, type HtmlPageData } from '../ssr/htmlDocument.js';
 import { generateGatedPageDocument } from '../ssr/gatedPage.js';
 import { refreshSession } from '../ssr/lib/auth.js';
+import { getAuthConfig } from '../config/env.js';
 import type { AuthConfig } from '../ssr/htmlDocument.js';
 
 const DEFAULT_FAVICON = '/static/icon.png';
@@ -47,20 +48,17 @@ async function getCachedSettings(sessionAccessToken?: string): Promise<CachedSet
             ),
         ]);
 
+        // Build authConfig from FRONTBASE_AUTH env var (not state DB)
         let authConfig: AuthConfig | null = null;
-        if (settings?.usersConfig) {
-            try {
-                const config = JSON.parse(settings.usersConfig);
-                if (config.authProvider?.url && config.authProvider?.anonKey && config.contactsTable) {
-                    authConfig = {
-                        url: config.authProvider.url,
-                        anonKey: config.authProvider.anonKey,
-                        contactsTable: config.contactsTable,
-                        authUserIdColumn: config.columnMapping?.authUserIdColumn || 'auth_user_id',
-                        accessToken: sessionAccessToken,
-                    };
-                }
-            } catch { /* unparsable usersConfig — skip */ }
+        const authEnv = getAuthConfig();
+        if (authEnv.contacts?.table && authEnv.url && authEnv.anonKey) {
+            authConfig = {
+                url: authEnv.url,
+                anonKey: authEnv.anonKey,
+                contactsTable: authEnv.contacts.table,
+                authUserIdColumn: authEnv.contacts.columnMapping?.authUserIdColumn || 'auth_user_id',
+                accessToken: sessionAccessToken,
+            };
         }
 
         _settingsCache = {

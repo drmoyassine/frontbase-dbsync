@@ -66,62 +66,10 @@ async def update_project_endpoint(request: ProjectUpdateRequest):
     finally:
         db.close()  # RELEASE CONNECTION BEFORE EDGE SYNC
 
-    # 2. EDGE SYNC — Fan-out to ALL engines (local + cloud)
-    # Enrich usersConfig with contacts datasource credentials before sending
-    enriched_users_config = _enrich_users_config_for_edge(project_data["users_config"])
+    # Edge sync removed — auth config is now pushed to engines as FRONTBASE_AUTH
+    # env var via the explicit push-to-engines UI (secrets_builder pipeline).
+    # The fan-out POST to /api/import/settings is no longer needed.
 
-    settings_payload = {
-        "faviconUrl": project_data["favicon_url"],
-        "logoUrl": project_data["logo_url"],
-        "siteName": project_data["name"],
-        "siteDescription": project_data["description"],
-        "appUrl": project_data["app_url"],
-        "usersConfig": enriched_users_config,
-    }
-
-    # Collect all engine URLs (local edge + cloud engines)
-    sync_targets: list[dict] = []
-
-    # Always include local edge
-    edge_url = os.getenv("EDGE_URL", "http://localhost:3002")
-    sync_targets.append({"url": edge_url, "headers": {}})
-
-    # Add cloud engines used by this project (those with active page deployments)
-    try:
-        from ..models.models import EdgeEngine, PageDeployment
-        from ..services.edge_client import get_edge_headers
-        db2 = SessionLocal()
-        try:
-            engines = db2.query(EdgeEngine).join(PageDeployment).filter(EdgeEngine.url.isnot(None)).distinct().all()
-            for eng in engines:
-                _ = eng.engine_config  # Force load before detach
-                eng_url = str(eng.url).rstrip("/")
-                # Skip if same as local edge (avoid duplicate)
-                if eng_url == edge_url.rstrip("/"):
-                    continue
-                sync_targets.append({
-                    "url": eng_url,
-                    "headers": get_edge_headers(eng),
-                })
-        finally:
-            db2.close()
-    except Exception as e:
-        print(f"[Project] Failed to fetch active cloud engines (non-fatal): {e}")
-
-    # Fan-out settings sync (no DB held)
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        for target in sync_targets:
-            try:
-                await client.post(
-                    f"{target['url'].rstrip('/')}/api/import/settings",
-                    json=settings_payload,
-                    headers={"Content-Type": "application/json", **target["headers"]},
-                )
-            except Exception as e:
-                print(f"[Project] Edge sync failed for {target['url']} (non-fatal): {e}")
-
-    if len(sync_targets) > 1:
-        print(f"[Project] Settings synced to {len(sync_targets)} engines (1 local + {len(sync_targets) - 1} cloud)")
     
     # 3. AUTO-ENABLE REALTIME on contacts table (non-fatal side-effect)
     realtime_result = await _ensure_contacts_realtime(project_data.get("users_config"))

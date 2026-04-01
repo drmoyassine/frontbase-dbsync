@@ -119,47 +119,7 @@ async def test_redis_connection(settings_update: RedisSettings):
 
 
 
-# =============================================================================
-# Supabase Settings (JWT secret for edge auth)
-# =============================================================================
 
-class SupabaseSettings(BaseModel):
-    supabase_jwt_secret: Optional[str] = None
-
-
-@router.get("/supabase/", response_model=SupabaseSettings)
-async def get_supabase_settings():
-    """
-    Get Supabase JWT secret.
-    
-    Auto-detects from SUPABASE_JWT_SECRET env var when no saved config exists.
-    Once the user connects Supabase via the Data Studio, this should be set.
-    """
-    settings = load_settings()
-    supabase = settings.get("supabase", {})
-    
-    # Auto-detect from env var if no saved value
-    saved_secret = supabase.get("supabase_jwt_secret")
-    default_secret = os.environ.get("SUPABASE_JWT_SECRET")
-    
-    return SupabaseSettings(
-        supabase_jwt_secret=saved_secret or default_secret,
-    )
-
-
-@router.put("/supabase/", response_model=SupabaseSettings)
-async def update_supabase_settings(settings_update: SupabaseSettings):
-    """
-    Update Supabase JWT secret.
-    
-    Called automatically when user connects a Supabase project
-    that includes the JWT secret.
-    """
-    settings = load_settings()
-    settings["supabase"] = settings_update.dict()
-    save_settings(settings)
-    
-    return settings_update
 
 
 # =============================================================================

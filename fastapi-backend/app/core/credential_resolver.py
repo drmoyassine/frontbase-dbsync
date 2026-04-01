@@ -190,6 +190,7 @@ def _from_connected_accounts(db: Session, mode: str) -> Optional[dict]:
         "provider_id": str(provider.id),
         "access_token": creds.get("access_token", ""),
         "project_ref": metadata.get("project_ref", ""),
+        "jwt_secret": creds.get("jwt_secret", ""),
     }
 
 

@@ -175,6 +175,7 @@ async def reconfigure(
         edge_db_id=payload.edge_db_id,
         edge_cache_id=payload.edge_cache_id,
         edge_queue_id=payload.edge_queue_id,
+        engine_id=str(engine.id),
         deploy_provider=deploy_provider,
     )
 

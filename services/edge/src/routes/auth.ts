@@ -8,6 +8,7 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { SupabaseAuthProvider } from '../ssr/lib/SupabaseAuthProvider.js';
 import { stateProvider } from '../storage/index.js';
+import { getAuthConfig } from '../config/env.js';
 
 async function resolveDynamicRedirect(
     client: Awaited<ReturnType<SupabaseAuthProvider['createClient']>>,
@@ -30,36 +31,33 @@ async function resolveDynamicRedirect(
             }
         }
 
-        // 2. Contact Type Gated Homepage override
-        if (settings.usersConfig) {
-            const usersConfig = JSON.parse(settings.usersConfig);
-            const { contactsTable, columnMapping, contactTypeHomePages } = usersConfig;
+        // 2. Contact Type Gated Homepage override (from FRONTBASE_AUTH env var)
+        const authCfg = getAuthConfig();
+        const contacts = authCfg.contacts;
+        if (contacts?.table && contacts?.columnMapping && contacts?.contactTypeHomePages) {
+            const typeCol = contacts.columnMapping.contactTypeColumn;
+            const authUserCol = contacts.columnMapping.authUserIdColumn || 'id';
             
-            if (contactsTable && columnMapping && contactTypeHomePages) {
-                const typeCol = columnMapping.contactTypeColumn;
-                const authUserCol = columnMapping.authUserIdColumn || 'id';
-                
-                if (typeCol) {
-                    const { data, error } = await client.supabase
-                        .from(contactsTable)
-                        .select(typeCol)
-                        .eq(authUserCol, userId)
-                        .maybeSingle();
+            if (typeCol) {
+                const { data, error } = await client.supabase
+                    .from(contacts.table)
+                    .select(typeCol)
+                    .eq(authUserCol, userId)
+                    .maybeSingle();
 
-                    if (data && !error) {
-                        const contactType = data[typeCol];
-                        const homePageId = contactTypeHomePages[contactType];
-                        
-                        if (homePageId && homePageId !== '_default_') {
-                            const pages = await stateProvider.listPages();
-                            const targetPage = pages.find((p: any) => p.id === homePageId);
-                            if (targetPage) {
-                                return `/${targetPage.slug}`;
-                            }
+                if (data && !error) {
+                    const contactType = data[typeCol];
+                    const homePageId = contacts.contactTypeHomePages[contactType];
+                    
+                    if (homePageId && homePageId !== '_default_') {
+                        const pages = await stateProvider.listPages();
+                        const targetPage = pages.find((p: any) => p.id === homePageId);
+                        if (targetPage) {
+                            return `/${targetPage.slug}`;
                         }
-                    } else if (error) {
-                        console.warn('[Auth] Error querying contact type:', error);
                     }
+                } else if (error) {
+                    console.warn('[Auth] Error querying contact type:', error);
                 }
             }
         }

@@ -3,7 +3,7 @@ import { getFastApiBaseUrl } from '../../../lib/portConfig'
 import {
     RedisSettings,
     RedisTestResult,
-    SupabaseSettings,
+
     PrivacySettings,
     EmailProviderSettings,
     AdminInviteRequest,
@@ -24,9 +24,6 @@ export const settingsApi = {
     testRedis: (data: Partial<RedisSettings>) => mainApi.post<RedisTestResult>('/settings/redis/test/', data),
 
 
-    // Supabase JWT
-    getSupabase: () => mainApi.get<SupabaseSettings>('/settings/supabase/'),
-    updateSupabase: (data: Partial<SupabaseSettings>) => mainApi.put<SupabaseSettings>('/settings/supabase/', data),
 
     // Privacy & Tracking
     getPrivacy: () => mainApi.get<PrivacySettings>('/settings/privacy/'),

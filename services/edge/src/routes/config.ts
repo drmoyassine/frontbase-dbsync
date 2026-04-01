@@ -13,6 +13,7 @@
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { SuccessResponseSchema, ErrorResponseSchema } from '../schemas';
+import { getStateDbConfig, getCacheConfig, getQueueConfig, overrideCacheConfig, overrideQueueConfig } from '../config/env.js';
 
 const configRoute = new OpenAPIHono();
 
@@ -60,18 +61,22 @@ const getConfigRoute = createRoute({
 });
 
 configRoute.openapi(getConfigRoute, async (c) => {
+    const stateDb = getStateDbConfig();
+    const cache = getCacheConfig();
+    const queue = getQueueConfig();
+
     return c.json({
         stateDb: {
-            provider: process.env.FRONTBASE_STATE_DB_PROVIDER || 'local-sqlite',
-            url: redact(process.env.FRONTBASE_STATE_DB_URL),
+            provider: stateDb.provider || 'local-sqlite',
+            url: redact(stateDb.url),
         },
         cache: {
-            url: redact(process.env.FRONTBASE_CACHE_URL),
-            configured: !!(process.env.FRONTBASE_CACHE_URL && process.env.FRONTBASE_CACHE_TOKEN),
+            url: redact(cache.url),
+            configured: cache.provider !== 'none',
         },
         queue: {
-            url: redact(process.env.FRONTBASE_QUEUE_URL),
-            configured: !!(process.env.FRONTBASE_QUEUE_URL && process.env.FRONTBASE_QUEUE_TOKEN),
+            url: redact(queue.url),
+            configured: queue.provider !== 'none',
         },
         engineMode: process.env.FRONTBASE_ADAPTER_PLATFORM || null,
     }, 200);
@@ -130,8 +135,7 @@ configRoute.openapi(updateConfigRoute, async (c) => {
     try {
         // ── Cache (Redis/Upstash) ────────────────────────────────────────
         if (body.cache) {
-            process.env.FRONTBASE_CACHE_URL = body.cache.url;
-            process.env.FRONTBASE_CACHE_TOKEN = body.cache.token;
+            overrideCacheConfig({ provider: 'upstash', url: body.cache.url, token: body.cache.token });
 
             // Reinitialize Redis singleton
             try {
@@ -146,8 +150,7 @@ configRoute.openapi(updateConfigRoute, async (c) => {
 
         // ── Queue ────────────────────────────────────────────────────────
         if (body.queue) {
-            process.env.FRONTBASE_QUEUE_URL = body.queue.url;
-            process.env.FRONTBASE_QUEUE_TOKEN = body.queue.token;
+            overrideQueueConfig({ provider: 'qstash', url: body.queue.url, token: body.queue.token });
             updated.push('queue');
             console.log('[Config] Queue config updated');
         }

@@ -11,6 +11,7 @@
 
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { getGPUModels } from './ai.js';
+import { getStateDbConfig, getCacheConfig, getQueueConfig } from '../config/env.js';
 
 const manifestRoute = new OpenAPIHono();
 
@@ -36,38 +37,28 @@ function getCapabilities(): string[] {
 }
 
 /**
- * Derive binding types from env vars (types only, never credentials).
+ * Derive binding types from config (types only, never credentials).
  */
 function getBindings(): Record<string, string> {
     const bindings: Record<string, string> = {};
 
     // Database
-    const dbUrl = process.env.FRONTBASE_STATE_DB_URL || '';
-    if (dbUrl.startsWith('libsql://') || dbUrl.startsWith('https://')) {
-        bindings.db = 'turso';
-    } else if (dbUrl.includes('sqlite') || dbUrl.endsWith('.db')) {
-        bindings.db = 'sqlite';
-    } else if (dbUrl) {
+    const dbCfg = getStateDbConfig();
+    if (dbCfg.provider && dbCfg.provider !== 'local') {
+        bindings.db = dbCfg.provider;
+    } else if (dbCfg.url) {
         bindings.db = 'custom';
     } else {
         bindings.db = 'none';
     }
 
     // Cache
-    const cacheUrl = process.env.FRONTBASE_CACHE_URL || '';
-    if (cacheUrl.includes('upstash')) {
-        bindings.cache = 'upstash';
-    } else if (cacheUrl.includes('redis')) {
-        bindings.cache = 'redis';
-    } else if (cacheUrl) {
-        bindings.cache = 'custom';
-    } else {
-        bindings.cache = 'none';
-    }
+    const cacheCfg = getCacheConfig();
+    bindings.cache = cacheCfg.provider !== 'none' ? cacheCfg.provider : 'none';
 
     // Queue
-    const qstashToken = process.env.QSTASH_TOKEN || '';
-    bindings.queue = qstashToken ? 'qstash' : 'none';
+    const queueCfg = getQueueConfig();
+    bindings.queue = queueCfg.provider !== 'none' ? queueCfg.provider : 'none';
 
     return bindings;
 }

@@ -17,6 +17,7 @@ import { createClient } from '@libsql/client';
 import { sql } from 'drizzle-orm';
 import { DrizzleStateProvider } from './DrizzleStateProvider';
 import { runMigrations } from './edge-migrations';
+import { getStateDbConfig } from '../config/env.js';
 
 export class TursoHttpProvider extends DrizzleStateProvider {
     private _db: ReturnType<typeof drizzle> | null = null;
@@ -27,13 +28,14 @@ export class TursoHttpProvider extends DrizzleStateProvider {
      */
     protected getDb(): ReturnType<typeof drizzle> {
         if (!this._db) {
-            const url = process.env.FRONTBASE_STATE_DB_URL;
-            const authToken = process.env.FRONTBASE_STATE_DB_TOKEN;
+            const cfg = getStateDbConfig();
+            const url = cfg.url;
+            const authToken = cfg.token;
 
             if (!url) {
                 throw new Error(
-                    '[TursoHttpProvider] FRONTBASE_STATE_DB_URL is required. ' +
-                    'Set this as a Worker secret or env var.'
+                    '[TursoHttpProvider] FRONTBASE_STATE_DB.url is required. ' +
+                    'Set FRONTBASE_STATE_DB JSON env var with url and token.'
                 );
             }
 

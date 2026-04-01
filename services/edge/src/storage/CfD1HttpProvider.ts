@@ -83,9 +83,11 @@ export class CfD1HttpProvider implements IStateProvider {
     private ensureConfig(): void {
         if (this.accountId) return;
 
-        const dbUrl = process.env.FRONTBASE_STATE_DB_URL || '';
-        this.apiToken = process.env.FRONTBASE_CF_API_TOKEN || '';
-        this.accountId = process.env.FRONTBASE_CF_ACCOUNT_ID || '';
+        const { getStateDbConfig } = require('../config/env.js');
+        const cfg = getStateDbConfig();
+        const dbUrl = cfg.url || '';
+        this.apiToken = cfg.cfApiToken || '';
+        this.accountId = cfg.cfAccountId || '';
 
         // Parse d1://<uuid> → extract database UUID
         if (dbUrl.startsWith('d1://')) {
@@ -96,8 +98,8 @@ export class CfD1HttpProvider implements IStateProvider {
 
         if (!this.databaseId || !this.apiToken || !this.accountId) {
             throw new Error(
-                '[CfD1HttpProvider] Missing env vars. Required: ' +
-                'FRONTBASE_STATE_DB_URL (d1://UUID), FRONTBASE_CF_API_TOKEN, FRONTBASE_CF_ACCOUNT_ID'
+                '[CfD1HttpProvider] Missing config. Required in FRONTBASE_STATE_DB: ' +
+                'url (d1://UUID), cfApiToken, cfAccountId'
             );
         }
 
@@ -247,7 +249,7 @@ export class CfD1HttpProvider implements IStateProvider {
             return {
                 id: 'default', faviconUrl: null, logoUrl: null,
                 siteName: null, siteDescription: null, appUrl: null,
-                authForms: null, usersConfig: null,
+                authForms: null,
                 updatedAt: new Date().toISOString(),
             };
         }
@@ -259,7 +261,6 @@ export class CfD1HttpProvider implements IStateProvider {
             siteDescription: (row.site_description as string) || null,
             appUrl: (row.app_url as string) || null,
             authForms: (row.auth_forms as string) || null,
-            usersConfig: (row.users_config as string) || null,
             updatedAt: row.updated_at as string,
         };
     }
@@ -285,12 +286,11 @@ export class CfD1HttpProvider implements IStateProvider {
             if (updates.siteDescription !== undefined) { setClauses.push(`site_description = ?${idx}`); params.push(updates.siteDescription); idx++; }
             if (updates.appUrl !== undefined) { setClauses.push(`app_url = ?${idx}`); params.push(updates.appUrl); idx++; }
             if (updates.authForms !== undefined) { setClauses.push(`auth_forms = ?${idx}`); params.push(updates.authForms); idx++; }
-            if (updates.usersConfig !== undefined) { setClauses.push(`users_config = ?${idx}`); params.push(updates.usersConfig); idx++; }
             await this.run(`UPDATE project_settings SET ${setClauses.join(', ')} WHERE id = 'default'`, params);
         } else {
             await this.run(
-                `INSERT INTO project_settings (id, favicon_url, logo_url, site_name, site_description, app_url, auth_forms, users_config, updated_at) VALUES ('default', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
-                [updates.faviconUrl || null, updates.logoUrl || null, updates.siteName || null, updates.siteDescription || null, updates.appUrl || null, updates.authForms || null, updates.usersConfig || null, now]
+                `INSERT INTO project_settings (id, favicon_url, logo_url, site_name, site_description, app_url, auth_forms, updated_at) VALUES ('default', ?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
+                [updates.faviconUrl || null, updates.logoUrl || null, updates.siteName || null, updates.siteDescription || null, updates.appUrl || null, updates.authForms || null, now]
             );
         }
         return this.getProjectSettings();

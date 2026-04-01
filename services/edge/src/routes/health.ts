@@ -33,20 +33,19 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 // ── Binding health checks ───────────────────────────────────────────
 
 async function checkStateDb(): Promise<BindingStatus> {
-    const provider = process.env.FRONTBASE_STATE_DB_PROVIDER;
-    const url = process.env.FRONTBASE_STATE_DB_URL;
+    const { getStateDbConfig } = await import('../config/env.js');
+    const cfg = getStateDbConfig();
 
-    if (!provider && !url) {
+    if (cfg.provider === 'local' && !cfg.url) {
         return { provider: 'none', status: 'not_configured' };
     }
 
     const result: BindingStatus = {
-        provider: provider || 'auto',
+        provider: cfg.provider || 'auto',
         status: 'ok',
     };
 
-    const schema = process.env.FRONTBASE_SCHEMA_NAME;
-    if (schema) result.schema = schema;
+    if (cfg.schema) result.schema = cfg.schema;
 
     try {
         const { stateProvider } = await import('../storage/index.js');
@@ -61,20 +60,20 @@ async function checkStateDb(): Promise<BindingStatus> {
 }
 
 async function checkCache(): Promise<BindingStatus> {
-    const provider = process.env.FRONTBASE_CACHE_PROVIDER;
-    const url = process.env.FRONTBASE_CACHE_URL;
+    const { getCacheConfig } = await import('../config/env.js');
+    const cfg = getCacheConfig();
 
-    if (!url) {
+    if (cfg.provider === 'none' && !cfg.url) {
         return { provider: 'none', status: 'not_configured' };
     }
 
     try {
         const { cacheProvider } = await import('../cache/index.js');
         await withTimeout(cacheProvider.get('__health_check__'), PING_TIMEOUT_MS);
-        return { provider: provider || 'redis', status: 'ok' };
+        return { provider: cfg.provider || 'redis', status: 'ok' };
     } catch (e: any) {
         return {
-            provider: provider || 'redis',
+            provider: cfg.provider || 'redis',
             status: 'error',
             error: (e?.message || String(e)).slice(0, 120),
         };
@@ -82,17 +81,15 @@ async function checkCache(): Promise<BindingStatus> {
 }
 
 async function checkQueue(): Promise<BindingStatus> {
-    const provider = process.env.FRONTBASE_QUEUE_PROVIDER;
-    const token = process.env.FRONTBASE_QUEUE_TOKEN || process.env.QSTASH_TOKEN;
-    const url = process.env.FRONTBASE_QUEUE_URL;
+    const { getQueueConfig } = await import('../config/env.js');
+    const cfg = getQueueConfig();
 
-    // CF Queues use CF API token (not a separate queue token)
-    if (!token && !url && !provider) {
+    if (cfg.provider === 'none' && !cfg.token && !cfg.url) {
         return { provider: 'none', status: 'not_configured' };
     }
 
     // Queue health is "configured" — can't ping QStash/CF Queues without publishing
-    return { provider: provider || 'qstash', status: 'ok' };
+    return { provider: cfg.provider || 'qstash', status: 'ok' };
 }
 
 // ── OpenAPI Route ───────────────────────────────────────────────────

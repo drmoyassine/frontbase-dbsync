@@ -111,15 +111,12 @@ async def deploy_edge_function(
 ) -> dict:
     """Deploy an edge function to Netlify using the CLI.
 
-    Netlify Edge Functions require the CLI's build step to compile them into
-    .eszip (Deno bundle) format. The raw file-digest API cannot deploy edge
-    functions — they are treated as static files and never executed.
+    Netlify Edge Functions REQUIRE .eszip compilation (Deno bundle format)
+    which only the CLI provides. The raw deploy API (ZIP/file-digest) cannot
+    deploy edge functions — they are treated as static files.
 
-    This function:
-    1. Creates a temp project dir with netlify/edge-functions/{name}.js
-    2. Writes a netlify.toml with [[edge_functions]] routing
-    3. Runs ``npx netlify-cli deploy --prod --json``
-    4. Returns the parsed deploy response
+    The CLI is cached after the first ``npx`` run (~100MB download).
+    Subsequent deploys take ~30 seconds.
     """
     import asyncio
     import shutil
@@ -129,16 +126,13 @@ async def deploy_edge_function(
 
     func_name = filename.replace('.js', '').replace('.ts', '')
 
-    # Use mkdtemp instead of TemporaryDirectory — the CLI subprocess leaves
-    # file handles open on Windows, causing TemporaryDirectory.__exit__ to
-    # crash with PermissionError from shutil.rmtree.
     tmpdir = tempfile.mkdtemp(prefix="frontbase-netlify-")
     try:
         # Create project structure
         ef_dir = os.path.join(tmpdir, "netlify", "edge-functions")
         os.makedirs(ef_dir, exist_ok=True)
 
-        # Create .netlify/state.json to link the site (CLI requires this)
+        # Create .netlify/state.json to link the site
         netlify_dir = os.path.join(tmpdir, ".netlify")
         os.makedirs(netlify_dir, exist_ok=True)
         with open(os.path.join(netlify_dir, "state.json"), "w", encoding="utf-8") as f:
@@ -148,7 +142,7 @@ async def deploy_edge_function(
         with open(os.path.join(ef_dir, f"{func_name}.js"), "w", encoding="utf-8") as f:
             f.write(script_content)
 
-        # Write minimal index.html (static fallback)
+        # Write minimal index.html (required static asset)
         with open(os.path.join(tmpdir, "index.html"), "w", encoding="utf-8") as f:
             f.write("<!-- Frontbase Edge Engine -->")
 
@@ -163,11 +157,12 @@ async def deploy_edge_function(
         with open(os.path.join(tmpdir, "netlify.toml"), "w", encoding="utf-8") as f:
             f.write(toml_content)
 
-        # Run CLI deploy via subprocess.run in a thread pool.
-        # asyncio.create_subprocess_shell raises NotImplementedError on Windows
-        # when uvicorn uses SelectorEventLoop (which doesn't support subprocesses).
-        # Auth token passed via env var (not CLI flag) to avoid exposure in process list.
-        cmd = "npx -y netlify-cli deploy --prod --json"
+        bundle_kb = len(script_content) // 1024
+        print(f"[Netlify] Deploying edge function via CLI ({bundle_kb} KB bundle)")
+
+        from .netlify_cli import resolve_netlify_bin
+        netlify_bin = resolve_netlify_bin()
+        cmd = f"{netlify_bin} deploy --prod --json"
         cli_env = {**os.environ, "NETLIFY_AUTH_TOKEN": api_token}
 
         def _run_cli() -> subprocess.CompletedProcess[str]:
@@ -177,7 +172,7 @@ async def deploy_edge_function(
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
-                timeout=180,
+                timeout=300,  # 5 min timeout (first run downloads CLI)
                 shell=True,
                 env=cli_env,
             )
@@ -188,33 +183,48 @@ async def deploy_edge_function(
             err_msg = (result.stderr or result.stdout or "Unknown error")[:500]
             raise HTTPException(400, f"Netlify CLI deploy failed (exit {result.returncode}): {err_msg}")
 
-        # Parse JSON output
         try:
             deploy_data = json.loads(result.stdout)
         except (json.JSONDecodeError, ValueError) as e:
             raise HTTPException(500, f"Netlify CLI returned non-JSON output: {e}")
 
+        print(f"[Netlify] Deploy complete: {deploy_data.get('deploy_id', 'unknown')}")
         return deploy_data
     finally:
-        # Best-effort cleanup — ignore Windows file-lock errors
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 async def set_env_vars(api_token: str, site_id: str, secrets: dict) -> None:
-    """Set environment variables on a Netlify site."""
+    """Set environment variables on a Netlify site (batched).
+
+    Uses delete-then-create pattern for idempotency — Netlify rejects
+    POST if the key already exists, so we delete existing keys first.
+    """
     url = f"{NETLIFY_API}/accounts/me/env"
     params = {"site_id": site_id}
+    env_vars = [
+        {"key": k, "values": [{"value": v, "context": "all"}]}
+        for k, v in secrets.items() if v is not None
+    ]
+    if not env_vars:
+        return
 
-    async with httpx.AsyncClient() as client:
-        for name, value in secrets.items():
-            if value is not None:
-                resp = await client.post(
-                    url, headers=_headers(api_token), params=params,
-                    json=[{"key": name, "values": [{"value": value, "context": "all"}]}],
-                    timeout=10.0,
-                )
-                if resp.status_code not in (200, 201):
-                    print(f"[Netlify] Warning: Failed to set env var {name}: {resp.status_code}")
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # Delete existing env vars first (idempotent upsert)
+        for ev in env_vars:
+            await client.delete(
+                f"{url}/{ev['key']}", headers=_headers(api_token), params=params,
+            )
+
+        # Batch create all env vars in one POST
+        resp = await client.post(
+            url, headers=_headers(api_token), params=params,
+            json=env_vars,
+        )
+        if resp.status_code not in (200, 201):
+            print(f"[Netlify] Warning: Batch env vars failed ({resp.status_code}): {resp.text[:200]}")
+        else:
+            print(f"[Netlify] Set {len(env_vars)} env vars in one batch")
 
 
 async def delete_site(api_token: str, site_id: str) -> None:

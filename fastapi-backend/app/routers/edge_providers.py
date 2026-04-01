@@ -249,6 +249,12 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
             except Exception as e:
                 print(f"Warning: Could not auto-detect Cloudflare account_id: {e}")
 
+    # For Netlify: pre-install CLI in background so first deploy is fast
+    if payload.provider == "netlify":
+        import asyncio
+        from ..services.netlify_cli import ensure_netlify_cli
+        asyncio.create_task(ensure_netlify_cli())
+
     return _provider_response(provider)
 
 

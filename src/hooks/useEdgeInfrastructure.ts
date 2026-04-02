@@ -175,6 +175,15 @@ export const edgeInfrastructureApi = {
     },
 
     // Batch Operations
+    batchRedeploy: async (engine_ids: string[]): Promise<BatchResult> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/batch/redeploy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ engine_ids }),
+        });
+        if (!res.ok) throw new Error('Batch redeploy failed');
+        return res.json();
+    },
     batchDelete: async (engine_ids: string[], delete_remote = false): Promise<BatchResult> => {
         const res = await fetch(`${API_BASE}/api/edge-engines/batch/delete`, {
             method: 'POST',

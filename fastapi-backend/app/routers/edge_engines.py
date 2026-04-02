@@ -128,12 +128,21 @@ async def update_edge_engine(engine_id: str, payload: EdgeEngineUpdate, db: Sess
     if 'engine_config' in update_data and update_data['engine_config'] is not None:
         update_data['engine_config'] = json.dumps(update_data['engine_config'])
         
+    # Check if is_active is toggled
+    toggled_is_active = None
+    if 'is_active' in update_data and update_data['is_active'] != engine.is_active:
+        toggled_is_active = update_data.pop('is_active')
+
     for key, value in update_data.items():
         setattr(engine, key, value)
         
     engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
 
-    db.commit()
+    if toggled_is_active is not None:
+        await engine_reconfigure.toggle_engine(engine, toggled_is_active, db)
+    else:
+        db.commit()
+    
     db.refresh(engine)
     return serialize_engine(engine)
 
@@ -334,6 +343,36 @@ async def update_engine_source(engine_id: str, payload: dict, db: Session = Depe
 # Batch Operations
 # =============================================================================
 
+@router.post("/batch/redeploy", response_model=BatchResult)
+async def batch_redeploy_engines(payload: BatchRequest, db: Session = Depends(get_db)):
+    """Batch redeploy multiple edge engines.
+    
+    Uses asyncio.Semaphore(3) to limit concurrent redeploys and avoid provider rate limits.
+    """
+    result = BatchResult(total=len(payload.engine_ids))
+    sem = asyncio.Semaphore(3)
+
+    engines = []
+    for eid in payload.engine_ids:
+        engine = db.query(EdgeEngine).filter(EdgeEngine.id == eid).first()
+        if not engine:
+            result.failed.append({"id": eid, "error": "Not found"})
+            continue
+        engines.append(engine)
+
+    async def _safe_redeploy(eng: EdgeEngine):
+        async with sem:
+            try:
+                await engine_deploy.redeploy(eng, db)
+                result.success.append(str(eng.id))
+            except Exception as e:
+                result.failed.append({"id": str(eng.id), "error": str(e)})
+
+    # Execute with concurrency limit 3
+    await asyncio.gather(*[_safe_redeploy(e) for e in engines])
+    return result
+
+
 @router.post("/batch/delete", response_model=BatchResult)
 async def batch_delete_engines(payload: BatchDeleteRequest, db: Session = Depends(get_db)):
     """Batch delete engines. Optionally delete remote resources in parallel via asyncio.gather."""
@@ -379,17 +418,31 @@ async def batch_delete_engines(payload: BatchDeleteRequest, db: Session = Depend
 
 @router.post("/batch/toggle", response_model=BatchResult)
 async def batch_toggle_engines(payload: BatchToggleRequest, db: Session = Depends(get_db)):
-    """Batch toggle active status for multiple engines. Single SQL update."""
+    """Batch toggle active status for multiple engines.
+    
+    Calls toggle_engine for each to ensure env vars are pushed to provider.
+    Concurrency level 5 (less intensive than full redeploys).
+    """
     result = BatchResult(total=len(payload.engine_ids))
+    sem = asyncio.Semaphore(5)
+
+    engines = []
     for eid in payload.engine_ids:
         engine = db.query(EdgeEngine).filter(EdgeEngine.id == eid).first()
         if not engine:
             result.failed.append({"id": eid, "error": "Not found"})
             continue
-        engine.is_active = payload.is_active  # type: ignore[assignment]
-        engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
-        result.success.append(eid)
-    db.commit()
+        engines.append(engine)
+
+    async def _safe_toggle(eng: EdgeEngine):
+        async with sem:
+            try:
+                await engine_reconfigure.toggle_engine(eng, payload.is_active, db)
+                result.success.append(str(eng.id))
+            except Exception as e:
+                result.failed.append({"id": str(eng.id), "error": str(e)})
+
+    await asyncio.gather(*[_safe_toggle(e) for e in engines])
     return result
 
 

@@ -293,3 +293,52 @@ async def reconfigure(
         "bindings_set": bindings_set,
         "bindings_removed": bindings_removed,
     }
+
+
+async def toggle_engine(
+    engine: EdgeEngine,
+    is_active: bool,
+    db: Session,
+) -> bool:
+    """True enable/disable for an engine.
+    
+    1. Updates the DB flag (is_active) so publishes stop/resume.
+    2. Pushes FRONTBASE_DISABLED env var to the engine so it returns 503 HTTP responses.
+    3. Redeploys if necessary (Vercel/Netlify).
+    """
+    # 1. Update DB
+    engine.is_active = is_active # type: ignore[assignment]
+    engine.updated_at = datetime.utcnow().isoformat() # type: ignore[assignment]
+    db.commit()
+    db.refresh(engine)
+
+    # 2. Push FRONTBASE_DISABLED env var
+    provider_type = _resolve_provider_type(engine, db)
+    if not provider_type:
+        return True # Probably local docker, DB toggle is enough
+
+    disabled_val = "false" if is_active else "true"
+    new_bindings = {"FRONTBASE_DISABLED": disabled_val}
+    settings_patched = False
+
+    if provider_type == 'cloudflare':
+        cf_creds = _resolve_cf_credentials(engine, db)
+        if cf_creds:
+            settings_patched, _, _ = await _patch_cf_settings(cf_creds, new_bindings)
+    elif provider_type in ('supabase', 'deno', 'vercel', 'netlify'):
+        settings_patched = await _push_env_vars(provider_type, engine, db, new_bindings)
+
+        # 3. Redeploy if provider requires it
+        if provider_type in NEEDS_REDEPLOY_FOR_ENV:
+            try:
+                await engine_deploy.redeploy(engine, db)
+                print(f"[Toggle] Redeployed {provider_type} engine '{engine.name}' for FRONTBASE_DISABLED={disabled_val}")
+            except Exception as e:
+                print(f"[Toggle] Redeploy failed for {provider_type} engine '{engine.name}': {e}")
+                settings_patched = False
+
+    if not is_active:
+        # Best effort flush to clear out any cached pages that might still serve
+        await engine_deploy._flush_cache(engine, str(engine.url).rstrip('/'))
+
+    return settings_patched

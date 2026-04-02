@@ -59,6 +59,7 @@ export function EdgeEnginesSection() {
         handleBulkDelete,
         handleBulkToggle,
         handleBulkSyncCheck,
+        handleBulkRedeploy,
         handleAIDelete,
     } = useEdgeEngineActions({ providers, refetchEngines });
 
@@ -173,6 +174,15 @@ export function EdgeEnginesSection() {
                                         disabled={bulkLoading}
                                     >
                                         <RefreshCw className="w-3 h-3" /> Sync Check
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 text-xs gap-1.5"
+                                        onClick={handleBulkRedeploy}
+                                        disabled={bulkLoading}
+                                    >
+                                        <Upload className="w-3 h-3" /> Redeploy
                                     </Button>
                                     <Button
                                         size="sm"

@@ -113,6 +113,20 @@ export function useEdgeEngineActions({ providers, refetchEngines }: UseEdgeEngin
         } catch (e: any) { alert(e.message); } finally { setBulkLoading(false); }
     };
 
+    const handleBulkRedeploy = async () => {
+        setBulkLoading(true);
+        try {
+            const result = await edgeInfrastructureApi.batchRedeploy([...selectedIds]);
+            if (result.failed.length > 0) {
+                alert(`${result.success.length} deployed, ${result.failed.length} failed:\n${result.failed.map((f: any) => `${f.id}: ${f.error}`).join('\n')}`);
+            } else {
+                toast.success('Bulk Redeploy Completed', { description: `Redeployed ${result.success.length} engines.` });
+            }
+            setSelectedIds(new Set());
+            await refetchEngines();
+        } catch (e: any) { alert(e.message); } finally { setBulkLoading(false); }
+    };
+
     // ── AI Model Delete ────────────────────────────────────────────────
 
     const handleAIDelete = async (modelId: string) => {
@@ -151,6 +165,7 @@ export function useEdgeEngineActions({ providers, refetchEngines }: UseEdgeEngin
         handleBulkDelete,
         handleBulkToggle,
         handleBulkSyncCheck,
+        handleBulkRedeploy,
         handleAIDelete,
     };
 }

@@ -286,16 +286,16 @@ export function EdgeEnginesSection() {
                                             }
                                             actions={
                                                 <div className="flex items-center space-x-2">
-                                                    <Switch
-                                                        title={engine.is_active ? "Pause Engine" : "Activate Engine"}
-                                                        id={`active-${engine.id}`}
-                                                        checked={engine.is_active}
-                                                        onCheckedChange={() => handleToggle(engine)}
-                                                    />
-                                                    <HealthCheckPopover engineId={engine.id} engineUrl={engine.url} variant="icon" />
-                                                    <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
                                                     {!engine.is_system && (
                                                         <>
+                                                            <Switch
+                                                                title={engine.is_active ? "Pause Engine" : "Activate Engine"}
+                                                                id={`active-${engine.id}`}
+                                                                checked={engine.is_active}
+                                                                onCheckedChange={() => handleToggle(engine)}
+                                                            />
+                                                            <HealthCheckPopover engineId={engine.id} engineUrl={engine.url} variant="icon" />
+                                                            <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"

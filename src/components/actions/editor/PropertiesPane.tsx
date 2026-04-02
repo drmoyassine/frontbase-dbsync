@@ -45,6 +45,8 @@ interface NodeExecutionResult {
     error?: string;
 }
 
+import { resolvePreviewUrl } from '@/lib/edgeUtils';
+
 interface PropertiesPaneProps {
     className?: string;
     nodeExecutions?: NodeExecutionResult[];
@@ -411,7 +413,7 @@ export function PropertiesPane({ className, nodeExecutions, onTestNode, isTestin
                     <div className="pt-3 border-t space-y-2">
                         <Label className="text-xs font-medium text-muted-foreground">Endpoint URLs</Label>
                         {engines.map((engine: any) => {
-                            const endpointUrl = `${engine.url?.replace(/\/$/, '')}/api/webhook/${currentDraftId}`;
+                            const endpointUrl = resolvePreviewUrl(engine.url, `/api/webhook/${currentDraftId}`);
                             const isCopied = copiedUrl === endpointUrl;
                             return (
                                 <div key={engine.id} className="flex items-center gap-1">

@@ -37,6 +37,7 @@ import { useBuilderStore } from '@/stores/builder';
 import { PageSelector } from './PageSelector';
 import { PageSettingsDrawer } from './PageSettingsDrawer';
 import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
+import { resolveEngineOrigin, resolvePreviewUrl } from '@/lib/edgeUtils';
 
 interface EdgeTarget {
   id: string;
@@ -91,12 +92,6 @@ export const BuilderHeader: React.FC<{
 
     const currentPage = pages.find(page => page.id === currentPageId);
 
-    // Get preview URL for a specific engine
-    const getPreviewUrl = (engineUrl: string, pagePath: string = '') => {
-      const baseUrl = engineUrl.replace(/\/$/, '');
-      return `${baseUrl}/${pagePath}`;
-    };
-
     // Get unified page status
     const getPageStatus = () => {
       if (!currentPage) return null;
@@ -132,22 +127,6 @@ export const BuilderHeader: React.FC<{
       }
     };
 
-    // Single-target: publish and auto-preview
-    const getPreviewOrigin = (target: EdgeTarget) => {
-      try {
-        const host = new URL(target.url).hostname;
-        const isInternal = !host.includes('.') || host === 'localhost' || host === '0.0.0.0';
-        if (isInternal) {
-          // In dev (Vite on :5173), no Nginx to route — use edge URL directly
-          // In production, Nginx routes /* → edge, so use same origin
-          const isDev = window.location.port === '5173';
-          return isDev ? target.url.replace(/\/$/, '') : window.location.origin;
-        }
-        // Cloud edge → use its public URL
-        return target.url.replace(/\/$/, '');
-      } catch { return null; }
-    };
-
     const handleSingleTargetPublish = async (target: EdgeTarget) => {
       if (!currentPageId || !currentPage) return;
       setIsPublishing(true);
@@ -156,7 +135,7 @@ export const BuilderHeader: React.FC<{
         // Reload once for single target
         await loadPagesFromDatabase(false, true);
         const pagePath = currentPage.isHomepage ? '' : currentPage.slug;
-        const origin = getPreviewOrigin(target);
+        const origin = resolveEngineOrigin(target.url);
         if (origin) {
           window.open(`${origin}/${pagePath}`, '_blank');
         } else {
@@ -476,7 +455,7 @@ export const BuilderHeader: React.FC<{
                     {targets.map(target => {
                       const synced = isTargetSynced(target.id);
                       const pagePath = currentPage?.isHomepage ? '' : currentPage?.slug || '';
-                      const previewUrl = getPreviewUrl(target.url, pagePath);
+                      const previewUrl = resolvePreviewUrl(target.url, pagePath);
                       return (
                         <div
                           key={target.id}

@@ -37,6 +37,7 @@ import {
     API_BASE, PROVIDER_LABELS,
     extractWorkerName, getWorkerBaseUrl, engineInspectFetch,
 } from './inspector/types';
+import { resolveEngineOrigin } from '@/lib/edgeUtils';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -535,17 +536,21 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
                             <div className="flex items-center gap-2 mt-1">
                                 <Badge variant="outline" className="text-[10px]">{engine.provider || 'cloudflare'}</Badge>
                                 <Badge variant="outline" className="text-[10px]">{engine.adapter_type}</Badge>
-                                {engine.url && (
-                                    <a
-                                        href={engine.url.startsWith('http') ? engine.url : `https://${engine.url}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
-                                    >
-                                        {engine.url.replace(/^https?:\/\//, '')}
-                                        <ExternalLink className="h-2.5 w-2.5" />
-                                    </a>
-                                )}
+                                {engine.url && (() => {
+                                    const originUrl = resolveEngineOrigin(engine.url);
+                                    if (!originUrl) return null;
+                                    return (
+                                        <a
+                                            href={originUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
+                                        >
+                                            {originUrl.replace(/^https?:\/\//, '')}
+                                            <ExternalLink className="h-2.5 w-2.5" />
+                                        </a>
+                                    );
+                                })()}
                             </div>
                         </div>
 

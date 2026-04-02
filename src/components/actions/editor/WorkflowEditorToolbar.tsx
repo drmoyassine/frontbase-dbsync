@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { resolveEngineOrigin } from '@/lib/edgeUtils';
 import {
     Popover,
     PopoverContent,
@@ -232,17 +233,22 @@ export function WorkflowEditorToolbar({
                                                     )}
                                                     title={synced ? "Up to date" : "Needs publish"}
                                                 />
-                                                {engine.url && (
-                                                    <a
-                                                        href={engine.url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                                                        onClick={(e) => e.stopPropagation()}
-                                                    >
-                                                        <ExternalLink className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
-                                                    </a>
-                                                )}
+                                                {engine.url && (() => {
+                                                    const originUrl = resolveEngineOrigin(engine.url);
+                                                    if (!originUrl) return null;
+                                                    return (
+                                                        <a
+                                                            href={originUrl}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors group-hover:text-primary/70"
+                                                            onClick={e => e.stopPropagation()}
+                                                        >
+                                                            {originUrl.replace(/^https?:\/\//, '')}
+                                                            <ExternalLink className="h-3 w-3" />
+                                                        </a>
+                                                    );
+                                                })()}
                                             </label>
                                         );
                                     })

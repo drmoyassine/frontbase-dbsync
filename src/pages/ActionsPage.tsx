@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { useParams, useNavigate } from 'react-router-dom';
+import { resolvePreviewUrl } from '@/lib/edgeUtils';
 
 export default function ActionsPage() {
     const { id: routeId } = useParams<{ id: string }>();
@@ -41,15 +42,14 @@ export default function ActionsPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-    const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+    const [copiedId, setCopiedId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'workflows' | 'executions'>('workflows');
 
-    const handleCopyWebhookUrl = (e: React.MouseEvent, url: string, draftId: string) => {
+    const handleCopyWebhookUrl = (e: React.MouseEvent, resolvedUrl: string, flowId: string) => {
         e.stopPropagation();
-        const webhookUrl = `${url.replace(/\/$/, '')}/api/webhook/${draftId}`;
-        navigator.clipboard.writeText(webhookUrl);
-        setCopiedUrl(webhookUrl);
-        setTimeout(() => setCopiedUrl(null), 2000);
+        navigator.clipboard.writeText(resolvedUrl);
+        setCopiedId(flowId);
+        setTimeout(() => setCopiedId(null), 2000);
         toast({ title: 'Webhook URL copied', description: 'URL copied to clipboard' });
     };
 
@@ -407,30 +407,41 @@ export default function ActionsPage() {
                                                                     {triggerLabel(type)}
                                                                 </span>
                                                             </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end" className="w-64" onClick={(e) => e.stopPropagation()}>
-                                                                <DropdownMenuLabel className="font-normal text-xs text-muted-foreground pb-2">Copy webhook URL for target:</DropdownMenuLabel>
-                                                                {Object.entries(draft.deployed_engines)
-                                                                    .map(([engineId, deployedEngine]: [string, any]) => {
-                                                                        const actualEngine = engines?.find((e: any) => e.id === engineId);
-                                                                        if (!actualEngine && engineId !== 'local') return null;
+                                                            <DropdownMenuContent align="end" className="w-80 p-3" onClick={(e) => e.stopPropagation()}>
+                                                                <DropdownMenuLabel className="font-normal text-xs text-muted-foreground pb-2 px-0">Webhook URLs per target:</DropdownMenuLabel>
+                                                                <div className="space-y-2">
+                                                                    {Object.entries(draft.deployed_engines)
+                                                                        .map(([engineId, deployedEngine]: [string, any]) => {
+                                                                            const actualEngine = engines?.find((e: any) => e.id === engineId);
+                                                                            if (!actualEngine && engineId !== 'local') return null;
 
-                                                                        const engineName = actualEngine?.name || deployedEngine.name;
-                                                                        const url = `${deployedEngine.url.replace(/\/$/, '')}/api/webhook/${draft.id}`;
-                                                                        const isCopied = copiedUrl === url;
-                                                                        return (
-                                                                            <DropdownMenuItem
-                                                                                key={engineId}
-                                                                                disabled={deployedEngine.is_active === false || draft.is_active === false}
-                                                                                className="flex items-center justify-between py-2 cursor-pointer w-full"
-                                                                                onClick={(e) => handleCopyWebhookUrl(e, deployedEngine.url, draft.id)}
-                                                                            >
-                                                                                <span className="font-medium truncate pr-2">{engineName}</span>
-                                                                                {isCopied ? <Check className="w-3.5 h-3.5 text-green-500 shrink-0" /> : <Copy className="w-3.5 h-3.5 opacity-50 shrink-0" />}
-                                                                            </DropdownMenuItem>
-                                                                        );
-                                                                    })
-                                                                    .filter(Boolean)
-                                                                }
+                                                                            return (
+                                                                                <div key={engineId} className="flex items-center gap-2">
+                                                                                    <Badge variant="outline" className="text-[10px] shrink-0 w-[50px] justify-center">
+                                                                                        {actualEngine?.name || deployedEngine.name}
+                                                                                    </Badge>
+                                                                                    
+                                                                                    <div className="flex-1 flex items-center bg-muted/30 rounded border border-border px-2 py-1 min-w-0 group relative overflow-hidden text-[10px]">
+                                                                                        <span className="truncate opacity-70 group-hover:opacity-100 transition-opacity flex-1 font-mono select-all">
+                                                                                            {resolvePreviewUrl(deployedEngine.url, `/api/webhook/${draft.id}`)}
+                                                                                        </span>
+                                                                                        <button
+                                                                                            className="absolute right-0 top-0 bottom-0 px-2 bg-gradient-to-l from-muted/80 via-muted/80 to-transparent flex items-center justify-center text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                                            onClick={(e) => {
+                                                                                                const url = resolvePreviewUrl(deployedEngine.url, `/api/webhook/${draft.id}`);
+                                                                                                handleCopyWebhookUrl(e, url, draft.id);
+                                                                                            }}
+                                                                                            title="Copy webhook URL"
+                                                                                        >
+                                                                                            {copiedId === draft.id ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </div>
+                                                                            );
+                                                                        })
+                                                                        .filter(Boolean)
+                                                                    }
+                                                                </div>
                                                             </DropdownMenuContent>
                                                         </DropdownMenu>
                                                     </div>

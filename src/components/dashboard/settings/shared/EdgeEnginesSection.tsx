@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Cloud, Server, Loader2, Search, Trash2, Power, RefreshCw, Upload, Cpu, Brain } from 'lucide-react';
+import { Cloud, Server, Loader2, Search, Trash2, Power, RefreshCw, Upload, Cpu, Brain, Shield } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
     useEdgeEngines,
@@ -236,6 +236,11 @@ export function EdgeEnginesSection() {
                                             onSelectChange={() => toggleSelect(engine.id)}
                                             showSelectSpacer={engine.is_system}
                                             badges={<>
+                                                {engine.is_system && (
+                                                    <Badge variant="outline" className="text-[10px] h-5 py-0 bg-amber-500/5 text-amber-500 border-amber-500/20">
+                                                        <Shield className="h-3 w-3 mr-1" /> System
+                                                    </Badge>
+                                                )}
                                                 {!engine.is_active && (
                                                     <Badge variant="secondary" className="text-[10px] h-5 py-0 bg-muted text-muted-foreground">Paused</Badge>
                                                 )}
@@ -287,10 +292,10 @@ export function EdgeEnginesSection() {
                                                         checked={engine.is_active}
                                                         onCheckedChange={() => handleToggle(engine)}
                                                     />
+                                                    <HealthCheckPopover engineId={engine.id} engineUrl={engine.url} variant="icon" />
+                                                    <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
                                                     {!engine.is_system && (
                                                         <>
-                                                            <HealthCheckPopover engineId={engine.id} engineUrl={engine.url} variant="icon" />
-                                                            <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"

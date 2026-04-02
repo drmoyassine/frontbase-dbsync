@@ -47,7 +47,21 @@ def upgrade() -> None:
         )
 
     # 2. Drop the column (batch mode required for SQLite)
-    with op.batch_alter_table('auth_forms', schema=None) as batch_op:
+    #    Explicit table_args needed because SQLite reflection maps Text columns
+    #    to NullType when created outside Alembic (e.g., via 0001's if-not-exists guard).
+    with op.batch_alter_table('auth_forms', schema=None, table_args=[
+        sa.Column('id', sa.Text(), primary_key=True),
+        sa.Column('name', sa.Text(), nullable=False),
+        sa.Column('type', sa.Text(), nullable=False),
+        sa.Column('config', sa.Text(), server_default='{}'),
+        sa.Column('target_contact_type', sa.Text()),
+        sa.Column('allowed_contact_types', sa.Text(), server_default='[]'),
+        sa.Column('redirect_url', sa.Text()),
+        sa.Column('is_active', sa.Integer(), server_default='1'),
+        sa.Column('created_at', sa.Text()),
+        sa.Column('updated_at', sa.Text()),
+        sa.Column('is_primary', sa.Integer(), server_default='0'),
+    ]) as batch_op:
         batch_op.drop_column('is_primary')
 
 
@@ -64,7 +78,18 @@ def downgrade() -> None:
         return  # Column already exists
 
     # 1. Re-add column
-    with op.batch_alter_table('auth_forms', schema=None) as batch_op:
+    with op.batch_alter_table('auth_forms', schema=None, table_args=[
+        sa.Column('id', sa.Text(), primary_key=True),
+        sa.Column('name', sa.Text(), nullable=False),
+        sa.Column('type', sa.Text(), nullable=False),
+        sa.Column('config', sa.Text(), server_default='{}'),
+        sa.Column('target_contact_type', sa.Text()),
+        sa.Column('allowed_contact_types', sa.Text(), server_default='[]'),
+        sa.Column('redirect_url', sa.Text()),
+        sa.Column('is_active', sa.Integer(), server_default='1'),
+        sa.Column('created_at', sa.Text()),
+        sa.Column('updated_at', sa.Text()),
+    ]) as batch_op:
         batch_op.add_column(
             sa.Column('is_primary', sa.Integer(), server_default='0')
         )

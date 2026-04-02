@@ -198,6 +198,10 @@ def _compute_supabase_request(binding: dict, datasource) -> Optional[dict]:
     sort_dir = sorting.get('direction', 'asc')
     
     # Build initial RPC URL for SSR (page 1)
+    # Guard: Supabase RPC requires an HTTP API URL, not a raw connection string
+    if not ds_url or not ds_url.startswith('http'):
+        print(f"[_compute_supabase_request] Invalid datasource URL for Supabase RPC: {ds_url}")
+        return None
     rpc_url = f"{ds_url}/rest/v1/rpc/frontbase_get_rows"
     
     # --- Filter Options Request Generation ---
@@ -244,6 +248,7 @@ def _compute_supabase_request(binding: dict, datasource) -> Optional[dict]:
     return {
         'url': rpc_url,
         'method': 'POST',  # RPC uses POST
+        'fetchStrategy': 'direct',  # Supabase anonKey is public, PostgREST has CORS
         'headers': {
             'apikey': anon_key,
             'Authorization': f"Bearer {anon_key}",
@@ -278,7 +283,11 @@ def _compute_supabase_request(binding: dict, datasource) -> Optional[dict]:
 
 
 def _compute_sql_request(binding: dict, datasource, ds_type: str) -> Optional[dict]:
-    """Build SQL query with JOINs for SQL databases (Neon, PlanetScale, Turso)"""
+    """Build SQL query with JOINs for SQL databases (Neon, PlanetScale, Turso)
+    
+    Proxy strategy: bakes only datasourceId + queryConfig into the page.
+    Credentials are resolved server-side from FRONTBASE_DATASOURCES env var.
+    """
     table_name = binding.get('tableName') or binding.get('table_name')
     if not table_name:
         return None
@@ -298,45 +307,25 @@ def _compute_sql_request(binding: dict, datasource, ds_type: str) -> Optional[di
     join_str = ' '.join(joins) if joins else ''
     sql = f"SELECT {table_name}.* FROM {table_name} {join_str} LIMIT 100".strip()
     
-    # Different URL/body format for each database type
-    ds_url = datasource.url if hasattr(datasource, 'url') else datasource.get('url', '')
+    # Get datasource ID for server-side credential resolution
+    datasource_id = datasource.id if hasattr(datasource, 'id') else datasource.get('id', '')
     
-    if ds_type == 'neon':
-        return {
-            'url': '{{NEON_HTTP_URL}}/sql',
-            'method': 'POST',
-            'headers': {
-                'Authorization': 'Bearer {{NEON_API_KEY}}',
-                'Content-Type': 'application/json'
-            },
-            'body': {'query': sql, 'params': []},
-            'resultPath': 'rows',
-            'flattenRelations': False
+    # Proxy strategy: Edge resolves credentials from FRONTBASE_DATASOURCES env var.
+    # Client sends only datasourceId + query — no credentials in page HTML.
+    return {
+        'url': '',  # Resolved server-side from FRONTBASE_DATASOURCES
+        'method': 'POST',
+        'fetchStrategy': 'proxy',
+        'datasourceId': str(datasource_id),
+        'headers': {},  # Resolved server-side
+        'body': {'query': sql, 'params': []},
+        'resultPath': 'rows',
+        'flattenRelations': False,
+        'queryConfig': {
+            'datasourceType': ds_type,
+            'tableName': table_name,
+            'sql': sql,
+            'joins': joins,
         }
-    elif ds_type == 'planetscale':
-        return {
-            'url': '{{PLANETSCALE_HTTP_URL}}/query',
-            'method': 'POST',
-            'headers': {
-                'Authorization': '{{PLANETSCALE_AUTH}}',
-                'Content-Type': 'application/json'
-            },
-            'body': {'query': sql},
-            'resultPath': 'rows',
-            'flattenRelations': False
-        }
-    elif ds_type == 'turso':
-        return {
-            'url': '{{TURSO_HTTP_URL}}/v2/pipeline',
-            'method': 'POST',
-            'headers': {
-                'Authorization': 'Bearer {{TURSO_AUTH_TOKEN}}',
-                'Content-Type': 'application/json'
-            },
-            'body': {'statements': [{'q': sql}]},
-            'resultPath': 'results[0].rows',
-            'flattenRelations': False
-        }
-    else:
-        # Generic SQL - return None, not supported via HTTP yet
-        return None
+    }
+

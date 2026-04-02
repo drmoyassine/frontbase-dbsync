@@ -97,6 +97,36 @@ The Edge Engine has no knowledge of:
 - Builder-specific component logic
 - Supabase SDK (uses pre-computed `DataRequest` instead)
 
+### 2.5 Data Fetch Strategies (HARD RULE)
+
+> [!CAUTION]
+> **Credentials for non-Supabase datasources MUST NEVER appear in published page HTML.** The publish pipeline bakes only a `datasourceId` reference; the edge resolves real credentials server-side from the `FRONTBASE_DATASOURCES` environment variable.
+
+Data-bound components use one of two strategies, decided at **publish time** and baked into `DataRequest.fetchStrategy`:
+
+| Strategy | When Used | Data Flow | Credentials |
+|----------|-----------|-----------|-------------|
+| **`direct`** | Supabase (PostgREST) | Browser → Datasource | `anonKey` is public by design, included in page HTML |
+| **`proxy`** | Neon, Turso, PlanetScale, Postgres, MySQL | Browser → Edge `/api/data/execute` → Datasource | Resolved server-side from `FRONTBASE_DATASOURCES` env var |
+
+```
+Direct strategy (Supabase):
+  Browser ──(anonKey in headers)──→ PostgREST ──→ Response
+
+Proxy strategy (Neon, Turso, etc.):
+  Browser ──(datasourceId only)──→ Edge ──(reads FRONTBASE_DATASOURCES)──→ Datasource
+                                          credentials never in page HTML
+```
+
+**Key files:**
+
+| File | Role |
+|------|------|
+| `app/services/data_request.py` | Publish-time: decides strategy, bakes `datasourceId` or `anonKey` |
+| `app/services/secrets_builder.py` | Builds `FRONTBASE_DATASOURCES` JSON blob from all non-Supabase datasources |
+| `services/edge/src/routes/data.ts` | Runtime: `buildProxyRequest()` resolves credentials, `executeDataRequest()` routes |
+| `services/edge/src/components/datatable/useDataTableQuery.ts` | Client: sends `datasourceId` for proxy, full request for direct |
+
 ---
 
 ## 3. Forbidden Actions
@@ -108,6 +138,8 @@ The Edge Engine has no knowledge of:
 |--------------|--------|
 | Edge calling FastAPI at runtime | Violates Edge Self-Sufficiency |
 | Publishing secrets to Edge | Security risk |
+| **Baking `{{ENV_VAR}}` templates or credential values into published page HTML for proxy-strategy datasources** | **Use `datasourceId` reference instead. The edge resolves credentials from `FRONTBASE_DATASOURCES` env var at runtime. Only Supabase `anonKey` (designed to be public) may appear in page HTML.** |
+| **Adding a new datasource provider without updating `_build_datasources_config()` and `buildProxyRequest()`** | **`secrets_builder.py` must know how to extract credentials for the provider, and `data.ts` must know how to build the HTTP request. Both files must be updated together.** |
 | Using `CURRENT_TIMESTAMP` in migrations | Not portable (use `func.now()` or dialect check) |
 | Holding DB connection during slow I/O | Causes QueuePool exhaustion |
 | Using `native_enum=True` for PostgreSQL | Creates migration issues |
@@ -235,6 +267,30 @@ const childrenHtml = children.map(c => renderComponent(c)).join('');
 
 **Automatic FK Joins**: `useDatabase.ts` automatically resolves foreign key relationships in data binding.
 
+**Data Fetch Strategy Factory** (publish-time decision, runtime execution):
+
+The `DataRequest` schema includes `fetchStrategy` and `datasourceId` fields set at publish time:
+```typescript
+// Published DataRequest for proxy strategy (Neon, Turso, etc.)
+{
+  fetchStrategy: 'proxy',
+  datasourceId: 'uuid-of-neon-datasource',  // Reference only — no credentials
+  method: 'POST',
+  url: '',        // Empty — resolved server-side
+  headers: {},    // Empty — resolved server-side
+  body: { query: 'SELECT ...', params: [] },
+  queryConfig: { datasourceType: 'neon', tableName: 'users', sql: '...' }
+}
+
+// Published DataRequest for direct strategy (Supabase)
+{
+  fetchStrategy: 'direct',
+  url: 'https://xxx.supabase.co/rest/v1/rpc/frontbase_get_rows',
+  headers: { apikey: '<anon_key>', Authorization: 'Bearer <anon_key>' },
+  // anonKey is public by PostgREST design — safe to include
+}
+```
+
 **Release-Before-IO Pattern** (prevents connection pool exhaustion):
 ```python
 # 1. Fetch data quickly
@@ -292,13 +348,16 @@ stylesData: {
 |------|----------|-------------|
 | 1 | `normalize_binding_location()` | Move `props.binding` → `component.binding` |
 | 2 | `map_styles_schema()` | Convert `stylesData` → `styles` (preserving `viewportOverrides`) |
-| 3a | `enrich_binding_with_data_request()` | Pre-compute HTTP request spec |
+| 3a | `enrich_binding_with_data_request()` | Pre-compute `DataRequest` with strategy routing (see §2.5) |
 | 3b | Form/InfoList column baking | Bake `columns`, `foreignKeys`, `fieldOverrides`, `fieldOrder` into binding AND `props._columns` (Zod-safe) |
 | 4 | `collect_icons_from_component()` | Gather all icon names |
 | 5 | `fetch_icons_batch()` | Pre-render SVGs from CDN |
 | 6 | `inject_icon_svg()` | Embed `iconSvg` in props |
 | 7 | `bundle_css_for_page_minified()` | Tree-shake CSS, generate bundle |
 | 8 | `remove_nulls()` | Clean for Zod validation |
+
+> [!IMPORTANT]
+> **Step 3a strategy routing**: `compute_data_request()` in `data_request.py` decides the fetch strategy at publish time. Supabase → `direct` (anonKey in headers). All other SQL databases → `proxy` (only `datasourceId` baked, credentials resolved at edge runtime from `FRONTBASE_DATASOURCES`).
 
 > [!IMPORTANT]
 > **Step 3b dual-path**: Enriched data is stored in BOTH `component.binding` (for edge components that read binding) AND `component.props._columns` (as a Zod-safe fallback via `z.record`). The `renderForm` SSR function reads `_columns` from props and reconstructs the binding for React hydration.
@@ -351,7 +410,7 @@ Both files explicitly state: *"These mirror the [Zod/Pydantic] schemas in [Hono/
 | **Mirror Changes** | Any Pydantic change MUST update Zod |
 | **Use Aliases** | `Field(..., alias="camelCase")` for JSON compatibility |
 | **Nullish Matching** | Zod `.nullish()` = Pydantic `Optional[...] = None` |
-| **No Secrets** | Only `anonKey` and `secretEnvVar` name published |
+| **No Secrets** | Only Supabase `anonKey` (public by design) may appear in page HTML. Proxy-strategy datasources use `datasourceId` reference only — credentials resolved server-side from `FRONTBASE_DATASOURCES` env var. Never bake `{{ENV_VAR}}` templates or raw credentials. |
 | **Validate Contracts** | Run `validate_contract.py` before releases |
 | **Enrichment Safety** | When baking new data shapes at publish time (e.g., column objects vs column strings), update both `ComponentBinding` (Pydantic) and `ComponentBindingSchema` (Zod) to accept the enriched types. Use `List[Any]` / `z.union()` or `extra="allow"` / `.passthrough()` |
 | **Dual-Path Data** | For data that may be stripped by strict schema validation, also store in `component.props` (which uses `z.record(z.string(), z.unknown())` — passes through both Pydantic and Zod without stripping) |
@@ -512,6 +571,36 @@ if (componentName === 'Form' || componentName === 'form') {
 - **Edge Databases**: `edge_databases` table — named DB connections (Turso, Neon, etc.), each target selects which DB to use via `edge_db_id` FK
 - **System Entries**: Default Local SQLite DB + Local Edge target are pre-seeded with `is_system=True` (undeletable)
 - **Cloudflare Worker**: Lightweight skeleton (`cloudflare-lite.ts`, ~337 KB) — Hono + `@libsql/client/web` + `@upstash/redis/cloudflare`, no React/LiquidJS/native Node bindings
+
+### Edge Engine Environment Variables (`FRONTBASE_*`)
+
+All edge secrets are JSON blobs pushed via `secrets_builder.py` → provider deploy API. Single source of truth: `build_engine_secrets()`.
+
+| Env Var | Source | Purpose |
+|---------|--------|---------|
+| `FRONTBASE_STATE_DB` | `EdgeDatabase` table | State DB connection (provider-discriminated: Turso, Supabase, CF D1, Neon, Postgres) |
+| `FRONTBASE_AUTH` | Auth config + API key hashes | Auth provider config + system key for inter-service auth |
+| `FRONTBASE_CACHE` | `EdgeCache` table | Cache connection (Upstash, CF KV, Deno KV) |
+| `FRONTBASE_QUEUE` | `EdgeQueue` table | Queue connection (CF Queue, QStash) |
+| `FRONTBASE_GPU` | `EdgeGPUModel` table | GPU model registry (slug, modelId, provider) |
+| `FRONTBASE_DATASOURCES` | `Datasource` table (unified.db) | Datasource credentials for proxy-strategy data fetching |
+
+> [!IMPORTANT]
+> **`FRONTBASE_DATASOURCES` shape**: `{ "<datasource_id>": { "type": "neon", "connectionString": "...", "httpUrl": "...", "apiKey": "..." } }`. Only non-Supabase datasources are included (Supabase uses direct strategy). The edge parses this once and caches in memory.
+
+### Engine Reconfigure — Provider Routing
+
+`engine_reconfigure.py` pushes env vars via provider-specific APIs. **DRY**: reuses existing `set_env_vars` / `set_project_secrets` from each provider's `*_deploy_api.py` module.
+
+| Provider | Env Push Method | Needs Redeploy? | Latency |
+|----------|----------------|-----------------|----------|
+| **Cloudflare** | PATCH Settings API (preserves non-FB bindings) | No | Instant |
+| **Supabase** | `set_project_secrets()` Management API | No | Instant |
+| **Deno** | `set_env_vars()` PATCH v2 API | No | Instant |
+| **Vercel** | `set_env_vars()` REST API + `redeploy()` | **Yes** | ~30s |
+| **Netlify** | `set_env_vars()` Environment Variables API + `redeploy()` | **Yes** | ~30s |
+
+**Key constant**: `NEEDS_REDEPLOY_FOR_ENV = frozenset({'vercel', 'netlify'})` — only these two require full redeploy after env var updates.
 
 ---
 
@@ -862,5 +951,4 @@ Env vars or settings needed to enable the feature.
 
 ---
 
-*Last Updated: 2026-03-26*
-
+*Last Updated: 2026-04-02*

@@ -179,7 +179,28 @@ function renderDataTable(id: string, props: Record<string, unknown>, propsJson: 
     const binding = props.binding as Record<string, unknown> || {};
     // Read tableName from binding first (where the builder stores it), then fallback to props
     const tableName = (binding.tableName as string) || props.tableName as string || props.table as string || '';
-    const columns = binding.columnOrder as string[] || props.columns as string[] || [];
+    
+    // Column resolution chain: binding.columnOrder → props._columnOrder → queryConfig parse
+    let columns = (binding.columnOrder as string[]) || (props._columnOrder as string[]) || (props.columns as string[]) || [];
+    
+    // Fallback: parse column names from dataRequest queryConfig SQL string
+    if (columns.length === 0) {
+        const queryConfig = (binding.dataRequest as any)?.queryConfig;
+        if (queryConfig?.columns && typeof queryConfig.columns === 'string') {
+            columns = (queryConfig.columns as string).split(',')
+                .map((c: string) => c.trim())
+                .map((c: string) => {
+                    // Extract column name from: "table"."col" AS "alias", "table"."col", col
+                    const aliasMatch = c.match(/AS\s+"(.+)"/i);
+                    if (aliasMatch) return aliasMatch[1];
+                    const quotedMatch = c.match(/"[^"]*"\."([^"]+)"/);
+                    if (quotedMatch) return quotedMatch[1];
+                    return c.replace(/"/g, '').replace(/^\w+\./, '');
+                })
+                .filter((c: string) => c && c !== '*');
+        }
+    }
+    
     const title = escapeHtml(String(props.title || `Table: ${tableName}`));
     const showPagination = (binding.pagination as any)?.enabled !== false;
     const pageSize = (binding.pagination as any)?.pageSize || (props.pageSize as number) || 10;
@@ -194,37 +215,51 @@ function renderDataTable(id: string, props: Record<string, unknown>, propsJson: 
 
     // Generate skeleton header row (shown before React hydrates)
     const headerCells = columns.length > 0
-        ? columns.slice(0, 5).map(col => {
+        ? columns.slice(0, 8).map(col => {
             const label = col.replace(/\./g, ' › ').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-            return `<th style="padding:0.75rem 1rem;text-align:left;border-bottom:2px solid #e5e7eb;font-weight:600">${escapeHtml(label)}</th>`;
+            return `<th>${escapeHtml(label)}</th>`;
         }).join('')
-        : '<th style="padding:0.75rem 1rem">Column 1</th><th style="padding:0.75rem 1rem">Column 2</th><th style="padding:0.75rem 1rem">Column 3</th>';
+        : '<th>Column 1</th><th>Column 2</th><th>Column 3</th>';
 
     // Generate skeleton data rows
-    const numCols = columns.length > 0 ? Math.min(columns.length, 5) : 3;
+    const numCols = columns.length > 0 ? Math.min(columns.length, 8) : 3;
     const skeletonRows = Array(Math.min(pageSize, 5)).fill(0).map(() => {
         return `<tr>${Array(numCols).fill(0).map(() =>
-            '<td style="padding:0.75rem 1rem;border-bottom:1px solid #f3f4f6"><div class="fb-skeleton" style="height:1rem;width:80%;border-radius:0.25rem">&nbsp;</div></td>'
+            '<td><div class="fb-skeleton" style="height:1rem;width:80%;border-radius:0.25rem">&nbsp;</div></td>'
         ).join('')}</tr>`;
     }).join('');
 
+    // Search bar skeleton (if search is enabled in binding)
+    const searchEnabled = (binding.filtering as any)?.searchEnabled !== false;
+    const searchHtml = searchEnabled ? `
+        <div class="fb-datatable-search">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" placeholder="Search..." disabled />
+        </div>` : '';
+
     // Use data-react-component for React hydration (entry.tsx looks for this)
     return `<div id="${id}" class="fb-datatable" data-react-component="DataTable" data-react-props="${escapeHtml(reactPropsJson)}" data-component-id="${id}">
-        <div class="fb-datatable-container" style="overflow-x:auto;border:1px solid #e5e7eb;border-radius:0.5rem">
-            <table style="width:100%;border-collapse:collapse">
-                <thead style="background:#f9fafb">
-                    <tr>${headerCells}</tr>
-                </thead>
-                <tbody class="fb-loading">
-                    ${skeletonRows}
-                </tbody>
-            </table>
+        <div class="fb-datatable-header">
+            <h3 class="fb-datatable-title">${title}</h3>
+            ${searchHtml}
         </div>
-        ${showPagination ? `<div class="fb-datatable-pagination" style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;padding:0.5rem 0">
+        <div class="fb-datatable-content">
+            <div class="fb-datatable-scroll">
+                <table class="fb-table">
+                    <thead class="fb-table-header">
+                        <tr>${headerCells}</tr>
+                    </thead>
+                    <tbody class="fb-table-body fb-loading">
+                        ${skeletonRows}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        ${showPagination ? `<div class="fb-datatable-pagination">
             <span class="fb-skeleton" style="width:100px;height:1rem">&nbsp;</span>
-            <div style="display:flex;gap:0.25rem">
-                <button class="fb-skeleton" style="width:32px;height:32px;border-radius:0.25rem">&nbsp;</button>
-                <button class="fb-skeleton" style="width:32px;height:32px;border-radius:0.25rem">&nbsp;</button>
+            <div class="fb-pagination-btns">
+                <button disabled>← Previous</button>
+                <button disabled>Next →</button>
             </div>
         </div>` : ''}
     </div>`;
@@ -260,25 +295,49 @@ function renderForm(id: string, props: Record<string, unknown>, childrenHtml: st
     };
     const reactPropsJson = JSON.stringify(reactProps).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 
-    // Generate skeleton fields (shown before React hydrates)
-    const skeletonFields = Array(3).fill(0).map(() => `
-        <div class="fb-form-field" style="margin-bottom:1rem">
-            <div class="fb-skeleton" style="height:16px;width:60px;margin-bottom:0.25rem">&nbsp;</div>
-            <div class="fb-skeleton" style="height:40px;border-radius:0.375rem">&nbsp;</div>
-        </div>
-    `).join('');
+    // Generate form fields from baked column data (or skeleton if no data)
+    let fieldsHtml: string;
+    const orderedColumns = fieldOrder.length > 0
+        ? fieldOrder.map(name => columns.find((c: any) => (typeof c === 'string' ? c : c.name) === name) || name)
+        : columns;
+
+    if (orderedColumns.length > 0) {
+        fieldsHtml = orderedColumns.map((col: any) => {
+            const colName = typeof col === 'string' ? col : col.name;
+            const colType = typeof col === 'object' ? col.type : 'text';
+            const override = fieldOverrides[colName] || {};
+            if (override.hidden) return '';
+            const label = override.label || colName.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+            const isTextarea = colType === 'text' && !override.type;
+            return `
+                <div class="fb-form-field">
+                    <label class="fb-form-label">${escapeHtml(label)}</label>
+                    ${isTextarea
+                        ? `<textarea class="fb-textarea" placeholder="${escapeHtml(label)}" disabled></textarea>`
+                        : `<input class="fb-input" type="${override.type || 'text'}" placeholder="${escapeHtml(label)}" disabled />`}
+                </div>`;
+        }).join('');
+    } else {
+        // Fallback: generic skeleton fields
+        fieldsHtml = Array(3).fill(0).map(() => `
+            <div class="fb-form-field">
+                <div class="fb-skeleton" style="height:16px;width:60px;margin-bottom:0.25rem">&nbsp;</div>
+                <div class="fb-skeleton" style="height:40px;border-radius:var(--radius)">&nbsp;</div>
+            </div>
+        `).join('');
+    }
 
     // Use data-react-component for React hydration (entry.tsx picks this up)
     return `<div id="${id}" class="fb-form" data-react-component="Form" data-react-props="${escapeHtml(reactPropsJson)}" data-component-id="${id}">
-        <div class="fb-form-container" style="border:1px solid #e5e7eb;border-radius:0.5rem;padding:1.5rem">
-            ${title ? `<h3 style="margin:0 0 1.5rem 0;font-size:1.125rem;font-weight:600">${title}</h3>` : ''}
-            <div class="fb-form-fields fb-loading">
-                ${skeletonFields}
-            </div>
-            <div class="fb-form-actions" style="display:flex;gap:0.75rem;margin-top:1.5rem">
-                <button type="submit" class="fb-skeleton" style="padding:0.5rem 1.5rem;border-radius:0.375rem;width:100px">&nbsp;</button>
-                <button type="button" class="fb-skeleton" style="padding:0.5rem 1rem;border-radius:0.375rem;width:80px">&nbsp;</button>
-            </div>
+        <div class="fb-form-header">
+            ${title ? `<h3 class="fb-form-title">${title}</h3>` : ''}
+        </div>
+        <div class="fb-form-content fb-loading">
+            ${fieldsHtml}
+        </div>
+        <div class="fb-form-actions">
+            <button type="submit" class="fb-button" style="padding:0.5rem 1.5rem;border-radius:var(--radius);background:hsl(var(--primary));color:hsl(var(--primary-foreground))" disabled>Submit</button>
+            <button type="button" class="fb-button" style="padding:0.5rem 1rem;border-radius:var(--radius);border:1px solid hsl(var(--border))" disabled>Cancel</button>
         </div>
     </div>`;
 }

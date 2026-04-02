@@ -128,7 +128,7 @@ async def upload_worker(
             url,
             headers=headers(api_token),
             files=files,
-            timeout=60.0,
+            timeout=120.0,
         )
         result = resp.json()
         cf_success = result.get("success", False)

@@ -54,6 +54,7 @@ async def create_datasource(
         anon_key_encrypted=encrypt_field(data.anon_key),
         table_prefix=data.table_prefix,
         extra_config=json.dumps(data.extra_config) if data.extra_config else None,
+        provider_account_id=data.provider_account_id,
     )
     
     db.add(datasource)

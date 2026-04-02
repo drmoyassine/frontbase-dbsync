@@ -51,6 +51,7 @@ class DatasourceCreate(DatasourceBase):
     password: Optional[str] = None
     anon_key: Optional[str] = None  # Supabase anon key
     api_key: Optional[str] = None  # Service role key for Supabase/Neon
+    provider_account_id: Optional[str] = None  # FK to Connected Account (central cred management)
 
     @model_validator(mode="before")
     @classmethod

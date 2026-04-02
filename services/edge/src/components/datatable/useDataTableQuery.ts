@@ -43,7 +43,7 @@ async function fetchTableData(options: UseDataTableQueryOptions): Promise<DataTa
     const queryConfig = binding.dataRequest?.queryConfig;
 
     if (queryConfig?.useRpc) {
-        // Use RPC: frontbase_get_rows via /api/data/execute
+        // Use RPC: frontbase_get_rows via direct fetch or edge proxy
         const effectiveSortCol = sortColumn || queryConfig.sortColumn || null;
         const effectiveSortDir = sortDirection || queryConfig.sortDirection || 'asc';
 
@@ -83,30 +83,61 @@ async function fetchTableData(options: UseDataTableQueryOptions): Promise<DataTa
 
         rpcBody.filters = filterList;
 
-        const response = await fetch('/api/data/execute', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                dataRequest: {
-                    ...binding.dataRequest,
-                    url: rpcUrl,
-                    method: 'POST',
-                    body: rpcBody
-                }
-            })
-        });
+        // Strategy factory: route based on publish-time decision
+        const strategy = binding.dataRequest?.fetchStrategy || 'proxy';
+        let response: Response;
+
+        if (strategy === 'direct') {
+            // Direct: browser → datasource (Supabase PostgREST, CORS-enabled)
+            logDebug(`Strategy: direct → ${rpcUrl.substring(0, 80)}...`);
+            response = await fetch(rpcUrl, {
+                method: 'POST',
+                headers: binding.dataRequest?.headers as Record<string, string> || {},
+                body: JSON.stringify(rpcBody),
+            });
+        } else {
+            // Proxy: browser → edge /api/data/execute → datasource
+            // Only send datasourceId + query — credentials resolved server-side
+            const datasourceId = (binding.dataRequest as any)?.datasourceId || binding.datasourceId;
+            logDebug(`Strategy: proxy → /api/data/execute (ds: ${datasourceId})`);
+            response = await fetch('/api/data/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dataRequest: {
+                        fetchStrategy: 'proxy',
+                        datasourceId,
+                        method: 'POST',
+                        queryConfig: binding.dataRequest?.queryConfig || {},
+                        body: rpcBody,
+                        resultPath: binding.dataRequest?.resultPath || 'rows',
+                        flattenRelations: binding.dataRequest?.flattenRelations ?? false,
+                    }
+                })
+            });
+        }
 
         const result = await response.json();
         const duration = (performance.now() - startTime).toFixed(2);
 
-        if (result.success) {
-            const rows = result.data?.rows || result.data || [];
-            const total = result.data?.total ?? result.total ?? rows.length;
+        if (strategy === 'direct') {
+            // Direct fetch returns RPC response shape: { rows: [...], total: N }
+            const rows = result.rows || result.data || [];
+            const total = result.total ?? rows.length;
             logDebug(`Fetch complete in ${duration}ms`, { rows: rows.length, total });
             return { rows, total };
         } else {
-            logDebug(`Fetch failed in ${duration}ms`, result.error);
-            throw new Error(result.error || 'Failed to fetch data');
+            // Proxy returns edge wrapper: { success, data: { rows, total } }
+            if (result.success) {
+                const rows = result.data?.rows || result.data || [];
+                const total = result.data?.total ?? result.total ?? rows.length;
+                logDebug(`Fetch complete in ${duration}ms`, { rows: rows.length, total });
+                return { rows, total };
+            } else {
+                const errMsg = typeof result.error === 'object' ? (result.error.message || JSON.stringify(result.error)) : result.error;
+                logDebug(`Fetch failed in ${duration}ms`, result.error);
+                throw new Error(errMsg || 'Failed to fetch data');
+            }
         }
     } else if (binding.dataRequest?.url) {
         // ... legacy code ...
@@ -122,7 +153,8 @@ async function fetchTableData(options: UseDataTableQueryOptions): Promise<DataTa
             const total = result.data?.total ?? rows.length;
             return { rows, total };
         } else {
-            throw new Error(result.error || 'Failed to fetch data');
+            const errMsg = typeof result.error === 'object' ? (result.error?.message || JSON.stringify(result.error)) : result.error;
+            throw new Error(errMsg || 'Failed to fetch data');
         }
     } else if (binding.tableName) {
         // Fallback to simple data API
@@ -131,7 +163,8 @@ async function fetchTableData(options: UseDataTableQueryOptions): Promise<DataTa
         if (result.success) {
             return { rows: result.data || [], total: result.data?.length || 0 };
         } else {
-            throw new Error(result.error || 'Failed to fetch data');
+            const errMsg = typeof result.error === 'object' ? (result.error?.message || JSON.stringify(result.error)) : result.error;
+            throw new Error(errMsg || 'Failed to fetch data');
         }
     }
 

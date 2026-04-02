@@ -70,13 +70,15 @@ export const ColumnOverrideSchema = z.object({
 
 // Pre-computed HTTP request spec for data fetching (computed at publish time)
 export const DataRequestSchema = z.object({
-    url: z.string(),  // Full URL with query params (may contain {{ENV_VAR}} placeholders)
+    url: z.string().default(""),  // Full URL (may be empty for proxy — resolved server-side)
     method: z.string().default("GET"),  // HTTP method
     headers: z.record(z.string(), z.string()).default({}),  // Headers
     body: z.record(z.string(), z.unknown()).optional(),  // For POST requests
     resultPath: z.string().default(""),  // JSON path to extract data
     flattenRelations: z.boolean().default(true),  // Flatten nested objects
     queryConfig: z.record(z.string(), z.unknown()).optional(),  // RPC config for DataTable
+    fetchStrategy: z.enum(['direct', 'proxy']).default('proxy'),  // Publish-time routing decision
+    datasourceId: z.string().nullish(),  // Datasource ID for proxy strategy (server-side credential resolution)
 });
 
 export type DataRequest = z.infer<typeof DataRequestSchema>;

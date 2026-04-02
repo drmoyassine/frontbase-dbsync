@@ -28,7 +28,108 @@ let cachedDatasource: DatasourceConfig | null = null;
 // =============================================================================
 
 /**
- * Resolve {{ENV_VAR}} placeholders in a string
+ * Datasource credentials cache (parsed from FRONTBASE_DATASOURCES env var)
+ */
+let _datasourcesCache: Record<string, any> | null = null;
+
+/**
+ * Get datasource credentials from FRONTBASE_DATASOURCES env var.
+ * Returns null if datasource not found.
+ */
+function getDatasourceCredentials(datasourceId: string): Record<string, any> | null {
+    if (!_datasourcesCache) {
+        const raw = process.env.FRONTBASE_DATASOURCES || '';
+        if (!raw) return null;
+        try {
+            _datasourcesCache = JSON.parse(raw);
+        } catch {
+            console.error('[Data Execute] Invalid FRONTBASE_DATASOURCES JSON');
+            return null;
+        }
+    }
+    return _datasourcesCache?.[datasourceId] || null;
+}
+
+/**
+ * Build the real HTTP request from datasource credentials + query config.
+ * This runs server-side — credentials never reach the client.
+ */
+function buildProxyRequest(
+    datasourceId: string,
+    queryConfig: Record<string, any>,
+    body: Record<string, any> | undefined,
+): { url: string; headers: Record<string, string>; body: any } | null {
+    const creds = getDatasourceCredentials(datasourceId);
+    if (!creds) {
+        console.error(`[Data Execute] No credentials found for datasource: ${datasourceId}`);
+        return null;
+    }
+
+    const dsType = creds.type || 'unknown';
+
+    if (dsType === 'neon') {
+        const httpUrl = creds.httpUrl || creds.apiUrl || '';
+        const apiKey = creds.apiKey || '';
+        return {
+            url: `${httpUrl}/sql`,
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+            },
+            body: body || { query: queryConfig.sql || '', params: [] },
+        };
+    }
+
+    if (dsType === 'turso') {
+        const httpUrl = creds.httpUrl || creds.apiUrl || '';
+        const authToken = creds.apiKey || creds.authToken || '';
+        return {
+            url: `${httpUrl}/v2/pipeline`,
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: body || { statements: [{ q: queryConfig.sql || '' }] },
+        };
+    }
+
+    if (dsType === 'planetscale') {
+        const httpUrl = creds.httpUrl || creds.apiUrl || '';
+        const auth = creds.apiKey || '';
+        return {
+            url: `${httpUrl}/query`,
+            headers: {
+                'Authorization': auth,
+                'Content-Type': 'application/json',
+            },
+            body: body || { query: queryConfig.sql || '' },
+        };
+    }
+
+    if (dsType === 'mysql' || dsType === 'postgres') {
+        // Generic SQL — use connection string via HTTP adapter if available
+        const httpUrl = creds.httpUrl || creds.apiUrl || '';
+        const apiKey = creds.apiKey || '';
+        if (httpUrl) {
+            return {
+                url: `${httpUrl}/sql`,
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                },
+                body: body || { query: queryConfig.sql || '', params: [] },
+            };
+        }
+        console.error(`[Data Execute] No HTTP URL for ${dsType} datasource: ${datasourceId}`);
+        return null;
+    }
+
+    console.error(`[Data Execute] Unsupported datasource type: ${dsType}`);
+    return null;
+}
+
+/**
+ * Resolve {{ENV_VAR}} placeholders in a string (legacy support for direct strategy)
  */
 function resolveEnvVars(template: string): string {
     return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
@@ -84,28 +185,49 @@ function flattenRelations(data: any[]): any[] {
 }
 
 /**
- * Execute a pre-computed DataRequest and return the data with count
+ * Execute a pre-computed DataRequest and return the data with count.
+ * For proxy strategy: resolves credentials server-side from FRONTBASE_DATASOURCES.
+ * For direct strategy: uses the URL/headers as-is (Supabase anonKey is public).
  */
 async function executeDataRequest(dataRequest: DataRequest): Promise<{ data: any[]; total: number | null }> {
-    // Resolve env var placeholders in URL and headers
-    const url = resolveEnvVars(dataRequest.url);
-    const headers: Record<string, string> = {};
+    let url: string;
+    let headers: Record<string, string> = {};
+    let body = dataRequest.body;
 
-    for (const [key, value] of Object.entries(dataRequest.headers || {})) {
-        headers[key] = resolveEnvVars(value);
+    const isProxy = dataRequest.fetchStrategy === 'proxy' && dataRequest.datasourceId;
+
+    if (isProxy) {
+        // Proxy: resolve credentials server-side
+        const proxyReq = buildProxyRequest(
+            dataRequest.datasourceId!,
+            (dataRequest.queryConfig || {}) as Record<string, any>,
+            dataRequest.body as Record<string, any> | undefined,
+        );
+        if (!proxyReq) {
+            throw new Error(`Cannot resolve credentials for datasource: ${dataRequest.datasourceId}`);
+        }
+        url = proxyReq.url;
+        headers = proxyReq.headers;
+        body = proxyReq.body;
+    } else {
+        // Direct: use URL/headers as-is (may contain env var templates for legacy)
+        url = resolveEnvVars(dataRequest.url);
+        for (const [key, value] of Object.entries(dataRequest.headers || {})) {
+            headers[key] = resolveEnvVars(value);
+        }
     }
 
-    console.log(`[Data Execute] Fetching: ${url.substring(0, 100)}...`);
+    console.log(`[Data Execute] ${isProxy ? 'Proxy' : 'Direct'}: ${url.substring(0, 100)}...`);
 
     // Generate cache key from URL + body hash
-    const cacheKey = `data:${url}:${dataRequest.body ? JSON.stringify(dataRequest.body) : ''}`;
+    const cacheKey = `data:${url}:${body ? JSON.stringify(body) : ''}`;
     const cacheTTL = 60; // 60 seconds default
 
     // Try to use Redis cache if available
     try {
         const redis = getRedis();
         return await cached<{ data: any[]; total: number | null }>(cacheKey, async () => {
-            return await executeDataRequestUncached(dataRequest, url, headers);
+            return await executeDataRequestUncached(dataRequest, url, headers, body);
         }, cacheTTL);
     } catch (e) {
         // Redis not initialized or cache error - fetch directly
@@ -117,7 +239,7 @@ async function executeDataRequest(dataRequest: DataRequest): Promise<{ data: any
     }
 
     // No Redis or cache error - fetch directly
-    return await executeDataRequestUncached(dataRequest, url, headers);
+    return await executeDataRequestUncached(dataRequest, url, headers, body);
 }
 
 /**
@@ -126,8 +248,12 @@ async function executeDataRequest(dataRequest: DataRequest): Promise<{ data: any
 async function executeDataRequestUncached(
     dataRequest: DataRequest,
     url: string,
-    headers: Record<string, string>
+    headers: Record<string, string>,
+    resolvedBody?: any,
 ): Promise<{ data: any[]; total: number | null }> {
+
+    // Use resolved body (from proxy credential resolution) or fall back to dataRequest.body
+    const body = resolvedBody !== undefined ? resolvedBody : dataRequest.body;
 
     // Build fetch options
     const fetchOptions: RequestInit = {
@@ -136,12 +262,11 @@ async function executeDataRequestUncached(
     };
 
     // Add body for POST requests
-    if (dataRequest.body && dataRequest.method === 'POST') {
-        fetchOptions.body = JSON.stringify(dataRequest.body);
+    if (body && dataRequest.method === 'POST') {
+        fetchOptions.body = JSON.stringify(body);
         // Debug: log filters if present
-        const filters = dataRequest.body.filters;
-        if (Array.isArray(filters) && filters.length > 0) {
-            console.log(`[Data Execute] Filters:`, JSON.stringify(dataRequest.body.filters));
+        if (body.filters && Array.isArray(body.filters) && body.filters.length > 0) {
+            console.log(`[Data Execute] Filters:`, JSON.stringify(body.filters));
         }
     }
 
@@ -304,14 +429,27 @@ dataRoute.post('/execute', async (c) => {
         const body = await c.req.json();
         const dataRequest = body.dataRequest;
 
-        if (!dataRequest || !dataRequest.url) {
+        if (!dataRequest) {
             return c.json({
                 success: false,
-                error: 'Invalid dataRequest: missing url',
+                error: 'Invalid dataRequest: missing dataRequest object',
             }, 400);
         }
 
-        console.log(`[Data Execute] Processing request for: ${dataRequest.url.substring(0, 80)}...`);
+        // Proxy strategy: needs datasourceId (credentials resolved server-side)
+        // Direct strategy: needs url (browser fetches directly but SSR uses this)
+        const isProxy = dataRequest.fetchStrategy === 'proxy' && dataRequest.datasourceId;
+        if (!isProxy && !dataRequest.url) {
+            return c.json({
+                success: false,
+                error: 'Invalid dataRequest: missing url (direct) or datasourceId (proxy)',
+            }, 400);
+        }
+
+        const label = isProxy
+            ? `proxy:${dataRequest.datasourceId}`
+            : dataRequest.url?.substring(0, 80);
+        console.log(`[Data Execute] Processing: ${label}...`);
 
         const { data, total } = await executeDataRequest(dataRequest);
 
@@ -337,5 +475,7 @@ dataRoute.post('/execute', async (c) => {
 
 dataRoute.post('/clear-cache', async (c) => {
     cachedDatasource = null;
+    _datasourcesCache = null;  // Also invalidate FRONTBASE_DATASOURCES cache
     return c.json({ success: true, message: 'Cache cleared' });
 });
+

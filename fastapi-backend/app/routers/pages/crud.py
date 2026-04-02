@@ -44,6 +44,9 @@ def serialize_page(page: Page) -> dict:
     
     if hasattr(page, 'deployments') and page.deployments:
         for dep in page.deployments:
+            # Skip deployments for deleted engines
+            if not dep.edge_engine:
+                continue
             target_data = {}
             if dep.edge_engine:
                 target_data = {

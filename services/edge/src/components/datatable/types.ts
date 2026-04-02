@@ -43,6 +43,7 @@ export interface FilterConfig {
 
 export interface DataTableBinding {
     tableName?: string;
+    datasourceId?: string;
     columnOrder?: string[];
     columnOverrides?: Record<string, ColumnOverride>;
     pagination?: { enabled: boolean; pageSize: number; page?: number };
@@ -56,6 +57,8 @@ export interface DataTableBinding {
         resultPath?: string;
         flattenRelations?: boolean;
         queryConfig?: QueryConfig;
+        fetchStrategy?: 'direct' | 'proxy';  // Publish-time routing decision
+        datasourceId?: string;  // Datasource ID for proxy strategy (server-side credential resolution)
     };
 }
 

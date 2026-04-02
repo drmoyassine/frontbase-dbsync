@@ -175,6 +175,17 @@ def get_source_hash() -> str | None:
         except (OSError, IOError):
             continue
 
+    # Also include build configs and client assets (hydrate.js) in the hash
+    # so the cache invalidates when these change.
+    for extra_glob in ("tsup.shared.*", "public/react/hydrate.js", "public/react/entry-*.css"):
+        for extra_file in sorted(EDGE_DIR.glob(extra_glob)):
+            try:
+                rel = str(extra_file.relative_to(EDGE_DIR)).replace("\\", "/")
+                hasher.update(rel.encode("utf-8"))
+                hasher.update(extra_file.read_bytes())
+            except (OSError, IOError):
+                continue
+
     return hasher.hexdigest()[:12]
 
 
@@ -504,6 +515,16 @@ def build_worker(adapter_type: str = "automations", provider: str = "cloudflare"
         # Copy shared tsup config (imported by provider-specific configs)
         for shared_cfg in EDGE_DIR.glob("tsup.shared.*"):
             shutil.copy2(shared_cfg, tmp_dir / shared_cfg.name)
+
+        # Copy public/react/ (Vite-built client assets embedded by esbuild plugin) 
+        public_react = EDGE_DIR / "public" / "react"
+        if public_react.exists():
+            shutil.copytree(public_react, tmp_dir / "public" / "react")
+        # Copy public/icon.png (favicon embedded by esbuild plugin)
+        icon_src = EDGE_DIR / "public" / "icon.png"
+        if icon_src.exists():
+            (tmp_dir / "public").mkdir(parents=True, exist_ok=True)
+            shutil.copy2(icon_src, tmp_dir / "public" / "icon.png")
 
         # Symlink node_modules (fast, safe — read-only from builds)
         nm_src = EDGE_DIR / "node_modules"

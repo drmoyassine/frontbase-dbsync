@@ -26,6 +26,9 @@ from app.models.models import Page
 def get_datasources_for_publish(db: Session) -> list:
     """Get all active datasources and convert to publish-safe format.
     
+    Credentials are resolved from the Central Accounts Management
+    (edge_providers_accounts) via the datasource's provider_account_id FK.
+    
     Returns empty list if datasources table doesn't exist (db-sync not configured).
     """
     try:
@@ -34,15 +37,6 @@ def get_datasources_for_publish(db: Session) -> list:
         # datasources table may not exist if db-sync hasn't been set up
         db.rollback()
         return []
-    
-    # Resolve Supabase anon key via unified credential resolver (DRY)
-    supabase_anon_key = None
-    try:
-        from app.core.credential_resolver import get_supabase_context
-        ctx = get_supabase_context(db, mode="public")
-        supabase_anon_key = ctx.get("anon_key")
-    except Exception:
-        pass  # No Supabase connected — anon_key stays None
 
     result = []
     for ds in datasources:
@@ -56,14 +50,38 @@ def get_datasources_for_publish(db: Session) -> list:
         
         publish_type = type_map.get(ds.type, PublishDatasourceType.POSTGRES)
         
-        # For Supabase: use resolved anon key, fallback to model field
-        anon_key = supabase_anon_key or ds.anon_key_encrypted
+        # Resolve credentials from Central Accounts Management via provider_account_id
+        url = ds.api_url or ''
+        anon_key = ds.anon_key_encrypted or ''
+        
+        provider_account_id = ds.provider_account_id
+        if provider_account_id:
+            try:
+                from app.core.credential_resolver import get_provider_context_by_id
+                ctx = get_provider_context_by_id(db, provider_account_id)
+                # Resolve URL: metadata.api_url is the canonical Supabase/Neon URL
+                if not url:
+                    url = ctx.get('api_url') or ctx.get('url') or ''
+                # Resolve anon_key from decrypted credentials
+                if not anon_key:
+                    anon_key = ctx.get('anon_key') or ''
+                print(f"[publish] Resolved datasource '{ds.name}' creds from Connected Account {provider_account_id[:8]}...")
+            except Exception as e:
+                print(f"[publish] Could not resolve creds for '{ds.name}' from account {provider_account_id}: {e}")
+        
+        # Build a usable URL: prefer resolved URL, fallback to host-based connection string
+        if not url:
+            if ds.host:
+                url = f"postgresql://{ds.host}:{ds.port or 5432}/{ds.database or ''}"
+            else:
+                print(f"[publish] Skipping datasource '{ds.name}': no api_url, no provider_account_id, no host")
+                continue
 
         config = DatasourceConfig(
             id=ds.id,
             type=publish_type,
             name=ds.name,
-            url=ds.api_url or f"postgresql://{ds.host}:{ds.port}/{ds.database}",
+            url=url,
             anonKey=anon_key,
             secretEnvVar=f"DS_{ds.name.upper().replace(' ', '_')}_API_KEY",
         )
@@ -124,6 +142,20 @@ def convert_component(c: dict, datasources_list: list | None = None) -> dict:
                 # MAP columns -> columnOrder because React DataTable expects columnOrder
                 if 'columns' in result['binding'] and result['binding']['columns']:
                     result['binding']['columnOrder'] = result['binding']['columns']
+
+    # Step 3b+: Bake columnOrder into DataTable props (Zod-safe dual-path)
+    comp_type = result.get('type', '')
+    if comp_type == 'DataTable' and 'binding' in result:
+        binding = result.get('binding', {})
+        col_order = binding.get('columnOrder') or binding.get('columns')
+        # Extract column names if they're column dicts [{name: "...", type: "..."}, ...]
+        if col_order and isinstance(col_order, list):
+            if col_order and isinstance(col_order[0], dict):
+                col_order = [c.get('name') for c in col_order if c.get('name')]
+            if 'props' not in result:
+                result['props'] = {}
+            result['props']['_columnOrder'] = col_order
+            print(f"[convert_component] Baked {len(col_order)} columns into DataTable props._columnOrder (Zod-safe)")
 
     # Step 3b: Bake column schema into Form/InfoList bindings
     comp_type = result.get('type', '')

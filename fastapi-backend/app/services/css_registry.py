@@ -277,6 +277,60 @@ COMPONENT_CSS: Dict[str, str] = {
     # -------------------------------------------------------------------------
     "DataTable:base": """
 /* DataTable Base Styles */
+.fb-datatable {
+    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border));
+    background-color: hsl(var(--background));
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+    overflow: hidden;
+}
+.fb-datatable-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1.5rem;
+}
+.fb-datatable-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1;
+    margin: 0;
+}
+.fb-datatable-search {
+    position: relative;
+    max-width: 24rem;
+}
+.fb-datatable-search input {
+    width: 100%;
+    height: 2.5rem;
+    padding: 0 0.75rem 0 2.25rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    background-color: transparent;
+    color: hsl(var(--foreground));
+}
+.fb-datatable-search input:focus {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+}
+.fb-datatable-search svg {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1rem;
+    height: 1rem;
+    color: hsl(var(--muted-foreground));
+}
+.fb-datatable-content {
+    padding: 0 1.5rem 1.5rem;
+}
+.fb-datatable-scroll {
+    overflow-x: auto;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+}
 .fb-table {
     width: 100%;
     caption-side: bottom;
@@ -292,10 +346,14 @@ COMPONENT_CSS: Dict[str, str] = {
     text-align: left;
     font-weight: 500;
     color: hsl(var(--muted-foreground));
+    white-space: nowrap;
 }
 .fb-table-body tr {
     border-bottom: 1px solid hsl(var(--border));
     transition: background-color 0.15s;
+}
+.fb-table-body tr:last-child {
+    border-bottom: 0;
 }
 .fb-table-body tr:hover {
     background-color: hsl(var(--muted) / 0.5);
@@ -303,11 +361,123 @@ COMPONENT_CSS: Dict[str, str] = {
 .fb-table-body td {
     padding: 1rem;
     vertical-align: middle;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .fb-table-footer {
     border-top: 1px solid hsl(var(--border));
     background-color: hsl(var(--muted) / 0.5);
     font-weight: 500;
+}
+.fb-datatable-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 1rem 1.5rem;
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+}
+.fb-datatable-pagination .fb-pagination-btns {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.fb-datatable-pagination button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.75rem;
+    height: 2.25rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background: transparent;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background-color 0.15s;
+    color: hsl(var(--foreground));
+}
+.fb-datatable-pagination button:hover {
+    background-color: hsl(var(--accent));
+}
+.fb-datatable-pagination button:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+""",
+
+    # -------------------------------------------------------------------------
+    # Form Component
+    # -------------------------------------------------------------------------
+    "Form:base": """
+/* Form Base Styles */
+.fb-form {
+    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border));
+    background-color: hsl(var(--background));
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+}
+.fb-form-header {
+    padding: 1.5rem;
+}
+.fb-form-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1;
+    margin: 0;
+}
+.fb-form-content {
+    padding: 0 1.5rem 1.5rem;
+}
+.fb-form-field {
+    margin-bottom: 1.25rem;
+}
+.fb-form-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.375rem;
+    color: hsl(var(--foreground));
+}
+.fb-input {
+    display: flex;
+    width: 100%;
+    height: 2.5rem;
+    padding: 0 0.75rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    background-color: transparent;
+    color: hsl(var(--foreground));
+    transition: border-color 0.15s;
+}
+.fb-input:focus {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+}
+.fb-input::placeholder {
+    color: hsl(var(--muted-foreground));
+}
+.fb-textarea {
+    display: flex;
+    width: 100%;
+    min-height: 5rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    background-color: transparent;
+    color: hsl(var(--foreground));
+    resize: vertical;
+}
+.fb-form-actions {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0 1.5rem 1.5rem;
 }
 """,
 
@@ -669,6 +839,10 @@ def get_component_css_requirements(component: dict, requirements: Set[str]) -> N
     # DataTable
     elif comp_type in ('DataTable', 'Table'):
         requirements.add('DataTable:base')
+    
+    # Form
+    elif comp_type == 'Form':
+        requirements.add('Form:base')
     
     # Landing page components
     elif comp_type == 'Hero':

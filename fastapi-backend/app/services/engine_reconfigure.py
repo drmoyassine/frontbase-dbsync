@@ -2,9 +2,10 @@
 Engine Reconfigure Service — Live binding updates without full redeployment.
 
 Extracted from edge_engines.py router for single-responsibility compliance.
-Uses the CF Settings API PATCH to update bindings, preserving non-Frontbase bindings.
+Uses provider-specific env var APIs, only triggering full redeploy for
+providers that require it (Vercel, Netlify).
 
-Follows the same pattern as engine_deploy.py and engine_test.py.
+DRY: reuses set_env_vars / set_project_secrets from each provider's deploy API.
 """
 
 import json
@@ -16,6 +17,21 @@ from ..services.secrets_builder import build_engine_secrets, FRONTBASE_BINDING_N
 from ..services import engine_deploy
 from ..schemas.edge_engines import ReconfigureRequest
 from datetime import datetime
+
+
+# Providers that require a full redeploy after env var updates
+# (their Edge Functions read env vars at build time, not runtime)
+NEEDS_REDEPLOY_FOR_ENV = frozenset({'vercel', 'netlify'})
+
+
+def _resolve_provider_type(engine: EdgeEngine, db: Session) -> str | None:
+    """Get the provider type string for an engine (e.g., 'cloudflare', 'supabase')."""
+    if engine.edge_provider_id is None:
+        return None
+    provider = db.query(EdgeProviderAccount).filter(
+        EdgeProviderAccount.id == engine.edge_provider_id
+    ).first()
+    return str(provider.provider) if provider else None
 
 
 def _resolve_cf_credentials(engine: EdgeEngine, db: Session) -> dict | None:
@@ -49,6 +65,64 @@ def _resolve_cf_credentials(engine: EdgeEngine, db: Session) -> dict | None:
         'account_id': account_id,
         'worker_name': worker_name,
     }
+
+
+async def _push_env_vars(
+    provider_type: str,
+    engine: EdgeEngine,
+    db: Session,
+    new_bindings: dict[str, str],
+) -> bool:
+    """Push env vars via provider-specific API (DRY adapter).
+    
+    Reuses existing set_env_vars / set_project_secrets from each deploy API.
+    Returns True if successful.
+    """
+    from ..core.credential_resolver import get_provider_context_by_id
+
+    ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
+    cfg = json.loads(str(engine.engine_config or '{}'))
+
+    try:
+        if provider_type == 'supabase':
+            from ..services import supabase_deploy_api
+            await supabase_deploy_api.set_project_secrets(
+                str(ctx.get('access_token', '')),
+                str(ctx.get('project_ref', '')),
+                new_bindings,
+            )
+        elif provider_type == 'deno':
+            from ..services import deno_deploy_api
+            await deno_deploy_api.set_env_vars(
+                str(ctx.get('access_token', '')),
+                str(cfg.get('project_name', '')),
+                new_bindings,
+            )
+        elif provider_type == 'vercel':
+            from ..services import vercel_deploy_api
+            await vercel_deploy_api.set_env_vars(
+                str(ctx.get('api_token', '')),
+                str(cfg.get('vercel_project_name', '')),
+                new_bindings,
+                ctx.get('team_id'),
+            )
+        elif provider_type == 'netlify':
+            from ..services import netlify_deploy_api
+            await netlify_deploy_api.set_env_vars(
+                str(ctx.get('api_token', '')),
+                str(cfg.get('site_id', '')),
+                new_bindings,
+            )
+        else:
+            print(f"[Reconfigure] No env var setter for provider '{provider_type}'")
+            return False
+
+        print(f"[Reconfigure] Pushed {len(new_bindings)} env vars via {provider_type}")
+        return True
+
+    except Exception as e:
+        print(f"[Reconfigure] Failed to push env vars via {provider_type}: {e}")
+        return False
 
 
 async def _patch_cf_settings(
@@ -95,7 +169,7 @@ async def _patch_cf_settings(
                 b.get("name") for b in existing_bindings
                 if b.get("name") in FRONTBASE_BINDING_NAMES
             }
-            bindings_removed: list[str] = [str(n) for n in existing_fb_names - set(new_bindings.keys())]
+            bindings_removed = [str(n) for n in existing_fb_names - set(new_bindings.keys())]
 
             # Add our new bindings as secret_text
             for name, value in new_bindings.items():
@@ -151,23 +225,14 @@ async def reconfigure(
 ) -> dict:
     """Live-reconfigure an engine's DB/cache/queue bindings.
     
-    1. Resolve CF credentials
-    2. Build new bindings from DB/cache/queue selections
-    3. PATCH CF Worker settings (preserving non-Frontbase bindings)
-    4. Update local DB record
-    5. Flush edge cache on target
+    Provider routing:
+      - CF:               PATCH Settings API (instant, preserves non-FB bindings)
+      - Supabase/Deno:    Push env vars via API (instant, no redeploy)
+      - Vercel/Netlify:   Push env vars via API + trigger full redeploy
+      - Docker:           POST to engine /api/update
     """
-    # 1. Resolve CF credentials
-    cf_creds = _resolve_cf_credentials(engine, db)
-
-    # Resolve deploy provider for dual-path secrets
-    deploy_provider: str | None = None
-    if engine.edge_provider_id is not None:
-        prov = db.query(EdgeProviderAccount).filter(
-            EdgeProviderAccount.id == engine.edge_provider_id
-        ).first()
-        if prov:
-            deploy_provider = str(prov.provider)
+    # 1. Resolve provider type
+    provider_type = _resolve_provider_type(engine, db)
 
     # 2. Build new bindings
     new_bindings = build_engine_secrets(
@@ -176,16 +241,10 @@ async def reconfigure(
         edge_cache_id=payload.edge_cache_id,
         edge_queue_id=payload.edge_queue_id,
         engine_id=str(engine.id),
-        deploy_provider=deploy_provider,
+        deploy_provider=provider_type,
     )
 
-    # 3. For non-CF providers, update DB FIRST then redeploy
-    # (redeploy reads edge_cache_id / edge_queue_id from the engine record)
-    settings_patched = False
-    bindings_set = list(new_bindings.keys())
-    bindings_removed: list[str] = []
-
-    # 4. Update local DB record (must happen BEFORE redeploy for non-CF engines)
+    # 3. Update local DB record (must happen BEFORE redeploy for non-CF engines)
     engine.edge_db_id = payload.edge_db_id  # type: ignore[assignment]
     engine.edge_cache_id = payload.edge_cache_id  # type: ignore[assignment]
     engine.edge_queue_id = payload.edge_queue_id  # type: ignore[assignment]
@@ -193,25 +252,38 @@ async def reconfigure(
     db.commit()
     db.refresh(engine)
 
-    if cf_creds:
-        settings_patched, bindings_set, bindings_removed = await _patch_cf_settings(
-            cf_creds, new_bindings
-        )
+    # 4. Push env vars via provider-specific path
+    settings_patched = False
+    bindings_set = list(new_bindings.keys())
+    bindings_removed: list[str] = []
+
+    if provider_type == 'cloudflare':
+        cf_creds = _resolve_cf_credentials(engine, db)
+        if cf_creds:
+            settings_patched, bindings_set, bindings_removed = await _patch_cf_settings(
+                cf_creds, new_bindings
+            )
+    elif provider_type in ('supabase', 'deno', 'vercel', 'netlify'):
+        settings_patched = await _push_env_vars(provider_type, engine, db, new_bindings)
+
+        # 5. Only redeploy if provider requires it
+        if provider_type in NEEDS_REDEPLOY_FOR_ENV:
+            try:
+                await engine_deploy.redeploy(engine, db)
+                print(f"[Reconfigure] Redeployed {provider_type} engine '{engine.name}' to activate new env vars")
+            except Exception as e:
+                print(f"[Reconfigure] Redeploy failed for {provider_type} engine '{engine.name}': {e}")
+                settings_patched = False
     elif engine.edge_provider_id is not None:
-        # Non-CF providers: trigger redeploy to push new secrets
-        # (Supabase, Vercel, Netlify, Deno all set secrets during deploy)
-        prov = db.query(EdgeProviderAccount).filter(
-            EdgeProviderAccount.id == engine.edge_provider_id
-        ).first()
-        provider_label = str(prov.provider).capitalize() if prov else "Unknown"
+        # Unknown provider: fallback to full redeploy
         try:
             await engine_deploy.redeploy(engine, db)
             settings_patched = True
-            print(f"[Reconfigure] Redeployed {provider_label} engine '{engine.name}' to push new bindings")
+            print(f"[Reconfigure] Redeployed engine '{engine.name}' (unknown provider)")
         except Exception as e:
-            print(f"[Reconfigure] Redeploy failed for {provider_label} engine '{engine.name}': {e}")
+            print(f"[Reconfigure] Redeploy failed for engine '{engine.name}': {e}")
 
-    # 5. Flush edge cache on target
+    # 6. Flush edge cache on target
     cache_flushed = await engine_deploy._flush_cache(engine, str(engine.url).rstrip('/'))
 
     return {

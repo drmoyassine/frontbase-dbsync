@@ -67,13 +67,15 @@ class DataRequest(BaseModel):
     Pre-computed HTTP request spec for data fetching.
     Computed at publish time so Hono doesn't need adapter logic.
     """
-    url: str  # Full URL with query params (may contain {{ENV_VAR}} placeholders)
+    url: str = ""  # Full URL (may be empty for proxy strategy — resolved server-side)
     method: str = "GET"  # HTTP method
-    headers: Dict[str, str] = {}  # Headers (may contain {{ENV_VAR}} placeholders)
+    headers: Dict[str, str] = {}  # Headers (may be empty for proxy strategy)
     body: Optional[Dict[str, Any]] = None  # For POST requests (SQL queries)
     result_path: str = Field("", alias="resultPath")  # JSON path to extract data (e.g., "rows", "data")
     flatten_relations: bool = Field(True, alias="flattenRelations")  # Flatten nested objects to "table.column"
     query_config: Optional[Dict[str, Any]] = Field(None, alias="queryConfig")  # Added for DataTable RPC config
+    fetch_strategy: Optional[str] = Field(None, alias="fetchStrategy")  # "direct" | "proxy" — set at publish time
+    datasource_id: Optional[str] = Field(None, alias="datasourceId")  # Datasource ID for proxy strategy (server-side credential resolution)
     
     class Config:
         populate_by_name = True

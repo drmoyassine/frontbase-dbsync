@@ -14,14 +14,15 @@
  */
 import { defineConfig } from 'tsup';
 import type { Options } from 'tsup';
-import { resolve } from 'path';
+import { resolve, join } from 'path';
 import { fileURLToPath } from 'url';
+import { readFileSync, readdirSync, existsSync } from 'fs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 const shim = (name: string) => resolve(__dirname, `shims/${name}.js`);
 
-// ── Shared esbuild plugin ────────────────────────────────────────────
+// ── Shared esbuild plugins ───────────────────────────────────────────
 
 const localSqlitePlugin = {
     name: 'replace-local-sqlite',
@@ -29,6 +30,59 @@ const localSqlitePlugin = {
         build.onResolve({ filter: /LocalSqliteProvider/ }, () => ({
             path: shim('LocalSqliteProvider'),
         }));
+    },
+};
+
+/**
+ * Embed Vite-built client assets (hydrate.js, CSS, favicon) as string
+ * constants in the server bundle. This allows cloud edges (CF, Vercel,
+ * Netlify, Deno, Supabase) to serve them without a filesystem.
+ */
+const embedClientAssetsPlugin = {
+    name: 'embed-client-assets',
+    setup(build: any) {
+        build.onLoad({ filter: /staticAssets\.ts$/ }, (args: any) => {
+            const publicReact = resolve(__dirname, 'public/react');
+            
+            // Read hydrate.js
+            let hydrateJs = '';
+            const hydratePath = join(publicReact, 'hydrate.js');
+            if (existsSync(hydratePath)) {
+                hydrateJs = readFileSync(hydratePath, 'utf-8');
+                console.log(`[embed] hydrate.js: ${(hydrateJs.length / 1024).toFixed(0)} KB`);
+            } else {
+                console.warn('[embed] WARNING: public/react/hydrate.js not found — run "vite build" first');
+            }
+            
+            // Read CSS (entry-*.css — filename has a hash)
+            let hydrateCss = '';
+            if (existsSync(publicReact)) {
+                const cssFile = readdirSync(publicReact).find(f => f.startsWith('entry-') && f.endsWith('.css'));
+                if (cssFile) {
+                    hydrateCss = readFileSync(join(publicReact, cssFile), 'utf-8');
+                    console.log(`[embed] ${cssFile}: ${(hydrateCss.length / 1024).toFixed(0)} KB`);
+                }
+            }
+            
+            // Read favicon as base64
+            let faviconB64 = '';
+            const iconPath = join(resolve(__dirname, 'public'), 'icon.png');
+            if (existsSync(iconPath)) {
+                faviconB64 = readFileSync(iconPath).toString('base64');
+                console.log(`[embed] icon.png: ${(faviconB64.length / 1024).toFixed(0)} KB (base64)`);
+            }
+            
+            // Escape backticks and ${} in JS content for template literal safety
+            const escapeForTemplateLiteral = (s: string) =>
+                s.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+            
+            const contents = `
+export const HYDRATE_JS = \`${escapeForTemplateLiteral(hydrateJs)}\`;
+export const HYDRATE_CSS = \`${escapeForTemplateLiteral(hydrateCss)}\`;
+export const FAVICON_PNG_B64 = '${faviconB64}';
+`;
+            return { contents, loader: 'ts' as const };
+        });
     },
 };
 
@@ -43,7 +97,7 @@ const BASE: Partial<Options> = {
     outDir: 'dist',
     target: 'es2022',
     treeshake: true,
-    esbuildPlugins: [localSqlitePlugin],
+    esbuildPlugins: [localSqlitePlugin, embedClientAssetsPlugin],
     define: { 'process.env.NODE_ENV': '"production"' },
 };
 
@@ -123,7 +177,7 @@ export function tsupConfigDeno(entry: string) {
         ...BASE,
         entry: [entry],
         platform: 'browser',
-        esbuildPlugins: [localSqlitePlugin, externalizeNodeOnly],
+        esbuildPlugins: [localSqlitePlugin, externalizeNodeOnly, embedClientAssetsPlugin],
         esbuildOptions(opts) {
             opts.alias = { ...opts.alias, ...DENO_ALIASES };
         },
@@ -150,7 +204,7 @@ export function tsupConfigVercel(entry: string) {
         ...BASE,
         entry: [entry],
         platform: 'browser',
-        esbuildPlugins: [localSqlitePlugin, stubIoredis],
+        esbuildPlugins: [localSqlitePlugin, stubIoredis, embedClientAssetsPlugin],
         esbuildOptions(opts) {
             opts.alias = { ...opts.alias, ...DENO_ALIASES };
         },

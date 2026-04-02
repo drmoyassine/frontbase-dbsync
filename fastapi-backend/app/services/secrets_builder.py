@@ -1,15 +1,16 @@
 """
 Engine Secrets Builder — Single Source of Truth.
 
-Builds 5 JSON FRONTBASE_* environment variables from DB/cache/queue/auth records.
+Builds 6 JSON FRONTBASE_* environment variables from DB/cache/queue/auth records.
 Used by: deploy APIs, redeploy, reconfigure, inspector.
 
 Output env vars:
-  FRONTBASE_STATE_DB  — State DB config (provider-discriminated JSON)
-  FRONTBASE_AUTH      — Auth + users config (JSON)
-  FRONTBASE_CACHE     — Cache config (provider-discriminated JSON)
-  FRONTBASE_QUEUE     — Queue config (provider-discriminated JSON)
-  FRONTBASE_GPU       — GPU model registry (JSON array)
+  FRONTBASE_STATE_DB      — State DB config (provider-discriminated JSON)
+  FRONTBASE_AUTH          — Auth + users config (JSON)
+  FRONTBASE_CACHE         — Cache config (provider-discriminated JSON)
+  FRONTBASE_QUEUE         — Queue config (provider-discriminated JSON)
+  FRONTBASE_GPU           — GPU model registry (JSON array)
+  FRONTBASE_DATASOURCES   — Datasource credentials for proxy-strategy data fetching (JSON)
 """
 
 import json
@@ -24,6 +25,7 @@ FRONTBASE_BINDING_NAMES = frozenset([
     'FRONTBASE_CACHE',
     'FRONTBASE_QUEUE',
     'FRONTBASE_GPU',
+    'FRONTBASE_DATASOURCES',
 ])
 
 
@@ -183,6 +185,95 @@ def _build_auth_config(db: Session, engine_id: str | None) -> dict:
     return auth
 
 
+def _build_datasources_config(db: Session) -> dict:
+    """Build FRONTBASE_DATASOURCES JSON blob.
+
+    Maps datasource IDs → credentials needed for proxy-strategy data fetching.
+    Only includes datasources that use non-Supabase providers (proxy strategy).
+
+    Shape: { "<datasource_id>": { "type": "neon", "connectionString": "...", ... } }
+    
+    Uses direct sqlite3 for unified.db (same pattern as data_request.py).
+    """
+    import os
+    import sqlite3
+    from ..core.security import decrypt_field
+
+    datasources: dict[str, dict] = {}
+
+    # unified.db is at fastapi-backend/unified.db
+    db_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        'unified.db'
+    )
+
+    if not os.path.exists(db_path):
+        return datasources
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.execute(
+            "SELECT id, name, type, host, port, database, username, password_encrypted, "
+            "api_url, api_key_encrypted, extra_config "
+            "FROM datasources WHERE is_active = 1"
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        for row in rows:
+            ds_type = str(row['type'])
+
+            # Supabase uses direct strategy (browser → PostgREST), skip
+            if ds_type == 'supabase':
+                continue
+
+            entry: dict[str, str] = {'type': ds_type}
+
+            # Build connection string for SQL databases
+            if ds_type in ('neon', 'postgres', 'mysql'):
+                user = str(row['username'] or '')
+                password = decrypt_field(str(row['password_encrypted'])) if row['password_encrypted'] else ''
+                host = str(row['host'] or '')
+                port = str(row['port'] or '5432')
+                database = str(row['database'] or '')
+
+                if ds_type == 'mysql':
+                    entry['connectionString'] = f"mysql://{user}:{password}@{host}:{port}/{database}"
+                else:
+                    sslmode = 'require' if ds_type == 'neon' else 'prefer'
+                    entry['connectionString'] = f"postgresql://{user}:{password}@{host}:{port}/{database}?sslmode={sslmode}"
+
+                # Neon HTTP API (for serverless HTTP queries)
+                if ds_type == 'neon' and host:
+                    entry['httpUrl'] = f"https://{host}"
+
+            # API key for HTTP-based providers
+            if row['api_key_encrypted']:
+                api_key = decrypt_field(str(row['api_key_encrypted']))
+                if api_key:
+                    entry['apiKey'] = api_key
+
+            if row['api_url']:
+                entry['apiUrl'] = str(row['api_url'])
+
+            # Extra config (JSON string with provider-specific fields)
+            if row['extra_config']:
+                try:
+                    extra = json.loads(str(row['extra_config']))
+                    if isinstance(extra, dict):
+                        entry.update(extra)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            datasources[str(row['id'])] = entry
+
+    except Exception as e:
+        print(f"[SecretsBuilder] Could not build datasources config: {e}")
+
+    return datasources
+
+
 def build_engine_secrets(
     db: Session,
     edge_db_id: str | None,
@@ -191,7 +282,7 @@ def build_engine_secrets(
     engine_id: str | None = None,
     deploy_provider: str | None = None,
 ) -> dict[str, str]:
-    """Build 5 FRONTBASE_* JSON env vars from DB/cache/queue/auth records.
+    """Build 6 FRONTBASE_* JSON env vars from DB/cache/queue/auth records.
     
     Args:
         db: SQLAlchemy session
@@ -325,5 +416,10 @@ def build_engine_secrets(
                 queue.update(cf_creds)
 
             secrets['FRONTBASE_QUEUE'] = json.dumps(queue)
+
+    # ─── FRONTBASE_DATASOURCES ──────────────────────────────────────────
+    datasources = _build_datasources_config(db)
+    if datasources:
+        secrets['FRONTBASE_DATASOURCES'] = json.dumps(datasources)
 
     return secrets

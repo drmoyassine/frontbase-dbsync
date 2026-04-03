@@ -80,5 +80,6 @@ memory-bank/
 !src/**
 !public/**
 !dist/**
+!packages/**
 # NOTE: fastapi-backend/ and services/ are NOT re-included here.
 # They have their own Dockerfiles with separate build contexts.

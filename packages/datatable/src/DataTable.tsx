@@ -25,6 +25,7 @@ export function DataTable({
     style,
     onColumnOverrideChange,
     onConfigureBinding,
+    headerCellWrapper,
     title,
 }: DataTableProps) {
     // State
@@ -224,6 +225,7 @@ export function DataTable({
                         sortColumn={sortColumn}
                         sortDirection={sortDirection}
                         onSort={handleSort}
+                        headerCellWrapper={headerCellWrapper}
                     />
                     <TableBody
                         data={data}

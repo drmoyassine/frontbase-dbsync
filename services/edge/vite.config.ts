@@ -9,6 +9,7 @@ export default defineConfig({
             '@': path.resolve(__dirname, './src'),
             '@frontbase/datatable': path.resolve(__dirname, '../../packages/datatable/src/index.ts'),
         },
+        dedupe: ['react', 'react-dom', '@tanstack/react-query'],
     },
     build: {
         outDir: 'public/react',

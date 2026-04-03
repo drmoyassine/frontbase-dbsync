@@ -36,18 +36,18 @@ export function TableBody({
     }
 
     return (
-        <tbody className={className}>
+        <tbody className={cn("[&_tr:last-child]:border-0 [&_tr:nth-child(even)]:bg-muted/50", className)}>
             {data.map((row, index) => (
                 <tr
                     key={row.id || index}
-                    className="border-t hover:bg-muted/50"
+                    className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted h-12"
                 >
                     {columns.map((col) => {
                         const override = columnOverrides?.[col];
                         const value = getCellValue(row, col);
 
                         return (
-                            <td key={col} className="px-4 py-3">
+                            <td key={col} className="p-4 align-middle [&:has([role=checkbox])]:pr-0 max-w-[200px] truncate whitespace-nowrap py-2">
                                 {renderCell(value, override?.displayType, col)}
                             </td>
                         );

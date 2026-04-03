@@ -17,7 +17,7 @@ interface WorkflowNode {
     data: {
         label: string;
         type: string;
-        inputs?: Array<{ name: string; value: any }>;
+        inputs?: Array<{ name: string; type?: string; value?: any }>;
     };
 }
 

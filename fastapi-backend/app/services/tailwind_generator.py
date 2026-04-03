@@ -39,12 +39,14 @@ def extract_css_classes_from_source(source_dir: str) -> set:
         r"'([a-z][a-z0-9:/_-]+(?:\s+[a-z][a-z0-9:/_-]+)*)'",
     ]
     
-    # Use the exact same patterns as original
+    # Use the exact same patterns as original plus generic utility function patterns
     patterns = [
         r'class(?:Name)?=[\"\'](.*?)[\"\'](.*?)',
         r'class(?:Name)?=\\?"([^"]+?)\\?"',
         r'class(?:Name)?=\\"([^\\]+?)\\"',
         r"'([a-z][a-z0-9:/_-]+(?:\s+[a-z][a-z0-9:/_-]+)*)'",
+        r'cn\(\s*[\"\'](.*?)[\"\']',
+        r'\"([a-zA-Z\[][\w:/.\[\]()&=-]+(?:\s+[a-zA-Z\[][\w:/.\[\]()&=-]+)*)\"',
     ]
     
     if not os.path.isdir(source_dir):
@@ -64,7 +66,7 @@ def extract_css_classes_from_source(source_dir: str) -> set:
                         class_str = match.group(1)
                         for cls in class_str.split():
                             cls = cls.strip('"\',`{}$')
-                            if cls and re.match(r'^[a-zA-Z!-][\w:/.\[\]-]*$', cls):
+                            if cls and re.match(r'^[a-zA-Z\[!-][\w:/.\[\]()&=-]*$', cls):
                                 classes.add(cls)
             except Exception as e:
                 print(f"[tailwind_generator] Warning: Could not read {filepath}: {e}")
@@ -109,13 +111,28 @@ async def generate_tailwind_utilities(components: list) -> str:
             input_css = os.path.join(tmpdir, "input.css")
             output_css = os.path.join(tmpdir, "output.css")
             
-            # 1. Find Edge SSR source directory  
-            edge_ssr_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "services", "edge", "src", "ssr")
-            if not os.path.isdir(edge_ssr_dir):
-                edge_ssr_dir = "/app/edge-ssr-source"
+            # 1. Find directories to scan
+            dirs_to_scan = []
+            
+            # Check if running in Docker (where we copy them to /app)
+            if os.path.isdir("/app/edge-source") or os.path.isdir("/app/packages"):
+                if os.path.isdir("/app/edge-source"): dirs_to_scan.append("/app/edge-source")
+                if os.path.isdir("/app/packages"): dirs_to_scan.append("/app/packages")
+            else:
+                # Local development relative paths
+                base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
+                dirs_to_scan = [
+                    os.path.join(base_dir, "services", "edge", "src"),
+                    os.path.join(base_dir, "packages")
+                ]
             
             # 2. Extract all CSS class names from source files
-            extracted_classes = extract_css_classes_from_source(edge_ssr_dir)
+            extracted_classes = set()
+            for d in dirs_to_scan:
+                if os.path.isdir(d):
+                    extracted_classes.update(extract_css_classes_from_source(d))
+                else:
+                    print(f"[tailwind_generator] target scan directory not found: {d}")
             
             # Also extract class names from component JSON (user-set className props)
             for component in components:
@@ -161,6 +178,12 @@ async def generate_tailwind_utilities(components: list) -> str:
                 f.write('  --radius: var(--radius);\n')
                 f.write('}\n')
                 
+                # Apply base reset for borders exactly like the builder
+                f.write('@layer base {\n')
+                f.write('  * {\n')
+                f.write('    @apply border-border;\n')
+                f.write('  }\n')
+                f.write('}\n')
             # 5. Run tailwindcss CLI (v4 standalone binary)
             tailwind_bin = await ensure_tailwind_cli()
             if not tailwind_bin:

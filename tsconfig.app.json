@@ -23,7 +23,9 @@
 
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@frontbase/datatable": ["./packages/datatable/src/index.ts"],
+      "@frontbase/datatable/*": ["./packages/datatable/src/*"]
     }
   },
   "include": ["src"]

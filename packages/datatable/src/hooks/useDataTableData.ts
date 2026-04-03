@@ -69,17 +69,19 @@ async function fetchFromBuilder(config: DataFetcherConfig): Promise<DataFetcherR
 }
 
 /**
- * Fetch data from Edge /api/data/execute (edge mode)
+ * Fetch data from Edge — routes based on fetchStrategy
+ * - 'direct': browser → Supabase PostgREST (CORS-enabled, anonKey in headers)
+ * - 'proxy': browser → edge /api/data/execute → datasource (credentials server-side)
  */
 async function fetchFromEdge(config: DataFetcherConfig): Promise<DataFetcherResult> {
     const { binding, page, pageSize, sortColumn, sortDirection, filters, searchQuery } = config;
     const dataRequest = binding.dataRequest;
 
-    if (!dataRequest?.url) {
+    if (!dataRequest?.url && !dataRequest?.queryConfig) {
         return { data: [], total: 0 };
     }
 
-    const queryConfig = dataRequest.queryConfig;
+    const queryConfig = dataRequest?.queryConfig;
 
     // Build filters for RPC
     const filterList = filters
@@ -97,7 +99,7 @@ async function fetchFromEdge(config: DataFetcherConfig): Promise<DataFetcherResu
 
     // Determine RPC name based on search
     const rpcName = searchQuery ? 'frontbase_search_rows' : 'frontbase_get_rows';
-    const rpcUrl = dataRequest.url.replace('frontbase_get_rows', rpcName);
+    const rpcUrl = (dataRequest?.url || '').replace('frontbase_get_rows', rpcName);
 
     // Build RPC body
     const rpcBody: Record<string, any> = {
@@ -117,37 +119,57 @@ async function fetchFromEdge(config: DataFetcherConfig): Promise<DataFetcherResu
         rpcBody.sort_dir = sortDirection || queryConfig?.sortDirection || 'asc';
     }
 
-    // Resolve env vars in URL and headers
-    const url = resolveEnvVars(rpcUrl);
-    const headers: Record<string, string> = {};
-    for (const [key, value] of Object.entries(dataRequest.headers || {})) {
-        headers[key] = resolveEnvVars(value);
+    // Strategy factory: route based on publish-time decision
+    const strategy = dataRequest?.fetchStrategy || 'proxy';
+    let response: Response;
+
+    if (strategy === 'direct') {
+        // Direct: browser → datasource (Supabase PostgREST, CORS-enabled)
+        // Resolve env vars in URL and headers
+        const url = resolveEnvVars(rpcUrl);
+        const headers: Record<string, string> = {};
+        for (const [key, value] of Object.entries(dataRequest?.headers || {})) {
+            headers[key] = resolveEnvVars(value);
+        }
+
+        response = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(rpcBody),
+        });
+
+        const result = await response.json();
+        const rows = result.rows || result.data || [];
+        const total = result.total ?? rows.length;
+        return { data: rows, total };
+    } else {
+        // Proxy: browser → edge /api/data/execute → datasource
+        // Only send datasourceId + query — credentials resolved server-side
+        const datasourceId = (dataRequest as any)?.datasourceId || binding.dataSourceId;
+        response = await fetch('/api/data/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                dataRequest: {
+                    fetchStrategy: 'proxy',
+                    datasourceId,
+                    method: 'POST',
+                    queryConfig: dataRequest?.queryConfig || {},
+                    body: rpcBody,
+                    resultPath: dataRequest?.resultPath || 'rows',
+                    flattenRelations: dataRequest?.flattenRelations ?? false,
+                },
+            }),
+        });
+
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.error || 'Failed to fetch data');
+        }
+        const rows = result.data?.rows || result.data || [];
+        const total = result.data?.total ?? result.total ?? rows.length;
+        return { data: rows, total };
     }
-
-    const response = await fetch('/api/data/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            dataRequest: {
-                ...dataRequest,
-                url,
-                method: 'POST',
-                headers,
-                body: rpcBody,
-            },
-        }),
-    });
-
-    const result = await response.json();
-
-    if (!result.success) {
-        throw new Error(result.error || 'Failed to fetch data');
-    }
-
-    const rows = result.data?.rows || result.data || [];
-    const total = result.data?.total ?? result.total ?? rows.length;
-
-    return { data: rows, total };
 }
 
 interface UseDataTableDataOptions {

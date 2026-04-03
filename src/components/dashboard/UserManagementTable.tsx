@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UniversalDataTable } from '@/components/data-binding/UniversalDataTable';
+import { DataTable } from '@frontbase/datatable';
 import { useUserContactConfig } from '@/hooks/useUserContactConfig';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
@@ -97,7 +97,7 @@ export const UserManagementTable = () => {
       </div>
 
       <div className="border rounded-md">
-        <UniversalDataTable componentId="user-management-table" binding={binding} title="" />
+        <DataTable mode="builder" componentId="user-management-table" binding={binding} title="" />
       </div>
     </div>
   );

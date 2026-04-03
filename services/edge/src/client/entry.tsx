@@ -5,10 +5,10 @@
  * Includes QueryClientProvider for @frontbase/datatable caching.
  */
 
-import { hydrateRoot, createRoot } from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
 import { StrictMode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { DataTable } from '../components/datatable';
+import { DataTable } from '../components/UnifiedDataTable';
 import { Form } from '../components/form/Form';
 import './globals.css';
 
@@ -82,16 +82,11 @@ function hydrateReactComponents() {
                 </StrictMode>
             );
 
-            // Form uses createRoot (SSR is a skeleton placeholder, not matching client)
-            // DataTable uses hydrateRoot (SSR matches client render)
-            if (componentName === 'Form' || componentName === 'form') {
-                // Clear SSR skeleton before mounting
-                element.innerHTML = '';
-                const root = createRoot(element);
-                root.render(reactTree);
-            } else {
-                hydrateRoot(element, reactTree);
-            }
+            // SSR outputs skeleton placeholders, not matching React renders.
+            // Always use createRoot to replace skeleton with interactive component.
+            element.innerHTML = '';
+            const root = createRoot(element);
+            root.render(reactTree);
         } catch (err) {
             console.error(`[React Hydrate] Failed to hydrate ${componentName}:`, err);
         }

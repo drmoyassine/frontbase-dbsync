@@ -30,7 +30,7 @@ export interface FilterConfig {
     filterType: 'text' | 'dropdown' | 'multiselect' | 'number' | 'dateRange' | 'boolean';
     label?: string;
     value?: any;
-    options?: { label: string; value: string }[];
+    options?: string[] | { label: string; value: string }[];
     optionsDataRequest?: DataRequest;
 }
 
@@ -46,6 +46,8 @@ export interface DataRequest {
     resultPath?: string;
     flattenRelations?: boolean;
     queryConfig?: QueryConfig;
+    fetchStrategy?: 'direct' | 'proxy';
+    datasourceId?: string;
 }
 
 export interface QueryConfig {
@@ -134,6 +136,9 @@ export interface DataTableProps {
 
     /** Callback to open binding configuration (builder mode) */
     onConfigureBinding?: () => void;
+
+    /** Inversion of Control wrapper for injecting builder tools into headers without bundling them */
+    headerCellWrapper?: (columnName: string, children: React.ReactNode) => React.ReactNode;
 
     /** Table title */
     title?: string;

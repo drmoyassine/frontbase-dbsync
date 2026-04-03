@@ -12,7 +12,7 @@
 export type {
     FieldType, BaseFieldDefinition, SelectFieldDefinition,
     CodeFieldDefinition, KeyValueFieldDefinition, ColumnKeyValueFieldDefinition,
-    FieldDefinition, OutputDefinition, NodeSchema,
+    ExpressionFieldDefinition, FieldDefinition, OutputDefinition, NodeSchema,
 } from './types';
 
 // Re-export all schemas

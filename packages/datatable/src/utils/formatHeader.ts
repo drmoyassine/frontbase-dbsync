@@ -14,8 +14,5 @@ export function formatHeader(key: string, override?: ColumnOverride): string {
     if (override?.label) return override.label;
 
     // Auto-format: countries.flag → Countries › Flag
-    return key
-        .replace(/\./g, ' › ')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (c) => c.toUpperCase());
+    return key;
 }

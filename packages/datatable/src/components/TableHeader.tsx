@@ -12,6 +12,7 @@ interface TableHeaderProps {
     sortDirection?: 'asc' | 'desc';
     onSort?: (column: string) => void;
     className?: string;
+    headerCellWrapper?: (columnName: string, children: React.ReactNode) => React.ReactNode;
 }
 
 /**
@@ -25,39 +26,40 @@ export function TableHeader({
     sortDirection,
     onSort,
     className,
+    headerCellWrapper
 }: TableHeaderProps) {
     return (
-        <thead className={cn('bg-muted/50', className)}>
-            <tr>
+        <thead className={cn('[&_tr]:border-b', className)}>
+            <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
                 {columns.map((col) => {
                     const override = columnOverrides?.[col];
                     const isSorted = sortColumn === col;
 
+                    const InnerContent = (
+                        <div className="flex items-center space-x-1">
+                            <span>{formatHeader(col, override)}</span>
+                            {sortingEnabled && (
+                                <button
+                                    className="h-auto p-1 inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onSort?.(col);
+                                    }}
+                                >
+                                    {isSorted && sortDirection === 'asc' && <ChevronUp className="h-3 w-3" />}
+                                    {isSorted && sortDirection === 'desc' && <ChevronDown className="h-3 w-3" />}
+                                    {!isSorted && <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                                </button>
+                            )}
+                        </div>
+                    );
+
                     return (
                         <th
                             key={col}
-                            onClick={() => sortingEnabled && onSort?.(col)}
-                            className={cn(
-                                'px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap',
-                                sortingEnabled && 'cursor-pointer hover:bg-muted/80 select-none'
-                            )}
+                            className="h-12 px-4 text-left align-middle font-medium text-muted-foreground whitespace-nowrap group [&:has([role=checkbox])]:pr-0"
                         >
-                            <div className="flex items-center gap-1">
-                                <span>{formatHeader(col, override)}</span>
-                                {sortingEnabled && (
-                                    <>
-                                        {isSorted ? (
-                                            sortDirection === 'asc' ? (
-                                                <ChevronUp className="h-4 w-4" />
-                                            ) : (
-                                                <ChevronDown className="h-4 w-4" />
-                                            )
-                                        ) : (
-                                            <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-50" />
-                                        )}
-                                    </>
-                                )}
-                            </div>
+                            {headerCellWrapper ? headerCellWrapper(col, InnerContent) : InnerContent}
                         </th>
                     );
                 })}

@@ -37,10 +37,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY fastapi-backend/ .
 
-# Copy Edge SSR source files for Tailwind CSS class scanning
-# The Tailwind CLI needs to scan these TypeScript renderers to find
-# all CSS class names (bg-primary, text-muted-foreground, flex, etc.)
-COPY services/edge/src/ssr/ /app/edge-ssr-source/
+# Copy Edge source files (both SSR and Hydration components)
+# for Tailwind CSS class scanning
+COPY services/edge/src/ /app/edge-source/
+
+# Copy shared UI packages (e.g. @frontbase/datatable) for Tailwind scanning
+COPY packages/ /app/packages/
 
 # Copy entrypoint script and make executable
 COPY fastapi-backend/docker_entrypoint.sh /usr/local/bin/

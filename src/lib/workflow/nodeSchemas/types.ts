@@ -17,7 +17,8 @@ export type FieldType =
     | 'keyValue'
     | 'columnKeyValue'
     | 'conditionBuilder'
-    | 'fieldMapping';
+    | 'fieldMapping'
+    | 'expression';
 
 export interface BaseFieldDefinition {
     name: string;
@@ -52,12 +53,17 @@ export interface ColumnKeyValueFieldDefinition extends BaseFieldDefinition {
     valuePlaceholder?: string;
 }
 
+export interface ExpressionFieldDefinition extends BaseFieldDefinition {
+    type: 'expression';
+}
+
 export type FieldDefinition =
     | BaseFieldDefinition
     | SelectFieldDefinition
     | CodeFieldDefinition
     | KeyValueFieldDefinition
-    | ColumnKeyValueFieldDefinition;
+    | ColumnKeyValueFieldDefinition
+    | ExpressionFieldDefinition;
 
 export interface OutputDefinition {
     name: string;

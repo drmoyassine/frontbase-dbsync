@@ -133,7 +133,7 @@ async def _test_cf_kv(cache_url: str, provider_account_id: Optional[str]) -> Tes
             resp = await client.get(
                 f"https://api.cloudflare.com/client/v4/accounts/{acct_id}/storage/kv/namespaces/{namespace_id}/keys",
                 headers={"Authorization": f"Bearer {token}"},
-                params={"limit": 1},
+                params={"limit": 10},
             )
 
         latency = round((time.time() - start) * 1000, 1)

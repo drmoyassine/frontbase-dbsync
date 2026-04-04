@@ -211,7 +211,7 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
     const handleTest = async (id: string) => {
         setTestingId(id);
         try {
-            const res = await fetch(`${API_BASE}/api/edge-queues/${id}/test`, { method: 'POST' });
+            const res = await fetch(`${API_BASE}/api/edge-queues/${id}/test/`, { method: 'POST' });
             const data: TestResult = await res.json();
             const queue = queues.find(q => q.id === id);
             const label = QUEUE_PROVIDER_OPTIONS.find(p => p.value === queue?.provider)?.label || 'Queue';
@@ -229,7 +229,7 @@ export const EdgeQueuesForm: React.FC<EdgeQueuesFormProps> = ({ withCard = false
 
             if (editingId && !formToken) {
                 // Token not re-entered — use saved test endpoint
-                const res = await fetch(`${API_BASE}/api/edge-queues/${editingId}/test`, { method: 'POST' });
+                const res = await fetch(`${API_BASE}/api/edge-queues/${editingId}/test/`, { method: 'POST' });
                 const data: TestResult = await res.json();
                 showTestToast(data, providerLabel);
             } else {

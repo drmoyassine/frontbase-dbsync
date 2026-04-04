@@ -493,7 +493,7 @@ async def _test_cf_queue(queue_url: str, provider_account_id: Optional[str]) -> 
     if not provider_account_id:
         return TestQueueResult(success=False, message="No connected account — cannot test Queue")
 
-    queue_id = queue_url.strip()
+    queue_id = queue_url.replace("cfq://", "").strip()
     if not queue_id:
         return TestQueueResult(success=False, message="No queue ID")
 

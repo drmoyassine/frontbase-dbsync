@@ -25,6 +25,12 @@
             ],
             "@frontbase/infolist/*": [
                 "../../packages/infolist/src/*"
+            ],
+            "@frontbase/form": [
+                "../../packages/form/src/index.ts"
+            ],
+            "@frontbase/form/*": [
+                "../../packages/form/src/*"
             ]
         }
     },

@@ -8,6 +8,8 @@ export default defineConfig({
         alias: {
             '@': path.resolve(__dirname, './src'),
             '@frontbase/datatable': path.resolve(__dirname, '../../packages/datatable/src/index.ts'),
+            '@frontbase/infolist': path.resolve(__dirname, '../../packages/infolist/src/index.ts'),
+            '@frontbase/form': path.resolve(__dirname, '../../packages/form/src/index.ts'),
         },
         dedupe: ['react', 'react-dom', '@tanstack/react-query'],
     },

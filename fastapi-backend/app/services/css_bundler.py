@@ -52,7 +52,7 @@ def generate_bundle_cache_key(components: list) -> str:
     requirements_str = ','.join(sorted(requirements))
     hash_value = hashlib.md5(requirements_str.encode()).hexdigest()[:12]
     
-    return f"css:bundle:v2:{hash_value}"
+    return f"css:bundle:v5:{hash_value}"
 
 
 # =============================================================================

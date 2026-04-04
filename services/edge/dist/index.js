@@ -4225,6 +4225,7 @@ function renderForm(id, props, childrenHtml, propsJson) {
   const columns = props._columns || binding.columns || [];
   const foreignKeys = props._foreignKeys || binding.foreignKeys || [];
   const reactProps = {
+    mode: "edge",
     binding: {
       ...binding,
       columns,
@@ -6089,7 +6090,7 @@ var FALLBACK_CSS = `
 *, *::before, *::after { box-sizing: border-box; }
 html { background-color: hsl(var(--background)); color: hsl(var(--foreground)); }
 body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; background-color: hsl(var(--background)); color: hsl(var(--foreground)); }
-.fb-page { min-height: 100vh; display: flex; flex-direction: column; }
+.fb-page { min-height: 100vh; width: 100%; overflow-x: hidden; display: flex; flex-direction: column; }
 .fb-button { display: inline-flex; align-items: center; justify-content: center; }
 .fb-heading { margin: 0; }
 .fb-heading-1 { font-size: 2.25rem; font-weight: 700; }
@@ -6149,7 +6150,7 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height
 `;
 
 // src/ssr/htmlDocument.ts
-var HYDRATE_VERSION = "20260205h";
+var HYDRATE_VERSION = "20260404a";
 var DEFAULT_FAVICON = "/static/icon.png";
 function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl = DEFAULT_FAVICON, authConfig) {
   const title = page.title || page.name;

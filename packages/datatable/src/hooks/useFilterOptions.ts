@@ -47,7 +47,9 @@ export function useFilterOptions({
                 if (!filter.optionsDataRequest) {
                     // Use static options if no data request
                     if (filter.options) {
-                        options[filter.column] = filter.options;
+                        options[filter.column] = (filter.options as any[]).map((opt: any) =>
+                            typeof opt === 'string' ? { label: opt, value: opt } : opt
+                        );
                     }
                     continue;
                 }

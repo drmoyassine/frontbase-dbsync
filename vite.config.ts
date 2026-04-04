@@ -67,6 +67,7 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(__dirname, "./src"),
         "@frontbase/datatable": path.resolve(__dirname, "./packages/datatable/src/index.ts"),
         "@frontbase/infolist": path.resolve(__dirname, "./packages/infolist/src/index.ts"),
+        "@frontbase/form": path.resolve(__dirname, "./packages/form/src/index.ts"),
       },
     },
     // Expose server-side env vars to client

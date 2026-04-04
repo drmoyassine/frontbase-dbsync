@@ -190,6 +190,8 @@ export function InfoList({
     const tableName = binding.tableName || propTableName || '';
     const recordId = binding.recordId || propRecordId || '';
     const fieldOverrides = propOverrides || binding.fieldOverrides || {};
+    // Cast style to break cross-package csstype version incompatibility
+    const safeStyle = style as React.CSSProperties | undefined;
     // Data fetching via TanStack query
     const {
         data: queryResult,
@@ -250,7 +252,7 @@ export function InfoList({
     // Early states (Empty Binding)
     if (!tableName || !recordId) {
         return (
-            <div className={cn('rounded-md border p-8', className)} style={style}>
+            <div className={cn('rounded-md border p-8', className)} style={safeStyle}>
                 <div className="text-center text-muted-foreground">
                     No table or record configured.
                     {onConfigureBinding && (
@@ -269,7 +271,7 @@ export function InfoList({
     // Error state
     if (error) {
         return (
-            <div className={cn("rounded-lg border bg-card text-card-foreground shadow-sm p-6", className)} style={style}>
+            <div className={cn("rounded-lg border bg-card text-card-foreground shadow-sm p-6", className)} style={safeStyle}>
                 <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">
                     Failed to load record: {error instanceof Error ? error.message : 'Unknown error'}
                 </div>
@@ -280,7 +282,7 @@ export function InfoList({
     // No columns baked — show helpful message
     if (rawColumns.length === 0 && !loading) {
         return (
-            <div className={cn("rounded-lg border bg-card text-card-foreground shadow-sm p-6", className)} style={style}>
+            <div className={cn("rounded-lg border bg-card text-card-foreground shadow-sm p-6", className)} style={safeStyle}>
                 <p className="text-sm text-muted-foreground">
                     {tableName
                         ? `No schema available for "${tableName}". Try re-publishing the page or check the configuration.`
@@ -294,7 +296,7 @@ export function InfoList({
     // Loading / skeleton
     if (loading && !record) {
         return (
-            <div className={cn("rounded-lg border bg-card text-card-foreground shadow-sm p-6", className)} style={style}>
+            <div className={cn("rounded-lg border bg-card text-card-foreground shadow-sm p-6", className)} style={safeStyle}>
                 {title && <h3 className="text-lg font-semibold mb-4">{title}</h3>}
                 <div className="space-y-3 animate-pulse" style={{ display: 'grid', gridTemplateColumns: `repeat(${gridColumns}, 1fr)`, gap: '0 2rem' }}>
                     {Array.from({ length: Math.max(6, gridColumns * 2) }).map((_, i) => (
@@ -360,7 +362,7 @@ export function InfoList({
 
     if (showCard) {
         return (
-            <div className={cn("rounded-lg border bg-card text-card-foreground shadow-sm", className)} style={style}>
+            <div className={cn("rounded-lg border bg-card text-card-foreground shadow-sm", className)} style={safeStyle}>
                 {title && (
                     <div className="flex flex-col space-y-1.5 p-6 pb-4">
                         <h3 className="text-lg font-semibold leading-none tracking-tight">{title}</h3>
@@ -373,7 +375,7 @@ export function InfoList({
         );
     }
 
-    return <div className={cn(className)} style={style}>{content}</div>;
+    return <div className={cn(className)} style={safeStyle}>{content}</div>;
 }
 
 export default InfoList;

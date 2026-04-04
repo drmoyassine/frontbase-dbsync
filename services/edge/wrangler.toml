@@ -14,7 +14,7 @@
 # =============================================================================
 
 name = "frontbase-edge"
-main = "dist/adapters/cloudflare.js"
+main = "dist/cloudflare.js"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 

@@ -135,8 +135,15 @@ export function renderDataComponent(
     props: Record<string, unknown>,
     childrenHtml: string
 ): string {
+    // Modify props to ensure hydration uses edge mode
+    const hydrationProps = {
+        ...props,
+        mode: 'edge', // IMPORTANT: Force edge mode to prevent components (like InfoList) from calling builder APIs
+        _isEditorPreview: false,
+    };
+
     // Serialize props for client hydration  
-    const propsJson = JSON.stringify(props).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+    const propsJson = JSON.stringify(hydrationProps).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 
     switch (type) {
         case 'DataTable':
@@ -284,6 +291,7 @@ function renderForm(id: string, props: Record<string, unknown>, childrenHtml: st
 
     // Build react props for hydration — include columns for client-side rendering
     const reactProps = {
+        mode: 'edge',
         binding: {
             ...binding,
             columns,
@@ -316,35 +324,54 @@ function renderForm(id: string, props: Record<string, unknown>, childrenHtml: st
             if (override.hidden) return '';
             const label = override.label || colName.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
             const isTextarea = colType === 'text' && !override.type;
+            const inputClass = "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50";
+            const textareaClass = "flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50";
+            
             return `
-                <div class="fb-form-field">
-                    <label class="fb-form-label">${escapeHtml(label)}</label>
+                <div class="space-y-2">
+                    <label class="text-sm font-medium leading-none">${escapeHtml(label)}</label>
                     ${isTextarea
-                        ? `<textarea class="fb-textarea" placeholder="${escapeHtml(label)}" disabled></textarea>`
-                        : `<input class="fb-input" type="${override.type || 'text'}" placeholder="${escapeHtml(label)}" disabled />`}
+                        ? `<textarea class="${textareaClass}" placeholder="${escapeHtml(label)}" disabled></textarea>`
+                        : `<input class="${inputClass}" type="${override.type || 'text'}" placeholder="${escapeHtml(label)}" disabled />`}
                 </div>`;
         }).join('');
     } else {
         // Fallback: generic skeleton fields
         fieldsHtml = Array(3).fill(0).map(() => `
-            <div class="fb-form-field">
-                <div class="fb-skeleton" style="height:16px;width:60px;margin-bottom:0.25rem">&nbsp;</div>
-                <div class="fb-skeleton" style="height:40px;border-radius:var(--radius)">&nbsp;</div>
+            <div class="space-y-2">
+                <div class="h-4 w-20 rounded bg-muted animate-pulse"></div>
+                <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
             </div>
         `).join('');
     }
 
-    // Use data-react-component for React hydration (entry.tsx picks this up)
-    return `<div id="${id}" class="fb-form" data-react-component="Form" data-react-props="${escapeHtml(reactPropsJson)}" data-component-id="${id}">
-        <div class="fb-form-header">
-            ${title ? `<h3 class="fb-form-title">${title}</h3>` : ''}
-        </div>
-        <div class="fb-form-content fb-loading">
-            ${fieldsHtml}
-        </div>
-        <div class="fb-form-actions">
-            <button type="submit" class="fb-button" style="padding:0.5rem 1.5rem;border-radius:var(--radius);background:hsl(var(--primary));color:hsl(var(--primary-foreground))" disabled>Submit</button>
-            <button type="button" class="fb-button" style="padding:0.5rem 1rem;border-radius:var(--radius);border:1px solid hsl(var(--border))" disabled>Cancel</button>
+    const styleAttr = ``; // add explicit inline styles if needed
+    
+    // We match the @frontbase/form React layout EXACTLY to prevent layout shift
+    const wrapperClass = props.showCard !== false 
+        ? "rounded-lg border bg-card text-card-foreground shadow-sm"
+        : "";
+
+    const headerHtml = props.showCard !== false
+        ? `<div class="flex flex-col space-y-1.5 p-6 pb-4">
+               ${title ? `<h3 class="text-lg font-semibold leading-none tracking-tight">${title}</h3>` : ''}
+           </div>`
+        : (title ? `<h3 class="text-lg font-semibold leading-none tracking-tight mb-4">${title}</h3>` : '');
+
+    const contentPadding = props.showCard !== false ? "p-6 pt-0" : "";
+
+    return `<div id="${id}" class="${wrapperClass}" data-react-component="Form" data-react-props="${escapeHtml(reactPropsJson)}" data-component-id="${id}">
+        ${headerHtml}
+        <div class="${contentPadding}">
+            <form class="space-y-4">
+                <div class="space-y-4">
+                    ${fieldsHtml}
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground disabled:opacity-50" disabled>Cancel</button>
+                    <button type="submit" class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50" disabled>Submit</button>
+                </div>
+            </form>
         </div>
     </div>`;
 }

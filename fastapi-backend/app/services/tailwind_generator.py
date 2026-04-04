@@ -37,10 +37,10 @@ def extract_css_classes_from_source(source_dir: str) -> Tuple[Set[str], int]:
         r'class(?:Name)?=[\"\'](.*?)[\"\']',
         # cn("...")
         r'cn\(\s*[\"\'](.*?)[\"\']',
-        # String literals that only contain characters valid in tailwind classes (and spaces)
-        # This catches Shadcn variants like: "[&_tr]:border-b", "data-[state=selected]:bg-muted/50"
-        r'[\"\']([a-zA-Z\[!-][\w:/.\[\]()&=-]*(?:\s+[a-zA-Z\[!-][\w:/.\[\]()&=-]*)*)[\"\']',
-        r'\`([a-zA-Z\[!-][\w:/.\[\]()&=-]*(?:\s+[a-zA-Z\[!-][\w:/.\[\]()&=-]*)*)\`',
+        # Catch all JS/TS string literals safely (up to 500 chars to avoid catastrophic backtracking)
+        # This catches Shadcn variants and concatenated classes like "[&_tr]:border-b", " min-h-[80px]"
+        r'[\"\']([^\"\']{1,500})[\"\']',
+        r'\`([^\`]{1,500})\`',
     ]
     
     if not os.path.isdir(source_dir):
@@ -63,6 +63,12 @@ def extract_css_classes_from_source(source_dir: str) -> Tuple[Set[str], int]:
                             cls = cls.strip('"\',`{}$')
                             # Strict validation for what is allowed as a Tailwind class
                             if cls and re.match(r'^[a-zA-Z0-9\[!-][\w:/.\[\]()&=-]*$', cls):
+                                # Reject log prefixes like "Context:", "Error:", "FastAPI:", "about:client"
+                                if re.match(r'^[A-Z][a-zA-Z]*:$', cls) or cls.startswith('about:'):
+                                    continue
+                                # Reject bare colon-suffixed words that aren't Tailwind prefixes
+                                if cls.endswith(':') and not re.match(r'^(sm|md|lg|xl|2xl|hover|focus|active|disabled|first|last|odd|even|group-hover|peer|dark|placeholder|focus-visible|focus-within)', cls):
+                                    continue
                                 classes.add(cls)
             except Exception as e:
                 print(f"[tailwind_generator] Warning: Could not read {filepath}: {e}")
@@ -108,53 +114,32 @@ async def generate_tailwind_utilities(components: list) -> str:
             output_css = os.path.join(tmpdir, "output.css")
             
             # 1. Find directories to scan
-            dirs_to_scan = []
-            
             # Check if running in Docker (where we copy them to /app)
             if os.path.isdir("/app/edge-source") or os.path.isdir("/app/packages"):
-                if os.path.isdir("/app/edge-source"): dirs_to_scan.append("/app/edge-source")
-                if os.path.isdir("/app/packages"): dirs_to_scan.append("/app/packages")
+                edge_path = "/app/edge-source"
+                packages_path = "/app/packages"
             else:
                 # Local development relative paths
-                # Local development relative paths
                 base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-                dirs_to_scan = [
-                    os.path.join(base_dir, "services", "edge", "src"),
-                    os.path.join(base_dir, "packages")
-                ]
+                edge_path = os.path.join(base_dir, "services", "edge", "src").replace("\\", "/")
+                packages_path = os.path.join(base_dir, "packages").replace("\\", "/")
             
-            # 2. Extract all CSS class names from source files
+            # 2. Set up component-specific arbitrary classes
             extracted_classes = set()
-            for d in dirs_to_scan:
-                if os.path.isdir(d):
-                    dir_classes, file_count = extract_css_classes_from_source(d)
-                    extracted_classes.update(dir_classes)
-                    print(f"[tailwind_generator] Scanned '{d}': found {len(dir_classes)} classes in {file_count} files.")
-                else:
-                    print(f"[tailwind_generator] WARNING: target scan directory not found: {d}")
-            
-            # Also extract class names from component JSON (user-set className props)
             for component in components:
                 extract_classes_from_component(component, extracted_classes)
             
-            if extracted_classes:
-                print(f"[tailwind_generator] Extracted {len(extracted_classes)} total unique CSS classes")
-                # Log shadcn/arbitrary classes specifically for IoC validation
-                bracket_classes = [c for c in extracted_classes if '[' in c]
-                print(f"[tailwind_generator] Found {len(bracket_classes)} bracket-prefixed/arbitrary classes (e.g. Shadcn)")
-                responsive = [c for c in extracted_classes if ':' in c and not c.startswith('--')]
-                if responsive:
-                    print(f"[tailwind_generator] Responsive classes found: {sorted(responsive)[:20]}")
-            else:
-                print("[tailwind_generator] Warning: No CSS classes extracted, using safelist fallback")
+            content_html = os.path.join(tmpdir, "content.html").replace("\\", "/")
+            with open(content_html, "w") as f:
+                f.write(f'<div class="{" ".join(sorted(extracted_classes))}"></div>\n')
 
-            # 3. Build @source inline() directive with all extracted classes
-            classes_str = ' '.join(sorted(extracted_classes))
-            
-            # 4. Write input CSS with @source inline()
+            # 3. Write input CSS with @source pointing directly to the source folders
+            # This offloads all the parsing to Tailwind's Oxide engine
             with open(input_css, "w") as f:
                 f.write('@import "tailwindcss";\n')
-                f.write(f'@source inline("{classes_str}");\n\n')
+                f.write(f'@source "{content_html}";\n')
+                f.write(f'@source "{edge_path}";\n')
+                f.write(f'@source "{packages_path}";\n\n')
                 # Map CSS variable color names so Tailwind generates
                 # bg-primary, text-muted-foreground, border-border, etc.
                 f.write('@theme {\n')

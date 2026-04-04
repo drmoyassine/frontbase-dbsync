@@ -11,19 +11,29 @@ import os
 from typing import Optional, Dict, List, Any
 
 
-def get_unified_db_path() -> str:
-    """Get path to unified.db in fastapi-backend directory."""
-    # This file is in app/services/data_request.py
-    # unified.db is in fastapi-backend/unified.db
-    return os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
-        'unified.db'
+_db_path_logged = False
+
+def get_sync_db_path() -> str:
+    """Get path to frontbase.db — the single backend database.
+
+    Uses the same /app/data detection as app.database.config and
+    app.services.sync.config — Docker/VPS uses /app/data volume,
+    local dev falls back to the fastapi-backend directory.
+    """
+    global _db_path_logged
+    data_dir = "/app/data" if os.path.isdir("/app/data") else os.path.dirname(
+        os.path.dirname(os.path.dirname(__file__))
     )
+    db_path = os.path.join(data_dir, "frontbase.db")
+    if not _db_path_logged:
+        _db_path_logged = True
+        print(f"[data_request] Resolved DB path: {db_path} (exists={os.path.exists(db_path)})")
+    return db_path
 
 
 def get_table_foreign_keys(datasource_id: str, table_name: str) -> list:
     """Lookup FK relationships from SQLite table_schema_cache (direct sqlite3)"""
-    db_path = get_unified_db_path()
+    db_path = get_sync_db_path()
     
     try:
         conn = sqlite3.connect(db_path)
@@ -57,7 +67,7 @@ def get_table_foreign_keys(datasource_id: str, table_name: str) -> list:
 
 def get_table_columns(datasource_id: str, table_name: str) -> list:
     """Lookup columns from SQLite table_schema_cache"""
-    db_path = get_unified_db_path()
+    db_path = get_sync_db_path()
     
     try:
         conn = sqlite3.connect(db_path)
@@ -106,7 +116,16 @@ def _compute_supabase_request(binding: dict, datasource) -> Optional[dict]:
         return None
     
     # Get columns from columnOrder (builder uses columnOrder)
-    column_order = binding.get('columns') or binding.get('columnOrder')
+    raw_col_order = binding.get('columnOrder') or binding.get('columns')
+    column_order = []
+    if raw_col_order and isinstance(raw_col_order, list):
+        for c in raw_col_order:
+            if isinstance(c, dict):
+                column_order.append(c.get('name') or c.get('column_name') or '*')
+            else:
+                column_order.append(c)
+    else:
+        column_order = raw_col_order
     
     # Get datasource ID for lookup
     if hasattr(datasource, 'id'):

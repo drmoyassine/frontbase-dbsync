@@ -135,7 +135,7 @@ def convert_component(c: dict, datasources_list: list | None = None) -> dict:
                     component_id=str(result.get('id') or '')  # Add componentId for Pydantic validation
                 )
                 
-                print(f"[convert_component] Enriched {result.get('type', 'component')} binding")
+                print(f"[convert_component] Enriched {result.get('type', 'component')} binding (has dataRequest={('dataRequest' in result['binding'])})")
                 if 'frontendFilters' in result['binding']:
                     print(f"  - Preserved {len(result['binding']['frontendFilters'])} filters")
 
@@ -238,6 +238,17 @@ def convert_component(c: dict, datasources_list: list | None = None) -> dict:
             result['props']['_fieldOverrides'] = field_overrides
             result['props']['_fieldOrder'] = field_order
             print(f"[convert_component] Also baked columns into {comp_type} props (Zod-safe)")
+
+            # Step 3c: Compute dataRequest for Form/InfoList
+            # Step 3 may have skipped this if the binding lacked tableName at that point
+            if 'dataRequest' not in result.get('binding', {}):
+                from app.routers.pages.transforms import find_datasource
+                datasource = find_datasource(datasources, ds_id) if datasources else None
+                if datasource:
+                    data_req = compute_data_request(result['binding'], datasource)
+                    if data_req:
+                        result['binding']['dataRequest'] = data_req
+                        print(f"[convert_component] Computed dataRequest for {comp_type} (strategy={data_req.get('fetchStrategy', 'unknown')})")
         else:
             print(f"[convert_component] {comp_type} has no tableName({table_name}) or dsId({ds_id}), skipping enrichment")
 

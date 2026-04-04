@@ -10,6 +10,7 @@ import { StrictMode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DataTable } from '../components/UnifiedDataTable';
 import { Form } from '../components/form/Form';
+import { InfoList } from '../components/infolist/InfoList';
 import './globals.css';
 
 // Create QueryClient with sensible defaults for SSR hydration
@@ -29,6 +30,8 @@ const components: Record<string, React.ComponentType<any>> = {
     datatable: DataTable, // lowercase alias
     Form,
     form: Form, // lowercase alias
+    InfoList,
+    infolist: InfoList, // lowercase alias
 };
 
 // Hydrate all React components
@@ -36,13 +39,13 @@ function hydrateReactComponents() {
     console.log('🔄 React hydration starting...');
 
     // Find all elements marked for React hydration
-    const elements = document.querySelectorAll('[data-react-component], [data-fb-hydrate="datatable"], [data-fb-hydrate="form"]');
+    const elements = document.querySelectorAll('[data-react-component], [data-fb-hydrate="datatable"], [data-fb-hydrate="form"], [data-fb-hydrate="infolist"]');
 
     elements.forEach((element) => {
         // Handle both new data-react-component and legacy data-fb-hydrate
         const hydrateType = element.getAttribute('data-fb-hydrate');
         const componentName = element.getAttribute('data-react-component') ||
-            (hydrateType === 'datatable' ? 'DataTable' : hydrateType === 'form' ? 'Form' : null);
+            (hydrateType === 'datatable' ? 'DataTable' : hydrateType === 'form' ? 'Form' : hydrateType === 'infolist' ? 'InfoList' : null);
 
         const propsAttr = element.getAttribute('data-react-props') || element.getAttribute('data-fb-props');
 

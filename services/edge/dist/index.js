@@ -1,7 +1,30 @@
 import {
-  cacheProvider,
+  handleDataQuery
+} from "./chunk-Z42UIXOU.js";
+import {
+  SupabaseAuthProvider
+} from "./chunk-TJ75V3EZ.js";
+import {
+  edgeLogsTable,
+  ensureInitialized,
+  getStateProvider,
+  stateProvider
+} from "./chunk-427TXHMK.js";
+import {
   shouldDebounce
-} from "./chunk-KZFI6UZV.js";
+} from "./chunk-WATJN2SY.js";
+import {
+  cacheProvider
+} from "./chunk-TNITJ7W3.js";
+import {
+  getAuthConfig,
+  getCacheConfig,
+  getQueueConfig,
+  getStateDbConfig,
+  init_env,
+  overrideCacheConfig,
+  overrideQueueConfig
+} from "./chunk-TWKTZCHU.js";
 import {
   cached,
   getRedis,
@@ -24,8 +47,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 // src/engine/lite.ts
-import { OpenAPIHono as OpenAPIHono9 } from "@hono/zod-openapi";
-import { swaggerUI } from "@hono/swagger-ui";
+import { OpenAPIHono as OpenAPIHono13 } from "@hono/zod-openapi";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
@@ -38,14 +60,82 @@ import { Liquid } from "liquidjs";
 
 // src/routes/health.ts
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
+
+// src/adapters/shared.ts
+var _platform = "docker";
+function getPlatform() {
+  return _platform;
+}
+
+// src/routes/health.ts
 var startedAt = Date.now();
 var healthRoute = new OpenAPIHono();
+var PING_TIMEOUT_MS = 8e3;
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))
+  ]);
+}
+async function checkStateDb() {
+  const { getStateDbConfig: getStateDbConfig2 } = await import("./env-4RJFWTVC.js");
+  const cfg = getStateDbConfig2();
+  if (cfg.provider === "local" && !cfg.url) {
+    return { provider: "none", status: "not_configured" };
+  }
+  const result = {
+    provider: cfg.provider || "auto",
+    status: "ok"
+  };
+  if (cfg.schema) result.schema = cfg.schema;
+  try {
+    const { stateProvider: stateProvider2 } = await import("./storage-6EGSUCHR.js");
+    await withTimeout(stateProvider2.listPages(), PING_TIMEOUT_MS);
+    result.status = "ok";
+  } catch (e) {
+    result.status = "error";
+    result.error = (e?.message || String(e)).slice(0, 120);
+  }
+  return result;
+}
+async function checkCache() {
+  const { getCacheConfig: getCacheConfig2 } = await import("./env-4RJFWTVC.js");
+  const cfg = getCacheConfig2();
+  if (cfg.provider === "none" && !cfg.url) {
+    return { provider: "none", status: "not_configured" };
+  }
+  try {
+    const { cacheProvider: cacheProvider2 } = await import("./cache-L5B5IGG4.js");
+    await withTimeout(cacheProvider2.get("__health_check__"), PING_TIMEOUT_MS);
+    return { provider: cfg.provider || "redis", status: "ok" };
+  } catch (e) {
+    return {
+      provider: cfg.provider || "redis",
+      status: "error",
+      error: (e?.message || String(e)).slice(0, 120)
+    };
+  }
+}
+async function checkQueue() {
+  const { getQueueConfig: getQueueConfig3 } = await import("./env-4RJFWTVC.js");
+  const cfg = getQueueConfig3();
+  if (cfg.provider === "none" && !cfg.token && !cfg.url) {
+    return { provider: "none", status: "not_configured" };
+  }
+  return { provider: cfg.provider || "qstash", status: "ok" };
+}
+var bindingSchema = z.object({
+  provider: z.string(),
+  status: z.enum(["ok", "error", "not_configured"]),
+  error: z.string().optional(),
+  schema: z.string().optional()
+});
 var route = createRoute({
   method: "get",
   path: "/",
   tags: ["System"],
   summary: "Health check",
-  description: "Returns service health status, version, and provider info",
+  description: "Returns service health status, version, provider info, and binding health",
   responses: {
     200: {
       description: "Service is healthy",
@@ -56,22 +146,52 @@ var route = createRoute({
             service: z.string(),
             version: z.string(),
             provider: z.string(),
-            uptime_seconds: z.number(),
-            timestamp: z.string()
+            uptime_seconds: z.number().optional(),
+            timestamp: z.string(),
+            bindings: z.object({
+              stateDb: bindingSchema,
+              cache: bindingSchema,
+              queue: bindingSchema
+            })
           })
         }
       }
     }
   }
 });
-healthRoute.openapi(route, (c) => {
+healthRoute.openapi(route, async (c) => {
+  const systemKey = process.env.FRONTBASE_SYSTEM_KEY;
+  const provided = c.req.header("x-system-key");
+  const isAuthenticated = !systemKey || provided === systemKey;
+  if (!isAuthenticated) {
+    return c.json({
+      status: "ok",
+      service: "frontbase-edge",
+      version: "0.1.0",
+      provider: getPlatform(),
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      bindings: {
+        stateDb: { provider: "hidden", status: "ok" },
+        cache: { provider: "hidden", status: "ok" },
+        queue: { provider: "hidden", status: "ok" }
+      }
+    });
+  }
+  const platform = getPlatform();
+  const isServerless = platform !== "docker";
+  const [stateDb, cache, queue] = await Promise.all([
+    checkStateDb(),
+    checkCache(),
+    checkQueue()
+  ]);
   return c.json({
     status: "ok",
     service: "frontbase-edge",
     version: "0.1.0",
-    provider: process.env.FRONTBASE_ADAPTER_PLATFORM || "docker",
-    uptime_seconds: Math.floor((Date.now() - startedAt) / 1e3),
-    timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    provider: platform,
+    ...isServerless ? {} : { uptime_seconds: Math.floor((Date.now() - startedAt) / 1e3) },
+    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    bindings: { stateDb, cache, queue }
   });
 });
 
@@ -103,10 +223,11 @@ function getGPUModels() {
 }
 
 // src/routes/manifest.ts
+init_env();
 var manifestRoute = new OpenAPIHono2();
 function getAdapterType() {
   const platform = process.env.FRONTBASE_ADAPTER_PLATFORM || "docker";
-  if (platform === "cloudflare-lite") return "lite";
+  if (platform.endsWith("-lite")) return "lite";
   return "full";
 }
 function getCapabilities() {
@@ -118,28 +239,18 @@ function getCapabilities() {
 }
 function getBindings() {
   const bindings = {};
-  const dbUrl = process.env.FRONTBASE_STATE_DB_URL || "";
-  if (dbUrl.startsWith("libsql://") || dbUrl.startsWith("https://")) {
-    bindings.db = "turso";
-  } else if (dbUrl.includes("sqlite") || dbUrl.endsWith(".db")) {
-    bindings.db = "sqlite";
-  } else if (dbUrl) {
+  const dbCfg = getStateDbConfig();
+  if (dbCfg.provider && dbCfg.provider !== "local") {
+    bindings.db = dbCfg.provider;
+  } else if (dbCfg.url) {
     bindings.db = "custom";
   } else {
     bindings.db = "none";
   }
-  const cacheUrl = process.env.FRONTBASE_CACHE_URL || "";
-  if (cacheUrl.includes("upstash")) {
-    bindings.cache = "upstash";
-  } else if (cacheUrl.includes("redis")) {
-    bindings.cache = "redis";
-  } else if (cacheUrl) {
-    bindings.cache = "custom";
-  } else {
-    bindings.cache = "none";
-  }
-  const qstashToken = process.env.QSTASH_TOKEN || "";
-  bindings.queue = qstashToken ? "qstash" : "none";
+  const cacheCfg = getCacheConfig();
+  bindings.cache = cacheCfg.provider !== "none" ? cacheCfg.provider : "none";
+  const queueCfg = getQueueConfig();
+  bindings.queue = queueCfg.provider !== "none" ? queueCfg.provider : "none";
   return bindings;
 }
 manifestRoute.get("/", (c) => {
@@ -152,6 +263,13 @@ manifestRoute.get("/", (c) => {
     deployed_at: process.env.FRONTBASE_DEPLOYED_AT || null,
     bundle_checksum: process.env.FRONTBASE_BUNDLE_CHECKSUM || null,
     capabilities: getCapabilities(),
+    tech_stack: {
+      runtime: process.env.FRONTBASE_ADAPTER_PLATFORM === "cloudflare" || process.env.FRONTBASE_ADAPTER_PLATFORM === "cloudflare-lite" ? "Cloudflare Workers" : "Node.js",
+      framework: "Hono",
+      orm: "Drizzle ORM",
+      templating: "LiquidJS",
+      validation: "Zod + OpenAPI 3.1"
+    },
     gpu_models: gpuModels.map((m) => ({
       slug: m.slug,
       model_id: m.model_id,
@@ -164,840 +282,6 @@ manifestRoute.get("/", (c) => {
 
 // src/routes/deploy.ts
 import { OpenAPIHono as OpenAPIHono3, createRoute as createRoute2, z as z3 } from "@hono/zod-openapi";
-
-// src/storage/TursoHttpProvider.ts
-import { drizzle } from "drizzle-orm/libsql";
-import { createClient } from "@libsql/client";
-import { sql as sql2, eq, and, desc } from "drizzle-orm";
-
-// src/storage/edge-migrations.ts
-var MIGRATIONS = [
-  {
-    version: 1,
-    description: "Initial schema \u2014 published_pages + project_settings",
-    sql: [
-      // Schema version tracking
-      `CREATE TABLE IF NOT EXISTS _schema_version (
-                version INTEGER PRIMARY KEY,
-                description TEXT,
-                applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )`,
-      // Published pages
-      `CREATE TABLE IF NOT EXISTS published_pages (
-                id TEXT PRIMARY KEY,
-                slug TEXT NOT NULL UNIQUE,
-                name TEXT NOT NULL,
-                title TEXT,
-                description TEXT,
-                layout_data TEXT NOT NULL,
-                seo_data TEXT,
-                datasources TEXT,
-                css_bundle TEXT,
-                version INTEGER NOT NULL DEFAULT 1,
-                published_at TEXT NOT NULL,
-                is_public INTEGER NOT NULL DEFAULT 1,
-                is_homepage INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )`,
-      // Indexes
-      `CREATE INDEX IF NOT EXISTS idx_published_pages_slug ON published_pages(slug)`,
-      `CREATE INDEX IF NOT EXISTS idx_published_pages_homepage ON published_pages(is_homepage)`,
-      // Project settings
-      `CREATE TABLE IF NOT EXISTS project_settings (
-                id TEXT PRIMARY KEY DEFAULT 'default',
-                favicon_url TEXT,
-                logo_url TEXT,
-                site_name TEXT,
-                site_description TEXT,
-                app_url TEXT,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )`,
-      // Default settings row
-      `INSERT OR IGNORE INTO project_settings (id, updated_at) VALUES ('default', datetime('now'))`
-    ]
-  },
-  {
-    version: 2,
-    description: "Add workflows + executions tables",
-    sql: [
-      `CREATE TABLE IF NOT EXISTS workflows (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                description TEXT,
-                trigger_type TEXT NOT NULL,
-                trigger_config TEXT,
-                nodes TEXT NOT NULL,
-                edges TEXT NOT NULL,
-                version INTEGER NOT NULL DEFAULT 1,
-                is_active INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                published_by TEXT
-            )`,
-      `CREATE TABLE IF NOT EXISTS executions (
-                id TEXT PRIMARY KEY,
-                workflow_id TEXT NOT NULL REFERENCES workflows(id),
-                status TEXT NOT NULL,
-                trigger_type TEXT NOT NULL,
-                trigger_payload TEXT,
-                node_executions TEXT,
-                result TEXT,
-                error TEXT,
-                usage REAL DEFAULT 0,
-                started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                ended_at TEXT
-            )`,
-      `CREATE INDEX IF NOT EXISTS idx_executions_workflow ON executions(workflow_id)`,
-      `CREATE INDEX IF NOT EXISTS idx_executions_started ON executions(started_at)`
-    ]
-  },
-  {
-    version: 3,
-    description: "Add content_hash column to published_pages",
-    sql: [
-      `ALTER TABLE published_pages ADD COLUMN content_hash TEXT`
-    ]
-  },
-  {
-    version: 4,
-    description: "Add settings column to workflows",
-    sql: [
-      `ALTER TABLE workflows ADD COLUMN settings TEXT`
-    ]
-  },
-  {
-    version: 5,
-    description: "Add dead_letters table for DLQ",
-    sql: [
-      `CREATE TABLE IF NOT EXISTS dead_letters (
-                id TEXT PRIMARY KEY,
-                workflow_id TEXT NOT NULL,
-                execution_id TEXT NOT NULL,
-                error TEXT,
-                payload TEXT,
-                retry_count INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT (datetime('now'))
-            )`,
-      `CREATE INDEX IF NOT EXISTS idx_dead_letters_workflow ON dead_letters(workflow_id)`
-    ]
-  }
-];
-async function runMigrations(execute, providerName) {
-  await execute(`CREATE TABLE IF NOT EXISTS _schema_version (
-        version INTEGER PRIMARY KEY,
-        description TEXT,
-        applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`);
-  let appliedCount = 0;
-  for (const migration of MIGRATIONS) {
-    try {
-      for (const sqlStmt of migration.sql) {
-        try {
-          await execute(sqlStmt);
-        } catch (sqlError) {
-          const msg = String(sqlError?.message || sqlError || "");
-          if (msg.includes("duplicate column")) {
-            console.log(`[${providerName}:Migration] Column already exists (v${migration.version}), skipping.`);
-          } else {
-            throw sqlError;
-          }
-        }
-      }
-      await execute(
-        `INSERT OR IGNORE INTO _schema_version (version, description) 
-                 VALUES (${migration.version}, '${migration.description.replace(/'/g, "''")}')`
-      );
-      appliedCount++;
-    } catch (error) {
-      console.error(`[${providerName}:Migration] Failed at v${migration.version}: ${error}`);
-      throw error;
-    }
-  }
-  const latestVersion = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
-  console.log(`[${providerName}:Migration] Schema at v${latestVersion} (${appliedCount} migrations checked)`);
-}
-
-// src/storage/schema.ts
-import { sql } from "drizzle-orm";
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
-var publishedPages = sqliteTable("published_pages", {
-  id: text("id").primaryKey(),
-  slug: text("slug").notNull().unique(),
-  name: text("name").notNull(),
-  title: text("title"),
-  description: text("description"),
-  layoutData: text("layout_data").notNull(),
-  seoData: text("seo_data"),
-  datasources: text("datasources"),
-  cssBundle: text("css_bundle"),
-  version: integer("version").notNull().default(1),
-  publishedAt: text("published_at").notNull(),
-  isPublic: integer("is_public", { mode: "boolean" }).notNull().default(true),
-  isHomepage: integer("is_homepage", { mode: "boolean" }).notNull().default(false),
-  contentHash: text("content_hash"),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
-});
-var projectSettings = sqliteTable("project_settings", {
-  id: text("id").primaryKey().default("default"),
-  faviconUrl: text("favicon_url"),
-  logoUrl: text("logo_url"),
-  siteName: text("site_name"),
-  siteDescription: text("site_description"),
-  appUrl: text("app_url"),
-  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
-});
-var workflowsTable = sqliteTable("workflows", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  description: text("description"),
-  triggerType: text("trigger_type").notNull(),
-  triggerConfig: text("trigger_config"),
-  nodes: text("nodes").notNull(),
-  edges: text("edges").notNull(),
-  settings: text("settings"),
-  version: integer("version").notNull().default(1),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  publishedBy: text("published_by")
-});
-var executionsTable = sqliteTable("executions", {
-  id: text("id").primaryKey(),
-  workflowId: text("workflow_id").notNull(),
-  status: text("status").notNull(),
-  triggerType: text("trigger_type").notNull(),
-  triggerPayload: text("trigger_payload"),
-  nodeExecutions: text("node_executions"),
-  result: text("result"),
-  error: text("error"),
-  usage: real("usage").default(0),
-  startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  endedAt: text("ended_at")
-});
-
-// src/storage/TursoHttpProvider.ts
-var DEFAULT_FAVICON = "/static/icon.png";
-var TursoHttpProvider = class {
-  _db = null;
-  /**
-   * Lazy DB accessor — creates client on first use.
-   * On CF Workers, env vars aren't available at module eval time.
-   * They're bridged in the fetch() handler BEFORE any provider method runs.
-   */
-  getDb() {
-    if (!this._db) {
-      const url = process.env.FRONTBASE_STATE_DB_URL;
-      const authToken = process.env.FRONTBASE_STATE_DB_TOKEN;
-      if (!url) {
-        throw new Error(
-          "[TursoHttpProvider] FRONTBASE_STATE_DB_URL is required. Set this as a Worker secret or env var."
-        );
-      }
-      const client = createClient({ url, authToken });
-      this._db = drizzle(client);
-      console.log(`\u2601\uFE0F TursoHttpProvider connected to: ${url.substring(0, 40)}...`);
-    }
-    return this._db;
-  }
-  // =========================================================================
-  // Lifecycle
-  // =========================================================================
-  async init() {
-    await runMigrations(
-      async (sqlStr) => {
-        await this.getDb().run(sql2.raw(sqlStr));
-      },
-      "Turso"
-    );
-    console.log("\u2601\uFE0F State DB initialized (Turso)");
-  }
-  async initSettings() {
-    console.log("\u2601\uFE0F Project settings table initialized (Turso)");
-  }
-  // =========================================================================
-  // Pages CRUD
-  // =========================================================================
-  async upsertPage(page) {
-    const record = {
-      id: page.id,
-      slug: page.slug,
-      name: page.name,
-      title: page.title || null,
-      description: page.description || null,
-      layoutData: JSON.stringify(page.layoutData),
-      seoData: page.seoData ? JSON.stringify(page.seoData) : null,
-      datasources: page.datasources ? JSON.stringify(page.datasources) : null,
-      cssBundle: page.cssBundle || null,
-      version: page.version,
-      publishedAt: page.publishedAt,
-      isPublic: page.isPublic,
-      isHomepage: page.isHomepage,
-      contentHash: page.contentHash || null
-    };
-    if (page.isHomepage) {
-      await this.getDb().update(publishedPages).set({ isHomepage: false }).where(eq(publishedPages.isHomepage, true));
-      console.log(`\u2601\uFE0F Cleared old homepage flag(s) before setting new homepage: ${page.slug}`);
-    }
-    await this.getDb().insert(publishedPages).values(record).onConflictDoUpdate({
-      target: publishedPages.id,
-      set: { ...record, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }
-    });
-    console.log(`\u2601\uFE0F Upserted page (Turso): ${page.slug} (v${page.version})`);
-    return { success: true, version: page.version };
-  }
-  async getPageBySlug(slug) {
-    const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.slug, slug)).get();
-    if (!record) return null;
-    return {
-      id: record.id,
-      slug: record.slug,
-      name: record.name,
-      title: record.title || void 0,
-      description: record.description || void 0,
-      layoutData: JSON.parse(record.layoutData),
-      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
-      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
-      cssBundle: record.cssBundle || void 0,
-      version: record.version,
-      publishedAt: record.publishedAt,
-      isPublic: record.isPublic,
-      isHomepage: record.isHomepage
-    };
-  }
-  async getHomepage() {
-    const record = await this.getDb().select().from(publishedPages).where(eq(publishedPages.isHomepage, true)).get();
-    if (!record) return null;
-    return {
-      id: record.id,
-      slug: record.slug,
-      name: record.name,
-      title: record.title || void 0,
-      description: record.description || void 0,
-      layoutData: JSON.parse(record.layoutData),
-      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
-      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
-      cssBundle: record.cssBundle || void 0,
-      version: record.version,
-      publishedAt: record.publishedAt,
-      isPublic: record.isPublic,
-      isHomepage: record.isHomepage
-    };
-  }
-  async deletePage(slug) {
-    await this.getDb().delete(publishedPages).where(eq(publishedPages.slug, slug));
-    return true;
-  }
-  async listPages() {
-    return await this.getDb().select({
-      slug: publishedPages.slug,
-      name: publishedPages.name,
-      version: publishedPages.version
-    }).from(publishedPages);
-  }
-  // =========================================================================
-  // Project Settings CRUD
-  // =========================================================================
-  async getProjectSettings() {
-    const record = await this.getDb().select().from(projectSettings).where(eq(projectSettings.id, "default")).get();
-    if (!record) {
-      return {
-        id: "default",
-        faviconUrl: null,
-        logoUrl: null,
-        siteName: null,
-        siteDescription: null,
-        appUrl: null,
-        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    }
-    return record;
-  }
-  async getFaviconUrl() {
-    const settings = await this.getProjectSettings();
-    return settings.faviconUrl || DEFAULT_FAVICON;
-  }
-  async updateProjectSettings(updates) {
-    const existing = await this.getDb().select().from(projectSettings).where(eq(projectSettings.id, "default")).get();
-    if (existing) {
-      await this.getDb().update(projectSettings).set({ ...updates, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(eq(projectSettings.id, "default"));
-    } else {
-      await this.getDb().insert(projectSettings).values({
-        id: "default",
-        ...updates,
-        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-      });
-    }
-    console.log("\u2601\uFE0F Project settings updated (Turso)");
-    return this.getProjectSettings();
-  }
-  // =========================================================================
-  // Workflows CRUD
-  // =========================================================================
-  async upsertWorkflow(workflow) {
-    const existing = await this.getDb().select().from(workflowsTable).where(eq(workflowsTable.id, workflow.id)).get();
-    const now = (/* @__PURE__ */ new Date()).toISOString();
-    if (existing) {
-      const newVersion = (existing.version || 1) + 1;
-      await this.getDb().update(workflowsTable).set({
-        name: workflow.name,
-        description: workflow.description,
-        triggerType: workflow.triggerType,
-        triggerConfig: workflow.triggerConfig,
-        nodes: workflow.nodes,
-        edges: workflow.edges,
-        settings: workflow.settings || null,
-        version: newVersion,
-        updatedAt: now,
-        publishedBy: workflow.publishedBy
-      }).where(eq(workflowsTable.id, workflow.id));
-      return { version: newVersion };
-    } else {
-      await this.getDb().insert(workflowsTable).values({
-        id: workflow.id,
-        name: workflow.name,
-        description: workflow.description,
-        triggerType: workflow.triggerType,
-        triggerConfig: workflow.triggerConfig,
-        nodes: workflow.nodes,
-        edges: workflow.edges,
-        settings: workflow.settings || null,
-        version: 1,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-        publishedBy: workflow.publishedBy
-      });
-      return { version: 1 };
-    }
-  }
-  async getWorkflowById(id) {
-    const row = await this.getDb().select().from(workflowsTable).where(eq(workflowsTable.id, id)).get();
-    return row ? { ...row, isActive: !!row.isActive } : null;
-  }
-  async getActiveWebhookWorkflow(id) {
-    const row = await this.getDb().select().from(workflowsTable).where(and(eq(workflowsTable.id, id), eq(workflowsTable.isActive, true))).get();
-    return row ? { ...row, isActive: !!row.isActive } : null;
-  }
-  // =========================================================================
-  // Executions CRUD
-  // =========================================================================
-  async createExecution(execution) {
-    await this.getDb().insert(executionsTable).values({
-      id: execution.id,
-      workflowId: execution.workflowId,
-      status: execution.status,
-      triggerType: execution.triggerType,
-      triggerPayload: execution.triggerPayload || null,
-      nodeExecutions: execution.nodeExecutions || null,
-      startedAt: execution.startedAt
-    });
-  }
-  async getExecutionById(id) {
-    const row = await this.getDb().select().from(executionsTable).where(eq(executionsTable.id, id)).get();
-    return row;
-  }
-  async updateExecution(id, updates) {
-    const setValues = {};
-    if (updates.status !== void 0) setValues.status = updates.status;
-    if (updates.result !== void 0) setValues.result = updates.result;
-    if (updates.error !== void 0) setValues.error = updates.error;
-    if (updates.nodeExecutions !== void 0) setValues.nodeExecutions = updates.nodeExecutions;
-    if (updates.usage !== void 0) setValues.usage = updates.usage;
-    if (updates.endedAt !== void 0) setValues.endedAt = updates.endedAt;
-    if (Object.keys(setValues).length > 0) {
-      await this.getDb().update(executionsTable).set(setValues).where(eq(executionsTable.id, id));
-    }
-  }
-  async listExecutionsByWorkflow(workflowId, limit = 20) {
-    const rows = await this.getDb().select().from(executionsTable).where(eq(executionsTable.workflowId, workflowId)).orderBy(desc(executionsTable.startedAt)).limit(limit);
-    return rows;
-  }
-  async listAllExecutions(filters) {
-    const conditions = [];
-    if (filters?.workflowId) {
-      conditions.push(eq(executionsTable.workflowId, filters.workflowId));
-    }
-    if (filters?.since) {
-      conditions.push(sql2`${executionsTable.startedAt} >= ${filters.since}`);
-    }
-    if (filters?.until) {
-      conditions.push(sql2`${executionsTable.startedAt} <= ${filters.until}`);
-    }
-    let query = this.getDb().select().from(executionsTable);
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions));
-    }
-    let rows = await query.orderBy(desc(executionsTable.startedAt)).limit(filters?.limit || 100);
-    if (filters?.status && filters.status.length > 0) {
-      rows = rows.filter((r) => filters.status.includes(r.status));
-    }
-    return rows;
-  }
-  async getExecutionStats() {
-    const allExecutions = await this.getDb().select().from(executionsTable);
-    const statsMap = /* @__PURE__ */ new Map();
-    for (const exec of allExecutions) {
-      const current = statsMap.get(exec.workflowId) || {
-        workflowId: exec.workflowId,
-        totalRuns: 0,
-        successfulRuns: 0,
-        failedRuns: 0
-      };
-      current.totalRuns++;
-      if (exec.status === "completed") current.successfulRuns++;
-      else if (exec.status === "error") current.failedRuns++;
-      statsMap.set(exec.workflowId, current);
-    }
-    return Array.from(statsMap.values());
-  }
-  // =========================================================================
-  // Dead Letter Queue
-  // =========================================================================
-  async createDeadLetter(deadLetter) {
-    await this.getDb().run(sql2`
-            INSERT INTO dead_letters (id, workflow_id, execution_id, error, payload, retry_count)
-            VALUES (${deadLetter.id}, ${deadLetter.workflowId}, ${deadLetter.executionId},
-                    ${deadLetter.error}, ${deadLetter.payload}, ${deadLetter.retryCount || 0})
-        `);
-  }
-};
-
-// src/storage/LocalSqliteProvider.ts
-import { drizzle as drizzle2 } from "drizzle-orm/libsql";
-import { createClient as createClient2 } from "@libsql/client";
-import { sql as sql3, eq as eq2, and as and2, desc as desc2 } from "drizzle-orm";
-var DEFAULT_FAVICON2 = "/static/icon.png";
-var LocalSqliteProvider = class {
-  db = null;
-  /** Get or create the database connection */
-  getDb() {
-    if (!this.db) {
-      const client = createClient2({
-        url: process.env.PAGES_DB_URL || "file:./data/pages.db"
-      });
-      this.db = drizzle2(client);
-    }
-    return this.db;
-  }
-  // =========================================================================
-  // Lifecycle
-  // =========================================================================
-  async init() {
-    const database = this.getDb();
-    await runMigrations(
-      async (sqlStr) => {
-        await database.run(sql3.raw(sqlStr));
-      },
-      "LocalSqlite"
-    );
-    console.log("\u{1F4C4} State DB initialized (local SQLite)");
-  }
-  async initSettings() {
-    console.log("\u2699\uFE0F Project settings database initialized");
-  }
-  // =========================================================================
-  // Pages CRUD
-  // =========================================================================
-  async upsertPage(page) {
-    const database = this.getDb();
-    const record = {
-      id: page.id,
-      slug: page.slug,
-      name: page.name,
-      title: page.title || null,
-      description: page.description || null,
-      layoutData: JSON.stringify(page.layoutData),
-      seoData: page.seoData ? JSON.stringify(page.seoData) : null,
-      datasources: page.datasources ? JSON.stringify(page.datasources) : null,
-      cssBundle: page.cssBundle || null,
-      version: page.version,
-      publishedAt: page.publishedAt,
-      isPublic: page.isPublic,
-      isHomepage: page.isHomepage,
-      contentHash: page.contentHash || null
-    };
-    if (page.isHomepage) {
-      await database.update(publishedPages).set({ isHomepage: false }).where(eq2(publishedPages.isHomepage, true));
-      console.log(`\u{1F4DD} Cleared old homepage flag(s) before setting new homepage: ${page.slug}`);
-    }
-    await database.insert(publishedPages).values(record).onConflictDoUpdate({
-      target: publishedPages.slug,
-      set: { ...record, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }
-    });
-    console.log(`\u{1F4DD} Upserted published page: ${page.slug} (v${page.version})`);
-    return { success: true, version: page.version };
-  }
-  async getPageBySlug(slug) {
-    const record = await this.getDb().select().from(publishedPages).where(eq2(publishedPages.slug, slug)).get();
-    if (!record) return null;
-    return {
-      id: record.id,
-      slug: record.slug,
-      name: record.name,
-      title: record.title || void 0,
-      description: record.description || void 0,
-      layoutData: JSON.parse(record.layoutData),
-      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
-      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
-      cssBundle: record.cssBundle || void 0,
-      version: record.version,
-      publishedAt: record.publishedAt,
-      isPublic: record.isPublic,
-      isHomepage: record.isHomepage
-    };
-  }
-  async getHomepage() {
-    const record = await this.getDb().select().from(publishedPages).where(eq2(publishedPages.isHomepage, true)).get();
-    if (!record) return null;
-    return {
-      id: record.id,
-      slug: record.slug,
-      name: record.name,
-      title: record.title || void 0,
-      description: record.description || void 0,
-      layoutData: JSON.parse(record.layoutData),
-      seoData: record.seoData ? JSON.parse(record.seoData) : void 0,
-      datasources: record.datasources ? JSON.parse(record.datasources) : void 0,
-      cssBundle: record.cssBundle || void 0,
-      version: record.version,
-      publishedAt: record.publishedAt,
-      isPublic: record.isPublic,
-      isHomepage: record.isHomepage
-    };
-  }
-  async deletePage(slug) {
-    await this.getDb().delete(publishedPages).where(eq2(publishedPages.slug, slug));
-    return true;
-  }
-  async listPages() {
-    return await this.getDb().select({
-      slug: publishedPages.slug,
-      name: publishedPages.name,
-      version: publishedPages.version
-    }).from(publishedPages);
-  }
-  // =========================================================================
-  // Project Settings CRUD
-  // =========================================================================
-  async getProjectSettings() {
-    const record = await this.getDb().select().from(projectSettings).where(eq2(projectSettings.id, "default")).get();
-    if (!record) {
-      return {
-        id: "default",
-        faviconUrl: null,
-        logoUrl: null,
-        siteName: null,
-        siteDescription: null,
-        appUrl: null,
-        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    }
-    return record;
-  }
-  async getFaviconUrl() {
-    const settings = await this.getProjectSettings();
-    return settings.faviconUrl || DEFAULT_FAVICON2;
-  }
-  async updateProjectSettings(updates) {
-    const database = this.getDb();
-    const existing = await database.select().from(projectSettings).where(eq2(projectSettings.id, "default")).get();
-    if (existing) {
-      await database.update(projectSettings).set({ ...updates, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(eq2(projectSettings.id, "default"));
-    } else {
-      await database.insert(projectSettings).values({
-        id: "default",
-        ...updates,
-        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-      });
-    }
-    console.log("\u2699\uFE0F Project settings updated");
-    return this.getProjectSettings();
-  }
-  // =========================================================================
-  // Workflows CRUD
-  // =========================================================================
-  async upsertWorkflow(workflow) {
-    const database = this.getDb();
-    const existing = await database.select().from(workflowsTable).where(eq2(workflowsTable.id, workflow.id)).get();
-    const now = (/* @__PURE__ */ new Date()).toISOString();
-    if (existing) {
-      const newVersion = (existing.version || 1) + 1;
-      await database.update(workflowsTable).set({
-        name: workflow.name,
-        description: workflow.description,
-        triggerType: workflow.triggerType,
-        triggerConfig: workflow.triggerConfig,
-        nodes: workflow.nodes,
-        edges: workflow.edges,
-        settings: workflow.settings || null,
-        version: newVersion,
-        updatedAt: now,
-        publishedBy: workflow.publishedBy
-      }).where(eq2(workflowsTable.id, workflow.id));
-      return { version: newVersion };
-    } else {
-      await database.insert(workflowsTable).values({
-        id: workflow.id,
-        name: workflow.name,
-        description: workflow.description,
-        triggerType: workflow.triggerType,
-        triggerConfig: workflow.triggerConfig,
-        nodes: workflow.nodes,
-        edges: workflow.edges,
-        settings: workflow.settings || null,
-        version: 1,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-        publishedBy: workflow.publishedBy
-      });
-      return { version: 1 };
-    }
-  }
-  async getWorkflowById(id) {
-    const row = await this.getDb().select().from(workflowsTable).where(eq2(workflowsTable.id, id)).get();
-    return row ? { ...row, isActive: !!row.isActive } : null;
-  }
-  async getActiveWebhookWorkflow(id) {
-    const row = await this.getDb().select().from(workflowsTable).where(and2(eq2(workflowsTable.id, id), eq2(workflowsTable.isActive, true))).get();
-    return row ? { ...row, isActive: !!row.isActive } : null;
-  }
-  // =========================================================================
-  // Executions CRUD
-  // =========================================================================
-  async createExecution(execution) {
-    await this.getDb().insert(executionsTable).values({
-      id: execution.id,
-      workflowId: execution.workflowId,
-      status: execution.status,
-      triggerType: execution.triggerType,
-      triggerPayload: execution.triggerPayload || null,
-      nodeExecutions: execution.nodeExecutions || null,
-      startedAt: execution.startedAt
-    });
-  }
-  async getExecutionById(id) {
-    const row = await this.getDb().select().from(executionsTable).where(eq2(executionsTable.id, id)).get();
-    return row;
-  }
-  async updateExecution(id, updates) {
-    const setValues = {};
-    if (updates.status !== void 0) setValues.status = updates.status;
-    if (updates.result !== void 0) setValues.result = updates.result;
-    if (updates.error !== void 0) setValues.error = updates.error;
-    if (updates.nodeExecutions !== void 0) setValues.nodeExecutions = updates.nodeExecutions;
-    if (updates.usage !== void 0) setValues.usage = updates.usage;
-    if (updates.endedAt !== void 0) setValues.endedAt = updates.endedAt;
-    if (Object.keys(setValues).length > 0) {
-      await this.getDb().update(executionsTable).set(setValues).where(eq2(executionsTable.id, id));
-    }
-  }
-  async listExecutionsByWorkflow(workflowId, limit = 20) {
-    const rows = await this.getDb().select().from(executionsTable).where(eq2(executionsTable.workflowId, workflowId)).orderBy(desc2(executionsTable.startedAt)).limit(limit);
-    return rows;
-  }
-  async listAllExecutions(filters) {
-    const conditions = [];
-    if (filters?.workflowId) {
-      conditions.push(eq2(executionsTable.workflowId, filters.workflowId));
-    }
-    if (filters?.since) {
-      conditions.push(sql3`${executionsTable.startedAt} >= ${filters.since}`);
-    }
-    if (filters?.until) {
-      conditions.push(sql3`${executionsTable.startedAt} <= ${filters.until}`);
-    }
-    let query = this.getDb().select().from(executionsTable);
-    if (conditions.length > 0) {
-      query = query.where(and2(...conditions));
-    }
-    let rows = await query.orderBy(desc2(executionsTable.startedAt)).limit(filters?.limit || 100);
-    if (filters?.status && filters.status.length > 0) {
-      rows = rows.filter((r) => filters.status.includes(r.status));
-    }
-    return rows;
-  }
-  async getExecutionStats() {
-    const allExecutions = await this.getDb().select().from(executionsTable);
-    const statsMap = /* @__PURE__ */ new Map();
-    for (const exec of allExecutions) {
-      const current = statsMap.get(exec.workflowId) || {
-        workflowId: exec.workflowId,
-        totalRuns: 0,
-        successfulRuns: 0,
-        failedRuns: 0
-      };
-      current.totalRuns++;
-      if (exec.status === "completed") current.successfulRuns++;
-      else if (exec.status === "error") current.failedRuns++;
-      statsMap.set(exec.workflowId, current);
-    }
-    return Array.from(statsMap.values());
-  }
-  // =========================================================================
-  // Dead Letter Queue
-  // =========================================================================
-  async createDeadLetter(deadLetter) {
-    await this.getDb().run(sql3`
-            INSERT INTO dead_letters (id, workflow_id, execution_id, error, payload, retry_count)
-            VALUES (${deadLetter.id}, ${deadLetter.workflowId}, ${deadLetter.executionId},
-                    ${deadLetter.error}, ${deadLetter.payload}, ${deadLetter.retryCount || 0})
-        `);
-  }
-};
-
-// src/storage/index.ts
-var _provider = null;
-function isCloudRuntime() {
-  return process.env.FRONTBASE_ADAPTER_PLATFORM === "cloudflare" || process.env.FRONTBASE_DEPLOYMENT_MODE === "cloud" || !!process.env.FRONTBASE_STATE_DB_URL;
-}
-function createInitialProvider() {
-  if (isCloudRuntime()) {
-    console.log("\u2601\uFE0F Using TursoHttpProvider");
-    return new TursoHttpProvider();
-  }
-  console.log("\u{1F4BE} Using LocalSqliteProvider");
-  return new LocalSqliteProvider();
-}
-function getStateProvider() {
-  if (_provider && _provider._isStub && isCloudRuntime()) {
-    console.log("\u{1F504} Auto-upgrading from stub to TursoHttpProvider (env vars now available)");
-    _provider = new TursoHttpProvider();
-  }
-  if (!_provider) {
-    _provider = createInitialProvider();
-  }
-  return _provider;
-}
-var _initPromise = null;
-function ensureInitialized() {
-  if (!_initPromise) {
-    const provider = getStateProvider();
-    _initPromise = provider.init().catch((err) => {
-      _initPromise = null;
-      throw err;
-    });
-  }
-  return _initPromise;
-}
-var stateProvider = new Proxy({}, {
-  get(_target, prop) {
-    if (prop === "init") {
-      return () => ensureInitialized();
-    }
-    return async (...args) => {
-      await ensureInitialized();
-      const provider = getStateProvider();
-      const value = provider[prop];
-      if (typeof value === "function") {
-        return value.apply(provider, args);
-      }
-      return value;
-    };
-  }
-});
 
 // src/schemas/workflow.ts
 import { z as z2 } from "@hono/zod-openapi";
@@ -1132,7 +416,7 @@ var deployRoute = new OpenAPIHono3();
 var route2 = createRoute2({
   method: "post",
   path: "/",
-  tags: ["Deployment"],
+  tags: ["Workflows"],
   summary: "Deploy a workflow",
   description: "Receives a workflow from FastAPI and stores it for execution",
   request: {
@@ -1687,20 +971,22 @@ function getUpstreamNodes(targetNodeId, nodes, edges) {
 init_redis();
 
 // src/engine/queue.ts
+init_env();
 var queueClient = null;
 var queueInitialized = false;
 function getQueueProvider() {
-  return process.env.FRONTBASE_QUEUE_PROVIDER || "qstash";
+  return getQueueConfig().provider || "none";
 }
 function getQueueClient() {
   if (queueInitialized) return queueClient;
   queueInitialized = true;
-  const token = process.env.FRONTBASE_QUEUE_TOKEN || process.env.QSTASH_TOKEN;
-  if (!token) {
-    console.log("\u2B1C Queue: not configured (no FRONTBASE_QUEUE_TOKEN)");
+  const cfg = getQueueConfig();
+  const token = cfg.token;
+  const provider = cfg.provider || "none";
+  if (!token && provider !== "cloudflare" && provider !== "cloudflare_queues") {
+    console.log("\u2B1C Queue: not configured (no token in FRONTBASE_QUEUE)");
     return null;
   }
-  const provider = getQueueProvider();
   if (provider === "qstash") {
     try {
       const { Client } = __require("@upstash/qstash");
@@ -1711,6 +997,19 @@ function getQueueClient() {
       console.warn("\u26A0\uFE0F Queue: @upstash/qstash not installed, durable execution disabled");
       return null;
     }
+  }
+  if (provider === "cloudflare" || provider === "cloudflare_queues") {
+    const apiToken = cfg.cfApiToken;
+    const accountId = cfg.cfAccountId;
+    const queueUrl = cfg.url || "";
+    const queueId = queueUrl.startsWith("cfq://") ? queueUrl.replace("cfq://", "") : queueUrl;
+    if (!apiToken || !accountId || !queueId) {
+      console.warn("\u26A0\uFE0F Queue: CF Queues missing cfApiToken, cfAccountId, or url in FRONTBASE_QUEUE");
+      return null;
+    }
+    queueClient = { provider: "cloudflare", apiToken, accountId, queueId };
+    console.log(`\u{1F504} Queue: CF Queues enabled (queue ${queueId.substring(0, 8)}...)`);
+    return queueClient;
   }
   console.warn(`\u26A0\uFE0F Queue: unsupported provider "${provider}", durable execution disabled`);
   return null;
@@ -1736,6 +1035,32 @@ async function publishExecution(destinationUrl, payload, options) {
       return null;
     }
   }
+  if ((provider === "cloudflare" || provider === "cloudflare_queues") && client?.provider === "cloudflare") {
+    try {
+      const cfApi = `https://api.cloudflare.com/client/v4/accounts/${client.accountId}/queues/${client.queueId}/messages`;
+      const resp = await fetch(cfApi, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${client.apiToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          body: JSON.stringify({ destinationUrl, payload }),
+          content_type: "json"
+        })
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        console.error(`[Queue] CF Queue publish failed: ${resp.status} ${text.substring(0, 200)}`);
+        return null;
+      }
+      const data = await resp.json();
+      return data?.result?.messageId || "cf-queued";
+    } catch (error) {
+      console.error("[Queue] CF Queue publish failed:", error.message);
+      return null;
+    }
+  }
   console.warn(`[Queue] Publishing not implemented for provider "${provider}"`);
   return null;
 }
@@ -1743,8 +1068,9 @@ async function verifyQueueSignature(signature, _body) {
   if (!signature) return false;
   const provider = getQueueProvider();
   if (provider === "qstash") {
-    const currentKey = process.env.FRONTBASE_QUEUE_SIGNING_KEY || process.env.QSTASH_CURRENT_SIGNING_KEY;
-    const nextKey = process.env.FRONTBASE_QUEUE_NEXT_SIGNING_KEY || process.env.QSTASH_NEXT_SIGNING_KEY;
+    const cfg = getQueueConfig();
+    const currentKey = cfg.signingKey;
+    const nextKey = cfg.nextSigningKey;
     if (!currentKey && !nextKey) {
       console.warn("[Queue] No signing keys configured, skipping verification");
       return true;
@@ -1759,6 +1085,9 @@ async function verifyQueueSignature(signature, _body) {
     } catch {
       return false;
     }
+  }
+  if (provider === "cloudflare" || provider === "cloudflare_queues") {
+    return true;
   }
   return false;
 }
@@ -1901,7 +1230,7 @@ executeRoute.openapi(route3, async (c) => {
     }
   }
   if (debounceSec > 0) {
-    const { shouldDebounce: shouldDebounce2 } = await import("./debounce-HSJYP36F.js");
+    const { shouldDebounce: shouldDebounce2 } = await import("./debounce-VIPCMWDZ.js");
     const debounced = await shouldDebounce2(id, debounceSec);
     if (debounced) {
       return c.json({
@@ -2270,7 +1599,7 @@ var executionsRoute = new OpenAPIHono6();
 var allRoute = createRoute5({
   method: "get",
   path: "/all",
-  tags: ["Executions"],
+  tags: ["Execution"],
   summary: "List all executions across all workflows",
   description: "Returns recent executions with optional filters (status, date range)",
   request: {
@@ -2323,7 +1652,7 @@ executionsRoute.openapi(allRoute, async (c) => {
 var statsRoute = createRoute5({
   method: "get",
   path: "/stats",
-  tags: ["Executions"],
+  tags: ["Execution"],
   summary: "Get execution counts per workflow",
   description: "Returns run counts for each workflow",
   responses: {
@@ -2351,7 +1680,7 @@ executionsRoute.openapi(statsRoute, async (c) => {
 var getRoute = createRoute5({
   method: "get",
   path: "/:id",
-  tags: ["Executions"],
+  tags: ["Execution"],
   summary: "Get execution status",
   description: "Returns the status and details of a workflow execution",
   request: {
@@ -2404,7 +1733,7 @@ executionsRoute.openapi(getRoute, async (c) => {
 var listRoute = createRoute5({
   method: "get",
   path: "/workflow/:workflowId",
-  tags: ["Executions"],
+  tags: ["Execution"],
   summary: "List workflow executions",
   description: "Returns recent executions for a specific workflow",
   request: {
@@ -2543,9 +1872,733 @@ updateRoute.openapi(route5, async (c) => {
   }
 });
 
+// src/routes/cache.ts
+init_redis();
+import { OpenAPIHono as OpenAPIHono8, createRoute as createRoute7, z as z8 } from "@hono/zod-openapi";
+var cacheRoute = new OpenAPIHono8();
+function isRedisInitialized() {
+  try {
+    getRedis();
+    return true;
+  } catch {
+    return false;
+  }
+}
+function ensureRedisInitialized() {
+  if (isRedisInitialized()) {
+    return true;
+  }
+  const url = process.env.FRONTBASE_CACHE_URL;
+  const token = process.env.FRONTBASE_CACHE_TOKEN;
+  if (!url || !token) {
+    return false;
+  }
+  try {
+    initRedis({ url, token });
+    return true;
+  } catch {
+    return false;
+  }
+}
+var CacheStatusSchema = z8.object({
+  success: z8.boolean(),
+  message: z8.string()
+});
+var CacheStatsSchema = z8.object({
+  success: z8.boolean(),
+  configured: z8.boolean(),
+  connected: z8.boolean().optional(),
+  message: z8.string()
+});
+var InvalidateRequestSchema = z8.object({
+  key: z8.string().optional().openapi({ description: "Single cache key to invalidate" }),
+  pattern: z8.string().optional().openapi({ description: "Glob pattern to match multiple keys" })
+});
+var InvalidateResponseSchema = z8.object({
+  success: z8.boolean(),
+  message: z8.string()
+});
+var testRoute = createRoute7({
+  method: "get",
+  path: "/test",
+  tags: ["Cache"],
+  summary: "Test Redis connection",
+  description: "Tests the Redis connection and returns the status.",
+  responses: {
+    200: {
+      description: "Connection test result",
+      content: {
+        "application/json": {
+          schema: CacheStatusSchema
+        }
+      }
+    }
+  }
+});
+cacheRoute.openapi(testRoute, async (c) => {
+  if (!ensureRedisInitialized()) {
+    return c.json({ success: false, message: "Redis not configured" }, 200);
+  }
+  const result = await testConnection();
+  return c.json(result, 200);
+});
+var invalidateRoute = createRoute7({
+  method: "post",
+  path: "/invalidate",
+  tags: ["Cache"],
+  summary: "Invalidate cache entries",
+  description: "Invalidates a single cache key or all keys matching a pattern.",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: InvalidateRequestSchema
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Invalidation result",
+      content: {
+        "application/json": {
+          schema: InvalidateResponseSchema
+        }
+      }
+    },
+    400: {
+      description: "Bad request",
+      content: {
+        "application/json": {
+          schema: InvalidateResponseSchema
+        }
+      }
+    },
+    500: {
+      description: "Server error",
+      content: {
+        "application/json": {
+          schema: InvalidateResponseSchema
+        }
+      }
+    }
+  }
+});
+cacheRoute.openapi(invalidateRoute, async (c) => {
+  if (!ensureRedisInitialized()) {
+    return c.json({ success: false, message: "Redis not configured" }, 400);
+  }
+  try {
+    const { key, pattern } = c.req.valid("json");
+    if (key) {
+      await invalidate(key);
+      return c.json({ success: true, message: `Invalidated key: ${key}` }, 200);
+    } else if (pattern) {
+      await invalidatePattern(pattern);
+      return c.json({ success: true, message: `Invalidated pattern: ${pattern}` }, 200);
+    } else {
+      return c.json({ success: false, message: "Provide key or pattern" }, 400);
+    }
+  } catch (error) {
+    return c.json({
+      success: false,
+      message: error instanceof Error ? error.message : "Invalidation failed"
+    }, 500);
+  }
+});
+var statsRoute2 = createRoute7({
+  method: "get",
+  path: "/stats",
+  tags: ["Cache"],
+  summary: "Get cache status",
+  description: "Returns the current cache configuration and connection status.",
+  responses: {
+    200: {
+      description: "Cache status",
+      content: {
+        "application/json": {
+          schema: CacheStatsSchema
+        }
+      }
+    }
+  }
+});
+cacheRoute.openapi(statsRoute2, async (c) => {
+  const configured = ensureRedisInitialized();
+  if (!configured) {
+    return c.json({
+      success: true,
+      configured: false,
+      message: "Redis not configured. Configure via Settings > Cache & Performance."
+    }, 200);
+  }
+  const connectionResult = await testConnection();
+  return c.json({
+    success: true,
+    configured: true,
+    connected: connectionResult.success,
+    message: connectionResult.message
+  }, 200);
+});
+var flushRoute = createRoute7({
+  method: "post",
+  path: "/flush",
+  tags: ["Cache"],
+  summary: "Flush all cache entries",
+  description: "Clears all cached data. Called after reconfiguration or redeployment.",
+  responses: {
+    200: {
+      description: "Flush result",
+      content: {
+        "application/json": {
+          schema: CacheStatusSchema
+        }
+      }
+    }
+  }
+});
+cacheRoute.openapi(flushRoute, async (c) => {
+  if (!ensureRedisInitialized()) {
+    return c.json({ success: true, message: "No cache configured, nothing to flush" }, 200);
+  }
+  try {
+    await invalidatePattern("*");
+    return c.json({ success: true, message: "All cache entries flushed" }, 200);
+  } catch (error) {
+    return c.json({
+      success: false,
+      message: error instanceof Error ? error.message : "Flush failed"
+    }, 200);
+  }
+});
+
+// src/routes/edge-logs.ts
+import { Hono } from "hono";
+import { desc, sql, and } from "drizzle-orm";
+var edgeLogsRoute = new Hono();
+async function getDb() {
+  await ensureInitialized();
+  const provider = getStateProvider();
+  return provider.db || provider.getDb?.();
+}
+edgeLogsRoute.post("/", async (c) => {
+  const body = await c.req.json();
+  const logs = body?.logs;
+  if (!logs || !Array.isArray(logs) || logs.length === 0) {
+    return c.json({ success: false, error: "No logs provided" }, 400);
+  }
+  const db = await getDb();
+  if (!db) {
+    return c.json({ success: false, error: "State database not available" }, 503);
+  }
+  const values = logs.map((log) => ({
+    id: crypto.randomUUID(),
+    timestamp: log.timestamp || (/* @__PURE__ */ new Date()).toISOString(),
+    level: log.level || "info",
+    message: log.message || "",
+    source: log.source || "runtime",
+    metadata: log.metadata ? JSON.stringify(log.metadata) : null
+  }));
+  try {
+    const BATCH_SIZE = 100;
+    let inserted = 0;
+    for (let i = 0; i < values.length; i += BATCH_SIZE) {
+      const batch = values.slice(i, i + BATCH_SIZE);
+      await db.insert(edgeLogsTable).values(batch);
+      inserted += batch.length;
+    }
+    return c.json({ success: true, inserted });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[EdgeLogs] Bulk insert failed:", message);
+    return c.json({ success: false, error: message }, 500);
+  }
+});
+edgeLogsRoute.get("/", async (c) => {
+  const limit = Math.min(parseInt(c.req.query("limit") || "50"), 500);
+  const before = c.req.query("before");
+  const level = c.req.query("level");
+  const db = await getDb();
+  if (!db) {
+    return c.json({ logs: [], next_cursor: null, error: "State database not available" }, 503);
+  }
+  try {
+    const conditions = [];
+    if (before) {
+      conditions.push(sql`${edgeLogsTable.timestamp} < ${before}`);
+    }
+    if (level) {
+      conditions.push(sql`${edgeLogsTable.level} = ${level}`);
+    }
+    let query = db.select().from(edgeLogsTable);
+    if (conditions.length > 0) {
+      query = query.where(conditions.length === 1 ? conditions[0] : and(...conditions));
+    }
+    const rows = await query.orderBy(desc(edgeLogsTable.timestamp)).limit(limit + 1);
+    const hasMore = rows.length > limit;
+    const results = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor = hasMore ? results[results.length - 1]?.timestamp : null;
+    return c.json({
+      logs: results.map((row) => ({
+        id: row.id,
+        timestamp: row.timestamp,
+        level: row.level,
+        message: row.message,
+        source: row.source,
+        metadata: row.metadata ? JSON.parse(row.metadata) : null
+      })),
+      next_cursor: nextCursor,
+      total: results.length
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[EdgeLogs] Query failed:", message);
+    return c.json({ logs: [], next_cursor: null, error: message }, 500);
+  }
+});
+
+// src/routes/workflows.ts
+import { OpenAPIHono as OpenAPIHono9, createRoute as createRoute8, z as z9 } from "@hono/zod-openapi";
+var workflowsRoute = new OpenAPIHono9();
+var WorkflowSummarySchema = z9.object({
+  id: z9.string(),
+  name: z9.string(),
+  triggerType: z9.string(),
+  version: z9.number(),
+  isActive: z9.boolean(),
+  createdAt: z9.string(),
+  updatedAt: z9.string()
+});
+var listRoute2 = createRoute8({
+  method: "get",
+  path: "/",
+  tags: ["Workflows"],
+  summary: "List all deployed workflows",
+  description: "Returns a list of all workflows deployed to this engine",
+  responses: {
+    200: {
+      description: "Workflow list",
+      content: {
+        "application/json": {
+          schema: z9.object({
+            workflows: z9.array(WorkflowSummarySchema),
+            total: z9.number()
+          })
+        }
+      }
+    }
+  }
+});
+workflowsRoute.openapi(listRoute2, async (c) => {
+  const workflows = await stateProvider.listWorkflows();
+  return c.json({
+    workflows: workflows.map((w) => ({
+      id: w.id,
+      name: w.name,
+      triggerType: w.triggerType,
+      version: w.version,
+      isActive: w.isActive,
+      createdAt: w.createdAt,
+      updatedAt: w.updatedAt
+    })),
+    total: workflows.length
+  }, 200);
+});
+var getRoute2 = createRoute8({
+  method: "get",
+  path: "/:id",
+  tags: ["Workflows"],
+  summary: "Get workflow by ID",
+  description: "Returns the full workflow definition including nodes and edges",
+  request: {
+    params: z9.object({
+      id: z9.string().uuid().openapi({ description: "Workflow ID" })
+    })
+  },
+  responses: {
+    200: {
+      description: "Workflow detail",
+      content: {
+        "application/json": {
+          schema: z9.object({ workflow: z9.record(z9.unknown()) })
+        }
+      }
+    },
+    404: {
+      description: "Workflow not found",
+      content: {
+        "application/json": { schema: ErrorResponseSchema }
+      }
+    }
+  }
+});
+workflowsRoute.openapi(getRoute2, async (c) => {
+  const { id } = c.req.valid("param");
+  const workflow = await stateProvider.getWorkflowById(id);
+  if (!workflow) {
+    return c.json({ error: "NotFound", message: `Workflow ${id} not found` }, 404);
+  }
+  return c.json({ workflow }, 200);
+});
+var deleteRoute = createRoute8({
+  method: "delete",
+  path: "/:id",
+  tags: ["Workflows"],
+  summary: "Delete a workflow",
+  description: "Permanently removes a workflow from this engine",
+  request: {
+    params: z9.object({
+      id: z9.string().uuid().openapi({ description: "Workflow ID" })
+    })
+  },
+  responses: {
+    200: {
+      description: "Workflow deleted",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema
+        }
+      }
+    }
+  }
+});
+workflowsRoute.openapi(deleteRoute, async (c) => {
+  const { id } = c.req.valid("param");
+  await stateProvider.deleteWorkflow(id);
+  return c.json({ success: true, message: `Workflow ${id} deleted` }, 200);
+});
+var toggleRoute = createRoute8({
+  method: "patch",
+  path: "/:id/toggle",
+  tags: ["Workflows"],
+  summary: "Toggle workflow active state",
+  description: "Enable or disable a workflow without deleting it",
+  request: {
+    params: z9.object({
+      id: z9.string().uuid().openapi({ description: "Workflow ID" })
+    }),
+    body: {
+      content: {
+        "application/json": {
+          schema: z9.object({
+            isActive: z9.boolean().openapi({ description: "Desired active state" })
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Workflow toggled",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema.extend({
+            isActive: z9.boolean()
+          })
+        }
+      }
+    }
+  }
+});
+workflowsRoute.openapi(toggleRoute, async (c) => {
+  const { id } = c.req.valid("param");
+  const { isActive } = c.req.valid("json");
+  await stateProvider.toggleWorkflow(id, isActive);
+  return c.json({
+    success: true,
+    message: `Workflow ${id} ${isActive ? "activated" : "deactivated"}`,
+    isActive
+  }, 200);
+});
+
+// src/routes/queue.ts
+import { OpenAPIHono as OpenAPIHono10, createRoute as createRoute9, z as z10 } from "@hono/zod-openapi";
+var queueRoute = new OpenAPIHono10();
+function getQueueConfig2() {
+  const url = process.env.FRONTBASE_QUEUE_URL;
+  const token = process.env.FRONTBASE_QUEUE_TOKEN;
+  if (!url || !token) return null;
+  return { url: url.replace(/\/$/, ""), token };
+}
+var statsRoute3 = createRoute9({
+  method: "get",
+  path: "/stats",
+  tags: ["Queue"],
+  summary: "Get queue stats",
+  description: "Returns queue connection status and provider info",
+  responses: {
+    200: {
+      description: "Queue stats",
+      content: {
+        "application/json": {
+          schema: z10.object({
+            configured: z10.boolean(),
+            provider: z10.string().optional(),
+            connected: z10.boolean().optional(),
+            message: z10.string()
+          })
+        }
+      }
+    }
+  }
+});
+queueRoute.openapi(statsRoute3, async (c) => {
+  const config = getQueueConfig2();
+  if (!config) {
+    return c.json({
+      configured: false,
+      message: "No queue provider configured. Set FRONTBASE_QUEUE_URL and FRONTBASE_QUEUE_TOKEN."
+    }, 200);
+  }
+  const isQStash = config.url.includes("qstash") || config.url.includes("upstash");
+  const provider = isQStash ? "upstash-qstash" : "generic-http";
+  try {
+    const resp = await fetch(config.url, {
+      headers: { "Authorization": `Bearer ${config.token}` }
+    });
+    return c.json({
+      configured: true,
+      provider,
+      connected: resp.ok,
+      message: resp.ok ? "Queue connected" : `Queue returned HTTP ${resp.status}`
+    }, 200);
+  } catch (err) {
+    return c.json({
+      configured: true,
+      provider,
+      connected: false,
+      message: `Connection failed: ${err.message}`
+    }, 200);
+  }
+});
+var publishRoute = createRoute9({
+  method: "post",
+  path: "/publish",
+  tags: ["Queue"],
+  summary: "Publish a message to the queue",
+  description: "Sends a message to the connected queue provider (QStash/CF Queue)",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z10.object({
+            topic: z10.string().min(1).openapi({ description: "Queue topic/destination URL" }),
+            payload: z10.record(z10.unknown()).openapi({ description: "Message body (JSON)" }),
+            delay: z10.number().int().min(0).optional().openapi({
+              description: "Delay in seconds before delivery (QStash only)"
+            })
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Message published",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema.extend({
+            messageId: z10.string().optional()
+          })
+        }
+      }
+    },
+    400: {
+      description: "Invalid request",
+      content: {
+        "application/json": { schema: ErrorResponseSchema }
+      }
+    },
+    501: {
+      description: "No queue configured",
+      content: {
+        "application/json": { schema: ErrorResponseSchema }
+      }
+    }
+  }
+});
+queueRoute.openapi(publishRoute, async (c) => {
+  const config = getQueueConfig2();
+  if (!config) {
+    return c.json({
+      error: "NotConfigured",
+      message: "No queue provider configured"
+    }, 501);
+  }
+  const { topic, payload, delay } = c.req.valid("json");
+  try {
+    const headers = {
+      "Authorization": `Bearer ${config.token}`,
+      "Content-Type": "application/json"
+    };
+    if (delay && delay > 0) {
+      headers["Upstash-Delay"] = `${delay}s`;
+    }
+    const resp = await fetch(`${config.url}/v2/publish/${encodeURIComponent(topic)}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      return c.json({
+        error: "PublishFailed",
+        message: `Queue returned HTTP ${resp.status}: ${text.substring(0, 200)}`
+      }, 400);
+    }
+    const result = await resp.json();
+    return c.json({
+      success: true,
+      message: "Message published",
+      messageId: result.messageId || result.id || void 0
+    }, 200);
+  } catch (err) {
+    return c.json({
+      error: "PublishError",
+      message: err.message || "Failed to publish message"
+    }, 400);
+  }
+});
+
+// src/routes/config.ts
+import { OpenAPIHono as OpenAPIHono11, createRoute as createRoute10, z as z11 } from "@hono/zod-openapi";
+init_env();
+var configRoute = new OpenAPIHono11();
+function redact(value) {
+  if (!value) return null;
+  if (value.length <= 16) return "***";
+  return `${value.substring(0, 8)}...${value.substring(value.length - 4)}`;
+}
+var getConfigRoute = createRoute10({
+  method: "get",
+  path: "/",
+  tags: ["System"],
+  summary: "Get current runtime configuration",
+  description: "Returns the active database, cache, and queue settings (secrets redacted)",
+  responses: {
+    200: {
+      description: "Current config",
+      content: {
+        "application/json": {
+          schema: z11.object({
+            stateDb: z11.object({
+              provider: z11.string().nullable(),
+              url: z11.string().nullable()
+            }),
+            cache: z11.object({
+              url: z11.string().nullable(),
+              configured: z11.boolean()
+            }),
+            queue: z11.object({
+              url: z11.string().nullable(),
+              configured: z11.boolean()
+            }),
+            engineMode: z11.string().nullable()
+          })
+        }
+      }
+    }
+  }
+});
+configRoute.openapi(getConfigRoute, async (c) => {
+  const stateDb = getStateDbConfig();
+  const cache = getCacheConfig();
+  const queue = getQueueConfig();
+  return c.json({
+    stateDb: {
+      provider: stateDb.provider || "local-sqlite",
+      url: redact(stateDb.url)
+    },
+    cache: {
+      url: redact(cache.url),
+      configured: cache.provider !== "none"
+    },
+    queue: {
+      url: redact(queue.url),
+      configured: queue.provider !== "none"
+    },
+    engineMode: process.env.FRONTBASE_ADAPTER_PLATFORM || null
+  }, 200);
+});
+var updateConfigRoute = createRoute10({
+  method: "post",
+  path: "/",
+  tags: ["System"],
+  summary: "Update runtime configuration",
+  description: "Hot-swap database, cache, or queue configuration without redeploying. Updates process.env and reinitializes affected singletons.",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z11.object({
+            cache: z11.object({
+              url: z11.string().min(1),
+              token: z11.string().min(1)
+            }).optional().openapi({ description: "Redis/Upstash cache credentials" }),
+            queue: z11.object({
+              url: z11.string().min(1),
+              token: z11.string().min(1)
+            }).optional().openapi({ description: "QStash/queue credentials" })
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Config updated",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema.extend({
+            updated: z11.array(z11.string())
+          })
+        }
+      }
+    },
+    400: {
+      description: "Invalid config",
+      content: {
+        "application/json": { schema: ErrorResponseSchema }
+      }
+    }
+  }
+});
+configRoute.openapi(updateConfigRoute, async (c) => {
+  const body = c.req.valid("json");
+  const updated = [];
+  try {
+    if (body.cache) {
+      overrideCacheConfig({ provider: "upstash", url: body.cache.url, token: body.cache.token });
+      try {
+        const { initRedis: initRedis2 } = await import("./redis-E24KJZFG.js");
+        initRedis2({ url: body.cache.url, token: body.cache.token });
+        updated.push("cache");
+        console.log("[Config] Cache reinitialized");
+      } catch (err) {
+        console.error("[Config] Cache reinit failed:", err.message);
+      }
+    }
+    if (body.queue) {
+      overrideQueueConfig({ provider: "qstash", url: body.queue.url, token: body.queue.token });
+      updated.push("queue");
+      console.log("[Config] Queue config updated");
+    }
+    return c.json({
+      success: true,
+      message: updated.length > 0 ? `Updated: ${updated.join(", ")}` : "No changes applied",
+      updated
+    }, 200);
+  } catch (err) {
+    return c.json({
+      error: "ConfigError",
+      message: err.message || "Failed to apply config"
+    }, 400);
+  }
+});
+
 // src/routes/openai.ts
-import { OpenAPIHono as OpenAPIHono8 } from "@hono/zod-openapi";
-var openaiRoute = new OpenAPIHono8();
+import { OpenAPIHono as OpenAPIHono12 } from "@hono/zod-openapi";
+var openaiRoute = new OpenAPIHono12();
 function resolveModel(modelSlug, c) {
   if (!modelSlug) {
     return { error: c.json({ error: { message: "Missing required field: model", type: "invalid_request_error", code: "missing_field" } }, 400) };
@@ -2613,6 +2666,11 @@ openaiRoute.post("/chat/completions", async (c) => {
   mergeDefaults(payload, model);
   try {
     const result = await ai.run(model.model_id, payload);
+    if (result && typeof result === "object" && Array.isArray(result.choices)) {
+      result.model = result.model || model.slug;
+      result.id = result.id || `chatcmpl-${crypto.randomUUID().slice(0, 12)}`;
+      return c.json(result);
+    }
     const responseContent = typeof result === "string" ? result : result?.response ?? result?.result ?? JSON.stringify(result);
     return c.json({
       id: `chatcmpl-${crypto.randomUUID().slice(0, 12)}`,
@@ -2806,19 +2864,71 @@ openaiRoute.post("/responses", async (c) => {
   if (!body.input) {
     return c.json({ error: { message: "Missing required field: input", type: "invalid_request_error", code: "missing_field" } }, 400);
   }
-  const payload = { input: body.input };
+  const messages = [];
+  if (body.instructions) {
+    messages.push({ role: "system", content: body.instructions });
+  }
+  if (typeof body.input === "string") {
+    messages.push({ role: "user", content: body.input });
+  } else if (Array.isArray(body.input)) {
+    for (const item of body.input) {
+      if (typeof item === "string") {
+        messages.push({ role: "user", content: item });
+      } else if (item && typeof item === "object") {
+        if (item.type === "message") {
+          const role = item.role || "user";
+          const content = typeof item.content === "string" ? item.content : Array.isArray(item.content) ? item.content.map((c2) => c2?.text || c2?.content || "").join("") : JSON.stringify(item.content);
+          messages.push({ role, content });
+        } else if (item.role && item.content) {
+          messages.push({
+            role: item.role,
+            content: typeof item.content === "string" ? item.content : JSON.stringify(item.content)
+          });
+        }
+      }
+    }
+  }
+  if (messages.length === 0) {
+    return c.json({ error: { message: "Could not extract messages from input", type: "invalid_request_error", code: "invalid_input" } }, 400);
+  }
+  const payload = { messages };
   if (body.reasoning) {
     payload.reasoning = {};
     if (body.reasoning.effort) payload.reasoning.effort = body.reasoning.effort;
     if (body.reasoning.summary) payload.reasoning.summary = body.reasoning.summary;
   }
-  if (body.instructions) payload.instructions = body.instructions;
   if (body.max_tokens != null) payload.max_tokens = body.max_tokens;
   if (body.temperature != null) payload.temperature = body.temperature;
   if (body.tools != null) payload.tools = body.tools;
   mergeDefaults(payload, model);
   try {
     const result = await ai.run(model.model_id, payload);
+    if (result && typeof result === "object" && Array.isArray(result.output)) {
+      result.model = result.model || model.slug;
+      result.id = result.id || `resp-${crypto.randomUUID().slice(0, 12)}`;
+      return c.json(result);
+    }
+    if (result && typeof result === "object" && Array.isArray(result.choices)) {
+      const msg = result.choices[0]?.message;
+      const content = msg?.content || "";
+      const usage = result.usage || {};
+      return c.json({
+        id: `resp-${(result.id || crypto.randomUUID()).slice(0, 16)}`,
+        object: "response",
+        created_at: result.created || Math.floor(Date.now() / 1e3),
+        model: result.model || model.slug,
+        output: [{
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: content }]
+        }],
+        usage: {
+          input_tokens: usage.prompt_tokens || 0,
+          output_tokens: usage.completion_tokens || 0,
+          total_tokens: usage.total_tokens || 0
+        }
+      });
+    }
     const responseText = typeof result === "string" ? result : result?.response ?? result?.output?.[0]?.content?.[0]?.text ?? result?.result ?? JSON.stringify(result);
     return c.json({
       id: `resp-${crypto.randomUUID().slice(0, 12)}`,
@@ -2839,42 +2949,96 @@ openaiRoute.post("/responses", async (c) => {
 });
 
 // src/middleware/auth.ts
+init_env();
 import { jwt } from "hono/jwt";
 import { csrf } from "hono/csrf";
-var apiKeyAuth = async (c, next) => {
-  const validKeys = (process.env.API_KEYS || "").split(",").map((k) => k.trim()).filter(Boolean);
-  if (validKeys.length === 0) {
-    console.warn("\u26A0\uFE0F No API_KEYS configured - webhook auth disabled");
-    return next();
-  }
+function parseKeyHashes() {
+  const auth = getAuthConfig();
+  return auth.apiKeyHashes || null;
+}
+function extractBearerToken(c) {
   const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return c.json({ error: "Unauthorized", message: "Missing or invalid Authorization header" }, 401);
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  return authHeader.slice(7).trim();
+}
+async function sha256(input) {
+  const data = new TextEncoder().encode(input);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function validateApiKey(token, allowedScopes) {
+  const keyEntries = parseKeyHashes();
+  if (!keyEntries || keyEntries.length === 0) return null;
+  const tokenHash = await sha256(token);
+  const matched = keyEntries.find((k) => k.hash === tokenHash);
+  if (!matched) return null;
+  const keyScope = matched.scope || "user";
+  if (!allowedScopes.includes(keyScope) && keyScope !== "all") {
+    return null;
   }
-  const token = authHeader.slice(7).trim();
-  if (!validKeys.includes(token)) {
-    return c.json({ error: "Unauthorized", message: "Invalid API key" }, 401);
+  if (matched.expires_at) {
+    if (new Date(matched.expires_at) < /* @__PURE__ */ new Date()) return null;
   }
-  return next();
+  return matched;
+}
+var systemKeyAuth = async (c, next) => {
+  const systemKey = getAuthConfig().systemKey;
+  if (!systemKey) {
+    return next();
+  }
+  const sysHeader = c.req.header("x-system-key");
+  if (sysHeader && sysHeader === systemKey) {
+    return next();
+  }
+  const bearerToken = extractBearerToken(c);
+  if (bearerToken) {
+    const matched = await validateApiKey(bearerToken, ["management", "all"]);
+    if (matched) return next();
+  }
+  return c.json({
+    error: {
+      message: "Unauthorized. Provide x-system-key header or a management-scoped API key.",
+      type: "invalid_request_error",
+      code: "unauthorized"
+    }
+  }, 401);
 };
-var aiApiKeyAuth = async (c, next) => {
-  const envHashes = process.env.FRONTBASE_API_KEY_HASHES;
-  if (!envHashes) {
-    console.warn("\u26A0\uFE0F No FRONTBASE_API_KEY_HASHES configured - AI auth disabled");
-    return next();
+var userApiKeyAuth = async (c, next) => {
+  const auth = getAuthConfig();
+  const isDev = (process.env.NODE_ENV || "development") === "development";
+  if (!auth.apiKeyHashes) {
+    if (isDev) return next();
+    return c.json({
+      error: {
+        message: "No API keys configured for this engine.",
+        type: "invalid_request_error",
+        code: "no_api_keys_configured"
+      }
+    }, 403);
   }
-  let keyEntries;
-  try {
-    keyEntries = JSON.parse(envHashes);
-  } catch {
-    console.error("[AI Auth] Failed to parse FRONTBASE_API_KEY_HASHES");
-    return next();
+  const keyEntries = parseKeyHashes();
+  if (!keyEntries) {
+    return c.json({
+      error: {
+        message: "API key configuration error. Contact administrator.",
+        type: "server_error",
+        code: "config_error"
+      }
+    }, 500);
   }
   if (keyEntries.length === 0) {
-    return next();
+    if (isDev) return next();
+    return c.json({
+      error: {
+        message: "No API keys configured for this engine.",
+        type: "invalid_request_error",
+        code: "no_api_keys_configured"
+      }
+    }, 403);
   }
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  const token = extractBearerToken(c);
+  if (!token) {
     return c.json({
       error: {
         message: "Missing or invalid Authorization header. Use: Authorization: Bearer <api_key>",
@@ -2883,36 +3047,19 @@ var aiApiKeyAuth = async (c, next) => {
       }
     }, 401);
   }
-  const token = authHeader.slice(7).trim();
-  const encoder = new TextEncoder();
-  const data = encoder.encode(token);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const tokenHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-  const matchedKey = keyEntries.find((k) => k.hash === tokenHash);
-  if (!matchedKey) {
+  const matched = await validateApiKey(token, ["user", "all"]);
+  if (!matched) {
     return c.json({
       error: {
-        message: "Invalid API key.",
+        message: "Invalid API key or insufficient scope.",
         type: "invalid_request_error",
         code: "invalid_api_key"
       }
     }, 401);
   }
-  if (matchedKey.expires_at) {
-    const expiresAt = new Date(matchedKey.expires_at);
-    if (expiresAt < /* @__PURE__ */ new Date()) {
-      return c.json({
-        error: {
-          message: "API key has expired.",
-          type: "invalid_request_error",
-          code: "expired_api_key"
-        }
-      }, 401);
-    }
-  }
   return next();
 };
+var aiApiKeyAuth = userApiKeyAuth;
 var csrfProtection = csrf({
   origin: (origin, c) => {
     const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:5173").split(",");
@@ -2925,8 +3072,41 @@ var liquidEngine = new Liquid({
   strictVariables: false,
   strictFilters: false
 });
-function createLiteApp() {
-  const app2 = new OpenAPIHono9({
+var ENGINE_PROFILES = {
+  lite: {
+    description: "Self-sufficient edge runtime for workflow automation, webhooks, and AI inference.",
+    techStack: "Hono \xB7 Drizzle ORM \xB7 LiquidJS \xB7 Zod",
+    badge: "Lite Engine",
+    tags: [
+      { name: "System", description: "Health checks, manifest, and self-update" },
+      { name: "Workflows", description: "Deploy, list, and manage published workflows" },
+      { name: "Execution", description: "Execute workflows and inspect runs" },
+      { name: "Webhooks", description: "Trigger workflows via incoming webhooks" },
+      { name: "Cache", description: "Redis/Upstash cache management \u2014 test connection, invalidate keys, flush, and stats" },
+      { name: "Queue", description: "Message queue management \u2014 stats and publishing (QStash/CF Queue)" },
+      { name: "AI", description: "OpenAI-compatible inference (GPU models required)" }
+    ]
+  },
+  full: {
+    description: "Self-sufficient edge runtime for SSR pages, workflow automation, data proxy, webhooks, and AI inference.",
+    techStack: "Hono \xB7 React \xB7 Drizzle ORM \xB7 LiquidJS \xB7 Zod",
+    badge: "Full Engine",
+    tags: [
+      { name: "System", description: "Health checks, manifest, and self-update" },
+      { name: "Pages", description: "Published page SSR and homepage rendering" },
+      { name: "Data", description: "Datasource proxy \u2014 fetches data from connected backends (Supabase, Neon, etc.)" },
+      { name: "Workflows", description: "Deploy, list, and manage published workflows" },
+      { name: "Execution", description: "Execute workflows and inspect runs" },
+      { name: "Webhooks", description: "Trigger workflows via incoming webhooks" },
+      { name: "Cache", description: "Redis/Upstash cache management \u2014 test connection, invalidate keys, flush, and stats" },
+      { name: "Queue", description: "Message queue management \u2014 stats and publishing (QStash/CF Queue)" },
+      { name: "AI", description: "OpenAI-compatible inference (GPU models required)" }
+    ]
+  }
+};
+function createLiteApp(mode = "lite") {
+  const profile = ENGINE_PROFILES[mode];
+  const app2 = new OpenAPIHono13({
     defaultHook: (result, c) => {
       if (!result.success) {
         console.error("[Zod Validation Error]", JSON.stringify(result.error.issues, null, 2));
@@ -2952,6 +3132,18 @@ function createLiteApp() {
       error: err.message || "Internal server error"
     }, 500);
   });
+  app2.use("*", async (c, next) => {
+    const disabled = process.env.FRONTBASE_DISABLED;
+    if (disabled === "true" || disabled === "1") {
+      const path2 = new URL(c.req.url).pathname;
+      if (path2.startsWith("/api/health")) return next();
+      return c.html(
+        `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Engine Paused</title><style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f1117;color:#e4e4e7;font-family:Inter,system-ui,sans-serif;text-align:center}.c{max-width:420px;padding:2rem}h1{font-size:1.5rem;margin:0 0 .5rem;color:#6366f1}p{color:#a1a1aa;margin:0;font-size:.9rem}</style></head><body><div class="c"><h1>\u23F8 Engine Paused</h1><p>This Frontbase Edge Engine has been paused by the administrator. It will resume when re-enabled from the dashboard.</p></div></body></html>`,
+        503
+      );
+    }
+    return next();
+  });
   app2.use("*", requestId());
   app2.use("*", logger());
   app2.use("*", secureHeaders());
@@ -2974,7 +3166,17 @@ function createLiteApp() {
   });
   app2.use("/api/*", cors({ origin: "*" }));
   app2.use("*", cors({ origin: "*" }));
-  app2.use("/api/webhook/*", apiKeyAuth);
+  app2.use("/api/deploy/*", systemKeyAuth);
+  app2.use("/api/execute/*", systemKeyAuth);
+  app2.use("/api/update/*", systemKeyAuth);
+  app2.use("/api/cache/*", systemKeyAuth);
+  app2.use("/api/edge-logs/*", systemKeyAuth);
+  app2.use("/api/manifest/*", systemKeyAuth);
+  app2.use("/api/executions/*", systemKeyAuth);
+  app2.use("/api/workflows/*", systemKeyAuth);
+  app2.use("/api/queue/*", systemKeyAuth);
+  app2.use("/api/config/*", systemKeyAuth);
+  app2.use("/api/webhook/*", userApiKeyAuth);
   app2.route("/api/health", healthRoute);
   app2.route("/api/manifest", manifestRoute);
   app2.route("/api/deploy", deployRoute);
@@ -2982,20 +3184,196 @@ function createLiteApp() {
   app2.route("/api/webhook", webhookRoute);
   app2.route("/api/executions", executionsRoute);
   app2.route("/api/update", updateRoute);
+  app2.route("/api/cache", cacheRoute);
+  app2.route("/api/edge-logs", edgeLogsRoute);
+  app2.route("/api/workflows", workflowsRoute);
+  app2.route("/api/queue", queueRoute);
+  app2.route("/api/config", configRoute);
   app2.use("/v1/*", aiApiKeyAuth);
   app2.route("/v1", openaiRoute);
-  app2.doc("/api/openapi.json", {
+  const EDGE_VERSION = "0.1.0";
+  app2.doc("/api/openapi.json", (c) => ({
     openapi: "3.1.0",
     info: {
-      title: "Frontbase Edge Engine API",
-      version: "0.1.0",
-      description: "Edge runtime API for workflows, webhooks, triggers, and data proxy."
+      title: "Frontbase Edge Engine",
+      version: EDGE_VERSION,
+      description: [
+        profile.description,
+        "",
+        `**Tech Stack:** ${profile.techStack}`,
+        "",
+        "**Authentication:** Protected routes require an API key via the `x-api-key` header."
+      ].join("\n")
     },
     servers: [
-      { url: "http://localhost:3002", description: "Local development" }
-    ]
+      {
+        url: new URL(c.req.url).origin,
+        description: "Current server"
+      }
+    ],
+    tags: profile.tags,
+    security: [{ ApiKeyAuth: [] }],
+    components: {
+      securitySchemes: {
+        ApiKeyAuth: {
+          type: "apiKey",
+          in: "header",
+          name: "x-api-key",
+          description: "API key created in the Frontbase dashboard \u2192 Edge \u2192 API Keys"
+        }
+      }
+    }
+  }));
+  app2.get("/api/docs", (c) => {
+    return c.html(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontbase Edge API</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+    <style>
+        /* \u2500\u2500 Frontbase Dark Theme \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+        :root {
+            --fb-bg: #0f1117;
+            --fb-surface: #1a1d27;
+            --fb-border: #2a2d3a;
+            --fb-text: #e4e4e7;
+            --fb-text-muted: #a1a1aa;
+            --fb-primary: #6366f1;
+            --fb-primary-hover: #818cf8;
+            --fb-success: #22c55e;
+            --fb-warning: #eab308;
+            --fb-danger: #ef4444;
+            --fb-info: #3b82f6;
+        }
+        body {
+            margin: 0;
+            background: var(--fb-bg);
+            color: var(--fb-text);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        /* Header bar */
+        .fb-header {
+            background: var(--fb-surface);
+            border-bottom: 1px solid var(--fb-border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .fb-header h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--fb-text);
+        }
+        .fb-header .badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .fb-header .badge-version {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--fb-primary-hover);
+        }
+        .fb-header .badge-engine {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--fb-success);
+        }
+
+        /* Swagger UI dark overrides */
+        .swagger-ui { background: var(--fb-bg) !important; }
+        .swagger-ui .topbar { display: none !important; }
+        .swagger-ui .info { margin: 24px 0 !important; }
+        .swagger-ui .info .title { color: var(--fb-text) !important; font-family: 'Inter', sans-serif !important; }
+        .swagger-ui .info .description p { color: var(--fb-text-muted) !important; }
+        .swagger-ui .info .description code { background: var(--fb-surface) !important; color: var(--fb-primary-hover) !important; }
+        .swagger-ui .scheme-container { background: var(--fb-surface) !important; border: 1px solid var(--fb-border) !important; border-radius: 8px; box-shadow: none !important; }
+        .swagger-ui .opblock-tag { color: var(--fb-text) !important; border-bottom: 1px solid var(--fb-border) !important; font-family: 'Inter', sans-serif !important; }
+        .swagger-ui .opblock-tag small { color: var(--fb-text-muted) !important; }
+        .swagger-ui .opblock { border-radius: 8px !important; border: 1px solid var(--fb-border) !important; background: var(--fb-surface) !important; margin-bottom: 8px !important; }
+        .swagger-ui .opblock .opblock-summary { border: none !important; }
+        .swagger-ui .opblock .opblock-summary-description { color: var(--fb-text-muted) !important; }
+        .swagger-ui .opblock .opblock-summary-path { color: var(--fb-text) !important; }
+        .swagger-ui .opblock.opblock-get { border-color: rgba(34, 197, 94, 0.3) !important; }
+        .swagger-ui .opblock.opblock-post { border-color: rgba(59, 130, 246, 0.3) !important; }
+        .swagger-ui .opblock.opblock-put { border-color: rgba(234, 179, 8, 0.3) !important; }
+        .swagger-ui .opblock.opblock-delete { border-color: rgba(239, 68, 68, 0.3) !important; }
+        .swagger-ui .opblock.opblock-patch { border-color: rgba(168, 85, 247, 0.3) !important; }
+        .swagger-ui .opblock-body { background: var(--fb-bg) !important; }
+        .swagger-ui .opblock-section-header { background: var(--fb-surface) !important; border-bottom: 1px solid var(--fb-border) !important; }
+        .swagger-ui .opblock-section-header h4 { color: var(--fb-text) !important; }
+        .swagger-ui table thead tr th { color: var(--fb-text-muted) !important; border-bottom: 1px solid var(--fb-border) !important; }
+        .swagger-ui table tbody tr td { color: var(--fb-text) !important; border-bottom: 1px solid var(--fb-border) !important; }
+        .swagger-ui .parameter__name { color: var(--fb-text) !important; }
+        .swagger-ui .parameter__type { color: var(--fb-text-muted) !important; }
+        .swagger-ui .response-col_status { color: var(--fb-text) !important; }
+        .swagger-ui .response-col_description { color: var(--fb-text-muted) !important; }
+        .swagger-ui .model-box { background: var(--fb-surface) !important; }
+        .swagger-ui .model { color: var(--fb-text) !important; }
+        .swagger-ui .model-title { color: var(--fb-text) !important; }
+        .swagger-ui section.models { border: 1px solid var(--fb-border) !important; border-radius: 8px !important; }
+        .swagger-ui section.models h4 { color: var(--fb-text) !important; }
+        .swagger-ui .btn { border-radius: 6px !important; }
+        .swagger-ui .btn.authorize { background: var(--fb-primary) !important; color: white !important; border-color: var(--fb-primary) !important; }
+        .swagger-ui .btn.authorize svg { fill: white !important; }
+        .swagger-ui .btn.execute { background: var(--fb-primary) !important; border-color: var(--fb-primary) !important; }
+        .swagger-ui select { background: var(--fb-surface) !important; color: var(--fb-text) !important; border: 1px solid var(--fb-border) !important; border-radius: 6px !important; }
+        .swagger-ui input[type=text] { background: var(--fb-surface) !important; color: var(--fb-text) !important; border: 1px solid var(--fb-border) !important; border-radius: 6px !important; }
+        .swagger-ui textarea { background: var(--fb-surface) !important; color: var(--fb-text) !important; border: 1px solid var(--fb-border) !important; border-radius: 6px !important; }
+        .swagger-ui .highlight-code { background: var(--fb-surface) !important; }
+        .swagger-ui .highlight-code pre { color: var(--fb-text) !important; }
+        .swagger-ui .responses-inner { background: transparent !important; }
+        .swagger-ui .auth-wrapper { color: var(--fb-text) !important; }
+        .swagger-ui .dialog-ux .modal-ux { background: var(--fb-surface) !important; border: 1px solid var(--fb-border) !important; }
+        .swagger-ui .dialog-ux .modal-ux-header h3 { color: var(--fb-text) !important; }
+        .swagger-ui .dialog-ux .modal-ux-content p { color: var(--fb-text-muted) !important; }
+        .swagger-ui .wrapper { max-width: 1200px !important; padding: 0 24px !important; }
+        .swagger-ui .servers > label { color: var(--fb-text) !important; }
+        .swagger-ui .servers > label select { min-width: 320px; }
+        .swagger-ui a { color: var(--fb-primary-hover) !important; }
+    </style>
+</head>
+<body>
+    <div class="fb-header">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="24" height="24" rx="6" fill="#6366f1"/>
+            <g transform="scale(0.7) translate(5.1 5.1)" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+                <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/>
+                <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/>
+                <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/>
+            </g>
+        </svg>
+        <h1>Frontbase Edge API</h1>
+        <span class="badge badge-version">v${EDGE_VERSION}</span>
+        <span class="badge badge-engine">${profile.badge}</span>
+    </div>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script>
+        SwaggerUIBundle({
+            url: '/api/openapi.json',
+            dom_id: '#swagger-ui',
+            deepLinking: true,
+            presets: [
+                SwaggerUIBundle.presets.apis,
+                SwaggerUIBundle.SwaggerUIStandalonePreset,
+            ],
+            layout: 'BaseLayout',
+            defaultModelsExpandDepth: -1,
+            docExpansion: 'list',
+            filter: true,
+            persistAuthorization: true,
+        });
+    </script>
+</body>
+</html>`);
   });
-  app2.get("/api/docs", swaggerUI({ url: "/api/openapi.json" }));
   return app2;
 }
 var liteApp = createLiteApp();
@@ -3007,8 +3385,13 @@ liteApp.get("/", (c) => c.json({
   health: "/api/health"
 }));
 
+// src/ssr/staticAssets.ts
+var HYDRATE_JS = "%%HYDRATE_JS%%";
+var HYDRATE_CSS = "%%HYDRATE_CSS%%";
+var FAVICON_PNG_B64 = "%%FAVICON_PNG_B64%%";
+
 // src/routes/pages.ts
-import { OpenAPIHono as OpenAPIHono10, createRoute as createRoute7, z as z8 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono14, createRoute as createRoute11, z as z12 } from "@hono/zod-openapi";
 
 // src/ssr/components/static.ts
 function escapeHtml(str) {
@@ -3416,6 +3799,8 @@ function renderInteractiveComponent(type, id, props, childrenHtml) {
       return renderRadio(id, props, propsJson);
     case "Tooltip":
       return renderTooltip(id, props, childrenHtml, propsJson);
+    case "AuthForm":
+      return renderAuthForm(id, props, propsJson);
     default:
       return `<div data-fb-id="${id}" data-fb-type="${type}" data-fb-hydrate="true" data-fb-props="${escapeHtml2(propsJson)}">${childrenHtml}</div>`;
   }
@@ -3470,14 +3855,14 @@ function renderButton(id, props, propsJson) {
     </button>`;
 }
 function renderLink(id, props, propsJson) {
-  const text2 = escapeHtml2(String(props.text || props.label || props.children || "Link"));
+  const text = escapeHtml2(String(props.text || props.label || props.children || "Link"));
   const href = escapeHtml2(String(props.href || props.to || "#"));
   const target = props.target || "_self";
   const color = props.color || "#3b82f6";
   const underline = props.underline !== false;
   const style = `color:${color};${underline ? "text-decoration:underline" : "text-decoration:none"};cursor:pointer`;
   const attrs = getCommonAttributes2(id, "fb-link", props, style, "link", propsJson);
-  return `<a ${attrs} href="${href}" target="${target}">${text2}</a>`;
+  return `<a ${attrs} href="${href}" target="${target}">${text}</a>`;
 }
 function renderTabs(id, props, childrenHtml, propsJson) {
   const tabs = props.tabs || [];
@@ -3614,6 +3999,57 @@ function renderTooltip(id, props, childrenHtml, propsJson) {
         <span class="fb-tooltip-content" data-position="${position}" style="display:none;position:absolute;background:#1f2937;color:#fff;padding:0.25rem 0.5rem;border-radius:0.25rem;font-size:0.75rem;white-space:nowrap;z-index:100">${content}</span>
     </span>`;
 }
+function renderAuthForm(id, props, propsJson) {
+  const formType = props.type || "both";
+  const title = escapeHtml2(String(props.title || (formType === "signup" ? "Create an Account" : "Sign In")));
+  const description = escapeHtml2(String(props.description || ""));
+  const primaryColor = props.primaryColor || "#18181b";
+  const providers = props.providers || [];
+  const showToggle = formType === "both";
+  const defaultIsLogin = formType !== "signup";
+  const socialButtons = providers.map((p) => {
+    const name = p.charAt(0).toUpperCase() + p.slice(1);
+    return `<button type="button" class="fb-social-btn" data-provider="${p}" style="width:100%;padding:0.5rem;background:#fff;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.8125rem;cursor:pointer">Continue with ${name}</button>`;
+  }).join("");
+  const attrs = getCommonAttributes2(id, "fb-auth-form", props, "", "authform", propsJson);
+  return `<div ${attrs}>
+        <div style="max-width:400px;margin:0 auto;padding:2rem">
+            <h2 style="margin:0 0 0.25rem;font-size:1.5rem;font-weight:700;color:#18181b;text-align:center">${title}</h2>
+            ${description ? `<p style="margin:0 0 1.5rem;color:#71717a;font-size:0.875rem;text-align:center">${description}</p>` : '<div style="margin-bottom:1.5rem"></div>'}
+            ${providers.length > 0 ? `
+                <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem">${socialButtons}</div>
+                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem">
+                    <div style="flex:1;height:1px;background:#e4e4e7"></div>
+                    <span style="color:#a1a1aa;font-size:0.75rem;text-transform:uppercase">or</span>
+                    <div style="flex:1;height:1px;background:#e4e4e7"></div>
+                </div>
+            ` : ""}
+            <div id="${id}-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:0.625rem;border-radius:0.375rem;font-size:0.8125rem;margin-bottom:0.75rem"></div>
+            <form id="${id}-form" style="display:flex;flex-direction:column;gap:0.75rem">
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem">Email</label>
+                    <input type="email" required autocomplete="email" placeholder="you@example.com"
+                        style="width:100%;padding:0.5rem 0.75rem;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.875rem;outline:none;box-sizing:border-box" />
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem">Password</label>
+                    <input type="password" required autocomplete="${defaultIsLogin ? "current-password" : "new-password"}" placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" minlength="6"
+                        style="width:100%;padding:0.5rem 0.75rem;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.875rem;outline:none;box-sizing:border-box" />
+                </div>
+                <button type="submit"
+                    style="width:100%;padding:0.625rem;background:${primaryColor};color:#fff;border:none;border-radius:0.375rem;font-size:0.875rem;font-weight:600;cursor:pointer">
+                    ${defaultIsLogin ? "Sign In" : "Sign Up"}
+                </button>
+            </form>
+            ${showToggle ? `
+                <p style="text-align:center;margin-top:1rem;font-size:0.8125rem;color:#71717a">
+                    ${defaultIsLogin ? "Don't have an account?" : "Already have an account?"}
+                    <a href="#" style="color:${primaryColor};font-weight:500;text-decoration:none;margin-left:0.25rem" data-fb-toggle-auth>${defaultIsLogin ? "Sign Up" : "Sign In"}</a>
+                </p>
+            ` : ""}
+        </div>
+    </div>`;
+}
 
 // src/ssr/components/data.ts
 function escapeHtml3(str) {
@@ -3715,41 +4151,66 @@ function renderDataComponent(type, id, props, childrenHtml) {
 function renderDataTable(id, props, propsJson) {
   const binding = props.binding || {};
   const tableName = binding.tableName || props.tableName || props.table || "";
-  const columns = binding.columnOrder || props.columns || [];
-  const title = escapeHtml3(String(props.title || `Table: ${tableName}`));
+  let columns = binding.columnOrder || props._columnOrder || props.columns || [];
+  if (columns.length === 0) {
+    const queryConfig = binding.dataRequest?.queryConfig;
+    if (queryConfig?.columns && typeof queryConfig.columns === "string") {
+      columns = queryConfig.columns.split(",").map((c) => c.trim()).map((c) => {
+        const aliasMatch = c.match(/AS\s+"(.+)"/i);
+        if (aliasMatch) return aliasMatch[1];
+        const quotedMatch = c.match(/"[^"]*"\."([^"]+)"/);
+        if (quotedMatch) return quotedMatch[1];
+        return c.replace(/"/g, "").replace(/^\w+\./, "");
+      }).filter((c) => c && c !== "*");
+    }
+  }
+  const columnOverrides = binding.columnOverrides || {};
+  const title = escapeHtml3(String(props.title || ""));
   const showPagination = binding.pagination?.enabled !== false;
   const pageSize = binding.pagination?.pageSize || props.pageSize || 10;
+  const sortingEnabled = binding.sorting?.enabled !== false;
   const reactProps = {
     binding,
     tableName
   };
   const reactPropsJson = JSON.stringify(reactProps).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
-  const headerCells = columns.length > 0 ? columns.slice(0, 5).map((col) => {
-    const label = col.replace(/\./g, " \u203A ").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    return `<th style="padding:0.75rem 1rem;text-align:left;border-bottom:2px solid #e5e7eb;font-weight:600">${escapeHtml3(label)}</th>`;
-  }).join("") : '<th style="padding:0.75rem 1rem">Column 1</th><th style="padding:0.75rem 1rem">Column 2</th><th style="padding:0.75rem 1rem">Column 3</th>';
-  const numCols = columns.length > 0 ? Math.min(columns.length, 5) : 3;
+  const headerCells = columns.length > 0 ? columns.slice(0, 8).map((col) => {
+    const override = columnOverrides[col];
+    const label = override?.label || override?.displayName || col;
+    const sortIcon = sortingEnabled ? `<button class="h-auto p-1 inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3 opacity-50"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg></button>` : "";
+    return `<th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground whitespace-nowrap group [&:has([role=checkbox])]:pr-0"><div class="flex items-center space-x-1"><span>${escapeHtml3(label)}</span>${sortIcon}</div></th>`;
+  }).join("") : '<th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground whitespace-nowrap">Column 1</th><th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground whitespace-nowrap">Column 2</th><th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground whitespace-nowrap">Column 3</th>';
+  const numCols = columns.length > 0 ? Math.min(columns.length, 8) : 3;
   const skeletonRows = Array(Math.min(pageSize, 5)).fill(0).map(() => {
-    return `<tr>${Array(numCols).fill(0).map(
-      () => '<td style="padding:0.75rem 1rem;border-bottom:1px solid #f3f4f6"><div class="fb-skeleton" style="height:1rem;width:80%;border-radius:0.25rem">&nbsp;</div></td>'
+    return `<tr class="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted h-12">${Array(numCols).fill(0).map(
+      () => '<td class="p-4 align-middle [&:has([role=checkbox])]:pr-0 max-w-[200px] truncate whitespace-nowrap py-2"><div class="fb-skeleton" style="height:1rem;width:80%;border-radius:0.25rem">&nbsp;</div></td>'
     ).join("")}</tr>`;
   }).join("");
-  return `<div id="${id}" class="fb-datatable" data-react-component="DataTable" data-react-props="${escapeHtml3(reactPropsJson)}" data-component-id="${id}">
-        <div class="fb-datatable-container" style="overflow-x:auto;border:1px solid #e5e7eb;border-radius:0.5rem">
-            <table style="width:100%;border-collapse:collapse">
-                <thead style="background:#f9fafb">
-                    <tr>${headerCells}</tr>
+  const searchEnabled = binding.filtering?.searchEnabled !== false;
+  const searchHtml = searchEnabled ? `
+        <div class="relative max-w-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" placeholder="Search..." disabled class="w-full pl-10 pr-4 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+        </div>` : "";
+  const titleHtml = title ? `<h3 class="text-lg font-semibold">${title}</h3>` : "";
+  return `<div id="${id}" class="space-y-4" data-react-component="DataTable" data-react-props="${escapeHtml3(reactPropsJson)}" data-component-id="${id}">
+        ${titleHtml}
+        ${searchHtml}
+        <div class="rounded-md border overflow-auto relative">
+            <table class="w-full text-sm">
+                <thead class="[&_tr]:border-b">
+                    <tr class="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">${headerCells}</tr>
                 </thead>
-                <tbody class="fb-loading">
+                <tbody class="[&_tr:last-child]:border-0 [&_tr:nth-child(even)]:bg-muted/50">
                     ${skeletonRows}
                 </tbody>
             </table>
         </div>
-        ${showPagination ? `<div class="fb-datatable-pagination" style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;padding:0.5rem 0">
-            <span class="fb-skeleton" style="width:100px;height:1rem">&nbsp;</span>
-            <div style="display:flex;gap:0.25rem">
-                <button class="fb-skeleton" style="width:32px;height:32px;border-radius:0.25rem">&nbsp;</button>
-                <button class="fb-skeleton" style="width:32px;height:32px;border-radius:0.25rem">&nbsp;</button>
+        ${showPagination ? `<div class="flex items-center justify-between px-2">
+            <span class="text-sm text-muted-foreground fb-skeleton" style="width:100px;height:1rem">&nbsp;</span>
+            <div class="flex items-center space-x-2">
+                <button disabled class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 disabled:opacity-50">\u2190 Previous</button>
+                <button disabled class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 disabled:opacity-50">Next \u2192</button>
             </div>
         </div>` : ""}
     </div>`;
@@ -3781,22 +4242,40 @@ function renderForm(id, props, childrenHtml, propsJson) {
     showCard: props.showCard !== false
   };
   const reactPropsJson = JSON.stringify(reactProps).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
-  const skeletonFields = Array(3).fill(0).map(() => `
-        <div class="fb-form-field" style="margin-bottom:1rem">
-            <div class="fb-skeleton" style="height:16px;width:60px;margin-bottom:0.25rem">&nbsp;</div>
-            <div class="fb-skeleton" style="height:40px;border-radius:0.375rem">&nbsp;</div>
-        </div>
-    `).join("");
+  let fieldsHtml;
+  const orderedColumns = fieldOrder.length > 0 ? fieldOrder.map((name) => columns.find((c) => (typeof c === "string" ? c : c.name) === name) || name) : columns;
+  if (orderedColumns.length > 0) {
+    fieldsHtml = orderedColumns.map((col) => {
+      const colName = typeof col === "string" ? col : col.name;
+      const colType = typeof col === "object" ? col.type : "text";
+      const override = fieldOverrides[colName] || {};
+      if (override.hidden) return "";
+      const label = override.label || colName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      const isTextarea = colType === "text" && !override.type;
+      return `
+                <div class="fb-form-field">
+                    <label class="fb-form-label">${escapeHtml3(label)}</label>
+                    ${isTextarea ? `<textarea class="fb-textarea" placeholder="${escapeHtml3(label)}" disabled></textarea>` : `<input class="fb-input" type="${override.type || "text"}" placeholder="${escapeHtml3(label)}" disabled />`}
+                </div>`;
+    }).join("");
+  } else {
+    fieldsHtml = Array(3).fill(0).map(() => `
+            <div class="fb-form-field">
+                <div class="fb-skeleton" style="height:16px;width:60px;margin-bottom:0.25rem">&nbsp;</div>
+                <div class="fb-skeleton" style="height:40px;border-radius:var(--radius)">&nbsp;</div>
+            </div>
+        `).join("");
+  }
   return `<div id="${id}" class="fb-form" data-react-component="Form" data-react-props="${escapeHtml3(reactPropsJson)}" data-component-id="${id}">
-        <div class="fb-form-container" style="border:1px solid #e5e7eb;border-radius:0.5rem;padding:1.5rem">
-            ${title ? `<h3 style="margin:0 0 1.5rem 0;font-size:1.125rem;font-weight:600">${title}</h3>` : ""}
-            <div class="fb-form-fields fb-loading">
-                ${skeletonFields}
-            </div>
-            <div class="fb-form-actions" style="display:flex;gap:0.75rem;margin-top:1.5rem">
-                <button type="submit" class="fb-skeleton" style="padding:0.5rem 1.5rem;border-radius:0.375rem;width:100px">&nbsp;</button>
-                <button type="button" class="fb-skeleton" style="padding:0.5rem 1rem;border-radius:0.375rem;width:80px">&nbsp;</button>
-            </div>
+        <div class="fb-form-header">
+            ${title ? `<h3 class="fb-form-title">${title}</h3>` : ""}
+        </div>
+        <div class="fb-form-content fb-loading">
+            ${fieldsHtml}
+        </div>
+        <div class="fb-form-actions">
+            <button type="submit" class="fb-button" style="padding:0.5rem 1.5rem;border-radius:var(--radius);background:hsl(var(--primary));color:hsl(var(--primary-foreground))" disabled>Submit</button>
+            <button type="button" class="fb-button" style="padding:0.5rem 1rem;border-radius:var(--radius);border:1px solid hsl(var(--border))" disabled>Cancel</button>
         </div>
     </div>`;
 }
@@ -4029,14 +4508,14 @@ function renderHero(id, props, stylesData) {
     align: alignment,
     className: "text-lg sm:text-xl text-muted-foreground"
   })}</div>` : "";
-  const renderCtaButton = (text2, link, actionBindings, isPrimary) => {
-    if (!text2) return "";
+  const renderCtaButton = (text, link, actionBindings, isPrimary) => {
+    if (!text) return "";
     const baseClasses = isPrimary ? "inline-flex items-center justify-center px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors" : "inline-flex items-center justify-center px-6 py-3 rounded-lg border border-input bg-background hover:bg-accent hover:text-accent-foreground font-medium transition-colors";
     const onClickAction = actionBindings?.find((b) => b.trigger === "onClick");
     if (onClickAction?.actionType === "scrollToSection" && onClickAction.config?.sectionId) {
       return `<button data-scroll-to="${escapeHtml4(onClickAction.config.sectionId)}" 
                      class="${baseClasses}">
-                     ${escapeHtml4(text2)}
+                     ${escapeHtml4(text)}
                    </button>`;
     }
     if (onClickAction?.actionType === "openPage" && onClickAction.config?.pageUrl) {
@@ -4045,12 +4524,12 @@ function renderHero(id, props, stylesData) {
       return `<a href="${escapeHtml4(onClickAction.config.pageUrl)}" 
                      target="${target}" ${rel ? `rel="${rel}"` : ""}
                      class="${baseClasses}">
-                     ${escapeHtml4(text2)}
+                     ${escapeHtml4(text)}
                    </a>`;
     }
     return `<a href="${escapeHtml4(link || "#")}" 
                  class="${baseClasses}">
-                 ${escapeHtml4(text2)}
+                 ${escapeHtml4(text)}
                </a>`;
   };
   const primaryCtaHtml = renderCtaButton(props.ctaText, props.ctaLink, props.ctaActionBindings || props.actionBindings, true);
@@ -4259,12 +4738,12 @@ function renderCTA(id, props, stylesData) {
 }
 
 // src/ssr/components/landing/Navbar.ts
-function renderCtaLink(id, text2, target, navType, variant) {
+function renderCtaLink(id, text, target, navType, variant) {
   const scrollAttr = navType === "scroll" ? `data-scroll-to="${escapeHtml4(target)}"` : "";
   const variantClasses = variant === "primary" ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border hover:bg-accent";
   return `<a id="${id}" href="${escapeHtml4(target)}" ${scrollAttr}
        class="inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${variantClasses}">
-        ${escapeHtml4(text2)}
+        ${escapeHtml4(text)}
     </a>`;
 }
 function renderNavbar(id, props, stylesData) {
@@ -5331,7 +5810,15 @@ async function renderPage(layoutData, context) {
   let badgeHtml = "";
   const edition = process.env.FRONTBASE_EDITION || "community";
   if (edition === "community" && !process.env.FRONTBASE_LICENSE_KEY) {
-    badgeHtml = `
+    const signOutHtml = context.user ? `
+            <div style="position:fixed;bottom:48px;right:16px;z-index:9999;font-family:system-ui,-apple-system,sans-serif;">
+                <button onclick="frontbase.signOut()" style="display:flex;align-items:center;gap:5px;background:white;padding:5px 10px;border-radius:6px;box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);border:1px solid #e5e7eb;color:#374151;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    <span>Sign Out</span>
+                </button>
+            </div>
+        ` : "";
+    badgeHtml = `${signOutHtml}
             <div style="position:fixed;bottom:16px;right:16px;z-index:9999;font-family:system-ui,-apple-system,sans-serif;">
                 <a href="https://frontbase.dev?ref=badge" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:6px;background:white;padding:6px 10px;border-radius:6px;box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);text-decoration:none;color:#374151;font-size:12px;font-weight:500;border:1px solid #e5e7eb;transition:all 0.2s;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -5348,95 +5835,29 @@ async function renderPage(layoutData, context) {
 }
 
 // src/ssr/lib/auth.ts
-import { createClient as createClient3 } from "@supabase/supabase-js";
-var supabase = null;
-function getSupabaseClient() {
-  if (supabase) return supabase;
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn("Supabase credentials not configured. User auth will be disabled.");
-    return null;
+init_env();
+var _provider = void 0;
+async function getAuthProvider() {
+  if (_provider !== void 0) return _provider;
+  const authCfg = getAuthConfig();
+  if (authCfg.provider === "supabase" && authCfg.url && authCfg.anonKey) {
+    const { SupabaseAuthProvider: SupabaseAuthProvider2 } = await import("./SupabaseAuthProvider-ZXJFSECO.js");
+    _provider = new SupabaseAuthProvider2();
+    console.log(`[Auth Factory] Resolved SupabaseAuthProvider from FRONTBASE_AUTH: ${authCfg.url.substring(0, 30)}...`);
+    return _provider;
   }
-  supabase = createClient3(supabaseUrl, supabaseAnonKey);
-  return supabase;
-}
-async function getUserFromSession(request) {
-  try {
-    const client = getSupabaseClient();
-    if (!client) return null;
-    const accessToken = extractAccessToken(request);
-    if (!accessToken) return null;
-    const { data: { user }, error } = await client.auth.getUser(accessToken);
-    if (error || !user) {
-      console.warn("Auth verification failed:", error?.message);
-      return null;
-    }
-    const { data: contact, error: contactError } = await client.from("contacts").select("*").eq("email", user.email).single();
-    if (contactError || !contact) {
-      return {
-        id: user.id,
-        email: user.email || "",
-        name: user.user_metadata?.full_name || user.user_metadata?.name || "",
-        firstName: user.user_metadata?.first_name || "",
-        lastName: user.user_metadata?.last_name || "",
-        avatar: user.user_metadata?.avatar_url,
-        role: "user"
-      };
-    }
-    return {
-      id: contact.id,
-      email: contact.email,
-      name: contact.name || `${contact.first_name || ""} ${contact.last_name || ""}`.trim(),
-      firstName: contact.first_name || "",
-      lastName: contact.last_name || "",
-      avatar: contact.avatar_url,
-      role: contact.role || "user",
-      phone: contact.phone,
-      company: contact.company,
-      createdAt: contact.created_at,
-      // Include all other contact fields dynamically
-      ...contact
-    };
-  } catch (error) {
-    console.error("getUserFromSession error:", error);
-    return null;
-  }
-}
-function extractAccessToken(request) {
-  const cookieHeader = request.headers.get("Cookie") || "";
-  const cookies = parseCookies(cookieHeader);
-  const tokenCookieNames = [
-    "sb-access-token",
-    "supabase-auth-token",
-    "sb-auth-token"
-  ];
-  for (const name of tokenCookieNames) {
-    if (cookies[name]) {
-      try {
-        const parsed = JSON.parse(cookies[name]);
-        if (parsed.access_token) return parsed.access_token;
-        if (typeof parsed === "string") return parsed;
-      } catch {
-        return cookies[name];
-      }
-    }
-  }
-  const authHeader = request.headers.get("Authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    return authHeader.slice(7);
-  }
+  _provider = null;
   return null;
 }
-function parseCookies(cookieHeader) {
-  const cookies = {};
-  cookieHeader.split(";").forEach((cookie) => {
-    const [name, ...rest] = cookie.trim().split("=");
-    if (name) {
-      cookies[name] = decodeURIComponent(rest.join("="));
-    }
-  });
-  return cookies;
+async function getUserFromSession(request) {
+  const provider = await getAuthProvider();
+  if (!provider) return null;
+  return provider.getUserFromRequest(request);
+}
+async function refreshSession(request) {
+  const provider = await getAuthProvider();
+  if (!provider) return { user: null, setCookieHeaders: [] };
+  return provider.refreshSession(request);
 }
 
 // src/ssr/lib/tracking.ts
@@ -5480,7 +5901,7 @@ function parseTrackingCookie(value) {
 
 // src/ssr/lib/context.ts
 async function buildTemplateContext(request, pageData, trackingConfig, dataContext) {
-  const cookies = parseCookies2(request.headers.get("Cookie") || "");
+  const cookies = parseCookies(request.headers.get("Cookie") || "");
   const user = await getUserFromSession(request);
   let visitor = buildVisitorContext(request);
   const config = trackingConfig || getDefaultTrackingConfig();
@@ -5515,7 +5936,7 @@ async function buildTemplateContext(request, pageData, trackingConfig, dataConte
     records: dataContext?.records
   };
 }
-function parseCookies2(cookieHeader) {
+function parseCookies(cookieHeader) {
   const cookies = {};
   cookieHeader.split(";").forEach((cookie) => {
     const [name, ...rest] = cookie.trim().split("=");
@@ -5550,7 +5971,7 @@ function buildVisitorContext(request) {
   const isLocalhost = !rawIp || rawIp === "127.0.0.1" || rawIp === "::1" || rawIp.startsWith("192.168.") || rawIp.startsWith("10.");
   const countryCode = headers.get("CF-IPCountry") || cf?.country || "";
   let country = countryCode;
-  const cookies = parseCookies2(headers.get("Cookie") || "");
+  const cookies = parseCookies(headers.get("Cookie") || "");
   let clientEnhanced = {};
   const enhancedCookie = cookies["visitor-enhanced"];
   if (enhancedCookie) {
@@ -5695,12 +6116,42 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height
 /* Dark mode: invert raster images in Navbar and LogoCloud */
 .dark .fb-navbar img:not(.no-invert),
 .dark .fb-logo-cloud img:not(.no-invert) { filter: invert(1) brightness(1.1); }
+/* DataTable fallback */
+.fb-datatable { border-radius: var(--radius, 0.5rem); border: 1px solid hsl(var(--border)); background-color: hsl(var(--background)); overflow: hidden; }
+.fb-datatable-header { display: flex; flex-direction: column; gap: 0.75rem; padding: 1.5rem; }
+.fb-datatable-title { font-size: 1.25rem; font-weight: 600; line-height: 1; margin: 0; }
+.fb-datatable-search { position: relative; max-width: 24rem; }
+.fb-datatable-search input { width: 100%; height: 2.5rem; padding: 0 0.75rem 0 2.25rem; border: 1px solid hsl(var(--border)); border-radius: var(--radius, 0.5rem); font-size: 0.875rem; background: transparent; color: hsl(var(--foreground)); }
+.fb-datatable-search svg { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 1rem; height: 1rem; color: hsl(var(--muted-foreground)); }
+.fb-datatable-content { padding: 0 1.5rem 1.5rem; }
+.fb-datatable-scroll { overflow-x: auto; border: 1px solid hsl(var(--border)); border-radius: var(--radius, 0.5rem); }
+.fb-table { width: 100%; font-size: 0.875rem; border-collapse: collapse; }
+.fb-table-header { border-bottom: 1px solid hsl(var(--border)); }
+.fb-table-header th { height: 3rem; padding: 0 1rem; text-align: left; font-weight: 500; color: hsl(var(--muted-foreground)); white-space: nowrap; }
+.fb-table-body tr { border-bottom: 1px solid hsl(var(--border)); transition: background-color 0.15s; }
+.fb-table-body tr:last-child { border-bottom: 0; }
+.fb-table-body tr:hover { background-color: hsl(var(--muted) / 0.5); }
+.fb-table-body td { padding: 1rem; vertical-align: middle; }
+.fb-datatable-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 1rem 1.5rem; font-size: 0.875rem; color: hsl(var(--muted-foreground)); }
+.fb-datatable-pagination .fb-pagination-btns { display: flex; align-items: center; gap: 0.5rem; }
+.fb-datatable-pagination button { display: inline-flex; align-items: center; justify-content: center; padding: 0.25rem 0.75rem; height: 2.25rem; border: 1px solid hsl(var(--border)); border-radius: var(--radius, 0.5rem); background: transparent; font-size: 0.875rem; cursor: pointer; color: hsl(var(--foreground)); }
+.fb-datatable-pagination button:disabled { opacity: 0.5; pointer-events: none; }
+/* Form fallback */
+.fb-form { border-radius: var(--radius, 0.5rem); border: 1px solid hsl(var(--border)); background-color: hsl(var(--background)); }
+.fb-form-header { padding: 1.5rem; }
+.fb-form-title { font-size: 1.125rem; font-weight: 600; line-height: 1; margin: 0; }
+.fb-form-content { padding: 0 1.5rem 1.5rem; }
+.fb-form-field { margin-bottom: 1.25rem; }
+.fb-form-label { display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.375rem; color: hsl(var(--foreground)); }
+.fb-input { display: flex; width: 100%; height: 2.5rem; padding: 0 0.75rem; border: 1px solid hsl(var(--border)); border-radius: var(--radius, 0.5rem); font-size: 0.875rem; background: transparent; color: hsl(var(--foreground)); }
+.fb-textarea { display: flex; width: 100%; min-height: 5rem; padding: 0.5rem 0.75rem; border: 1px solid hsl(var(--border)); border-radius: var(--radius, 0.5rem); font-size: 0.875rem; background: transparent; color: hsl(var(--foreground)); resize: vertical; }
+.fb-form-actions { display: flex; gap: 0.75rem; padding: 0 1.5rem 1.5rem; }
 `;
 
 // src/ssr/htmlDocument.ts
 var HYDRATE_VERSION = "20260205h";
-var DEFAULT_FAVICON3 = "/static/icon.png";
-function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl = DEFAULT_FAVICON3) {
+var DEFAULT_FAVICON = "/static/icon.png";
+function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl = DEFAULT_FAVICON, authConfig) {
   const title = page.title || page.name;
   const description = page.description || "";
   const keywords = page.keywords || "";
@@ -5765,7 +6216,6 @@ function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, favi
 </head>
 <body>
     <div id="root">${bodyHtml}</div>
-    
     <!-- Initial state for hydration -->
     <script>
         window.__INITIAL_STATE__ = ${safeJsonStringify(initialState)};
@@ -5777,6 +6227,120 @@ function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, favi
   })};
     </script>
     
+    <!-- Frontbase Client SDK -->
+    <script>
+        // Initialize window.frontbase SDK
+        (function() {
+            var STORAGE_KEY = 'frontbase_user';
+
+            // Sync SSR user state to localStorage
+            try {
+                var state = window.__INITIAL_STATE__;
+                if (state && state.user) {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.user));
+                } else {
+                    localStorage.removeItem(STORAGE_KEY);
+                }
+            } catch (e) {
+                console.warn('[Frontbase] Failed to sync user to localStorage:', e);
+            }
+
+            // Public SDK
+            window.frontbase = {
+                _channel: null,
+                _supabase: null,
+
+                get user() {
+                    try {
+                        var raw = localStorage.getItem(STORAGE_KEY);
+                        return raw ? JSON.parse(raw) : null;
+                    } catch (e) { return null; }
+                },
+
+                signOut: function(redirectTo) {
+                    // 1. Unsubscribe Realtime
+                    if (this._channel && this._supabase) {
+                        this._supabase.removeChannel(this._channel);
+                        this._channel = null;
+                    }
+                    // 2. Clear localStorage
+                    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+                    // 3. POST to logout endpoint
+                    fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+                        .finally(function() {
+                            window.location.href = redirectTo || '/';
+                        });
+                }
+            };
+        })();
+    </script>
+${authConfig ? `
+    <!-- Supabase Realtime (async, only for logged-in users) -->
+    <script>
+    (function() {
+        var user = window.__INITIAL_STATE__ && window.__INITIAL_STATE__.user;
+        if (!user) return;
+
+        var cfg = ${safeJsonStringify(authConfig)};
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+        script.async = true;
+        script.onload = function() {
+            try {
+                var sb = supabase.createClient(cfg.url, cfg.anonKey);
+                window.frontbase._supabase = sb;
+
+                // Set authenticated session so Realtime has RLS permissions
+                if (cfg.accessToken) {
+                    sb.realtime.setAuth(cfg.accessToken);
+                }
+
+                var channel = sb.channel('user-contact-' + user.id)
+                    .on('postgres_changes', {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: cfg.contactsTable,
+                        filter: cfg.authUserIdColumn + '=eq.' + user.id
+                    }, function(payload) {
+                        console.log('[Frontbase] Realtime UPDATE:', payload.new);
+                        var current = window.frontbase.user || {};
+                        var merged = Object.assign({}, current, payload.new);
+                        try {
+                            localStorage.setItem('frontbase_user', JSON.stringify(merged));
+                        } catch (e) {}
+
+                        // Soft refresh: re-fetch page and swap #root content
+                        fetch(window.location.href, { credentials: 'same-origin' })
+                            .then(function(r) { return r.text(); })
+                            .then(function(html) {
+                                var parser = new DOMParser();
+                                var doc = parser.parseFromString(html, 'text/html');
+                                var newRoot = doc.getElementById('root');
+                                var oldRoot = document.getElementById('root');
+                                if (newRoot && oldRoot) {
+                                    oldRoot.innerHTML = newRoot.innerHTML;
+                                    console.log('[Frontbase] Page content refreshed with new user data');
+                                }
+                            })
+                            .catch(function(err) {
+                                console.warn('[Frontbase] Soft refresh failed:', err);
+                            });
+
+                        window.dispatchEvent(new CustomEvent('frontbase:user-updated', { detail: merged }));
+                    })
+                    .subscribe(function(status) {
+                        console.log('[Frontbase] Realtime status:', status);
+                    });
+
+                window.frontbase._channel = channel;
+            } catch (err) {
+                console.warn('[Frontbase] Realtime setup failed:', err);
+            }
+        };
+        document.head.appendChild(script);
+    })();
+    </script>
+` : ""}
     <!-- Hydration bundle (all interactive components) -->
     <script type="module" src="/static/react/hydrate.js?v=${HYDRATE_VERSION}"></script>
 </body>
@@ -5789,21 +6353,228 @@ function escapeHtml5(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
+// src/ssr/gatedPage.ts
+function generateGatedPageDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl, authFormConfig) {
+  const normalHtml = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl ?? void 0);
+  const formConfig = authFormConfig || {
+    type: "both",
+    title: "Welcome",
+    showLinks: true
+  };
+  const currentPath = page.isHomepage ? "/" : `/${page.slug}`;
+  const authOverlayHtml = buildAuthOverlay(formConfig, currentPath);
+  const modifiedHtml = normalHtml.replace(
+    /<div id="root">/,
+    '<div id="root" style="filter:blur(8px);pointer-events:none;user-select:none;-webkit-filter:blur(8px)">'
+  ).replace(
+    "</body>",
+    `${authOverlayHtml}
+</body>`
+  );
+  return modifiedHtml;
+}
+function buildAuthOverlay(config, currentPath = "/") {
+  const primaryColor = config.primaryColor || "#18181b";
+  const title = config.title || (config.type === "signup" ? "Create an Account" : "Sign In");
+  const description = config.description || "";
+  const showToggle = config.type === "both";
+  const defaultIsLogin = config.type !== "signup";
+  const socialButtons = (config.providers || []).map((provider) => {
+    const name = provider.charAt(0).toUpperCase() + provider.slice(1);
+    return `<button type="button" class="fb-social-btn" data-provider="${provider}">
+            Continue with ${name}
+        </button>`;
+  }).join("\n");
+  const hasSocial = (config.providers || []).length > 0;
+  return `
+<!-- Frontbase Auth Overlay (Private Page Gating) -->
+<div id="fb-auth-overlay" style="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.4);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:1rem">
+
+<!-- Toast notification -->
+<div id="fb-auth-toast" style="position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:#18181b;color:#fff;padding:0.75rem 1.5rem;border-radius:0.5rem;font-size:0.875rem;font-family:system-ui,-apple-system,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:100000;animation:fb-toast-in 0.5s ease-out">
+    Please log in or sign up to access this page
+</div>
+
+<!-- Auth Card -->
+<div style="background:#fff;border-radius:0.75rem;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-width:400px;width:100%;padding:2rem;font-family:system-ui,-apple-system,sans-serif;animation:fb-card-in 0.4s ease-out">
+
+    ${config.logoUrl ? `<div style="text-align:center;margin-bottom:1.5rem"><img src="${escapeHtml6(config.logoUrl)}" alt="Logo" style="max-height:48px;max-width:200px"></div>` : ""}
+
+    <h2 id="fb-auth-title" style="margin:0 0 0.25rem;font-size:1.5rem;font-weight:700;color:#18181b;text-align:center">${escapeHtml6(title)}</h2>
+    ${description ? `<p style="margin:0 0 1.5rem;color:#71717a;font-size:0.875rem;text-align:center">${escapeHtml6(description)}</p>` : '<div style="margin-bottom:1.5rem"></div>'}
+
+    ${hasSocial ? `
+    <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem">
+        ${socialButtons}
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem">
+        <div style="flex:1;height:1px;background:#e4e4e7"></div>
+        <span style="color:#a1a1aa;font-size:0.75rem;text-transform:uppercase">or</span>
+        <div style="flex:1;height:1px;background:#e4e4e7"></div>
+    </div>
+    ` : ""}
+
+    <div id="fb-auth-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:0.625rem;border-radius:0.375rem;font-size:0.8125rem;margin-bottom:0.75rem"></div>
+
+    <form id="fb-auth-form" action="/api/auth/login" method="POST" style="display:flex;flex-direction:column;gap:0.75rem">
+        <input type="hidden" name="redirectTo" value="${escapeHtml6(currentPath)}">
+        <div>
+            <label for="fb-email" style="display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem">Email</label>
+            <input id="fb-email" name="email" type="email" required autocomplete="email" placeholder="you@example.com"
+                style="width:100%;padding:0.5rem 0.75rem;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.875rem;outline:none;transition:border-color 0.2s;box-sizing:border-box"
+                onfocus="this.style.borderColor='${primaryColor}'" onblur="this.style.borderColor='#d4d4d8'">
+        </div>
+        <div>
+            <label for="fb-password" style="display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem">Password</label>
+            <input id="fb-password" name="password" type="password" required autocomplete="current-password" placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" minlength="6"
+                style="width:100%;padding:0.5rem 0.75rem;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.875rem;outline:none;transition:border-color 0.2s;box-sizing:border-box"
+                onfocus="this.style.borderColor='${primaryColor}'" onblur="this.style.borderColor='#d4d4d8'">
+        </div>
+        <button id="fb-auth-submit" type="submit"
+            style="width:100%;padding:0.625rem;background:${primaryColor};color:#fff;border:none;border-radius:0.375rem;font-size:0.875rem;font-weight:600;cursor:pointer;transition:opacity 0.2s"
+            onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+            ${defaultIsLogin ? "Sign In" : "Sign Up"}
+        </button>
+    </form>
+
+    ${showToggle ? `
+    <p id="fb-auth-toggle" style="text-align:center;margin-top:1rem;font-size:0.8125rem;color:#71717a">
+        <span id="fb-toggle-text">${defaultIsLogin ? "Don't have an account?" : "Already have an account?"}</span>
+        <a href="#" id="fb-toggle-link" style="color:${primaryColor};font-weight:500;text-decoration:none;margin-left:0.25rem"
+            onclick="fbToggleMode();return false">${defaultIsLogin ? "Sign Up" : "Sign In"}</a>
+    </p>
+    ` : ""}
+
+</div>
+</div>
+
+<style>
+@keyframes fb-toast-in{from{opacity:0;transform:translateX(-50%) translateY(-1rem)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes fb-card-in{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
+.fb-social-btn{width:100%;padding:0.5rem;background:#fff;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.8125rem;cursor:pointer;transition:background 0.2s;font-family:inherit}
+.fb-social-btn:hover{background:#f4f4f5}
+</style>
+
+<script>
+(function(){
+    var isLoginMode = ${defaultIsLogin ? "true" : "false"};
+    var form = document.getElementById('fb-auth-form');
+    var errorDiv = document.getElementById('fb-auth-error');
+    var submitBtn = document.getElementById('fb-auth-submit');
+
+    // Show error from URL params (server-side redirect on auth failure)
+    var urlParams = new URLSearchParams(window.location.search);
+    var authError = urlParams.get('auth_error');
+    var authMessage = urlParams.get('auth_message');
+    if (authError) {
+        errorDiv.textContent = authError;
+        errorDiv.style.display = 'block';
+    }
+    if (authMessage) {
+        errorDiv.style.background = '#f0fdf4';
+        errorDiv.style.borderColor = '#bbf7d0';
+        errorDiv.style.color = '#16a34a';
+        errorDiv.textContent = authMessage;
+        errorDiv.style.display = 'block';
+    }
+
+    // Loading state on submit
+    form.addEventListener('submit', function() {
+        submitBtn.disabled = true;
+        submitBtn.textContent = isLoginMode ? 'Signing in...' : 'Signing up...';
+    });
+
+    // Toggle login/signup mode
+    window.fbToggleMode = function() {
+        isLoginMode = !isLoginMode;
+        form.action = isLoginMode ? '/api/auth/login' : '/api/auth/signup';
+        document.getElementById('fb-auth-title').textContent = isLoginMode ? '${escapeHtml6(config.type === "both" ? "Welcome Back" : title)}' : 'Create an Account';
+        submitBtn.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
+        document.getElementById('fb-toggle-text').textContent = isLoginMode ? "Don't have an account?" : 'Already have an account?';
+        document.getElementById('fb-toggle-link').textContent = isLoginMode ? 'Sign Up' : 'Sign In';
+        document.getElementById('fb-password').autocomplete = isLoginMode ? 'current-password' : 'new-password';
+    };
+
+    // Auto-dismiss toast after 5s
+    setTimeout(function() {
+        var toast = document.getElementById('fb-auth-toast');
+        if (toast) toast.style.opacity = '0';
+        setTimeout(function() { if (toast) toast.remove(); }, 500);
+    }, 5000);
+})();
+</script>`;
+}
+function escapeHtml6(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 // src/routes/pages.ts
-var ErrorResponseSchema2 = z8.object({
-  error: z8.string(),
-  message: z8.string().optional()
+init_env();
+var DEFAULT_FAVICON2 = "/static/icon.png";
+var SETTINGS_TTL_MS = 3e4;
+var SETTINGS_TIMEOUT_MS = 3e3;
+var _settingsCache = null;
+async function getCachedSettings(sessionAccessToken) {
+  if (_settingsCache && Date.now() - _settingsCache.ts < SETTINGS_TTL_MS) {
+    if (sessionAccessToken && _settingsCache.authConfig) {
+      return { ..._settingsCache, authConfig: { ..._settingsCache.authConfig, accessToken: sessionAccessToken } };
+    }
+    return _settingsCache;
+  }
+  try {
+    const settings = await Promise.race([
+      stateProvider.getProjectSettings(),
+      new Promise(
+        (_, reject) => setTimeout(() => reject(new Error("settings_timeout")), SETTINGS_TIMEOUT_MS)
+      )
+    ]);
+    let authConfig = null;
+    const authEnv = getAuthConfig();
+    if (authEnv.contacts?.table && authEnv.url && authEnv.anonKey) {
+      authConfig = {
+        url: authEnv.url,
+        anonKey: authEnv.anonKey,
+        contactsTable: authEnv.contacts.table,
+        authUserIdColumn: authEnv.contacts.columnMapping?.authUserIdColumn || "auth_user_id",
+        accessToken: sessionAccessToken
+      };
+    }
+    _settingsCache = {
+      faviconUrl: settings?.faviconUrl || DEFAULT_FAVICON2,
+      authConfig,
+      ts: Date.now()
+    };
+    return _settingsCache;
+  } catch (e) {
+    console.warn("[Pages] Settings fetch failed/timeout:", e.message);
+    return {
+      faviconUrl: _settingsCache?.faviconUrl || DEFAULT_FAVICON2,
+      authConfig: null,
+      ts: Date.now()
+    };
+  }
+}
+var ErrorResponseSchema2 = z12.object({
+  error: z12.string(),
+  message: z12.string().optional()
 });
-var pagesRoute = new OpenAPIHono10();
-var renderPageRoute = createRoute7({
+var pagesRoute = new OpenAPIHono14();
+pagesRoute.use("*", async (c, next) => {
+  await next();
+  const ct = c.res.headers.get("Content-Type");
+  if (ct) {
+    c.res.headers.set("X-Content-Type", ct);
+  }
+});
+var renderPageRoute = createRoute11({
   method: "get",
   path: "/:slug",
   tags: ["Pages"],
   summary: "Render a published page",
   description: "Server-side renders a published page by slug. Returns full HTML document.",
   request: {
-    params: z8.object({
-      slug: z8.string().min(1).describe("Page slug")
+    params: z12.object({
+      slug: z12.string().min(1).describe("Page slug")
     })
   },
   responses: {
@@ -5811,7 +6582,7 @@ var renderPageRoute = createRoute7({
       description: "Rendered HTML page",
       content: {
         "text/html": {
-          schema: z8.string()
+          schema: z12.string()
         }
       }
     },
@@ -5915,6 +6686,47 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
   if (page.isHomepage) {
     return c.redirect("/", 301);
   }
+  let sessionAccessToken;
+  if (!page.isPublic) {
+    const refreshResult = await refreshSession(c.req.raw);
+    const { user, setCookieHeaders } = refreshResult;
+    sessionAccessToken = refreshResult.accessToken;
+    for (const header of setCookieHeaders) {
+      c.header("Set-Cookie", header, { append: true });
+    }
+    if (!user) {
+      const contextPageData2 = {
+        id: page.id,
+        title: page.title || page.name,
+        slug: page.slug,
+        description: page.description,
+        published: page.isPublic,
+        createdAt: page.createdAt || (/* @__PURE__ */ new Date()).toISOString(),
+        updatedAt: page.updatedAt || (/* @__PURE__ */ new Date()).toISOString(),
+        canonicalUrl: void 0,
+        ogImage: void 0,
+        ogType: "website",
+        customVariables: {}
+      };
+      const context2 = await buildTemplateContext(c.req.raw, contextPageData2);
+      const bodyHtml2 = await renderPage(page.layoutData, context2);
+      const initialState2 = { pageVariables: context2.local, sessionVariables: context2.session, cookies: context2.cookies, user: context2.user };
+      const trackingConfig2 = await fetchTrackingConfig();
+      const { faviconUrl: faviconUrl2 } = await getCachedSettings();
+      const authFormConfig = page._primaryAuthForm || void 0;
+      const gatedHtml = generateGatedPageDocument(
+        page,
+        bodyHtml2,
+        initialState2,
+        trackingConfig2,
+        faviconUrl2,
+        authFormConfig
+      );
+      c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+      c.header("Content-Type", "text/html; charset=utf-8");
+      return c.html(gatedHtml);
+    }
+  }
   const contextPageData = {
     id: page.id,
     title: page.title || page.name,
@@ -5947,11 +6759,12 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
   const initialState = {
     pageVariables: context.local,
     sessionVariables: context.session,
-    cookies: context.cookies
+    cookies: context.cookies,
+    user: context.user
   };
   const trackingConfig = await fetchTrackingConfig();
-  const faviconUrl = await stateProvider.getFaviconUrl();
-  const htmlDoc = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl);
+  const { faviconUrl, authConfig } = await getCachedSettings(sessionAccessToken);
+  const htmlDoc = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl, authConfig);
   c.header("Cache-Control", "no-cache, no-store, must-revalidate");
   c.header("Content-Type", "text/html; charset=utf-8");
   return c.html(htmlDoc);
@@ -6017,6 +6830,46 @@ pagesRoute.get("/", async (c) => {
       }
     }
     if (homepage) {
+      if (!homepage.isPublic) {
+        const { user, setCookieHeaders } = await refreshSession(c.req.raw);
+        for (const header of setCookieHeaders) {
+          c.header("Set-Cookie", header, { append: true });
+        }
+        if (!user) {
+          const page2 = {
+            id: homepage.id,
+            slug: homepage.slug,
+            title: homepage.title,
+            description: homepage.description,
+            name: homepage.name,
+            isPublic: homepage.isPublic,
+            isHomepage: homepage.isHomepage,
+            layoutData: homepage.layoutData,
+            datasources: homepage.datasources,
+            cssBundle: homepage.cssBundle || void 0
+          };
+          const cpd = {
+            id: homepage.id,
+            title: homepage.title || homepage.name,
+            slug: homepage.slug,
+            description: homepage.description,
+            published: homepage.isPublic,
+            createdAt: homepage.publishedAt || (/* @__PURE__ */ new Date()).toISOString(),
+            updatedAt: homepage.publishedAt || (/* @__PURE__ */ new Date()).toISOString(),
+            canonicalUrl: void 0,
+            ogImage: void 0,
+            ogType: "website",
+            customVariables: {}
+          };
+          const ctx = await buildTemplateContext(c.req.raw, cpd);
+          const bodyHtml2 = await renderPage(page2.layoutData, ctx);
+          const is = { pageVariables: ctx.local, sessionVariables: ctx.session, cookies: ctx.cookies };
+          const tc = await fetchTrackingConfig();
+          const { faviconUrl: fav } = await getCachedSettings();
+          const afc = homepage._primaryAuthForm || void 0;
+          return c.html(generateGatedPageDocument(page2, bodyHtml2, is, tc, fav, afc));
+        }
+      }
       const page = {
         id: homepage.id,
         slug: homepage.slug,
@@ -6057,7 +6910,7 @@ pagesRoute.get("/", async (c) => {
         cookies: context.cookies
       };
       const trackingConfig = await fetchTrackingConfig();
-      const faviconUrl = await stateProvider.getFaviconUrl();
+      const { faviconUrl } = await getCachedSettings();
       const fullHtml = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl);
       return c.html(fullHtml);
     }
@@ -6076,11 +6929,11 @@ pagesRoute.get("/", async (c) => {
 });
 
 // src/routes/import.ts
-import { Hono } from "hono";
+import { Hono as Hono2 } from "hono";
 
 // src/schemas/publish.ts
-import { z as z9 } from "zod";
-var ComponentTypeSchema = z9.enum([
+import { z as z13 } from "zod";
+var ComponentTypeSchema = z13.enum([
   // Static
   "Text",
   "Heading",
@@ -6118,7 +6971,7 @@ var ComponentTypeSchema = z9.enum([
   "Card",
   "Panel"
 ]);
-var DatasourceTypeSchema = z9.enum([
+var DatasourceTypeSchema = z13.enum([
   "supabase",
   "neon",
   "planetscale",
@@ -6127,168 +6980,174 @@ var DatasourceTypeSchema = z9.enum([
   "mysql",
   "sqlite"
 ]);
-var DatasourceConfigSchema = z9.object({
-  id: z9.string(),
+var DatasourceConfigSchema = z13.object({
+  id: z13.string(),
   type: DatasourceTypeSchema,
-  name: z9.string(),
+  name: z13.string(),
   // URL is safe to publish (no password)
-  url: z9.string().optional(),
+  url: z13.string().optional(),
   // For Supabase: anon key is safe to publish
-  anonKey: z9.string().optional(),
+  anonKey: z13.string().optional(),
   // Secret environment variable name (actual secret NOT published)
-  secretEnvVar: z9.string().optional()
+  secretEnvVar: z13.string().optional()
 });
-var ColumnOverrideSchema = z9.object({
-  visible: z9.boolean().nullish(),
-  label: z9.string().nullish(),
-  width: z9.string().nullish(),
-  sortable: z9.boolean().nullish(),
-  filterable: z9.boolean().nullish(),
-  type: z9.string().nullish(),
-  primaryKey: z9.string().nullish()
+var ColumnOverrideSchema = z13.object({
+  visible: z13.boolean().nullish(),
+  label: z13.string().nullish(),
+  width: z13.string().nullish(),
+  sortable: z13.boolean().nullish(),
+  filterable: z13.boolean().nullish(),
+  type: z13.string().nullish(),
+  primaryKey: z13.string().nullish()
   // Added for FK reference
 });
-var DataRequestSchema = z9.object({
-  url: z9.string(),
-  // Full URL with query params (may contain {{ENV_VAR}} placeholders)
-  method: z9.string().default("GET"),
+var DataRequestSchema = z13.object({
+  url: z13.string().default(""),
+  // Full URL (may be empty for proxy — resolved server-side)
+  method: z13.string().default("GET"),
   // HTTP method
-  headers: z9.record(z9.string(), z9.string()).default({}),
+  headers: z13.record(z13.string(), z13.string()).default({}),
   // Headers
-  body: z9.record(z9.string(), z9.unknown()).optional(),
+  body: z13.record(z13.string(), z13.unknown()).optional(),
   // For POST requests
-  resultPath: z9.string().default(""),
+  resultPath: z13.string().default(""),
   // JSON path to extract data
-  flattenRelations: z9.boolean().default(true),
+  flattenRelations: z13.boolean().default(true),
   // Flatten nested objects
-  queryConfig: z9.record(z9.string(), z9.unknown()).optional()
+  queryConfig: z13.record(z13.string(), z13.unknown()).optional(),
   // RPC config for DataTable
+  fetchStrategy: z13.enum(["direct", "proxy"]).default("proxy"),
+  // Publish-time routing decision
+  datasourceId: z13.string().nullish()
+  // Datasource ID for proxy strategy (server-side credential resolution)
 });
-var ComponentBindingSchema = z9.object({
-  componentId: z9.string().nullish(),
-  datasourceId: z9.string().nullish(),
-  tableName: z9.string().nullish(),
+var ComponentBindingSchema = z13.object({
+  componentId: z13.string().nullish(),
+  datasourceId: z13.string().nullish(),
+  tableName: z13.string().nullish(),
   // columns can be string[] (column names) or object[] (enriched schema from publish)
-  columns: z9.union([
-    z9.array(z9.string()),
-    z9.array(z9.object({
-      name: z9.string(),
-      type: z9.string(),
-      nullable: z9.boolean().optional(),
-      primary_key: z9.boolean().optional(),
-      default: z9.any().optional(),
-      foreign_key_table: z9.string().nullish(),
-      foreign_key_column: z9.string().nullish()
+  columns: z13.union([
+    z13.array(z13.string()),
+    z13.array(z13.object({
+      name: z13.string(),
+      type: z13.string(),
+      nullable: z13.boolean().optional(),
+      primary_key: z13.boolean().optional(),
+      default: z13.any().optional(),
+      foreign_key_table: z13.string().nullish(),
+      foreign_key_column: z13.string().nullish()
     }).passthrough())
   ]).nullish(),
-  columnOrder: z9.array(z9.string()).nullish(),
-  columnOverrides: z9.record(z9.string(), ColumnOverrideSchema).nullish(),
-  filters: z9.record(z9.string(), z9.unknown()).nullish(),
-  primaryKey: z9.string().nullish(),
-  foreignKeys: z9.array(z9.object({
-    column: z9.string(),
-    referencedTable: z9.string(),
-    referencedColumn: z9.string()
+  columnOrder: z13.array(z13.string()).nullish(),
+  columnOverrides: z13.record(z13.string(), ColumnOverrideSchema).nullish(),
+  filters: z13.record(z13.string(), z13.unknown()).nullish(),
+  primaryKey: z13.string().nullish(),
+  foreignKeys: z13.array(z13.object({
+    column: z13.string(),
+    referencedTable: z13.string(),
+    referencedColumn: z13.string()
   }).passthrough()).nullish(),
   dataRequest: DataRequestSchema.nullish(),
   // Form-specific fields
-  fieldOverrides: z9.record(z9.string(), z9.unknown()).nullish(),
-  fieldOrder: z9.array(z9.string()).nullish(),
-  dataSourceId: z9.string().nullish(),
+  fieldOverrides: z13.record(z13.string(), z13.unknown()).nullish(),
+  fieldOrder: z13.array(z13.string()).nullish(),
+  dataSourceId: z13.string().nullish(),
   // camelCase alias
   // Dynamic feature configuration (for DataTable server-side features)
-  frontendFilters: z9.array(z9.record(z9.string(), z9.unknown())).nullish(),
-  sorting: z9.record(z9.string(), z9.unknown()).nullish(),
-  pagination: z9.record(z9.string(), z9.unknown()).nullish(),
-  filtering: z9.record(z9.string(), z9.unknown()).nullish()
+  frontendFilters: z13.array(z13.record(z13.string(), z13.unknown())).nullish(),
+  sorting: z13.record(z13.string(), z13.unknown()).nullish(),
+  pagination: z13.record(z13.string(), z13.unknown()).nullish(),
+  filtering: z13.record(z13.string(), z13.unknown()).nullish()
 }).passthrough();
-var VisibilitySettingsSchema = z9.object({
-  mobile: z9.boolean().default(true),
-  tablet: z9.boolean().default(true),
-  desktop: z9.boolean().default(true)
+var VisibilitySettingsSchema = z13.object({
+  mobile: z13.boolean().default(true),
+  tablet: z13.boolean().default(true),
+  desktop: z13.boolean().default(true)
 });
-var ViewportOverridesSchema = z9.object({
-  mobile: z9.record(z9.string(), z9.any()).nullable().optional(),
-  tablet: z9.record(z9.string(), z9.any()).nullable().optional()
+var ViewportOverridesSchema = z13.object({
+  mobile: z13.record(z13.string(), z13.any()).nullable().optional(),
+  tablet: z13.record(z13.string(), z13.any()).nullable().optional()
 }).passthrough();
-var StylesDataSchema = z9.object({
-  values: z9.record(z9.string(), z9.any()).nullable().optional(),
-  activeProperties: z9.array(z9.string()).nullable().optional(),
-  stylingMode: z9.string().default("visual"),
+var StylesDataSchema = z13.object({
+  values: z13.record(z13.string(), z13.any()).nullable().optional(),
+  activeProperties: z13.array(z13.string()).nullable().optional(),
+  stylingMode: z13.string().default("visual"),
   viewportOverrides: ViewportOverridesSchema.nullable().optional()
 }).passthrough();
-var ComponentStylesSchema = z9.record(z9.string(), z9.any()).nullable().optional();
-var PageComponentSchema = z9.lazy(
-  () => z9.object({
-    id: z9.string(),
-    type: z9.string(),
+var ComponentStylesSchema = z13.record(z13.string(), z13.any()).nullable().optional();
+var PageComponentSchema = z13.lazy(
+  () => z13.object({
+    id: z13.string(),
+    type: z13.string(),
     // ComponentTypeSchema is too strict for flexibility
-    props: z9.record(z9.string(), z9.unknown()).nullable().optional(),
+    props: z13.record(z13.string(), z13.unknown()).nullable().optional(),
     styles: ComponentStylesSchema,
     // Legacy: direct styles
     stylesData: StylesDataSchema.nullable().optional(),
     // New: structured styles with overrides
     visibility: VisibilitySettingsSchema.nullable().optional(),
     // Per-viewport visibility
-    children: z9.array(PageComponentSchema).nullable().optional(),
+    children: z13.array(PageComponentSchema).nullable().optional(),
     binding: ComponentBindingSchema.nullable().optional()
   })
 );
-var PageLayoutSchema = z9.object({
-  content: z9.array(PageComponentSchema),
-  root: z9.record(z9.string(), z9.unknown()).optional()
+var PageLayoutSchema = z13.object({
+  content: z13.array(PageComponentSchema),
+  root: z13.record(z13.string(), z13.unknown()).optional()
 });
-var SeoDataSchema = z9.object({
-  title: z9.string().optional(),
-  description: z9.string().optional(),
-  keywords: z9.array(z9.string()).optional(),
-  ogImage: z9.string().optional(),
-  canonical: z9.string().optional()
+var SeoDataSchema = z13.object({
+  title: z13.string().optional(),
+  description: z13.string().optional(),
+  keywords: z13.array(z13.string()).optional(),
+  ogImage: z13.string().optional(),
+  canonical: z13.string().optional()
 });
-var PublishPageSchema = z9.object({
+var PublishPageSchema = z13.object({
   // Page identity (can be UUID or custom string ID like "default-homepage")
-  id: z9.string().min(1),
-  slug: z9.string().min(1),
-  name: z9.string(),
-  title: z9.string().optional(),
-  description: z9.string().optional(),
+  id: z13.string().min(1),
+  slug: z13.string().min(1),
+  name: z13.string(),
+  title: z13.string().optional(),
+  description: z13.string().optional(),
   // Layout & structure
   layoutData: PageLayoutSchema,
   // SEO
   seoData: SeoDataSchema.nullable().optional(),
   // Datasources (non-sensitive config only)
-  datasources: z9.array(DatasourceConfigSchema).nullable().optional(),
+  datasources: z13.array(DatasourceConfigSchema).nullable().optional(),
   // CSS Bundle (tree-shaken, component-specific CSS from FastAPI)
-  cssBundle: z9.string().nullable().optional(),
+  cssBundle: z13.string().nullable().optional(),
   // Versioning
-  version: z9.number().int().min(1),
-  publishedAt: z9.string().datetime(),
+  version: z13.number().int().min(1),
+  publishedAt: z13.string().datetime(),
   // Flags
-  isPublic: z9.boolean().default(true),
-  isHomepage: z9.boolean().default(false),
+  isPublic: z13.boolean().default(true),
+  isHomepage: z13.boolean().default(false),
   // Content hash for drift detection (SHA-256 of publishable attributes)
-  contentHash: z9.string().nullable().optional()
+  contentHash: z13.string().nullable().optional(),
+  // Auth form config baked at publish time (for private page gating overlay)
+  _primaryAuthForm: z13.record(z13.string(), z13.unknown()).nullable().optional()
 });
-var ImportPageRequestSchema = z9.object({
+var ImportPageRequestSchema = z13.object({
   page: PublishPageSchema,
   // Optional: force overwrite even if version is same
-  force: z9.boolean().default(false)
+  force: z13.boolean().default(false)
 });
-var ImportPageResponseSchema = z9.object({
-  success: z9.boolean(),
-  slug: z9.string(),
-  version: z9.number(),
-  previewUrl: z9.string(),
-  message: z9.string().optional()
+var ImportPageResponseSchema = z13.object({
+  success: z13.boolean(),
+  slug: z13.string(),
+  version: z13.number(),
+  previewUrl: z13.string(),
+  message: z13.string().optional()
 });
-var ErrorResponseSchema3 = z9.object({
-  success: z9.literal(false),
-  error: z9.string(),
-  details: z9.record(z9.string(), z9.unknown()).optional()
+var ErrorResponseSchema3 = z13.object({
+  success: z13.literal(false),
+  error: z13.string(),
+  details: z13.record(z13.string(), z13.unknown()).optional()
 });
 
 // src/routes/import.ts
-var importRoute = new Hono();
+var importRoute = new Hono2();
 importRoute.post("/", async (c) => {
   try {
     const rawBody = await c.req.json();
@@ -6342,6 +7201,7 @@ importRoute.post("/", async (c) => {
         await redis.del("page:__homepage__");
         console.log(`[Import] Cache invalidated: page:__homepage__`);
       }
+      await redis.del("seo:sitemap", "seo:llms");
     } catch {
     }
     const publicUrl = process.env.PUBLIC_URL;
@@ -6414,13 +7274,16 @@ importRoute.post("/settings", async (c) => {
   try {
     const body = await c.req.json();
     console.log("[Import Settings] Received:", Object.keys(body));
-    await stateProvider.updateProjectSettings({
-      faviconUrl: body.faviconUrl || null,
-      logoUrl: body.logoUrl || null,
-      siteName: body.siteName || body.name || null,
-      siteDescription: body.siteDescription || body.description || null,
-      appUrl: body.appUrl || null
-    });
+    const updates = {};
+    if (body.faviconUrl !== void 0) updates.faviconUrl = body.faviconUrl || null;
+    if (body.logoUrl !== void 0) updates.logoUrl = body.logoUrl || null;
+    if (body.siteName !== void 0) updates.siteName = body.siteName || null;
+    else if (body.name !== void 0) updates.siteName = body.name || null;
+    if (body.siteDescription !== void 0) updates.siteDescription = body.siteDescription || null;
+    else if (body.description !== void 0) updates.siteDescription = body.description || null;
+    if (body.appUrl !== void 0) updates.appUrl = body.appUrl || null;
+    if (body.authForms !== void 0) updates.authForms = body.authForms || null;
+    await stateProvider.updateProjectSettings(updates);
     return c.json({
       success: true,
       message: "Project settings synced successfully"
@@ -6455,205 +7318,86 @@ importRoute.get("/status", async (c) => {
 });
 
 // src/routes/data.ts
-import { Hono as Hono2 } from "hono";
-
-// src/db/datasource-adapter.ts
-var SupabaseAdapter = class {
-  url;
-  anonKey;
-  constructor(config) {
-    this.url = config.url || process.env.SUPABASE_URL || "";
-    this.anonKey = config.anonKey || process.env.SUPABASE_ANON_KEY || "";
-  }
-  async query(options) {
-    const { table, columns = ["*"], filters = {}, limit = 100, offset = 0 } = options;
-    const selectCols = columns.join(",");
-    let url = `${this.url}/rest/v1/${table}?select=${selectCols}`;
-    Object.entries(filters).forEach(([key, value]) => {
-      url += `&${key}=eq.${value}`;
-    });
-    url += `&limit=${limit}&offset=${offset}`;
-    console.log(`[Supabase] Query URL: ${url}`);
-    console.log(`[Supabase] Using key: ${this.anonKey ? this.anonKey.substring(0, 20) + "..." : "MISSING"}`);
-    try {
-      const response = await fetch(url, {
-        headers: {
-          "apikey": this.anonKey,
-          "Authorization": `Bearer ${this.anonKey}`,
-          "Accept": "application/json",
-          "Prefer": "count=exact"
-        }
-      });
-      console.log(`[Supabase] Response status: ${response.status}`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Supabase] Error response: ${errorText}`);
-        throw new Error(`Supabase error: ${response.status} - ${errorText}`);
-      }
-      const data = await response.json();
-      const count = parseInt(response.headers.get("content-range")?.split("/")[1] || "0");
-      console.log(`[Supabase] Returned ${data.length} rows, count: ${count}`);
-      return { data, count };
-    } catch (error) {
-      console.error("[Supabase] Query error:", error);
-      return { data: [], error: String(error) };
-    }
-  }
-  async execute(sql4, params) {
-    return { data: [], error: "Raw SQL not supported via REST" };
-  }
-  async close() {
-  }
-};
-var NeonAdapter = class {
-  connectionString;
-  constructor(config) {
-    const secretEnvVar = config.secretEnvVar || "NEON_DATABASE_URL";
-    this.connectionString = config.url || process.env[secretEnvVar] || "";
-  }
-  async query(options) {
-    const { table, columns = ["*"], filters = {}, limit = 100, offset = 0 } = options;
-    const selectCols = columns.join(", ");
-    let sql4 = `SELECT ${selectCols} FROM ${table}`;
-    const whereConditions = Object.entries(filters).map(
-      ([key, value]) => `${key} = '${value}'`
-    );
-    if (whereConditions.length > 0) {
-      sql4 += ` WHERE ${whereConditions.join(" AND ")}`;
-    }
-    sql4 += ` LIMIT ${limit} OFFSET ${offset}`;
-    return this.execute(sql4);
-  }
-  async execute(sql4, params) {
-    try {
-      const { neon } = await import("@neondatabase/serverless");
-      const sqlClient = neon(this.connectionString);
-      const result = await sqlClient.call(null, [sql4], ...params || []);
-      return { data: result };
-    } catch (error) {
-      console.error("[Neon] Query error:", error);
-      return { data: [], error: String(error) };
-    }
-  }
-  async close() {
-  }
-};
-var PlanetScaleAdapter = class {
-  connectionString;
-  constructor(config) {
-    const secretEnvVar = config.secretEnvVar || "PLANETSCALE_DATABASE_URL";
-    this.connectionString = config.url || process.env[secretEnvVar] || "";
-  }
-  async query(options) {
-    const { table, columns = ["*"], filters = {}, limit = 100, offset = 0 } = options;
-    const selectCols = columns.join(", ");
-    let sql4 = `SELECT ${selectCols} FROM \`${table}\``;
-    const whereConditions = Object.entries(filters).map(
-      ([key, value]) => `\`${key}\` = '${value}'`
-    );
-    if (whereConditions.length > 0) {
-      sql4 += ` WHERE ${whereConditions.join(" AND ")}`;
-    }
-    sql4 += ` LIMIT ${limit} OFFSET ${offset}`;
-    return this.execute(sql4);
-  }
-  async execute(sql4, params) {
-    try {
-      const { connect } = await import("@planetscale/database");
-      const conn = connect({ url: this.connectionString });
-      const result = await conn.execute(sql4, params);
-      return { data: result.rows };
-    } catch (error) {
-      console.error("[PlanetScale] Query error:", error);
-      return { data: [], error: String(error) };
-    }
-  }
-  async close() {
-  }
-};
-var TursoAdapter = class {
-  url;
-  authToken;
-  constructor(config) {
-    const secretEnvVar = config.secretEnvVar || "TURSO_AUTH_TOKEN";
-    this.url = config.url || process.env.TURSO_DATABASE_URL || "";
-    this.authToken = process.env[secretEnvVar] || "";
-  }
-  async query(options) {
-    const { table, columns = ["*"], filters = {}, limit = 100, offset = 0 } = options;
-    const selectCols = columns.join(", ");
-    let sql4 = `SELECT ${selectCols} FROM "${table}"`;
-    const whereConditions = Object.entries(filters).map(
-      ([key, value]) => `"${key}" = '${value}'`
-    );
-    if (whereConditions.length > 0) {
-      sql4 += ` WHERE ${whereConditions.join(" AND ")}`;
-    }
-    sql4 += ` LIMIT ${limit} OFFSET ${offset}`;
-    return this.execute(sql4);
-  }
-  async execute(sql4, params) {
-    try {
-      const { createClient: createClient4 } = await import("@libsql/client");
-      const client = createClient4({
-        url: this.url,
-        authToken: this.authToken
-      });
-      const result = await client.execute(sql4);
-      return { data: result.rows };
-    } catch (error) {
-      console.error("[Turso] Query error:", error);
-      return { data: [], error: String(error) };
-    }
-  }
-  async close() {
-  }
-};
-function createDatasourceAdapter(config) {
-  switch (config.type) {
-    case "supabase":
-      return new SupabaseAdapter(config);
-    case "neon":
-    case "postgres":
-      return new NeonAdapter(config);
-    case "planetscale":
-    case "mysql":
-      return new PlanetScaleAdapter(config);
-    case "turso":
-    case "sqlite":
-      return new TursoAdapter(config);
-    default:
-      throw new Error(`Unsupported datasource type: ${config.type}`);
-  }
-}
-var defaultAdapter = null;
-function getDefaultDatasource() {
-  if (!defaultAdapter && process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
-    defaultAdapter = new SupabaseAdapter({
-      id: "default",
-      type: "supabase",
-      name: "Default Supabase",
-      url: process.env.SUPABASE_URL,
-      anonKey: process.env.SUPABASE_ANON_KEY
-    });
-  }
-  return defaultAdapter;
-}
-async function handleDataQuery(table, options = {}, datasourceConfig) {
-  const adapter = datasourceConfig ? createDatasourceAdapter(datasourceConfig) : getDefaultDatasource();
-  if (!adapter) {
-    return { data: [], error: "No datasource configured" };
-  }
-  return adapter.query({
-    table,
-    ...options
-  });
-}
-
-// src/routes/data.ts
+import { Hono as Hono3 } from "hono";
 init_redis();
-var dataRoute = new Hono2();
+var dataRoute = new Hono3();
 var cachedDatasource = null;
+var _datasourcesCache = null;
+function getDatasourceCredentials(datasourceId) {
+  if (!_datasourcesCache) {
+    const raw = process.env.FRONTBASE_DATASOURCES || "";
+    if (!raw) return null;
+    try {
+      _datasourcesCache = JSON.parse(raw);
+    } catch {
+      console.error("[Data Execute] Invalid FRONTBASE_DATASOURCES JSON");
+      return null;
+    }
+  }
+  return _datasourcesCache?.[datasourceId] || null;
+}
+function buildProxyRequest(datasourceId, queryConfig, body) {
+  const creds = getDatasourceCredentials(datasourceId);
+  if (!creds) {
+    console.error(`[Data Execute] No credentials found for datasource: ${datasourceId}`);
+    return null;
+  }
+  const dsType = creds.type || "unknown";
+  if (dsType === "neon") {
+    const httpUrl = creds.httpUrl || creds.apiUrl || "";
+    const apiKey = creds.apiKey || "";
+    return {
+      url: `${httpUrl}/sql`,
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: body || { query: queryConfig.sql || "", params: [] }
+    };
+  }
+  if (dsType === "turso") {
+    const httpUrl = creds.httpUrl || creds.apiUrl || "";
+    const authToken = creds.apiKey || creds.authToken || "";
+    return {
+      url: `${httpUrl}/v2/pipeline`,
+      headers: {
+        "Authorization": `Bearer ${authToken}`,
+        "Content-Type": "application/json"
+      },
+      body: body || { statements: [{ q: queryConfig.sql || "" }] }
+    };
+  }
+  if (dsType === "planetscale") {
+    const httpUrl = creds.httpUrl || creds.apiUrl || "";
+    const auth = creds.apiKey || "";
+    return {
+      url: `${httpUrl}/query`,
+      headers: {
+        "Authorization": auth,
+        "Content-Type": "application/json"
+      },
+      body: body || { query: queryConfig.sql || "" }
+    };
+  }
+  if (dsType === "mysql" || dsType === "postgres") {
+    const httpUrl = creds.httpUrl || creds.apiUrl || "";
+    const apiKey = creds.apiKey || "";
+    if (httpUrl) {
+      return {
+        url: `${httpUrl}/sql`,
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: body || { query: queryConfig.sql || "", params: [] }
+      };
+    }
+    console.error(`[Data Execute] No HTTP URL for ${dsType} datasource: ${datasourceId}`);
+    return null;
+  }
+  console.error(`[Data Execute] Unsupported datasource type: ${dsType}`);
+  return null;
+}
 function resolveEnvVars(template) {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
     return process.env[key] || "";
@@ -6688,18 +7432,35 @@ function flattenRelations(data) {
   });
 }
 async function executeDataRequest2(dataRequest) {
-  const url = resolveEnvVars(dataRequest.url);
-  const headers = {};
-  for (const [key, value] of Object.entries(dataRequest.headers || {})) {
-    headers[key] = resolveEnvVars(value);
+  let url;
+  let headers = {};
+  let body = dataRequest.body;
+  const isProxy = dataRequest.fetchStrategy === "proxy" && dataRequest.datasourceId;
+  if (isProxy) {
+    const proxyReq = buildProxyRequest(
+      dataRequest.datasourceId,
+      dataRequest.queryConfig || {},
+      dataRequest.body
+    );
+    if (!proxyReq) {
+      throw new Error(`Cannot resolve credentials for datasource: ${dataRequest.datasourceId}`);
+    }
+    url = proxyReq.url;
+    headers = proxyReq.headers;
+    body = proxyReq.body;
+  } else {
+    url = resolveEnvVars(dataRequest.url);
+    for (const [key, value] of Object.entries(dataRequest.headers || {})) {
+      headers[key] = resolveEnvVars(value);
+    }
   }
-  console.log(`[Data Execute] Fetching: ${url.substring(0, 100)}...`);
-  const cacheKey = `data:${url}:${dataRequest.body ? JSON.stringify(dataRequest.body) : ""}`;
+  console.log(`[Data Execute] ${isProxy ? "Proxy" : "Direct"}: ${url.substring(0, 100)}...`);
+  const cacheKey = `data:${url}:${body ? JSON.stringify(body) : ""}`;
   const cacheTTL = 60;
   try {
     const redis = getRedis();
     return await cached(cacheKey, async () => {
-      return await executeDataRequestUncached(dataRequest, url, headers);
+      return await executeDataRequestUncached(dataRequest, url, headers, body);
     }, cacheTTL);
   } catch (e) {
     if (e.message?.includes("not initialized")) {
@@ -6707,18 +7468,18 @@ async function executeDataRequest2(dataRequest) {
       console.warn("[Data Execute] Redis cache error, falling back to direct fetch:", e);
     }
   }
-  return await executeDataRequestUncached(dataRequest, url, headers);
+  return await executeDataRequestUncached(dataRequest, url, headers, body);
 }
-async function executeDataRequestUncached(dataRequest, url, headers) {
+async function executeDataRequestUncached(dataRequest, url, headers, resolvedBody) {
+  const body = resolvedBody !== void 0 ? resolvedBody : dataRequest.body;
   const fetchOptions = {
     method: dataRequest.method || "GET",
     headers
   };
-  if (dataRequest.body && dataRequest.method === "POST") {
-    fetchOptions.body = JSON.stringify(dataRequest.body);
-    const filters = dataRequest.body.filters;
-    if (Array.isArray(filters) && filters.length > 0) {
-      console.log(`[Data Execute] Filters:`, JSON.stringify(dataRequest.body.filters));
+  if (body && dataRequest.method === "POST") {
+    fetchOptions.body = JSON.stringify(body);
+    if (body.filters && Array.isArray(body.filters) && body.filters.length > 0) {
+      console.log(`[Data Execute] Filters:`, JSON.stringify(body.filters));
     }
   }
   const response = await fetch(url, fetchOptions);
@@ -6747,7 +7508,7 @@ async function executeDataRequestUncached(dataRequest, url, headers) {
   }
   return { data, total };
 }
-async function getDefaultDatasource2() {
+async function getDefaultDatasource() {
   if (cachedDatasource) return cachedDatasource;
   try {
     const pages = await stateProvider.listPages();
@@ -6776,7 +7537,7 @@ dataRoute.get("/:table", async (c) => {
       direction: query.order || "asc"
     } : void 0;
     console.log(`[Data API] Querying ${table}:`, { columns, limit, offset });
-    const datasource = await getDefaultDatasource2();
+    const datasource = await getDefaultDatasource();
     const result = await handleDataQuery(table, {
       columns,
       limit,
@@ -6808,7 +7569,7 @@ dataRoute.get("/:table/:id", async (c) => {
   const table = c.req.param("table");
   const id = c.req.param("id");
   try {
-    const datasource = await getDefaultDatasource2();
+    const datasource = await getDefaultDatasource();
     const result = await handleDataQuery(table, {
       filters: { id },
       limit: 1
@@ -6829,13 +7590,21 @@ dataRoute.post("/execute", async (c) => {
   try {
     const body = await c.req.json();
     const dataRequest = body.dataRequest;
-    if (!dataRequest || !dataRequest.url) {
+    if (!dataRequest) {
       return c.json({
         success: false,
-        error: "Invalid dataRequest: missing url"
+        error: "Invalid dataRequest: missing dataRequest object"
       }, 400);
     }
-    console.log(`[Data Execute] Processing request for: ${dataRequest.url.substring(0, 80)}...`);
+    const isProxy = dataRequest.fetchStrategy === "proxy" && dataRequest.datasourceId;
+    if (!isProxy && !dataRequest.url) {
+      return c.json({
+        success: false,
+        error: "Invalid dataRequest: missing url (direct) or datasourceId (proxy)"
+      }, 400);
+    }
+    const label = isProxy ? `proxy:${dataRequest.datasourceId}` : dataRequest.url?.substring(0, 80);
+    console.log(`[Data Execute] Processing: ${label}...`);
     const { data, total } = await executeDataRequest2(dataRequest);
     return c.json({
       success: true,
@@ -6854,214 +7623,713 @@ dataRoute.post("/execute", async (c) => {
 });
 dataRoute.post("/clear-cache", async (c) => {
   cachedDatasource = null;
+  _datasourcesCache = null;
   return c.json({ success: true, message: "Cache cleared" });
 });
 
-// src/routes/cache.ts
-init_redis();
-import { OpenAPIHono as OpenAPIHono11, createRoute as createRoute8, z as z10 } from "@hono/zod-openapi";
-var cacheRoute = new OpenAPIHono11();
-function isRedisInitialized() {
-  try {
-    getRedis();
-    return true;
-  } catch {
-    return false;
-  }
-}
-function ensureRedisInitialized() {
-  if (isRedisInitialized()) {
-    return true;
-  }
-  const url = process.env.FRONTBASE_CACHE_URL;
-  const token = process.env.FRONTBASE_CACHE_TOKEN;
-  if (!url || !token) {
-    return false;
-  }
-  try {
-    initRedis({ url, token });
-    return true;
-  } catch {
-    return false;
-  }
-}
-var CacheStatusSchema = z10.object({
-  success: z10.boolean(),
-  message: z10.string()
-});
-var CacheStatsSchema = z10.object({
-  success: z10.boolean(),
-  configured: z10.boolean(),
-  connected: z10.boolean().optional(),
-  message: z10.string()
-});
-var InvalidateRequestSchema = z10.object({
-  key: z10.string().optional().openapi({ description: "Single cache key to invalidate" }),
-  pattern: z10.string().optional().openapi({ description: "Glob pattern to match multiple keys" })
-});
-var InvalidateResponseSchema = z10.object({
-  success: z10.boolean(),
-  message: z10.string()
-});
-var testRoute = createRoute8({
+// src/routes/manage.ts
+import { OpenAPIHono as OpenAPIHono15, createRoute as createRoute12, z as z14 } from "@hono/zod-openapi";
+var manageRoute = new OpenAPIHono15();
+var listPagesRoute = createRoute12({
   method: "get",
-  path: "/test",
-  tags: ["Cache"],
-  summary: "Test Redis connection",
-  description: "Tests the Redis connection and returns the status.",
+  path: "/pages",
+  tags: ["Pages"],
+  summary: "List all published pages",
+  description: "Returns slug, name, and version for each published page on this engine",
   responses: {
     200: {
-      description: "Connection test result",
+      description: "Page list",
       content: {
         "application/json": {
-          schema: CacheStatusSchema
+          schema: z14.object({
+            pages: z14.array(z14.object({
+              slug: z14.string(),
+              name: z14.string(),
+              version: z14.number()
+            })),
+            total: z14.number()
+          })
         }
       }
     }
   }
 });
-cacheRoute.openapi(testRoute, async (c) => {
-  if (!ensureRedisInitialized()) {
-    return c.json({ success: false, message: "Redis not configured" }, 200);
-  }
-  const result = await testConnection();
-  return c.json(result, 200);
+manageRoute.openapi(listPagesRoute, async (c) => {
+  const pages = await stateProvider.listPages();
+  return c.json({ pages, total: pages.length }, 200);
 });
-var invalidateRoute = createRoute8({
-  method: "post",
-  path: "/invalidate",
-  tags: ["Cache"],
-  summary: "Invalidate cache entries",
-  description: "Invalidates a single cache key or all keys matching a pattern.",
+var getPageRoute = createRoute12({
+  method: "get",
+  path: "/pages/:slug",
+  tags: ["Pages"],
+  summary: "Get page by slug",
+  description: "Returns the full page bundle including layout, SEO, datasources, and CSS",
   request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: InvalidateRequestSchema
-        }
-      }
-    }
+    params: z14.object({
+      slug: z14.string().openapi({ description: "Page slug" })
+    })
   },
   responses: {
     200: {
-      description: "Invalidation result",
+      description: "Page bundle",
       content: {
         "application/json": {
-          schema: InvalidateResponseSchema
+          schema: z14.object({ page: z14.record(z14.unknown()) })
         }
       }
     },
-    400: {
-      description: "Bad request",
+    404: {
+      description: "Page not found",
       content: {
-        "application/json": {
-          schema: InvalidateResponseSchema
-        }
-      }
-    },
-    500: {
-      description: "Server error",
-      content: {
-        "application/json": {
-          schema: InvalidateResponseSchema
-        }
+        "application/json": { schema: ErrorResponseSchema }
       }
     }
   }
 });
-cacheRoute.openapi(invalidateRoute, async (c) => {
-  if (!ensureRedisInitialized()) {
-    return c.json({ success: false, message: "Redis not configured" }, 400);
+manageRoute.openapi(getPageRoute, async (c) => {
+  const { slug } = c.req.valid("param");
+  const page = await stateProvider.getPageBySlug(slug);
+  if (!page) {
+    return c.json({ error: "NotFound", message: `Page "${slug}" not found` }, 404);
   }
-  try {
-    const { key, pattern } = c.req.valid("json");
-    if (key) {
-      await invalidate(key);
-      return c.json({ success: true, message: `Invalidated key: ${key}` }, 200);
-    } else if (pattern) {
-      await invalidatePattern(pattern);
-      return c.json({ success: true, message: `Invalidated pattern: ${pattern}` }, 200);
-    } else {
-      return c.json({ success: false, message: "Provide key or pattern" }, 400);
-    }
-  } catch (error) {
-    return c.json({
-      success: false,
-      message: error instanceof Error ? error.message : "Invalidation failed"
-    }, 500);
-  }
+  return c.json({ page }, 200);
 });
-var statsRoute2 = createRoute8({
-  method: "get",
-  path: "/stats",
-  tags: ["Cache"],
-  summary: "Get cache status",
-  description: "Returns the current cache configuration and connection status.",
+var deletePageRoute = createRoute12({
+  method: "delete",
+  path: "/pages/:slug",
+  tags: ["Pages"],
+  summary: "Delete a page",
+  description: "Removes a published page from this engine and invalidates Redis cache",
+  request: {
+    params: z14.object({
+      slug: z14.string().openapi({ description: "Page slug" })
+    })
+  },
   responses: {
     200: {
-      description: "Cache status",
+      description: "Page deleted",
       content: {
-        "application/json": {
-          schema: CacheStatsSchema
-        }
+        "application/json": { schema: SuccessResponseSchema }
       }
     }
   }
 });
-cacheRoute.openapi(statsRoute2, async (c) => {
-  const configured = ensureRedisInitialized();
-  if (!configured) {
-    return c.json({
-      success: true,
-      configured: false,
-      message: "Redis not configured. Configure via Settings > Cache & Performance."
-    }, 200);
-  }
-  const connectionResult = await testConnection();
-  return c.json({
-    success: true,
-    configured: true,
-    connected: connectionResult.success,
-    message: connectionResult.message
-  }, 200);
-});
-var flushRoute = createRoute8({
-  method: "post",
-  path: "/flush",
-  tags: ["Cache"],
-  summary: "Flush all cache entries",
-  description: "Clears all cached data. Called after reconfiguration or redeployment.",
-  responses: {
-    200: {
-      description: "Flush result",
-      content: {
-        "application/json": {
-          schema: CacheStatusSchema
-        }
-      }
-    }
-  }
-});
-cacheRoute.openapi(flushRoute, async (c) => {
-  if (!ensureRedisInitialized()) {
-    return c.json({ success: true, message: "No cache configured, nothing to flush" }, 200);
-  }
+manageRoute.openapi(deletePageRoute, async (c) => {
+  const { slug } = c.req.valid("param");
+  await stateProvider.deletePage(slug);
   try {
-    await invalidatePattern("*");
-    return c.json({ success: true, message: "All cache entries flushed" }, 200);
-  } catch (error) {
-    return c.json({
-      success: false,
-      message: error instanceof Error ? error.message : "Flush failed"
-    }, 200);
+    const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+    const redis = getRedis2();
+    await redis.del(`page:${slug}`);
+  } catch {
   }
+  return c.json({ success: true, message: `Page "${slug}" deleted` }, 200);
+});
+
+// src/routes/seo.ts
+import { Hono as Hono4 } from "hono";
+var seoRoute = new Hono4();
+seoRoute.use("*", async (c, next) => {
+  await next();
+  const ct = c.res.headers.get("Content-Type");
+  if (ct) {
+    c.res.headers.set("X-Content-Type", ct);
+  }
+});
+function getBaseUrl(request) {
+  const publicUrl = process.env.PUBLIC_URL;
+  if (publicUrl) return publicUrl.replace(/\/$/, "");
+  try {
+    const url = new URL(request.url);
+    return url.origin;
+  } catch {
+    return "http://localhost:3002";
+  }
+}
+seoRoute.get("/sitemap.xml", async (c) => {
+  try {
+    const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+    const redis = getRedis2();
+    const cached2 = await redis.get("seo:sitemap");
+    if (cached2) {
+      c.header("Content-Type", "application/xml");
+      c.header("Cache-Control", "public, max-age=3600");
+      c.header("X-Cache", "HIT");
+      return c.body(cached2);
+    }
+  } catch {
+  }
+  const baseUrl = getBaseUrl(c.req.raw);
+  const pages = await stateProvider.listPublicPageSlugs();
+  const urls = pages.map((page) => {
+    const loc = page.isHomepage ? baseUrl + "/" : `${baseUrl}/${page.slug}`;
+    const priority = page.isHomepage ? "1.0" : "0.8";
+    const lastmod = page.updatedAt ? page.updatedAt.split("T")[0] : (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+    return `  <url>
+    <loc>${escapeXml(loc)}</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>${priority}</priority>
+  </url>`;
+  }).join("\n");
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`;
+  try {
+    const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+    const redis = getRedis2();
+    await redis.setex("seo:sitemap", 3600, xml);
+  } catch {
+  }
+  c.header("Content-Type", "application/xml");
+  c.header("Cache-Control", "public, max-age=3600");
+  c.header("X-Cache", "MISS");
+  return c.body(xml);
+});
+seoRoute.get("/robots.txt", async (c) => {
+  const baseUrl = getBaseUrl(c.req.raw);
+  const robotsTxt = `User-agent: *
+Allow: /
+
+Sitemap: ${baseUrl}/sitemap.xml
+`;
+  c.header("Content-Type", "text/plain");
+  c.header("Cache-Control", "public, max-age=600");
+  return c.body(robotsTxt);
+});
+seoRoute.get("/llms.txt", async (c) => {
+  try {
+    const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+    const redis = getRedis2();
+    const cached2 = await redis.get("seo:llms");
+    if (cached2) {
+      c.header("Content-Type", "text/plain");
+      c.header("Cache-Control", "public, max-age=3600");
+      c.header("X-Cache", "HIT");
+      return c.body(cached2);
+    }
+  } catch {
+  }
+  const baseUrl = getBaseUrl(c.req.raw);
+  const pages = await stateProvider.listPublicPageSlugs();
+  const settings = await stateProvider.getProjectSettings();
+  const siteName = settings.siteName || "Frontbase Site";
+  const siteDescription = settings.siteDescription || "";
+  const lines = [
+    `# ${siteName}`
+  ];
+  if (siteDescription) {
+    lines.push(`> ${siteDescription}`);
+  }
+  lines.push("", "## Pages", "");
+  for (const page of pages) {
+    const url = page.isHomepage ? baseUrl + "/" : `${baseUrl}/${page.slug}`;
+    const label = page.slug.replace(/-/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
+    lines.push(`- [${label}](${url})`);
+  }
+  const llmsTxt = lines.join("\n") + "\n";
+  try {
+    const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+    const redis = getRedis2();
+    await redis.setex("seo:llms", 3600, llmsTxt);
+  } catch {
+  }
+  c.header("Content-Type", "text/plain");
+  c.header("Cache-Control", "public, max-age=3600");
+  c.header("X-Cache", "MISS");
+  return c.body(llmsTxt);
+});
+function escapeXml(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
+// src/routes/embed.ts
+import { OpenAPIHono as OpenAPIHono16 } from "@hono/zod-openapi";
+var embedRoute = new OpenAPIHono16();
+embedRoute.get("/embed.js", (c) => {
+  c.header("Content-Type", "application/javascript");
+  c.header("Cache-Control", "public, max-age=3600");
+  c.header("Access-Control-Allow-Origin", "*");
+  return c.body(`(function(){
+  function initEmbed(){
+    var scripts=document.querySelectorAll('script[src*="/embed.js"][data-form-id]');
+    scripts.forEach(function(script){
+      if(script.dataset.processed)return;
+      script.dataset.processed='true';
+      var formId=script.dataset.formId;
+      var width=script.dataset.width||'100%';
+      var baseUrl=script.src.split('/api/embed/embed.js')[0];
+      var iframe=document.createElement('iframe');
+      iframe.src=baseUrl+'/api/embed/auth/'+formId;
+      iframe.style.width=width;
+      iframe.style.border='none';
+      iframe.style.overflow='hidden';
+      iframe.scrolling='no';
+      iframe.style.minHeight='400px';
+      iframe.style.borderRadius='12px';
+      script.parentNode.insertBefore(iframe,script.nextSibling);
+      window.addEventListener('message',function(event){
+        if(event.origin!==baseUrl)return;
+        try{
+          var data=typeof event.data==='string'?JSON.parse(event.data):event.data;
+          if(data.type==='frontbase-resize'&&data.formId===formId){
+            iframe.style.height=data.height+'px';
+          }
+          if(data.type==='frontbase-auth-success'){
+            if(data.user){
+               localStorage.setItem('frontbase_user', JSON.stringify(data.user));
+            }
+            window.location.href=data.redirectUrl;
+          }
+        }catch(e){}
+      });
+    });
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',initEmbed);
+  }else{
+    initEmbed();
+  }
+})();`);
+});
+embedRoute.get("/auth/:formId", async (c) => {
+  const formId = c.req.param("formId");
+  let formConfig = null;
+  try {
+    const settings = await stateProvider.getProjectSettings();
+    if (settings.authForms) {
+      const formsMap = JSON.parse(settings.authForms);
+      formConfig = formsMap[formId] || null;
+    }
+  } catch (err) {
+    console.warn("[Embed] Could not read auth forms from settings:", err);
+  }
+  const type = formConfig?.type || "both";
+  const title = formConfig?.name || formConfig?.title || "Welcome";
+  const description = formConfig?.description || "";
+  const logoUrl = formConfig?.logoUrl || formConfig?.config?.logoUrl || "";
+  const primaryColor = formConfig?.config?.primaryColor || formConfig?.primaryColor || "#18181b";
+  const providers = formConfig?.config?.providers || formConfig?.providers || [];
+  const magicLink = formConfig?.config?.magicLink || formConfig?.magicLink || false;
+  const showLinks = formConfig?.config?.showLinks !== false;
+  const redirectUrl = formConfig?.redirectUrl || formConfig?.config?.redirectUrl || "";
+  const defaultIsLogin = type !== "signup";
+  const showToggle = type === "both";
+  const hasSocial = providers.length > 0;
+  const socialButtons = providers.map((p) => {
+    const name = p.charAt(0).toUpperCase() + p.slice(1);
+    return `<button type="button" class="fb-social-btn" data-provider="${esc(p)}">Continue with ${esc(name)}</button>`;
+  }).join("\n");
+  c.header("Content-Type", "text/html; charset=utf-8");
+  c.header("Cache-Control", "no-cache");
+  return c.html(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${esc(title)}</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#18181b}
+        .fb-auth-container{max-width:400px;margin:0 auto;padding:2rem}
+        .fb-logo{text-align:center;margin-bottom:1.5rem}
+        .fb-logo img{max-height:48px;max-width:200px}
+        h1{font-size:1.5rem;font-weight:700;text-align:center;margin-bottom:0.25rem}
+        .fb-desc{color:#71717a;font-size:0.875rem;text-align:center;margin-bottom:1.5rem}
+        .fb-spacer{margin-bottom:1.5rem}
+        .fb-divider{display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem}
+        .fb-divider-line{flex:1;height:1px;background:#e4e4e7}
+        .fb-divider-text{color:#a1a1aa;font-size:0.75rem;text-transform:uppercase}
+        .fb-social-btn{width:100%;padding:0.625rem;background:#fff;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.8125rem;cursor:pointer;transition:background 0.2s;font-family:inherit;margin-bottom:0.5rem}
+        .fb-social-btn:hover{background:#f4f4f5}
+        .fb-error{display:none;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:0.625rem;border-radius:0.375rem;font-size:0.8125rem;margin-bottom:0.75rem}
+        .fb-form{display:flex;flex-direction:column;gap:0.75rem}
+        .fb-label{display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem}
+        .fb-input{width:100%;padding:0.5rem 0.75rem;border:1px solid #d4d4d8;border-radius:0.375rem;font-size:0.875rem;outline:none;transition:border-color 0.2s;box-sizing:border-box}
+        .fb-input:focus{border-color:${esc(primaryColor)}}
+        .fb-submit{width:100%;padding:0.625rem;background:${esc(primaryColor)};color:#fff;border:none;border-radius:0.375rem;font-size:0.875rem;font-weight:600;cursor:pointer;transition:opacity 0.2s}
+        .fb-submit:hover{opacity:0.9}
+        .fb-submit:disabled{opacity:0.6;cursor:not-allowed}
+        .fb-toggle{text-align:center;margin-top:1rem;font-size:0.8125rem;color:#71717a}
+        .fb-toggle a{color:${esc(primaryColor)};font-weight:500;text-decoration:none;margin-left:0.25rem}
+        .fb-success{display:none;text-align:center;padding:2rem 1rem;color:#16a34a;font-size:0.875rem}
+    </style>
+</head>
+<body>
+<div class="fb-auth-container">
+    ${logoUrl ? `<div class="fb-logo"><img src="${esc(logoUrl)}" alt="Logo"></div>` : ""}
+    <h1 id="fb-auth-title">${esc(title)}</h1>
+    ${description ? `<p class="fb-desc">${esc(description)}</p>` : '<div class="fb-spacer"></div>'}
+
+    ${hasSocial ? `
+    <div>${socialButtons}</div>
+    <div class="fb-divider">
+        <div class="fb-divider-line"></div>
+        <span class="fb-divider-text">or</span>
+        <div class="fb-divider-line"></div>
+    </div>` : ""}
+
+    <div id="fb-auth-error" class="fb-error"></div>
+    <div id="fb-auth-success" class="fb-success">
+        <p>\u2713 Check your email for a confirmation link.</p>
+    </div>
+
+    <form id="fb-auth-form" class="fb-form" action="/api/auth/login" method="POST">
+        <input type="hidden" name="redirectTo" value="${esc(redirectUrl)}">
+        <input type="hidden" name="isEmbed" value="true">
+        <input type="hidden" name="formId" value="${esc(formId)}">
+        <div>
+            <label for="fb-email" class="fb-label">Email</label>
+            <input id="fb-email" name="email" class="fb-input" type="email" required autocomplete="email" placeholder="you@example.com">
+        </div>
+        <div>
+            <label for="fb-password" class="fb-label">Password</label>
+            <input id="fb-password" name="password" class="fb-input" type="password" required autocomplete="current-password" placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" minlength="6">
+        </div>
+        <button id="fb-auth-submit" class="fb-submit" type="submit">
+            ${defaultIsLogin ? "Sign In" : "Sign Up"}
+        </button>
+    </form>
+
+    ${showToggle ? `
+    <p class="fb-toggle">
+        <span id="fb-toggle-text">${defaultIsLogin ? "Don't have an account?" : "Already have an account?"}</span>
+        <a href="#" id="fb-toggle-link" onclick="fbToggleMode();return false">${defaultIsLogin ? "Sign Up" : "Sign In"}</a>
+    </p>` : ""}
+</div>
+
+<script>
+(function(){
+    var REDIRECT_URL='${esc(redirectUrl)}';
+    var FORM_ID='${esc(formId)}';
+    var isLoginMode=${defaultIsLogin};
+    var form=document.getElementById('fb-auth-form');
+    var errorDiv=document.getElementById('fb-auth-error');
+    var successDiv=document.getElementById('fb-auth-success');
+    var submitBtn=document.getElementById('fb-auth-submit');
+
+    // Resize notification for parent iframe
+    function notifyResize(){
+        var h=document.documentElement.scrollHeight;
+        window.parent.postMessage({type:'frontbase-resize',formId:FORM_ID,height:h+20},'*');
+    }
+    new ResizeObserver(notifyResize).observe(document.body);
+    setTimeout(notifyResize,100);
+
+    // Show error from URL params (server-side redirect on auth failure)
+    var urlParams=new URLSearchParams(window.location.search);
+    var authError=urlParams.get('auth_error');
+    var authMessage=urlParams.get('auth_message');
+    if(authError){
+        errorDiv.textContent=authError;
+        errorDiv.style.display='block';
+        notifyResize();
+    }
+    if(authMessage){
+        form.style.display='none';
+        successDiv.textContent=authMessage;
+        successDiv.style.display='block';
+        notifyResize();
+    }
+
+    form.addEventListener('submit',function(){
+        submitBtn.disabled=true;
+        submitBtn.textContent=isLoginMode?'Signing in...':'Signing up...';
+    });
+
+    // Toggle login/signup mode
+    window.fbToggleMode=function(){
+        isLoginMode=!isLoginMode;
+        form.action=isLoginMode?'/api/auth/login':'/api/auth/signup';
+        document.getElementById('fb-auth-title').textContent=isLoginMode?'${esc(type === "both" ? "Welcome Back" : title)}':'Create an Account';
+        submitBtn.textContent=isLoginMode?'Sign In':'Sign Up';
+        document.getElementById('fb-toggle-text').textContent=isLoginMode?"Don't have an account?":'Already have an account?';
+        document.getElementById('fb-toggle-link').textContent=isLoginMode?'Sign Up':'Sign In';
+        document.getElementById('fb-password').autocomplete=isLoginMode?'current-password':'new-password';
+        errorDiv.style.display='none';
+        successDiv.style.display='none';
+        form.style.display='block';
+        notifyResize();
+    };
+})();
+</script>
+</body>
+</html>`);
+});
+function esc(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+// src/routes/auth.ts
+import { OpenAPIHono as OpenAPIHono17 } from "@hono/zod-openapi";
+init_env();
+async function resolveDynamicRedirect(client, userId, formId, isEmbed, fallbackRedirect) {
+  if (!client) return fallbackRedirect;
+  try {
+    const settings = await stateProvider.getProjectSettings();
+    if (isEmbed && formId && settings.authForms) {
+      const authFormsConfig = JSON.parse(settings.authForms);
+      const formConfig = authFormsConfig[formId];
+      if (formConfig?.redirectUrl) {
+        return formConfig.redirectUrl;
+      }
+    }
+    const authCfg = getAuthConfig();
+    const contacts = authCfg.contacts;
+    if (contacts?.table && contacts?.columnMapping && contacts?.contactTypeHomePages) {
+      const typeCol = contacts.columnMapping.contactTypeColumn;
+      const authUserCol = contacts.columnMapping.authUserIdColumn || "id";
+      if (typeCol) {
+        const { data, error } = await client.supabase.from(contacts.table).select(typeCol).eq(authUserCol, userId).maybeSingle();
+        if (data && !error) {
+          const contactType = data[typeCol];
+          const homePageId = contacts.contactTypeHomePages[contactType];
+          if (homePageId && homePageId !== "_default_") {
+            const pages = await stateProvider.listPages();
+            const targetPage = pages.find((p) => p.id === homePageId);
+            if (targetPage) {
+              return `/${targetPage.slug}`;
+            }
+          }
+        } else if (error) {
+          console.warn("[Auth] Error querying contact type:", error);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[Auth] Error resolving dynamic redirect:", e);
+  }
+  return fallbackRedirect;
+}
+var authRoute = new OpenAPIHono17();
+authRoute.post("/login", async (c) => {
+  const provider = new SupabaseAuthProvider();
+  const client = await provider.createClient(c.req.raw);
+  if (!client) {
+    return c.json({ error: "Supabase not configured" }, 503);
+  }
+  let email;
+  let password;
+  let redirectTo;
+  let isEmbed = false;
+  let formId;
+  const contentType = c.req.header("Content-Type") || "";
+  if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
+    const form = await c.req.parseBody();
+    email = form["email"] || "";
+    password = form["password"] || "";
+    redirectTo = form["redirectTo"] || "/";
+    isEmbed = form["isEmbed"] === "true";
+    formId = form["formId"];
+  } else {
+    const body = await c.req.json();
+    email = body.email || "";
+    password = body.password || "";
+    redirectTo = body.redirectTo || "/";
+    isEmbed = !!body.isEmbed;
+    formId = body.formId;
+  }
+  if (!email || !password) {
+    return c.json({ error: "Email and password required" }, 400);
+  }
+  const { data, error } = await client.supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    if (contentType.includes("form")) {
+      const errorUrl = new URL(redirectTo, new URL(c.req.url).origin);
+      errorUrl.searchParams.set("auth_error", error.message);
+      return c.redirect(errorUrl.toString(), 303);
+    }
+    return c.json({ error: error.message }, 401);
+  }
+  const cookieHeaders = client.getCookieHeaders();
+  for (const header of cookieHeaders) {
+    c.header("Set-Cookie", header, { append: true });
+  }
+  let finalRedirect = redirectTo;
+  let enrichedUser = null;
+  if (data.user) {
+    finalRedirect = await resolveDynamicRedirect(client, data.user.id, formId, isEmbed, redirectTo);
+    enrichedUser = await provider.enrichUserContext(data.user, data.session?.access_token);
+  }
+  if (contentType.includes("form")) {
+    if (isEmbed) {
+      const userJson = enrichedUser ? JSON.stringify(enrichedUser) : "null";
+      return c.html(`
+                <!DOCTYPE html>
+                <html>
+                <body>
+                    <script>
+                        if (window.parent && window.parent !== window) {
+                            window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: '${finalRedirect}', user: ${userJson} }, '*');
+                        } else {
+                            window.location.href = '${finalRedirect}';
+                        }
+                    </script>
+                </body>
+                </html>
+            `, 200);
+    }
+    return c.redirect(finalRedirect, 303);
+  }
+  return c.json({ success: true, user: enrichedUser, redirectUrl: finalRedirect });
+});
+authRoute.get("/me", async (c) => {
+  const provider = new SupabaseAuthProvider();
+  const user = await provider.getUserFromRequest(c.req.raw);
+  if (user) {
+    return c.json({ success: true, user });
+  }
+  return c.json({ success: false, user: null }, 401);
+});
+authRoute.post("/signup", async (c) => {
+  const provider = new SupabaseAuthProvider();
+  const client = await provider.createClient(c.req.raw);
+  if (!client) {
+    return c.json({ error: "Supabase not configured" }, 503);
+  }
+  let email;
+  let password;
+  let redirectTo;
+  let isEmbed = false;
+  let formId;
+  const contentType = c.req.header("Content-Type") || "";
+  if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
+    const form = await c.req.parseBody();
+    email = form["email"] || "";
+    password = form["password"] || "";
+    redirectTo = form["redirectTo"] || "/";
+    isEmbed = form["isEmbed"] === "true";
+    formId = form["formId"];
+  } else {
+    const body = await c.req.json();
+    email = body.email || "";
+    password = body.password || "";
+    redirectTo = body.redirectTo || "/";
+    isEmbed = !!body.isEmbed;
+    formId = body.formId;
+  }
+  if (!email || !password) {
+    return c.json({ error: "Email and password required" }, 400);
+  }
+  const { data, error } = await client.supabase.auth.signUp({ email, password });
+  if (error) {
+    if (contentType.includes("form")) {
+      const errorUrl = new URL(redirectTo, new URL(c.req.url).origin);
+      errorUrl.searchParams.set("auth_error", error.message);
+      return c.redirect(errorUrl.toString(), 303);
+    }
+    return c.json({ error: error.message }, 400);
+  }
+  if (data.user && !data.session) {
+    if (contentType.includes("form")) {
+      const successUrl = new URL(redirectTo, new URL(c.req.url).origin);
+      successUrl.searchParams.set("auth_message", "Check your email to confirm your account");
+      if (isEmbed) {
+        return c.html(`
+                    <!DOCTYPE html>
+                    <html>
+                    <body>
+                        <script>
+                            if (window.parent && window.parent !== window) {
+                                window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: '${successUrl.toString()}' }, '*');
+                            } else {
+                                window.location.href = '${successUrl.toString()}';
+                            }
+                        </script>
+                    </body>
+                    </html>
+                `, 200);
+      }
+      return c.redirect(successUrl.toString(), 303);
+    }
+    return c.json({ success: true, message: "Check your email to confirm your account" });
+  }
+  const cookieHeaders = client.getCookieHeaders();
+  for (const header of cookieHeaders) {
+    c.header("Set-Cookie", header, { append: true });
+  }
+  let finalRedirect = redirectTo;
+  let enrichedUser = null;
+  if (data.user) {
+    finalRedirect = await resolveDynamicRedirect(client, data.user.id, formId, isEmbed, redirectTo);
+    enrichedUser = await provider.enrichUserContext(data.user, data.session?.access_token);
+  }
+  if (contentType.includes("form")) {
+    if (isEmbed) {
+      const userJson = enrichedUser ? JSON.stringify(enrichedUser) : "null";
+      return c.html(`
+                <!DOCTYPE html>
+                <html>
+                <body>
+                    <script>
+                        if (window.parent && window.parent !== window) {
+                            window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: '${finalRedirect}', user: ${userJson} }, '*');
+                        } else {
+                            window.location.href = '${finalRedirect}';
+                        }
+                    </script>
+                </body>
+                </html>
+            `, 200);
+    }
+    return c.redirect(finalRedirect, 303);
+  }
+  return c.json({ success: true, user: enrichedUser, redirectUrl: finalRedirect });
+});
+authRoute.post("/logout", async (c) => {
+  const provider = new SupabaseAuthProvider();
+  const client = await provider.createClient(c.req.raw);
+  if (!client) {
+    return c.json({ error: "Supabase not configured" }, 503);
+  }
+  await client.supabase.auth.signOut();
+  const cookieHeaders = client.getCookieHeaders();
+  for (const header of cookieHeaders) {
+    c.header("Set-Cookie", header, { append: true });
+  }
+  const contentType = c.req.header("Content-Type") || "";
+  const redirectTo = c.req.query("redirectTo") || "/";
+  if (contentType.includes("form")) {
+    return c.redirect(redirectTo, 303);
+  }
+  return c.json({ success: true });
 });
 
 // src/engine/full.ts
-var app = createLiteApp();
+var app = createLiteApp("full");
+if (HYDRATE_JS && !HYDRATE_JS.includes("%%HYDRATE_JS%%")) {
+  app.get("/static/react/hydrate.js", (c) => {
+    c.header("Content-Type", "application/javascript; charset=utf-8");
+    c.header("Cache-Control", "public, max-age=31536000, immutable");
+    return c.body(HYDRATE_JS);
+  });
+}
+if (HYDRATE_CSS && !HYDRATE_CSS.includes("%%HYDRATE_CSS%%")) {
+  app.get("/static/react/:cssFile{entry-.+\\.css}", (c) => {
+    c.header("Content-Type", "text/css; charset=utf-8");
+    c.header("Cache-Control", "public, max-age=31536000, immutable");
+    return c.body(HYDRATE_CSS);
+  });
+}
+if (FAVICON_PNG_B64 && !FAVICON_PNG_B64.includes("%%FAVICON_PNG_B64%%")) {
+  const faviconBuf = Uint8Array.from(atob(FAVICON_PNG_B64), (c) => c.charCodeAt(0));
+  app.get("/static/icon.png", (c) => {
+    c.header("Content-Type", "image/png");
+    c.header("Cache-Control", "public, max-age=86400");
+    return c.body(faviconBuf);
+  });
+}
+app.use("/api/import/*", systemKeyAuth);
+app.use("/api/data/execute", async (_c, next) => await next());
+app.use("/api/data/*", systemKeyAuth);
+app.use("/api/manage/*", systemKeyAuth);
 app.route("/api/import", importRoute);
 app.route("/api/data", dataRoute);
-app.route("/api/cache", cacheRoute);
+app.route("/api/manage", manageRoute);
+app.route("", seoRoute);
+app.route("/api/embed", embedRoute);
+app.route("/api/auth", authRoute);
 app.route("", pagesRoute);
 
 // src/startup/sync.ts
@@ -7113,7 +8381,10 @@ async function syncSupabaseJwtFromFastAPI() {
     }
     const settings = await response.json();
     if (settings.supabase_jwt_secret) {
-      process.env.SUPABASE_JWT_SECRET = settings.supabase_jwt_secret;
+      try {
+        process.env.SUPABASE_JWT_SECRET = settings.supabase_jwt_secret;
+      } catch {
+      }
       console.log("[Startup Sync] \u2705 Supabase JWT secret synced from backend");
       return { status: "success" };
     } else {
@@ -7178,6 +8449,11 @@ async function syncHomepageFromFastAPI() {
 async function runStartupSync() {
   console.log("[Startup Sync] \u{1F680} Starting Edge database initialization...");
   await stateProvider.init();
+  const platform = getPlatform();
+  if (platform !== "docker") {
+    console.log(`[Startup Sync] \u2601\uFE0F  Platform "${platform}" \u2014 skipping backend sync (secrets pushed at deploy time)`);
+    return;
+  }
   console.log("[Startup Sync] Syncing settings from backend...");
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const redisResult = await syncRedisSettingsFromFastAPI();
@@ -7277,6 +8553,121 @@ app.post("/api/build-bundle", async (c) => {
       error: err.stderr || err.message || "Unknown build error"
     }, 500);
   }
+});
+app.get("/api/source-snapshot", async (c) => {
+  const fs = await import("fs");
+  const crypto2 = await import("crypto");
+  const provider = c.req.query("provider") || "";
+  const adapterType = c.req.query("adapter_type") || "full";
+  const isLite = ["automations", "lite", ""].includes(adapterType);
+  const edgeRoot = path.resolve(__dirname, "..");
+  const srcDir = path.join(edgeRoot, "src");
+  if (!fs.existsSync(srcDir)) {
+    return c.json({ success: false, error: "Source directory not found" }, 404);
+  }
+  const CORE_PREFIX = "frontbase-core";
+  const allProviders = /* @__PURE__ */ new Set(["cloudflare", "supabase", "vercel", "netlify", "deno", "docker"]);
+  const otherProviders = provider ? new Set([...allProviders].filter((p) => p !== provider)) : /* @__PURE__ */ new Set();
+  const fullOnlyDirs = ["ssr/", "components/", "db/_archived/"];
+  const files = {};
+  let totalSize = 0;
+  function walkDir(dir, prefix = "") {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        if (entry.name === "__tests__" || entry.name === "node_modules") continue;
+        walkDir(path.join(dir, entry.name), rel);
+      } else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) {
+        if (rel.includes(".bak")) continue;
+        if (rel.startsWith("adapters/") && otherProviders.size > 0) {
+          const baseName = entry.name.replace(/\.[^.]+$/, "").toLowerCase();
+          if ([...otherProviders].some((p) => baseName.includes(p))) continue;
+        }
+        if (isLite && fullOnlyDirs.some((d) => rel.startsWith(d))) continue;
+        try {
+          const content = fs.readFileSync(path.join(dir, entry.name), "utf-8");
+          files[`${CORE_PREFIX}/${rel}`] = content;
+          totalSize += content.length;
+        } catch {
+        }
+      }
+    }
+  }
+  walkDir(srcDir);
+  if (Object.keys(files).length === 0) {
+    return c.json({ success: false, error: "No source files found" }, 404);
+  }
+  const bundleMode = isLite ? "Lite (Automations only)" : "Full (SSR + Automations)";
+  const providerLabel = provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : "Unknown";
+  files[`${CORE_PREFIX}/README.md`] = `# Frontbase Edge Engine
+
+**Provider**: ${providerLabel}
+**Bundle**: ${bundleMode}
+**Adapter**: ${adapterType || "automations"}
+
+## Folder Structure
+
+| Folder | Description |
+|:-------|:------------|
+| \`adapters/\` | Platform entry point \u2014 wires the Hono app to the runtime |
+| \`engine/\` | Core Hono app creation, middleware, route registration |
+| \`routes/\` | API routes: health, deploy, execute, webhook, executions |
+| \`cache/\` | Redis/Upstash cache adapter with ICacheProvider interface |
+| \`middleware/\` | Auth (API key, JWT), rate limiting |
+| \`db/\` | State provider (SQLite/Turso), datasource adapters |
+| \`schemas/\` | Zod validation schemas for API payloads |
+| \`startup/\` | Backend sync on boot (Redis, Turso, JWT settings) |
+| \`lib/\` | Shared utilities |
+${!isLite ? "| `ssr/` | Server-side page rendering (React/Hono) |" : ""}
+## Data vs Code
+
+This Inspector shows the **engine source code** \u2014 how the runtime works.
+
+Published **pages and workflows** are stored in the attached state database
+(SQLite or Turso), not in these source files. They are deployed via the
+\`/api/deploy\` endpoint and served by the routes defined here.
+`;
+  return c.json({
+    success: true,
+    files,
+    file_count: Object.keys(files).length,
+    total_size: totalSize
+  });
+});
+app.get("/api/source-hash", async (c) => {
+  const fs = await import("fs");
+  const crypto2 = await import("crypto");
+  const edgeRoot = path.resolve(__dirname, "..");
+  const srcDir = path.join(edgeRoot, "src");
+  if (!fs.existsSync(srcDir)) {
+    return c.json({ success: false, hash: null }, 404);
+  }
+  const hasher = crypto2.createHash("sha256");
+  let fileCount = 0;
+  function walkDir(dir, prefix = "") {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        if (entry.name === "__tests__" || entry.name === "node_modules") continue;
+        walkDir(path.join(dir, entry.name), rel);
+      } else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) {
+        try {
+          hasher.update(rel);
+          hasher.update(fs.readFileSync(path.join(dir, entry.name)));
+          fileCount++;
+        } catch {
+        }
+      }
+    }
+  }
+  walkDir(srcDir);
+  if (fileCount === 0) {
+    return c.json({ success: false, hash: null }, 404);
+  }
+  const hash = hasher.digest("hex").substring(0, 12);
+  return c.json({ success: true, hash, file_count: fileCount });
 });
 var port = parseInt(process.env.PORT || "3002");
 serve({

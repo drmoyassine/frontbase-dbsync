@@ -22,6 +22,7 @@ from ..models.models import EdgeDatabase, EdgeCache, EdgeQueue
 FRONTBASE_BINDING_NAMES = frozenset([
     'FRONTBASE_STATE_DB',
     'FRONTBASE_AUTH',
+    'FRONTBASE_API_KEYS',
     'FRONTBASE_CACHE',
     'FRONTBASE_QUEUE',
     'FRONTBASE_GPU',
@@ -78,19 +79,17 @@ def _resolve_cf_credentials(db: Session, resource: object) -> dict:
     return result
 
 
-def _build_auth_config(db: Session, engine_id: str | None) -> dict:
-    """Build FRONTBASE_AUTH JSON blob.
-    
-    Combines:
-      - Auth provider credentials (Supabase URL + anonKey from connected account)
-      - System key, API key hashes
-      - Users config (contacts table, column mapping, types, etc.)
+def _build_api_keys_config(db: Session, engine_id: str | None) -> dict:
+    """Build FRONTBASE_API_KEYS JSON blob.
+
+    Contains engine access control — system key + user API key hashes.
+    Separated from FRONTBASE_AUTH (user authentication) to avoid mixed concerns.
     """
     from ..core.security import decrypt_field
-    auth: dict = {'provider': 'none'}
+    config: dict = {}
 
     if not engine_id:
-        return auth
+        return config
 
     # ── System Key ───────────────────────────────────────────────────────
     from ..models.models import EdgeEngine as _EdgeEngine
@@ -102,7 +101,7 @@ def _build_auth_config(db: Session, engine_id: str | None) -> dict:
             if _encrypted_key:
                 _raw_key = decrypt_field(_encrypted_key)
                 if _raw_key:
-                    auth['systemKey'] = _raw_key
+                    config['systemKey'] = _raw_key
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -113,12 +112,26 @@ def _build_auth_config(db: Session, engine_id: str | None) -> dict:
         (EdgeAPIKey.edge_engine_id == engine_id) | (EdgeAPIKey.edge_engine_id == None),
     ).all()
     if api_keys:
-        auth['apiKeyHashes'] = [{
+        config['apiKeyHashes'] = [{
             "prefix": str(k.prefix),
             "hash": str(k.key_hash),
             "scope": str(k.scope) if k.scope else 'user',  # type: ignore[truthy-bool]
             "expires_at": str(k.expires_at) if k.expires_at else None,  # type: ignore[truthy-bool]
         } for k in api_keys]
+
+    return config
+
+
+def _build_auth_config(db: Session, engine_id: str | None) -> dict:
+    """Build FRONTBASE_AUTH JSON blob.
+
+    Contains user authentication config only (Supabase Auth, Clerk, etc.).
+    Engine access control (system key, API key hashes) is in FRONTBASE_API_KEYS.
+    """
+    auth: dict = {'provider': 'none'}
+
+    if not engine_id:
+        return auth
 
     # ── Auth Provider (Supabase) ─────────────────────────────────────────
     ctx: dict = {}
@@ -300,8 +313,13 @@ def build_engine_secrets(
 
     # ─── FRONTBASE_AUTH ──────────────────────────────────────────────────
     auth = _build_auth_config(db, engine_id)
-    if auth.get('provider') != 'none' or auth.get('systemKey'):
+    if auth.get('provider') != 'none':
         secrets['FRONTBASE_AUTH'] = json.dumps(auth)
+
+    # ─── FRONTBASE_API_KEYS ──────────────────────────────────────────────
+    api_keys_config = _build_api_keys_config(db, engine_id)
+    if api_keys_config.get('systemKey') or api_keys_config.get('apiKeyHashes'):
+        secrets['FRONTBASE_API_KEYS'] = json.dumps(api_keys_config)
 
     # ─── FRONTBASE_GPU ───────────────────────────────────────────────────
     if engine_id:

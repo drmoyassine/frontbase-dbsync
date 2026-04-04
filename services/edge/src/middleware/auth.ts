@@ -15,7 +15,7 @@
 import { jwt } from 'hono/jwt';
 import { csrf } from 'hono/csrf';
 import type { Context, Next } from 'hono';
-import { getAuthConfig } from '../config/env.js';
+import { getApiKeysConfig, getAuthConfig } from '../config/env.js';
 
 // =============================================================================
 // Shared Helpers
@@ -28,10 +28,10 @@ interface APIKeyHashEntry {
     expires_at?: string | null;
 }
 
-/** Parse API key hashes from FRONTBASE_AUTH config. Returns null if not configured. */
+/** Parse API key hashes from FRONTBASE_API_KEYS config. Returns null if not configured. */
 function parseKeyHashes(): APIKeyHashEntry[] | null {
-    const auth = getAuthConfig();
-    return auth.apiKeyHashes || null;
+    const config = getApiKeysConfig();
+    return config.apiKeyHashes || null;
 }
 
 /** Extract Bearer token from Authorization header. */
@@ -89,7 +89,7 @@ async function validateApiKey(
  * Dev mode: if no FRONTBASE_SYSTEM_KEY is configured, all requests pass through.
  */
 export const systemKeyAuth = async (c: Context, next: Next) => {
-    const systemKey = getAuthConfig().systemKey;
+    const systemKey = getApiKeysConfig().systemKey;
 
     if (!systemKey) {
         // No system key configured — allow all (dev mode / local Docker)
@@ -132,10 +132,10 @@ export const systemKeyAuth = async (c: Context, next: Next) => {
  * Dev mode: if no API key hashes are configured, all requests pass through.
  */
 export const userApiKeyAuth = async (c: Context, next: Next) => {
-    const auth = getAuthConfig();
+    const config = getApiKeysConfig();
     const isDev = (process.env.NODE_ENV || 'development') === 'development';
 
-    if (!auth.apiKeyHashes) {
+    if (!config.apiKeyHashes) {
         if (isDev) return next();
         return c.json({
             error: {

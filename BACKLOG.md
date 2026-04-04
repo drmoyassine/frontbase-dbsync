@@ -87,6 +87,14 @@
 
 # ✅ Completed
 
+## Backend & Frontend (Unified)
+### 2026-04-04 — Unified UI Component Architecture & Tailwind Oxide Pipeline
+- [x] ✨ **Pure UI + IoC Pattern** — Ported core databound components (DataTable, Form, InfoList) to a shared pure-runtime package structure (`@frontbase/*`).
+- [x] ✨ **Tailwind v4 Native Oxide Pipeline** — Abstracted CSS compiling away from Python RegEx into AST-driven `@source` generation (resolving arbitrary space-padded utilities).
+- [x] ✨ **Global SSR Hydration Boundary** — Implemented global `mode='edge'` prop injection into all components to eliminate leaky Builder API calls on local edge runtimes.
+- [x] 🐛 Fixed Form and InfoList SSR rendering ("No schema available" and "Failed to fetch schema" 404 blockages).
+- [x] 🐛 Fixed React/Vite deduplication "Invalid hook call" crashes via strict module resolution rules in `vite.config.ts`.
+
 ## Backend
 ### 2026-03-24 — Private Page Enforcement & SEO Routes
 - [x] ✨ **Private Page Enforcement** — Page gating (`pages.ts:360`): check `page.isPublic`, redirect unauthenticated. Auth middleware in Hono to verify JWT from cookie.

@@ -13,7 +13,7 @@
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { SuccessResponseSchema, ErrorResponseSchema } from '../schemas';
-import { getStateDbConfig, getCacheConfig, getQueueConfig, overrideCacheConfig, overrideQueueConfig } from '../config/env.js';
+import { getStateDbConfig, getCacheConfig, getQueueConfig, getApiKeysConfig, overrideCacheConfig, overrideQueueConfig, overrideApiKeysConfig } from '../config/env.js';
 
 const configRoute = new OpenAPIHono();
 
@@ -65,6 +65,8 @@ configRoute.openapi(getConfigRoute, async (c) => {
     const cache = getCacheConfig();
     const queue = getQueueConfig();
 
+    const apiKeys = getApiKeysConfig();
+
     return c.json({
         stateDb: {
             provider: stateDb.provider || 'local-sqlite',
@@ -77,6 +79,10 @@ configRoute.openapi(getConfigRoute, async (c) => {
         queue: {
             url: redact(queue.url),
             configured: queue.provider !== 'none',
+        },
+        apiKeys: {
+            configured: !!(apiKeys.apiKeyHashes && apiKeys.apiKeyHashes.length > 0),
+            count: apiKeys.apiKeyHashes?.length ?? 0,
         },
         engineMode: process.env.FRONTBASE_ADAPTER_PLATFORM || null,
     }, 200);
@@ -103,6 +109,15 @@ const updateConfigRoute = createRoute({
                             url: z.string().min(1),
                             token: z.string().min(1),
                         }).optional().openapi({ description: 'QStash/queue credentials' }),
+                        apiKeys: z.object({
+                            systemKey: z.string().optional(),
+                            apiKeyHashes: z.array(z.object({
+                                prefix: z.string().optional(),
+                                hash: z.string(),
+                                scope: z.string().optional(),
+                                expires_at: z.string().nullable().optional(),
+                            })).optional(),
+                        }).optional().openapi({ description: 'API key hashes for engine access control' }),
                     }),
                 },
             },
@@ -153,6 +168,13 @@ configRoute.openapi(updateConfigRoute, async (c) => {
             overrideQueueConfig({ provider: 'qstash', url: body.queue.url, token: body.queue.token });
             updated.push('queue');
             console.log('[Config] Queue config updated');
+        }
+
+        // ── API Keys ─────────────────────────────────────────────────────
+        if (body.apiKeys) {
+            overrideApiKeysConfig(body.apiKeys);
+            updated.push('apiKeys');
+            console.log(`[Config] API keys updated (${body.apiKeys.apiKeyHashes?.length ?? 0} keys)`);
         }
 
         return c.json({

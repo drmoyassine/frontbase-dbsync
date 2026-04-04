@@ -114,17 +114,52 @@ export function useEdgeEngineActions({ providers, refetchEngines }: UseEdgeEngin
     };
 
     const handleBulkRedeploy = async () => {
+        const ids = [...selectedIds];
+        if (ids.length === 0) return;
+
+        // Mark all selected engines as redeploying — their individual buttons show spinners
+        setRedeployingIds(prev => {
+            const next = new Set(prev);
+            ids.forEach(id => next.add(id));
+            return next;
+        });
         setBulkLoading(true);
-        try {
-            const result = await edgeInfrastructureApi.batchRedeploy([...selectedIds]);
-            if (result.failed.length > 0) {
-                alert(`${result.success.length} deployed, ${result.failed.length} failed:\n${result.failed.map((f: any) => `${f.id}: ${f.error}`).join('\n')}`);
-            } else {
-                toast.success('Bulk Redeploy Completed', { description: `Redeployed ${result.success.length} engines.` });
-            }
-            setSelectedIds(new Set());
-            await refetchEngines();
-        } catch (e: any) { alert(e.message); } finally { setBulkLoading(false); }
+
+        // Fire individual redeploys concurrently so each engine's button
+        // clears its spinner independently as it completes
+        const results = await Promise.allSettled(
+            ids.map(async (id) => {
+                try {
+                    await edgeInfrastructureApi.redeployEngine(id);
+                    return { id, status: 'success' as const };
+                } catch (e: any) {
+                    return { id, status: 'failed' as const, error: e.message };
+                } finally {
+                    // Clear this engine's spinner immediately on completion
+                    setRedeployingIds(prev => {
+                        const next = new Set(prev);
+                        next.delete(id);
+                        return next;
+                    });
+                    // Invalidate so the synced badge updates for this engine
+                    queryClient.invalidateQueries({ queryKey: ['edge-engines'] });
+                }
+            })
+        );
+
+        // Summarize results
+        const settled = results.map(r => r.status === 'fulfilled' ? r.value : { id: '', status: 'failed' as const, error: 'Unknown error' });
+        const succeeded = settled.filter(r => r.status === 'success');
+        const failed = settled.filter(r => r.status === 'failed');
+
+        if (failed.length > 0) {
+            alert(`${succeeded.length} deployed, ${failed.length} failed:\n${failed.map(f => `${f.id}: ${f.error}`).join('\n')}`);
+        } else {
+            toast.success('Bulk Redeploy Completed', { description: `Redeployed ${succeeded.length} engines.` });
+        }
+
+        setSelectedIds(new Set());
+        setBulkLoading(false);
     };
 
     // ── AI Model Delete ────────────────────────────────────────────────

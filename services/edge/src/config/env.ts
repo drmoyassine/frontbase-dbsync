@@ -47,10 +47,16 @@ export interface AuthConfig {
     url?: string;
     anonKey?: string;
     jwtSecret?: string;
-    systemKey?: string;
-    apiKeyHashes?: Array<{ prefix?: string; hash: string; scope?: string; expires_at?: string }>;
     contacts?: ContactsConfig;
     enabled?: boolean;
+    // Legacy fields (pre-migration) — read via getApiKeysConfig() fallback
+    systemKey?: string;
+    apiKeyHashes?: Array<{ prefix?: string; hash: string; scope?: string; expires_at?: string | null }>;
+}
+
+export interface ApiKeysConfig {
+    systemKey?: string;
+    apiKeyHashes?: Array<{ prefix?: string; hash: string; scope?: string; expires_at?: string | null }>;
 }
 
 export interface CacheConfig {
@@ -99,6 +105,7 @@ function parseEnv<T>(key: string, fallback: T): T {
 
 let _stateDb: StateDbConfig | null = null;
 let _auth: AuthConfig | null = null;
+let _apiKeys: ApiKeysConfig | null = null;
 let _cache: CacheConfig | null = null;
 let _queue: QueueConfig | null = null;
 let _gpu: GpuModel[] | null = null;
@@ -111,6 +118,20 @@ export function getStateDbConfig(): StateDbConfig {
 /** Auth + users config (supabase | none) */
 export function getAuthConfig(): AuthConfig {
     return (_auth ??= parseEnv<AuthConfig>('FRONTBASE_AUTH', { provider: 'none' }));
+}
+
+/** Engine access control — system key + API key hashes */
+export function getApiKeysConfig(): ApiKeysConfig {
+    if (!_apiKeys) {
+        const fresh = parseEnv<ApiKeysConfig>('FRONTBASE_API_KEYS', {});
+        // Backward compat: also check FRONTBASE_AUTH for pre-migration engines
+        const legacyAuth = getAuthConfig();
+        _apiKeys = {
+            systemKey: fresh.systemKey || legacyAuth.systemKey,
+            apiKeyHashes: fresh.apiKeyHashes || legacyAuth.apiKeyHashes,
+        };
+    }
+    return _apiKeys;
 }
 
 /** Cache config (upstash | cloudflare | deno_kv | none) */
@@ -133,9 +154,10 @@ export function getGpuModels(): GpuModel[] {
 // =============================================================================
 
 /** Reset a specific config singleton (forces re-parse on next access) */
-export function resetConfig(key: 'stateDb' | 'auth' | 'cache' | 'queue' | 'gpu' | 'all'): void {
+export function resetConfig(key: 'stateDb' | 'auth' | 'apiKeys' | 'cache' | 'queue' | 'gpu' | 'all'): void {
     if (key === 'stateDb' || key === 'all') _stateDb = null;
     if (key === 'auth' || key === 'all') _auth = null;
+    if (key === 'apiKeys' || key === 'all') _apiKeys = null;
     if (key === 'cache' || key === 'all') _cache = null;
     if (key === 'queue' || key === 'all') _queue = null;
     if (key === 'gpu' || key === 'all') _gpu = null;
@@ -148,4 +170,8 @@ export function overrideCacheConfig(config: CacheConfig): void {
 
 export function overrideQueueConfig(config: QueueConfig): void {
     _queue = config;
+}
+
+export function overrideApiKeysConfig(config: ApiKeysConfig): void {
+    _apiKeys = config;
 }

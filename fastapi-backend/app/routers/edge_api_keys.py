@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from ..database.config import get_db
 from ..database.utils import encrypt_data, decrypt_data
 from ..models.models import EdgeAPIKey, EdgeEngine, EdgeProviderAccount
-from ..services.secrets_builder import build_engine_secrets
+from ..services.secrets_builder import build_engine_secrets, _build_api_keys_config
 from ..services.engine_reconfigure import _resolve_cf_credentials, _patch_cf_settings
 
 
@@ -179,20 +179,11 @@ async def _sync_keys_to_engines(engine_id: Optional[str]) -> None:
 
 
 def _build_key_secrets(engine: EdgeEngine, db: Session) -> dict:
-    """Build the FRONTBASE_API_KEY_HASHES secret for a specific engine."""
-    api_keys = db.query(EdgeAPIKey).filter(
-        EdgeAPIKey.is_active == True,
-        (EdgeAPIKey.edge_engine_id == str(engine.id)) | (EdgeAPIKey.edge_engine_id == None),
-    ).all()
-    if not api_keys:
+    """Build the FRONTBASE_API_KEYS secret for a specific engine."""
+    api_keys_config = _build_api_keys_config(db, str(engine.id))
+    if not api_keys_config.get('apiKeyHashes') and not api_keys_config.get('systemKey'):
         return {}
-    keys_data = [{
-        "prefix": str(k.prefix),
-        "hash": _derive_hash(str(k.key_hash)),
-        "scope": str(k.scope) if k.scope else 'user',  # type: ignore[truthy-bool]
-        "expires_at": str(k.expires_at) if k.expires_at else None,  # type: ignore[truthy-bool]
-    } for k in api_keys]
-    return {'FRONTBASE_API_KEY_HASHES': json.dumps(keys_data)}
+    return {'FRONTBASE_API_KEYS': json.dumps(api_keys_config)}
 
 
 # =============================================================================

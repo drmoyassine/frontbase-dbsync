@@ -19,6 +19,12 @@
       ],
       "@frontbase/datatable/*": [
         "./packages/datatable/src/*"
+      ],
+      "@frontbase/infolist": [
+        "./packages/infolist/src/index.ts"
+      ],
+      "@frontbase/infolist/*": [
+        "./packages/infolist/src/*"
       ]
     },
     "noImplicitAny": true,

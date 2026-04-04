@@ -12,6 +12,7 @@ import {
 import { Trash2, Copy, Monitor, Tablet, Smartphone } from 'lucide-react';
 import { useBuilderStore } from '@/stores/builder';
 import { StylesPanel } from '@/components/styles/StylesPanel';
+import { ThemeSelector } from '@/components/builder/ThemeSelector';
 import type { StylesData, ViewportType, VisibilitySettings } from '@/lib/styles/types';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 
@@ -158,10 +159,10 @@ export const StylingPanel: React.FC = () => {
       // Desktop: update base values directly
       updatedStylesData = {
         ...existingStyles,
-        activeProperties: newStyles.activeProperties,
-        values: newStyles.values,
-        stylingMode: newStyles.stylingMode,
-        rawCSS: newStyles.rawCSS
+        activeProperties: newStyles.activeProperties || [],
+        values: newStyles.values || {},
+        stylingMode: newStyles.stylingMode || 'visual',
+        rawCSS: newStyles.rawCSS || ''
       };
     } else {
       // Mobile/Tablet: extract override values (differences from base)
@@ -390,6 +391,13 @@ export const StylingPanel: React.FC = () => {
           </label>
         </div>
       </div>
+
+      {/* Theme Selector (Only renders for Smart Blocks) */}
+      <ThemeSelector
+        componentType={selectedComponent.type}
+        currentStyles={selectedComponent.stylesData}
+        onApplyTheme={handleStylesUpdate}
+      />
 
       {/* Content - Scrollable */}
       <div className="flex-1 overflow-auto p-4">

@@ -214,6 +214,32 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
     return styles;
   };
 
+  // Collect all rawCSS from the component tree
+  const getAllRawCSS = React.useCallback((items: any[]): string => {
+    let cssString = '';
+    
+    for (const item of items) {
+      const rawCSS = item.stylesData?.rawCSS;
+      if (rawCSS && typeof rawCSS === 'string') {
+        // Scope the CSS to this specific component
+        cssString += `\n/* Component ${item.id} */\n`;
+        cssString += rawCSS.replace(/&/g, `.fb-${item.id}`);
+        cssString += '\n';
+      }
+      
+      // Recursively process children
+      if (item.children && Array.isArray(item.children)) {
+        cssString += getAllRawCSS(item.children);
+      }
+    }
+    
+    return cssString;
+  }, []);
+  
+  const pageRawCSS = React.useMemo(() => {
+    return getAllRawCSS(components);
+  }, [components, getAllRawCSS]);
+
   return (
     <div
       className={cn(
@@ -233,6 +259,11 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
         }
       }}
     >
+      {/* Dynamic Component Themes CSS */}
+      {pageRawCSS && (
+        <style dangerouslySetInnerHTML={{ __html: pageRawCSS }} />
+      )}
+
       {/* Scroll Target Selection Mode Banner */}
       {scrollTargetSelectionMode && (
         <div className="absolute top-0 left-0 right-0 z-50 bg-primary text-primary-foreground px-4 py-2 flex items-center justify-between shadow-lg">

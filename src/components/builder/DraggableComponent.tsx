@@ -99,6 +99,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
       {...listeners}
       onClick={(e) => onSelect(component.id, e)}
       className={cn(
+        `fb-${component.id}`,
         'transition-all duration-200 relative group',
         {
           'ring-2 ring-primary ring-offset-2 rounded-md': isSelected && !isPreviewMode,

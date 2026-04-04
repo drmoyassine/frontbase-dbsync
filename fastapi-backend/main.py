@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
-from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys, deno
+from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys, deno, themes
 from app.middleware.test_mode import TestModeMiddleware
 
 logger = logging.getLogger(__name__)
@@ -159,6 +159,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[Main App Startup] Local Edge seed failed (non-fatal): {e}")
 
+    # Seed Component Themes
+    try:
+        from app.services.seed_themes import seed_system_themes
+        from app.database.config import SessionLocal
+        db = SessionLocal()
+        seed_system_themes(db)
+        db.close()
+    except Exception as e:
+        logger.warning(f"[Main App Startup] Theme seed failed (non-fatal): {e}")
+
     # Load Redis settings for sync service
     try:
         from app.services.sync.redis_client import load_settings_from_db
@@ -307,6 +317,7 @@ app.include_router(cloudflare_inspector.router)  # CF Worker inspector (legacy)
 app.include_router(engine_inspector.router)  # Multi-provider engine inspector
 app.include_router(edge_gpu.router)  # Edge GPU AI inference models
 app.include_router(edge_api_keys.router)  # Tenant API keys for /v1/* endpoints
+app.include_router(themes.router, prefix="/api/themes", tags=["Themes"])
 
 # Mount DB-Synchronizer Service
 from app.services.sync.main import sync_app

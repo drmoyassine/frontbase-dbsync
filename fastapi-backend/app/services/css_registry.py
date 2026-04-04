@@ -19,7 +19,9 @@ from typing import Dict, Set
 GLOBAL_CSS = """
 /* Reset & Base Styles */
 *, *::before, *::after { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; }
+html { background-color: hsl(var(--background)); color: hsl(var(--foreground)); }
+body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; background-color: hsl(var(--background)); color: hsl(var(--foreground)); }
+.fb-page { min-height: 100vh; width: 100%; overflow-x: hidden; display: flex; flex-direction: column; }
 img, video { max-width: 100%; height: auto; }
 
 /* CSS Variables */

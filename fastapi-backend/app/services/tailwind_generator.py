@@ -11,12 +11,12 @@ import os
 import re
 import subprocess
 import tempfile
-from typing import Set
+from typing import Set, Tuple
 
 from .tailwind_cli import ensure_tailwind_cli
 
 
-def extract_css_classes_from_source(source_dir: str) -> set:
+def extract_css_classes_from_source(source_dir: str) -> Tuple[Set[str], int]:
     """
     Extract CSS class names from Edge SSR TypeScript renderer source files.
     
@@ -28,34 +28,29 @@ def extract_css_classes_from_source(source_dir: str) -> set:
     exactly what CSS classes are used, then pass them to Tailwind.
     """
     classes = set()
+    file_count = 0
     
-    # Patterns to extract CSS classes from TypeScript source
+    # We want to capture any string literal that contains potential Tailwind classes.
+    # We include backticks, single quotes, double quotes, and handle escaped quotes.
     patterns = [
-        # class="..." or className="..." in template literals
-        r'class(?:Name)?=[\"\'](.*?)[\"\'](.*?)',
-        r'class(?:Name)?=\\?"([^"]+?)\\?"',
-        r'class(?:Name)?=\\"([^\\]+?)\\"',
-        # String literals containing class names (e.g. 'md:hidden', 'flex gap-4')
-        r"'([a-z][a-z0-9:/_-]+(?:\s+[a-z][a-z0-9:/_-]+)*)'",
-    ]
-    
-    # Use the exact same patterns as original plus generic utility function patterns
-    patterns = [
-        r'class(?:Name)?=[\"\'](.*?)[\"\'](.*?)',
-        r'class(?:Name)?=\\?"([^"]+?)\\?"',
-        r'class(?:Name)?=\\"([^\\]+?)\\"',
-        r"'([a-z][a-z0-9:/_-]+(?:\s+[a-z][a-z0-9:/_-]+)*)'",
+        # class="...", className="..."
+        r'class(?:Name)?=[\"\'](.*?)[\"\']',
+        # cn("...")
         r'cn\(\s*[\"\'](.*?)[\"\']',
-        r'\"([a-zA-Z\[][\w:/.\[\]()&=-]+(?:\s+[a-zA-Z\[][\w:/.\[\]()&=-]+)*)\"',
+        # String literals that only contain characters valid in tailwind classes (and spaces)
+        # This catches Shadcn variants like: "[&_tr]:border-b", "data-[state=selected]:bg-muted/50"
+        r'[\"\']([a-zA-Z\[!-][\w:/.\[\]()&=-]*(?:\s+[a-zA-Z\[!-][\w:/.\[\]()&=-]*)*)[\"\']',
+        r'\`([a-zA-Z\[!-][\w:/.\[\]()&=-]*(?:\s+[a-zA-Z\[!-][\w:/.\[\]()&=-]*)*)\`',
     ]
     
     if not os.path.isdir(source_dir):
-        return classes
+        return classes, file_count
     
     for root, dirs, files in os.walk(source_dir):
         for filename in files:
             if not (filename.endswith('.ts') or filename.endswith('.tsx')):
                 continue
+            file_count += 1
             filepath = os.path.join(root, filename)
             try:
                 with open(filepath, 'r', encoding='utf-8') as f:
@@ -66,12 +61,13 @@ def extract_css_classes_from_source(source_dir: str) -> set:
                         class_str = match.group(1)
                         for cls in class_str.split():
                             cls = cls.strip('"\',`{}$')
-                            if cls and re.match(r'^[a-zA-Z\[!-][\w:/.\[\]()&=-]*$', cls):
+                            # Strict validation for what is allowed as a Tailwind class
+                            if cls and re.match(r'^[a-zA-Z0-9\[!-][\w:/.\[\]()&=-]*$', cls):
                                 classes.add(cls)
             except Exception as e:
                 print(f"[tailwind_generator] Warning: Could not read {filepath}: {e}")
     
-    return classes
+    return classes, file_count
 
 
 def extract_classes_from_component(component: dict, classes: set):
@@ -120,7 +116,8 @@ async def generate_tailwind_utilities(components: list) -> str:
                 if os.path.isdir("/app/packages"): dirs_to_scan.append("/app/packages")
             else:
                 # Local development relative paths
-                base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
+                # Local development relative paths
+                base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
                 dirs_to_scan = [
                     os.path.join(base_dir, "services", "edge", "src"),
                     os.path.join(base_dir, "packages")
@@ -130,16 +127,21 @@ async def generate_tailwind_utilities(components: list) -> str:
             extracted_classes = set()
             for d in dirs_to_scan:
                 if os.path.isdir(d):
-                    extracted_classes.update(extract_css_classes_from_source(d))
+                    dir_classes, file_count = extract_css_classes_from_source(d)
+                    extracted_classes.update(dir_classes)
+                    print(f"[tailwind_generator] Scanned '{d}': found {len(dir_classes)} classes in {file_count} files.")
                 else:
-                    print(f"[tailwind_generator] target scan directory not found: {d}")
+                    print(f"[tailwind_generator] WARNING: target scan directory not found: {d}")
             
             # Also extract class names from component JSON (user-set className props)
             for component in components:
                 extract_classes_from_component(component, extracted_classes)
             
             if extracted_classes:
-                print(f"[tailwind_generator] Extracted {len(extracted_classes)} unique CSS classes from Edge SSR source")
+                print(f"[tailwind_generator] Extracted {len(extracted_classes)} total unique CSS classes")
+                # Log shadcn/arbitrary classes specifically for IoC validation
+                bracket_classes = [c for c in extracted_classes if '[' in c]
+                print(f"[tailwind_generator] Found {len(bracket_classes)} bracket-prefixed/arbitrary classes (e.g. Shadcn)")
                 responsive = [c for c in extracted_classes if ':' in c and not c.startswith('--')]
                 if responsive:
                     print(f"[tailwind_generator] Responsive classes found: {sorted(responsive)[:20]}")

@@ -241,3 +241,35 @@ export const variableAPI = {
     }
   }
 };
+
+export const themeAPI = {
+  // Get themes for a component type
+  getThemes: async (componentType?: string): Promise<APIResponse> => {
+    try {
+      const url = componentType ? `/api/themes/?component_type=${componentType}` : '/api/themes/';
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch themes');
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  },
+
+  // Save a custom theme
+  createTheme: async (themeData: { name: string; component_type: string; styles_data: any; is_system?: boolean }): Promise<APIResponse> => {
+    try {
+      const response = await fetch('/api/themes/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(themeData)
+      });
+      if (!response.ok) throw new Error('Failed to create theme');
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+};

@@ -107,17 +107,33 @@ def _build_api_keys_config(db: Session, engine_id: str | None) -> dict:
 
     # ── API Key Hashes ───────────────────────────────────────────────────
     from ..models.models import EdgeAPIKey
+    from ..database.utils import decrypt_data
+    import hashlib
     api_keys = db.query(EdgeAPIKey).filter(
         EdgeAPIKey.is_active == True,
         (EdgeAPIKey.edge_engine_id == engine_id) | (EdgeAPIKey.edge_engine_id == None),
     ).all()
     if api_keys:
-        config['apiKeyHashes'] = [{
-            "prefix": str(k.prefix),
-            "hash": str(k.key_hash),
-            "scope": str(k.scope) if k.scope else 'user',  # type: ignore[truthy-bool]
-            "expires_at": str(k.expires_at) if k.expires_at else None,  # type: ignore[truthy-bool]
-        } for k in api_keys]
+        hashes = []
+        for k in api_keys:
+            raw_hash = str(k.key_hash)
+            # Fernet-encrypted keys start with 'gAAAAA' — decrypt and SHA-256
+            # Legacy keys are already 64-char hex SHA-256 hashes
+            if raw_hash.startswith('gAAAAA'):
+                try:
+                    full_key = decrypt_data(raw_hash)
+                    derived = hashlib.sha256(full_key.encode()).hexdigest()
+                except Exception:
+                    derived = raw_hash  # Fallback: push as-is
+            else:
+                derived = raw_hash  # Already a legacy SHA-256 hash
+            hashes.append({
+                "prefix": str(k.prefix),
+                "hash": derived,
+                "scope": str(k.scope) if k.scope else 'user',  # type: ignore[truthy-bool]
+                "expires_at": str(k.expires_at) if k.expires_at else None,  # type: ignore[truthy-bool]
+            })
+        config['apiKeyHashes'] = hashes
 
     return config
 

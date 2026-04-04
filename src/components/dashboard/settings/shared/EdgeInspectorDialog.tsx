@@ -53,7 +53,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
     const queryClient = useQueryClient();
 
     // Navigation state
-    const [expandedSections, setExpandedSections] = useState<Set<NavSection>>(new Set(['files', 'settings']));
+    const [expandedSections, setExpandedSections] = useState<Set<NavSection>>(new Set(['files', 'secrets', 'settings']));
     const [selectedItem, setSelectedItem] = useState<SelectedItem>({ section: 'files', key: '' });
     const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
 

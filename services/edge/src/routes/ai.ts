@@ -13,6 +13,8 @@
  * the OpenAI-compatible /v1/chat/completions endpoint (openai.ts).
  */
 
+import { getGpuModels as getGpuModelsFromEnv } from '../config/env.js';
+
 // Global reference to CF Workers AI binding (set by adapter)
 let _aiBinding: any = null;
 
@@ -45,19 +47,24 @@ export function setGPUModels(models: GPUModelEntry[]) {
 }
 
 export function getGPUModels(): GPUModelEntry[] {
-    // Auto-init from env var on first access (set during deploy)
+    // Auto-init from FRONTBASE_GPU env var on first access
     if (_gpuModels.length === 0) {
-        const envModels = (globalThis as any).process?.env?.FRONTBASE_GPU_MODELS;
-        if (envModels) {
-            try {
-                const parsed = JSON.parse(envModels);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    _gpuModels = parsed;
-                    console.log(`[AI] Auto-loaded ${parsed.length} GPU model(s) from env:`, parsed.map((m: any) => m.slug).join(', '));
-                }
-            } catch (e) {
-                console.error('[AI] Failed to parse FRONTBASE_GPU_MODELS:', e);
+        try {
+            const envModels = getGpuModelsFromEnv();
+
+            if (Array.isArray(envModels) && envModels.length > 0) {
+                // Map camelCase env fields → snake_case GPUModelEntry
+                _gpuModels = envModels.map((m: any) => ({
+                    slug: m.slug,
+                    model_id: m.modelId || m.model_id,
+                    model_type: m.modelType || m.model_type,
+                    provider: m.provider,
+                    provider_config: m.providerConfig || m.provider_config,
+                }));
+                console.log(`[AI] Auto-loaded ${_gpuModels.length} GPU model(s) from env:`, _gpuModels.map(m => m.slug).join(', '));
             }
+        } catch (e) {
+            console.error('[AI] Failed to load GPU models from env:', e);
         }
     }
     return _gpuModels;

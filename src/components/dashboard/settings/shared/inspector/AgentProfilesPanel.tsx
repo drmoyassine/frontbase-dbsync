@@ -4,6 +4,7 @@ import { Bot, Plus, Trash2, Save, Loader2, Database, Zap, LayoutDashboard } from
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -159,7 +160,13 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
                             </div>
                         </div>
 
-                        <div className="space-y-4">
+                        <Tabs defaultValue="identity" className="w-full">
+                            <TabsList className="mb-4">
+                                <TabsTrigger value="identity">Identity & Rules</TabsTrigger>
+                                <TabsTrigger value="channels">Channels & APIs</TabsTrigger>
+                            </TabsList>
+                            
+                            <TabsContent value="identity" className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold text-muted-foreground">Profile Name</label>
@@ -229,7 +236,37 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
                                     })}
                                 </div>
                             </div>
-                        </div>
+                            </TabsContent>
+                            
+                            <TabsContent value="channels" className="space-y-4">
+                                <div className="space-y-1.5">
+                                    <h3 className="text-sm font-semibold">Headless Automations (n8n, Make)</h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        Use your Frontbase Edge Engine as a drop-in replacement for any OpenAI node to directly talk to this specifically configured agent.
+                                    </p>
+                                    
+                                    <div className="mt-4 p-3 bg-muted/30 border border-border rounded-md space-y-3">
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">OpenAI API Connection URL</label>
+                                            <code className="block p-2 bg-background border border-border rounded text-xs select-all">
+                                                https://{engineName}.frontbase.dev/api/agents/{editForm.slug || 'agent-slug'}/v1
+                                            </code>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Authentication Header</label>
+                                            <code className="block p-2 bg-background border border-border rounded text-xs">
+                                                Bearer [YOUR_EDGE_API_KEY]
+                                            </code>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground bg-primary/10 text-primary p-2 rounded border border-primary/20">
+                                            <Zap className="inline-block w-3.5 h-3.5 mr-1" />
+                                            <strong>Streaming Native:</strong> This endpoint fully supports Server-Sent Events (SSE). 
+                                            You can directly enable "Stream Response" on your n8n node!
+                                        </p>
+                                    </div>
+                                </div>
+                            </TabsContent>
+                        </Tabs>
                     </div>
                 ) : (
                     <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">

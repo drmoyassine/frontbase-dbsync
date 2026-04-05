@@ -27,6 +27,8 @@ import {
 } from 'ai';
 import { createWorkersAI } from 'workers-ai-provider';
 import { saveAITask, loadAITask, dispatchAITask, clearAITask } from '../engine/ai-tasks.js';
+import { buildAgentSystemPrompt } from '../engine/agent/prompts.js';
+import { buildAgentTools } from '../engine/agent/tools.js';
 
 const openaiRoute = new OpenAPIHono();
 
@@ -160,6 +162,20 @@ openaiRoute.post('/chat/completions', async (c) => {
         model: sdkModel,
         messages: convertOpenAIMessages(body.messages),
     };
+
+    // ── Agent Profile Overlay ──
+    // If this request was routed through /api/agents/:profileSlug, the context is hydrated here
+    const profile = (c as any).get ? (c as any).get('agentProfile') : (c as any).var?.agentProfile;
+    if (profile) {
+        sdkOptions.system = buildAgentSystemPrompt(profile);
+        sdkOptions.tools = buildAgentTools(profile);
+        // Vercel SDK places System prompt separate, drop them from message history to prevent conflicts
+        sdkOptions.messages = sdkOptions.messages.filter((m: any) => m.role !== 'system');
+        // Agents generally rely on recursive loop limits. If max_steps is unspecified by user, default to 5.
+        if (mergedBody.max_steps == null && mergedBody.maxSteps == null) {
+            mergedBody.max_steps = 5;
+        }
+    }
 
     if (mergedBody.max_tokens != null) sdkOptions.maxOutputTokens = mergedBody.max_tokens;
     if (mergedBody.temperature != null) sdkOptions.temperature = mergedBody.temperature;

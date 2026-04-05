@@ -45,9 +45,8 @@ import { edgeLogsRoute } from '../routes/edge-logs.js';
 import { workflowsRoute } from '../routes/workflows.js';
 import { queueRoute } from '../routes/queue.js';
 import { configRoute } from '../routes/config.js';
-// ai.ts still provides setAIBinding/setGPUModels/getGPUModels used by adapters + openai.ts
 import { openaiRoute } from '../routes/openai.js';
-import { agentRoute } from '../routes/agent.js';
+import { getAgentProfilesConfig } from '../config/env.js';
 import { systemKeyAuth, userApiKeyAuth, aiApiKeyAuth } from '../middleware/auth.js';
 
 // =============================================================================
@@ -226,10 +225,24 @@ export function createLiteApp(mode: EngineMode = 'lite') {
     app.route('/api/queue', queueRoute);
     app.route('/api/config', configRoute);
 
-    // OpenAI-compatible and Agent AI routes (secured by AI API key auth)
-    app.use('/v1/*', aiApiKeyAuth);
-    app.route('/v1', openaiRoute);
-    app.route('/v1/agent', agentRoute);
+    // ── AI Infrastructure routes ──
+    app.use('/api/agents/v1/*', aiApiKeyAuth);
+    app.route('/api/agents/v1', openaiRoute);
+
+    // ── AI Agent Profiles routes ──
+    app.use('/api/agents/:profileSlug/v1/*', aiApiKeyAuth);
+    app.use('/api/agents/:profileSlug/v1/*', async (c, next) => {
+        const profileSlug = c.req.param('profileSlug');
+        const profilesConfig = getAgentProfilesConfig();
+        const profile = profilesConfig[profileSlug];
+        if (!profile) {
+            return c.json({ error: { message: `Agent Profile '${profileSlug}' not deployed on this engine. Check your Edge Inspector.` } }, 404);
+        }
+        (c.set as any)('agentProfile', profile);
+        await next();
+    });
+    // Mount the exact same openaiRoute under the profile slug
+    app.route('/api/agents/:profileSlug/v1', openaiRoute);
 
     // ── OpenAPI Docs ───────────────────────────────────────────────────
     // Dynamic server URL, mode-aware tags/description, API key auth, Frontbase branding.

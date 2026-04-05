@@ -101,17 +101,17 @@ const audioTranscriptionBaseBody = (m: string) => ({ model: m, file: '<base64-en
 const audioSpeechBaseBody = (m: string) => ({ model: m, input: 'Hello, this is a test of text to speech.' });
 
 export const MODALITY_MAP: Record<string, ModalityConfig> = {
-    llm: { endpoint: '/v1/chat/completions', params: CHAT_COMPLETIONS_PARAMS, baseBody: chatBaseBody },
-    'text-generation': { endpoint: '/v1/chat/completions', params: CHAT_COMPLETIONS_PARAMS, baseBody: chatBaseBody },
-    embedder: { endpoint: '/v1/embeddings', params: EMBEDDINGS_PARAMS, baseBody: embeddingsBaseBody },
-    'text-embeddings': { endpoint: '/v1/embeddings', params: EMBEDDINGS_PARAMS, baseBody: embeddingsBaseBody },
-    image_gen: { endpoint: '/v1/images/generations', params: IMAGE_GEN_PARAMS, baseBody: imageBaseBody },
-    'text-to-image': { endpoint: '/v1/images/generations', params: IMAGE_GEN_PARAMS, baseBody: imageBaseBody },
-    stt: { endpoint: '/v1/audio/transcriptions', params: AUDIO_TRANSCRIPTION_PARAMS, baseBody: audioTranscriptionBaseBody },
-    'speech-recognition': { endpoint: '/v1/audio/transcriptions', params: AUDIO_TRANSCRIPTION_PARAMS, baseBody: audioTranscriptionBaseBody },
-    tts: { endpoint: '/v1/audio/speech', params: AUDIO_SPEECH_PARAMS, baseBody: audioSpeechBaseBody },
+    llm: { endpoint: '/api/agents/v1/chat/completions', params: CHAT_COMPLETIONS_PARAMS, baseBody: chatBaseBody },
+    'text-generation': { endpoint: '/api/agents/v1/chat/completions', params: CHAT_COMPLETIONS_PARAMS, baseBody: chatBaseBody },
+    embedder: { endpoint: '/api/agents/v1/embeddings', params: EMBEDDINGS_PARAMS, baseBody: embeddingsBaseBody },
+    'text-embeddings': { endpoint: '/api/agents/v1/embeddings', params: EMBEDDINGS_PARAMS, baseBody: embeddingsBaseBody },
+    image_gen: { endpoint: '/api/agents/v1/images/generations', params: IMAGE_GEN_PARAMS, baseBody: imageBaseBody },
+    'text-to-image': { endpoint: '/api/agents/v1/images/generations', params: IMAGE_GEN_PARAMS, baseBody: imageBaseBody },
+    stt: { endpoint: '/api/agents/v1/audio/transcriptions', params: AUDIO_TRANSCRIPTION_PARAMS, baseBody: audioTranscriptionBaseBody },
+    'speech-recognition': { endpoint: '/api/agents/v1/audio/transcriptions', params: AUDIO_TRANSCRIPTION_PARAMS, baseBody: audioTranscriptionBaseBody },
+    tts: { endpoint: '/api/agents/v1/audio/speech', params: AUDIO_SPEECH_PARAMS, baseBody: audioSpeechBaseBody },
     responses: {
-        endpoint: '/v1/responses',
+        endpoint: '/api/agents/v1/responses',
         params: RESPONSES_PARAMS,
         baseBody: (m) => ({
             model: m,
@@ -122,7 +122,7 @@ export const MODALITY_MAP: Record<string, ModalityConfig> = {
 };
 
 export const DEFAULT_MODALITY: ModalityConfig = {
-    endpoint: '/v1/chat/completions',
+    endpoint: '/api/agents/v1/chat/completions',
     params: CHAT_COMPLETIONS_PARAMS,
     baseBody: (m) => ({
         model: m,

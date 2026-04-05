@@ -238,16 +238,18 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
                             </div>
                             </TabsContent>
                             
-                            <TabsContent value="channels" className="space-y-4">
+                            <TabsContent value="channels" className="space-y-6">
                                 <div className="space-y-1.5">
-                                    <h3 className="text-sm font-semibold">Headless Automations (n8n, Make)</h3>
+                                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                                        <Database className="h-4 w-4" /> API Endpoint (n8n, Make, Flowise)
+                                    </h3>
                                     <p className="text-xs text-muted-foreground">
                                         Use your Frontbase Edge Engine as a drop-in replacement for any OpenAI node to directly talk to this specifically configured agent.
                                     </p>
                                     
                                     <div className="mt-4 p-3 bg-muted/30 border border-border rounded-md space-y-3">
                                         <div className="space-y-1">
-                                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">OpenAI API Connection URL</label>
+                                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">OpenAI-Compatible Base URL</label>
                                             <code className="block p-2 bg-background border border-border rounded text-xs select-all">
                                                 https://{engineName}.frontbase.dev/api/agents/{editForm.slug || 'agent-slug'}/v1
                                             </code>
@@ -261,8 +263,42 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
                                         <p className="text-xs text-muted-foreground bg-primary/10 text-primary p-2 rounded border border-primary/20">
                                             <Zap className="inline-block w-3.5 h-3.5 mr-1" />
                                             <strong>Streaming Native:</strong> This endpoint fully supports Server-Sent Events (SSE). 
-                                            You can directly enable "Stream Response" on your n8n node!
+                                            You can directly enable "Stream Response" on your connection!
                                         </p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3 pt-2 border-t border-border">
+                                    <h3 className="text-sm font-semibold">Consumer Messengers</h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        Bind this agent profile directly to external messaging platforms using webhooks.
+                                    </p>
+                                    
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="border border-border rounded-md p-3 flex items-center justify-between bg-muted/10 opacity-60 cursor-not-allowed">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-8 w-8 rounded bg-[#2AABEE]/10 flex items-center justify-center">
+                                                    <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#2AABEE]" fill="currentColor">
+                                                        <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c..."/>
+                                                        <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.223-.548.223l.188-2.85 5.18-4.686c.223-.195-.054-.304-.346-.108l-6.4 4.024-2.76-.86c-.6-.188-.61-.6.125-.892l10.774-4.15c.5-.188.94.116.787.827z" />
+                                                    </svg>
+                                                </div>
+                                                <div className="font-medium text-sm">Telegram Bot</div>
+                                            </div>
+                                            <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
+                                        </div>
+
+                                        <div className="border border-border rounded-md p-3 flex items-center justify-between bg-muted/10 opacity-60 cursor-not-allowed">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-8 w-8 rounded bg-[#4A154B]/10 flex items-center justify-center">
+                                                    <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#4A154B]" fill="currentColor">
+                                                        <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.523-2.522v-2.522h2.523zM15.165 17.688a2.527 2.527 0 0 1-2.523-2.523 2.526 2.526 0 0 1 2.523-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/>
+                                                    </svg>
+                                                </div>
+                                                <div className="font-medium text-sm">Slack App</div>
+                                            </div>
+                                            <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
+                                        </div>
                                     </div>
                                 </div>
                             </TabsContent>

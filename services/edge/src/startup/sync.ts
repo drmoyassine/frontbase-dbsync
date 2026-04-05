@@ -66,46 +66,7 @@ async function syncRedisSettingsFromFastAPI(): Promise<SyncResult> {
     }
 }
 
-/**
- * Fetch Supabase JWT secret from FastAPI settings and store in process.env
- * so auth.ts middleware can use it.
- */
-async function syncSupabaseJwtFromFastAPI(): Promise<SyncResult> {
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/settings/supabase/`, {
-            headers: { 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(5000),
-        });
 
-        if (!response.ok) {
-            console.warn(`[Startup Sync] Supabase settings fetch failed: ${response.status}`);
-            return { status: 'error', retry: response.status >= 500 };
-        }
-
-        const settings = await response.json();
-
-        if (settings.supabase_jwt_secret) {
-            // Store in process.env so auth.ts picks it up
-            // Wrapped in try-catch: Deno Deploy forbids process.env writes
-            try {
-                process.env.SUPABASE_JWT_SECRET = settings.supabase_jwt_secret;
-            } catch {
-                // On Supabase Edge, JWT secret is set via project-level secrets
-            }
-            console.log('[Startup Sync] ✅ Supabase JWT secret synced from backend');
-            return { status: 'success' };
-        } else {
-            console.log('[Startup Sync] ℹ️ No Supabase JWT secret configured');
-            return { status: 'not-configured' };
-        }
-    } catch (error) {
-        const isConnectionError = (error as any)?.cause?.code === 'ECONNREFUSED';
-        if (!isConnectionError) {
-            console.warn('[Startup Sync] Supabase JWT sync failed:', (error as Error).message);
-        }
-        return { status: 'error', retry: true };
-    }
-}
 
 /**
  * Fetch homepage from FastAPI and store in local pages.db
@@ -184,23 +145,16 @@ export async function runStartupSync(): Promise<void> {
     }
 
     // Sync settings from backend with retries (FastAPI may not be ready yet)
-    // NOTE: Turso/edge DB credentials are now pushed as env vars via secrets_builder
-    // during deploy — no startup sync needed for database config.
     console.log('[Startup Sync] Syncing settings from backend...');
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         const redisResult = await syncRedisSettingsFromFastAPI();
-        const supabaseResult = await syncSupabaseJwtFromFastAPI();
 
-        const allDone =
-            (redisResult.status === 'success' || redisResult.status === 'not-configured') &&
-            (supabaseResult.status === 'success' || supabaseResult.status === 'not-configured');
+        const allDone = (redisResult.status === 'success' || redisResult.status === 'not-configured');
 
         if (allDone) break;
 
         // At least one had a retryable error
-        const needsRetry =
-            (redisResult.status === 'error' && redisResult.retry) ||
-            (supabaseResult.status === 'error' && supabaseResult.retry);
+        const needsRetry = (redisResult.status === 'error' && redisResult.retry);
 
         if (needsRetry && attempt < MAX_RETRIES) {
             console.log(`[Startup Sync] Attempt ${attempt}/${MAX_RETRIES}, retrying in ${RETRY_DELAY_MS / 1000}s...`);

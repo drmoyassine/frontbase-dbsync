@@ -70,7 +70,7 @@ export interface InspectDomainsResponse {
 
 // ─── Navigation Types ───────────────────────────────────────────────────────
 
-export type NavSection = 'files' | 'secrets' | 'settings' | 'logs' | 'domains';
+export type NavSection = 'files' | 'secrets' | 'settings' | 'logs' | 'domains' | 'agents';
 export type SelectedItem = { section: NavSection; key: string };
 
 // ─── Props Types ────────────────────────────────────────────────────────────

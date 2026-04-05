@@ -30,6 +30,7 @@ import { LogsPanel } from './inspector/LogsPanel';
 import { DomainsPanel } from './inspector/DomainsPanel';
 import { HealthCheckPopover } from './HealthCheckPopover';
 import { ApiKeysPanel } from './inspector/ApiKeysPanel';
+import { AgentProfilesPanel } from './inspector/AgentProfilesPanel';
 import {
     type NavSection, type SelectedItem, type HierNode,
     type SourceSnapshotResponse, type InspectSettingsResponse, type InspectSecretsResponse,
@@ -483,6 +484,11 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         // Settings (CF-only)
         if (selectedItem.section === 'settings' && settings) {
             return <SettingsPanel settingsKey={selectedItem.key} settings={settings} />;
+        }
+
+        // Agent Profiles
+        if (selectedItem.section === 'agents') {
+            return <AgentProfilesPanel engineId={engine.id} engineName={engine.name} />;
         }
 
         // Logs (all providers) — pass settings for compatibility section

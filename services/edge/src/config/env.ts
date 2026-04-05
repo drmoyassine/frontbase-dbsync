@@ -10,6 +10,7 @@
  *   FRONTBASE_CACHE     — Cache config (provider-discriminated)
  *   FRONTBASE_QUEUE     — Queue config (provider-discriminated)
  *   FRONTBASE_GPU       — AI model registry (array)
+ *   FRONTBASE_AGENT_PROFILES — Agent personas & permissions mappings
  */
 
 // =============================================================================
@@ -84,6 +85,14 @@ export interface GpuModel {
     provider: string;
 }
 
+export interface AgentProfile {
+    name: string;
+    systemPrompt: string | null;
+    permissions: Record<string, string[]>;
+}
+
+export type AgentProfilesConfig = Record<string, AgentProfile>;
+
 // =============================================================================
 // Parser
 // =============================================================================
@@ -109,6 +118,7 @@ let _apiKeys: ApiKeysConfig | null = null;
 let _cache: CacheConfig | null = null;
 let _queue: QueueConfig | null = null;
 let _gpu: GpuModel[] | null = null;
+let _agentProfiles: AgentProfilesConfig | null = null;
 
 /** State DB config (turso | supabase | cloudflare | neon | local) */
 export function getStateDbConfig(): StateDbConfig {
@@ -149,18 +159,24 @@ export function getGpuModels(): GpuModel[] {
     return (_gpu ??= parseEnv<GpuModel[]>('FRONTBASE_GPU', []));
 }
 
+/** Agent Profiles mapping */
+export function getAgentProfilesConfig(): AgentProfilesConfig {
+    return (_agentProfiles ??= parseEnv<AgentProfilesConfig>('FRONTBASE_AGENT_PROFILES', {}));
+}
+
 // =============================================================================
 // Hot-Reload Support (for config.ts POST /api/config)
 // =============================================================================
 
 /** Reset a specific config singleton (forces re-parse on next access) */
-export function resetConfig(key: 'stateDb' | 'auth' | 'apiKeys' | 'cache' | 'queue' | 'gpu' | 'all'): void {
+export function resetConfig(key: 'stateDb' | 'auth' | 'apiKeys' | 'cache' | 'queue' | 'gpu' | 'agentProfiles' | 'all'): void {
     if (key === 'stateDb' || key === 'all') _stateDb = null;
     if (key === 'auth' || key === 'all') _auth = null;
     if (key === 'apiKeys' || key === 'all') _apiKeys = null;
     if (key === 'cache' || key === 'all') _cache = null;
     if (key === 'queue' || key === 'all') _queue = null;
     if (key === 'gpu' || key === 'all') _gpu = null;
+    if (key === 'agentProfiles' || key === 'all') _agentProfiles = null;
 }
 
 /** Override a config singleton directly (for runtime hot-swap without env var mutation) */

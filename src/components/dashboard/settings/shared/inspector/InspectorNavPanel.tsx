@@ -13,7 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useEdgeAPIKeys } from '@/hooks/useEdgeInfrastructure';
 import {
     FileCode, Lock, Settings2, ChevronDown, ChevronRight,
-    File, Folder, Shield, Globe, Clock, Cpu, Loader2, Zap, Info, Circle, Key, Route,
+    File, Folder, Shield, Globe, Clock, Cpu, Loader2, Zap, Info, Circle, Key, Route, Bot,
 } from 'lucide-react';
 import type {
     SourceSnapshotResponse, InspectSettingsResponse, InspectSecretsResponse,
@@ -239,6 +239,30 @@ export const InspectorNavPanel: React.FC<InspectorNavPanelProps> = ({
                                     {secrets.imported_notice}
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* ── Agents Section ──────────────────────────── */}
+                    <button
+                        onClick={() => toggleSection('agents')}
+                        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors mt-1"
+                    >
+                        {expandedSections.has('agents') ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                        <Bot className="h-3.5 w-3.5" />
+                        AI AGENTS
+                    </button>
+                    {expandedSections.has('agents') && (
+                        <div className="ml-2">
+                            <button
+                                onClick={() => setSelectedItem({ section: 'agents', key: 'profiles' })}
+                                className={`w-full flex items-center gap-2 px-3 py-1 text-xs rounded-md transition-colors ${isSelected('agents', 'profiles')
+                                    ? 'bg-primary/10 text-primary font-medium'
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                                    }`}
+                            >
+                                <Bot className="h-3 w-3 shrink-0" />
+                                <span className="truncate">Agent Profiles</span>
+                            </button>
                         </div>
                     )}
 

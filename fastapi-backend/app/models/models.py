@@ -20,7 +20,7 @@ from .sync import SyncConfig, FieldMapping, SyncJob, Conflict, DatasourceView, T
 # Edge Infrastructure
 from .edge import (  # noqa: F401
     EdgeDatabase, EdgeCache, EdgeQueue, EdgeProviderAccount,
-    EdgeEngine, EdgeGPUModel, EdgeAPIKey,
+    EdgeEngine, EdgeGPUModel, EdgeAPIKey, EdgeAgentProfile,
 )
 
 # Pages

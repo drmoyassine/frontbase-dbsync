@@ -27,6 +27,7 @@ FRONTBASE_BINDING_NAMES = frozenset([
     'FRONTBASE_QUEUE',
     'FRONTBASE_GPU',
     'FRONTBASE_DATASOURCES',
+    'FRONTBASE_AGENT_PROFILES',
 ])
 
 
@@ -135,6 +136,34 @@ def _build_api_keys_config(db: Session, engine_id: str | None) -> dict:
             })
         config['apiKeyHashes'] = hashes
 
+    return config
+
+
+def _build_agent_profiles_config(db: Session, engine_id: str | None) -> dict:
+    """Build FRONTBASE_AGENT_PROFILES JSON blob.
+
+    Contains all AI Agent Personas registered to this engine, including their Let
+    system prompts and granular data-access permissions.
+    """
+    config: dict = {}
+    if not engine_id:
+        return config
+
+    from ..models.models import EdgeAgentProfile
+    profiles = db.query(EdgeAgentProfile).filter(EdgeAgentProfile.engine_id == engine_id).all()
+    
+    for p in profiles:
+        try:
+            perms = json.loads(str(p.permissions)) if p.permissions is not None else {}
+        except (json.JSONDecodeError, TypeError):
+            perms = {}
+
+        config[str(p.slug)] = {
+            "name": str(p.name),
+            "systemPrompt": str(p.system_prompt) if p.system_prompt is not None else None,
+            "permissions": perms
+        }
+        
     return config
 
 
@@ -455,5 +484,10 @@ def build_engine_secrets(
     datasources = _build_datasources_config(db)
     if datasources:
         secrets['FRONTBASE_DATASOURCES'] = json.dumps(datasources)
+
+    # ─── FRONTBASE_AGENT_PROFILES ─────────────────────────────────────────
+    agent_profiles = _build_agent_profiles_config(db, engine_id)
+    if agent_profiles:
+        secrets['FRONTBASE_AGENT_PROFILES'] = json.dumps(agent_profiles)
 
     return secrets

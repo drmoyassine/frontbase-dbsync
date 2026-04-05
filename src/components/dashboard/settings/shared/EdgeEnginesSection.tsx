@@ -349,6 +349,11 @@ export function EdgeEnginesSection() {
                                                 <Badge variant="outline" className="text-[10px] h-5 py-0 bg-muted/50 border-border text-muted-foreground">
                                                     Queue: {engine.edge_queue_name || 'None'}
                                                 </Badge>
+                                                {engine.gpu_models && engine.gpu_models.length > 0 && (!engine.edge_cache_name || !engine.edge_queue_name) && (
+                                                    <span className="text-[10px] text-amber-500/80 ml-1 font-medium flex items-center">
+                                                        ⚠ Attach cache & queue for long multi-turn AI
+                                                    </span>
+                                                )}
                                             </div>
                                         </EdgeResourceRow>
                                     );

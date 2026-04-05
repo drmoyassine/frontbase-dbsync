@@ -47,6 +47,7 @@ import { queueRoute } from '../routes/queue.js';
 import { configRoute } from '../routes/config.js';
 // ai.ts still provides setAIBinding/setGPUModels/getGPUModels used by adapters + openai.ts
 import { openaiRoute } from '../routes/openai.js';
+import { agentRoute } from '../routes/agent.js';
 import { systemKeyAuth, userApiKeyAuth, aiApiKeyAuth } from '../middleware/auth.js';
 
 // =============================================================================
@@ -225,9 +226,10 @@ export function createLiteApp(mode: EngineMode = 'lite') {
     app.route('/api/queue', queueRoute);
     app.route('/api/config', configRoute);
 
-    // OpenAI-compatible AI routes (secured by user API key auth)
+    // OpenAI-compatible and Agent AI routes (secured by AI API key auth)
     app.use('/v1/*', aiApiKeyAuth);
     app.route('/v1', openaiRoute);
+    app.route('/v1/agent', agentRoute);
 
     // ── OpenAPI Docs ───────────────────────────────────────────────────
     // Dynamic server URL, mode-aware tags/description, API key auth, Frontbase branding.

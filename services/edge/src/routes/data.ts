@@ -189,7 +189,7 @@ function flattenRelations(data: any[]): any[] {
  * For proxy strategy: resolves credentials server-side from FRONTBASE_DATASOURCES.
  * For direct strategy: uses the URL/headers as-is (Supabase anonKey is public).
  */
-async function executeDataRequest(dataRequest: DataRequest): Promise<{ data: any[]; total: number | null }> {
+export async function executeDataRequest(dataRequest: DataRequest): Promise<{ data: any[]; total: number | null }> {
     let url: string;
     let headers: Record<string, string> = {};
     let body = dataRequest.body;

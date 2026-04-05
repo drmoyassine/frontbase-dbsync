@@ -142,3 +142,29 @@ class GenericDeployRequest(BaseModel):
             )
         return v
 
+
+class EdgeAgentProfileCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    slug: str = Field(..., min_length=1, max_length=50)
+    system_prompt: Optional[str] = None
+    permissions: Optional[dict] = None
+
+class EdgeAgentProfileUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    slug: Optional[str] = Field(None, min_length=1, max_length=50)
+    system_prompt: Optional[str] = None
+    permissions: Optional[dict] = None
+
+class EdgeAgentProfileResponse(BaseModel):
+    id: str
+    engine_id: str
+    name: str
+    slug: str
+    system_prompt: Optional[str] = None
+    permissions: Optional[dict] = None
+    created_at: str
+    updated_at: str
+
+    class Config:
+        from_attributes = True
+

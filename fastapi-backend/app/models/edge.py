@@ -145,6 +145,7 @@ class EdgeEngine(Base):
     page_deployments = relationship("PageDeployment", back_populates="edge_engine", cascade="all, delete-orphan")
     gpu_models = relationship("EdgeGPUModel", back_populates="edge_engine", cascade="all, delete-orphan")
     api_keys = relationship("EdgeAPIKey", back_populates="edge_engine", cascade="all, delete-orphan")
+    agent_profiles = relationship("EdgeAgentProfile", back_populates="edge_engine", cascade="all, delete-orphan")
 
 
 class EdgeGPUModel(Base):
@@ -197,3 +198,25 @@ class EdgeAPIKey(Base):
 
     # Relationship
     edge_engine = relationship("EdgeEngine", back_populates="api_keys")
+
+
+class EdgeAgentProfile(Base):
+    """An AI Agent Persona deployed to an Edge Engine.
+    
+    Contains system prompt instructions and granular CRUD permissions.
+    Multiple profiles allow internal 'admin' agent interactions alongside
+    restricted 'customer support' integrations inside the same edge runtime.
+    """
+    __tablename__ = 'edge_agent_profiles'
+
+    id = Column(String, primary_key=True)
+    engine_id = Column(String, ForeignKey('edge_engines.id'), nullable=False)
+    name = Column(String(100), nullable=False)            # "Admin Agent"
+    slug = Column(String(50), nullable=False)             # "admin-agent"
+    system_prompt = Column(Text, nullable=True)           # "You are a database admin..."
+    permissions = Column(Text, nullable=True)             # JSON — { stateDb: [...], datasources: {...} }
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
+    # Relationship
+    edge_engine = relationship("EdgeEngine", back_populates="agent_profiles")

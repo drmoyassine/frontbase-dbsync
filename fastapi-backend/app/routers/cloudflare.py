@@ -135,7 +135,6 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
         
         worker_url = await cloudflare_api.enable_workers_dev(api_token, account_id, payload.worker_name)
         
-        # Build secrets (DRY: uses shared secrets_builder)
         # Resolve edge IDs, handling '__none__' sentinel
         edge_db_id = payload.edge_db_id
         if edge_db_id == "__none__":
@@ -153,26 +152,7 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
             if default_db:
                 edge_db_id = str(default_db.id)
 
-        secrets = build_engine_secrets(db, edge_db_id, edge_cache_id, edge_queue_id, deploy_provider='cloudflare')
-
-        # Direct cache URL/token (legacy — overrides EdgeCache lookup)
-        if payload.cache_url:
-            secrets["FRONTBASE_CACHE_URL"] = payload.cache_url
-        if payload.cache_token:
-            secrets["FRONTBASE_CACHE_TOKEN"] = payload.cache_token
-
-        if secrets:
-            try:
-                await cloudflare_api.set_secrets(api_token, account_id, payload.worker_name, secrets)
-            except HTTPException:
-                raise
-            except Exception as e:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Failed to push secrets to Cloudflare: {e}"
-                )
-
-        # Register as Edge Engine
+        # Register as Edge Engine FIRST (so we have engine_id for secrets)
         engine_id = None
         source_hash = get_source_hash() or bundle_hash
         try:
@@ -181,7 +161,7 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
             
             engine_cfg = json.dumps({
                 "worker_name": payload.worker_name,
-                "secret_names": list(secrets.keys()),
+                "secret_names": [],  # Updated after secrets are built
             })
             # Inject system key for M2M auth
             from ..services.edge_client import inject_system_key
@@ -234,6 +214,37 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
         except Exception as e:
             db.rollback()
             print(f"[Cloudflare] Warning: engine registration failed: {e}")
+
+        # Build secrets WITH engine_id (so GPU, API keys, agent profiles are included)
+        secrets = build_engine_secrets(db, edge_db_id, edge_cache_id, edge_queue_id, engine_id=engine_id, deploy_provider='cloudflare')
+
+        # Direct cache URL/token (legacy — overrides EdgeCache lookup)
+        if payload.cache_url:
+            secrets["FRONTBASE_CACHE_URL"] = payload.cache_url
+        if payload.cache_token:
+            secrets["FRONTBASE_CACHE_TOKEN"] = payload.cache_token
+
+        if secrets:
+            try:
+                await cloudflare_api.set_secrets(api_token, account_id, payload.worker_name, secrets)
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Failed to push secrets to Cloudflare: {e}"
+                )
+
+            # Update engine_config with actual secret_names
+            try:
+                eng = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+                if eng:
+                    cfg = json.loads(str(eng.engine_config or '{}'))
+                    cfg['secret_names'] = list(secrets.keys())
+                    eng.engine_config = json.dumps(cfg)  # type: ignore[assignment]
+                    db.commit()
+            except Exception:
+                pass
 
         return {
             "success": True,

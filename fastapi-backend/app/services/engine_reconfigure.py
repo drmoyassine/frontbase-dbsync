@@ -128,10 +128,19 @@ async def _push_env_vars(
 async def _patch_cf_settings(
     cf_creds: dict,
     new_bindings: dict[str, str],
+    partial: bool = False,
 ) -> tuple[bool, list[str], list[str]]:
     """PATCH CF Worker settings with new Frontbase bindings.
     
-    Preserves all non-Frontbase bindings. Returns (patched, bindings_set, bindings_removed).
+    When partial=False (default, used by full reconfigure):
+        Strips ALL Frontbase-managed bindings and replaces with new_bindings.
+        Bindings in FRONTBASE_BINDING_NAMES that are NOT in new_bindings are removed.
+    
+    When partial=True (used by targeted updates like API key sync):
+        Only upserts the specified bindings. All other existing bindings are preserved.
+    
+    Preserves all non-Frontbase bindings in both modes.
+    Returns (patched, bindings_set, bindings_removed).
     """
     from ..services.cloudflare_api import CF_API, headers as cf_headers
 
@@ -158,18 +167,24 @@ async def _patch_cf_settings(
                 data = get_resp.json()
                 existing_bindings = data.get("result", {}).get("bindings", [])
 
-            # Filter out Frontbase-managed bindings (we'll replace them)
-            preserved_bindings = [
-                b for b in existing_bindings
-                if b.get("name") not in FRONTBASE_BINDING_NAMES
-            ]
-
-            # Track what we're removing
-            existing_fb_names = {
-                b.get("name") for b in existing_bindings
-                if b.get("name") in FRONTBASE_BINDING_NAMES
-            }
-            bindings_removed = [str(n) for n in existing_fb_names - set(new_bindings.keys())]
+            if partial:
+                # Partial mode: only remove bindings we're explicitly replacing
+                preserved_bindings = [
+                    b for b in existing_bindings
+                    if b.get("name") not in new_bindings
+                ]
+                bindings_removed = []
+            else:
+                # Full mode: strip ALL Frontbase-managed bindings (reconfigure replaces them all)
+                preserved_bindings = [
+                    b for b in existing_bindings
+                    if b.get("name") not in FRONTBASE_BINDING_NAMES
+                ]
+                existing_fb_names = {
+                    b.get("name") for b in existing_bindings
+                    if b.get("name") in FRONTBASE_BINDING_NAMES
+                }
+                bindings_removed = [str(n) for n in existing_fb_names - set(new_bindings.keys())]
 
             # Add our new bindings as secret_text
             for name, value in new_bindings.items():
@@ -261,7 +276,7 @@ async def reconfigure(
         cf_creds = _resolve_cf_credentials(engine, db)
         if cf_creds:
             settings_patched, bindings_set, bindings_removed = await _patch_cf_settings(
-                cf_creds, new_bindings
+                cf_creds, new_bindings, partial=True
             )
     elif provider_type in ('supabase', 'deno', 'vercel', 'netlify'):
         settings_patched = await _push_env_vars(provider_type, engine, db, new_bindings)
@@ -324,7 +339,7 @@ async def toggle_engine(
     if provider_type == 'cloudflare':
         cf_creds = _resolve_cf_credentials(engine, db)
         if cf_creds:
-            settings_patched, _, _ = await _patch_cf_settings(cf_creds, new_bindings)
+            settings_patched, _, _ = await _patch_cf_settings(cf_creds, new_bindings, partial=True)
     elif provider_type in ('supabase', 'deno', 'vercel', 'netlify'):
         settings_patched = await _push_env_vars(provider_type, engine, db, new_bindings)
 

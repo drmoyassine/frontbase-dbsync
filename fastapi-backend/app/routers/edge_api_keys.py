@@ -161,7 +161,7 @@ async def _sync_keys_to_engines(engine_id: Optional[str]) -> None:
 
                     key_secrets = _build_key_secrets(engine, db)
                     if key_secrets:
-                        patched, _, _ = await _patch_cf_settings(cf_creds, key_secrets)
+                        patched, _, _ = await _patch_cf_settings(cf_creds, key_secrets, partial=True)
                         if patched:
                             print(f"[KeySync] Pushed key hashes to CF engine '{engine.name}'")
                         else:

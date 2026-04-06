@@ -1,4 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { useEditor, EditorContent, Extension } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Suggestion from '@tiptap/suggestion';
 import { cn } from '@/lib/utils';
 import { VariablePicker } from './VariablePicker';
 
@@ -23,240 +27,192 @@ export const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
   multiline = false,
   placeholder = ''
 }) => {
-  const [text, setText] = useState(value);
-  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
-
   // Variable picker state
   const [showPicker, setShowPicker] = useState(false);
   const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
   const [searchTerm, setSearchTerm] = useState('');
-  const [cursorPosition, setCursorPosition] = useState(0);
+  
+  const insertMentionRangeRef = useRef<{from: number, to: number} | null>(null);
+  // Ref-based tracking for onBlur race condition fix
+  const isPickerOpenRef = useRef(false);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    isPickerOpenRef.current = showPicker;
+  }, [showPicker]);
+
+  const handleSave = useCallback((currentText: string) => {
+    onChange(currentText);
+    onSave();
+  }, [onChange, onSave]);
+
+  const handleCancel = useCallback(() => {
+    onCancel();
+  }, [onCancel]);
+
+  // Memoize the VariableSuggestion extension to prevent re-creation on every render.
+  // The callbacks read from refs, so the extension instance is stable.
+  const VariableSuggestion = useMemo(() => Extension.create({
+    name: 'variableSuggestion',
+    addProseMirrorPlugins() {
+      return [
+        Suggestion({
+          editor: this.editor,
+          char: '@',
+          startOfLine: false,
+          command: () => {
+            // Unused since we insert content manually via React state
+          },
+          items: ({ query }) => {
+            setSearchTerm(query);
+            return []; // Let VariablePicker handle filtering
+          },
+          render: () => {
+            return {
+              onStart: (props) => {
+                insertMentionRangeRef.current = props.range;
+                isPickerOpenRef.current = true;
+                setShowPicker(true);
+                if (props.clientRect) {
+                  const rect = props.clientRect();
+                  if (rect) {
+                    setPickerPosition({ top: rect.bottom + 4, left: rect.left });
+                  }
+                }
+              },
+              onUpdate: (props) => {
+                insertMentionRangeRef.current = props.range;
+                setSearchTerm(props.query);
+                if (props.clientRect) {
+                  const rect = props.clientRect();
+                  if (rect) {
+                    setPickerPosition({ top: rect.bottom + 4, left: rect.left });
+                  }
+                }
+              },
+              onKeyDown: (props) => {
+                if (props.event.key === 'Escape') {
+                  isPickerOpenRef.current = false;
+                  setShowPicker(false);
+                  return true;
+                }
+                if (['ArrowUp', 'ArrowDown', 'Enter', 'Tab'].includes(props.event.key)) {
+                  return true; 
+                }
+                return false;
+              },
+              onExit: () => {
+                setTimeout(() => {
+                  isPickerOpenRef.current = false;
+                  setShowPicker(false);
+                }, 150);
+              },
+            };
+          },
+        })
+      ];
+    }
+  }), []); // Stable — never re-created
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        bold: false,
+        italic: false,
+        strike: false,
+        code: false,
+        heading: false,
+        bulletList: false,
+        orderedList: false,
+      }),
+      VariableSuggestion,
+    ],
+    content: value,
+    editorProps: {
+      attributes: {
+        class: cn(
+          'border-none outline-none bg-transparent resize-none select-text cursor-text',
+          'focus:ring-2 focus:ring-primary/50 rounded-sm w-full h-full',
+          className
+        ),
+        style: `font-family: inherit; font-size: inherit; font-weight: inherit; line-height: inherit; color: inherit; min-height: ${style.minHeight || 'auto'}; width: 100%; min-width: 100%;`
+      },
+      handleKeyDown: (view, event) => {
+        if (isPickerOpenRef.current) {
+           return false;
+        }
+
+        if (event.key === 'Enter' && !multiline) {
+          event.preventDefault();
+          handleSave(view.state.doc.textContent);
+          return true;
+        } else if (event.key === 'Enter' && multiline && !event.shiftKey) {
+          event.preventDefault();
+          handleSave(view.state.doc.textContent);
+          return true;
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          handleCancel();
+          return true;
+        }
+        return false;
+      }
+    },
+    onUpdate: ({ editor }) => {
+      onChange(editor.getText());
+    },
+    onBlur: () => {
+        // Use ref instead of state to avoid race condition.
+        // The ref is updated synchronously, so even if blur fires
+        // rapidly after a click, the check is reliable.
+        setTimeout(() => {
+          if (!isPickerOpenRef.current) {
+            handleSave(editor?.getText() || '');
+          }
+        }, 150);
+    }
+  });
 
   useEffect(() => {
-    setText(value);
-  }, [value]);
-
-  useEffect(() => {
-    // Focus and select all text when editor mounts
-    if (inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
+    if (editor) {
+      editor.commands.focus('end');
     }
-  }, []);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Stop propagation to prevent parent components from handling the event
-    e.stopPropagation();
-
-    // Don't handle Enter/Escape when picker is open
-    if (showPicker) {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setShowPicker(false);
-        return;
-      }
-      // Let picker handle arrow keys and enter
-      if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(e.key)) {
-        return;
-      }
-    }
-
-    if (e.key === 'Enter' && !multiline) {
-      e.preventDefault();
-      handleSave();
-    } else if (e.key === 'Enter' && multiline && !e.shiftKey) {
-      e.preventDefault();
-      handleSave();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      handleCancel();
-    }
-  };
-
-  const handleKeyUp = useCallback((e: React.KeyboardEvent) => {
-    const target = e.target as HTMLInputElement | HTMLTextAreaElement;
-    const pos = target.selectionStart || 0;
-    setCursorPosition(pos);
-
-    const textBeforeCursor = text.slice(0, pos);
-
-    // Check for @ trigger
-    const atIndex = textBeforeCursor.lastIndexOf('@');
-    const lastSpace = textBeforeCursor.lastIndexOf(' ');
-    const lastNewline = textBeforeCursor.lastIndexOf('\n');
-    const lastBoundary = Math.max(lastSpace, lastNewline);
-
-    if (atIndex !== -1 && atIndex > lastBoundary) {
-      setSearchTerm(textBeforeCursor.slice(atIndex + 1));
-      setShowPicker(true);
-      updatePickerPosition(target);
-      return;
-    }
-
-    setShowPicker(false);
-  }, [text]);
-
-  const getCaretCoordinates = (element: HTMLInputElement | HTMLTextAreaElement, position: number) => {
-    // Create a mirror div to measure text
-    const div = document.createElement('div');
-    const computed = window.getComputedStyle(element);
-
-    // Copy styles to mirror
-    const properties = [
-      'fontSize', 'fontFamily', 'fontWeight', 'letterSpacing', 'lineHeight',
-      'padding', 'border', 'boxSizing', 'whiteSpace', 'wordWrap'
-    ];
-
-    properties.forEach(prop => {
-      div.style[prop as any] = computed[prop as any];
-    });
-
-    div.style.position = 'absolute';
-    div.style.visibility = 'hidden';
-    div.style.whiteSpace = 'pre-wrap';
-    div.style.wordWrap = 'break-word';
-
-    // Get text before cursor
-    const textBeforeCursor = element.value.substring(0, position);
-    div.textContent = textBeforeCursor;
-
-    // Add marker span at cursor position
-    const marker = document.createElement('span');
-    marker.textContent = '|';
-    div.appendChild(marker);
-
-    document.body.appendChild(div);
-
-    // Get marker position relative to the div
-    const markerRect = marker.getBoundingClientRect();
-    const divRect = div.getBoundingClientRect();
-    const elementRect = element.getBoundingClientRect();
-
-    // Calculate coordinates
-    const x = elementRect.left + (markerRect.left - divRect.left);
-    const y = elementRect.top + (markerRect.top - divRect.top);
-
-    document.body.removeChild(div);
-
-    return { x, y, height: markerRect.height };
-  };
-
-  const updatePickerPosition = (target: HTMLElement) => {
-    const inputElement = target as HTMLInputElement | HTMLTextAreaElement;
-    const cursorPos = inputElement.selectionStart || 0;
-
-    const coords = getCaretCoordinates(inputElement, cursorPos);
-
-    setPickerPosition({
-      top: coords.y + coords.height + 4, // 4px below cursor
-      left: coords.x,
-    });
-  };
+  }, [editor]);
 
   const handleSelect = useCallback((insertValue: string) => {
-    const textBeforeCursor = text.slice(0, cursorPosition);
-    const textAfterCursor = text.slice(cursorPosition);
-    const atIndex = textBeforeCursor.lastIndexOf('@');
-    const newText = textBeforeCursor.slice(0, atIndex) + insertValue + textAfterCursor;
-    setText(newText);
-    onChange(newText);
+    if (editor && insertMentionRangeRef.current) {
+      const { from, to } = insertMentionRangeRef.current;
+      editor
+        .chain()
+        .focus()
+        .insertContentAt({ from, to }, insertValue)
+        .run();
+      
+      onChange(editor.getText());
+    }
+    isPickerOpenRef.current = false;
     setShowPicker(false);
-
-    // Focus back on input
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 0);
-  }, [text, cursorPosition, onChange]);
-
-  const handleBlur = () => {
-    // Delay to allow picker click
-    setTimeout(() => {
-      if (!showPicker) {
-        handleSave();
-      }
-    }, 150);
-  };
-
-  const handleSave = () => {
-    onChange(text);
-    onSave();
-  };
-
-  const handleCancel = () => {
-    setText(value); // Reset to original value
-    onCancel();
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setText(e.target.value);
-    // Also update the parent immediately for sync
-    onChange(e.target.value);
-  };
-
-
-  const baseClasses = cn(
-    'border-none outline-none bg-transparent resize-none',
-    'focus:ring-2 focus:ring-primary/50 rounded-sm',
-    className
-  );
-
-  const inputElement = multiline ? (
-    <textarea
-      ref={inputRef as React.RefObject<HTMLTextAreaElement>}
-      value={text}
-      onChange={handleChange}
-      onKeyDown={handleKeyDown}
-      onKeyUp={handleKeyUp}
-      onBlur={handleBlur}
-      className={baseClasses}
-      style={{
-        ...style,
-        minHeight: style.minHeight || 'auto',
-        fontFamily: 'inherit',
-        fontSize: 'inherit',
-        fontWeight: 'inherit',
-        lineHeight: 'inherit',
-        color: 'inherit',
-      }}
-      placeholder={placeholder}
-      rows={1}
-    />
-  ) : (
-    <input
-      ref={inputRef as React.RefObject<HTMLInputElement>}
-      type="text"
-      value={text}
-      onChange={handleChange}
-      onKeyDown={handleKeyDown}
-      onKeyUp={handleKeyUp}
-      onBlur={handleBlur}
-      className={baseClasses}
-      style={{
-        ...style,
-        fontFamily: 'inherit',
-        fontSize: 'inherit',
-        fontWeight: 'inherit',
-        lineHeight: 'inherit',
-        color: 'inherit',
-        // Use 100% width - let parent container control sizing
-        width: '100%',
-        minWidth: '100%',
-      }}
-      placeholder={placeholder}
-    />
-  );
+  }, [editor, onChange]);
 
   return (
-    <>
-      {inputElement}
-      {showPicker && (
+    <div 
+      onKeyDown={(e) => e.stopPropagation()} 
+      onKeyUp={(e) => e.stopPropagation()}
+      style={{ display: 'inline-block', width: '100%', ...style }}
+    >
+      <EditorContent editor={editor} style={{ display: 'inline-block', width: '100%' }} />
+      {showPicker && createPortal(
         <VariablePicker
           searchTerm={searchTerm}
           position={pickerPosition}
           onSelect={handleSelect}
-          onClose={() => setShowPicker(false)}
-        />
+          onClose={() => {
+            isPickerOpenRef.current = false;
+            setShowPicker(false);
+          }}
+        />,
+        document.body
       )}
-    </>
+    </div>
   );
 };

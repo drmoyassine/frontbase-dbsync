@@ -46,6 +46,8 @@ import { workflowsRoute } from '../routes/workflows.js';
 import { queueRoute } from '../routes/queue.js';
 import { configRoute } from '../routes/config.js';
 import { openaiRoute } from '../routes/openai.js';
+import { agentToolsRoute } from '../routes/agent-tools.js';
+import { mcpServerRoute } from '../routes/mcp.js';
 import { getAgentProfilesConfig } from '../config/env.js';
 import { systemKeyAuth, userApiKeyAuth, aiApiKeyAuth } from '../middleware/auth.js';
 
@@ -224,10 +226,14 @@ export function createLiteApp(mode: EngineMode = 'lite') {
     app.route('/api/workflows', workflowsRoute);
     app.route('/api/queue', queueRoute);
     app.route('/api/config', configRoute);
+    app.route('/api/agent-tools', agentToolsRoute);
 
     // ── AI Infrastructure routes ──
     app.use('/api/agents/v1/*', aiApiKeyAuth);
     app.route('/api/agents/v1', openaiRoute);
+    
+    // ── MCP Server Protocol ──
+    app.route('/api/mcp', mcpServerRoute);
 
     // ── AI Agent Profiles routes ──
     app.use('/api/agents/:profileSlug/v1/*', aiApiKeyAuth);

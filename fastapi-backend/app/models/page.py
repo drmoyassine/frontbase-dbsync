@@ -28,6 +28,7 @@ class Page(Base):
     
     # Relationships
     deployments = relationship("PageDeployment", back_populates="page", cascade="all, delete-orphan")
+    versions = relationship("PageVersion", back_populates="page", cascade="all, delete-orphan", order_by="PageVersion.version_number.desc()")
     
     @property
     def layout_data_dict(self):
@@ -75,3 +76,19 @@ class PageDeployment(Base):
     # Relationships
     page = relationship("Page", back_populates="deployments")
     edge_engine = relationship("EdgeEngine", back_populates="page_deployments")
+
+
+class PageVersion(Base):
+    """Immutable snapshot of a page's layout_data. Created on every save."""
+    __tablename__ = 'page_versions'
+
+    id = Column(String, primary_key=True)
+    page_id = Column(String, ForeignKey('pages.id', ondelete='CASCADE'), nullable=False)
+    version_number = Column(Integer, nullable=False)          # Auto-incremented per page
+    layout_data = Column(Text, nullable=False)                # Full JSON snapshot
+    content_hash = Column(String(64))                         # Hash at snapshot time
+    label = Column(String(200))                               # Optional human label ("Pre-launch", "v2 draft")
+    created_at = Column(String, nullable=False)
+
+    # Relationships
+    page = relationship("Page", back_populates="versions")

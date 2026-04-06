@@ -102,6 +102,22 @@ export const edgeLogsTable = sqliteTable('edge_logs', {
 });
 
 // =============================================================================
+// Agent Tools (user-configured tools for AI agent profiles)
+// =============================================================================
+
+export const agentToolsTable = sqliteTable('agent_tools', {
+    id: text('id').primaryKey(),
+    profileSlug: text('profile_slug').notNull(),      // Which agent profile owns this tool
+    type: text('type').notNull(),                      // 'workflow' | 'mcp_server'
+    name: text('name').notNull(),                      // LLM-facing tool name (e.g., "send_welcome_email")
+    description: text('description'),                  // LLM-facing description
+    config: text('config').notNull(),                  // JSON blob (type-discriminated)
+    isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+    createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+// =============================================================================
 // Inferred Types
 // =============================================================================
 
@@ -111,3 +127,5 @@ export type WorkflowRow = typeof workflowsTable.$inferSelect;
 export type ExecutionRow = typeof executionsTable.$inferSelect;
 export type EdgeLogRow = typeof edgeLogsTable.$inferSelect;
 export type NewEdgeLog = typeof edgeLogsTable.$inferInsert;
+export type AgentToolRow = typeof agentToolsTable.$inferSelect;
+export type NewAgentTool = typeof agentToolsTable.$inferInsert;

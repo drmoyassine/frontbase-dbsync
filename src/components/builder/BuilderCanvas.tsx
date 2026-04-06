@@ -3,6 +3,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { useBuilderStore, type Page } from '@/stores/builder';
 import { DraggableComponent } from './DraggableComponent';
 import { CanvasGrid } from './CanvasGrid';
+import { ComponentBreadcrumb } from './ComponentBreadcrumb';
 import { cn } from '@/lib/utils';
 import { getDefaultProps } from '@/lib/componentDefaults';
 import { stylesToCSS } from '@/lib/styles/converters';
@@ -210,7 +211,6 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       }
     }
 
-    console.log('🎨 [Canvas] Applied container styles:', styles);
     return styles;
   };
 
@@ -327,6 +327,9 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
             />
           ))}
         </div>
+
+        {/* Breadcrumb Navigation — shows ancestry when component is selected */}
+        {!isPreviewMode && selectedComponentId && <ComponentBreadcrumb />}
       </div>
     </div>
   );

@@ -23,7 +23,7 @@ const getIconComponent = (iconName: string): React.ComponentType<{ size?: number
     return (ICON_MAP as any)[iconName] || null;
 };
 
-export const CardRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, inlineStyles, children }) => {
+export const CardRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, inlineStyles, children, createEditableText }) => {
     const {
         title,
         description,
@@ -86,17 +86,17 @@ export const CardRenderer: React.FC<RendererProps> = ({ effectiveProps, combined
                         </div>
 
                         {/* Title */}
-                        {title && (
-                            <h3 className="text-lg font-semibold">
-                                {title}
+                        {(title || title === '') && (
+                            <h3 className="text-lg font-semibold w-full">
+                                {createEditableText(title || '', 'title', 'block w-full', { textAlign: textAlignMap[textAlignment as keyof typeof textAlignMap] || 'center' })}
                             </h3>
                         )}
 
                         {/* Description */}
-                        {description && (
-                            <p className="text-sm text-muted-foreground leading-relaxed">
-                                {description}
-                            </p>
+                        {(description || description === '') && (
+                            <div className="text-sm text-muted-foreground leading-relaxed w-full">
+                                {createEditableText(description || '', 'description', 'block w-full', { textAlign: textAlignMap[textAlignment as keyof typeof textAlignMap] || 'center' })}
+                            </div>
                         )}
                     </div>
                 </CardContent>
@@ -108,14 +108,14 @@ export const CardRenderer: React.FC<RendererProps> = ({ effectiveProps, combined
     return (
         <Card className={combinedClassName} style={inlineStyles}>
             {/* Only show header if we have title/description AND no children */}
-            {(!hasChildren && (title || description)) && (
+            {(!hasChildren && ((title || title === '') || (description || description === ''))) && (
                 <CardHeader>
-                    {title && <CardTitle>{title}</CardTitle>}
-                    {description && <CardDescription>{description}</CardDescription>}
+                    {(title || title === '') && <CardTitle className="w-full">{createEditableText(title || '', 'title', 'block w-full')}</CardTitle>}
+                    {(description || description === '') && <CardDescription className="w-full">{createEditableText(description || '', 'description', 'block w-full')}</CardDescription>}
                 </CardHeader>
             )}
             <CardContent className={hasChildren ? 'p-4' : ''}>
-                {hasChildren ? children : (content && <p>{content}</p>)}
+                {hasChildren ? children : ((content || content === '') && <div className="w-full">{createEditableText(content || '', 'content', 'block w-full')}</div>)}
             </CardContent>
         </Card>
     );

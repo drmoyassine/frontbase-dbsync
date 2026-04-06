@@ -28,6 +28,7 @@ import type { PublishPage, PageLayout, SeoData, DatasourceConfig } from '../sche
 import type {
     IStateProvider, ProjectSettingsData, PublishedPageSummary,
     WorkflowData, ExecutionData, NewExecutionData, ExecutionStats, DeadLetterData,
+    AgentToolData,
 } from './IStateProvider';
 
 const DEFAULT_FAVICON = '/static/icon.png';
@@ -552,5 +553,57 @@ export class SupabaseRestProvider implements IStateProvider {
                 retry_count: deadLetter.retryCount || 0,
             });
         throwIfError(result, 'createDeadLetter');
+    }
+
+    // =========================================================================
+    // Agent Tools
+    // =========================================================================
+
+    async listAgentTools(profileSlug: string, includeInactive: boolean = false): Promise<AgentToolData[]> {
+        const client = getClient();
+        let query = client
+            .from('agent_tools')
+            .select('*')
+            .eq('profile_slug', profileSlug);
+        if (!includeInactive) {
+            query = query.eq('is_active', true);
+        }
+        const { data, error } = await query;
+        if (error) throw new Error(`[SupabaseRest] listAgentTools: ${error.message}`);
+        return (data || []).map((r: any) => ({
+            id: r.id, profileSlug: r.profile_slug, type: r.type,
+            name: r.name, description: r.description || null,
+            config: r.config, isActive: !!r.is_active,
+            createdAt: r.created_at, updatedAt: r.updated_at,
+        } as AgentToolData));
+    }
+
+    async upsertAgentTool(tool: AgentToolData): Promise<void> {
+        const client = getClient();
+        const now = new Date().toISOString();
+        const result = await client
+            .from('agent_tools')
+            .upsert({
+                id: tool.id,
+                profile_slug: tool.profileSlug,
+                type: tool.type,
+                name: tool.name,
+                description: tool.description,
+                config: tool.config,
+                is_active: tool.isActive,
+                created_at: tool.createdAt || now,
+                updated_at: now,
+            }, { onConflict: 'id' });
+        throwIfError(result, `upsertAgentTool(${tool.id})`);
+    }
+
+    async deleteAgentTool(id: string): Promise<boolean> {
+        const client = getClient();
+        const result = await client
+            .from('agent_tools')
+            .delete()
+            .eq('id', id);
+        throwIfError(result, `deleteAgentTool(${id})`);
+        return true;
     }
 }

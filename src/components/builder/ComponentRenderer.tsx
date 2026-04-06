@@ -31,7 +31,7 @@ interface ComponentRendererProps {
   onDoubleClick?: (componentId: string, event: React.MouseEvent) => void;
 }
 
-export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
+export const ComponentRenderer: React.FC<ComponentRendererProps> = React.memo(({
   component,
   isSelected,
   children,
@@ -63,15 +63,6 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   // Data Binding Logic
   const binding = props.binding as ComponentDataBinding | undefined;
 
-  // DEBUG: Check if binding is in props
-  if (type === 'DataTable') {
-    console.log('[ComponentRenderer] DataTable render:', {
-      componentId: id,
-      hasBinding: !!props.binding,
-      binding: props.binding,
-      tableName: binding?.tableName
-    });
-  }
 
   // For DataTable, we don't need fieldMapping (it shows all columns)
   // For other components, we need fieldMapping to know which props to bind
@@ -256,4 +247,4 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = ({
       Unknown component: {type}
     </div>
   );
-};
+});

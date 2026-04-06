@@ -400,7 +400,7 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
               component={child}
               index={childIndex}
               depth={depth + 1}
-              isSelected={expandedComponents.has('selected-' + child.id)}
+              isSelected={useBuilderStore.getState().selectedComponentId === child.id}
               isExpanded={expandedComponents.has(child.id)}
               expandedComponents={expandedComponents}
               onSelect={() => onSelectChild(child.id)}

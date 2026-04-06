@@ -54,6 +54,7 @@
     "@tanstack/query-sync-storage-persister": "^5.90.18",
     "@tanstack/react-query": "^5.83.0",
     "@tanstack/react-query-persist-client": "^5.90.18",
+    "@tiptap/extension-mention": "^2.27.1",
     "@tiptap/extension-placeholder": "^2.27.1",
     "@tiptap/react": "^2.27.1",
     "@tiptap/starter-kit": "^2.27.1",

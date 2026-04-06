@@ -81,3 +81,48 @@ export const permanentDeletePage = async (pageId: string): Promise<void> => {
     throw error;
   }
 };
+
+// Version History
+
+export interface PageVersion {
+  id: string;
+  pageId: string;
+  versionNumber: number;
+  contentHash?: string;
+  label?: string;
+  createdAt: string;
+  layoutData?: any;
+}
+
+export const getPageVersions = async (pageId: string): Promise<PageVersion[]> => {
+  try {
+    const response = await api.get(`/api/pages/${pageId}/versions/`);
+    if (!response.data?.success) throw new Error(response.data?.error || 'Failed to fetch versions');
+    return response.data.data;
+  } catch (error) {
+    console.error('Error getting page versions:', error);
+    throw error;
+  }
+};
+
+export const createPageVersion = async (pageId: string, label?: string): Promise<PageVersion> => {
+  try {
+    const response = await api.post(`/api/pages/${pageId}/versions/`, { label });
+    if (!response.data?.success) throw new Error(response.data?.error || 'Failed to create version snapshot');
+    return response.data.data;
+  } catch (error) {
+    console.error('Error creating page version:', error);
+    throw error;
+  }
+};
+
+export const rollbackPageToVersion = async (pageId: string, versionId: string): Promise<any> => {
+  try {
+    const response = await api.post(`/api/pages/${pageId}/rollback/`, { version_id: versionId });
+    if (!response.data?.success) throw new Error(response.data?.error || 'Failed to rollback page');
+    return response.data;
+  } catch (error) {
+    console.error('Error rolling back page:', error);
+    throw error;
+  }
+};

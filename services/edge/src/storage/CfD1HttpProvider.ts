@@ -20,6 +20,7 @@ import type { PublishPage, PageLayout, SeoData, DatasourceConfig } from '../sche
 import type {
     IStateProvider, ProjectSettingsData, PublishedPageSummary,
     WorkflowData, ExecutionData, NewExecutionData, ExecutionStats, DeadLetterData,
+    AgentToolData,
 } from './IStateProvider';
 import { runMigrations } from './edge-migrations';
 
@@ -473,5 +474,43 @@ export class CfD1HttpProvider implements IStateProvider {
             `INSERT INTO dead_letters (id, workflow_id, execution_id, error, payload, retry_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
             [deadLetter.id, deadLetter.workflowId, deadLetter.executionId, deadLetter.error, deadLetter.payload, deadLetter.retryCount || 0]
         );
+    }
+
+    // =========================================================================
+    // Agent Tools
+    // =========================================================================
+
+    async listAgentTools(profileSlug: string, includeInactive: boolean = false): Promise<AgentToolData[]> {
+        const where = includeInactive
+            ? `WHERE profile_slug = ?1`
+            : `WHERE profile_slug = ?1 AND is_active = 1`;
+        const rows = await this.all(
+            `SELECT * FROM agent_tools ${where}`, [profileSlug]
+        );
+        return rows.map((r: any) => ({
+            id: r.id, profileSlug: r.profile_slug, type: r.type,
+            name: r.name, description: r.description || null,
+            config: r.config, isActive: !!r.is_active,
+            createdAt: r.created_at, updatedAt: r.updated_at,
+        } as AgentToolData));
+    }
+
+    async upsertAgentTool(tool: AgentToolData): Promise<void> {
+        const now = new Date().toISOString();
+        await this.run(
+            `INSERT INTO agent_tools (id, profile_slug, type, name, description, config, is_active, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(id) DO UPDATE SET
+               profile_slug=excluded.profile_slug, type=excluded.type, name=excluded.name,
+               description=excluded.description, config=excluded.config,
+               is_active=excluded.is_active, updated_at=excluded.updated_at`,
+            [tool.id, tool.profileSlug, tool.type, tool.name, tool.description,
+             tool.config, tool.isActive ? 1 : 0, tool.createdAt || now, now]
+        );
+    }
+
+    async deleteAgentTool(id: string): Promise<boolean> {
+        await this.run(`DELETE FROM agent_tools WHERE id = ?1`, [id]);
+        return true;
     }
 }

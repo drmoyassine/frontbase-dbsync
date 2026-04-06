@@ -11,7 +11,7 @@ import {
 export interface BuilderSlice {
     selectedComponentId: string | null;
     draggedComponentId: string | null;
-    editingComponentId: string | null;
+    editingTextNode: { componentId: string, property: string } | null;
     copiedComponent: ComponentData | null;
     focusedField: { componentId: string; fieldName: string } | null;
 
@@ -27,7 +27,7 @@ export interface BuilderSlice {
 
     setSelectedComponentId: (id: string | null) => void;
     setDraggedComponentId: (componentId: string | null) => void;
-    setEditingComponentId: (id: string | null) => void;
+    setEditingTextNode: (node: { componentId: string, property: string } | null) => void;
     setFocusedField: (field: { componentId: string; fieldName: string } | null) => void;
 
     // Card-level actions
@@ -53,7 +53,7 @@ export interface BuilderSlice {
 export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice> = (set, get) => ({
     selectedComponentId: null,
     draggedComponentId: null,
-    editingComponentId: null,
+    editingTextNode: null,
     copiedComponent: null,
     focusedField: null,
     selectedCardIndex: null,
@@ -62,7 +62,7 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
 
     setSelectedComponentId: (id) => set({ selectedComponentId: id, selectedCardIndex: null }),
     setDraggedComponentId: (id) => set({ draggedComponentId: id }),
-    setEditingComponentId: (id) => set({ editingComponentId: id }),
+    setEditingTextNode: (node) => set({ editingTextNode: node }),
     setFocusedField: (field) => set({ focusedField: field }),
     setSelectedCardIndex: (index) => set({ selectedCardIndex: index }),
 
@@ -223,13 +223,24 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
                 page.layoutData.content = updateComponentInTree(
                     page.layoutData.content,
                     componentId,
-                    (comp) => ({
-                        ...comp,
-                        props: {
-                            ...comp.props,
-                            [textProperty]: text
+                    (comp) => {
+                        const newProps = { ...comp.props };
+                        if (textProperty.includes('.')) {
+                            const parts = textProperty.split('.');
+                            let current: any = newProps;
+                            for (let i = 0; i < parts.length - 1; i++) {
+                                current[parts[i]] = Array.isArray(current[parts[i]]) ? [...current[parts[i]]] : { ...current[parts[i]] };
+                                current = current[parts[i]];
+                            }
+                            current[parts[parts.length - 1]] = text;
+                        } else {
+                            newProps[textProperty] = text;
                         }
-                    })
+                        return {
+                            ...comp,
+                            props: newProps
+                        };
+                    }
                 );
             }
 

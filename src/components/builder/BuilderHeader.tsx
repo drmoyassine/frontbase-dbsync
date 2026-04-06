@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { toast } from 'sonner';
+import { showApiErrorToast } from '@/components/dashboard/settings/shared/edgeTestToast';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +24,7 @@ import {
   Trash2,
   Grid3x3,
   Settings,
+  History,
   ExternalLink,
   ChevronDown,
 } from 'lucide-react';
@@ -36,6 +38,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useBuilderStore } from '@/stores/builder';
 import { PageSelector } from './PageSelector';
 import { PageSettingsDrawer } from './PageSettingsDrawer';
+import { VersionHistoryDialog } from './settings/VersionHistoryDialog';
 import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
 import { resolveEngineOrigin, resolvePreviewUrl } from '@/lib/edgeUtils';
 
@@ -84,6 +87,7 @@ export const BuilderHeader: React.FC<{
 
     const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
     const [showPageSettings, setShowPageSettings] = useState(false);
+    const [showVersionHistory, setShowVersionHistory] = useState(false);
     const [publishOpen, setPublishOpen] = useState(false);
     const [targets, setTargets] = useState<EdgeTarget[]>([]);
     const [selectedTargets, setSelectedTargets] = useState<Set<string>>(new Set());
@@ -172,7 +176,7 @@ export const BuilderHeader: React.FC<{
           }
         }
       } catch (err: any) {
-        toast.error(err?.message || 'Failed to publish');
+        showApiErrorToast(err, 'Publish Failed');
       } finally {
         setIsPublishing(false);
         setPublishOpen(false);
@@ -205,7 +209,7 @@ export const BuilderHeader: React.FC<{
           setPublishOpen(true);
         }
       } catch (err) {
-        console.error('Failed to load targets:', err);
+        showApiErrorToast(err, 'Failed to load targets');
       } finally {
         setLoadingTargets(false);
       }
@@ -424,7 +428,7 @@ export const BuilderHeader: React.FC<{
                       ));
                       setPublishOpen(true);
                     } catch (err) {
-                      console.error('Failed to load targets:', err);
+                      showApiErrorToast(err, 'Failed to load targets');
                     } finally {
                       setLoadingTargets(false);
                     }
@@ -518,11 +522,22 @@ export const BuilderHeader: React.FC<{
           </Popover>
           </div>
 
+          {/* Version History */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowVersionHistory(true)}
+            title="Version History"
+          >
+            <History className="h-4 w-4" />
+          </Button>
+
           {/* Page Settings */}
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowPageSettings(true)}
+            title="Page Settings"
           >
             <Settings className="h-4 w-4" />
           </Button>
@@ -538,6 +553,11 @@ export const BuilderHeader: React.FC<{
         <PageSettingsDrawer
           open={showPageSettings}
           onOpenChange={setShowPageSettings}
+        />
+
+        <VersionHistoryDialog
+          open={showVersionHistory}
+          onOpenChange={setShowVersionHistory}
         />
       </header>
     );

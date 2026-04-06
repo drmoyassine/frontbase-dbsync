@@ -39,6 +39,9 @@
 - [ ] ✨ **Manual Checkpoint Node** — User-placeable checkpoint node for explicit state saves inside loops.
 - [ ] ✨ **Custom WebSockets** — Real-time workflow execution streaming (replacing Supabase Realtime).
 
+### AI Agents (Backend)
+- [ ] 🔌 **Messenger Webhooks (Phase 3B)** — Implement direct Telegram and Slack bot channels using the new `vercel/chat` unified TS SDK. (Delayed: keep on backlog until the `chat` SDK matures out of beta).
+
 ### Cross-Bucket File Move (Backend + Frontend)
 - [ ] ✨ **Cross-Bucket & Cross-Provider File Move** — `download_file()` on `StorageAdapter` ABC, `POST /api/storage/move-cross`, streaming for >50MB. Frontend: enhanced `MoveDialog` with bucket picker, folder browser, progress indicator.
 
@@ -47,7 +50,6 @@
 ## Frontend
 
 ### Builder / SSR (Frontend)
-- [ ] 🐛 **SSR page width issue** — Page content doesn't span full viewport. Debug `renderPage()` viewport width, `containerStyles.values.size`, `.fb-page` width.
 - [ ] ✨ **Role-Based Visibility** — Component-level access rules ("Visible to roles"). Server-side filtering. User-scoped data queries via JWT for Supabase RLS.
 - [ ] ✨ **PWA Support for Published Apps** — Dynamic Manifest, Service Worker, offline support, "Add to Home Screen" prompt.
 - [ ] 🐛 **Better error toasts** — Parse and display structured error details from backend.

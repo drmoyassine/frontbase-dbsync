@@ -1,11 +1,4 @@
-c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_agent_profiles.py
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_agent_profiles.py:22:56 - error: Invalid conditional operand of type "Column[str]"
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\versions.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\versions.py:63:48 - error: Invalid conditional operand of type "Column[str]"
   ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_agent_profiles.py:23:64 - error: Invalid conditional operand of type "Column[str]"
-  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
-c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\secrets_builder.py
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\secrets_builder.py:157:55 - error: Invalid conditional operand of type "Column[str]"
-  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\secrets_builder.py:163:53 - error: Invalid conditional operand of type "Column[str]"
-  ┬á┬áMethod __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
-4 errors, 0 warnings, 0 informations
+1 error, 0 warnings, 0 informations

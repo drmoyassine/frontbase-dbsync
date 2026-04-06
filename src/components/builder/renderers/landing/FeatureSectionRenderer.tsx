@@ -64,7 +64,8 @@ const DraggableCard: React.FC<{
     isFirst: boolean;
     isLast: boolean;
     onClick: (e: React.MouseEvent) => void;
-}> = ({ feature, index, sectionId, cardProps, bgColor, isSelected, isFirst, isLast, onClick }) => {
+    createEditableText: (text: string, prop: string, className: string, style?: any) => any;
+}> = ({ feature, index, sectionId, cardProps, bgColor, isSelected, isFirst, isLast, onClick, createEditableText }) => {
     const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
         id: `card-${sectionId}-${feature.id}`,
         data: {
@@ -114,7 +115,9 @@ const DraggableCard: React.FC<{
                 combinedClassName="transition-all duration-300 hover:shadow-lg h-full w-full"
                 inlineStyles={{ backgroundColor: bgColor }}
                 children={null}
-                createEditableText={() => null}
+                createEditableText={(text, prop, className, style) => 
+                    createEditableText(text, `features.${index}.${prop}`, className, style)
+                }
             />
 
             {isSelected && (
@@ -232,6 +235,7 @@ export const FeatureSectionRenderer: React.FC<RendererProps> = ({
                     isFirst={index === 0}
                     isLast={index === featureList.length - 1}
                     onClick={(e) => handleCardClick(e, index)}
+                    createEditableText={createEditableText}
                 />
             );
         });

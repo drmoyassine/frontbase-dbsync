@@ -23,6 +23,7 @@ import type { PublishPage, PageLayout, SeoData, DatasourceConfig } from '../sche
 import type {
     IStateProvider, ProjectSettingsData, PublishedPageSummary,
     WorkflowData, ExecutionData, NewExecutionData, ExecutionStats, DeadLetterData,
+    AgentToolData,
 } from './IStateProvider';
 
 const DEFAULT_FAVICON = '/static/icon.png';
@@ -171,6 +172,19 @@ const PG_MIGRATIONS = [
         retry_count INTEGER DEFAULT 0,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`,
+    // Agent tools
+    `CREATE TABLE IF NOT EXISTS ${SCHEMA}.agent_tools (
+        id TEXT PRIMARY KEY,
+        profile_slug TEXT NOT NULL,
+        type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        config TEXT NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_agent_tools_profile ON ${SCHEMA}.agent_tools(profile_slug)`,
 ];
 
 // =============================================================================
@@ -523,5 +537,43 @@ export class NeonHttpProvider implements IStateProvider {
             `INSERT INTO ${SCHEMA}.dead_letters (id, workflow_id, execution_id, error, payload, retry_count) VALUES ($1, $2, $3, $4, $5, $6)`,
             [deadLetter.id, deadLetter.workflowId, deadLetter.executionId, deadLetter.error, deadLetter.payload, deadLetter.retryCount || 0]
         );
+    }
+
+    // =========================================================================
+    // Agent Tools
+    // =========================================================================
+
+    async listAgentTools(profileSlug: string, includeInactive: boolean = false): Promise<AgentToolData[]> {
+        const where = includeInactive
+            ? `WHERE profile_slug = $1`
+            : `WHERE profile_slug = $1 AND is_active = TRUE`;
+        const rows = await this.all(
+            `SELECT * FROM ${SCHEMA}.agent_tools ${where}`, [profileSlug]
+        );
+        return rows.map((r: any) => ({
+            id: r.id, profileSlug: r.profile_slug, type: r.type,
+            name: r.name, description: r.description || null,
+            config: r.config, isActive: !!r.is_active,
+            createdAt: r.created_at, updatedAt: r.updated_at,
+        } as AgentToolData));
+    }
+
+    async upsertAgentTool(tool: AgentToolData): Promise<void> {
+        const now = new Date().toISOString();
+        await this.query(
+            `INSERT INTO ${SCHEMA}.agent_tools (id, profile_slug, type, name, description, config, is_active, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             ON CONFLICT(id) DO UPDATE SET
+               profile_slug=EXCLUDED.profile_slug, type=EXCLUDED.type, name=EXCLUDED.name,
+               description=EXCLUDED.description, config=EXCLUDED.config,
+               is_active=EXCLUDED.is_active, updated_at=EXCLUDED.updated_at`,
+            [tool.id, tool.profileSlug, tool.type, tool.name, tool.description,
+             tool.config, tool.isActive, tool.createdAt || now, now]
+        );
+    }
+
+    async deleteAgentTool(id: string): Promise<boolean> {
+        await this.query(`DELETE FROM ${SCHEMA}.agent_tools WHERE id = $1`, [id]);
+        return true;
     }
 }

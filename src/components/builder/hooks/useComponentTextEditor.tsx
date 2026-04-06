@@ -4,7 +4,7 @@ import { InlineTextEditor } from '../InlineTextEditor';
 import { cn } from '@/lib/utils';
 
 export const useComponentTextEditor = (componentId: string | undefined) => {
-    const { editingComponentId, setEditingComponentId, updateComponentText, isPreviewMode } = useBuilderStore();
+    const { editingTextNode, setEditingTextNode, updateComponentText, isPreviewMode } = useBuilderStore();
 
     const handleTextEdit = (textProperty: string, text: string) => {
         if (componentId) {
@@ -13,12 +13,12 @@ export const useComponentTextEditor = (componentId: string | undefined) => {
     };
 
     const handleTextEditEnd = () => {
-        setEditingComponentId(null);
+        setEditingTextNode(null);
     };
 
-    const isEditing = editingComponentId === componentId;
-
     const createEditableText = (text: string, textProperty: string, className: string, style: React.CSSProperties = {}) => {
+        const isEditing = editingTextNode?.componentId === componentId && editingTextNode?.property === textProperty;
+        
         if (isEditing) {
             return (
                 // Wrapper with position:relative for the hidden measuring span inside InlineTextEditor
@@ -45,7 +45,17 @@ export const useComponentTextEditor = (componentId: string | undefined) => {
                 onClick={(e) => {
                     if (!isPreviewMode && componentId) {
                         e.stopPropagation();
-                        setEditingComponentId(componentId);
+                        setEditingTextNode({ componentId, property: textProperty });
+                    }
+                }}
+                onPointerDown={(e) => {
+                    if (!isPreviewMode && componentId) {
+                        e.stopPropagation();
+                    }
+                }}
+                onMouseDown={(e) => {
+                    if (!isPreviewMode && componentId) {
+                        e.stopPropagation();
                     }
                 }}
             >

@@ -102,6 +102,47 @@ export interface DeadLetterData {
 }
 
 // =============================================================================
+// Agent Tool Types
+// =============================================================================
+
+export interface AgentToolData {
+    id: string;
+    profileSlug: string;
+    type: 'workflow' | 'mcp_server';
+    name: string;             // LLM-facing tool name
+    description: string | null;
+    config: string;           // JSON string (type-discriminated)
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+// =============================================================================
+// Agent Tool Config Shapes (parsed from config JSON)
+// =============================================================================
+
+export interface ToolParameter {
+    name: string;
+    type: 'string' | 'number' | 'boolean' | 'object' | 'array';
+    required: boolean;
+    description: string;
+    default?: any;
+    enum?: string[];
+}
+
+export interface WorkflowToolConfig {
+    workflowId: string;
+    parameters: ToolParameter[];
+}
+
+export interface McpServerToolConfig {
+    url: string;
+    transport: 'streamable-http';
+    headers?: Record<string, string>;
+    toolFilter?: string[];   // Only import these tool names
+}
+
+// =============================================================================
 // State Provider Interface
 // =============================================================================
 
@@ -173,4 +214,12 @@ export interface IStateProvider {
     // --- Dead Letter Queue ---
     /** Write a failed execution to the dead letters table (optional) */
     createDeadLetter?(deadLetter: DeadLetterData): Promise<void>;
+
+    // --- Agent Tools ---
+    /** List agent tools for a profile (active only by default) */
+    listAgentTools(profileSlug: string, includeInactive?: boolean): Promise<AgentToolData[]>;
+    /** Upsert an agent tool */
+    upsertAgentTool(tool: AgentToolData): Promise<void>;
+    /** Delete an agent tool by ID */
+    deleteAgentTool(id: string): Promise<boolean>;
 }

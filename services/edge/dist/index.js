@@ -1,30 +1,31 @@
 import {
-  handleDataQuery
-} from "./chunk-Z42UIXOU.js";
-import {
   SupabaseAuthProvider
-} from "./chunk-TJ75V3EZ.js";
+} from "./chunk-R2ERTRIO.js";
 import {
   edgeLogsTable,
   ensureInitialized,
   getStateProvider,
   stateProvider
-} from "./chunk-427TXHMK.js";
+} from "./chunk-J7G2UYPF.js";
 import {
   shouldDebounce
-} from "./chunk-WATJN2SY.js";
+} from "./chunk-ESNN5VK7.js";
 import {
   cacheProvider
-} from "./chunk-TNITJ7W3.js";
+} from "./chunk-C5H4IGGO.js";
 import {
+  getAgentProfilesConfig,
+  getApiKeysConfig,
   getAuthConfig,
   getCacheConfig,
+  getGpuModels,
   getQueueConfig,
   getStateDbConfig,
   init_env,
+  overrideApiKeysConfig,
   overrideCacheConfig,
   overrideQueueConfig
-} from "./chunk-TWKTZCHU.js";
+} from "./chunk-YLQ7CKVG.js";
 import {
   cached,
   getRedis,
@@ -35,6 +36,9 @@ import {
   rateLimit,
   testConnection
 } from "./chunk-2T6KJ3IO.js";
+import {
+  handleDataQuery
+} from "./chunk-Z42UIXOU.js";
 import {
   __require
 } from "./chunk-KFQGP6VL.js";
@@ -47,7 +51,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 // src/engine/lite.ts
-import { OpenAPIHono as OpenAPIHono13 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono15 } from "@hono/zod-openapi";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
@@ -78,7 +82,7 @@ function withTimeout(promise, ms) {
   ]);
 }
 async function checkStateDb() {
-  const { getStateDbConfig: getStateDbConfig2 } = await import("./env-4RJFWTVC.js");
+  const { getStateDbConfig: getStateDbConfig2 } = await import("./env-IFXQKGIA.js");
   const cfg = getStateDbConfig2();
   if (cfg.provider === "local" && !cfg.url) {
     return { provider: "none", status: "not_configured" };
@@ -89,7 +93,7 @@ async function checkStateDb() {
   };
   if (cfg.schema) result.schema = cfg.schema;
   try {
-    const { stateProvider: stateProvider2 } = await import("./storage-6EGSUCHR.js");
+    const { stateProvider: stateProvider2 } = await import("./storage-5TVM5HGK.js");
     await withTimeout(stateProvider2.listPages(), PING_TIMEOUT_MS);
     result.status = "ok";
   } catch (e) {
@@ -99,13 +103,13 @@ async function checkStateDb() {
   return result;
 }
 async function checkCache() {
-  const { getCacheConfig: getCacheConfig2 } = await import("./env-4RJFWTVC.js");
+  const { getCacheConfig: getCacheConfig2 } = await import("./env-IFXQKGIA.js");
   const cfg = getCacheConfig2();
   if (cfg.provider === "none" && !cfg.url) {
     return { provider: "none", status: "not_configured" };
   }
   try {
-    const { cacheProvider: cacheProvider2 } = await import("./cache-L5B5IGG4.js");
+    const { cacheProvider: cacheProvider2 } = await import("./cache-VJNABVJY.js");
     await withTimeout(cacheProvider2.get("__health_check__"), PING_TIMEOUT_MS);
     return { provider: cfg.provider || "redis", status: "ok" };
   } catch (e) {
@@ -117,7 +121,7 @@ async function checkCache() {
   }
 }
 async function checkQueue() {
-  const { getQueueConfig: getQueueConfig3 } = await import("./env-4RJFWTVC.js");
+  const { getQueueConfig: getQueueConfig3 } = await import("./env-IFXQKGIA.js");
   const cfg = getQueueConfig3();
   if (cfg.provider === "none" && !cfg.token && !cfg.url) {
     return { provider: "none", status: "not_configured" };
@@ -199,6 +203,7 @@ healthRoute.openapi(route, async (c) => {
 import { OpenAPIHono as OpenAPIHono2 } from "@hono/zod-openapi";
 
 // src/routes/ai.ts
+init_env();
 var _aiBinding = null;
 function getAIBinding() {
   return _aiBinding;
@@ -206,17 +211,20 @@ function getAIBinding() {
 var _gpuModels = [];
 function getGPUModels() {
   if (_gpuModels.length === 0) {
-    const envModels = globalThis.process?.env?.FRONTBASE_GPU_MODELS;
-    if (envModels) {
-      try {
-        const parsed = JSON.parse(envModels);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          _gpuModels = parsed;
-          console.log(`[AI] Auto-loaded ${parsed.length} GPU model(s) from env:`, parsed.map((m) => m.slug).join(", "));
-        }
-      } catch (e) {
-        console.error("[AI] Failed to parse FRONTBASE_GPU_MODELS:", e);
+    try {
+      const envModels = getGpuModels();
+      if (Array.isArray(envModels) && envModels.length > 0) {
+        _gpuModels = envModels.map((m) => ({
+          slug: m.slug,
+          model_id: m.modelId || m.model_id,
+          model_type: m.modelType || m.model_type,
+          provider: m.provider,
+          provider_config: m.providerConfig || m.provider_config
+        }));
+        console.log(`[AI] Auto-loaded ${_gpuModels.length} GPU model(s) from env:`, _gpuModels.map((m) => m.slug).join(", "));
       }
+    } catch (e) {
+      console.error("[AI] Failed to load GPU models from env:", e);
     }
   }
   return _gpuModels;
@@ -989,8 +997,8 @@ function getQueueClient() {
   }
   if (provider === "qstash") {
     try {
-      const { Client } = __require("@upstash/qstash");
-      queueClient = new Client({ token });
+      const { Client: Client2 } = __require("@upstash/qstash");
+      queueClient = new Client2({ token });
       console.log("\u{1F504} Queue: QStash durable execution enabled");
       return queueClient;
     } catch {
@@ -1230,7 +1238,7 @@ executeRoute.openapi(route3, async (c) => {
     }
   }
   if (debounceSec > 0) {
-    const { shouldDebounce: shouldDebounce2 } = await import("./debounce-VIPCMWDZ.js");
+    const { shouldDebounce: shouldDebounce2 } = await import("./debounce-DDWODTYS.js");
     const debounced = await shouldDebounce2(id, debounceSec);
     if (debounced) {
       return c.json({
@@ -2461,8 +2469,192 @@ queueRoute.openapi(publishRoute, async (c) => {
 });
 
 // src/routes/config.ts
-import { OpenAPIHono as OpenAPIHono11, createRoute as createRoute10, z as z11 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono11, createRoute as createRoute10, z as z12 } from "@hono/zod-openapi";
 init_env();
+
+// src/engine/agent/auto-register.ts
+import { tool } from "ai";
+import { z as z11 } from "zod";
+var _cachedTools = null;
+var _cachedExcluded = [];
+function invalidateAutoToolCache() {
+  _cachedTools = null;
+  _cachedExcluded = [];
+}
+function jsonSchemaToZod(schema) {
+  if (!schema || typeof schema !== "object") return z11.any();
+  if (schema.enum && Array.isArray(schema.enum)) {
+    if (schema.enum.length === 0) return z11.string();
+    if (schema.enum.every((v) => typeof v === "string")) {
+      return z11.enum(schema.enum);
+    }
+    return z11.any();
+  }
+  if (schema.oneOf || schema.anyOf) {
+    const variants = schema.oneOf || schema.anyOf;
+    if (Array.isArray(variants) && variants.length > 0) {
+      return jsonSchemaToZod(variants[0]).optional();
+    }
+  }
+  const type = schema.type;
+  switch (type) {
+    case "string": {
+      let s = z11.string();
+      if (schema.description) s = s.describe(schema.description);
+      return s;
+    }
+    case "number":
+    case "integer": {
+      let n = z11.number();
+      if (schema.description) n = n.describe(schema.description);
+      return n;
+    }
+    case "boolean": {
+      let b = z11.boolean();
+      if (schema.description) b = b.describe(schema.description);
+      return b;
+    }
+    case "array": {
+      const itemSchema = schema.items ? jsonSchemaToZod(schema.items) : z11.any();
+      let a = z11.array(itemSchema);
+      if (schema.description) a = a.describe(schema.description);
+      return a;
+    }
+    case "object": {
+      if (schema.properties && typeof schema.properties === "object") {
+        const shape = {};
+        const required = new Set(schema.required || []);
+        for (const [key, propSchema] of Object.entries(schema.properties)) {
+          let zodProp = jsonSchemaToZod(propSchema);
+          if (!required.has(key)) {
+            zodProp = zodProp.optional();
+          }
+          shape[key] = zodProp;
+        }
+        return z11.object(shape);
+      }
+      return z11.record(z11.any());
+    }
+    default:
+      return z11.any();
+  }
+}
+var MAX_RESPONSE_CHARS = 4096;
+function truncateResponse(data) {
+  const str = typeof data === "string" ? data : JSON.stringify(data);
+  if (str.length <= MAX_RESPONSE_CHARS) return data;
+  const truncated = str.slice(0, MAX_RESPONSE_CHARS);
+  try {
+    return { _truncated: true, _originalLength: str.length, data: JSON.parse(truncated + '"}') };
+  } catch {
+    return { _truncated: true, _originalLength: str.length, preview: truncated + "..." };
+  }
+}
+async function buildAutoTools(profile) {
+  const excluded = profile.excludedEndpoints || [];
+  const excludedKey = excluded.sort().join(",");
+  if (_cachedTools && excludedKey === _cachedExcluded.join(",")) {
+    return { ..._cachedTools };
+  }
+  const tools = {};
+  try {
+    const req = new Request("http://localhost/api/openapi.json");
+    const res = await liteApp.request(req);
+    if (!res.ok) {
+      console.warn("[AutoTools] Failed to fetch openapi.json");
+      return tools;
+    }
+    const spec = await res.json();
+    for (const [path2, methods] of Object.entries(spec.paths || {})) {
+      for (const [method, operation] of Object.entries(methods)) {
+        const op = operation;
+        let operationId = op.operationId;
+        if (!operationId) {
+          operationId = `${method}_${path2.replace(/[^a-zA-Z0-9_]/g, "_")}`.replace(/_+/g, "_").replace(/^_|_$/g, "");
+        }
+        if (excluded.includes(operationId)) {
+          continue;
+        }
+        const tag = op.tags && op.tags[0] ? op.tags[0].toLowerCase().replace(/\s+/g, "_") : "api";
+        const toolName = `${tag}_${operationId}`;
+        const reqBodySchema = op.requestBody?.content?.["application/json"]?.schema;
+        const queryParams = (op.parameters || []).filter((p) => p.in === "query");
+        const pathParams = (op.parameters || []).filter((p) => p.in === "path");
+        const paramShape = {};
+        for (const p of pathParams) {
+          paramShape[p.name] = p.required ? z11.string().describe(p.description || `Path param: ${p.name}`) : z11.string().optional().describe(p.description || p.name);
+        }
+        for (const p of queryParams) {
+          let paramZod;
+          if (p.schema) {
+            paramZod = jsonSchemaToZod(p.schema);
+          } else {
+            paramZod = z11.string();
+          }
+          if (p.description) paramZod = paramZod.describe(p.description);
+          paramShape[p.name] = p.required ? paramZod : paramZod.optional();
+        }
+        if (reqBodySchema) {
+          const bodyZod = jsonSchemaToZod(reqBodySchema);
+          paramShape["body"] = bodyZod.describe("JSON request body");
+        }
+        let desc2 = op.summary || `Execute ${method.toUpperCase()} ${path2}`;
+        if (op.description) desc2 += `
+${op.description}`;
+        try {
+          tools[toolName] = tool({
+            description: desc2,
+            parameters: z11.object(paramShape),
+            execute: async (args) => {
+              let actualPath = path2;
+              for (const p of pathParams) {
+                if (args[p.name]) {
+                  actualPath = actualPath.replace(`{${p.name}}`, encodeURIComponent(args[p.name]));
+                }
+              }
+              const urlObj = new URL(`http://localhost${actualPath}`);
+              for (const p of queryParams) {
+                if (args[p.name] != null) {
+                  urlObj.searchParams.append(p.name, String(args[p.name]));
+                }
+              }
+              const init = {
+                method: method.toUpperCase(),
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-api-key": profile.apiKey || ""
+                }
+              };
+              if (reqBodySchema && args.body) {
+                init.body = JSON.stringify(args.body);
+              }
+              const internalReq = new Request(urlObj.toString(), init);
+              try {
+                const result = await liteApp.request(internalReq);
+                const text = await result.text();
+                try {
+                  return truncateResponse(JSON.parse(text));
+                } catch {
+                  return truncateResponse({ text });
+                }
+              } catch (e) {
+                return { error: `Internal execution failed: ${e.message}` };
+              }
+            }
+          });
+        } catch {
+        }
+      }
+    }
+    _cachedTools = { ...tools };
+    _cachedExcluded = [...excluded].sort();
+  } catch (e) {
+    console.error("[AutoTools] Error building tools:", e.message);
+  }
+  return tools;
+}
+
+// src/routes/config.ts
 var configRoute = new OpenAPIHono11();
 function redact(value) {
   if (!value) return null;
@@ -2480,20 +2672,20 @@ var getConfigRoute = createRoute10({
       description: "Current config",
       content: {
         "application/json": {
-          schema: z11.object({
-            stateDb: z11.object({
-              provider: z11.string().nullable(),
-              url: z11.string().nullable()
+          schema: z12.object({
+            stateDb: z12.object({
+              provider: z12.string().nullable(),
+              url: z12.string().nullable()
             }),
-            cache: z11.object({
-              url: z11.string().nullable(),
-              configured: z11.boolean()
+            cache: z12.object({
+              url: z12.string().nullable(),
+              configured: z12.boolean()
             }),
-            queue: z11.object({
-              url: z11.string().nullable(),
-              configured: z11.boolean()
+            queue: z12.object({
+              url: z12.string().nullable(),
+              configured: z12.boolean()
             }),
-            engineMode: z11.string().nullable()
+            engineMode: z12.string().nullable()
           })
         }
       }
@@ -2504,6 +2696,7 @@ configRoute.openapi(getConfigRoute, async (c) => {
   const stateDb = getStateDbConfig();
   const cache = getCacheConfig();
   const queue = getQueueConfig();
+  const apiKeys = getApiKeysConfig();
   return c.json({
     stateDb: {
       provider: stateDb.provider || "local-sqlite",
@@ -2516,6 +2709,10 @@ configRoute.openapi(getConfigRoute, async (c) => {
     queue: {
       url: redact(queue.url),
       configured: queue.provider !== "none"
+    },
+    apiKeys: {
+      configured: !!(apiKeys.apiKeyHashes && apiKeys.apiKeyHashes.length > 0),
+      count: apiKeys.apiKeyHashes?.length ?? 0
     },
     engineMode: process.env.FRONTBASE_ADAPTER_PLATFORM || null
   }, 200);
@@ -2530,15 +2727,24 @@ var updateConfigRoute = createRoute10({
     body: {
       content: {
         "application/json": {
-          schema: z11.object({
-            cache: z11.object({
-              url: z11.string().min(1),
-              token: z11.string().min(1)
+          schema: z12.object({
+            cache: z12.object({
+              url: z12.string().min(1),
+              token: z12.string().min(1)
             }).optional().openapi({ description: "Redis/Upstash cache credentials" }),
-            queue: z11.object({
-              url: z11.string().min(1),
-              token: z11.string().min(1)
-            }).optional().openapi({ description: "QStash/queue credentials" })
+            queue: z12.object({
+              url: z12.string().min(1),
+              token: z12.string().min(1)
+            }).optional().openapi({ description: "QStash/queue credentials" }),
+            apiKeys: z12.object({
+              systemKey: z12.string().optional(),
+              apiKeyHashes: z12.array(z12.object({
+                prefix: z12.string().optional(),
+                hash: z12.string(),
+                scope: z12.string().optional(),
+                expires_at: z12.string().nullable().optional()
+              })).optional()
+            }).optional().openapi({ description: "API key hashes for engine access control" })
           })
         }
       }
@@ -2550,7 +2756,7 @@ var updateConfigRoute = createRoute10({
       content: {
         "application/json": {
           schema: SuccessResponseSchema.extend({
-            updated: z11.array(z11.string())
+            updated: z12.array(z12.string())
           })
         }
       }
@@ -2583,6 +2789,12 @@ configRoute.openapi(updateConfigRoute, async (c) => {
       updated.push("queue");
       console.log("[Config] Queue config updated");
     }
+    if (body.apiKeys) {
+      overrideApiKeysConfig(body.apiKeys);
+      updated.push("apiKeys");
+      console.log(`[Config] API keys updated (${body.apiKeys.apiKeyHashes?.length ?? 0} keys)`);
+    }
+    invalidateAutoToolCache();
     return c.json({
       success: true,
       message: updated.length > 0 ? `Updated: ${updated.join(", ")}` : "No changes applied",
@@ -2598,6 +2810,1150 @@ configRoute.openapi(updateConfigRoute, async (c) => {
 
 // src/routes/openai.ts
 import { OpenAPIHono as OpenAPIHono12 } from "@hono/zod-openapi";
+import {
+  generateText,
+  streamText,
+  embedMany,
+  generateImage,
+  experimental_transcribe as transcribe,
+  experimental_generateSpeech as generateSpeech
+} from "ai";
+import { createWorkersAI } from "workers-ai-provider";
+
+// src/engine/ai-tasks.ts
+var AI_TASK_TTL = 3600;
+function getTaskKey(taskId) {
+  return `ai:task:${taskId}`;
+}
+async function saveAITask(task) {
+  try {
+    await cacheProvider.setex(
+      getTaskKey(task.id),
+      AI_TASK_TTL,
+      JSON.stringify(task)
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function loadAITask(taskId) {
+  try {
+    const data = await cacheProvider.get(getTaskKey(taskId));
+    if (!data) return null;
+    if (typeof data === "string") return JSON.parse(data);
+    return data;
+  } catch {
+    return null;
+  }
+}
+async function dispatchAITask(taskId) {
+  if (!isQueueEnabled()) return false;
+  const publicUrl = process.env.PUBLIC_URL || process.env.EDGE_URL || "";
+  if (!publicUrl) return false;
+  const destUrl = `${publicUrl}/v1/chat/completions/continue`;
+  const msgId = await publishExecution(
+    destUrl,
+    {
+      executionId: taskId,
+      workflowId: "ai-task",
+      // dummy required by signature 
+      parameters: { taskId },
+      triggerType: "ai-internal"
+    },
+    {
+      retries: 3,
+      backoff: "exponential"
+    }
+  );
+  return msgId !== null;
+}
+
+// src/engine/agent/prompts.ts
+var buildAgentSystemPrompt = (profile) => {
+  let prompt = `You are a helpful AI Agent named ${profile.name} running autonomously on a Frontbase Edge Engine. `;
+  if (profile.systemPrompt) {
+    prompt += `
+
+=== SYSTEM INSTRUCTIONS ===
+${profile.systemPrompt}
+===========================
+`;
+  }
+  const perms = Object.keys(profile.permissions || {});
+  const permittedDatasources = perms.filter((k) => k.startsWith("datasources.") && (profile.permissions[k].includes("read") || profile.permissions[k].includes("all")));
+  const hasStateDb = perms.includes("stateDb") && (profile.permissions["stateDb"].includes("read") || profile.permissions["stateDb"].includes("all"));
+  const hasWorkflows = perms.includes("workflows.all") && (profile.permissions["workflows.all"].includes("trigger") || profile.permissions["workflows.all"].includes("all"));
+  const pagePerms = profile.permissions?.["pages.all"] || [];
+  const hasPageRead = pagePerms.includes("read") || pagePerms.includes("all");
+  const hasPageWrite = pagePerms.includes("write") || pagePerms.includes("all");
+  const enginePerms = profile.permissions?.["engine.all"] || [];
+  const hasEngine = enginePerms.includes("read") || enginePerms.includes("all");
+  prompt += `
+
+=== CAPABILITIES & AVAILABLE TOOLS ===
+`;
+  if (permittedDatasources.length > 0) {
+    prompt += `
+\u{1F4CA} **Data Access**
+`;
+    prompt += `- You have READ access to connected datasources: ${permittedDatasources.map((d) => d.replace("datasources.", "")).join(", ")}.
+`;
+    prompt += `- Use the \`queryDatasource\` tool when you need live data.
+`;
+  } else {
+    prompt += `
+\u{1F4CA} **Data Access**: None \u2014 you do not have access to any external datasources.
+`;
+  }
+  if (hasPageRead || hasPageWrite) {
+    prompt += `
+\u{1F4C4} **Page Management**
+`;
+    if (hasPageRead) {
+      prompt += `- Use \`pages_list\` to see all published pages.
+`;
+      prompt += `- Use \`pages_get\` to inspect a page's component tree.
+`;
+    }
+    if (hasPageWrite) {
+      prompt += `- Use \`pages_updateAndPublish\` for one-shot visible edits (recommended).
+`;
+      prompt += `- Use \`pages_updateComponent\` to change props without publishing.
+`;
+    }
+    if (hasPageRead) {
+      prompt += `- Use \`styles_get\` to inspect component styles.
+`;
+    }
+    if (hasPageWrite) {
+      prompt += `- Use \`styles_update\` or \`styles_batchUpdate\` for visual changes.
+`;
+    }
+  }
+  if (hasEngine) {
+    prompt += `
+\u2699\uFE0F **Engine Introspection**
+`;
+    prompt += `- Use \`engine_status\` to check health and binding status.
+`;
+    prompt += `- Use \`engine_config\` to see provider configuration.
+`;
+    prompt += `- Use \`engine_workflows\` to list deployed workflows.
+`;
+    prompt += `- Use \`engine_logs\` to view recent logs.
+`;
+  }
+  if (hasStateDb) {
+    prompt += `
+\u{1F5C4}\uFE0F **State DB**
+`;
+    prompt += `- You have READ access to the Edge Engine's internal State DB (configuration and pages).
+`;
+  }
+  if (hasWorkflows) {
+    prompt += `
+\u{1F527} **Workflow Automation**
+`;
+    prompt += `- Use \`triggerWorkflow\` to start Action Workflows by ID (generic, for any workflow).
+`;
+    prompt += `- Named workflow tools (e.g., \`send_welcome_email\`) are easier to use \u2014 they have typed parameters.
+`;
+  }
+  prompt += `
+\u{1F6E0}\uFE0F **Custom Tools**
+`;
+  prompt += `- You may also have access to user-configured tools: named workflow tools with typed parameters, or tools imported from external MCP servers.
+`;
+  prompt += `- These tools have descriptive names and parameter schemas \u2014 prefer them over the generic \`triggerWorkflow\` when available.
+`;
+  prompt += `
+\u{1F50C} **API Endpoints**
+`;
+  prompt += `- You also have access to auto-registered tools prefixed with their API category (e.g., \`execution_*\`, \`cache_*\`, \`system_*\`). These correspond to the engine's internal API endpoints.
+`;
+  prompt += `
+=== END CAPABILITIES ===
+`;
+  prompt += `
+**Guidelines:**
+`;
+  prompt += `- Prefer curated tools (pages_*, styles_*, engine_*) over raw API tools when both are available.
+`;
+  prompt += `- When making visual changes, use \`pages_updateAndPublish\` for atomic edits.
+`;
+  prompt += `- For coordinated style changes across multiple components, use \`styles_batchUpdate\`.
+`;
+  prompt += `- Always verify your changes took effect by using inspection tools after modifications.
+`;
+  return prompt;
+};
+
+// src/engine/agent/tools.ts
+import { tool as tool6 } from "ai";
+import { z as z17 } from "zod";
+
+// src/routes/data.ts
+import { Hono as Hono2 } from "hono";
+init_redis();
+var dataRoute = new Hono2();
+var cachedDatasource = null;
+var _datasourcesCache = null;
+function getDatasourceCredentials(datasourceId) {
+  if (!_datasourcesCache) {
+    const raw = process.env.FRONTBASE_DATASOURCES || "";
+    if (!raw) return null;
+    try {
+      _datasourcesCache = JSON.parse(raw);
+    } catch {
+      console.error("[Data Execute] Invalid FRONTBASE_DATASOURCES JSON");
+      return null;
+    }
+  }
+  return _datasourcesCache?.[datasourceId] || null;
+}
+function buildProxyRequest(datasourceId, queryConfig, body) {
+  const creds = getDatasourceCredentials(datasourceId);
+  if (!creds) {
+    console.error(`[Data Execute] No credentials found for datasource: ${datasourceId}`);
+    return null;
+  }
+  const dsType = creds.type || "unknown";
+  if (dsType === "neon") {
+    const httpUrl = creds.httpUrl || creds.apiUrl || "";
+    const apiKey = creds.apiKey || "";
+    return {
+      url: `${httpUrl}/sql`,
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: body || { query: queryConfig.sql || "", params: [] }
+    };
+  }
+  if (dsType === "turso") {
+    const httpUrl = creds.httpUrl || creds.apiUrl || "";
+    const authToken = creds.apiKey || creds.authToken || "";
+    return {
+      url: `${httpUrl}/v2/pipeline`,
+      headers: {
+        "Authorization": `Bearer ${authToken}`,
+        "Content-Type": "application/json"
+      },
+      body: body || { statements: [{ q: queryConfig.sql || "" }] }
+    };
+  }
+  if (dsType === "planetscale") {
+    const httpUrl = creds.httpUrl || creds.apiUrl || "";
+    const auth = creds.apiKey || "";
+    return {
+      url: `${httpUrl}/query`,
+      headers: {
+        "Authorization": auth,
+        "Content-Type": "application/json"
+      },
+      body: body || { query: queryConfig.sql || "" }
+    };
+  }
+  if (dsType === "mysql" || dsType === "postgres") {
+    const httpUrl = creds.httpUrl || creds.apiUrl || "";
+    const apiKey = creds.apiKey || "";
+    if (httpUrl) {
+      return {
+        url: `${httpUrl}/sql`,
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: body || { query: queryConfig.sql || "", params: [] }
+      };
+    }
+    console.error(`[Data Execute] No HTTP URL for ${dsType} datasource: ${datasourceId}`);
+    return null;
+  }
+  console.error(`[Data Execute] Unsupported datasource type: ${dsType}`);
+  return null;
+}
+function resolveEnvVars(template) {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    return process.env[key] || "";
+  });
+}
+function getByPath(obj, path2) {
+  if (!path2) return obj;
+  const parts = path2.replace(/\[(\d+)\]/g, ".$1").split(".");
+  let current = obj;
+  for (const part of parts) {
+    if (current === null || current === void 0) return void 0;
+    current = current[part];
+  }
+  return current;
+}
+function flattenRelations(data) {
+  return data.map((record) => {
+    if (record === null || record === void 0) return record;
+    if (typeof record !== "object") return record;
+    if (Array.isArray(record)) return record;
+    const flat = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        for (const [subKey, subValue] of Object.entries(value)) {
+          flat[`${key}.${subKey}`] = subValue;
+        }
+      } else {
+        flat[key] = value;
+      }
+    }
+    return flat;
+  });
+}
+async function executeDataRequest2(dataRequest) {
+  let url;
+  let headers = {};
+  let body = dataRequest.body;
+  const isProxy = dataRequest.fetchStrategy === "proxy" && dataRequest.datasourceId;
+  if (isProxy) {
+    const proxyReq = buildProxyRequest(
+      dataRequest.datasourceId,
+      dataRequest.queryConfig || {},
+      dataRequest.body
+    );
+    if (!proxyReq) {
+      throw new Error(`Cannot resolve credentials for datasource: ${dataRequest.datasourceId}`);
+    }
+    url = proxyReq.url;
+    headers = proxyReq.headers;
+    body = proxyReq.body;
+  } else {
+    url = resolveEnvVars(dataRequest.url);
+    for (const [key, value] of Object.entries(dataRequest.headers || {})) {
+      headers[key] = resolveEnvVars(value);
+    }
+  }
+  console.log(`[Data Execute] ${isProxy ? "Proxy" : "Direct"}: ${url.substring(0, 100)}...`);
+  const cacheKey = `data:${url}:${body ? JSON.stringify(body) : ""}`;
+  const cacheTTL = 60;
+  try {
+    const redis = getRedis();
+    return await cached(cacheKey, async () => {
+      return await executeDataRequestUncached(dataRequest, url, headers, body);
+    }, cacheTTL);
+  } catch (e) {
+    if (e.message?.includes("not initialized")) {
+    } else {
+      console.warn("[Data Execute] Redis cache error, falling back to direct fetch:", e);
+    }
+  }
+  return await executeDataRequestUncached(dataRequest, url, headers, body);
+}
+async function executeDataRequestUncached(dataRequest, url, headers, resolvedBody) {
+  const body = resolvedBody !== void 0 ? resolvedBody : dataRequest.body;
+  const fetchOptions = {
+    method: dataRequest.method || "GET",
+    headers
+  };
+  if (body && dataRequest.method === "POST") {
+    fetchOptions.body = JSON.stringify(body);
+    if (body.filters && Array.isArray(body.filters) && body.filters.length > 0) {
+      console.log(`[Data Execute] Filters:`, JSON.stringify(body.filters));
+    }
+  }
+  const response = await fetch(url, fetchOptions);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
+  }
+  let total = null;
+  const contentRange = response.headers.get("content-range");
+  if (contentRange) {
+    const match = contentRange.match(/\/(\d+)$/);
+    if (match) {
+      total = parseInt(match[1], 10);
+    }
+  }
+  const json = await response.json();
+  let data = getByPath(json, dataRequest.resultPath || "");
+  if (!Array.isArray(data)) {
+    data = data ? [data] : [];
+  }
+  if (dataRequest.flattenRelations !== false) {
+    data = flattenRelations(data);
+  }
+  if (total === null && typeof json.total === "number") {
+    total = json.total;
+  }
+  return { data, total };
+}
+async function getDefaultDatasource() {
+  if (cachedDatasource) return cachedDatasource;
+  try {
+    const pages = await stateProvider.listPages();
+    if (pages.length > 0) {
+      const page = await stateProvider.getPageBySlug(pages[0].slug);
+      if (page?.datasources && page.datasources.length > 0) {
+        cachedDatasource = page.datasources[0];
+        console.log(`[Data API] Using datasource: ${cachedDatasource.name} (${cachedDatasource.type})`);
+        return cachedDatasource;
+      }
+    }
+  } catch (error) {
+    console.error("[Data API] Error getting datasource:", error);
+  }
+  return null;
+}
+dataRoute.get("/:table", async (c) => {
+  const table = c.req.param("table");
+  const query = c.req.query();
+  try {
+    const columns = query.select?.split(",").map((col) => col.trim()) || ["*"];
+    const limit = parseInt(query.limit || "100");
+    const offset = parseInt(query.offset || "0");
+    const orderBy = query.orderBy ? {
+      column: query.orderBy,
+      direction: query.order || "asc"
+    } : void 0;
+    console.log(`[Data API] Querying ${table}:`, { columns, limit, offset });
+    const datasource = await getDefaultDatasource();
+    const result = await handleDataQuery(table, {
+      columns,
+      limit,
+      offset,
+      orderBy
+    }, datasource || void 0);
+    if (result.error) {
+      console.error(`[Data API] Error:`, result.error);
+      return c.json({
+        success: false,
+        error: result.error
+      }, 500);
+    }
+    c.header("Cache-Control", "public, max-age=60, s-maxage=300");
+    return c.json({
+      success: true,
+      data: result.data,
+      count: result.count
+    });
+  } catch (error) {
+    console.error(`[Data API] Error:`, error);
+    return c.json({
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error"
+    }, 500);
+  }
+});
+dataRoute.get("/:table/:id", async (c) => {
+  const table = c.req.param("table");
+  const id = c.req.param("id");
+  try {
+    const datasource = await getDefaultDatasource();
+    const result = await handleDataQuery(table, {
+      filters: { id },
+      limit: 1
+    }, datasource || void 0);
+    return c.json({
+      success: true,
+      data: result.data[0] || null
+    });
+  } catch (error) {
+    return c.json({
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+      data: null
+    }, 500);
+  }
+});
+dataRoute.post("/execute", async (c) => {
+  try {
+    const body = await c.req.json();
+    const dataRequest = body.dataRequest;
+    if (!dataRequest) {
+      return c.json({
+        success: false,
+        error: "Invalid dataRequest: missing dataRequest object"
+      }, 400);
+    }
+    const isProxy = dataRequest.fetchStrategy === "proxy" && dataRequest.datasourceId;
+    if (!isProxy && !dataRequest.url) {
+      return c.json({
+        success: false,
+        error: "Invalid dataRequest: missing url (direct) or datasourceId (proxy)"
+      }, 400);
+    }
+    const label = isProxy ? `proxy:${dataRequest.datasourceId}` : dataRequest.url?.substring(0, 80);
+    console.log(`[Data Execute] Processing: ${label}...`);
+    const { data, total } = await executeDataRequest2(dataRequest);
+    return c.json({
+      success: true,
+      data,
+      count: data.length,
+      total: total ?? data.length
+      // Use server total or fallback to data length
+    });
+  } catch (error) {
+    console.error(`[Data Execute] Error:`, error);
+    return c.json({
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error"
+    }, 500);
+  }
+});
+dataRoute.post("/clear-cache", async (c) => {
+  cachedDatasource = null;
+  _datasourcesCache = null;
+  return c.json({ success: true, message: "Cache cleared" });
+});
+
+// src/engine/agent/tools/pages.ts
+import { tool as tool2 } from "ai";
+import { z as z13 } from "zod";
+function buildPageTools(profile) {
+  const tools = {};
+  const perms = profile.permissions?.["pages.all"] || [];
+  const hasRead = perms.includes("read") || perms.includes("all");
+  const hasWrite = perms.includes("write") || perms.includes("all");
+  if (!hasRead && !hasWrite) return tools;
+  if (hasRead) {
+    tools["pages_list"] = tool2({
+      description: "List all published pages on this engine. Returns page name, slug, and version for each page.",
+      parameters: z13.object({}),
+      execute: async () => {
+        try {
+          const pages = await stateProvider.listPages();
+          return {
+            count: pages.length,
+            pages: pages.map((p) => ({
+              name: p.name,
+              slug: p.slug,
+              version: p.version
+            }))
+          };
+        } catch (e) {
+          return { error: `Failed to list pages: ${e.message}` };
+        }
+      }
+    });
+    tools["pages_get"] = tool2({
+      description: "Get the full structure of a published page by slug. Returns the page name, slug, version, component tree (types and IDs), and SEO metadata.",
+      parameters: z13.object({
+        slug: z13.string().describe('The page slug (URL path), e.g. "about" or "pricing"')
+      }),
+      execute: async ({ slug }) => {
+        try {
+          const page = await stateProvider.getPageBySlug(slug);
+          if (!page) {
+            return { error: `Page with slug '${slug}' not found` };
+          }
+          const summarizeComponents = (components) => {
+            return (components || []).map((c) => ({
+              id: c.id,
+              type: c.type,
+              ...c.props?.text ? { text: String(c.props.text).slice(0, 100) } : {},
+              ...c.props?.label ? { label: c.props.label } : {},
+              ...c.props?.src ? { src: c.props.src } : {},
+              ...c.binding?.tableName ? { boundTo: c.binding.tableName } : {},
+              ...c.children?.length ? { children: summarizeComponents(c.children) } : {}
+            }));
+          };
+          const layoutData = page.layoutData;
+          return {
+            name: page.name,
+            slug: page.slug,
+            version: page.version,
+            isHomepage: page.isHomepage || false,
+            isPublic: page.isPublic !== false,
+            seo: {
+              title: page.title || page.seoData?.title || page.name,
+              description: page.description || page.seoData?.description || null
+            },
+            components: summarizeComponents(layoutData?.content || [])
+          };
+        } catch (e) {
+          return { error: `Failed to get page: ${e.message}` };
+        }
+      }
+    });
+  }
+  if (hasWrite) {
+    tools["pages_updateComponent"] = tool2({
+      description: "Update a single component's props on a published page. Changes are applied to the page in the state DB but NOT automatically published \u2014 use pages_updateAndPublish for atomic edit+publish.",
+      parameters: z13.object({
+        slug: z13.string().describe("The page slug"),
+        componentId: z13.string().describe("The ID of the component to update"),
+        props: z13.record(z13.any()).describe("The prop key-value pairs to merge into the component")
+      }),
+      execute: async ({ slug, componentId, props }) => {
+        try {
+          const page = await stateProvider.getPageBySlug(slug);
+          if (!page) return { error: `Page '${slug}' not found` };
+          const layoutData = { ...page.layoutData };
+          let found = false;
+          const patchComponent = (components) => {
+            return components.map((c) => {
+              if (c.id === componentId) {
+                found = true;
+                return { ...c, props: { ...c.props || {}, ...props } };
+              }
+              if (c.children?.length) {
+                return { ...c, children: patchComponent(c.children) };
+              }
+              return c;
+            });
+          };
+          layoutData.content = patchComponent(layoutData.content || []);
+          if (!found) {
+            return { error: `Component '${componentId}' not found in page '${slug}'` };
+          }
+          await stateProvider.upsertPage({ ...page, layoutData });
+          return { success: true, message: `Updated component '${componentId}' on page '${slug}'` };
+        } catch (e) {
+          return { error: `Failed to update component: ${e.message}` };
+        }
+      }
+    });
+    tools["pages_updateAndPublish"] = tool2({
+      description: "Update a component's props on a page AND trigger a full publish cycle (CSS rebundle + cache flush). This is the recommended way to make visible changes. It is an atomic one-shot operation.",
+      parameters: z13.object({
+        slug: z13.string().describe("The page slug"),
+        componentId: z13.string().describe("The ID of the component to update"),
+        props: z13.record(z13.any()).describe("The prop key-value pairs to merge into the component")
+      }),
+      execute: async ({ slug, componentId, props }) => {
+        try {
+          const page = await stateProvider.getPageBySlug(slug);
+          if (!page) return { error: `Page '${slug}' not found` };
+          const layoutData = { ...page.layoutData };
+          let found = false;
+          const patchComponent = (components) => {
+            return components.map((c) => {
+              if (c.id === componentId) {
+                found = true;
+                return { ...c, props: { ...c.props || {}, ...props } };
+              }
+              if (c.children?.length) {
+                return { ...c, children: patchComponent(c.children) };
+              }
+              return c;
+            });
+          };
+          layoutData.content = patchComponent(layoutData.content || []);
+          if (!found) {
+            return { error: `Component '${componentId}' not found in page '${slug}'` };
+          }
+          await stateProvider.upsertPage({ ...page, layoutData });
+          try {
+            const cacheReq = new Request("http://localhost/api/cache/invalidate", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-api-key": profile.apiKey || ""
+              },
+              body: JSON.stringify({ pattern: `page:${slug}*` })
+            });
+            await liteApp.request(cacheReq);
+          } catch {
+          }
+          return {
+            success: true,
+            message: `Updated component '${componentId}' on page '${slug}' and flushed cache.`
+          };
+        } catch (e) {
+          return { error: `Failed to update and publish: ${e.message}` };
+        }
+      }
+    });
+  }
+  return tools;
+}
+
+// src/engine/agent/tools/styles.ts
+import { tool as tool3 } from "ai";
+import { z as z14 } from "zod";
+function buildStyleTools(profile) {
+  const tools = {};
+  const perms = profile.permissions?.["pages.all"] || [];
+  const hasRead = perms.includes("read") || perms.includes("all");
+  const hasWrite = perms.includes("write") || perms.includes("all");
+  if (!hasRead && !hasWrite) return tools;
+  const findComponent = (components, id) => {
+    for (const c of components) {
+      if (c.id === id) return c;
+      if (c.children?.length) {
+        const found = findComponent(c.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+  if (hasRead) {
+    tools["styles_get"] = tool3({
+      description: "Get the current styles for a specific component on a page. Returns the style values (colors, spacing, typography, etc.) and any viewport overrides.",
+      parameters: z14.object({
+        slug: z14.string().describe("The page slug"),
+        componentId: z14.string().describe("The component ID to inspect")
+      }),
+      execute: async ({ slug, componentId }) => {
+        try {
+          const page = await stateProvider.getPageBySlug(slug);
+          if (!page) return { error: `Page '${slug}' not found` };
+          const layoutData = page.layoutData;
+          const component = findComponent(layoutData?.content || [], componentId);
+          if (!component) return { error: `Component '${componentId}' not found` };
+          return {
+            componentId,
+            type: component.type,
+            styles: component.styles || {},
+            stylesData: component.stylesData || null
+          };
+        } catch (e) {
+          return { error: `Failed to get styles: ${e.message}` };
+        }
+      }
+    });
+  }
+  if (hasWrite) {
+    tools["styles_update"] = tool3({
+      description: "Update styles for a single component on a page. Merges the provided style values into the component's existing styles. Supports CSS properties like backgroundColor, fontSize, padding, margin, borderRadius, color, etc.",
+      parameters: z14.object({
+        slug: z14.string().describe("The page slug"),
+        componentId: z14.string().describe("The component ID to style"),
+        styles: z14.record(z14.any()).describe('Style key-value pairs to merge, e.g. { "backgroundColor": "#1a1a2e", "fontSize": "18px" }')
+      }),
+      execute: async ({ slug, componentId, styles }) => {
+        try {
+          const page = await stateProvider.getPageBySlug(slug);
+          if (!page) return { error: `Page '${slug}' not found` };
+          const layoutData = { ...page.layoutData };
+          let found = false;
+          const patchStyles = (components) => {
+            return components.map((c) => {
+              if (c.id === componentId) {
+                found = true;
+                const existingStyles = c.styles || {};
+                return { ...c, styles: { ...existingStyles, ...styles } };
+              }
+              if (c.children?.length) {
+                return { ...c, children: patchStyles(c.children) };
+              }
+              return c;
+            });
+          };
+          layoutData.content = patchStyles(layoutData.content || []);
+          if (!found) return { error: `Component '${componentId}' not found` };
+          await stateProvider.upsertPage({ ...page, layoutData });
+          return { success: true, message: `Updated styles for '${componentId}' on page '${slug}'` };
+        } catch (e) {
+          return { error: `Failed to update styles: ${e.message}` };
+        }
+      }
+    });
+    tools["styles_batchUpdate"] = tool3({
+      description: "Update styles for multiple components on a page in a single operation. Useful for applying a theme or making coordinated visual changes across several components at once.",
+      parameters: z14.object({
+        slug: z14.string().describe("The page slug"),
+        updates: z14.array(z14.object({
+          componentId: z14.string().describe("The component ID"),
+          styles: z14.record(z14.any()).describe("Style key-value pairs to merge")
+        })).describe("Array of component style updates")
+      }),
+      execute: async ({ slug, updates }) => {
+        try {
+          const page = await stateProvider.getPageBySlug(slug);
+          if (!page) return { error: `Page '${slug}' not found` };
+          const layoutData = { ...page.layoutData };
+          const updateMap = new Map(updates.map((u) => [u.componentId, u.styles]));
+          const applied = [];
+          const patchAll = (components) => {
+            return components.map((c) => {
+              const newStyles = updateMap.get(c.id);
+              let updated = c;
+              if (newStyles) {
+                applied.push(c.id);
+                updated = { ...c, styles: { ...c.styles || {}, ...newStyles } };
+              }
+              if (updated.children?.length) {
+                updated = { ...updated, children: patchAll(updated.children) };
+              }
+              return updated;
+            });
+          };
+          layoutData.content = patchAll(layoutData.content || []);
+          const notFound = updates.filter((u) => !applied.includes(u.componentId)).map((u) => u.componentId);
+          await stateProvider.upsertPage({ ...page, layoutData });
+          return {
+            success: true,
+            applied: applied.length,
+            notFound: notFound.length > 0 ? notFound : void 0,
+            message: `Updated styles for ${applied.length}/${updates.length} components on page '${slug}'`
+          };
+        } catch (e) {
+          return { error: `Failed to batch update styles: ${e.message}` };
+        }
+      }
+    });
+  }
+  return tools;
+}
+
+// src/engine/agent/tools/engine.ts
+import { tool as tool4 } from "ai";
+import { z as z15 } from "zod";
+function buildEngineTools(profile) {
+  const tools = {};
+  const perms = profile.permissions?.["engine.all"] || [];
+  const hasRead = perms.includes("read") || perms.includes("all");
+  if (!hasRead) return tools;
+  tools["engine_status"] = tool4({
+    description: "Get the engine's current health status including state DB, cache, and queue binding status. Use this to understand what infrastructure is connected.",
+    parameters: z15.object({}),
+    execute: async () => {
+      try {
+        const req = new Request("http://localhost/api/health", {
+          headers: { "x-api-key": profile.apiKey || "" }
+        });
+        const res = await liteApp.request(req);
+        const data = await res.json();
+        return {
+          status: data.status,
+          version: data.version,
+          provider: data.provider,
+          uptime_seconds: data.uptime_seconds,
+          bindings: data.bindings
+        };
+      } catch (e) {
+        return { error: `Failed to get engine status: ${e.message}` };
+      }
+    }
+  });
+  tools["engine_config"] = tool4({
+    description: "Get a non-secret summary of the engine's configuration: which providers are configured for state DB, cache, queue, and how many GPU models are available.",
+    parameters: z15.object({}),
+    execute: async () => {
+      try {
+        const { getStateDbConfig: getStateDbConfig2, getCacheConfig: getCacheConfig2, getQueueConfig: getQueueConfig3, getGpuModels: getGpuModels2, getAgentProfilesConfig: getAgentProfilesConfig2 } = await import("./env-IFXQKGIA.js");
+        const stateDb = getStateDbConfig2();
+        const cache = getCacheConfig2();
+        const queue = getQueueConfig3();
+        const models = getGpuModels2();
+        const profiles = getAgentProfilesConfig2();
+        return {
+          stateDb: { provider: stateDb.provider },
+          cache: { provider: cache.provider },
+          queue: { provider: queue.provider },
+          gpu: {
+            modelCount: models.length,
+            models: models.map((m) => ({
+              slug: m.slug,
+              modelId: m.modelId,
+              type: m.modelType,
+              provider: m.provider
+            }))
+          },
+          agentProfiles: Object.keys(profiles)
+        };
+      } catch (e) {
+        return { error: `Failed to get config: ${e.message}` };
+      }
+    }
+  });
+  tools["engine_workflows"] = tool4({
+    description: "List all deployed workflows on this engine. Returns name, trigger type, active status, and version for each workflow.",
+    parameters: z15.object({}),
+    execute: async () => {
+      try {
+        const workflows = await stateProvider.listWorkflows();
+        return {
+          count: workflows.length,
+          workflows: workflows.map((w) => ({
+            id: w.id,
+            name: w.name,
+            description: w.description,
+            triggerType: w.triggerType,
+            isActive: w.isActive,
+            version: w.version,
+            updatedAt: w.updatedAt
+          }))
+        };
+      } catch (e) {
+        return { error: `Failed to list workflows: ${e.message}` };
+      }
+    }
+  });
+  tools["engine_logs"] = tool4({
+    description: "Get recent edge engine logs. Useful for debugging issues or checking recent activity.",
+    parameters: z15.object({
+      limit: z15.number().optional().describe("Max number of log entries to return (default: 20, max: 100)"),
+      level: z15.string().optional().describe('Filter by log level: "info", "warn", "error"')
+    }),
+    execute: async ({ limit, level }) => {
+      try {
+        const queryLimit = Math.min(limit || 20, 100);
+        const url = new URL("http://localhost/api/edge-logs");
+        url.searchParams.set("limit", String(queryLimit));
+        if (level) url.searchParams.set("level", level);
+        const req = new Request(url.toString(), {
+          headers: { "x-api-key": profile.apiKey || "" }
+        });
+        const res = await liteApp.request(req);
+        const data = await res.json();
+        return data;
+      } catch (e) {
+        return { error: `Failed to get logs: ${e.message}` };
+      }
+    }
+  });
+  return tools;
+}
+
+// src/engine/agent/tools/user-tools.ts
+import { tool as tool5 } from "ai";
+import { z as z16 } from "zod";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+function parametersToZod(params) {
+  const shape = {};
+  for (const param of params) {
+    let zodType;
+    switch (param.type) {
+      case "number":
+        zodType = z16.number();
+        break;
+      case "boolean":
+        zodType = z16.boolean();
+        break;
+      case "array":
+        zodType = z16.array(z16.any());
+        break;
+      case "object":
+        zodType = z16.record(z16.string(), z16.any());
+        break;
+      case "string":
+      default:
+        if (param.enum && param.enum.length > 0) {
+          zodType = z16.enum(param.enum);
+        } else {
+          zodType = z16.string();
+        }
+        break;
+    }
+    if (param.description) {
+      zodType = zodType.describe(param.description);
+    }
+    if (param.default !== void 0) {
+      zodType = zodType.default(param.default);
+    }
+    if (!param.required) {
+      zodType = zodType.optional();
+    }
+    shape[param.name] = zodType;
+  }
+  return z16.object(shape);
+}
+function buildWorkflowTool(toolDef, config, profile) {
+  const schema = config.parameters?.length > 0 ? parametersToZod(config.parameters) : z16.object({});
+  return {
+    [toolDef.name]: tool5({
+      description: toolDef.description || `Trigger workflow: ${toolDef.name}`,
+      parameters: schema,
+      execute: async (args) => {
+        try {
+          const req = new Request(`http://localhost/api/execute/${config.workflowId}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": profile.apiKey || ""
+            },
+            body: JSON.stringify({ parameters: args })
+          });
+          const res = await liteApp.request(req);
+          const data = await res.json();
+          const json = JSON.stringify(data);
+          if (json.length > 4096) {
+            return { result: JSON.parse(json.substring(0, 4096) + "..."), _truncated: true };
+          }
+          return data;
+        } catch (e) {
+          return { error: `Workflow execution failed: ${e.message}` };
+        }
+      }
+    })
+  };
+}
+async function buildMcpClientTools(toolDef, config) {
+  const tools = {};
+  try {
+    const sseUrl = new URL(config.url);
+    const transport = new SSEClientTransport(sseUrl, {
+      requestInit: { headers: config.headers || {} }
+    });
+    const client = new Client(
+      { name: `frontbase-edge-client`, version: "1.0.0" },
+      { capabilities: {} }
+    );
+    await client.connect(transport);
+    const mcpToolsRes = await client.listTools();
+    if (mcpToolsRes && Array.isArray(mcpToolsRes.tools)) {
+      for (const mTool of mcpToolsRes.tools) {
+        if (config.toolFilter && config.toolFilter.length > 0) {
+          if (!config.toolFilter.includes(mTool.name)) {
+            continue;
+          }
+        }
+        tools[`mcp_${toolDef.name}_${mTool.name}`] = tool5({
+          description: `[From ${toolDef.name} MCP]: ${mTool.description || `Tool ${mTool.name}`}`,
+          parameters: z16.any(),
+          execute: async (args) => {
+            try {
+              const result = await client.callTool({
+                name: mTool.name,
+                arguments: args
+              });
+              const resAny = result;
+              if (resAny.content && resAny.content.length > 0) {
+                const textBlock = resAny.content.find((c) => c.type === "text");
+                if (textBlock) {
+                  try {
+                    return JSON.parse(textBlock.text);
+                  } catch {
+                    return textBlock.text;
+                  }
+                }
+              }
+              return result;
+            } catch (err) {
+              return { error: `MCP Tool Execution Failed: ${err.message}` };
+            }
+          }
+        });
+      }
+    }
+  } catch (err) {
+    console.error(`[UserTools] Failed to initialize MCP Client '${toolDef.name}':`, err.message);
+    tools[`mcp_${toolDef.name}_status`] = tool5({
+      description: `MCP Server '${toolDef.name}' is currently unreachable.`,
+      parameters: z16.object({}),
+      execute: async () => ({
+        error: `MCP Connection failed`,
+        message: err.message
+      })
+    });
+  }
+  return tools;
+}
+async function buildUserTools(profile, stateProvider2) {
+  const tools = {};
+  try {
+    const profileSlug = profile.name?.toLowerCase().replace(/\s+/g, "-") || "default";
+    const userTools = await stateProvider2.listAgentTools(profileSlug);
+    if (!userTools.length) return tools;
+    for (const toolDef of userTools) {
+      try {
+        const config = JSON.parse(toolDef.config);
+        switch (toolDef.type) {
+          case "workflow": {
+            const wfPerms = profile.permissions?.["workflows.all"] || [];
+            if (!wfPerms.includes("trigger") && !wfPerms.includes("all")) {
+              console.log(`[UserTools] Skipping '${toolDef.name}' \u2014 no workflow trigger permission`);
+              continue;
+            }
+            Object.assign(tools, buildWorkflowTool(toolDef, config, profile));
+            break;
+          }
+          case "mcp_server": {
+            const enginePerms = profile.permissions?.["engine.all"] || [];
+            if (!enginePerms.includes("read") && !enginePerms.includes("all")) {
+              console.log(`[UserTools] Skipping MCP '${toolDef.name}' \u2014 no engine read permission`);
+              continue;
+            }
+            Object.assign(tools, await buildMcpClientTools(toolDef, config));
+            break;
+          }
+          default:
+            console.warn(`[UserTools] Unknown tool type '${toolDef.type}' for '${toolDef.name}'`);
+        }
+      } catch (parseErr) {
+        console.error(`[UserTools] Failed to parse config for '${toolDef.name}': ${parseErr.message}`);
+      }
+    }
+    if (Object.keys(tools).length > 0) {
+      console.log(`[UserTools] Loaded ${Object.keys(tools).length} user-configured tools for profile '${profile.name}'`);
+    }
+  } catch (err) {
+    console.warn(`[UserTools] Could not load user tools: ${err.message}`);
+  }
+  return tools;
+}
+
+// src/engine/agent/tools.ts
+var buildAgentTools = async (profile, stateProvider2) => {
+  const tools = {};
+  Object.assign(tools, await buildAutoTools(profile));
+  Object.assign(tools, buildPageTools(profile));
+  Object.assign(tools, buildStyleTools(profile));
+  Object.assign(tools, buildEngineTools(profile));
+  tools.queryDatasource = tool6({
+    description: "Execute a read-only SQL SELECT query against a connected external Datasource. Use this to query live app data.",
+    parameters: z17.object({
+      datasourceId: z17.string().describe("The UUID of the connected datasource to query."),
+      sql: z17.string().describe("The raw SQL SELECT query to execute. Do not execute destructive commands like DROP or DELETE.")
+    }),
+    // @ts-ignore
+    execute: async ({ datasourceId, sql: sql2 }) => {
+      const dsPerms = profile.permissions?.[`datasources.${datasourceId}`] || profile.permissions?.["datasources.all"] || [];
+      if (!dsPerms.includes("read") && !dsPerms.includes("all")) {
+        return {
+          error: `Security Violation: Your Agent Profile '${profile.name}' does not have 'read' permissions configured for datasource '${datasourceId}'. Have the administrator grant access through the Edge Inspector UI.`
+        };
+      }
+      try {
+        const dataReq = {
+          fetchStrategy: "proxy",
+          datasourceId,
+          method: "POST",
+          url: "",
+          body: { query: sql2, params: [] },
+          queryConfig: { sql: sql2 }
+        };
+        const result = await executeDataRequest2(dataReq);
+        return result.data;
+      } catch (e) {
+        return { error: `Query failed: ${e.message || "Unknown query error"}` };
+      }
+    }
+  });
+  const workflowPerms = profile.permissions?.["workflows.all"] || [];
+  if (workflowPerms.includes("trigger") || workflowPerms.includes("all")) {
+    tools.triggerWorkflow = tool6({
+      description: "Trigger an Action Workflow deployed on this Edge Engine.",
+      parameters: z17.object({
+        workflowId: z17.string().describe("The ID of the workflow to trigger."),
+        payload: z17.record(z17.any()).optional().describe("Optional JSON payload to send to the workflow.")
+      }),
+      execute: async ({ workflowId, payload }) => {
+        try {
+          const req = new Request(`http://localhost/api/execute/${workflowId}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": profile.apiKey || ""
+            },
+            body: JSON.stringify({ parameters: payload || {} })
+          });
+          const res = await liteApp.request(req);
+          const data = await res.json();
+          return data;
+        } catch (e) {
+          return { error: `Failed to trigger workflow: ${e.message}` };
+        }
+      }
+    });
+  }
+  if (stateProvider2) {
+    Object.assign(tools, await buildUserTools(profile, stateProvider2));
+  }
+  return tools;
+};
+
+// src/routes/openai.ts
 var openaiRoute = new OpenAPIHono12();
 function resolveModel(modelSlug, c) {
   if (!modelSlug) {
@@ -2621,6 +3977,30 @@ function mergeDefaults(payload, model) {
       if (!(k in payload)) payload[k] = v;
     }
   }
+}
+function getWorkersAI(ai) {
+  return createWorkersAI({ binding: ai });
+}
+function convertOpenAIMessages(messages) {
+  if (!Array.isArray(messages)) return messages;
+  return messages.map((msg) => {
+    if (!msg || typeof msg !== "object") return msg;
+    if (!Array.isArray(msg.content)) return msg;
+    const convertedContent = msg.content.map((part) => {
+      if (!part || typeof part !== "object") return part;
+      if (part.type === "image_url" && part.image_url) {
+        const url = typeof part.image_url === "string" ? part.image_url : part.image_url.url;
+        if (!url) return part;
+        return { type: "image", image: url };
+      }
+      if (part.type === "input_image" && part.image_url) {
+        const url = typeof part.image_url === "string" ? part.image_url : part.image_url.url;
+        return { type: "image", image: url };
+      }
+      return part;
+    });
+    return { ...msg, content: convertedContent };
+  });
 }
 openaiRoute.get("/models", (c) => {
   const models = getGPUModels();
@@ -2647,31 +4027,88 @@ openaiRoute.post("/chat/completions", async (c) => {
   const resolved = resolveModel(body.model, c);
   if ("error" in resolved) return resolved.error;
   const { model, ai } = resolved;
-  const payload = {};
-  if (body.messages) payload.messages = body.messages;
-  if (body.max_tokens != null) payload.max_tokens = body.max_tokens;
-  if (body.temperature != null) payload.temperature = body.temperature;
-  if (body.top_p != null) payload.top_p = body.top_p;
-  if (body.top_k != null) payload.top_k = body.top_k;
-  if (body.stream != null) payload.stream = body.stream;
-  if (body.stop != null) payload.stop = body.stop;
-  if (body.seed != null) payload.seed = body.seed;
-  if (body.frequency_penalty != null) payload.frequency_penalty = body.frequency_penalty;
-  if (body.presence_penalty != null) payload.presence_penalty = body.presence_penalty;
-  if (body.repetition_penalty != null) payload.repetition_penalty = body.repetition_penalty;
-  if (body.tools != null) payload.tools = body.tools;
-  if (body.response_format != null) payload.response_format = body.response_format;
-  if (body.raw != null) payload.raw = body.raw;
-  if (body.lora != null) payload.lora = body.lora;
-  mergeDefaults(payload, model);
-  try {
-    const result = await ai.run(model.model_id, payload);
-    if (result && typeof result === "object" && Array.isArray(result.choices)) {
-      result.model = result.model || model.slug;
-      result.id = result.id || `chatcmpl-${crypto.randomUUID().slice(0, 12)}`;
-      return c.json(result);
+  const workersai = getWorkersAI(ai);
+  const sdkModel = workersai(model.model_id);
+  const mergedBody = { ...body };
+  mergeDefaults(mergedBody, model);
+  const sdkOptions = {
+    model: sdkModel,
+    messages: convertOpenAIMessages(body.messages)
+  };
+  const profile = c.get ? c.get("agentProfile") : c.var?.agentProfile;
+  if (profile) {
+    sdkOptions.system = buildAgentSystemPrompt(profile);
+    sdkOptions.tools = await buildAgentTools(profile, getStateProvider());
+    sdkOptions.messages = sdkOptions.messages.filter((m) => m.role !== "system");
+    if (mergedBody.max_steps == null && mergedBody.maxSteps == null) {
+      mergedBody.max_steps = 5;
     }
-    const responseContent = typeof result === "string" ? result : result?.response ?? result?.result ?? JSON.stringify(result);
+  }
+  if (mergedBody.max_tokens != null) sdkOptions.maxOutputTokens = mergedBody.max_tokens;
+  if (mergedBody.temperature != null) sdkOptions.temperature = mergedBody.temperature;
+  if (mergedBody.top_p != null) sdkOptions.topP = mergedBody.top_p;
+  if (mergedBody.top_k != null) sdkOptions.topK = mergedBody.top_k;
+  if (mergedBody.stop != null) sdkOptions.stopSequences = Array.isArray(mergedBody.stop) ? mergedBody.stop : [mergedBody.stop];
+  if (mergedBody.seed != null) sdkOptions.seed = mergedBody.seed;
+  if (mergedBody.frequency_penalty != null) sdkOptions.frequencyPenalty = mergedBody.frequency_penalty;
+  if (mergedBody.presence_penalty != null) sdkOptions.presencePenalty = mergedBody.presence_penalty;
+  const workerSpecific = {};
+  if (mergedBody.repetition_penalty != null) workerSpecific.repetitionPenalty = mergedBody.repetition_penalty;
+  if (mergedBody.raw != null) workerSpecific.raw = mergedBody.raw;
+  if (mergedBody.lora != null) workerSpecific.lora = mergedBody.lora;
+  if (mergedBody.response_format != null) workerSpecific.response_format = mergedBody.response_format;
+  if (Object.keys(workerSpecific).length > 0) {
+    sdkOptions.providerOptions = { "workers-ai": workerSpecific };
+  }
+  const maxSteps = mergedBody.max_steps || mergedBody.maxSteps || 1;
+  if (maxSteps > 1 && !body.stream) {
+    const taskId = `chatcmpl-${crypto.randomUUID().slice(0, 12)}`;
+    const saved = await saveAITask({
+      id: taskId,
+      model: model.slug,
+      messages: sdkOptions.messages,
+      tools: sdkOptions.tools,
+      maxSteps,
+      currentStep: 0,
+      status: "pending",
+      options: sdkOptions,
+      result: null
+    });
+    const dispatched = saved ? await dispatchAITask(taskId) : false;
+    if (saved && dispatched) {
+      return c.json({
+        id: taskId,
+        object: "chat.completion.async",
+        status: "pending",
+        message: "Task successfully queued for asynchronous processing. Poll /v1/chat/completions/{id} for result."
+      }, 202);
+    } else {
+      sdkOptions.maxSteps = maxSteps;
+    }
+  }
+  try {
+    if (body.stream) {
+      const result2 = streamText(sdkOptions);
+      return result2.toTextStreamResponse({
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+          "content-encoding": "identity",
+          "transfer-encoding": "chunked"
+        }
+      });
+    }
+    const result = await generateText(sdkOptions);
+    const toolCalls = result.toolCalls && result.toolCalls.length > 0 ? result.toolCalls.map((tc, i) => ({
+      id: tc.toolCallId || `call_${crypto.randomUUID().slice(0, 12)}`,
+      type: "function",
+      function: {
+        name: tc.toolName,
+        arguments: JSON.stringify(tc.args)
+      }
+    })) : void 0;
+    const finishReason = result.finishReason === "tool-calls" ? "tool_calls" : result.finishReason === "length" ? "length" : result.finishReason === "content-filter" ? "content_filter" : "stop";
     return c.json({
       id: `chatcmpl-${crypto.randomUUID().slice(0, 12)}`,
       object: "chat.completion",
@@ -2679,14 +4116,113 @@ openaiRoute.post("/chat/completions", async (c) => {
       model: model.slug,
       choices: [{
         index: 0,
-        message: { role: "assistant", content: responseContent },
-        finish_reason: "stop"
+        message: {
+          role: "assistant",
+          content: result.text || null,
+          ...toolCalls ? { tool_calls: toolCalls } : {}
+        },
+        finish_reason: finishReason
       }],
-      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+      usage: {
+        prompt_tokens: result.usage?.inputTokens ?? 0,
+        completion_tokens: result.usage?.outputTokens ?? 0,
+        total_tokens: result.usage?.totalTokens ?? 0
+      }
     });
   } catch (err) {
     console.error(`[OpenAI] Inference error for ${body.model}:`, err);
     return c.json({ error: { message: err.message || "Inference failed", type: "server_error", code: "inference_error" } }, 500);
+  }
+});
+openaiRoute.get("/chat/completions/:id", async (c) => {
+  const id = c.req.param("id");
+  const task = await loadAITask(id);
+  if (!task) {
+    return c.json({ error: { message: "Task not found or expired", type: "invalid_request_error", code: "not_found" } }, 404);
+  }
+  if (task.status === "pending") {
+    return c.json({
+      id: task.id,
+      object: "chat.completion.async",
+      status: "pending",
+      current_step: task.currentStep,
+      max_steps: task.maxSteps
+    }, 202);
+  }
+  if (task.status === "failed") {
+    return c.json({
+      id: task.id,
+      object: "chat.completion.async",
+      status: "failed",
+      error: task.error || "Unknown execution error"
+    }, 500);
+  }
+  return c.json(task.result);
+});
+openaiRoute.post("/chat/completions/continue", async (c) => {
+  let body;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: { message: "Invalid JSON body" } }, 400);
+  }
+  const taskId = body.taskId || body.parameters?.taskId;
+  if (!taskId) {
+    return c.json({ error: { message: "Missing taskId" } }, 400);
+  }
+  const task = await loadAITask(taskId);
+  if (!task || task.status !== "pending") {
+    return c.json({ status: "ignored", message: "Task not pending or not found" });
+  }
+  try {
+    const resolved = resolveModel(task.model, c);
+    if ("error" in resolved) return resolved.error;
+    const { model, ai } = resolved;
+    const workersai = getWorkersAI(ai);
+    const sdkModel = workersai(model.model_id);
+    const sdkOptions = { ...task.options, model: sdkModel, messages: task.messages, maxSteps: task.maxSteps };
+    const profile = c.get ? c.get("agentProfile") : c.var?.agentProfile;
+    if (profile) {
+      sdkOptions.tools = await buildAgentTools(profile, getStateProvider());
+    }
+    const result = await generateText(sdkOptions);
+    const toolCalls = result.toolCalls && result.toolCalls.length > 0 ? result.toolCalls.map((tc, i) => ({
+      id: tc.toolCallId || `call_${crypto.randomUUID().slice(0, 12)}`,
+      type: "function",
+      function: { name: tc.toolName, arguments: JSON.stringify(tc.args) }
+    })) : void 0;
+    const finishReason = result.finishReason === "tool-calls" ? "tool_calls" : result.finishReason === "length" ? "length" : result.finishReason === "content-filter" ? "content_filter" : "stop";
+    const finalOutput = {
+      id: task.id,
+      // Reuse task ID so polling matches
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1e3),
+      model: model.slug,
+      choices: [{
+        index: 0,
+        message: {
+          role: "assistant",
+          content: result.text || null,
+          ...toolCalls ? { tool_calls: toolCalls } : {}
+        },
+        finish_reason: finishReason
+      }],
+      usage: {
+        prompt_tokens: result.usage?.inputTokens ?? 0,
+        completion_tokens: result.usage?.outputTokens ?? 0,
+        total_tokens: result.usage?.totalTokens ?? 0
+      }
+    };
+    task.result = finalOutput;
+    task.status = "completed";
+    await saveAITask(task);
+    return c.json({ status: "completed" });
+  } catch (err) {
+    console.error(`[Queue] Task ${taskId} failed:`, err);
+    task.status = "failed";
+    task.error = err.message;
+    await saveAITask(task);
+    return c.json({ status: "failed", error: err.message }, 500);
   }
 });
 openaiRoute.post("/embeddings", async (c) => {
@@ -2699,20 +4235,27 @@ openaiRoute.post("/embeddings", async (c) => {
   const resolved = resolveModel(body.model, c);
   if ("error" in resolved) return resolved.error;
   const { model, ai } = resolved;
-  const input = body.input;
-  const payload = Array.isArray(input) ? { text: input } : { text: [input] };
+  const workersai = getWorkersAI(ai);
+  const embeddingModel = workersai.textEmbedding(model.model_id);
   try {
-    const result = await ai.run(model.model_id, payload);
-    const data = Array.isArray(result?.data) ? result.data.map((emb, i) => ({
+    const inputs = Array.isArray(body.input) ? body.input : [body.input];
+    const result = await embedMany({
+      model: embeddingModel,
+      values: inputs
+    });
+    const data = result.embeddings.map((emb, i) => ({
       object: "embedding",
-      embedding: emb.values ?? emb,
+      embedding: emb,
       index: i
-    })) : [{ object: "embedding", embedding: result?.data ?? result, index: 0 }];
+    }));
     return c.json({
       object: "list",
       data,
       model: model.slug,
-      usage: { prompt_tokens: 0, total_tokens: 0 }
+      usage: {
+        prompt_tokens: result.usage?.tokens ?? 0,
+        total_tokens: result.usage?.tokens ?? 0
+      }
     });
   } catch (err) {
     console.error(`[OpenAI] Embedding error for ${body.model}:`, err);
@@ -2732,38 +4275,23 @@ openaiRoute.post("/images/generations", async (c) => {
   if (!body.prompt) {
     return c.json({ error: { message: "Missing required field: prompt", type: "invalid_request_error", code: "missing_field" } }, 400);
   }
-  const payload = { prompt: body.prompt };
-  if (body.size) {
-    const [w, h] = body.size.split("x").map(Number);
-    if (w && h) {
-      payload.width = w;
-      payload.height = h;
-    }
-  }
-  if (body.n != null) payload.num_steps = body.n;
-  mergeDefaults(payload, model);
+  const workersai = getWorkersAI(ai);
   try {
-    const result = await ai.run(model.model_id, payload);
-    let b64Data;
-    if (result instanceof ArrayBuffer || result instanceof Uint8Array) {
-      const bytes = result instanceof ArrayBuffer ? new Uint8Array(result) : result;
-      let binary = "";
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      b64Data = btoa(binary);
-    } else if (typeof result === "string") {
-      b64Data = result;
-    } else {
-      b64Data = JSON.stringify(result);
-    }
+    const imageOptions = {
+      model: workersai.image(model.model_id),
+      prompt: body.prompt,
+      n: body.n || 1
+    };
+    if (body.size) imageOptions.size = body.size;
+    const result = await generateImage(imageOptions);
     const responseFormat = body.response_format || "b64_json";
+    const imageData = result.images.map((img) => ({
+      ...responseFormat === "b64_json" ? { b64_json: img.base64 } : { url: `data:image/png;base64,${img.base64}` },
+      revised_prompt: body.prompt
+    }));
     return c.json({
       created: Math.floor(Date.now() / 1e3),
-      data: [{
-        ...responseFormat === "b64_json" ? { b64_json: b64Data } : { url: `data:image/png;base64,${b64Data}` },
-        revised_prompt: body.prompt
-      }]
+      data: imageData
     });
   } catch (err) {
     console.error(`[OpenAI] Image generation error for ${body.model}:`, err);
@@ -2773,6 +4301,7 @@ openaiRoute.post("/images/generations", async (c) => {
 openaiRoute.post("/audio/transcriptions", async (c) => {
   let modelSlug;
   let audioData = null;
+  let mimeType = "audio/wav";
   const contentType = c.req.header("content-type") || "";
   if (contentType.includes("multipart/form-data")) {
     const formData = await c.req.formData();
@@ -2781,7 +4310,8 @@ openaiRoute.post("/audio/transcriptions", async (c) => {
     if (!file) {
       return c.json({ error: { message: "Missing required field: file", type: "invalid_request_error", code: "missing_field" } }, 400);
     }
-    audioData = await file.arrayBuffer();
+    audioData = new Uint8Array(await file.arrayBuffer());
+    mimeType = file.type || "audio/wav";
   } else {
     let body;
     try {
@@ -2792,7 +4322,9 @@ openaiRoute.post("/audio/transcriptions", async (c) => {
     modelSlug = body.model;
     if (body.file) {
       const raw = body.file.replace(/^data:audio\/[^;]+;base64,/, "");
-      audioData = Uint8Array.from(atob(raw), (ch) => ch.charCodeAt(0)).buffer;
+      audioData = Uint8Array.from(atob(raw), (ch) => ch.charCodeAt(0));
+      const mimeMatch = body.file.match(/^data:(audio\/[^;]+);base64,/);
+      if (mimeMatch) mimeType = mimeMatch[1];
     }
   }
   const resolved = resolveModel(modelSlug, c);
@@ -2801,10 +4333,28 @@ openaiRoute.post("/audio/transcriptions", async (c) => {
   if (!audioData) {
     return c.json({ error: { message: "No audio data provided", type: "invalid_request_error", code: "missing_field" } }, 400);
   }
+  if (!transcribe) {
+    try {
+      const result = await ai.run(model.model_id, { audio: [...audioData] });
+      return c.json({
+        text: result?.text ?? result?.result ?? JSON.stringify(result)
+      });
+    } catch (err) {
+      console.error(`[OpenAI] Transcription error for ${modelSlug}:`, err);
+      return c.json({ error: { message: err.message || "Transcription failed", type: "server_error", code: "inference_error" } }, 500);
+    }
+  }
+  const workersai = getWorkersAI(ai);
   try {
-    const result = await ai.run(model.model_id, { audio: [...new Uint8Array(audioData)] });
+    const transcript = await transcribe({
+      model: workersai.transcription(model.model_id),
+      audio: audioData
+    });
     return c.json({
-      text: result?.text ?? result?.result ?? JSON.stringify(result)
+      text: transcript.text,
+      ...transcript.segments ? { segments: transcript.segments } : {},
+      ...transcript.language ? { language: transcript.language } : {},
+      ...transcript.durationInSeconds ? { duration: transcript.durationInSeconds } : {}
     });
   } catch (err) {
     console.error(`[OpenAI] Transcription error for ${modelSlug}:`, err);
@@ -2824,28 +4374,45 @@ openaiRoute.post("/audio/speech", async (c) => {
   if (!body.input) {
     return c.json({ error: { message: "Missing required field: input", type: "invalid_request_error", code: "missing_field" } }, 400);
   }
-  const payload = { text: body.input };
-  if (body.voice) payload.voice = body.voice;
-  if (body.speed) payload.speed = body.speed;
-  mergeDefaults(payload, model);
-  try {
-    const result = await ai.run(model.model_id, payload);
-    if (result instanceof ArrayBuffer || result instanceof Uint8Array) {
-      const format = body.response_format || "mp3";
-      const mimeMap = {
-        mp3: "audio/mpeg",
-        opus: "audio/opus",
-        aac: "audio/aac",
-        flac: "audio/flac",
-        wav: "audio/wav",
-        pcm: "audio/pcm"
-      };
-      const audioBuffer = result instanceof Uint8Array ? result.buffer : result;
-      return new Response(audioBuffer, {
-        headers: { "Content-Type": mimeMap[format] || "audio/mpeg" }
-      });
+  const mimeMap = {
+    mp3: "audio/mpeg",
+    opus: "audio/opus",
+    aac: "audio/aac",
+    flac: "audio/flac",
+    wav: "audio/wav",
+    pcm: "audio/pcm"
+  };
+  const format = body.response_format || "mp3";
+  if (!generateSpeech) {
+    const payload = { text: body.input };
+    if (body.voice) payload.voice = body.voice;
+    if (body.speed) payload.speed = body.speed;
+    mergeDefaults(payload, model);
+    try {
+      const result = await ai.run(model.model_id, payload);
+      if (result instanceof ArrayBuffer || result instanceof Uint8Array) {
+        const audioBuffer = result instanceof Uint8Array ? result.buffer : result;
+        return new Response(audioBuffer, {
+          headers: { "Content-Type": mimeMap[format] || "audio/mpeg" }
+        });
+      }
+      return c.json(result);
+    } catch (err) {
+      console.error(`[OpenAI] TTS error for ${body.model}:`, err);
+      return c.json({ error: { message: err.message || "Text-to-speech failed", type: "server_error", code: "inference_error" } }, 500);
     }
-    return c.json(result);
+  }
+  const workersai = getWorkersAI(ai);
+  try {
+    const result = await generateSpeech({
+      model: workersai.speech(model.model_id),
+      text: body.input,
+      ...body.voice ? { voice: body.voice } : {}
+    });
+    const audioBytes = result.audio.uint8Array;
+    return new Response(audioBytes.buffer.slice(audioBytes.byteOffset, audioBytes.byteOffset + audioBytes.byteLength), {
+      headers: { "Content-Type": mimeMap[format] || "audio/mpeg" }
+    });
   } catch (err) {
     console.error(`[OpenAI] TTS error for ${body.model}:`, err);
     return c.json({ error: { message: err.message || "Text-to-speech failed", type: "server_error", code: "inference_error" } }, 500);
@@ -2877,13 +4444,38 @@ openaiRoute.post("/responses", async (c) => {
       } else if (item && typeof item === "object") {
         if (item.type === "message") {
           const role = item.role || "user";
-          const content = typeof item.content === "string" ? item.content : Array.isArray(item.content) ? item.content.map((c2) => c2?.text || c2?.content || "").join("") : JSON.stringify(item.content);
-          messages.push({ role, content });
+          if (typeof item.content === "string") {
+            messages.push({ role, content: item.content });
+          } else if (Array.isArray(item.content)) {
+            const sdkParts = item.content.map((part) => {
+              if (part.type === "input_text" || part.type === "text") {
+                return { type: "text", text: part.text || part.content || "" };
+              }
+              if (part.type === "input_image" || part.type === "image_url") {
+                const url = part.image_url ? typeof part.image_url === "string" ? part.image_url : part.image_url.url : part.url;
+                return { type: "image", image: url };
+              }
+              return { type: "text", text: part.text || part.content || JSON.stringify(part) };
+            });
+            messages.push({ role, content: sdkParts });
+          } else {
+            messages.push({ role, content: JSON.stringify(item.content) });
+          }
         } else if (item.role && item.content) {
-          messages.push({
-            role: item.role,
-            content: typeof item.content === "string" ? item.content : JSON.stringify(item.content)
-          });
+          if (typeof item.content === "string") {
+            messages.push({ role: item.role, content: item.content });
+          } else if (Array.isArray(item.content)) {
+            const sdkParts = item.content.map((part) => {
+              if (part.type === "image_url") {
+                const url = typeof part.image_url === "string" ? part.image_url : part.image_url?.url;
+                return { type: "image", image: url };
+              }
+              return part;
+            });
+            messages.push({ role: item.role, content: sdkParts });
+          } else {
+            messages.push({ role: item.role, content: JSON.stringify(item.content) });
+          }
         }
       }
     }
@@ -2891,45 +4483,27 @@ openaiRoute.post("/responses", async (c) => {
   if (messages.length === 0) {
     return c.json({ error: { message: "Could not extract messages from input", type: "invalid_request_error", code: "invalid_input" } }, 400);
   }
-  const payload = { messages };
+  const workersai = getWorkersAI(ai);
+  const sdkModel = workersai(model.model_id);
+  const sdkOptions = {
+    model: sdkModel,
+    messages
+  };
+  if (body.max_tokens != null) sdkOptions.maxOutputTokens = body.max_tokens;
+  if (body.temperature != null) sdkOptions.temperature = body.temperature;
+  const workerSpecific = {};
   if (body.reasoning) {
-    payload.reasoning = {};
-    if (body.reasoning.effort) payload.reasoning.effort = body.reasoning.effort;
-    if (body.reasoning.summary) payload.reasoning.summary = body.reasoning.summary;
+    workerSpecific.reasoning = {};
+    if (body.reasoning.effort) workerSpecific.reasoning.effort = body.reasoning.effort;
+    if (body.reasoning.summary) workerSpecific.reasoning.summary = body.reasoning.summary;
   }
-  if (body.max_tokens != null) payload.max_tokens = body.max_tokens;
-  if (body.temperature != null) payload.temperature = body.temperature;
-  if (body.tools != null) payload.tools = body.tools;
-  mergeDefaults(payload, model);
+  if (Object.keys(workerSpecific).length > 0) {
+    sdkOptions.providerOptions = { "workers-ai": workerSpecific };
+  }
   try {
-    const result = await ai.run(model.model_id, payload);
-    if (result && typeof result === "object" && Array.isArray(result.output)) {
-      result.model = result.model || model.slug;
-      result.id = result.id || `resp-${crypto.randomUUID().slice(0, 12)}`;
-      return c.json(result);
-    }
-    if (result && typeof result === "object" && Array.isArray(result.choices)) {
-      const msg = result.choices[0]?.message;
-      const content = msg?.content || "";
-      const usage = result.usage || {};
-      return c.json({
-        id: `resp-${(result.id || crypto.randomUUID()).slice(0, 16)}`,
-        object: "response",
-        created_at: result.created || Math.floor(Date.now() / 1e3),
-        model: result.model || model.slug,
-        output: [{
-          type: "message",
-          role: "assistant",
-          content: [{ type: "output_text", text: content }]
-        }],
-        usage: {
-          input_tokens: usage.prompt_tokens || 0,
-          output_tokens: usage.completion_tokens || 0,
-          total_tokens: usage.total_tokens || 0
-        }
-      });
-    }
-    const responseText = typeof result === "string" ? result : result?.response ?? result?.output?.[0]?.content?.[0]?.text ?? result?.result ?? JSON.stringify(result);
+    const result = await generateText(sdkOptions);
+    const responseText = result.text || "";
+    const usage = result.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     return c.json({
       id: `resp-${crypto.randomUUID().slice(0, 12)}`,
       object: "response",
@@ -2940,7 +4514,11 @@ openaiRoute.post("/responses", async (c) => {
         role: "assistant",
         content: [{ type: "output_text", text: responseText }]
       }],
-      usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 }
+      usage: {
+        input_tokens: usage.inputTokens ?? 0,
+        output_tokens: usage.outputTokens ?? 0,
+        total_tokens: usage.totalTokens ?? 0
+      }
     });
   } catch (err) {
     console.error(`[OpenAI] Responses API error for ${body.model}:`, err);
@@ -2948,13 +4526,137 @@ openaiRoute.post("/responses", async (c) => {
   }
 });
 
+// src/routes/agent-tools.ts
+import { OpenAPIHono as OpenAPIHono13 } from "@hono/zod-openapi";
+var agentToolsRoute = new OpenAPIHono13();
+agentToolsRoute.get("/:profileSlug", async (c) => {
+  const profileSlug = c.req.param("profileSlug");
+  const includeInactive = c.req.query("includeInactive") === "true";
+  try {
+    const provider = getStateProvider();
+    const tools = await provider.listAgentTools(profileSlug, includeInactive);
+    return c.json({ tools });
+  } catch (err) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+agentToolsRoute.post("/", async (c) => {
+  const body = await c.req.json();
+  if (!body.id || !body.profileSlug || !body.type || !body.name || !body.config) {
+    return c.json({
+      error: "Missing required fields: id, profileSlug, type, name, config"
+    }, 400);
+  }
+  if (!["workflow", "mcp_server"].includes(body.type)) {
+    return c.json({ error: 'Invalid type. Must be "workflow" or "mcp_server".' }, 400);
+  }
+  try {
+    if (typeof body.config === "string") {
+      JSON.parse(body.config);
+    } else {
+      body.config = JSON.stringify(body.config);
+    }
+  } catch {
+    return c.json({ error: "config must be valid JSON" }, 400);
+  }
+  try {
+    const provider = getStateProvider();
+    await provider.upsertAgentTool({
+      id: body.id,
+      profileSlug: body.profileSlug,
+      type: body.type,
+      name: body.name,
+      description: body.description || null,
+      config: typeof body.config === "string" ? body.config : JSON.stringify(body.config),
+      isActive: body.isActive !== false,
+      createdAt: body.createdAt || (/* @__PURE__ */ new Date()).toISOString(),
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+    return c.json({ success: true, id: body.id });
+  } catch (err) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+agentToolsRoute.delete("/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    const provider = getStateProvider();
+    await provider.deleteAgentTool(id);
+    return c.json({ success: true });
+  } catch (err) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+// src/routes/mcp.ts
+init_env();
+import { OpenAPIHono as OpenAPIHono14 } from "@hono/zod-openapi";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPTransport } from "@hono/mcp";
+var mcpServerRoute = new OpenAPIHono14();
+var serverCache = /* @__PURE__ */ new Map();
+mcpServerRoute.all("/:profileSlug/*", async (c) => {
+  const profileSlug = c.req.param("profileSlug");
+  const profilesConfig = getAgentProfilesConfig();
+  const profile = profilesConfig[profileSlug];
+  if (!profile) {
+    return c.json({ error: { message: `Agent Profile '${profileSlug}' not found.` } }, 404);
+  }
+  const apiKeyHeader = c.req.header("x-api-key") || c.req.header("authorization")?.replace("Bearer ", "");
+  if (profile.apiKey && apiKeyHeader !== profile.apiKey) {
+    return c.text("Unauthorized API Key", 401);
+  }
+  let instance = serverCache.get(profileSlug);
+  if (!instance) {
+    const mcpServer = new McpServer({
+      name: `frontbase-${profileSlug}`,
+      version: "1.0.0"
+    });
+    const aiTools = await buildAgentTools(profile, getStateProvider());
+    for (const [name, toolObj] of Object.entries(aiTools)) {
+      let shape = {};
+      if (toolObj.parameters && toolObj.parameters._def && typeof toolObj.parameters.shape === "object") {
+        shape = toolObj.parameters.shape;
+      }
+      mcpServer.tool(
+        name,
+        toolObj.description || `Execute ${name}`,
+        shape,
+        async (args) => {
+          try {
+            const result = await toolObj.execute(args);
+            return {
+              content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }]
+            };
+          } catch (e) {
+            return {
+              isError: true,
+              content: [{ type: "text", text: `Tool execution failed: ${e.message}` }]
+            };
+          }
+        }
+      );
+    }
+    const transport = new StreamableHTTPTransport();
+    instance = { mcpServer, transport };
+    serverCache.set(profileSlug, instance);
+  }
+  if (!instance.mcpServer.isConnected()) {
+    await instance.mcpServer.connect(instance.transport);
+  }
+  return instance.transport.handleRequest(c);
+});
+
+// src/engine/lite.ts
+init_env();
+
 // src/middleware/auth.ts
 init_env();
 import { jwt } from "hono/jwt";
 import { csrf } from "hono/csrf";
 function parseKeyHashes() {
-  const auth = getAuthConfig();
-  return auth.apiKeyHashes || null;
+  const config = getApiKeysConfig();
+  return config.apiKeyHashes || null;
 }
 function extractBearerToken(c) {
   const authHeader = c.req.header("Authorization");
@@ -2983,7 +4685,7 @@ async function validateApiKey(token, allowedScopes) {
   return matched;
 }
 var systemKeyAuth = async (c, next) => {
-  const systemKey = getAuthConfig().systemKey;
+  const systemKey = getApiKeysConfig().systemKey;
   if (!systemKey) {
     return next();
   }
@@ -3005,9 +4707,9 @@ var systemKeyAuth = async (c, next) => {
   }, 401);
 };
 var userApiKeyAuth = async (c, next) => {
-  const auth = getAuthConfig();
+  const config = getApiKeysConfig();
   const isDev = (process.env.NODE_ENV || "development") === "development";
-  if (!auth.apiKeyHashes) {
+  if (!config.apiKeyHashes) {
     if (isDev) return next();
     return c.json({
       error: {
@@ -3106,7 +4808,7 @@ var ENGINE_PROFILES = {
 };
 function createLiteApp(mode = "lite") {
   const profile = ENGINE_PROFILES[mode];
-  const app2 = new OpenAPIHono13({
+  const app2 = new OpenAPIHono15({
     defaultHook: (result, c) => {
       if (!result.success) {
         console.error("[Zod Validation Error]", JSON.stringify(result.error.issues, null, 2));
@@ -3189,8 +4891,22 @@ function createLiteApp(mode = "lite") {
   app2.route("/api/workflows", workflowsRoute);
   app2.route("/api/queue", queueRoute);
   app2.route("/api/config", configRoute);
-  app2.use("/v1/*", aiApiKeyAuth);
-  app2.route("/v1", openaiRoute);
+  app2.route("/api/agent-tools", agentToolsRoute);
+  app2.use("/api/agents/v1/*", aiApiKeyAuth);
+  app2.route("/api/agents/v1", openaiRoute);
+  app2.route("/api/mcp", mcpServerRoute);
+  app2.use("/api/agents/:profileSlug/v1/*", aiApiKeyAuth);
+  app2.use("/api/agents/:profileSlug/v1/*", async (c, next) => {
+    const profileSlug = c.req.param("profileSlug");
+    const profilesConfig = getAgentProfilesConfig();
+    const profile2 = profilesConfig[profileSlug];
+    if (!profile2) {
+      return c.json({ error: { message: `Agent Profile '${profileSlug}' not deployed on this engine. Check your Edge Inspector.` } }, 404);
+    }
+    c.set("agentProfile", profile2);
+    await next();
+  });
+  app2.route("/api/agents/:profileSlug/v1", openaiRoute);
   const EDGE_VERSION = "0.1.0";
   app2.doc("/api/openapi.json", (c) => ({
     openapi: "3.1.0",
@@ -3391,7 +5107,7 @@ var HYDRATE_CSS = "%%HYDRATE_CSS%%";
 var FAVICON_PNG_B64 = "%%FAVICON_PNG_B64%%";
 
 // src/routes/pages.ts
-import { OpenAPIHono as OpenAPIHono14, createRoute as createRoute11, z as z12 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono16, createRoute as createRoute11, z as z18 } from "@hono/zod-openapi";
 
 // src/ssr/components/static.ts
 function escapeHtml(str) {
@@ -4123,7 +5839,13 @@ function getCommonAttributes3(id, baseClass, props, extraStyle, hydrateType, pro
   return `id="${id}" class="${className}" style="${finalStyle}" data-fb-hydrate="${hydrateType}" data-fb-props="${escapeHtml3(propsJson)}" ${extraAttrs}`;
 }
 function renderDataComponent(type, id, props, childrenHtml) {
-  const propsJson = JSON.stringify(props).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
+  const hydrationProps = {
+    ...props,
+    mode: "edge",
+    // IMPORTANT: Force edge mode to prevent components (like InfoList) from calling builder APIs
+    _isEditorPreview: false
+  };
+  const propsJson = JSON.stringify(hydrationProps).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   switch (type) {
     case "DataTable":
       return renderDataTable(id, props, propsJson);
@@ -4253,30 +5975,40 @@ function renderForm(id, props, childrenHtml, propsJson) {
       if (override.hidden) return "";
       const label = override.label || colName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
       const isTextarea = colType === "text" && !override.type;
+      const inputClass = "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50";
+      const textareaClass = "flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50";
       return `
-                <div class="fb-form-field">
-                    <label class="fb-form-label">${escapeHtml3(label)}</label>
-                    ${isTextarea ? `<textarea class="fb-textarea" placeholder="${escapeHtml3(label)}" disabled></textarea>` : `<input class="fb-input" type="${override.type || "text"}" placeholder="${escapeHtml3(label)}" disabled />`}
+                <div class="space-y-2">
+                    <label class="text-sm font-medium leading-none">${escapeHtml3(label)}</label>
+                    ${isTextarea ? `<textarea class="${textareaClass}" placeholder="${escapeHtml3(label)}" disabled></textarea>` : `<input class="${inputClass}" type="${override.type || "text"}" placeholder="${escapeHtml3(label)}" disabled />`}
                 </div>`;
     }).join("");
   } else {
     fieldsHtml = Array(3).fill(0).map(() => `
-            <div class="fb-form-field">
-                <div class="fb-skeleton" style="height:16px;width:60px;margin-bottom:0.25rem">&nbsp;</div>
-                <div class="fb-skeleton" style="height:40px;border-radius:var(--radius)">&nbsp;</div>
+            <div class="space-y-2">
+                <div class="h-4 w-20 rounded bg-muted animate-pulse"></div>
+                <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
             </div>
         `).join("");
   }
-  return `<div id="${id}" class="fb-form" data-react-component="Form" data-react-props="${escapeHtml3(reactPropsJson)}" data-component-id="${id}">
-        <div class="fb-form-header">
-            ${title ? `<h3 class="fb-form-title">${title}</h3>` : ""}
-        </div>
-        <div class="fb-form-content fb-loading">
-            ${fieldsHtml}
-        </div>
-        <div class="fb-form-actions">
-            <button type="submit" class="fb-button" style="padding:0.5rem 1.5rem;border-radius:var(--radius);background:hsl(var(--primary));color:hsl(var(--primary-foreground))" disabled>Submit</button>
-            <button type="button" class="fb-button" style="padding:0.5rem 1rem;border-radius:var(--radius);border:1px solid hsl(var(--border))" disabled>Cancel</button>
+  const styleAttr = ``;
+  const wrapperClass = props.showCard !== false ? "rounded-lg border bg-card text-card-foreground shadow-sm" : "";
+  const headerHtml = props.showCard !== false ? `<div class="flex flex-col space-y-1.5 p-6 pb-4">
+               ${title ? `<h3 class="text-lg font-semibold leading-none tracking-tight">${title}</h3>` : ""}
+           </div>` : title ? `<h3 class="text-lg font-semibold leading-none tracking-tight mb-4">${title}</h3>` : "";
+  const contentPadding = props.showCard !== false ? "p-6 pt-0" : "";
+  return `<div id="${id}" class="${wrapperClass}" data-react-component="Form" data-react-props="${escapeHtml3(reactPropsJson)}" data-component-id="${id}">
+        ${headerHtml}
+        <div class="${contentPadding}">
+            <form class="space-y-4">
+                <div class="space-y-4">
+                    ${fieldsHtml}
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground disabled:opacity-50" disabled>Cancel</button>
+                    <button type="submit" class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50" disabled>Submit</button>
+                </div>
+            </form>
         </div>
     </div>`;
 }
@@ -5842,7 +7574,7 @@ async function getAuthProvider() {
   if (_provider !== void 0) return _provider;
   const authCfg = getAuthConfig();
   if (authCfg.provider === "supabase" && authCfg.url && authCfg.anonKey) {
-    const { SupabaseAuthProvider: SupabaseAuthProvider2 } = await import("./SupabaseAuthProvider-ZXJFSECO.js");
+    const { SupabaseAuthProvider: SupabaseAuthProvider2 } = await import("./SupabaseAuthProvider-72ZS2KN2.js");
     _provider = new SupabaseAuthProvider2();
     console.log(`[Auth Factory] Resolved SupabaseAuthProvider from FRONTBASE_AUTH: ${authCfg.url.substring(0, 30)}...`);
     return _provider;
@@ -6555,11 +8287,11 @@ async function getCachedSettings(sessionAccessToken) {
     };
   }
 }
-var ErrorResponseSchema2 = z12.object({
-  error: z12.string(),
-  message: z12.string().optional()
+var ErrorResponseSchema2 = z18.object({
+  error: z18.string(),
+  message: z18.string().optional()
 });
-var pagesRoute = new OpenAPIHono14();
+var pagesRoute = new OpenAPIHono16();
 pagesRoute.use("*", async (c, next) => {
   await next();
   const ct = c.res.headers.get("Content-Type");
@@ -6574,8 +8306,8 @@ var renderPageRoute = createRoute11({
   summary: "Render a published page",
   description: "Server-side renders a published page by slug. Returns full HTML document.",
   request: {
-    params: z12.object({
-      slug: z12.string().min(1).describe("Page slug")
+    params: z18.object({
+      slug: z18.string().min(1).describe("Page slug")
     })
   },
   responses: {
@@ -6583,7 +8315,7 @@ var renderPageRoute = createRoute11({
       description: "Rendered HTML page",
       content: {
         "text/html": {
-          schema: z12.string()
+          schema: z18.string()
         }
       }
     },
@@ -6930,11 +8662,11 @@ pagesRoute.get("/", async (c) => {
 });
 
 // src/routes/import.ts
-import { Hono as Hono2 } from "hono";
+import { Hono as Hono3 } from "hono";
 
 // src/schemas/publish.ts
-import { z as z13 } from "zod";
-var ComponentTypeSchema = z13.enum([
+import { z as z19 } from "zod";
+var ComponentTypeSchema = z19.enum([
   // Static
   "Text",
   "Heading",
@@ -6972,7 +8704,7 @@ var ComponentTypeSchema = z13.enum([
   "Card",
   "Panel"
 ]);
-var DatasourceTypeSchema = z13.enum([
+var DatasourceTypeSchema = z19.enum([
   "supabase",
   "neon",
   "planetscale",
@@ -6981,174 +8713,174 @@ var DatasourceTypeSchema = z13.enum([
   "mysql",
   "sqlite"
 ]);
-var DatasourceConfigSchema = z13.object({
-  id: z13.string(),
+var DatasourceConfigSchema = z19.object({
+  id: z19.string(),
   type: DatasourceTypeSchema,
-  name: z13.string(),
+  name: z19.string(),
   // URL is safe to publish (no password)
-  url: z13.string().optional(),
+  url: z19.string().optional(),
   // For Supabase: anon key is safe to publish
-  anonKey: z13.string().optional(),
+  anonKey: z19.string().optional(),
   // Secret environment variable name (actual secret NOT published)
-  secretEnvVar: z13.string().optional()
+  secretEnvVar: z19.string().optional()
 });
-var ColumnOverrideSchema = z13.object({
-  visible: z13.boolean().nullish(),
-  label: z13.string().nullish(),
-  width: z13.string().nullish(),
-  sortable: z13.boolean().nullish(),
-  filterable: z13.boolean().nullish(),
-  type: z13.string().nullish(),
-  primaryKey: z13.string().nullish()
+var ColumnOverrideSchema = z19.object({
+  visible: z19.boolean().nullish(),
+  label: z19.string().nullish(),
+  width: z19.string().nullish(),
+  sortable: z19.boolean().nullish(),
+  filterable: z19.boolean().nullish(),
+  type: z19.string().nullish(),
+  primaryKey: z19.string().nullish()
   // Added for FK reference
 });
-var DataRequestSchema = z13.object({
-  url: z13.string().default(""),
+var DataRequestSchema = z19.object({
+  url: z19.string().default(""),
   // Full URL (may be empty for proxy — resolved server-side)
-  method: z13.string().default("GET"),
+  method: z19.string().default("GET"),
   // HTTP method
-  headers: z13.record(z13.string(), z13.string()).default({}),
+  headers: z19.record(z19.string(), z19.string()).default({}),
   // Headers
-  body: z13.record(z13.string(), z13.unknown()).optional(),
+  body: z19.record(z19.string(), z19.unknown()).optional(),
   // For POST requests
-  resultPath: z13.string().default(""),
+  resultPath: z19.string().default(""),
   // JSON path to extract data
-  flattenRelations: z13.boolean().default(true),
+  flattenRelations: z19.boolean().default(true),
   // Flatten nested objects
-  queryConfig: z13.record(z13.string(), z13.unknown()).optional(),
+  queryConfig: z19.record(z19.string(), z19.unknown()).optional(),
   // RPC config for DataTable
-  fetchStrategy: z13.enum(["direct", "proxy"]).default("proxy"),
+  fetchStrategy: z19.enum(["direct", "proxy"]).default("proxy"),
   // Publish-time routing decision
-  datasourceId: z13.string().nullish()
+  datasourceId: z19.string().nullish()
   // Datasource ID for proxy strategy (server-side credential resolution)
 });
-var ComponentBindingSchema = z13.object({
-  componentId: z13.string().nullish(),
-  datasourceId: z13.string().nullish(),
-  tableName: z13.string().nullish(),
+var ComponentBindingSchema = z19.object({
+  componentId: z19.string().nullish(),
+  datasourceId: z19.string().nullish(),
+  tableName: z19.string().nullish(),
   // columns can be string[] (column names) or object[] (enriched schema from publish)
-  columns: z13.union([
-    z13.array(z13.string()),
-    z13.array(z13.object({
-      name: z13.string(),
-      type: z13.string(),
-      nullable: z13.boolean().optional(),
-      primary_key: z13.boolean().optional(),
-      default: z13.any().optional(),
-      foreign_key_table: z13.string().nullish(),
-      foreign_key_column: z13.string().nullish()
+  columns: z19.union([
+    z19.array(z19.string()),
+    z19.array(z19.object({
+      name: z19.string(),
+      type: z19.string(),
+      nullable: z19.boolean().optional(),
+      primary_key: z19.boolean().optional(),
+      default: z19.any().optional(),
+      foreign_key_table: z19.string().nullish(),
+      foreign_key_column: z19.string().nullish()
     }).passthrough())
   ]).nullish(),
-  columnOrder: z13.array(z13.string()).nullish(),
-  columnOverrides: z13.record(z13.string(), ColumnOverrideSchema).nullish(),
-  filters: z13.record(z13.string(), z13.unknown()).nullish(),
-  primaryKey: z13.string().nullish(),
-  foreignKeys: z13.array(z13.object({
-    column: z13.string(),
-    referencedTable: z13.string(),
-    referencedColumn: z13.string()
+  columnOrder: z19.array(z19.string()).nullish(),
+  columnOverrides: z19.record(z19.string(), ColumnOverrideSchema).nullish(),
+  filters: z19.record(z19.string(), z19.unknown()).nullish(),
+  primaryKey: z19.string().nullish(),
+  foreignKeys: z19.array(z19.object({
+    column: z19.string(),
+    referencedTable: z19.string(),
+    referencedColumn: z19.string()
   }).passthrough()).nullish(),
   dataRequest: DataRequestSchema.nullish(),
   // Form-specific fields
-  fieldOverrides: z13.record(z13.string(), z13.unknown()).nullish(),
-  fieldOrder: z13.array(z13.string()).nullish(),
-  dataSourceId: z13.string().nullish(),
+  fieldOverrides: z19.record(z19.string(), z19.unknown()).nullish(),
+  fieldOrder: z19.array(z19.string()).nullish(),
+  dataSourceId: z19.string().nullish(),
   // camelCase alias
   // Dynamic feature configuration (for DataTable server-side features)
-  frontendFilters: z13.array(z13.record(z13.string(), z13.unknown())).nullish(),
-  sorting: z13.record(z13.string(), z13.unknown()).nullish(),
-  pagination: z13.record(z13.string(), z13.unknown()).nullish(),
-  filtering: z13.record(z13.string(), z13.unknown()).nullish()
+  frontendFilters: z19.array(z19.record(z19.string(), z19.unknown())).nullish(),
+  sorting: z19.record(z19.string(), z19.unknown()).nullish(),
+  pagination: z19.record(z19.string(), z19.unknown()).nullish(),
+  filtering: z19.record(z19.string(), z19.unknown()).nullish()
 }).passthrough();
-var VisibilitySettingsSchema = z13.object({
-  mobile: z13.boolean().default(true),
-  tablet: z13.boolean().default(true),
-  desktop: z13.boolean().default(true)
+var VisibilitySettingsSchema = z19.object({
+  mobile: z19.boolean().default(true),
+  tablet: z19.boolean().default(true),
+  desktop: z19.boolean().default(true)
 });
-var ViewportOverridesSchema = z13.object({
-  mobile: z13.record(z13.string(), z13.any()).nullable().optional(),
-  tablet: z13.record(z13.string(), z13.any()).nullable().optional()
+var ViewportOverridesSchema = z19.object({
+  mobile: z19.record(z19.string(), z19.any()).nullable().optional(),
+  tablet: z19.record(z19.string(), z19.any()).nullable().optional()
 }).passthrough();
-var StylesDataSchema = z13.object({
-  values: z13.record(z13.string(), z13.any()).nullable().optional(),
-  activeProperties: z13.array(z13.string()).nullable().optional(),
-  stylingMode: z13.string().default("visual"),
+var StylesDataSchema = z19.object({
+  values: z19.record(z19.string(), z19.any()).nullable().optional(),
+  activeProperties: z19.array(z19.string()).nullable().optional(),
+  stylingMode: z19.string().default("visual"),
   viewportOverrides: ViewportOverridesSchema.nullable().optional()
 }).passthrough();
-var ComponentStylesSchema = z13.record(z13.string(), z13.any()).nullable().optional();
-var PageComponentSchema = z13.lazy(
-  () => z13.object({
-    id: z13.string(),
-    type: z13.string(),
+var ComponentStylesSchema = z19.record(z19.string(), z19.any()).nullable().optional();
+var PageComponentSchema = z19.lazy(
+  () => z19.object({
+    id: z19.string(),
+    type: z19.string(),
     // ComponentTypeSchema is too strict for flexibility
-    props: z13.record(z13.string(), z13.unknown()).nullable().optional(),
+    props: z19.record(z19.string(), z19.unknown()).nullable().optional(),
     styles: ComponentStylesSchema,
     // Legacy: direct styles
     stylesData: StylesDataSchema.nullable().optional(),
     // New: structured styles with overrides
     visibility: VisibilitySettingsSchema.nullable().optional(),
     // Per-viewport visibility
-    children: z13.array(PageComponentSchema).nullable().optional(),
+    children: z19.array(PageComponentSchema).nullable().optional(),
     binding: ComponentBindingSchema.nullable().optional()
   })
 );
-var PageLayoutSchema = z13.object({
-  content: z13.array(PageComponentSchema),
-  root: z13.record(z13.string(), z13.unknown()).optional()
+var PageLayoutSchema = z19.object({
+  content: z19.array(PageComponentSchema),
+  root: z19.record(z19.string(), z19.unknown()).optional()
 });
-var SeoDataSchema = z13.object({
-  title: z13.string().optional(),
-  description: z13.string().optional(),
-  keywords: z13.array(z13.string()).optional(),
-  ogImage: z13.string().optional(),
-  canonical: z13.string().optional()
+var SeoDataSchema = z19.object({
+  title: z19.string().optional(),
+  description: z19.string().optional(),
+  keywords: z19.array(z19.string()).optional(),
+  ogImage: z19.string().optional(),
+  canonical: z19.string().optional()
 });
-var PublishPageSchema = z13.object({
+var PublishPageSchema = z19.object({
   // Page identity (can be UUID or custom string ID like "default-homepage")
-  id: z13.string().min(1),
-  slug: z13.string().min(1),
-  name: z13.string(),
-  title: z13.string().optional(),
-  description: z13.string().optional(),
+  id: z19.string().min(1),
+  slug: z19.string().min(1),
+  name: z19.string(),
+  title: z19.string().optional(),
+  description: z19.string().optional(),
   // Layout & structure
   layoutData: PageLayoutSchema,
   // SEO
   seoData: SeoDataSchema.nullable().optional(),
   // Datasources (non-sensitive config only)
-  datasources: z13.array(DatasourceConfigSchema).nullable().optional(),
+  datasources: z19.array(DatasourceConfigSchema).nullable().optional(),
   // CSS Bundle (tree-shaken, component-specific CSS from FastAPI)
-  cssBundle: z13.string().nullable().optional(),
+  cssBundle: z19.string().nullable().optional(),
   // Versioning
-  version: z13.number().int().min(1),
-  publishedAt: z13.string().datetime(),
+  version: z19.number().int().min(1),
+  publishedAt: z19.string().datetime(),
   // Flags
-  isPublic: z13.boolean().default(true),
-  isHomepage: z13.boolean().default(false),
+  isPublic: z19.boolean().default(true),
+  isHomepage: z19.boolean().default(false),
   // Content hash for drift detection (SHA-256 of publishable attributes)
-  contentHash: z13.string().nullable().optional(),
+  contentHash: z19.string().nullable().optional(),
   // Auth form config baked at publish time (for private page gating overlay)
-  _primaryAuthForm: z13.record(z13.string(), z13.unknown()).nullable().optional()
+  _primaryAuthForm: z19.record(z19.string(), z19.unknown()).nullable().optional()
 });
-var ImportPageRequestSchema = z13.object({
+var ImportPageRequestSchema = z19.object({
   page: PublishPageSchema,
   // Optional: force overwrite even if version is same
-  force: z13.boolean().default(false)
+  force: z19.boolean().default(false)
 });
-var ImportPageResponseSchema = z13.object({
-  success: z13.boolean(),
-  slug: z13.string(),
-  version: z13.number(),
-  previewUrl: z13.string(),
-  message: z13.string().optional()
+var ImportPageResponseSchema = z19.object({
+  success: z19.boolean(),
+  slug: z19.string(),
+  version: z19.number(),
+  previewUrl: z19.string(),
+  message: z19.string().optional()
 });
-var ErrorResponseSchema3 = z13.object({
-  success: z13.literal(false),
-  error: z13.string(),
-  details: z13.record(z13.string(), z13.unknown()).optional()
+var ErrorResponseSchema3 = z19.object({
+  success: z19.literal(false),
+  error: z19.string(),
+  details: z19.record(z19.string(), z19.unknown()).optional()
 });
 
 // src/routes/import.ts
-var importRoute = new Hono2();
+var importRoute = new Hono3();
 importRoute.post("/", async (c) => {
   try {
     const rawBody = await c.req.json();
@@ -7318,319 +9050,9 @@ importRoute.get("/status", async (c) => {
   });
 });
 
-// src/routes/data.ts
-import { Hono as Hono3 } from "hono";
-init_redis();
-var dataRoute = new Hono3();
-var cachedDatasource = null;
-var _datasourcesCache = null;
-function getDatasourceCredentials(datasourceId) {
-  if (!_datasourcesCache) {
-    const raw = process.env.FRONTBASE_DATASOURCES || "";
-    if (!raw) return null;
-    try {
-      _datasourcesCache = JSON.parse(raw);
-    } catch {
-      console.error("[Data Execute] Invalid FRONTBASE_DATASOURCES JSON");
-      return null;
-    }
-  }
-  return _datasourcesCache?.[datasourceId] || null;
-}
-function buildProxyRequest(datasourceId, queryConfig, body) {
-  const creds = getDatasourceCredentials(datasourceId);
-  if (!creds) {
-    console.error(`[Data Execute] No credentials found for datasource: ${datasourceId}`);
-    return null;
-  }
-  const dsType = creds.type || "unknown";
-  if (dsType === "neon") {
-    const httpUrl = creds.httpUrl || creds.apiUrl || "";
-    const apiKey = creds.apiKey || "";
-    return {
-      url: `${httpUrl}/sql`,
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: body || { query: queryConfig.sql || "", params: [] }
-    };
-  }
-  if (dsType === "turso") {
-    const httpUrl = creds.httpUrl || creds.apiUrl || "";
-    const authToken = creds.apiKey || creds.authToken || "";
-    return {
-      url: `${httpUrl}/v2/pipeline`,
-      headers: {
-        "Authorization": `Bearer ${authToken}`,
-        "Content-Type": "application/json"
-      },
-      body: body || { statements: [{ q: queryConfig.sql || "" }] }
-    };
-  }
-  if (dsType === "planetscale") {
-    const httpUrl = creds.httpUrl || creds.apiUrl || "";
-    const auth = creds.apiKey || "";
-    return {
-      url: `${httpUrl}/query`,
-      headers: {
-        "Authorization": auth,
-        "Content-Type": "application/json"
-      },
-      body: body || { query: queryConfig.sql || "" }
-    };
-  }
-  if (dsType === "mysql" || dsType === "postgres") {
-    const httpUrl = creds.httpUrl || creds.apiUrl || "";
-    const apiKey = creds.apiKey || "";
-    if (httpUrl) {
-      return {
-        url: `${httpUrl}/sql`,
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: body || { query: queryConfig.sql || "", params: [] }
-      };
-    }
-    console.error(`[Data Execute] No HTTP URL for ${dsType} datasource: ${datasourceId}`);
-    return null;
-  }
-  console.error(`[Data Execute] Unsupported datasource type: ${dsType}`);
-  return null;
-}
-function resolveEnvVars(template) {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    return process.env[key] || "";
-  });
-}
-function getByPath(obj, path2) {
-  if (!path2) return obj;
-  const parts = path2.replace(/\[(\d+)\]/g, ".$1").split(".");
-  let current = obj;
-  for (const part of parts) {
-    if (current === null || current === void 0) return void 0;
-    current = current[part];
-  }
-  return current;
-}
-function flattenRelations(data) {
-  return data.map((record) => {
-    if (record === null || record === void 0) return record;
-    if (typeof record !== "object") return record;
-    if (Array.isArray(record)) return record;
-    const flat = {};
-    for (const [key, value] of Object.entries(record)) {
-      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-        for (const [subKey, subValue] of Object.entries(value)) {
-          flat[`${key}.${subKey}`] = subValue;
-        }
-      } else {
-        flat[key] = value;
-      }
-    }
-    return flat;
-  });
-}
-async function executeDataRequest2(dataRequest) {
-  let url;
-  let headers = {};
-  let body = dataRequest.body;
-  const isProxy = dataRequest.fetchStrategy === "proxy" && dataRequest.datasourceId;
-  if (isProxy) {
-    const proxyReq = buildProxyRequest(
-      dataRequest.datasourceId,
-      dataRequest.queryConfig || {},
-      dataRequest.body
-    );
-    if (!proxyReq) {
-      throw new Error(`Cannot resolve credentials for datasource: ${dataRequest.datasourceId}`);
-    }
-    url = proxyReq.url;
-    headers = proxyReq.headers;
-    body = proxyReq.body;
-  } else {
-    url = resolveEnvVars(dataRequest.url);
-    for (const [key, value] of Object.entries(dataRequest.headers || {})) {
-      headers[key] = resolveEnvVars(value);
-    }
-  }
-  console.log(`[Data Execute] ${isProxy ? "Proxy" : "Direct"}: ${url.substring(0, 100)}...`);
-  const cacheKey = `data:${url}:${body ? JSON.stringify(body) : ""}`;
-  const cacheTTL = 60;
-  try {
-    const redis = getRedis();
-    return await cached(cacheKey, async () => {
-      return await executeDataRequestUncached(dataRequest, url, headers, body);
-    }, cacheTTL);
-  } catch (e) {
-    if (e.message?.includes("not initialized")) {
-    } else {
-      console.warn("[Data Execute] Redis cache error, falling back to direct fetch:", e);
-    }
-  }
-  return await executeDataRequestUncached(dataRequest, url, headers, body);
-}
-async function executeDataRequestUncached(dataRequest, url, headers, resolvedBody) {
-  const body = resolvedBody !== void 0 ? resolvedBody : dataRequest.body;
-  const fetchOptions = {
-    method: dataRequest.method || "GET",
-    headers
-  };
-  if (body && dataRequest.method === "POST") {
-    fetchOptions.body = JSON.stringify(body);
-    if (body.filters && Array.isArray(body.filters) && body.filters.length > 0) {
-      console.log(`[Data Execute] Filters:`, JSON.stringify(body.filters));
-    }
-  }
-  const response = await fetch(url, fetchOptions);
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
-  }
-  let total = null;
-  const contentRange = response.headers.get("content-range");
-  if (contentRange) {
-    const match = contentRange.match(/\/(\d+)$/);
-    if (match) {
-      total = parseInt(match[1], 10);
-    }
-  }
-  const json = await response.json();
-  let data = getByPath(json, dataRequest.resultPath || "");
-  if (!Array.isArray(data)) {
-    data = data ? [data] : [];
-  }
-  if (dataRequest.flattenRelations !== false) {
-    data = flattenRelations(data);
-  }
-  if (total === null && typeof json.total === "number") {
-    total = json.total;
-  }
-  return { data, total };
-}
-async function getDefaultDatasource() {
-  if (cachedDatasource) return cachedDatasource;
-  try {
-    const pages = await stateProvider.listPages();
-    if (pages.length > 0) {
-      const page = await stateProvider.getPageBySlug(pages[0].slug);
-      if (page?.datasources && page.datasources.length > 0) {
-        cachedDatasource = page.datasources[0];
-        console.log(`[Data API] Using datasource: ${cachedDatasource.name} (${cachedDatasource.type})`);
-        return cachedDatasource;
-      }
-    }
-  } catch (error) {
-    console.error("[Data API] Error getting datasource:", error);
-  }
-  return null;
-}
-dataRoute.get("/:table", async (c) => {
-  const table = c.req.param("table");
-  const query = c.req.query();
-  try {
-    const columns = query.select?.split(",").map((col) => col.trim()) || ["*"];
-    const limit = parseInt(query.limit || "100");
-    const offset = parseInt(query.offset || "0");
-    const orderBy = query.orderBy ? {
-      column: query.orderBy,
-      direction: query.order || "asc"
-    } : void 0;
-    console.log(`[Data API] Querying ${table}:`, { columns, limit, offset });
-    const datasource = await getDefaultDatasource();
-    const result = await handleDataQuery(table, {
-      columns,
-      limit,
-      offset,
-      orderBy
-    }, datasource || void 0);
-    if (result.error) {
-      console.error(`[Data API] Error:`, result.error);
-      return c.json({
-        success: false,
-        error: result.error
-      }, 500);
-    }
-    c.header("Cache-Control", "public, max-age=60, s-maxage=300");
-    return c.json({
-      success: true,
-      data: result.data,
-      count: result.count
-    });
-  } catch (error) {
-    console.error(`[Data API] Error:`, error);
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error"
-    }, 500);
-  }
-});
-dataRoute.get("/:table/:id", async (c) => {
-  const table = c.req.param("table");
-  const id = c.req.param("id");
-  try {
-    const datasource = await getDefaultDatasource();
-    const result = await handleDataQuery(table, {
-      filters: { id },
-      limit: 1
-    }, datasource || void 0);
-    return c.json({
-      success: true,
-      data: result.data[0] || null
-    });
-  } catch (error) {
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-      data: null
-    }, 500);
-  }
-});
-dataRoute.post("/execute", async (c) => {
-  try {
-    const body = await c.req.json();
-    const dataRequest = body.dataRequest;
-    if (!dataRequest) {
-      return c.json({
-        success: false,
-        error: "Invalid dataRequest: missing dataRequest object"
-      }, 400);
-    }
-    const isProxy = dataRequest.fetchStrategy === "proxy" && dataRequest.datasourceId;
-    if (!isProxy && !dataRequest.url) {
-      return c.json({
-        success: false,
-        error: "Invalid dataRequest: missing url (direct) or datasourceId (proxy)"
-      }, 400);
-    }
-    const label = isProxy ? `proxy:${dataRequest.datasourceId}` : dataRequest.url?.substring(0, 80);
-    console.log(`[Data Execute] Processing: ${label}...`);
-    const { data, total } = await executeDataRequest2(dataRequest);
-    return c.json({
-      success: true,
-      data,
-      count: data.length,
-      total: total ?? data.length
-      // Use server total or fallback to data length
-    });
-  } catch (error) {
-    console.error(`[Data Execute] Error:`, error);
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error"
-    }, 500);
-  }
-});
-dataRoute.post("/clear-cache", async (c) => {
-  cachedDatasource = null;
-  _datasourcesCache = null;
-  return c.json({ success: true, message: "Cache cleared" });
-});
-
 // src/routes/manage.ts
-import { OpenAPIHono as OpenAPIHono15, createRoute as createRoute12, z as z14 } from "@hono/zod-openapi";
-var manageRoute = new OpenAPIHono15();
+import { OpenAPIHono as OpenAPIHono17, createRoute as createRoute12, z as z20 } from "@hono/zod-openapi";
+var manageRoute = new OpenAPIHono17();
 var listPagesRoute = createRoute12({
   method: "get",
   path: "/pages",
@@ -7642,13 +9064,13 @@ var listPagesRoute = createRoute12({
       description: "Page list",
       content: {
         "application/json": {
-          schema: z14.object({
-            pages: z14.array(z14.object({
-              slug: z14.string(),
-              name: z14.string(),
-              version: z14.number()
+          schema: z20.object({
+            pages: z20.array(z20.object({
+              slug: z20.string(),
+              name: z20.string(),
+              version: z20.number()
             })),
-            total: z14.number()
+            total: z20.number()
           })
         }
       }
@@ -7666,8 +9088,8 @@ var getPageRoute = createRoute12({
   summary: "Get page by slug",
   description: "Returns the full page bundle including layout, SEO, datasources, and CSS",
   request: {
-    params: z14.object({
-      slug: z14.string().openapi({ description: "Page slug" })
+    params: z20.object({
+      slug: z20.string().openapi({ description: "Page slug" })
     })
   },
   responses: {
@@ -7675,7 +9097,7 @@ var getPageRoute = createRoute12({
       description: "Page bundle",
       content: {
         "application/json": {
-          schema: z14.object({ page: z14.record(z14.unknown()) })
+          schema: z20.object({ page: z20.record(z20.unknown()) })
         }
       }
     },
@@ -7702,8 +9124,8 @@ var deletePageRoute = createRoute12({
   summary: "Delete a page",
   description: "Removes a published page from this engine and invalidates Redis cache",
   request: {
-    params: z14.object({
-      slug: z14.string().openapi({ description: "Page slug" })
+    params: z20.object({
+      slug: z20.string().openapi({ description: "Page slug" })
     })
   },
   responses: {
@@ -7846,8 +9268,8 @@ function escapeXml(str) {
 }
 
 // src/routes/embed.ts
-import { OpenAPIHono as OpenAPIHono16 } from "@hono/zod-openapi";
-var embedRoute = new OpenAPIHono16();
+import { OpenAPIHono as OpenAPIHono18 } from "@hono/zod-openapi";
+var embedRoute = new OpenAPIHono18();
 embedRoute.get("/embed.js", (c) => {
   c.header("Content-Type", "application/javascript");
   c.header("Cache-Control", "public, max-age=3600");
@@ -8063,7 +9485,7 @@ function esc(str) {
 }
 
 // src/routes/auth.ts
-import { OpenAPIHono as OpenAPIHono17 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono19 } from "@hono/zod-openapi";
 init_env();
 async function resolveDynamicRedirect(client, userId, formId, isEmbed, fallbackRedirect) {
   if (!client) return fallbackRedirect;
@@ -8103,7 +9525,7 @@ async function resolveDynamicRedirect(client, userId, formId, isEmbed, fallbackR
   }
   return fallbackRedirect;
 }
-var authRoute = new OpenAPIHono17();
+var authRoute = new OpenAPIHono19();
 authRoute.post("/login", async (c) => {
   const provider = new SupabaseAuthProvider();
   const client = await provider.createClient(c.req.raw);
@@ -8370,36 +9792,6 @@ async function syncRedisSettingsFromFastAPI() {
     return { status: "error", retry: true };
   }
 }
-async function syncSupabaseJwtFromFastAPI() {
-  try {
-    const response = await fetch(`${BACKEND_URL}/api/settings/supabase/`, {
-      headers: { "Accept": "application/json" },
-      signal: AbortSignal.timeout(5e3)
-    });
-    if (!response.ok) {
-      console.warn(`[Startup Sync] Supabase settings fetch failed: ${response.status}`);
-      return { status: "error", retry: response.status >= 500 };
-    }
-    const settings = await response.json();
-    if (settings.supabase_jwt_secret) {
-      try {
-        process.env.SUPABASE_JWT_SECRET = settings.supabase_jwt_secret;
-      } catch {
-      }
-      console.log("[Startup Sync] \u2705 Supabase JWT secret synced from backend");
-      return { status: "success" };
-    } else {
-      console.log("[Startup Sync] \u2139\uFE0F No Supabase JWT secret configured");
-      return { status: "not-configured" };
-    }
-  } catch (error) {
-    const isConnectionError = error?.cause?.code === "ECONNREFUSED";
-    if (!isConnectionError) {
-      console.warn("[Startup Sync] Supabase JWT sync failed:", error.message);
-    }
-    return { status: "error", retry: true };
-  }
-}
 async function syncHomepageFromFastAPI() {
   try {
     const response = await fetch(`${BACKEND_URL}/api/pages/homepage/`, {
@@ -8458,10 +9850,9 @@ async function runStartupSync() {
   console.log("[Startup Sync] Syncing settings from backend...");
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const redisResult = await syncRedisSettingsFromFastAPI();
-    const supabaseResult = await syncSupabaseJwtFromFastAPI();
-    const allDone = (redisResult.status === "success" || redisResult.status === "not-configured") && (supabaseResult.status === "success" || supabaseResult.status === "not-configured");
+    const allDone = redisResult.status === "success" || redisResult.status === "not-configured";
     if (allDone) break;
-    const needsRetry = redisResult.status === "error" && redisResult.retry || supabaseResult.status === "error" && supabaseResult.retry;
+    const needsRetry = redisResult.status === "error" && redisResult.retry;
     if (needsRetry && attempt < MAX_RETRIES) {
       console.log(`[Startup Sync] Attempt ${attempt}/${MAX_RETRIES}, retrying in ${RETRY_DELAY_MS / 1e3}s...`);
       await sleep(RETRY_DELAY_MS);

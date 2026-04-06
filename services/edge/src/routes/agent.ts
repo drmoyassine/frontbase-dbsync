@@ -5,6 +5,7 @@ import { getAgentProfilesConfig } from '../config/env.js';
 import { getGPUModels, getAIBinding } from './ai.js';
 import { buildAgentSystemPrompt } from '../engine/agent/prompts.js';
 import { buildAgentTools } from '../engine/agent/tools.js';
+import { getStateProvider } from '../storage/index.js';
 
 export const agentRoute = new OpenAPIHono();
 
@@ -81,7 +82,7 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
     
     // 3. Assemble sandbox and tooling
     const systemPrompt = buildAgentSystemPrompt(profile);
-    const tools = await buildAgentTools(profile);
+    const tools = await buildAgentTools(profile, getStateProvider());
 
     // Vercel SDK assumes System is provided via `system:` param.
     // Ensure we handle user 'system' injection safely, or bypass them.

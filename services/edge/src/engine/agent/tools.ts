@@ -1,3 +1,15 @@
+/**
+ * Agent Tool Builder
+ * 
+ * Assembles the complete tool set for a given Agent Profile by combining:
+ *   - Tier 1: Auto-registered tools from OpenAPI spec
+ *   - Tier 2: Curated high-level tools (pages, styles, engine)
+ *   - Tier 3: queryDatasource, triggerWorkflow (generic)
+ *   - Tier 4: User-configured tools from state DB (workflows-as-tools, MCP clients)
+ * 
+ * All tools are permission-gated via the profile's permissions matrix.
+ */
+
 import { tool } from 'ai';
 import { z } from 'zod';
 import { executeDataRequest } from '../../routes/data.js';
@@ -5,20 +17,40 @@ import type { AgentProfile } from '../../config/env.js';
 import type { DataRequest } from '../../schemas/publish.js';
 
 import { buildAutoTools } from './auto-register.js';
+import { buildPageTools } from './tools/pages.js';
+import { buildStyleTools } from './tools/styles.js';
+import { buildEngineTools } from './tools/engine.js';
+import { buildUserTools } from './tools/user-tools.js';
 import { liteApp } from '../lite.js';
 
 /**
- * Builds the array of active SDK Tools for a given Agent Profile.
+ * Builds the complete set of active SDK Tools for a given Agent Profile.
  * Tools are rigorously guarded by the `permissions` JSON matrix injected 
  * into the environment variable FRONTBASE_AGENT_PROFILES.
  */
-export const buildAgentTools = async (profile: AgentProfile) => {
+export const buildAgentTools = async (
+    profile: AgentProfile,
+    stateProvider?: { listAgentTools: (slug: string) => Promise<any[]> },
+) => {
     const tools: Record<string, any> = {};
 
-    // 1. Dynamic Auto-Registered Tools
-    // These reflect the engine's entire exposed OpenAPI surface, minus any excluded endpoints
+    // ── Tier 1: Dynamic Auto-Registered Tools ───────────────────────
+    // These reflect the engine's entire exposed OpenAPI surface
     Object.assign(tools, await buildAutoTools(profile));
 
+    // ── Tier 2: Curated High-Level Tools ────────────────────────────
+    // Pages (list, get, updateComponent, updateAndPublish)
+    Object.assign(tools, buildPageTools(profile));
+
+    // Styles (get, update, batchUpdate)
+    Object.assign(tools, buildStyleTools(profile));
+
+    // Engine introspection (status, config, workflows, logs)
+    Object.assign(tools, buildEngineTools(profile));
+
+    // ── Tier 3: Generic Data + Workflow Tools ───────────────────────
+
+    // Data query tool (read-only SQL against connected datasources)
     tools.queryDatasource = tool({
         description: "Execute a read-only SQL SELECT query against a connected external Datasource. Use this to query live app data.",
         parameters: z.object({
@@ -38,8 +70,6 @@ export const buildAgentTools = async (profile: AgentProfile) => {
             }
 
             try {
-                // Synthesize a DataRequest schema which natively leverages the 
-                // proxy fetching strategy (resolves DB credentials securely via env)
                 const dataReq: any = {
                     fetchStrategy: 'proxy',
                     datasourceId,
@@ -57,7 +87,7 @@ export const buildAgentTools = async (profile: AgentProfile) => {
         }
     });
     
-    // Action Workflow Tool
+    // Action Workflow trigger tool
     const workflowPerms = profile.permissions?.['workflows.all'] || [];
     if (workflowPerms.includes('trigger') || workflowPerms.includes('all')) {
         tools.triggerWorkflow = tool({
@@ -84,6 +114,11 @@ export const buildAgentTools = async (profile: AgentProfile) => {
                 }
             }
         } as any);
+    }
+
+    // ── Tier 4: User-Configured Tools (State DB) ────────────────────
+    if (stateProvider) {
+        Object.assign(tools, await buildUserTools(profile, stateProvider));
     }
 
     return tools;

@@ -29,6 +29,7 @@ import { createWorkersAI } from 'workers-ai-provider';
 import { saveAITask, loadAITask, dispatchAITask, clearAITask } from '../engine/ai-tasks.js';
 import { buildAgentSystemPrompt } from '../engine/agent/prompts.js';
 import { buildAgentTools } from '../engine/agent/tools.js';
+import { getStateProvider } from '../storage/index.js';
 
 const openaiRoute = new OpenAPIHono();
 
@@ -168,7 +169,7 @@ openaiRoute.post('/chat/completions', async (c) => {
     const profile = (c as any).get ? (c as any).get('agentProfile') : (c as any).var?.agentProfile;
     if (profile) {
         sdkOptions.system = buildAgentSystemPrompt(profile);
-        sdkOptions.tools = await buildAgentTools(profile);
+        sdkOptions.tools = await buildAgentTools(profile, getStateProvider());
         // Vercel SDK places System prompt separate, drop them from message history to prevent conflicts
         sdkOptions.messages = sdkOptions.messages.filter((m: any) => m.role !== 'system');
         // Agents generally rely on recursive loop limits. If max_steps is unspecified by user, default to 5.
@@ -366,7 +367,7 @@ openaiRoute.post('/chat/completions/continue', async (c) => {
         // Always rebuild tools for the pending execution since functions do not serialize to task DB
         const profile = (c as any).get ? (c as any).get('agentProfile') : (c as any).var?.agentProfile;
         if (profile) {
-            sdkOptions.tools = await buildAgentTools(profile);
+            sdkOptions.tools = await buildAgentTools(profile, getStateProvider());
         }
         
         const result = await generateText(sdkOptions);

@@ -16,6 +16,7 @@ from ...database.utils import get_db, create_page, update_page, get_page_by_slug
 from ...models.schemas import PageCreateRequest, PageUpdateRequest
 from ...models.models import Page, PageDeployment, EdgeEngine
 from app.services.page_hash import compute_page_hash
+from .versions import create_version_snapshot
 from sqlalchemy.orm import joinedload
 import asyncio
 
@@ -268,6 +269,12 @@ async def update_page_endpoint(page_id: str, request: PageUpdateRequest, db: Ses
         db.commit()
         db.refresh(page)
 
+        # Auto-snapshot version history
+        try:
+            create_version_snapshot(db, page)
+        except Exception:
+            pass  # Non-blocking — version creation should never fail a save
+
         return {
             "success": True,
             "data": serialize_page(page)
@@ -303,6 +310,12 @@ async def update_page_layout(page_id: str, request: dict, db: Session = Depends(
         page.content_hash = compute_page_hash(page)  # type: ignore[assignment]
         db.commit()
         db.refresh(page)
+
+        # Auto-snapshot version history
+        try:
+            create_version_snapshot(db, page)
+        except Exception:
+            pass  # Non-blocking — version creation should never fail a save
 
         return {
             "success": True,

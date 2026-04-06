@@ -3,6 +3,8 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useDroppable } from '@dnd-kit/core';
 import { ComponentRenderer } from './ComponentRenderer';
+import { ComponentErrorBoundary } from './ComponentErrorBoundary';
+import { ComponentContextMenu } from './ComponentContextMenu';
 import { useBuilderStore } from '@/stores/builder';
 import { cn } from '@/lib/utils';
 
@@ -22,7 +24,7 @@ interface DraggableComponentProps {
   onSelect: (componentId: string, event: React.MouseEvent) => void;
 }
 
-export const DraggableComponent: React.FC<DraggableComponentProps> = ({
+export const DraggableComponent: React.FC<DraggableComponentProps> = React.memo(({
   component,
   index,
   pageId,
@@ -91,8 +93,13 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
   };
 
   return (
-    // Use a wrapper that acts as a single grid item
-    // The inner component will be styled, but the wrapper becomes the grid child
+    <ComponentContextMenu
+      componentId={component.id}
+      componentType={component.type}
+      disabled={isPreviewMode}
+    >
+    {/* Use a wrapper that acts as a single grid item */}
+    {/* The inner component will be styled, but the wrapper becomes the grid child */}
     <div
       ref={setNodeRef}
       {...attributes}
@@ -136,26 +143,36 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
 
       {/* Component Content */}
       {['Container', 'Row', 'Column', 'Card'].includes(component.type) ? (
-        <ContainerComponent
-          component={component}
-          pageId={pageId}
-          onSelect={onSelect}
-        />
+        <ComponentErrorBoundary
+          componentId={component.id}
+          componentType={component.type}
+        >
+          <ContainerComponent
+            component={component}
+            pageId={pageId}
+            onSelect={onSelect}
+          />
+        </ComponentErrorBoundary>
       ) : (
-        <ComponentRenderer
-          component={component}
-          isSelected={isSelected}
-          onComponentClick={(componentId, event) => onSelect(componentId, event)}
-          onDoubleClick={(componentId, event) => {
-            event.stopPropagation();
-            // Double-click to edit text for text-based components
-            const textComponents = ['Text', 'Heading', 'Button', 'Badge', 'Link'];
-            if (textComponents.includes(component.type) && !isPreviewMode) {
-              const { setEditingComponentId } = useBuilderStore.getState();
-              setEditingComponentId(componentId);
-            }
-          }}
-        />
+        <ComponentErrorBoundary
+          componentId={component.id}
+          componentType={component.type}
+        >
+          <ComponentRenderer
+            component={component}
+            isSelected={isSelected}
+            onComponentClick={(componentId, event) => onSelect(componentId, event)}
+            onDoubleClick={(componentId, event) => {
+              event.stopPropagation();
+              // Double-click to edit text for text-based components
+              const textComponents = ['Text', 'Heading', 'Button', 'Badge', 'Link'];
+              if (textComponents.includes(component.type) && !isPreviewMode) {
+                const { setEditingTextNode } = useBuilderStore.getState();
+                setEditingTextNode({ componentId, property: 'text' });
+              }
+            }}
+          />
+        </ComponentErrorBoundary>
       )}
 
       {/* Drop zone after last component - positioned at bottom edge */}
@@ -169,8 +186,9 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
         />
       )}
     </div>
+    </ComponentContextMenu>
   );
-};
+});
 
 // Container component with drop zone support
 const ContainerComponent: React.FC<{
@@ -224,8 +242,8 @@ const ContainerComponent: React.FC<{
     </>
   ) : (
     showPlaceholder ? (
-      <div className="text-center py-8">
-        <p className="text-muted-foreground">Drop components here</p>
+      <div className="text-center py-4" style={{ minHeight: '48px', border: '1px dashed hsl(var(--border))', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p className="text-muted-foreground text-sm">Drop components here</p>
       </div>
     ) : null
   );

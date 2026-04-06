@@ -21,8 +21,9 @@ import type { PublishPage, PageLayout, SeoData, DatasourceConfig } from '../sche
 import type {
     IStateProvider, ProjectSettingsData, PublishedPageSummary,
     WorkflowData, ExecutionData, NewExecutionData, ExecutionStats, DeadLetterData,
+    AgentToolData,
 } from './IStateProvider';
-import { publishedPages, projectSettings, workflowsTable, executionsTable, type NewPublishedPage } from './schema';
+import { publishedPages, projectSettings, workflowsTable, executionsTable, agentToolsTable, type NewPublishedPage } from './schema';
 
 /** Default favicon path (Frontbase logo) */
 const DEFAULT_FAVICON = '/static/icon.png';
@@ -311,5 +312,58 @@ export abstract class DrizzleStateProvider implements IStateProvider {
             VALUES (${deadLetter.id}, ${deadLetter.workflowId}, ${deadLetter.executionId},
                     ${deadLetter.error}, ${deadLetter.payload}, ${deadLetter.retryCount || 0})
         `);
+    }
+
+    // =========================================================================
+    // Agent Tools CRUD
+    // =========================================================================
+
+    async listAgentTools(profileSlug: string, includeInactive: boolean = false): Promise<AgentToolData[]> {
+        const conditions = [eq(agentToolsTable.profileSlug, profileSlug)];
+        if (!includeInactive) {
+            conditions.push(eq(agentToolsTable.isActive, true));
+        }
+
+        const rows = await this.getDb().select().from(agentToolsTable)
+            .where(and(...conditions));
+
+        return rows.map((r: any) => ({
+            ...r,
+            isActive: !!r.isActive,
+        } as AgentToolData));
+    }
+
+    async upsertAgentTool(tool: AgentToolData): Promise<void> {
+        const now = new Date().toISOString();
+        await this.getDb().insert(agentToolsTable)
+            .values({
+                id: tool.id,
+                profileSlug: tool.profileSlug,
+                type: tool.type,
+                name: tool.name,
+                description: tool.description,
+                config: tool.config,
+                isActive: tool.isActive,
+                createdAt: tool.createdAt || now,
+                updatedAt: now,
+            })
+            .onConflictDoUpdate({
+                target: agentToolsTable.id,
+                set: {
+                    profileSlug: tool.profileSlug,
+                    type: tool.type,
+                    name: tool.name,
+                    description: tool.description,
+                    config: tool.config,
+                    isActive: tool.isActive,
+                    updatedAt: now,
+                },
+            });
+    }
+
+    async deleteAgentTool(id: string): Promise<boolean> {
+        await this.getDb().delete(agentToolsTable)
+            .where(eq(agentToolsTable.id, id));
+        return true;
     }
 }

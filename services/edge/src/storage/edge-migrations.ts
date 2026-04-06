@@ -172,6 +172,25 @@ export const MIGRATIONS: Migration[] = [
             `ALTER TABLE project_settings ADD COLUMN users_config TEXT`,
         ],
     },
+    {
+        version: 9,
+        description: 'Add agent_tools table for user-configured AI agent tools',
+        sql: [
+            `CREATE TABLE IF NOT EXISTS agent_tools (
+                id TEXT PRIMARY KEY,
+                profile_slug TEXT NOT NULL,
+                type TEXT NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT,
+                config TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE INDEX IF NOT EXISTS idx_agent_tools_profile ON agent_tools(profile_slug)`,
+            `CREATE INDEX IF NOT EXISTS idx_agent_tools_type ON agent_tools(type)`,
+        ],
+    },
 ];
 
 // =============================================================================

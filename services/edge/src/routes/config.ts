@@ -14,6 +14,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { SuccessResponseSchema, ErrorResponseSchema } from '../schemas';
 import { getStateDbConfig, getCacheConfig, getQueueConfig, getApiKeysConfig, overrideCacheConfig, overrideQueueConfig, overrideApiKeysConfig } from '../config/env.js';
+import { invalidateAutoToolCache } from '../engine/agent/auto-register.js';
 
 const configRoute = new OpenAPIHono();
 
@@ -176,6 +177,9 @@ configRoute.openapi(updateConfigRoute, async (c) => {
             updated.push('apiKeys');
             console.log(`[Config] API keys updated (${body.apiKeys.apiKeyHashes?.length ?? 0} keys)`);
         }
+
+        // ── Invalidate auto-tool cache so agent rebuilds tools with fresh config ──
+        invalidateAutoToolCache();
 
         return c.json({
             success: true as const,

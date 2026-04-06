@@ -4,13 +4,20 @@ import { executeDataRequest } from '../../routes/data.js';
 import type { AgentProfile } from '../../config/env.js';
 import type { DataRequest } from '../../schemas/publish.js';
 
+import { buildAutoTools } from './auto-register.js';
+import { liteApp } from '../lite.js';
+
 /**
  * Builds the array of active SDK Tools for a given Agent Profile.
  * Tools are rigorously guarded by the `permissions` JSON matrix injected 
  * into the environment variable FRONTBASE_AGENT_PROFILES.
  */
-export const buildAgentTools = (profile: AgentProfile) => {
+export const buildAgentTools = async (profile: AgentProfile) => {
     const tools: Record<string, any> = {};
+
+    // 1. Dynamic Auto-Registered Tools
+    // These reflect the engine's entire exposed OpenAPI surface, minus any excluded endpoints
+    Object.assign(tools, await buildAutoTools(profile));
 
     tools.queryDatasource = tool({
         description: "Execute a read-only SQL SELECT query against a connected external Datasource. Use this to query live app data.",
@@ -59,12 +66,24 @@ export const buildAgentTools = (profile: AgentProfile) => {
                 workflowId: z.string().describe("The ID of the workflow to trigger."),
                 payload: z.record(z.any()).optional().describe("Optional JSON payload to send to the workflow.")
             }),
-            // @ts-ignore
-            execute: async ({ workflowId, payload }) => {
-                // Pending unified execution path integration inside `ActionRunner.ts`
-                return { error: "Workflow triggering via Agent tools is temporarily offline pending Phase 5 unification." };
+            execute: async ({ workflowId, payload }: { workflowId: string, payload?: Record<string, any> }) => {
+                try {
+                    const req = new Request(`http://localhost/api/execute/${workflowId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-api-key': profile.apiKey || '',
+                        },
+                        body: JSON.stringify({ parameters: payload || {} })
+                    });
+                    const res = await liteApp.request(req);
+                    const data = await res.json();
+                    return data;
+                } catch (e: any) {
+                    return { error: `Failed to trigger workflow: ${e.message}` };
+                }
             }
-        });
+        } as any);
     }
 
     return tools;

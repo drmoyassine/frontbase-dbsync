@@ -81,7 +81,7 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
     
     // 3. Assemble sandbox and tooling
     const systemPrompt = buildAgentSystemPrompt(profile);
-    const tools = buildAgentTools(profile);
+    const tools = await buildAgentTools(profile);
 
     // Vercel SDK assumes System is provided via `system:` param.
     // Ensure we handle user 'system' injection safely, or bypass them.

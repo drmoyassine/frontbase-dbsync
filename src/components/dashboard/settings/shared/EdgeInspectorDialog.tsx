@@ -488,7 +488,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
 
         // Agent Profiles
         if (selectedItem.section === 'agents') {
-            return <AgentProfilesPanel engineId={engine.id} engineName={engine.name} />;
+            return <AgentProfilesPanel engineId={engine.id} engineName={engine.name} openApiSpec={openApiSpec} />;
         }
 
         // Logs (all providers) — pass settings for compatibility section
@@ -530,7 +530,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
                     <Search className="h-4 w-4" />
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-[1100px] w-[92vw] h-[80vh] max-h-[700px] p-0 gap-0 flex flex-col overflow-hidden">
+            <DialogContent className="max-w-[90vw] w-[90vw] h-[90vh] max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
                 {/* Header */}
                 <DialogHeader className="px-4 py-3 border-b border-border shrink-0">
                     <div className="flex items-center justify-between">

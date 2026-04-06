@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bot, Plus, Trash2, Save, Loader2, Database, Zap, LayoutDashboard } from 'lucide-react';
+import { Bot, Plus, Trash2, Save, Loader2, Database, Zap, LayoutDashboard, Wrench, MessageSquare, Shield, Puzzle, ChevronDown, ChevronRight, Globe, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,10 +17,19 @@ interface AgentProfile {
     slug: string;
     system_prompt: string;
     permissions: Record<string, string[]>;
+    excluded_endpoints?: string[];
     created_at?: string;
 }
 
-export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string }> = ({ engineId, engineName }) => {
+interface ParsedEndpoint {
+    operationId: string;
+    method: string;
+    path: string;
+    summary: string;
+    tag: string;
+}
+
+export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string, openApiSpec?: any }> = ({ engineId, engineName, openApiSpec }) => {
     const queryClient = useQueryClient();
     const [selectedProfileId, setSelectedProfileId] = useState<string | 'new' | null>(null);
 
@@ -82,7 +91,7 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
 
     const handleNew = () => {
         setSelectedProfileId('new');
-        setEditForm({ name: '', slug: '', system_prompt: '', permissions: {} });
+        setEditForm({ name: '', slug: '', system_prompt: '', permissions: {}, excluded_endpoints: [] });
     };
 
     const togglePermission = (resource: string, perm: string) => {
@@ -99,15 +108,52 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
         setEditForm({ ...editForm, permissions: { ...currentPerms, [resource]: newPerms } });
     };
 
+    const toggleEndpointExclusion = (operationId: string) => {
+        const current = editForm.excluded_endpoints || [];
+        const next = current.includes(operationId)
+            ? current.filter(e => e !== operationId)
+            : [...current, operationId];
+        setEditForm({ ...editForm, excluded_endpoints: next });
+    };
+
     const activeProfile = selectedProfileId === 'new' ? editForm : profiles.find(p => p.id === selectedProfileId);
 
-    // Some mock/common resources for the permissions matrix.
-    // In a full implementation, you'd fetch live datasources and workflows.
-    const resourceTypes = [
+    // Collapsible permission group state
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['data', 'automation', 'endpoints']));
+    const toggleGroup = (group: string) => {
+        setExpandedGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(group)) next.delete(group); else next.add(group);
+            return next;
+        });
+    };
+
+    // Permission groups
+    const dataAccessResources = [
         { id: 'datasources.all', label: 'All Datasources', icon: Database, available: ['read'] },
         { id: 'stateDb', label: 'State Database (Platform)', icon: LayoutDashboard, available: ['read'] },
+    ];
+    const automationResources = [
         { id: 'workflows.all', label: 'All Action Workflows', icon: Zap, available: ['trigger'] }
     ];
+
+    // Parse OpenAPI spec into endpoint list grouped by tag
+    const endpointsByTag = useMemo<Record<string, ParsedEndpoint[]>>(() => {
+        if (!openApiSpec?.paths) return {};
+        const groups: Record<string, ParsedEndpoint[]> = {};
+        for (const [path, methods] of Object.entries(openApiSpec.paths || {})) {
+            for (const [method, op] of Object.entries(methods as any)) {
+                if (['get', 'post', 'put', 'patch', 'delete'].indexOf(method) === -1) continue;
+                const operation = op as any;
+                const operationId = operation.operationId || `${method}_${path.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+                const tag = operation.tags?.[0] || 'Other';
+                const summary = operation.summary || `${method.toUpperCase()} ${path}`;
+                if (!groups[tag]) groups[tag] = [];
+                groups[tag].push({ operationId, method, path, summary, tag });
+            }
+        }
+        return groups;
+    }, [openApiSpec]);
 
     return (
         <div className="flex-1 flex min-h-0 bg-background">
@@ -144,7 +190,7 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
             {/* Main Content (Profile Editor) */}
             <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
                 {selectedProfileId ? (
-                    <div className="p-6 max-w-3xl space-y-6">
+                    <div className="p-6 space-y-6 w-full">
                         <div className="flex items-center justify-between">
                             <h2 className="text-lg font-semibold">{selectedProfileId === 'new' ? 'Create Agent Profile' : 'Edit Profile'}</h2>
                             <div className="flex items-center gap-2">
@@ -162,10 +208,13 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
 
                         <Tabs defaultValue="identity" className="w-full">
                             <TabsList className="mb-4">
-                                <TabsTrigger value="identity">Identity & Rules</TabsTrigger>
-                                <TabsTrigger value="channels">Channels & APIs</TabsTrigger>
+                                <TabsTrigger value="identity" className="gap-1.5"><Bot className="h-3.5 w-3.5" />Identity & Persona</TabsTrigger>
+                                <TabsTrigger value="tools" className="gap-1.5"><Wrench className="h-3.5 w-3.5" />Tools & Skills</TabsTrigger>
+                                <TabsTrigger value="channels" className="gap-1.5"><MessageSquare className="h-3.5 w-3.5" />Communication Channels</TabsTrigger>
+                                <TabsTrigger value="permissions" className="gap-1.5"><Shield className="h-3.5 w-3.5" />Permissions</TabsTrigger>
                             </TabsList>
                             
+                            {/* ─── Tab 1: Identity & Persona ─── */}
                             <TabsContent value="identity" className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
@@ -195,49 +244,50 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
                                     className="min-h-[150px] font-mono text-[13px]"
                                 />
                             </div>
+                            </TabsContent>
 
-                            <div className="space-y-3 pt-4 border-t border-border">
-                                <h3 className="text-sm font-semibold">Capabilities & Permissions Matrix</h3>
-                                <p className="text-xs text-muted-foreground">Grants the agent tool access to the Engine's connected infrastructure.</p>
-                                
-                                <div className="border border-border rounded-md overflow-hidden bg-muted/10 divide-y divide-border">
-                                    {resourceTypes.map(rt => {
-                                        const currentPerms = editForm.permissions?.[rt.id] || [];
-                                        const Icon = rt.icon;
-                                        return (
-                                            <div key={rt.id} className="flex justify-between items-center p-3">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="bg-background border border-border p-1.5 rounded-md">
-                                                        <Icon className="h-4 w-4 text-muted-foreground" />
-                                                    </div>
-                                                    <div>
-                                                        <div className="text-sm font-medium">{rt.label}</div>
-                                                        <div className="text-[10px] text-muted-foreground font-mono">{rt.id}</div>
-                                                    </div>
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    {rt.available.map(perm => {
-                                                        const isEnabled = currentPerms.includes(perm) || currentPerms.includes('all');
-                                                        return (
-                                                            <Button
-                                                                key={perm}
-                                                                size="sm"
-                                                                variant={isEnabled ? "default" : "outline"}
-                                                                onClick={() => togglePermission(rt.id, perm)}
-                                                                className={`h-7 px-3 text-xs capitalize ${isEnabled ? 'bg-primary text-white' : ''}`}
-                                                            >
-                                                                {perm}
-                                                            </Button>
-                                                        )
-                                                    })}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                            {/* ─── Tab 2: Tools & Skills (External) ─── */}
+                            <TabsContent value="tools" className="space-y-6">
+                                <div className="space-y-1.5">
+                                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                                        <Puzzle className="h-4 w-4" /> MCP Servers
+                                    </h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        Connect external tool servers using the Model Context Protocol (MCP). The agent will be able to discover and invoke tools provided by these servers.
+                                    </p>
+                                    
+                                    <div className="mt-4 border border-dashed border-border rounded-md p-8 flex flex-col items-center justify-center text-center bg-muted/10">
+                                        <Wrench className="h-8 w-8 mb-3 text-muted-foreground/40" />
+                                        <p className="text-sm text-muted-foreground font-medium">No MCP servers connected</p>
+                                        <p className="text-xs text-muted-foreground mt-1">Connect an MCP server to extend this agent's capabilities with external tools.</p>
+                                        <Button variant="outline" size="sm" className="mt-4" disabled>
+                                            <Plus className="h-3.5 w-3.5 mr-1.5" /> Add MCP Server
+                                        </Button>
+                                        <Badge variant="secondary" className="text-[10px] mt-3">Coming Soon</Badge>
+                                    </div>
                                 </div>
-                            </div>
+
+                                <div className="space-y-1.5 pt-2 border-t border-border">
+                                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                                        <Zap className="h-4 w-4" /> Agent Skills
+                                    </h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        Install pre-built skill packages that give your agent specialized abilities (e.g. web scraping, code execution, document parsing).
+                                    </p>
+                                    
+                                    <div className="mt-4 border border-dashed border-border rounded-md p-8 flex flex-col items-center justify-center text-center bg-muted/10">
+                                        <Puzzle className="h-8 w-8 mb-3 text-muted-foreground/40" />
+                                        <p className="text-sm text-muted-foreground font-medium">No skills installed</p>
+                                        <p className="text-xs text-muted-foreground mt-1">Browse and install skills from the marketplace to enhance this agent.</p>
+                                        <Button variant="outline" size="sm" className="mt-4" disabled>
+                                            <Plus className="h-3.5 w-3.5 mr-1.5" /> Browse Skills
+                                        </Button>
+                                        <Badge variant="secondary" className="text-[10px] mt-3">Coming Soon</Badge>
+                                    </div>
+                                </div>
                             </TabsContent>
                             
+                            {/* ─── Tab 3: Communication Channels ─── */}
                             <TabsContent value="channels" className="space-y-6">
                                 <div className="space-y-1.5">
                                     <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -279,7 +329,6 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
                                             <div className="flex items-center gap-3">
                                                 <div className="h-8 w-8 rounded bg-[#2AABEE]/10 flex items-center justify-center">
                                                     <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#2AABEE]" fill="currentColor">
-                                                        <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c..."/>
                                                         <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.223-.548.223l.188-2.85 5.18-4.686c.223-.195-.054-.304-.346-.108l-6.4 4.024-2.76-.86c-.6-.188-.61-.6.125-.892l10.774-4.15c.5-.188.94.116.787.827z" />
                                                     </svg>
                                                 </div>
@@ -300,6 +349,170 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
                                             <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
                                         </div>
                                     </div>
+                                </div>
+                            </TabsContent>
+
+                            {/* ─── Tab 4: Permissions (Internal Engine Tools) ─── */}
+                            <TabsContent value="permissions" className="space-y-5">
+                                <p className="text-xs text-muted-foreground">Controls what internal engine resources this agent is allowed to access and which API endpoints it can invoke as tools.</p>
+
+                                {/* ── Group: Data Access ── */}
+                                <div className="border border-border rounded-lg overflow-hidden">
+                                    <button onClick={() => toggleGroup('data')} className="w-full flex items-center justify-between p-3 bg-muted/30 hover:bg-muted/50 transition-colors">
+                                        <span className="text-sm font-semibold flex items-center gap-2">
+                                            <Database className="h-4 w-4 text-muted-foreground" /> Data Access
+                                        </span>
+                                        {expandedGroups.has('data') ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                                    </button>
+                                    {expandedGroups.has('data') && (
+                                        <div className="divide-y divide-border">
+                                            {dataAccessResources.map(rt => {
+                                                const currentPerms = editForm.permissions?.[rt.id] || [];
+                                                const Icon = rt.icon;
+                                                return (
+                                                    <div key={rt.id} className="flex justify-between items-center p-3 bg-background">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="bg-muted/30 border border-border p-1.5 rounded-md">
+                                                                <Icon className="h-4 w-4 text-muted-foreground" />
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-sm font-medium">{rt.label}</div>
+                                                                <div className="text-[10px] text-muted-foreground font-mono">{rt.id}</div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            {rt.available.map(perm => {
+                                                                const isEnabled = currentPerms.includes(perm) || currentPerms.includes('all');
+                                                                return (
+                                                                    <Button key={perm} size="sm" variant={isEnabled ? 'default' : 'outline'} onClick={() => togglePermission(rt.id, perm)} className={`h-7 px-3 text-xs capitalize ${isEnabled ? 'bg-primary text-white' : ''}`}>
+                                                                        {perm}
+                                                                    </Button>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* ── Group: Automation ── */}
+                                <div className="border border-border rounded-lg overflow-hidden">
+                                    <button onClick={() => toggleGroup('automation')} className="w-full flex items-center justify-between p-3 bg-muted/30 hover:bg-muted/50 transition-colors">
+                                        <span className="text-sm font-semibold flex items-center gap-2">
+                                            <Zap className="h-4 w-4 text-muted-foreground" /> Automation
+                                        </span>
+                                        {expandedGroups.has('automation') ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                                    </button>
+                                    {expandedGroups.has('automation') && (
+                                        <div className="divide-y divide-border">
+                                            {automationResources.map(rt => {
+                                                const currentPerms = editForm.permissions?.[rt.id] || [];
+                                                const Icon = rt.icon;
+                                                return (
+                                                    <div key={rt.id} className="flex justify-between items-center p-3 bg-background">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="bg-muted/30 border border-border p-1.5 rounded-md">
+                                                                <Icon className="h-4 w-4 text-muted-foreground" />
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-sm font-medium">{rt.label}</div>
+                                                                <div className="text-[10px] text-muted-foreground font-mono">{rt.id}</div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            {rt.available.map(perm => {
+                                                                const isEnabled = currentPerms.includes(perm) || currentPerms.includes('all');
+                                                                return (
+                                                                    <Button key={perm} size="sm" variant={isEnabled ? 'default' : 'outline'} onClick={() => togglePermission(rt.id, perm)} className={`h-7 px-3 text-xs capitalize ${isEnabled ? 'bg-primary text-white' : ''}`}>
+                                                                        {perm}
+                                                                    </Button>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* ── Group: Internal API Endpoints ── */}
+                                <div className="border border-border rounded-lg overflow-hidden">
+                                    <button onClick={() => toggleGroup('endpoints')} className="w-full flex items-center justify-between p-3 bg-muted/30 hover:bg-muted/50 transition-colors">
+                                        <div className="flex items-center gap-2">
+                                            <Globe className="h-4 w-4 text-muted-foreground" />
+                                            <span className="text-sm font-semibold">Internal API Endpoints</span>
+                                            {Object.keys(endpointsByTag).length > 0 && (
+                                                <Badge variant="secondary" className="text-[10px] ml-1">
+                                                    {Object.values(endpointsByTag).flat().length} endpoints
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        {expandedGroups.has('endpoints') ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                                    </button>
+                                    {expandedGroups.has('endpoints') && (
+                                        <div className="bg-background">
+                                            <div className="px-3 py-2 border-b border-border bg-muted/10">
+                                                <p className="text-[11px] text-muted-foreground">All endpoints are <strong>included</strong> by default. Click to exclude specific endpoints from this agent's tool access.</p>
+                                            </div>
+                                            {Object.keys(endpointsByTag).length === 0 ? (
+                                                <div className="p-6 text-center text-sm text-muted-foreground">
+                                                    <Globe className="h-6 w-6 mx-auto mb-2 opacity-30" />
+                                                    No OpenAPI endpoints detected. Deploy the engine to load its API spec.
+                                                </div>
+                                            ) : (
+                                                Object.entries(endpointsByTag).map(([tag, endpoints]) => (
+                                                    <div key={tag}>
+                                                        <div className="px-3 py-1.5 bg-muted/20 border-b border-border">
+                                                            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{tag}</span>
+                                                        </div>
+                                                        <div className="divide-y divide-border/50">
+                                                            {endpoints.map(ep => {
+                                                                const isExcluded = (editForm.excluded_endpoints || []).includes(ep.operationId);
+                                                                const methodColors: Record<string, string> = {
+                                                                    get: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+                                                                    post: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
+                                                                    put: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+                                                                    patch: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
+                                                                    delete: 'bg-red-500/10 text-red-600 border-red-500/20',
+                                                                };
+                                                                return (
+                                                                    <div
+                                                                        key={ep.operationId}
+                                                                        className={`flex items-center justify-between px-3 py-2 hover:bg-muted/30 transition-colors cursor-pointer ${isExcluded ? 'opacity-50' : ''}`}
+                                                                        onClick={() => toggleEndpointExclusion(ep.operationId)}
+                                                                    >
+                                                                        <div className="flex items-center gap-3 min-w-0">
+                                                                            <Badge variant="outline" className={`text-[9px] font-mono uppercase w-14 justify-center shrink-0 ${methodColors[ep.method] || ''}`}>
+                                                                                {ep.method}
+                                                                            </Badge>
+                                                                            <div className="min-w-0">
+                                                                                <div className="text-xs font-medium truncate">{ep.summary}</div>
+                                                                                <div className="text-[10px] text-muted-foreground font-mono truncate">{ep.path}</div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="shrink-0 ml-3">
+                                                                            {isExcluded ? (
+                                                                                <Badge variant="outline" className="text-[10px] gap-1 text-destructive border-destructive/30">
+                                                                                    <X className="h-3 w-3" /> Excluded
+                                                                                </Badge>
+                                                                            ) : (
+                                                                                <Badge variant="outline" className="text-[10px] gap-1 text-emerald-600 border-emerald-500/30">
+                                                                                    <Check className="h-3 w-3" /> Included
+                                                                                </Badge>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </TabsContent>
                         </Tabs>

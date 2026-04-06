@@ -89,6 +89,8 @@ export interface AgentProfile {
     name: string;
     systemPrompt: string | null;
     permissions: Record<string, string[]>;
+    apiKey?: string;
+    excludedEndpoints?: string[];
 }
 
 export type AgentProfilesConfig = Record<string, AgentProfile>;

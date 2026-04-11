@@ -512,7 +512,7 @@ def _get_creds(engine_id: str, db: Session) -> tuple:
         EdgeProviderAccount.id == str(engine.edge_provider_id)
     ).first()
     raw_creds = {}
-    if provider_acct and provider_acct.provider_credentials:
+    if provider_acct and str(provider_acct.provider_credentials or ''):
         raw_creds = decrypt_credentials(str(provider_acct.provider_credentials))
     
     # Merge: raw creds take precedence (they have all fields), ctx adds flattened extras

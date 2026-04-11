@@ -97,85 +97,85 @@ class AutoSchemaValidationMiddleware:
             "/api/database/test-supabase": {
                 "schema_name": "TestConnectionRequestSchema",
                 "fields": {
-                                "url": {
-                                                "type": "string",
-                                                "constraints": {
-                                                                "format": "url",
-                                                                "required": true
-                                                }
-                                },
-                                "anonKey": {
-                                                "type": "string",
-                                                "constraints": {
-                                                                "required": true
-                                                }
-                                }
+                    "url": {
+                        "type": "string",
+                        "constraints": {
+                            "format": "url",
+                            "required": True
+                        }
+                    },
+                    "anonKey": {
+                        "type": "string",
+                        "constraints": {
+                            "required": True
+                        }
+                    }
                 }
-},,
+            },
             "/api/database/connect-supabase": {
                 "schema_name": "ConnectSupabaseRequestSchema",
                 "fields": {
-                                "url": {
-                                                "type": "string",
-                                                "constraints": {
-                                                                "format": "url",
-                                                                "required": true
-                                                }
-                                },
-                                "anonKey": {
-                                                "type": "string",
-                                                "constraints": {
-                                                                "required": true
-                                                }
-                                },
-                                "serviceKey": {
-                                                "type": "string",
-                                                "constraints": {
-                                                                "required": false
-                                                }
-                                }
+                    "url": {
+                        "type": "string",
+                        "constraints": {
+                            "format": "url",
+                            "required": True
+                        }
+                    },
+                    "anonKey": {
+                        "type": "string",
+                        "constraints": {
+                            "required": True
+                        }
+                    },
+                    "serviceKey": {
+                        "type": "string",
+                        "constraints": {
+                            "required": False
+                        }
+                    }
                 }
-},,
+            },
             "/api/auth/login": {
                 "schema_name": "LoginRequestSchema",
                 "fields": {
-                                "username": {
-                                                "type": "string",
-                                                "constraints": {
-                                                                "required": true
-                                                }
-                                },
-                                "password": {
-                                                "type": "string",
-                                                "constraints": {
-                                                                "required": true
-                                                }
-                                }
+                    "username": {
+                        "type": "string",
+                        "constraints": {
+                            "required": True
+                        }
+                    },
+                    "password": {
+                        "type": "string",
+                        "constraints": {
+                            "required": True
+                        }
+                    }
                 }
-},,
+            },
             "/api/auth/register": {
                 "schema_name": "RegisterRequestSchema",
                 "fields": {
-                                "username": {
-                                                "type": "string",
-                                                "constraints": {
-                                                                "required": true
-                                                }
-                                },
-                                "email": {
-                                                "type": "string",
-                                                "constraints": {
-                                                                "required": true
-                                                }
-                                },
-                                "password": {
-                                                "type": "string",
-                                                "constraints": {
-                                                                "required": true
-                                                }
-                                }
+                    "username": {
+                        "type": "string",
+                        "constraints": {
+                            "required": True
+                        }
+                    },
+                    "email": {
+                        "type": "string",
+                        "constraints": {
+                            "required": True
+                        }
+                    },
+                    "password": {
+                        "type": "string",
+                        "constraints": {
+                            "required": True
+                        }
+                    }
                 }
-},
+            },
         }
     
     def get_compatibility_report(self) -> str:

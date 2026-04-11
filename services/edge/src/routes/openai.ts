@@ -168,8 +168,8 @@ openaiRoute.post('/chat/completions', async (c) => {
     // If this request was routed through /api/agents/:profileSlug, the context is hydrated here
     const profile = (c as any).get ? (c as any).get('agentProfile') : (c as any).var?.agentProfile;
     if (profile) {
-        sdkOptions.system = buildAgentSystemPrompt(profile);
         sdkOptions.tools = await buildAgentTools(profile, getStateProvider());
+        sdkOptions.system = buildAgentSystemPrompt(profile, sdkOptions.tools);
         // Vercel SDK places System prompt separate, drop them from message history to prevent conflicts
         sdkOptions.messages = sdkOptions.messages.filter((m: any) => m.role !== 'system');
         // Agents generally rely on recursive loop limits. If max_steps is unspecified by user, default to 5.

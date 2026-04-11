@@ -27,16 +27,15 @@ import { liteApp } from '../lite.js';
  * Builds the complete set of active SDK Tools for a given Agent Profile.
  * Tools are rigorously guarded by the `permissions` JSON matrix injected 
  * into the environment variable FRONTBASE_AGENT_PROFILES.
+ * 
+ * Build order: Tier 2/3/4 first (curated), then Tier 1 (auto-registered).
+ * Curated tool names are passed to buildAutoTools for dedup — curated always wins.
  */
 export const buildAgentTools = async (
     profile: AgentProfile,
     stateProvider?: { listAgentTools: (slug: string) => Promise<any[]> },
 ) => {
     const tools: Record<string, any> = {};
-
-    // ── Tier 1: Dynamic Auto-Registered Tools ───────────────────────
-    // These reflect the engine's entire exposed OpenAPI surface
-    Object.assign(tools, await buildAutoTools(profile));
 
     // ── Tier 2: Curated High-Level Tools ────────────────────────────
     // Pages (list, get, updateComponent, updateAndPublish)
@@ -120,6 +119,12 @@ export const buildAgentTools = async (
     if (stateProvider) {
         Object.assign(tools, await buildUserTools(profile, stateProvider));
     }
+
+    // ── Tier 1: Dynamic Auto-Registered Tools ───────────────────────
+    // Built LAST so we can pass curated names for dedup.
+    // Curated tools always take precedence over auto-generated ones.
+    const curatedNames = new Set(Object.keys(tools));
+    Object.assign(tools, await buildAutoTools(profile, curatedNames));
 
     return tools;
 };

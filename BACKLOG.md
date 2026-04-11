@@ -22,9 +22,6 @@
 ### API Keys
 - [ ] ✨ **Direct Secret Patching for Vercel/Netlify** — After API key CRUD, patch `FRONTBASE_API_KEY_HASHES` directly via provider API instead of full redeploy. Vercel: `POST /v10/projects/{id}/env`. Netlify: `PATCH /api/v1/sites/{id}` env vars. Docker/self-hosted still requires redeploy. Update `_sync_keys_to_engines()` in `edge_api_keys.py`.
 
-### Builder / SSR (Backend)
-- [ ] ✨ **Version History & Rollback (Pages)** — Snapshot table (`page_versions`) with rollback, diff view, audit trail.
-
 ### Automations (Backend)
 - [ ] ✨ **Data Change Trigger** — `data_change_trigger` node. On publish, auto-register webhook in data source (Supabase Database Webhooks / `pg_net`).
 - [ ] ✨ **Queue Trigger (IoT / Message Bus)** — `queue_trigger` node. Push mode (QStash) + Pull mode (RabbitMQ/MQTT/self-hosted).
@@ -52,7 +49,6 @@
 ### Builder / SSR (Frontend)
 - [ ] ✨ **Role-Based Visibility** — Component-level access rules ("Visible to roles"). Server-side filtering. User-scoped data queries via JWT for Supabase RLS.
 - [ ] ✨ **PWA Support for Published Apps** — Dynamic Manifest, Service Worker, offline support, "Add to Home Screen" prompt.
-- [ ] 🐛 **Better error toasts** — Parse and display structured error details from backend.
 
 
 ### Edge Infrastructure (Frontend)

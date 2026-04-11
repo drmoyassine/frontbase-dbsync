@@ -62,13 +62,14 @@ describe('Gated Page Overlay', () => {
         expect(html).toContain('Please log in or sign up');
     });
 
-    it('should include Supabase JS CDN script', () => {
+    it('should include server-side auth form', () => {
         const html = generateGatedPageDocument(
             mockPage, mockBodyHtml, mockInitialState, null, null
         );
 
-        expect(html).toContain('supabase-js@2');
-        expect(html).toContain('supabase.min.js');
+        // Auth uses server-side form POST, not client-side Supabase SDK
+        expect(html).toContain('/api/auth/login');
+        expect(html).toContain('fb-auth-form');
     });
 
     it('should use custom auth form config when provided', () => {

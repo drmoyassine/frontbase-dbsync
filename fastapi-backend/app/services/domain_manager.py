@@ -105,7 +105,7 @@ async def verify_domain(engine: EdgeEngine, creds: dict, provider_type: str, dom
 def _get_engine_name(engine: EdgeEngine) -> str:
     """Extract the worker/project name from engine_config JSON."""
     try:
-        cfg = json.loads(str(engine.engine_config)) if engine.engine_config else {}
+        cfg = json.loads(str(engine.engine_config)) if str(engine.engine_config or '') else {}
     except (json.JSONDecodeError, TypeError):
         cfg = {}
     # Try all known config keys
@@ -121,7 +121,7 @@ def _save_custom_domain(engine: EdgeEngine, domain: str, db: Optional[Session]) 
     """
     engine_cfg = json.loads(str(engine.engine_config or '{}'))
     engine_cfg["custom_domain"] = domain
-    if "original_url" not in engine_cfg and engine.url:
+    if "original_url" not in engine_cfg and str(engine.url or ''):
         engine_cfg["original_url"] = str(engine.url)
     engine.engine_config = json.dumps(engine_cfg)  # type: ignore[assignment]
     engine.url = f"https://{domain}"  # type: ignore[assignment]

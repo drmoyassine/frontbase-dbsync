@@ -8,7 +8,7 @@
 
 import type { AgentProfile } from '../../config/env.js';
 
-export const buildAgentSystemPrompt = (profile: AgentProfile): string => {
+export const buildAgentSystemPrompt = (profile: AgentProfile, tools?: Record<string, any>): string => {
     let prompt = `You are a helpful AI Agent named ${profile.name} running autonomously on a Frontbase Edge Engine. `;
     
     if (profile.systemPrompt) {
@@ -103,6 +103,20 @@ export const buildAgentSystemPrompt = (profile: AgentProfile): string => {
     prompt += `- When making visual changes, use \`pages_updateAndPublish\` for atomic edits.\n`;
     prompt += `- For coordinated style changes across multiple components, use \`styles_batchUpdate\`.\n`;
     prompt += `- Always verify your changes took effect by using inspection tools after modifications.\n`;
+
+    // ── Tool Manifest (dynamic table of contents) ───────────────────
+
+    if (tools && Object.keys(tools).length > 0) {
+        prompt += `\n=== TOOL MANIFEST ===\n`;
+        prompt += `The following ${Object.keys(tools).length} tools are available to you:\n\n`;
+        for (const [name, t] of Object.entries(tools)) {
+            const desc = t?.description
+                ? t.description.split('\n')[0].slice(0, 120)
+                : 'No description';
+            prompt += `- \`${name}\`: ${desc}\n`;
+        }
+        prompt += `\n=== END TOOL MANIFEST ===\n`;
+    }
 
     return prompt;
 };

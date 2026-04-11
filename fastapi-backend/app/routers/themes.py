@@ -24,7 +24,7 @@ def get_themes(
     
     # Pass dict instead of str for Pydantic processing
     for t in themes:
-        t.styles_data = t.styles_data_dict
+        t.styles_data = t.styles_data_dict  # type: ignore[assignment]
     return themes
 
 @router.post("/", response_model=ComponentThemeOut)
@@ -48,7 +48,7 @@ def create_theme(
     db.commit()
     db.refresh(theme)
     
-    theme.styles_data = theme.styles_data_dict
+    theme.styles_data = theme.styles_data_dict  # type: ignore[assignment]
     return theme
 
 @router.delete("/{theme_id}", status_code=204)
@@ -61,7 +61,7 @@ def delete_theme(
     if not theme:
         raise HTTPException(status_code=404, detail="Theme not found")
         
-    if theme.is_system:
+    if bool(theme.is_system):
         raise HTTPException(status_code=400, detail="Cannot delete a system theme")
         
     db.delete(theme)

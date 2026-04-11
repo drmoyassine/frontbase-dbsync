@@ -114,14 +114,35 @@ function truncateResponse(data: any): any {
 // Auto-registration from OpenAPI spec
 // =============================================================================
 
-export async function buildAutoTools(profile: AgentProfile) {
+/**
+ * Build auto-registered tools from the engine's OpenAPI spec.
+ * 
+ * Hardening features:
+ *   - Tag-based permission gating: checks profile.permissions['api.<tag>'].
+ *     Falls back to 'api.all'. Deny-by-default if neither exists.
+ *   - Tool count cap: maxAutoTools (default 50) prevents context window bloat.
+ *   - Dedup guard: skips tools whose name collides with curated Tier 2/3/4 tools.
+ */
+export async function buildAutoTools(
+    profile: AgentProfile,
+    curatedNames?: Set<string>,
+) {
     // Return cached tools if available and exclusion list matches
     const excluded = profile.excludedEndpoints || [];
     const excludedKey = excluded.sort().join(',');
     if (_cachedTools && excludedKey === _cachedExcluded.join(',')) {
+        // Still apply dedup filter against curated names (they may change per-call)
+        if (curatedNames && curatedNames.size > 0) {
+            const filtered: Record<string, any> = {};
+            for (const [name, t] of Object.entries(_cachedTools)) {
+                if (!curatedNames.has(name)) filtered[name] = t;
+            }
+            return filtered;
+        }
         return { ..._cachedTools };
     }
 
+    const maxAutoTools = profile.maxAutoTools ?? 50;
     const tools: Record<string, any> = {};
 
     try {
@@ -136,7 +157,15 @@ export async function buildAutoTools(profile: AgentProfile) {
         const spec: any = await res.json();
 
         for (const [path, methods] of Object.entries(spec.paths || {})) {
+            // Bail early if we've hit the cap
+            if (Object.keys(tools).length >= maxAutoTools) {
+                console.warn(`[AutoTools] Tool cap reached (${maxAutoTools}). Skipping remaining endpoints.`);
+                break;
+            }
+
             for (const [method, operation] of Object.entries(methods as any)) {
+                if (Object.keys(tools).length >= maxAutoTools) break;
+
                 const op = operation as any;
                 let operationId = op.operationId;
                 if (!operationId) {
@@ -151,6 +180,19 @@ export async function buildAutoTools(profile: AgentProfile) {
                 // Category prefix from OpenAPI tags
                 const tag = (op.tags && op.tags[0]) ? op.tags[0].toLowerCase().replace(/\s+/g, '_') : 'api';
                 const toolName = `${tag}_${operationId}`;
+
+                // ── Dedup guard: curated tools always win ──
+                if (curatedNames && curatedNames.has(toolName)) {
+                    continue;
+                }
+
+                // ── Tag-based permission gating (deny-by-default) ──
+                const tagPerms = profile.permissions?.[`api.${tag}`]
+                              || profile.permissions?.['api.all']
+                              || [];
+                if (!tagPerms.includes('execute') && !tagPerms.includes('all')) {
+                    continue;
+                }
 
                 // Gather schema info
                 const reqBodySchema = op.requestBody?.content?.['application/json']?.schema;

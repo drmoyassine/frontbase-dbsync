@@ -57,6 +57,8 @@ vi.mock('../engine/debounce.js', () => ({
 vi.mock('../middleware/auth.js', () => ({
     apiKeyAuth: vi.fn().mockImplementation(async (_c: any, next: any) => next()),
     aiApiKeyAuth: vi.fn().mockImplementation(async (_c: any, next: any) => next()),
+    systemKeyAuth: vi.fn().mockImplementation(async (_c: any, next: any) => next()),
+    userApiKeyAuth: vi.fn().mockImplementation(async (_c: any, next: any) => next()),
 }));
 
 import { createLiteApp } from '../engine/lite.js';

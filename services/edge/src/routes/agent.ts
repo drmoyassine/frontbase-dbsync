@@ -81,8 +81,8 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
     const workersai = createWorkersAI({ binding: ai });
     
     // 3. Assemble sandbox and tooling
-    const systemPrompt = buildAgentSystemPrompt(profile);
     const tools = await buildAgentTools(profile, getStateProvider());
+    const systemPrompt = buildAgentSystemPrompt(profile, tools);
 
     // Vercel SDK assumes System is provided via `system:` param.
     // Ensure we handle user 'system' injection safely, or bypass them.

@@ -1,0 +1,7 @@
+feat(ai): Phase 0A - universal LLM provider infrastructure  
+  
+- Add api_key and base_url to edge_gpu_models with alembic migration  
+- Expand secrets_builder to decrypt and push provider API keys via FRONTBASE_GPU  
+- Create universal model-factory.ts using Vercel AI SDK for provider routing  
+- Add backend GPU adapter mapping for OpenAI, Anthropic, Google, Ollama  
+- Clean old workers-ai-provider refs from edge routes  

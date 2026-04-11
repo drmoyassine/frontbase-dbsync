@@ -374,12 +374,23 @@ def build_engine_secrets(
             EdgeGPUModel.is_active == True,
         ).all()
         if gpu_models:
-            models_data = [{
-                "slug": str(m.slug),
-                "modelId": str(m.model_id),
-                "modelType": str(m.model_type),
-                "provider": str(m.provider),
-            } for m in gpu_models]
+            models_data = []
+            for m in gpu_models:
+                entry: dict[str, str] = {
+                    "slug": str(m.slug),
+                    "modelId": str(m.model_id),
+                    "modelType": str(m.model_type),
+                    "provider": str(m.provider),
+                }
+                # Decrypt and push API key for non-CF providers
+                if str(m.api_key or ''):
+                    decrypted_key = decrypt_field(str(m.api_key))
+                    if decrypted_key:
+                        entry["apiKey"] = decrypted_key
+                # Push custom base URL (Ollama, OpenAI-compatible, etc.)
+                if str(m.base_url or ''):
+                    entry["baseUrl"] = str(m.base_url)
+                models_data.append(entry)
             secrets['FRONTBASE_GPU'] = json.dumps(models_data)
 
     # ─── FRONTBASE_STATE_DB ──────────────────────────────────────────────

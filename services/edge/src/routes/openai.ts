@@ -25,6 +25,7 @@ import {
     experimental_transcribe as transcribe,
     experimental_generateSpeech as generateSpeech,
 } from 'ai';
+import { createModelInstance } from '../engine/model-factory.js';
 import { createWorkersAI } from 'workers-ai-provider';
 import { saveAITask, loadAITask, dispatchAITask, clearAITask } from '../engine/ai-tasks.js';
 import { buildAgentSystemPrompt } from '../engine/agent/prompts.js';
@@ -47,9 +48,10 @@ function resolveModel(modelSlug: string | undefined, c: any) {
     if (!model) {
         return { error: c.json({ error: { message: `Model '${modelSlug}' not found. Available: ${models.map(m => m.slug).join(', ')}`, type: 'invalid_request_error', code: 'model_not_found' } }, 404) };
     }
+    // AI binding only required for workers_ai provider
     const ai = getAIBinding();
-    if (!ai) {
-        return { error: c.json({ error: { message: 'AI binding not available.', type: 'server_error', code: 'ai_binding_missing' } }, 503) };
+    if (!ai && model.provider === 'workers_ai') {
+        return { error: c.json({ error: { message: 'AI binding not available for workers_ai provider.', type: 'server_error', code: 'ai_binding_missing' } }, 503) };
     }
     return { model, ai };
 }
@@ -64,8 +66,11 @@ function mergeDefaults(payload: any, model: any) {
 }
 
 /**
- * Create a workers-ai-provider instance from the AI binding.
- * Called per-request since the binding may change between adapter setups.
+ * Workers AI provider instance — needed for non-LLM model types
+ * (embeddings, image, audio, speech) that use provider-specific methods
+ * like .textEmbedding(), .image(), .transcription(), .speech().
+ * 
+ * LLM chat/text endpoints use createModelInstance() from model-factory instead.
  */
 function getWorkersAI(ai: any) {
     return createWorkersAI({ binding: ai });
@@ -148,9 +153,8 @@ openaiRoute.post('/chat/completions', async (c) => {
     if ('error' in resolved) return resolved.error;
     const { model, ai } = resolved;
 
-    // Build SDK options from the OpenAI-format request
-    const workersai = getWorkersAI(ai);
-    const sdkModel = workersai(model.model_id);
+    // Build SDK model instance via universal factory
+    const sdkModel = createModelInstance(model, ai);
 
     // Merge provider_config defaults into body for params the SDK doesn't directly support
     const mergedBody = { ...body };
@@ -359,8 +363,7 @@ openaiRoute.post('/chat/completions/continue', async (c) => {
         if ('error' in resolved) return resolved.error;
         const { model, ai } = resolved;
         
-        const workersai = getWorkersAI(ai);
-        const sdkModel = workersai(model.model_id);
+        const sdkModel = createModelInstance(model, ai);
         
         const sdkOptions: any = { ...task.options, model: sdkModel, messages: task.messages, maxSteps: task.maxSteps };
         

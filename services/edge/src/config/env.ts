@@ -83,6 +83,8 @@ export interface GpuModel {
     modelId: string;
     modelType: string;
     provider: string;
+    apiKey?: string;
+    baseUrl?: string;
 }
 
 export interface AgentProfile {

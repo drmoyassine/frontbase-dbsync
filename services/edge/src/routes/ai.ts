@@ -34,8 +34,10 @@ interface GPUModelEntry {
     slug: string;
     model_id: string;      // "@cf/meta/llama-3.1-8b-instruct"
     model_type: string;    // "llm", "embedder", "stt", etc.
-    provider: string;      // "workers_ai"
+    provider: string;      // "workers_ai", "openai", "anthropic", "google", "ollama", "openai_compatible"
     provider_config?: any; // Default params (temperature, etc.)
+    api_key?: string;      // Provider API key (pushed from backend, decrypted)
+    base_url?: string;     // Custom API base URL (Ollama, OpenAI-compatible, etc.)
 }
 
 // In-memory model registry — populated on startup/deploy
@@ -60,6 +62,8 @@ export function getGPUModels(): GPUModelEntry[] {
                     model_type: m.modelType || m.model_type,
                     provider: m.provider,
                     provider_config: m.providerConfig || m.provider_config,
+                    api_key: m.apiKey || m.api_key,
+                    base_url: m.baseUrl || m.base_url,
                 }));
                 console.log(`[AI] Auto-loaded ${_gpuModels.length} GPU model(s) from env:`, _gpuModels.map(m => m.slug).join(', '));
             }

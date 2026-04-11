@@ -1,6 +1,6 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { generateText, streamText } from 'ai';
-import { createWorkersAI } from 'workers-ai-provider';
+import { createModelInstance } from '../engine/model-factory.js';
 import { getAgentProfilesConfig } from '../config/env.js';
 import { getGPUModels, getAIBinding } from './ai.js';
 import { buildAgentSystemPrompt } from '../engine/agent/prompts.js';
@@ -74,11 +74,11 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
     }
 
     const ai = getAIBinding();
-    if (!ai) {
-        return c.json({ error: { message: 'AI binding not available on this engine.' } }, 503);
+    if (!ai && modelRecord.provider === 'workers_ai') {
+        return c.json({ error: { message: 'AI binding not available for workers_ai provider.' } }, 503);
     }
 
-    const workersai = createWorkersAI({ binding: ai });
+    const sdkModel = createModelInstance(modelRecord, ai);
     
     // 3. Assemble sandbox and tooling
     const tools = await buildAgentTools(profile, getStateProvider());
@@ -91,7 +91,7 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
     try {
         if (body.stream) {
             const result = await streamText({
-                model: workersai(modelRecord.model_id),
+                model: sdkModel,
                 system: systemPrompt,
                 messages: userMessages,
                 tools,
@@ -100,7 +100,7 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
             return result.toTextStreamResponse();
         } else {
             const result = await generateText({
-                model: workersai(modelRecord.model_id),
+                model: sdkModel,
                 system: systemPrompt,
                 messages: userMessages,
                 tools,

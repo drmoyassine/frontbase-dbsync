@@ -165,6 +165,8 @@ class EdgeGPUModel(Base):
     model_id = Column(String(200), nullable=False)         # "@cf/meta/llama-3.1-8b-instruct"
     endpoint_url = Column(String(500), nullable=True)      # Auto: "{engine_url}/api/ai/{slug}"
     provider_config = Column(Text, nullable=True)          # JSON — defaults (temperature, etc.)
+    api_key = Column(Text, nullable=True)                   # Fernet-encrypted API key for non-CF providers
+    base_url = Column(String(500), nullable=True)           # Custom API base URL (OpenAI-compatible, Ollama, etc.)
     edge_engine_id = Column(String, ForeignKey('edge_engines.id'), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(String, nullable=False)

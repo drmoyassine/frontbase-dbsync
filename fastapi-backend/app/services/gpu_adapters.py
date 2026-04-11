@@ -245,15 +245,78 @@ class WorkersAIAdapter(GPUAdapter):
 
 
 # =============================================================================
+# Universal LLM Adapters (OpenAI, Anthropic, Google, Ollama, etc.)
+# =============================================================================
+
+class UniversalLLMAdapter(GPUAdapter):
+    """Base adapter for universal LLM providers.
+    These typically don't expose a structured catalog for our dashboard.
+    The UI allows manual model ID entry for these providers.
+    """
+
+    async def fetch_catalog(self, credentials: dict) -> list[dict]:
+        """Return an empty list; universal providers rely on manual input or static lists in the UI."""
+        return []
+
+    async def test_connection(self, credentials: dict) -> dict:
+        """Assume success if the provider record exists. True validation happens via inference."""
+        return {"success": True, "message": "Provider selected.", "latency_ms": 0}
+
+    async def test_inference(self, model_id: str, model_type: str,
+                             engine_url: str, slug: str) -> dict:
+        """Run a standard chat completion against the edge engine's /v1 endpoint."""
+        import time
+        start = time.time()
+        try:
+            openai_payload = {
+                "model": slug,
+                "messages": [{"role": "user", "content": "Say 'hello' in one word."}],
+                "max_tokens": 10,
+            }
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{engine_url.rstrip('/')}/v1/chat/completions",
+                    json=openai_payload,
+                    timeout=30.0,
+                )
+            latency = round((time.time() - start) * 1000, 1)
+
+            if resp.status_code == 200:
+                result = resp.json()
+                output = result.get("choices", [{}])[0].get("message", {}).get("content", str(result))
+                return {
+                    "success": True,
+                    "message": "Inference successful",
+                    "latency_ms": latency,
+                    "sample_output": output,
+                }
+            return {
+                "success": False,
+                "message": f"Engine returned {resp.status_code}: {resp.text[:200]}",
+                "latency_ms": latency,
+            }
+        except Exception as e:
+            return {"success": False, "message": str(e), "latency_ms": 0}
+
+
+class OpenAIAdapter(UniversalLLMAdapter): provider_name = "openai"
+class AnthropicAdapter(UniversalLLMAdapter): provider_name = "anthropic"
+class GoogleAdapter(UniversalLLMAdapter): provider_name = "google"
+class OllamaAdapter(UniversalLLMAdapter): provider_name = "ollama"
+class OpenAICompatibleAdapter(UniversalLLMAdapter): provider_name = "openai_compatible"
+
+
+# =============================================================================
 # Adapter Factory — plug & play
 # =============================================================================
 
 _ADAPTERS: dict[str, type[GPUAdapter]] = {
     "workers_ai": WorkersAIAdapter,
-    # Phase 2:
-    # "huggingface": HuggingFaceAdapter,
-    # "ollama": OllamaAdapter,
-    # "modal": ModalAdapter,
+    "openai": OpenAIAdapter,
+    "anthropic": AnthropicAdapter,
+    "google": GoogleAdapter,
+    "ollama": OllamaAdapter,
+    "openai_compatible": OpenAICompatibleAdapter,
 }
 
 

@@ -80,6 +80,51 @@ mcpServerRoute.all('/:profileSlug/*', async (c) => {
             );
         }
 
+        // Map MCP Resources
+        mcpServer.resource(
+            'pages',
+            'engine://pages',
+            async (uri: any) => {
+                const pages = await getStateProvider().listPages();
+                return {
+                    contents: [{
+                        uri: uri.href,
+                        text: JSON.stringify(pages, null, 2)
+                    }]
+                };
+            }
+        );
+
+        mcpServer.resource(
+            'workflows',
+            'engine://workflows',
+            async (uri: any) => {
+                const workflows = await getStateProvider().listWorkflows();
+                return {
+                    contents: [{
+                        uri: uri.href,
+                        text: JSON.stringify(workflows, null, 2)
+                    }]
+                };
+            }
+        );
+
+        mcpServer.resource(
+            'config',
+            'engine://config',
+            async (uri: any) => {
+                // Return sanitized profile config, omits API key
+                const sanitizedProfile = { ...profile };
+                delete sanitizedProfile.apiKey;
+                return {
+                    contents: [{
+                        uri: uri.href,
+                        text: JSON.stringify(sanitizedProfile, null, 2)
+                    }]
+                };
+            }
+        );
+
         const transport = new StreamableHTTPTransport();
         instance = { mcpServer, transport };
         serverCache.set(profileSlug, instance);

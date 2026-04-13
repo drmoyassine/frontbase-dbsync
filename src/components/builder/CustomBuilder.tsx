@@ -20,7 +20,8 @@ import { useBuilderStore } from '@/stores/builder';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Bot } from 'lucide-react';
+import { WorkspaceAgentChat } from '../agent/WorkspaceAgentChat';
 import { getSectionTemplate, expandTemplate } from './templates';
 import { getDefaultProps } from '@/lib/componentDefaults';
 import * as LucideIcons from 'lucide-react';
@@ -65,6 +66,7 @@ export const CustomBuilder: React.FC = () => {
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false); // Desktop
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false); // Desktop
   const [isMobile, setIsMobile] = useState(false);
+  const [agentChatOpen, setAgentChatOpen] = useState(false);
 
   // Detect mobile screen size and auto-switch viewport
   useEffect(() => {
@@ -508,6 +510,20 @@ export const CustomBuilder: React.FC = () => {
             </button>
           </>
         )}
+        
+        {/* Floating AI Agent Button */}
+        <button
+          onClick={() => setAgentChatOpen(!agentChatOpen)}
+          className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center hover:scale-105"
+          aria-label="Toggle Agent Chat"
+        >
+          <Bot className="w-6 h-6" />
+        </button>
+
+        <WorkspaceAgentChat 
+          isOpen={agentChatOpen} 
+          onClose={() => setAgentChatOpen(false)} 
+        />
       </div>
 
       {/* Drag Overlay - Shows custom preview while dragging */}

@@ -288,6 +288,19 @@ async function fetchTrackingConfig(): Promise<TrackingConfig> {
 pagesRoute.openapi(renderPageRoute, async (c) => {
     const { slug } = c.req.param();
 
+    const deviceMatch = c.req.header('user-agent')?.toLowerCase().match(/(mobile|tablet|ipad|android(?=.*mobile)|iphone)/i) || [];
+    const deviceType = deviceMatch[0] ? (deviceMatch[0].includes('ipad') || deviceMatch[0].includes('tablet') ? 'tablet' : 'mobile') : 'desktop';
+    const htmlKey = getCacheKey(slug, deviceType);
+
+    // Try L1 cache FIRST before doing any DB or Redis lookups
+    const cachedHtml = _htmlCache.get(htmlKey);
+    if (cachedHtml && (Date.now() - cachedHtml.ts) < HTML_CACHE_TTL_MS) {
+        c.header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
+        c.header('Content-Type', 'text/html; charset=utf-8');
+        c.header('X-Cache', 'HIT');
+        return c.html(cachedHtml.html);
+    }
+
     // Fetch page data
     const page = await fetchPage(slug);
 
@@ -303,10 +316,6 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     if (page.isHomepage) {
         return c.redirect('/', 301);
     }
-
-    const deviceMatch = c.req.header('user-agent')?.toLowerCase().match(/(mobile|tablet|ipad|android(?=.*mobile)|iphone)/i) || [];
-    const deviceType = deviceMatch[0] ? (deviceMatch[0].includes('ipad') || deviceMatch[0].includes('tablet') ? 'tablet' : 'mobile') : 'desktop';
-    const htmlKey = getCacheKey(slug, deviceType);
 
     // Private page gating — render blurred content with auth overlay
     let sessionAccessToken: string | undefined;
@@ -346,15 +355,6 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
             c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
             c.header('Content-Type', 'text/html; charset=utf-8');
             return c.html(gatedHtml);
-        }
-    } else {
-        // For public pages, try L1 cache first
-        const cachedHtml = _htmlCache.get(htmlKey);
-        if (cachedHtml && (Date.now() - cachedHtml.ts) < HTML_CACHE_TTL_MS) {
-            c.header('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
-            c.header('Content-Type', 'text/html; charset=utf-8');
-            c.header('X-Cache', 'HIT');
-            return c.html(cachedHtml.html);
         }
     }
 
@@ -404,7 +404,7 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     // Set cache headers
     if (page.isPublic) {
         _htmlCache.set(htmlKey, { html: htmlDoc, ts: Date.now() });
-        c.header('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+        c.header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
         c.header('X-Cache', 'MISS');
     } else {
         c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -418,6 +418,19 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
 // Homepage route - renders homepage directly or pulls from FastAPI
 pagesRoute.get('/', async (c) => {
     try {
+        const deviceMatch = c.req.header('user-agent')?.toLowerCase().match(/(mobile|tablet|ipad|android(?=.*mobile)|iphone)/i) || [];
+        const deviceType = deviceMatch[0] ? (deviceMatch[0].includes('ipad') || deviceMatch[0].includes('tablet') ? 'tablet' : 'mobile') : 'desktop';
+        const htmlKey = getCacheKey('__homepage__', deviceType);
+
+        // Try L1 cache FIRST before doing any DB or Redis lookups
+        const cachedHtml = _htmlCache.get(htmlKey);
+        if (cachedHtml && (Date.now() - cachedHtml.ts) < HTML_CACHE_TTL_MS) {
+            c.header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
+            c.header('Content-Type', 'text/html; charset=utf-8');
+            c.header('X-Cache', 'HIT');
+            return c.html(cachedHtml.html);
+        }
+
         const cacheKey = 'page:__homepage__';
         let homepage: any = null;
 
@@ -489,10 +502,6 @@ pagesRoute.get('/', async (c) => {
 
         // Render the homepage if we have one
         if (homepage) {
-            const deviceMatch = c.req.header('user-agent')?.toLowerCase().match(/(mobile|tablet|ipad|android(?=.*mobile)|iphone)/i) || [];
-            const deviceType = deviceMatch[0] ? (deviceMatch[0].includes('ipad') || deviceMatch[0].includes('tablet') ? 'tablet' : 'mobile') : 'desktop';
-            const htmlKey = getCacheKey('__homepage__', deviceType);
-
             // Private homepage gating
             if (!homepage.isPublic) {
                 const { user, setCookieHeaders } = await refreshSession(c.req.raw);
@@ -522,15 +531,6 @@ pagesRoute.get('/', async (c) => {
                     const { faviconUrl: fav } = await getCachedSettings();
                     const afc = (homepage as any)._primaryAuthForm || undefined;
                     return c.html(generateGatedPageDocument(page, bodyHtml, is, tc, fav, afc));
-                }
-            } else {
-                // Return cached HTML for public homepage
-                const cachedHtml = _htmlCache.get(htmlKey);
-                if (cachedHtml && (Date.now() - cachedHtml.ts) < HTML_CACHE_TTL_MS) {
-                    c.header('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
-                    c.header('Content-Type', 'text/html; charset=utf-8');
-                    c.header('X-Cache', 'HIT');
-                    return c.html(cachedHtml.html);
                 }
             }
 
@@ -593,7 +593,7 @@ pagesRoute.get('/', async (c) => {
             // Set cache headers
             if (page.isPublic) {
                 _htmlCache.set(htmlKey, { html: fullHtml, ts: Date.now() });
-                c.header('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+                c.header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
                 c.header('X-Cache', 'MISS');
             } else {
                 c.header('Cache-Control', 'no-cache, no-store, must-revalidate');

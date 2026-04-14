@@ -10,8 +10,108 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2 } from 'lucide-react';
+import { Trash2, GripVertical } from 'lucide-react';
 import { SelectTargetButton } from '@/components/builder/shared/SelectTargetButton';
+import {
+    DndContext,
+    closestCenter,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent,
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+interface SortableMenuItemProps {
+    item: any;
+    index: number;
+    updateItem: (index: number, updates: any) => void;
+    removeItem: (index: number) => void;
+}
+
+const SortableMenuItem: React.FC<SortableMenuItemProps> = ({
+    item,
+    index,
+    updateItem,
+    removeItem
+}) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id: item.id || `menu-${index}` });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        zIndex: isDragging ? 10 : 1,
+    };
+
+    return (
+        <div ref={setNodeRef} style={style} className="space-y-2 p-3 border rounded-md bg-muted/20 relative group">
+            <div className="flex gap-2">
+                <div
+                    {...attributes}
+                    {...listeners}
+                    className="cursor-grab active:cursor-grabbing hover:bg-muted text-muted-foreground/50 hover:text-muted-foreground rounded p-1 self-center"
+                >
+                    <GripVertical className="h-4 w-4" />
+                </div>
+                <Input
+                    value={item.label || ''}
+                    onChange={(e) => updateItem(index, { label: e.target.value })}
+                    placeholder="Menu label"
+                    className="h-8 flex-1"
+                />
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => removeItem(index)}
+                >
+                    <Trash2 className="h-4 w-4" />
+                </Button>
+            </div>
+            <div className="flex gap-2 pl-7">
+                <Select
+                    value={item.navType || 'scroll'}
+                    onValueChange={(value) => updateItem(index, { navType: value })}
+                >
+                    <SelectTrigger className="h-8 w-24">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="scroll">Scroll</SelectItem>
+                        <SelectItem value="link">Link</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Input
+                    value={item.target || ''}
+                    onChange={(e) => updateItem(index, { target: e.target.value })}
+                    placeholder={item.navType === 'scroll' ? '#section-id' : '/page-url'}
+                    className="h-8 flex-1"
+                />
+                {item.navType === 'scroll' && (
+                    <SelectTargetButton
+                        onSelect={(componentId) => {
+                            updateItem(index, { target: `#${componentId}` });
+                        }}
+                    />
+                )}
+            </div>
+        </div>
+    );
+};
 
 interface NavbarPropertiesProps {
     componentId: string;
@@ -26,6 +126,39 @@ export const NavbarProperties: React.FC<NavbarPropertiesProps> = ({
     updateComponentProp,
     project
 }) => {
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: { distance: 5 },
+        })
+    );
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (over && active.id !== over.id) {
+            const menuItems = props.menuItems || [];
+            const getStableId = (item: any, i: number) => item.id || `menu-${i}`;
+            const oldIndex = menuItems.findIndex((item: any, i: number) => getStableId(item, i) === active.id);
+            const newIndex = menuItems.findIndex((item: any, i: number) => getStableId(item, i) === over.id);
+            updateComponentProp('menuItems', arrayMove(menuItems, oldIndex, newIndex));
+        }
+    };
+
+    const updateMenuItem = (index: number, updates: any) => {
+        const newItems = [...(props.menuItems || [])];
+        newItems[index] = { ...newItems[index], ...updates };
+        updateComponentProp('menuItems', newItems);
+    };
+
+    const removeMenuItem = (index: number) => {
+        const newItems = (props.menuItems || []).filter((_: any, i: number) => i !== index);
+        updateComponentProp('menuItems', newItems);
+    };
+
+    const sortableItems = (props.menuItems || []).map((item: any, index: number) => ({
+        ...item,
+        id: item.id || `menu-${index}`
+    }));
+
     return (
         <>
             {/* Appearance Section */}
@@ -183,70 +316,26 @@ export const NavbarProperties: React.FC<NavbarPropertiesProps> = ({
             <div className="space-y-3 py-4 border-b">
                 <Label className="text-sm font-medium">Menu Items</Label>
                 <div className="space-y-2">
-                    {(props.menuItems || []).map((item: any, index: number) => (
-                        <div key={item.id || index} className="space-y-2 p-2 border rounded-md bg-muted/30">
-                            <div className="flex gap-2">
-                                <Input
-                                    value={item.label || ''}
-                                    onChange={(e) => {
-                                        const newItems = [...(props.menuItems || [])];
-                                        newItems[index] = { ...item, label: e.target.value };
-                                        updateComponentProp('menuItems', newItems);
-                                    }}
-                                    placeholder="Menu label"
-                                    className="h-8 flex-1"
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                    >
+                        <SortableContext
+                            items={sortableItems.map((item: any) => item.id)}
+                            strategy={verticalListSortingStrategy}
+                        >
+                            {sortableItems.map((item: any, index: number) => (
+                                <SortableMenuItem
+                                    key={item.id}
+                                    item={item}
+                                    index={index}
+                                    updateItem={updateMenuItem}
+                                    removeItem={removeMenuItem}
                                 />
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-destructive"
-                                    onClick={() => {
-                                        const newItems = (props.menuItems || []).filter((_: any, i: number) => i !== index);
-                                        updateComponentProp('menuItems', newItems);
-                                    }}
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                            </div>
-                            <div className="flex gap-2">
-                                <Select
-                                    value={item.navType || 'scroll'}
-                                    onValueChange={(value) => {
-                                        const newItems = [...(props.menuItems || [])];
-                                        newItems[index] = { ...item, navType: value };
-                                        updateComponentProp('menuItems', newItems);
-                                    }}
-                                >
-                                    <SelectTrigger className="h-8 w-24">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="scroll">Scroll</SelectItem>
-                                        <SelectItem value="link">Link</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <Input
-                                    value={item.target || ''}
-                                    onChange={(e) => {
-                                        const newItems = [...(props.menuItems || [])];
-                                        newItems[index] = { ...item, target: e.target.value };
-                                        updateComponentProp('menuItems', newItems);
-                                    }}
-                                    placeholder={item.navType === 'scroll' ? '#section-id' : '/page-url'}
-                                    className="h-8 flex-1"
-                                />
-                                {item.navType === 'scroll' && (
-                                    <SelectTargetButton
-                                        onSelect={(componentId) => {
-                                            const newItems = [...(props.menuItems || [])];
-                                            newItems[index] = { ...item, target: `#${componentId}` };
-                                            updateComponentProp('menuItems', newItems);
-                                        }}
-                                    />
-                                )}
-                            </div>
-                        </div>
-                    ))}
+                            ))}
+                        </SortableContext>
+                    </DndContext>
                 </div>
                 <Button
                     variant="outline"

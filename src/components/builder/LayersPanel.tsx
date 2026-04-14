@@ -38,7 +38,7 @@ export const LayersPanel: React.FC = () => {
     updatePage,
     removeComponent,
     duplicateComponent,
-    updateComponentProp
+    updateComponent
   } = useBuilderStore();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -257,7 +257,7 @@ export const LayersPanel: React.FC = () => {
                   getComponentIcon={getComponentIcon}
                   onDelete={(id) => removeComponent(id)}
                   onDuplicate={(id) => duplicateComponent(id)}
-                  updateComponentProp={updateComponentProp}
+                  updateComponent={updateComponent}
                 />
               ))}
             </SortableContext>
@@ -293,7 +293,7 @@ interface SortableLayerItemProps {
   getComponentIcon: (type: string) => string;
   onDelete: (componentId: string) => void;
   onDuplicate: (componentId: string) => void;
-  updateComponentProp: (id: string, key: string, value: any) => void;
+  updateComponent: (id: string, propsUpdates: Record<string, any>) => void;
   isDropTarget?: boolean;
   isBeingDragged?: boolean;
 }
@@ -312,7 +312,7 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
   getComponentIcon,
   onDelete,
   onDuplicate,
-  updateComponentProp,
+  updateComponent,
   isDropTarget = false,
   isBeingDragged = false
 }) => {
@@ -403,7 +403,7 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   setIsEditing(false);
-                  updateComponentProp(component.id, '_layerName', editName);
+                  updateComponent(component.id, { _layerName: editName });
                 } else if (e.key === 'Escape') {
                   setIsEditing(false);
                   setEditName(component.props?._layerName || component.type);
@@ -411,7 +411,7 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
               }}
               onBlur={() => {
                 setIsEditing(false);
-                updateComponentProp(component.id, '_layerName', editName);
+                updateComponent(component.id, { _layerName: editName });
               }}
             />
           ) : (
@@ -478,7 +478,7 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
                 getComponentIcon={getComponentIcon}
                 onDelete={onDelete}
                 onDuplicate={onDuplicate}
-                updateComponentProp={updateComponentProp}
+                updateComponent={updateComponent}
               />
             ))}
           </SortableContext>

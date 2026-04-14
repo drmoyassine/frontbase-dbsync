@@ -16,7 +16,8 @@ import {
   MoreHorizontal,
   Trash2,
   Copy,
-  GripVertical
+  GripVertical,
+  Edit2
 } from 'lucide-react';
 import { ComponentData } from '@/stores/builder';
 import { cn } from '@/lib/utils';
@@ -36,7 +37,8 @@ export const LayersPanel: React.FC = () => {
     setSelectedComponentId,
     updatePage,
     removeComponent,
-    duplicateComponent
+    duplicateComponent,
+    updateComponentProp
   } = useBuilderStore();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -46,6 +48,28 @@ export const LayersPanel: React.FC = () => {
 
   const currentPage = pages.find(page => page.id === currentPageId);
   const components = currentPage?.layoutData?.content || [];
+
+  // Expand all containers with children by default on page load
+  React.useEffect(() => {
+    if (components && components.length > 0) {
+      const parentIds = new Set<string>();
+      const collectParents = (items: ComponentData[]) => {
+        items.forEach(item => {
+          if (item.children && item.children.length > 0) {
+            parentIds.add(item.id);
+            collectParents(item.children);
+          }
+        });
+      };
+      collectParents(components);
+      
+      setExpandedComponents(prev => {
+        const newSet = new Set(prev);
+        parentIds.forEach(id => newSet.add(id));
+        return newSet;
+      });
+    }
+  }, [currentPageId]); // Run once when page loads/changes
 
   // Sensors for drag and drop - add activation distance to prevent accidental drags
   const sensors = useSensors(
@@ -233,6 +257,7 @@ export const LayersPanel: React.FC = () => {
                   getComponentIcon={getComponentIcon}
                   onDelete={(id) => removeComponent(id)}
                   onDuplicate={(id) => duplicateComponent(id)}
+                  updateComponentProp={updateComponentProp}
                 />
               ))}
             </SortableContext>
@@ -268,6 +293,7 @@ interface SortableLayerItemProps {
   getComponentIcon: (type: string) => string;
   onDelete: (componentId: string) => void;
   onDuplicate: (componentId: string) => void;
+  updateComponentProp: (id: string, key: string, value: any) => void;
   isDropTarget?: boolean;
   isBeingDragged?: boolean;
 }
@@ -286,6 +312,7 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
   getComponentIcon,
   onDelete,
   onDuplicate,
+  updateComponentProp,
   isDropTarget = false,
   isBeingDragged = false
 }) => {
@@ -298,6 +325,9 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
     isDragging,
     isOver
   } = useSortable({ id: component.id });
+
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [editName, setEditName] = React.useState(component.props?._layerName || component.type);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -355,13 +385,40 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
 
         {/* Icon & Name */}
         <div
-          className="flex-1 flex items-center gap-2 cursor-pointer"
+          className="flex-1 flex items-center gap-2 cursor-pointer min-w-0"
           onClick={onSelect}
+          onDoubleClick={() => {
+            setEditName(component.props?._layerName || component.type);
+            setIsEditing(true);
+          }}
         >
-          <span className="text-sm">{getComponentIcon(component.type)}</span>
-          <span className="text-sm font-medium truncate">
-            {component.type}
-          </span>
+          <span className="text-sm shrink-0">{getComponentIcon(component.type)}</span>
+          {isEditing ? (
+            <Input
+              value={editName}
+              autoFocus
+              className="h-6 py-0 px-1 text-sm bg-background"
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setIsEditing(false);
+                  updateComponentProp(component.id, '_layerName', editName);
+                } else if (e.key === 'Escape') {
+                  setIsEditing(false);
+                  setEditName(component.props?._layerName || component.type);
+                }
+              }}
+              onBlur={() => {
+                setIsEditing(false);
+                updateComponentProp(component.id, '_layerName', editName);
+              }}
+            />
+          ) : (
+            <span className="text-sm font-medium truncate">
+              {component.props?._layerName || component.type}
+            </span>
+          )}
         </div>
 
         {/* Actions */}
@@ -370,12 +427,19 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 shrink-0"
             >
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => {
+              setEditName(component.props?._layerName || component.type);
+              setIsEditing(true);
+            }}>
+              <Edit2 className="h-4 w-4 mr-2" />
+              Rename
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onDuplicate(component.id)}>
               <Copy className="h-4 w-4 mr-2" />
               Duplicate
@@ -394,24 +458,30 @@ const SortableLayerItem: React.FC<SortableLayerItemProps> = ({
       {/* Render children when expanded */}
       {isExpanded && hasChildren && (
         <div className="ml-2">
-          {component.children!.map((child, childIndex) => (
-            <SortableLayerItem
-              key={child.id}
-              component={child}
-              index={childIndex}
-              depth={depth + 1}
-              isSelected={useBuilderStore.getState().selectedComponentId === child.id}
-              isExpanded={expandedComponents.has(child.id)}
-              expandedComponents={expandedComponents}
-              onSelect={() => onSelectChild(child.id)}
-              onToggleExpand={() => onToggleExpandChild(child.id)}
-              onSelectChild={onSelectChild}
-              onToggleExpandChild={onToggleExpandChild}
-              getComponentIcon={getComponentIcon}
-              onDelete={onDelete}
-              onDuplicate={onDuplicate}
-            />
-          ))}
+          <SortableContext
+            items={component.children!.map(c => c.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {component.children!.map((child, childIndex) => (
+              <SortableLayerItem
+                key={child.id}
+                component={child}
+                index={childIndex}
+                depth={depth + 1}
+                isSelected={useBuilderStore.getState().selectedComponentId === child.id}
+                isExpanded={expandedComponents.has(child.id)}
+                expandedComponents={expandedComponents}
+                onSelect={() => onSelectChild(child.id)}
+                onToggleExpand={() => onToggleExpandChild(child.id)}
+                onSelectChild={onSelectChild}
+                onToggleExpandChild={onToggleExpandChild}
+                getComponentIcon={getComponentIcon}
+                onDelete={onDelete}
+                onDuplicate={onDuplicate}
+                updateComponentProp={updateComponentProp}
+              />
+            ))}
+          </SortableContext>
         </div>
       )}
     </>

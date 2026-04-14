@@ -48,6 +48,7 @@ import { configRoute } from '../routes/config.js';
 import { openaiRoute } from '../routes/openai.js';
 import { agentToolsRoute } from '../routes/agent-tools.js';
 import { mcpServerRoute } from '../routes/mcp.js';
+import { agentRoute } from '../routes/agent.js';
 import { getAgentProfilesConfig } from '../config/env.js';
 import { systemKeyAuth, userApiKeyAuth, aiApiKeyAuth } from '../middleware/auth.js';
 
@@ -234,6 +235,9 @@ export function createLiteApp(mode: EngineMode = 'lite') {
     
     // ── MCP Server Protocol ──
     app.route('/api/mcp', mcpServerRoute);
+
+    // ── Agent Chat ──
+    app.route('/api/agent', agentRoute);
 
     // ── AI Agent Profiles routes ──
     app.use('/api/agents/:profileSlug/v1/*', aiApiKeyAuth);

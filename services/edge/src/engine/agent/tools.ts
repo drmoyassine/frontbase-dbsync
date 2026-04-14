@@ -11,10 +11,10 @@
  */
 
 import { tool } from 'ai';
-import { z } from 'zod';
 import { executeDataRequest } from '../../routes/data.js';
 import type { AgentProfile } from '../../config/env.js';
 import type { DataRequest } from '../../schemas/publish.js';
+import { objectSchema, S } from './tools/schema-helper.js';
 
 import { buildAutoTools } from './auto-register.js';
 import { buildPageTools } from './tools/pages.js';
@@ -52,12 +52,12 @@ export const buildAgentTools = async (
     // Data query tool (read-only SQL against connected datasources)
     tools.queryDatasource = tool({
         description: "Execute a read-only SQL SELECT query against a connected external Datasource. Use this to query live app data.",
-        parameters: z.object({
-            datasourceId: z.string().describe("The UUID of the connected datasource to query."),
-            sql: z.string().describe("The raw SQL SELECT query to execute. Do not execute destructive commands like DROP or DELETE.")
+        parameters: objectSchema({
+            datasourceId: S.string("The UUID of the connected datasource to query."),
+            sql: S.string("The raw SQL SELECT query to execute. Do not execute destructive commands like DROP or DELETE."),
         }),
         // @ts-ignore
-        execute: async ({ datasourceId, sql }) => {
+        execute: async ({ datasourceId, sql }: any) => {
             // Permission Guard Matrix 
             const dsPerms = profile.permissions?.[`datasources.${datasourceId}`] 
                          || profile.permissions?.['datasources.all'] || [];
@@ -91,11 +91,11 @@ export const buildAgentTools = async (
     if (workflowPerms.includes('trigger') || workflowPerms.includes('all')) {
         tools.triggerWorkflow = tool({
             description: "Trigger an Action Workflow deployed on this Edge Engine.",
-            parameters: z.object({
-                workflowId: z.string().describe("The ID of the workflow to trigger."),
-                payload: z.record(z.any()).optional().describe("Optional JSON payload to send to the workflow.")
-            }),
-            execute: async ({ workflowId, payload }: { workflowId: string, payload?: Record<string, any> }) => {
+            parameters: objectSchema({
+                workflowId: S.string("The ID of the workflow to trigger."),
+                payload: S.record("Optional JSON payload to send to the workflow."),
+            }, ['workflowId']),
+            execute: async ({ workflowId, payload }: any) => {
                 try {
                     const req = new Request(`http://localhost/api/execute/${workflowId}`, {
                         method: 'POST',
@@ -112,7 +112,7 @@ export const buildAgentTools = async (
                     return { error: `Failed to trigger workflow: ${e.message}` };
                 }
             }
-        } as any);
+        });
     }
 
     // ── Tier 4: User-Configured Tools (State DB) ────────────────────

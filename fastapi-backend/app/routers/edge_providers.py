@@ -43,6 +43,94 @@ def _provider_response(provider: EdgeProviderAccount) -> dict:
 
 
 # =============================================================================
+# Workspace Agent — Stateless JWT Hydration
+# =============================================================================
+
+@router.get("/workspace-agent-token")
+def get_workspace_agent_token(db: Session = Depends(get_db)):
+    """Generate a stateless JWT for the Workspace Agent using the active GPU provider."""
+    from jose import jwt
+    import os
+    from ..core.security import get_provider_creds
+
+    # Look for a provider explicitly marked as default
+    providers = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.is_active == True).all()
+    default_provider = None
+    fallback_provider = None
+
+    import json
+    for p in providers:
+        if str(p.provider) in ("openai", "anthropic", "workers_ai", "ollama"):
+            fallback_provider = p
+            if p.provider_metadata:
+                try:
+                    meta = json.loads(str(p.provider_metadata))
+                    if meta.get("is_workspace_default"):
+                        default_provider = p
+                        break
+                except Exception:
+                    pass
+
+    target = default_provider or fallback_provider
+    if not target:
+        return {"token": None}
+
+    creds = get_provider_creds(str(target.id), db)
+    if not creds:
+        return {"token": None}
+
+    # Generate JWT
+    secret = os.environ.get("FRONTBASE_JWT_SECRET", "supersecret")
+    
+    payload = {
+        "provider": str(target.provider),
+        "credentials": creds,
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=1)
+    }
+    
+    token = jwt.encode(payload, secret, algorithm="HS256")
+    return {"token": token}
+
+
+from pydantic import BaseModel
+
+class SetWorkspaceDefaultRequest(BaseModel):
+    provider_id: str
+
+@router.post("/workspace-agent-token")
+def set_workspace_agent_token(payload: SetWorkspaceDefaultRequest, db: Session = Depends(get_db)):
+    """Set a specific provider as the default Workspace Agent provider and generate token."""
+    import json
+    
+    provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.provider_id).first()
+    if not provider:
+        raise HTTPException(404, "Provider not found")
+        
+    all_providers = db.query(EdgeProviderAccount).all()
+    for p in all_providers:
+        if p.provider_metadata:
+            try:
+                meta = json.loads(str(p.provider_metadata))
+                if meta.get("is_workspace_default"):
+                    meta["is_workspace_default"] = False
+                    p.provider_metadata = json.dumps(meta)  # type: ignore[assignment]
+            except Exception:
+                pass
+                
+    meta = {}
+    if provider.provider_metadata:
+        try:
+            meta = json.loads(str(provider.provider_metadata))
+        except Exception:
+            pass
+    meta["is_workspace_default"] = True
+    provider.provider_metadata = json.dumps(meta)  # type: ignore[assignment]
+    db.commit()
+    
+    return get_workspace_agent_token(db)
+
+
+# =============================================================================
 # CRUD Endpoints
 # =============================================================================
 
@@ -675,3 +763,6 @@ async def list_engines_for_provider(account_id: str, db: Session = Depends(get_d
         return {"success": True, "engines": engines}
     except Exception as e:
         return {"success": False, "detail": f"Failed to list engines: {str(e)[:300]}", "engines": []}
+
+
+

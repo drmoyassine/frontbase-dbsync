@@ -1,4 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
+import { verify } from 'hono/jwt';
 import { generateText, streamText } from 'ai';
 import { createModelInstance } from '../engine/model-factory.js';
 import { getAgentProfilesConfig } from '../config/env.js';
@@ -6,6 +7,7 @@ import { getGPUModels, getAIBinding } from './ai.js';
 import { buildAgentSystemPrompt } from '../engine/agent/prompts.js';
 import { buildAgentTools } from '../engine/agent/tools.js';
 import { getStateProvider } from '../storage/index.js';
+import { cacheProvider } from '../cache/index.js';
 
 export const agentRoute = new OpenAPIHono();
 
@@ -39,6 +41,55 @@ function convertOpenAIMessages(messages: any[]): any[] {
     });
 }
 
+
+// GET /api/agent/chat/:profileSlug
+// Fetch session history
+agentRoute.get('/chat/:profileSlug', async (c) => {
+    const profileSlug = c.req.param('profileSlug');
+    try {
+        const history = await cacheProvider.get<any[]>(`agent:session:${profileSlug}`);
+        return c.json(history || []);
+    } catch (e: any) {
+        console.error('[Agent Chat] Failed to fetch history:', e);
+        return c.json([]);
+    }
+});
+
+// Helper to auto-vivify the master admin workspace agent
+function getOrSynthesizeProfile(profileSlug: string, profilesConfig: any) {
+    let profile = profilesConfig[profileSlug];
+    if (!profile && profileSlug === 'workspace-agent') {
+        profile = {
+            name: 'Workspace Master Agent',
+            systemPrompt: 'You are the Master Admin\'s Workspace Agent. You have full, unrestricted access to the Frontbase Edge Engine and all its connected workloads, datasources, and runtime variables. You act as an expert developer assistant.',
+            permissions: {
+                'pages.all': ['all'],
+                'datasources.all': ['all'],
+                'workflows.all': ['all'],
+                'engine.all': ['all'],
+                'stateDb': ['all']
+            }
+        };
+    }
+    return profile;
+}
+
+// GET /api/agent/status/:profileSlug
+// Check if edge engine is configured correctly with models
+agentRoute.get('/status/:profileSlug', async (c) => {
+    const profileSlug = c.req.param('profileSlug');
+    const profilesConfig = getAgentProfilesConfig();
+    const profile = getOrSynthesizeProfile(profileSlug, profilesConfig);
+    if (!profile) return c.json({ hasProfile: false, hasModels: false });
+    
+    try {
+        const models = getGPUModels();
+        return c.json({ hasProfile: true, hasModels: models.length > 0 });
+    } catch {
+        return c.json({ hasProfile: true, hasModels: false });
+    }
+});
+
 // POST /api/agent/chat/:profileSlug
 // Core Inference Loop
 agentRoute.post('/chat/:profileSlug', async (c) => {
@@ -46,7 +97,7 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
     const profilesConfig = getAgentProfilesConfig();
     
     // 1. Hydrate the Identity target
-    const profile = profilesConfig[profileSlug];
+    const profile = getOrSynthesizeProfile(profileSlug, profilesConfig);
     if (!profile) {
         return c.json({ error: { message: `Agent Profile '${profileSlug}' not deployed on this engine. Check your Edge Inspector.` } }, 404);
     }
@@ -60,22 +111,54 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
 
     // 2. Hardware Allocation (GPU)
     let targetModelSlug = body.model;
-    const models = getGPUModels();
-    
-    if (!targetModelSlug && models.length > 0) {
-        // Fallback to highest priority chat model
-        const chatModels = models.filter(m => m.model_type === 'chat-completion' || m.model_type === 'text-generation');
-        targetModelSlug = chatModels.length > 0 ? chatModels[0].slug : models[0].slug;
+    let modelRecord: any = null;
+    let ai: any = null;
+
+    // Check for Stateless JWT Injection (Multi-tenant Mega-Shared approach)
+    const authHeader = c.req.header('Authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
+        try {
+            const secret = (c.env as any)?.FRONTBASE_JWT_SECRET || 'supersecret';
+            const payload = await verify(token, secret, 'HS256');
+            const providerStr = String(payload.provider || 'openai');
+            
+            modelRecord = {
+                 slug: 'workspace-injected-model',
+                 provider: providerStr,
+                 model_type: 'chat-completion',
+                 model_id: providerStr === 'anthropic' ? 'claude-3-5-sonnet-latest' 
+                         : providerStr === 'workers_ai' ? '@cf/meta/llama-3.1-8b-instruct'
+                         : 'gpt-4o',
+                 api_key: ((payload.credentials || {}) as any).api_key || ((payload.credentials || {}) as any).apiKey,
+                 base_url: ((payload.credentials || {}) as any).base_url || ((payload.credentials || {}) as any).baseUrl,
+                 provider_config: payload.credentials || {},
+                 endpoint_url: providerStr === 'openai' ? 'https://api.openai.com/v1/chat/completions' : undefined
+            };
+        } catch (e) {
+            console.error('[Agent Chat] JWT verification failed:', e);
+        }
     }
 
-    const modelRecord = models.find(m => m.slug === targetModelSlug);
+    // Fallback to legacy static engine `.env` models if no JWT is provided or valid
     if (!modelRecord) {
-        return c.json({ error: { message: `GPU Model '${targetModelSlug}' not assigned to this engine.` } }, 404);
-    }
+        const models = getGPUModels();
+        
+        if (!targetModelSlug && models.length > 0) {
+            // Fallback to highest priority chat model
+            const chatModels = models.filter(m => m.model_type === 'chat-completion' || m.model_type === 'text-generation');
+            targetModelSlug = chatModels.length > 0 ? chatModels[0].slug : models[0].slug;
+        }
 
-    const ai = getAIBinding();
-    if (!ai && modelRecord.provider === 'workers_ai') {
-        return c.json({ error: { message: 'AI binding not available for workers_ai provider.' } }, 503);
+        modelRecord = models.find(m => m.slug === targetModelSlug);
+        if (!modelRecord) {
+            return c.json({ error: { message: `GPU Model '${targetModelSlug}' not assigned to this engine.` } }, 404);
+        }
+        
+        ai = getAIBinding();
+        if (!ai && modelRecord.provider === 'workers_ai') {
+            return c.json({ error: { message: 'AI binding not available for workers_ai provider.' } }, 503);
+        }
     }
 
     const sdkModel = createModelInstance(modelRecord, ai);
@@ -90,13 +173,17 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
 
     try {
         if (body.stream) {
+            console.log('[DEBUG] Tools:', Object.keys(tools));
             const result = await streamText({
                 model: sdkModel,
                 system: systemPrompt,
                 messages: userMessages,
                 tools,
+                onFinish: async (event) => {
+                    const responseMsgs = event.response?.messages || [];
+                    await cacheProvider.setex(`agent:session:${profileSlug}`, 86400 * 7, JSON.stringify([...messages, ...responseMsgs]));
+                }
             });
-            
             return result.toTextStreamResponse();
         } else {
             const result = await generateText({
@@ -105,6 +192,9 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
                 messages: userMessages,
                 tools,
             });
+
+            const responseMsgs = result.response?.messages || [];
+            await cacheProvider.setex(`agent:session:${profileSlug}`, 86400 * 7, JSON.stringify([...messages, ...responseMsgs]));
 
             return c.json({
                 success: true,

@@ -21,61 +21,61 @@ import type {
 import { liteApp } from '../../lite.js';
 
 // =============================================================================
-// Parameter → Zod Conversion
+// Parameter → RAW JSON Schema Conversion
 // =============================================================================
 
+import { objectSchema, S } from './schema-helper.js';
+
 /**
- * Convert a ToolParameter[] definition to a Zod schema object.
- * This gives the LLM typed guidance for each parameter.
+ * Convert a ToolParameter[] definition to a raw JSON schema object.
+ * This bypasses Zod to fix the @ai-sdk/openai serialization stripping issue.
  */
-function parametersToZod(params: ToolParameter[]): z.ZodObject<any> {
-    const shape: Record<string, z.ZodTypeAny> = {};
+function parametersToJsonSchema(params: ToolParameter[]): any {
+    const properties: Record<string, any> = {};
+    const required: string[] = [];
 
     for (const param of params) {
-        let zodType: z.ZodTypeAny;
+        let typeInfo: any = {};
 
         switch (param.type) {
             case 'number':
-                zodType = z.number();
+                typeInfo = { type: 'number' };
                 break;
             case 'boolean':
-                zodType = z.boolean();
+                typeInfo = { type: 'boolean' };
                 break;
             case 'array':
-                zodType = z.array(z.any());
+                typeInfo = { type: 'array' };
                 break;
             case 'object':
-                zodType = z.record(z.string(), z.any());
+                typeInfo = { type: 'object', additionalProperties: true };
                 break;
             case 'string':
             default:
                 if (param.enum && param.enum.length > 0) {
-                    zodType = z.enum(param.enum as [string, ...string[]]);
+                    typeInfo = { type: 'string', enum: param.enum };
                 } else {
-                    zodType = z.string();
+                    typeInfo = { type: 'string' };
                 }
                 break;
         }
 
-        // Add description
         if (param.description) {
-            zodType = zodType.describe(param.description);
+            typeInfo.description = param.description;
         }
 
-        // Default value
         if (param.default !== undefined) {
-            zodType = zodType.default(param.default);
+            typeInfo.default = param.default;
         }
 
-        // Required vs optional
-        if (!param.required) {
-            zodType = zodType.optional();
+        if (param.required) {
+            required.push(param.name);
         }
 
-        shape[param.name] = zodType;
+        properties[param.name] = typeInfo;
     }
 
-    return z.object(shape);
+    return objectSchema(properties, required.length > 0 ? required : undefined);
 }
 
 // =============================================================================
@@ -88,8 +88,8 @@ function buildWorkflowTool(
     profile: AgentProfile,
 ): Record<string, any> {
     const schema = config.parameters?.length > 0
-        ? parametersToZod(config.parameters)
-        : z.object({});
+        ? parametersToJsonSchema(config.parameters)
+        : objectSchema({ dummy: S.string('Not used, pass empty string') });
 
     return {
         [toolDef.name]: tool({
@@ -205,12 +205,12 @@ async function buildMcpClientTools(
         // Graceful degradation: return a status/error tool so the LLM knows it failed
         tools[`mcp_${toolDef.name}_status`] = tool({
             description: `MCP Server '${toolDef.name}' is currently unreachable.`,
-            parameters: z.object({}),
-            execute: async () => ({
+            parameters: objectSchema({ dummy: S.string('Not used, pass empty string') }),
+            execute: async ({ dummy }: any) => ({
                 error: `MCP Connection failed`,
                 message: err.message
             }),
-        } as any);
+        });
     }
     
     return tools;

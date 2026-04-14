@@ -6,8 +6,8 @@
  */
 
 import { tool } from 'ai';
-import { z } from 'zod';
 import { stateProvider } from '../../../storage/index.js';
+import { objectSchema, S } from './schema-helper.js';
 import type { AgentProfile } from '../../../config/env.js';
 
 /**
@@ -39,11 +39,11 @@ export function buildStyleTools(profile: AgentProfile): Record<string, any> {
     if (hasRead) {
         tools['styles_get'] = tool({
             description: 'Get the current styles for a specific component on a page. Returns the style values (colors, spacing, typography, etc.) and any viewport overrides.',
-            parameters: z.object({
-                slug: z.string().describe('The page slug'),
-                componentId: z.string().describe('The component ID to inspect'),
+            parameters: objectSchema({
+                slug: S.string('The page slug'),
+                componentId: S.string('The component ID to inspect'),
             }),
-            execute: async ({ slug, componentId }: { slug: string; componentId: string }) => {
+            execute: async ({ slug, componentId }: any) => {
                 try {
                     const page = await stateProvider.getPageBySlug(slug);
                     if (!page) return { error: `Page '${slug}' not found` };
@@ -62,7 +62,7 @@ export function buildStyleTools(profile: AgentProfile): Record<string, any> {
                     return { error: `Failed to get styles: ${e.message}` };
                 }
             },
-        } as any);
+        });
     }
 
     // ── Write tools ─────────────────────────────────────────────────
@@ -70,12 +70,12 @@ export function buildStyleTools(profile: AgentProfile): Record<string, any> {
     if (hasWrite) {
         tools['styles_update'] = tool({
             description: 'Update styles for a single component on a page. Merges the provided style values into the component\'s existing styles. Supports CSS properties like backgroundColor, fontSize, padding, margin, borderRadius, color, etc.',
-            parameters: z.object({
-                slug: z.string().describe('The page slug'),
-                componentId: z.string().describe('The component ID to style'),
-                styles: z.record(z.any()).describe('Style key-value pairs to merge, e.g. { "backgroundColor": "#1a1a2e", "fontSize": "18px" }'),
+            parameters: objectSchema({
+                slug: S.string('The page slug'),
+                componentId: S.string('The component ID to style'),
+                styles: S.record('Style key-value pairs to merge, e.g. { "backgroundColor": "#1a1a2e", "fontSize": "18px" }'),
             }),
-            execute: async ({ slug, componentId, styles }: { slug: string; componentId: string; styles: Record<string, any> }) => {
+            execute: async ({ slug, componentId, styles }: any) => {
                 try {
                     const page = await stateProvider.getPageBySlug(slug);
                     if (!page) return { error: `Page '${slug}' not found` };
@@ -107,25 +107,29 @@ export function buildStyleTools(profile: AgentProfile): Record<string, any> {
                     return { error: `Failed to update styles: ${e.message}` };
                 }
             },
-        } as any);
+        });
 
         tools['styles_batchUpdate'] = tool({
             description: 'Update styles for multiple components on a page in a single operation. Useful for applying a theme or making coordinated visual changes across several components at once.',
-            parameters: z.object({
-                slug: z.string().describe('The page slug'),
-                updates: z.array(z.object({
-                    componentId: z.string().describe('The component ID'),
-                    styles: z.record(z.any()).describe('Style key-value pairs to merge'),
-                })).describe('Array of component style updates'),
+            parameters: objectSchema({
+                slug: S.string('The page slug'),
+                updates: S.array('Array of component style updates', {
+                    type: 'object',
+                    properties: {
+                        componentId: S.string('The component ID'),
+                        styles: S.record('Style key-value pairs to merge'),
+                    },
+                    required: ['componentId', 'styles'],
+                }),
             }),
-            execute: async ({ slug, updates }: { slug: string; updates: Array<{ componentId: string; styles: Record<string, any> }> }) => {
+            execute: async ({ slug, updates }: any) => {
                 try {
                     const page = await stateProvider.getPageBySlug(slug);
                     if (!page) return { error: `Page '${slug}' not found` };
 
                     const layoutData = { ...page.layoutData };
 
-                    const updateMap = new Map(updates.map(u => [u.componentId, u.styles]));
+                    const updateMap = new Map(updates.map((u: any) => [u.componentId, u.styles]));
                     const applied: string[] = [];
 
                     const patchAll = (components: any[]): any[] => {
@@ -147,8 +151,8 @@ export function buildStyleTools(profile: AgentProfile): Record<string, any> {
 
                     // Check which IDs were not found
                     const notFound = updates
-                        .filter(u => !applied.includes(u.componentId))
-                        .map(u => u.componentId);
+                        .filter((u: any) => !applied.includes(u.componentId))
+                        .map((u: any) => u.componentId);
 
                     await stateProvider.upsertPage({ ...page, layoutData });
 
@@ -162,7 +166,7 @@ export function buildStyleTools(profile: AgentProfile): Record<string, any> {
                     return { error: `Failed to batch update styles: ${e.message}` };
                 }
             },
-        } as any);
+        });
     }
 
     return tools;

@@ -51,8 +51,38 @@ export function createModelInstance(model: ModelEntry, aiBinding?: any): Languag
             const openai = createOpenAI({
                 apiKey: model.api_key,
                 ...(model.base_url ? { baseURL: model.base_url } : {}),
+                fetch: async (url, options) => {
+                    if (options?.body) {
+                        try {
+                            const body = JSON.parse(options.body as string);
+                            if (body.tools && Array.isArray(body.tools)) {
+                                body.tools.forEach((t: any) => {
+                                    if (t.function?.parameters) {
+                                        // Vercel AI SDK + Zod dual-package bug causes 'type: object'
+                                        // to be stripped. OpenAI Chat API rejects if this is missing.
+                                        if (t.function.parameters.properties && !t.function.parameters.type) {
+                                            t.function.parameters.type = 'object';
+                                        }
+                                        // If AI SDK stripped all properties, ensure it's not strictly bounded
+                                        // since we are bypassing strict schema validation
+                                        if (Object.keys(t.function.parameters.properties || {}).length === 0) {
+                                            t.function.parameters.additionalProperties = true;
+                                        }
+                                    }
+                                });
+                                options.body = JSON.stringify(body);
+                            }
+                        } catch (e) {
+                            // ignore parse errors
+                        }
+                    }
+                    return fetch(url, options);
+                }
             });
-            return openai(model.model_id) as LanguageModel;
+            // Use .chat() to force Chat Completions API (/v1/chat/completions).
+            // The default openai() routes to the Responses API (/v1/responses) in
+            // @ai-sdk/openai v3.x, which enforces strict JSON Schema validation
+            return openai.chat(model.model_id) as LanguageModel;
         }
 
         case 'anthropic': {
@@ -83,7 +113,7 @@ export function createModelInstance(model: ModelEntry, aiBinding?: any): Languag
                 apiKey: model.api_key || 'ollama',  // Ollama doesn't need a real key
                 baseURL: model.base_url || 'http://localhost:11434/v1',
             });
-            return ollama(model.model_id) as LanguageModel;
+            return ollama.chat(model.model_id) as LanguageModel;
         }
 
         case 'openai_compatible': {
@@ -95,7 +125,7 @@ export function createModelInstance(model: ModelEntry, aiBinding?: any): Languag
                 apiKey: model.api_key || 'no-key',
                 baseURL: model.base_url,
             });
-            return compatible(model.model_id) as LanguageModel;
+            return compatible.chat(model.model_id) as LanguageModel;
         }
 
         default:

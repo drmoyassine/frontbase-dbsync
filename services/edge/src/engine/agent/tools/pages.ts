@@ -7,9 +7,9 @@
  */
 
 import { tool } from 'ai';
-import { z } from 'zod';
 import { stateProvider } from '../../../storage/index.js';
 import { liteApp } from '../../lite.js';
+import { objectSchema, S } from './schema-helper.js';
 import type { AgentProfile } from '../../../config/env.js';
 
 /**
@@ -28,8 +28,10 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
     if (hasRead) {
         tools['pages_list'] = tool({
             description: 'List all published pages on this engine. Returns page name, slug, and version for each page.',
-            parameters: z.object({}),
-            execute: async () => {
+            parameters: objectSchema({
+                dummy: S.string('Unused, pass empty string'),
+            }),
+            execute: async ({ dummy }: any) => {
                 try {
                     const pages = await stateProvider.listPages();
                     return {
@@ -44,14 +46,14 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
                     return { error: `Failed to list pages: ${e.message}` };
                 }
             },
-        } as any);
+        });
 
         tools['pages_get'] = tool({
             description: 'Get the full structure of a published page by slug. Returns the page name, slug, version, component tree (types and IDs), and SEO metadata.',
-            parameters: z.object({
-                slug: z.string().describe('The page slug (URL path), e.g. "about" or "pricing"'),
+            parameters: objectSchema({
+                slug: S.string('The page slug (URL path), e.g. "about" or "pricing"'),
             }),
-            execute: async ({ slug }: { slug: string }) => {
+            execute: async ({ slug }: any) => {
                 try {
                     const page = await stateProvider.getPageBySlug(slug);
                     if (!page) {
@@ -89,7 +91,7 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
                     return { error: `Failed to get page: ${e.message}` };
                 }
             },
-        } as any);
+        });
     }
 
     // ── Write tools ─────────────────────────────────────────────────
@@ -97,12 +99,12 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
     if (hasWrite) {
         tools['pages_updateComponent'] = tool({
             description: 'Update a single component\'s props on a published page. Changes are applied to the page in the state DB but NOT automatically published — use pages_updateAndPublish for atomic edit+publish.',
-            parameters: z.object({
-                slug: z.string().describe('The page slug'),
-                componentId: z.string().describe('The ID of the component to update'),
-                props: z.record(z.any()).describe('The prop key-value pairs to merge into the component')
+            parameters: objectSchema({
+                slug: S.string('The page slug'),
+                componentId: S.string('The ID of the component to update'),
+                props: S.record('The prop key-value pairs to merge into the component'),
             }),
-            execute: async ({ slug, componentId, props }: { slug: string; componentId: string; props: Record<string, any> }) => {
+            execute: async ({ slug, componentId, props }: any) => {
                 try {
                     const page = await stateProvider.getPageBySlug(slug);
                     if (!page) return { error: `Page '${slug}' not found` };
@@ -138,16 +140,16 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
                     return { error: `Failed to update component: ${e.message}` };
                 }
             },
-        } as any);
+        });
 
         tools['pages_updateAndPublish'] = tool({
             description: 'Update a component\'s props on a page AND trigger a full publish cycle (CSS rebundle + cache flush). This is the recommended way to make visible changes. It is an atomic one-shot operation.',
-            parameters: z.object({
-                slug: z.string().describe('The page slug'),
-                componentId: z.string().describe('The ID of the component to update'),
-                props: z.record(z.any()).describe('The prop key-value pairs to merge into the component')
+            parameters: objectSchema({
+                slug: S.string('The page slug'),
+                componentId: S.string('The ID of the component to update'),
+                props: S.record('The prop key-value pairs to merge into the component'),
             }),
-            execute: async ({ slug, componentId, props }: { slug: string; componentId: string; props: Record<string, any> }) => {
+            execute: async ({ slug, componentId, props }: any) => {
                 try {
                     // Step 1: Update the component
                     const page = await stateProvider.getPageBySlug(slug);
@@ -199,7 +201,7 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
                     return { error: `Failed to update and publish: ${e.message}` };
                 }
             },
-        } as any);
+        });
     }
 
     return tools;

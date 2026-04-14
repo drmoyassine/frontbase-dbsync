@@ -299,6 +299,56 @@ async def _test_neon(creds: dict) -> dict:
     return {"success": True, "detail": "Connected — no organizations found"}
 
 
+async def _test_openai(creds: dict) -> dict:
+    api_key = creds.get("api_key", "")
+    if not api_key:
+        return {"success": False, "detail": "API key is required"}
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            "https://api.openai.com/v1/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+    if resp.status_code == 401:
+        return {"success": False, "detail": "Invalid OpenAI API key"}
+    if resp.status_code != 200:
+        return {"success": False, "detail": f"OpenAI API error: {resp.status_code}"}
+    return {"success": True, "detail": "Connected to OpenAI successfully"}
+
+
+async def _test_anthropic(creds: dict) -> dict:
+    api_key = creds.get("api_key", "")
+    if not api_key:
+        return {"success": False, "detail": "API key is required"}
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            "https://api.anthropic.com/v1/models",
+            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+        )
+    if resp.status_code == 401:
+        return {"success": False, "detail": "Invalid Anthropic API key"}
+    if resp.status_code != 200:
+        return {"success": False, "detail": f"Anthropic API error: {resp.status_code}"}
+    return {"success": True, "detail": "Connected to Anthropic successfully"}
+
+
+async def _test_ollama(creds: dict) -> dict:
+    base_url = creds.get("base_url", "http://localhost:11434").rstrip("/")
+    if not base_url:
+        return {"success": False, "detail": "Base URL is required"}
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            resp = await client.get(f"{base_url}/api/tags")
+        except httpx.ConnectError:
+            return {"success": False, "detail": f"Could not connect to Ollama at {base_url}"}
+            
+    if resp.status_code != 200:
+        return {"success": False, "detail": f"Ollama error: {resp.status_code}"}
+    
+    models = resp.json().get("models", [])
+    count = len(models)
+    return {"success": True, "detail": f"Connected to Ollama — {count} local models found"}
+
+
 # =============================================================================
 # Registry — add new providers here
 # =============================================================================
@@ -315,4 +365,7 @@ _TESTERS: dict[str, object] = {
     "mysql":          _test_mysql,
     "wordpress_rest": _test_wordpress,
     "neon":           _test_neon,
+    "openai":         _test_openai,
+    "anthropic":      _test_anthropic,
+    "ollama":         _test_ollama,
 }

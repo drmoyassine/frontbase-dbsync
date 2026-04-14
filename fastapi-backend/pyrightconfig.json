@@ -1,4 +1,8 @@
 {
+  "pythonPath": "C:\\Users\\drmoy\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+  "extraPaths": [
+    "C:\\Users\\drmoy\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages"
+  ],
   "exclude": [
     "app/middleware/auto_generated",
     "app/services/_archived"

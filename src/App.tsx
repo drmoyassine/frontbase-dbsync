@@ -11,6 +11,7 @@ import { useBuilderStore } from "@/stores/builder";
 import { useAuthStore } from "@/stores/auth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { GlobalAgentChat } from "@/components/agent/GlobalAgentChat";
 
 // Unified Shell & DB-Sync Pages
 import { Layout as UnifiedShell } from "./modules/dbsync/components/Layout";
@@ -112,6 +113,8 @@ const App = () => {
           <Toaster />
           <Sonner />
           <BrowserRouter basename="/frontbase-admin">
+            {/* Global Chat Overlay (Protected via state) */}
+            {isAuthenticated && <GlobalAgentChat />}
             <Routes>
               {/* Admin root redirects to dashboard */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />

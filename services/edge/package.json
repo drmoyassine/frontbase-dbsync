@@ -58,7 +58,7 @@
         "tailwindcss": "^4.1.18",
         "uuid": "^11.0.0",
         "workers-ai-provider": "^3.1.8",
-        "zod": "^3.24.0"
+        "zod": "^3.25.76"
     },
     "devDependencies": {
         "@types/node": "^22.0.0",

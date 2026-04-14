@@ -6,9 +6,9 @@
  */
 
 import { tool } from 'ai';
-import { z } from 'zod';
 import { stateProvider } from '../../../storage/index.js';
 import { liteApp } from '../../lite.js';
+import { objectSchema, S } from './schema-helper.js';
 import type { AgentProfile } from '../../../config/env.js';
 import type { GpuModel } from '../../../config/env.js';
 
@@ -24,8 +24,10 @@ export function buildEngineTools(profile: AgentProfile): Record<string, any> {
 
     tools['engine_status'] = tool({
         description: 'Get the engine\'s current health status including state DB, cache, and queue binding status. Use this to understand what infrastructure is connected.',
-        parameters: z.object({}),
-        execute: async () => {
+        parameters: objectSchema({
+            dummy: S.string('Not used, pass empty string'),
+        }),
+        execute: async ({ dummy }: any) => {
             try {
                 const req = new Request('http://localhost/api/health', {
                     headers: { 'x-api-key': profile.apiKey || '' },
@@ -43,12 +45,14 @@ export function buildEngineTools(profile: AgentProfile): Record<string, any> {
                 return { error: `Failed to get engine status: ${e.message}` };
             }
         },
-    } as any);
+    });
 
     tools['engine_config'] = tool({
         description: 'Get a non-secret summary of the engine\'s configuration: which providers are configured for state DB, cache, queue, and how many GPU models are available.',
-        parameters: z.object({}),
-        execute: async () => {
+        parameters: objectSchema({
+            dummy: S.string('Not used, pass empty string'),
+        }),
+        execute: async ({ dummy }: any) => {
             try {
                 const { getStateDbConfig, getCacheConfig, getQueueConfig, getGpuModels, getAgentProfilesConfig } = await import('../../../config/env.js');
                 const stateDb = getStateDbConfig();
@@ -76,12 +80,14 @@ export function buildEngineTools(profile: AgentProfile): Record<string, any> {
                 return { error: `Failed to get config: ${e.message}` };
             }
         },
-    } as any);
+    });
 
     tools['engine_workflows'] = tool({
         description: 'List all deployed workflows on this engine. Returns name, trigger type, active status, and version for each workflow.',
-        parameters: z.object({}),
-        execute: async () => {
+        parameters: objectSchema({
+            dummy: S.string('Not used, pass empty string'),
+        }),
+        execute: async ({ dummy }: any) => {
             try {
                 const workflows = await stateProvider.listWorkflows();
                 return {
@@ -100,15 +106,15 @@ export function buildEngineTools(profile: AgentProfile): Record<string, any> {
                 return { error: `Failed to list workflows: ${e.message}` };
             }
         },
-    } as any);
+    });
 
     tools['engine_logs'] = tool({
         description: 'Get recent edge engine logs. Useful for debugging issues or checking recent activity.',
-        parameters: z.object({
-            limit: z.number().optional().describe('Max number of log entries to return (default: 20, max: 100)'),
-            level: z.string().optional().describe('Filter by log level: "info", "warn", "error"'),
-        }),
-        execute: async ({ limit, level }: { limit?: number; level?: string }) => {
+        parameters: objectSchema({
+            limit: S.number('Max number of log entries to return (default: 20, max: 100)'),
+            level: S.string('Filter by log level: "info", "warn", "error"'),
+        }, ['limit']),
+        execute: async ({ limit, level }: any) => {
             try {
                 const queryLimit = Math.min(limit || 20, 100);
                 const url = new URL('http://localhost/api/edge-logs');
@@ -125,7 +131,7 @@ export function buildEngineTools(profile: AgentProfile): Record<string, any> {
                 return { error: `Failed to get logs: ${e.message}` };
             }
         },
-    } as any);
+    });
 
     return tools;
 }

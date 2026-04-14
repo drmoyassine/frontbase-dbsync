@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { Cloud, Server, Globe, Rocket, Database, Workflow, Triangle, Hexagon, Zap, HardDrive } from 'lucide-react';
+import { Cloud, Server, Globe, Rocket, Database, Workflow, Triangle, Hexagon, Zap, HardDrive, Bot, Cpu } from 'lucide-react';
 import { BRAND_ICONS } from '@/components/icons/providers';
 import { Badge } from '@/components/ui/badge';
 
@@ -43,6 +43,9 @@ const LUCIDE_FALLBACKS: Record<string, React.FC<any>> = {
     mysql: HardDrive,
     neon: Database,
     turso: Cloud,
+    openai: Bot,
+    anthropic: Cpu,
+    ollama: Server,
 };
 
 /** Brand SVGs override Lucide fallbacks when a matching .svg exists */
@@ -283,6 +286,33 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
             { key: 'db_token', label: 'Auth Token', placeholder: 'Database auth token', type: 'password', required: true },
         ],
         helpText: <>Get your URL and token from the Turso dashboard or CLI.</>,
+    },
+    openai: {
+        label: 'OpenAI',
+        defaultName: 'OpenAI Account',
+        capabilities: ['gpu'],
+        fields: [
+            { key: 'api_key', label: 'API Key', placeholder: 'sk-...', type: 'password', required: true },
+        ],
+        helpText: <>Get your API key from the <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">OpenAI dashboard</a>.</>,
+    },
+    anthropic: {
+        label: 'Anthropic',
+        defaultName: 'Anthropic Account',
+        capabilities: ['gpu'],
+        fields: [
+            { key: 'api_key', label: 'API Key', placeholder: 'sk-ant-...', type: 'password', required: true },
+        ],
+        helpText: <>Get your API key from the <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Anthropic Console</a>.</>,
+    },
+    ollama: {
+        label: 'Ollama (Local)',
+        defaultName: 'Local Ollama',
+        capabilities: ['gpu'],
+        fields: [
+            { key: 'base_url', label: 'Base URL', placeholder: 'http://localhost:11434', required: true },
+        ],
+        helpText: <>Ensure your local Ollama instance is running and accessible from the server.</>,
     },
 };
 

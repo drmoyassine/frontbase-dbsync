@@ -2,6 +2,7 @@ import { tool } from 'ai';
 import { z, type ZodTypeAny } from 'zod';
 import type { AgentProfile } from '../../config/env.js';
 import { liteApp } from '../lite.js';
+import { objectSchema } from './tools/schema-helper.js';
 
 // =============================================================================
 // Module-level tool cache (invalidated on config hot-reload)
@@ -199,32 +200,35 @@ export async function buildAutoTools(
                 const queryParams = (op.parameters || []).filter((p: any) => p.in === 'query');
                 const pathParams = (op.parameters || []).filter((p: any) => p.in === 'path');
 
-                // Build typed Zod schema from parameters and body
-                const paramShape: Record<string, ZodTypeAny> = {};
+                // Build raw JSON Schema for tool parameters
+                const properties: Record<string, any> = {};
+                const required: string[] = [];
 
                 // Map path parameters
                 for (const p of pathParams) {
-                    paramShape[p.name] = p.required
-                        ? z.string().describe(p.description || `Path param: ${p.name}`)
-                        : z.string().optional().describe(p.description || p.name);
+                    properties[p.name] = { 
+                        type: 'string', 
+                        description: p.description || `Path param: ${p.name}` 
+                    };
+                    if (p.required) required.push(p.name);
                 }
 
-                // Map query parameters with proper types
+                // Map query parameters
                 for (const p of queryParams) {
-                    let paramZod: ZodTypeAny;
-                    if (p.schema) {
-                        paramZod = jsonSchemaToZod(p.schema);
-                    } else {
-                        paramZod = z.string();
-                    }
-                    if (p.description) paramZod = paramZod.describe(p.description);
-                    paramShape[p.name] = p.required ? paramZod : paramZod.optional();
+                    let pType = p.schema ? { ...p.schema } : { type: 'string' };
+                    if (p.description) pType.description = p.description;
+                    properties[p.name] = pType;
+                    if (p.required) required.push(p.name);
                 }
 
-                // Map JSON body with typed schema
+                // Map JSON body
                 if (reqBodySchema) {
-                    const bodyZod = jsonSchemaToZod(reqBodySchema);
-                    paramShape['body'] = bodyZod.describe('JSON request body');
+                    properties['body'] = {
+                        ...reqBodySchema,
+                        description: 'JSON request body'
+                    };
+                    // Body is typically required if schema is provided
+                    required.push('body');
                 }
 
                 // Detailed description
@@ -232,9 +236,13 @@ export async function buildAutoTools(
                 if (op.description) desc += `\n${op.description}`;
 
                 try {
+                    if (Object.keys(properties).length === 0) {
+                        properties['_request'] = { type: 'string', description: 'Not used, pass empty string' };
+                    }
+                    
                     tools[toolName] = tool({
                         description: desc,
-                        parameters: z.object(paramShape),
+                        parameters: objectSchema(properties, required.length > 0 ? required : undefined),
                         execute: async (args: any) => {
                             let actualPath = path;
                             

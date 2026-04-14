@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
-from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys, edge_agent_profiles, deno, themes
+from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys, edge_agent_profiles, deno, themes, agent
 from app.middleware.test_mode import TestModeMiddleware
 
 logger = logging.getLogger(__name__)
@@ -277,6 +277,7 @@ class TrailingSlashMiddleware:
         "/api/cloudflare",
         "/api/deno",
         "/api/settings",
+        "/api/agent",
     ]
     
     def __init__(self, app: ASGIApp):
@@ -319,6 +320,7 @@ app.include_router(edge_gpu.router)  # Edge GPU AI inference models
 app.include_router(edge_api_keys.router)  # Tenant API keys for /v1/* endpoints
 app.include_router(edge_agent_profiles.router)  # CRUD for Agent Personas & Permissions
 app.include_router(themes.router, prefix="/api/themes", tags=["Themes"])
+app.include_router(agent.router)  # Master Admin Workspace Agent chat
 
 # Mount DB-Synchronizer Service
 from app.services.sync.main import sync_app
@@ -338,6 +340,10 @@ async def root():
 @app.get("/health/")
 async def health_check():
     return {"status": "healthy", "message": "API is operational", "test_mode": True}
+
+@app.get("/api/test-route")
+async def test_route():
+    return {"test": True}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, proxy_headers=True, forwarded_allow_ips="*")# trigger reload

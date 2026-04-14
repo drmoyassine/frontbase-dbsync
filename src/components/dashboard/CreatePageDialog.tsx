@@ -108,7 +108,7 @@ export const CreatePageDialog: React.FC<CreatePageDialogProps> = ({
                 title: name,
                 description: 'A new page created with Frontbase',
                 keywords: '',
-                isPublic: false,
+                isPublic: true,
                 isHomepage: false,
                 containerStyles: getDefaultPageStyles(),
                 layoutData: {
@@ -282,7 +282,7 @@ export const CreatePageDialog: React.FC<CreatePageDialogProps> = ({
                     title: file.data.page.title || file.name,
                     description: file.data.page.description || '',
                     keywords: file.data.page.keywords || '',
-                    isPublic: false,
+                    isPublic: true,
                     isHomepage: false,
                     containerStyles: file.data.page.containerStyles || getDefaultPageStyles(),
                     layoutData: file.data.page.layoutData || { content: [], root: {} },

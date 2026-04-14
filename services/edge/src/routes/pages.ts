@@ -23,7 +23,7 @@ import { getRedis } from '../cache/redis.js';
 
 // L1 HTML Cache
 const _htmlCache = new Map<string, { html: string; ts: number }>();
-const HTML_CACHE_TTL_MS = 60_000; // 60 seconds
+const HTML_CACHE_TTL_MS = 600_000; // 10 minutes
 
 export function invalidateHtmlCache(slug: string) {
     _htmlCache.delete(`html:${slug}:mobile`);
@@ -295,7 +295,7 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     // Try L1 cache FIRST before doing any DB or Redis lookups
     const cachedHtml = _htmlCache.get(htmlKey);
     if (cachedHtml && (Date.now() - cachedHtml.ts) < HTML_CACHE_TTL_MS) {
-        c.header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
+        c.header('Cache-Control', 'public, max-age=600, s-maxage=600, stale-while-revalidate=300');
         c.header('Content-Type', 'text/html; charset=utf-8');
         c.header('X-Cache', 'HIT');
         return c.html(cachedHtml.html);
@@ -404,7 +404,7 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     // Set cache headers
     if (page.isPublic) {
         _htmlCache.set(htmlKey, { html: htmlDoc, ts: Date.now() });
-        c.header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
+        c.header('Cache-Control', 'public, max-age=600, s-maxage=600, stale-while-revalidate=300');
         c.header('X-Cache', 'MISS');
     } else {
         c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -425,7 +425,7 @@ pagesRoute.get('/', async (c) => {
         // Try L1 cache FIRST before doing any DB or Redis lookups
         const cachedHtml = _htmlCache.get(htmlKey);
         if (cachedHtml && (Date.now() - cachedHtml.ts) < HTML_CACHE_TTL_MS) {
-            c.header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
+            c.header('Cache-Control', 'public, max-age=600, s-maxage=600, stale-while-revalidate=300');
             c.header('Content-Type', 'text/html; charset=utf-8');
             c.header('X-Cache', 'HIT');
             return c.html(cachedHtml.html);
@@ -593,7 +593,7 @@ pagesRoute.get('/', async (c) => {
             // Set cache headers
             if (page.isPublic) {
                 _htmlCache.set(htmlKey, { html: fullHtml, ts: Date.now() });
-                c.header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
+                c.header('Cache-Control', 'public, max-age=600, s-maxage=600, stale-while-revalidate=300');
                 c.header('X-Cache', 'MISS');
             } else {
                 c.header('Cache-Control', 'no-cache, no-store, must-revalidate');

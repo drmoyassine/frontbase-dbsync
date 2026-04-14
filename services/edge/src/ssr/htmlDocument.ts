@@ -237,6 +237,41 @@ ${authConfig ? `
     })();
     </script>
 ` : ''}
+
+    <!-- Background Eager Prefetcher -->
+    <script>
+    (function() {
+        if (sessionStorage.getItem('fb-prefetched')) return;
+        var rIC = window.requestIdleCallback || function(cb) { setTimeout(cb, 2000); };
+        rIC(function() {
+            fetch('/sitemap.xml')
+                .then(function(r) { return r.text(); })
+                .then(function(xml) {
+                    var urls = [];
+                    var regex = /<loc>(.*?)<\\/loc>/g;
+                    var match;
+                    while ((match = regex.exec(xml)) !== null) {
+                        if (match[1] !== window.location.href) urls.push(match[1]);
+                    }
+                    var i = 0;
+                    function fetchNext() {
+                        if (i >= urls.length) {
+                            sessionStorage.setItem('fb-prefetched', '1');
+                            return;
+                        }
+                        if (urls[i].indexOf(window.location.origin) === 0) {
+                            fetch(urls[i], { priority: 'low' }).catch(function(){});
+                        }
+                        i++;
+                        setTimeout(fetchNext, 100); // Stagger requests
+                    }
+                    if (urls.length > 0) fetchNext();
+                })
+                .catch(function(){});
+        });
+    })();
+    </script>
+
     <!-- Hydration bundle (all interactive components) -->
     <script type="module" src="/static/react/hydrate.js?v=${HYDRATE_VERSION}"></script>
 </body>

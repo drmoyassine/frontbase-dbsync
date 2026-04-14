@@ -46,6 +46,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 interface FeatureItem {
+    link?: string;
     id: string;
     icon: string;
     title: string;
@@ -128,6 +129,17 @@ const SortableFeatureItem: React.FC<{
                         onChange={(value) => updateFeature(index, { description: value })}
                         placeholder="Feature description or type @ for variables"
                         multiline
+                    />
+                </div>
+
+                                {/* Link */}
+                <div className="space-y-1">
+                    <Label className="text-xs">Link (URL)</Label>
+                    <Input
+                        value={feature.link || ''}
+                        onChange={(e) => updateFeature(index, { link: e.target.value })}
+                        placeholder="e.g. /aviation or https://..."
+                        className="h-8 w-full"
                     />
                 </div>
 

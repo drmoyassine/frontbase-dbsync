@@ -16,6 +16,7 @@ import { useDraggable, useDroppable } from '@dnd-kit/core';
 import * as LucideIcons from 'lucide-react';
 
 interface FeatureItem {
+    link?: string;
     id: string;
     icon: string;           // Lucide icon name
     title: string;
@@ -217,6 +218,7 @@ export const FeatureSectionRenderer: React.FC<RendererProps> = ({
                 icon: feature.icon,
                 title: feature.title,
                 description: feature.description,
+                link: feature.link,
                 iconSize,
                 iconColor,
                 iconAlignment,

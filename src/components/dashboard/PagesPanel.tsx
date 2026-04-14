@@ -83,14 +83,26 @@ export const PagesPanel: React.FC = () => {
     return matchesTrashView && matchesSearch && matchesFilter;
   });
 
-  // Get publish URL for preview
-  const getPublishUrl = (pagePath: string = '') => {
-    if (project?.appUrl) {
-      const baseUrl = project.appUrl.replace(/\/$/, '');
-      return `${baseUrl}/${pagePath}`;
+  // Get a browser-accessible preview URL.
+  // Always use window.location.origin — the reverse proxy routes to edge.
+  // project.appUrl and dep.target.url may contain Docker-internal hostnames
+  // (e.g. http://edge:3002) that aren't reachable from the browser.
+  const getPreviewUrl = (pagePath: string, targetUrl?: string) => {
+    // If target URL looks like a real external URL (has a dot in hostname), use it
+    if (targetUrl) {
+      try {
+        const parsed = new URL(targetUrl);
+        // Internal Docker hostnames don't have dots (e.g. 'edge', 'localhost')
+        const isExternal = parsed.hostname.includes('.') && parsed.hostname !== 'localhost';
+        if (isExternal) {
+          return `${targetUrl.replace(/\/$/, '')}/${pagePath}`;
+        }
+      } catch {
+        // Invalid URL, fall through
+      }
     }
-    const baseUrl = window.location.origin.replace(':5173', ':3002');
-    return `${baseUrl}/${pagePath}`;
+    // Fallback: use the current browser origin (reverse proxy handles routing)
+    return `${window.location.origin}/${pagePath}`;
   };
 
   const handlePageCreated = (pageId: string) => {
@@ -106,7 +118,9 @@ export const PagesPanel: React.FC = () => {
 
   const handlePreviewPage = (page: any) => {
     const pagePath = page.isHomepage ? '' : page.slug;
-    const url = getPublishUrl(pagePath);
+    // Try to use the first published deployment's target URL
+    const publishedDep = page.deployments?.find((d: any) => d.status === 'published');
+    const url = getPreviewUrl(pagePath, publishedDep?.target?.url);
     window.open(url, '_blank');
   };
 
@@ -624,7 +638,7 @@ export const PagesPanel: React.FC = () => {
                                 size="sm"
                                 variant="ghost"
                                 className="h-6 px-2 text-xs"
-                                onClick={() => window.open(`${dep.target?.url.replace(/\/$/, '')}/${page.isHomepage ? '' : page.slug}`, '_blank')}
+                                onClick={() => window.open(getPreviewUrl(page.isHomepage ? '' : page.slug, dep.target?.url), '_blank')}
                               >
                                 Preview
                               </Button>

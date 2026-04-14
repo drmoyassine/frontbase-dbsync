@@ -12,7 +12,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
@@ -25,7 +26,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, MoreHorizontal, Eye, Edit, Copy, Trash2, FileText, RotateCcw, Trash, CheckSquare, Square, Download } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Eye, Edit, Copy, Trash2, FileText, RotateCcw, Trash, CheckSquare, Square, Download, Globe, GlobeLock, Upload as UploadIcon } from 'lucide-react';
 import { PageExportEnvelope } from '@/types/page-export';
 import { toast } from 'sonner';
 import { CreatePageDialog } from './CreatePageDialog';
@@ -41,6 +42,7 @@ export const PagesPanel: React.FC = () => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [isBulkPublishing, setIsBulkPublishing] = useState(false);
 
   // Load pages from database when component mounts or trash mode changes
   useEffect(() => {
@@ -257,6 +259,83 @@ export const PagesPanel: React.FC = () => {
     }
   };
 
+  const handleBulkPublish = async () => {
+    setIsBulkPublishing(true);
+    try {
+      // Fetch active engines
+      const response = await fetch('/api/edge-engines/active/by-scope/full');
+      const engines = await response.json();
+      if (!Array.isArray(engines) || engines.length === 0) {
+        toast.error('No active deployment targets found');
+        setIsBulkPublishing(false);
+        return;
+      }
+
+      const engineIds = engines.map((eng: any) => eng.id);
+      const pageIds = Array.from(selectedPages);
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const pageId of pageIds) {
+        try {
+          const result = await publishPageToTargets(pageId, engineIds);
+          if (result) {
+            const succeeded = result.results?.filter((r: any) => r.success) || [];
+            if (succeeded.length > 0) successCount++;
+            else failCount++;
+          }
+        } catch {
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) toast.success(`Published ${successCount} page(s) to all targets`);
+      if (failCount > 0) toast.error(`Failed to publish ${failCount} page(s)`);
+      setSelectedPages(new Set());
+      await loadPagesFromDatabase(false, true);
+    } catch (err: any) {
+      toast.error(err?.message || 'Bulk publish failed');
+    } finally {
+      setIsBulkPublishing(false);
+    }
+  };
+
+  const handleBulkExport = () => {
+    const pagesToExport = pages.filter(p => selectedPages.has(p.id));
+    for (const page of pagesToExport) {
+      handleExportPage(page);
+    }
+    toast.success(`Exported ${pagesToExport.length} page(s)`);
+  };
+
+  // --- Badge computation helpers ---
+  const getPageBadges = (page: any) => {
+    const badges: { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; className?: string }[] = [];
+
+    if (page.isHomepage) {
+      badges.push({ label: 'Homepage', variant: 'outline' });
+    }
+
+    const hasDeployments = page.deployments && page.deployments.length > 0;
+    const hasAnyPublished = hasDeployments && page.deployments.some((d: any) => d.status === 'published');
+
+    if (hasAnyPublished) {
+      // Actually deployed to at least one target
+      badges.push({ label: 'Live', variant: 'default', className: 'bg-emerald-600 hover:bg-emerald-700' });
+      if (page.hasUnpublishedChanges) {
+        badges.push({ label: 'Changes pending', variant: 'secondary', className: 'bg-amber-100 text-amber-800 border-amber-300' });
+      }
+    } else if (hasDeployments) {
+      // Has deployments but none are "published" (all failed or pending)
+      badges.push({ label: 'Deploy failed', variant: 'destructive' });
+    } else {
+      // Never deployed
+      badges.push({ label: 'Not deployed', variant: 'secondary' });
+    }
+
+    return badges;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -316,6 +395,33 @@ export const PagesPanel: React.FC = () => {
 
             {selectedPages.size > 0 && (
               <>
+                {!showTrash && (
+                  <>
+                    {/* Bulk Publish */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleBulkPublish}
+                      disabled={isBulkPublishing}
+                      className="gap-2"
+                    >
+                      <Globe className="h-4 w-4" />
+                      {isBulkPublishing ? 'Publishing...' : `Publish (${selectedPages.size})`}
+                    </Button>
+
+                    {/* Bulk Export */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleBulkExport}
+                      className="gap-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      Export ({selectedPages.size})
+                    </Button>
+                  </>
+                )}
+
                 {showTrash && (
                   <Button
                     variant="outline"
@@ -335,7 +441,7 @@ export const PagesPanel: React.FC = () => {
                       className="gap-2"
                     >
                       <Trash2 className="h-4 w-4" />
-                      {showTrash ? 'Delete Forever' : 'Trash All'} ({selectedPages.size})
+                      {showTrash ? 'Delete Forever' : 'Trash'} ({selectedPages.size})
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
@@ -367,212 +473,210 @@ export const PagesPanel: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredPages.map((page) => (
-          <Card
-            key={page.id}
-            className={`hover:shadow-md transition-shadow relative ${selectedPages.has(page.id) ? 'ring-2 ring-primary' : ''}`}
-          >
-            {/* Checkbox for multiselect */}
-            <div className="absolute top-3 left-3 z-10">
-              <Checkbox
-                checked={selectedPages.has(page.id)}
-                onCheckedChange={() => togglePageSelection(page.id)}
-              />
-            </div>
+        {filteredPages.map((page) => {
+          const badges = getPageBadges(page);
 
-            <CardHeader className="pb-3 pl-10">
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <CardTitle className="text-lg">{page.name}</CardTitle>
-                  <CardDescription>{page.isHomepage ? '/' : `/${page.slug}`}</CardDescription>
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 w-8 p-0">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {showTrash ? (
-                      <>
-                        <DropdownMenuItem onClick={() => restorePage(page.id)}>
-                          <RotateCcw className="mr-2 h-4 w-4" />
-                          Restore
-                        </DropdownMenuItem>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <DropdownMenuItem
-                              onSelect={(e) => e.preventDefault()}
-                              className="text-destructive"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete Forever
-                            </DropdownMenuItem>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Permanently Delete Page?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This action cannot be undone. This will permanently delete the page and all its data.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => permanentDeletePage(page.id)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
-                                Delete Forever
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </>
-                    ) : (
-                      <>
-                        <DropdownMenuItem onClick={() => handleEditPage(page.id)}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDuplicatePage(page)}>
-                          <Copy className="mr-2 h-4 w-4" />
-                          Duplicate
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleExportPage(page)}>
-                          <Download className="mr-2 h-4 w-4" />
-                          Export
-                        </DropdownMenuItem>
-                        {page.isPublic && (
-                          <DropdownMenuItem onClick={() => handleSyncAllTargets(page.id)}>
-                            <RotateCcw className="mr-2 h-4 w-4" />
-                            Sync Targets
-                          </DropdownMenuItem>
-                        )}
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <DropdownMenuItem
-                              onSelect={(e) => e.preventDefault()}
-                              className="text-destructive"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Page?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This will move the page to trash. You can restore it later or permanently delete it.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDeletePage(page.id)}>
-                                Move to Trash
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+          return (
+            <Card
+              key={page.id}
+              className={`hover:shadow-md transition-shadow relative ${selectedPages.has(page.id) ? 'ring-2 ring-primary' : ''}`}
+            >
+              {/* Checkbox for multiselect */}
+              <div className="absolute top-3 left-3 z-10">
+                <Checkbox
+                  checked={selectedPages.has(page.id)}
+                  onCheckedChange={() => togglePageSelection(page.id)}
+                />
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  {showTrash ? (
-                    <Badge variant="destructive">Trashed</Badge>
-                  ) : (
-                    <>
-                      {page.hasUnpublishedChanges && <Badge variant="destructive">Unsynced</Badge>}
-                      {/* Only show page-level Published/Draft if no per-target deployments */}
-                      {(!page.deployments || page.deployments.length === 0) && (
-                        <Badge variant={page.isPublic ? "default" : "secondary"}>
-                          {page.isPublic ? 'Published' : 'Draft'}
-                        </Badge>
-                      )}
-                      {page.isHomepage && (
-                        <Badge variant="outline">Homepage</Badge>
-                      )}
-                    </>
-                  )}
-                </div>
 
-                {/* Deployments list (only for full edge engines where we published) */}
-                {!showTrash && page.deployments && page.deployments.length > 0 && (
-                  <div className="flex flex-col gap-2 mt-4">
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Targets</span>
-                    {page.deployments.map(dep => (
-                      <div key={dep.id} className="flex items-center justify-between text-sm bg-muted/30 p-2 rounded-md border">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{dep.target?.name || 'Unknown'}</span>
-                          <Badge
-                            variant={dep.status === 'failed' ? 'destructive' : 'outline'}
-                            className={`text-[10px] px-1.5 py-0 h-4 ${dep.status === 'published' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : ''}`}
-                          >
-                            {dep.status}
-                          </Badge>
-                        </div>
-                        <div className="flex gap-1">
-                          {dep.status === 'published' && dep.target?.url && (
+              <CardHeader className="pb-3 pl-10">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <CardTitle className="text-lg">{page.name}</CardTitle>
+                    <CardDescription>{page.isHomepage ? '/' : `/${page.slug}`}</CardDescription>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="h-8 w-8 p-0">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {showTrash ? (
+                        <>
+                          <DropdownMenuItem onClick={() => restorePage(page.id)}>
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            Restore
+                          </DropdownMenuItem>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <DropdownMenuItem
+                                onSelect={(e) => e.preventDefault()}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete Forever
+                              </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Permanently Delete Page?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This action cannot be undone. This will permanently delete the page and all its data.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => permanentDeletePage(page.id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Delete Forever
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </>
+                      ) : (
+                        <>
+                          <DropdownMenuItem onClick={() => handleEditPage(page.id)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDuplicatePage(page)}>
+                            <Copy className="mr-2 h-4 w-4" />
+                            Duplicate
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleExportPage(page)}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Export
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {page.isPublic && (
+                            <DropdownMenuItem onClick={() => handleSyncAllTargets(page.id)}>
+                              <Globe className="mr-2 h-4 w-4" />
+                              Publish to All Targets
+                            </DropdownMenuItem>
+                          )}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <DropdownMenuItem
+                                onSelect={(e) => e.preventDefault()}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Page?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will move the page to trash. You can restore it later or permanently delete it.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeletePage(page.id)}>
+                                  Move to Trash
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {showTrash ? (
+                      <Badge variant="destructive">Trashed</Badge>
+                    ) : (
+                      badges.map((badge, i) => (
+                        <Badge key={i} variant={badge.variant} className={badge.className}>
+                          {badge.label}
+                        </Badge>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Deployments list (only for full edge engines where we published) */}
+                  {!showTrash && page.deployments && page.deployments.length > 0 && (
+                    <div className="flex flex-col gap-2 mt-4">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Targets</span>
+                      {page.deployments.map((dep: any) => (
+                        <div key={dep.id} className="flex items-center justify-between text-sm bg-muted/30 p-2 rounded-md border">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{dep.target?.name || 'Unknown'}</span>
+                            <Badge
+                              variant={dep.status === 'failed' ? 'destructive' : 'outline'}
+                              className={`text-[10px] px-1.5 py-0 h-4 ${dep.status === 'published' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : ''}`}
+                            >
+                              {dep.status}
+                            </Badge>
+                          </div>
+                          <div className="flex gap-1">
+                            {dep.status === 'published' && dep.target?.url && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => window.open(`${dep.target?.url.replace(/\/$/, '')}/${page.isHomepage ? '' : page.slug}`, '_blank')}
+                              >
+                                Preview
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-xs"
+                              onClick={() => handleSyncTarget(page.id, dep.engineId)}
+                            >
+                              {dep.status === 'failed' ? 'Retry' : 'Sync'}
+                            </Button>
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-6 px-2 text-xs"
-                              onClick={() => window.open(`${dep.target?.url.replace(/\/$/, '')}/${page.isHomepage ? '' : page.slug}`, '_blank')}
+                              className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                              onClick={() => handleUnpublishTarget(page.id, dep.engineId)}
                             >
-                              Preview
+                              Unpublish
                             </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-6 px-2 text-xs"
-                            onClick={() => handleSyncTarget(page.id, dep.engineId)}
-                          >
-                            {dep.status === 'failed' ? 'Retry' : 'Sync'}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                            onClick={() => handleUnpublishTarget(page.id, dep.engineId)}
-                          >
-                            Unpublish
-                          </Button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
 
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    size="sm"
-                    onClick={() => handleEditPage(page.id)}
-                    className="flex-1"
-                  >
-                    <Edit className="mr-2 h-4 w-4" />
-                    Edit
-                  </Button>
-
-                  {(!showTrash && !page.hasUnpublishedChanges && page.isPublic) && (
+                  <div className="flex gap-2 pt-2">
                     <Button
                       size="sm"
-                      variant="outline"
-                      onClick={() => handlePreviewPage(page)}
+                      onClick={() => handleEditPage(page.id)}
+                      className="flex-1"
                     >
-                      <Eye className="mr-2 h-4 w-4" />
-                      Preview Default
+                      <Edit className="mr-2 h-4 w-4" />
+                      Edit
                     </Button>
-                  )}
+
+                    {(!showTrash && !page.hasUnpublishedChanges && page.isPublic) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handlePreviewPage(page)}
+                      >
+                        <Eye className="mr-2 h-4 w-4" />
+                        Preview
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {isLoadingPages ? (

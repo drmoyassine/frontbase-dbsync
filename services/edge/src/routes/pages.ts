@@ -15,6 +15,28 @@ import { generateGatedPageDocument } from '../ssr/gatedPage.js';
 import { refreshSession } from '../ssr/lib/auth.js';
 import { getAuthConfig } from '../config/env.js';
 import type { AuthConfig } from '../ssr/htmlDocument.js';
+import { getRedis } from '../cache/redis.js';
+
+// ============================================================================
+// Caches & Globals
+// ============================================================================
+
+// L1 HTML Cache
+const _htmlCache = new Map<string, { html: string; ts: number }>();
+const HTML_CACHE_TTL_MS = 60_000; // 60 seconds
+
+export function invalidateHtmlCache(slug: string) {
+    _htmlCache.delete(`html:${slug}:mobile`);
+    _htmlCache.delete(`html:${slug}:tablet`);
+    _htmlCache.delete(`html:${slug}:desktop`);
+    _htmlCache.delete(`html:__homepage__:mobile`);
+    _htmlCache.delete(`html:__homepage__:tablet`);
+    _htmlCache.delete(`html:__homepage__:desktop`);
+}
+
+function getCacheKey(slug: string, device: string): string {
+    return `html:${slug}:${device}`;
+}
 
 const DEFAULT_FAVICON = '/static/icon.png';
 const SETTINGS_TTL_MS = 30_000;   // Cache settings for 30s
@@ -166,11 +188,10 @@ async function fetchPage(slug: string): Promise<PageData | null> {
 
     // L2: Try Redis cache first (Upstash or local)
     try {
-        const { getRedis } = await import('../cache/redis.js');
         const redis = getRedis();
         const cached = await redis.get<PageData>(cacheKey);
         if (cached) {
-            console.log(`[SSR] Cache HIT: ${slug}`);
+            // console.log(`[SSR] Cache HIT: ${slug}`);
             return cached;
         }
     } catch {
@@ -230,10 +251,8 @@ async function fetchPage(slug: string): Promise<PageData | null> {
     // Populate L2 cache on miss
     if (page) {
         try {
-            const { getRedis } = await import('../cache/redis.js');
             const redis = getRedis();
             await redis.setex(cacheKey, 60, JSON.stringify(page));
-            console.log(`[SSR] Cache SET: ${slug} (60s TTL)`);
         } catch {
             // Redis not available — no-op
         }
@@ -242,15 +261,25 @@ async function fetchPage(slug: string): Promise<PageData | null> {
     return page;
 }
 
+let _trackingCache: { config: TrackingConfig; ts: number } | null = null;
+const TRACKING_TTL_MS = 30_000;
+
 async function fetchTrackingConfig(): Promise<TrackingConfig> {
+    if (_trackingCache && (Date.now() - _trackingCache.ts) < TRACKING_TTL_MS) {
+        return _trackingCache.config;
+    }
+
     const apiBase = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
     try {
-        const response = await fetch(`${apiBase}/api/settings/privacy`);
+        // Note: use trailing slash to avoid 307 redirect from FastAPI
+        const response = await fetch(`${apiBase}/api/settings/privacy/`);
         if (response.ok) {
-            return await response.json();
+            const config = await response.json();
+            _trackingCache = { config, ts: Date.now() };
+            return config;
         }
     } catch (error) {
-        console.warn('[SSR] Failed to fetch tracking config:', error);
+        console.warn('[SSR] Failed to fetch tracking config:', (error as Error).message);
     }
     return getDefaultTrackingConfig();
 }
@@ -274,6 +303,10 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     if (page.isHomepage) {
         return c.redirect('/', 301);
     }
+
+    const deviceMatch = c.req.header('user-agent')?.toLowerCase().match(/(mobile|tablet|ipad|android(?=.*mobile)|iphone)/i) || [];
+    const deviceType = deviceMatch[0] ? (deviceMatch[0].includes('ipad') || deviceMatch[0].includes('tablet') ? 'tablet' : 'mobile') : 'desktop';
+    const htmlKey = getCacheKey(slug, deviceType);
 
     // Private page gating — render blurred content with auth overlay
     let sessionAccessToken: string | undefined;
@@ -314,6 +347,15 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
             c.header('Content-Type', 'text/html; charset=utf-8');
             return c.html(gatedHtml);
         }
+    } else {
+        // For public pages, try L1 cache first
+        const cachedHtml = _htmlCache.get(htmlKey);
+        if (cachedHtml && (Date.now() - cachedHtml.ts) < HTML_CACHE_TTL_MS) {
+            c.header('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+            c.header('Content-Type', 'text/html; charset=utf-8');
+            c.header('X-Cache', 'HIT');
+            return c.html(cachedHtml.html);
+        }
     }
 
     // Build page data for template context
@@ -339,15 +381,6 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
         undefined   // dataContext
     );
 
-    // DEBUG: Log visitor context
-    console.log('[SSR] Visitor Context:', JSON.stringify({
-        country: context.visitor.country,
-        city: context.visitor.city,
-        ip: context.visitor.ip,
-        device: context.visitor.device,
-        browser: context.visitor.browser,
-    }, null, 2));
-
     // Render page components to HTML (async with LiquidJS)
     const bodyHtml = await renderPage(page.layoutData, context);
 
@@ -368,8 +401,15 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     // Generate full HTML document
     const htmlDoc = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl, authConfig);
 
-    // Set cache headers (Disabled for debugging/immediate updates)
-    c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+    // Set cache headers
+    if (page.isPublic) {
+        _htmlCache.set(htmlKey, { html: htmlDoc, ts: Date.now() });
+        c.header('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+        c.header('X-Cache', 'MISS');
+    } else {
+        c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+    
     c.header('Content-Type', 'text/html; charset=utf-8');
 
     return c.html(htmlDoc);
@@ -383,11 +423,9 @@ pagesRoute.get('/', async (c) => {
 
         // L2: Try Redis cache first
         try {
-            const { getRedis } = await import('../cache/redis.js');
             const redis = getRedis();
             const cached = await redis.get<any>(cacheKey);
             if (cached) {
-                console.log('[SSR] Cache HIT: homepage');
                 homepage = cached;
             }
         } catch {
@@ -441,10 +479,8 @@ pagesRoute.get('/', async (c) => {
             // Populate L2 cache on miss
             if (homepage) {
                 try {
-                    const { getRedis } = await import('../cache/redis.js');
                     const redis = getRedis();
                     await redis.setex(cacheKey, 60, JSON.stringify(homepage));
-                    console.log('[SSR] Cache SET: homepage (60s TTL)');
                 } catch {
                     // Redis not available — no-op
                 }
@@ -453,6 +489,10 @@ pagesRoute.get('/', async (c) => {
 
         // Render the homepage if we have one
         if (homepage) {
+            const deviceMatch = c.req.header('user-agent')?.toLowerCase().match(/(mobile|tablet|ipad|android(?=.*mobile)|iphone)/i) || [];
+            const deviceType = deviceMatch[0] ? (deviceMatch[0].includes('ipad') || deviceMatch[0].includes('tablet') ? 'tablet' : 'mobile') : 'desktop';
+            const htmlKey = getCacheKey('__homepage__', deviceType);
+
             // Private homepage gating
             if (!homepage.isPublic) {
                 const { user, setCookieHeaders } = await refreshSession(c.req.raw);
@@ -483,7 +523,17 @@ pagesRoute.get('/', async (c) => {
                     const afc = (homepage as any)._primaryAuthForm || undefined;
                     return c.html(generateGatedPageDocument(page, bodyHtml, is, tc, fav, afc));
                 }
+            } else {
+                // Return cached HTML for public homepage
+                const cachedHtml = _htmlCache.get(htmlKey);
+                if (cachedHtml && (Date.now() - cachedHtml.ts) < HTML_CACHE_TTL_MS) {
+                    c.header('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+                    c.header('Content-Type', 'text/html; charset=utf-8');
+                    c.header('X-Cache', 'HIT');
+                    return c.html(cachedHtml.html);
+                }
             }
+
             // Prepare page data for the template
             const page: PageData = {
                 id: homepage.id,
@@ -539,6 +589,16 @@ pagesRoute.get('/', async (c) => {
 
             // Return full HTML page
             const fullHtml = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl);
+            
+            // Set cache headers
+            if (page.isPublic) {
+                _htmlCache.set(htmlKey, { html: fullHtml, ts: Date.now() });
+                c.header('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+                c.header('X-Cache', 'MISS');
+            } else {
+                c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+            }
+
             return c.html(fullHtml);
         }
     } catch (error) {

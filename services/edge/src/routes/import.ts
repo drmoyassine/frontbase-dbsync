@@ -11,6 +11,7 @@ import {
     PublishPageSchema
 } from '../schemas/publish';
 import { stateProvider } from '../storage';
+import { invalidateHtmlCache } from './pages.js';
 
 // Create the import route (non-OpenAPI for better error handling)
 export const importRoute = new Hono();
@@ -95,6 +96,12 @@ importRoute.post('/', async (c) => {
             // Redis not configured — no-op
         }
 
+        // Invalidate L1 HTML Cache
+        invalidateHtmlCache(page.slug);
+        if (page.isHomepage) {
+            invalidateHtmlCache('__homepage__');
+        }
+
         // Build preview URL - use PUBLIC_URL env var for production, fallback to host header for dev
         const publicUrl = process.env.PUBLIC_URL;
         let previewUrl: string;
@@ -173,6 +180,8 @@ importRoute.delete('/:slug', async (c) => {
         // Delete the page
         await stateProvider.deletePage(slug);
         console.log(`[Import] Successfully unpublished: ${slug}`);
+
+        invalidateHtmlCache(slug);
 
         return c.json({
             success: true,

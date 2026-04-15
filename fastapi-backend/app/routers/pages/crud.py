@@ -16,7 +16,7 @@ from ...database.utils import get_db, create_page, update_page, get_page_by_slug
 from ...models.schemas import PageCreateRequest, PageUpdateRequest
 from ...models.models import Page, PageDeployment, EdgeEngine
 from app.services.page_hash import compute_page_hash
-from app.services.publish_orchestrator import get_edge_headers
+from app.services.edge_client import get_edge_headers
 from .versions import create_version_snapshot
 from sqlalchemy.orm import joinedload
 import asyncio

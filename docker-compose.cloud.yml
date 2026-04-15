@@ -64,8 +64,8 @@ services:
 
   edge:
     build:
-      context: ./services/edge
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/edge/Dockerfile
     expose:
       - "3002"
     environment:

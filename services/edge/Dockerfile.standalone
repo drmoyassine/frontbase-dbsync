@@ -17,14 +17,17 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY services/edge/package*.json ./
 RUN npm install
 
-COPY src ./src
-COPY public ./public
-COPY tsconfig.json ./
-COPY drizzle.config.ts ./
-COPY vite.config.ts ./
+# Copy monorepo packages to the root so Vite alias `../../packages/` resolves to `/packages`
+COPY packages /packages
+
+COPY services/edge/src ./src
+COPY services/edge/public ./public
+COPY services/edge/tsconfig.json ./
+COPY services/edge/drizzle.config.ts ./
+COPY services/edge/vite.config.ts ./
 
 # Build TypeScript
 RUN npm run build:client || echo "Client build completed"
@@ -36,7 +39,7 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY services/edge/package*.json ./
 RUN npm install --production
 
 COPY --from=builder /app/dist ./dist

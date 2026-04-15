@@ -4,15 +4,18 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY services/edge/package*.json ./
 RUN npm install
 
+# Copy monorepo packages to the root so Vite alias `../../packages/` resolves to `/packages`
+COPY packages /packages
+
 # Copy source files
-COPY src ./src
-COPY public ./public
-COPY tsconfig.json ./
-COPY drizzle.config.ts ./
-COPY vite.config.ts ./
+COPY services/edge/src ./src
+COPY services/edge/public ./public
+COPY services/edge/tsconfig.json ./
+COPY services/edge/drizzle.config.ts ./
+COPY services/edge/vite.config.ts ./
 
 # Build TypeScript - run both builds separately for better error visibility
 RUN npm run build:client || echo "Client build completed"
@@ -26,23 +29,25 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files and install ALL deps (including tsup/esbuild for CF bundle builds)
-COPY package*.json ./
+# Copy package files and install ALL deps
+COPY services/edge/package*.json ./
 RUN npm install
+
+# Copy the monorepo packages for edge engine to resolve runtime packages
+COPY packages /packages
 
 # Copy built files
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
 
-# Copy source + all tsup configs for /api/build-bundle (runtime bundle builds).
-# tsup.{provider}.ts configs import tsup.shared.ts, so all must be present.
+# Copy source + all tsup configs
 COPY --from=builder /app/src ./src
-COPY tsup.*.ts tsconfig.json ./
-COPY shims ./shims
-COPY scripts ./scripts
+COPY services/edge/tsup.*.ts services/edge/tsconfig.json ./
+COPY services/edge/shims ./shims
+COPY services/edge/scripts ./scripts
 
-# Copy drizzle config for migrations (if needed at runtime)
-COPY drizzle.config.ts ./
+# Copy drizzle config for migrations
+COPY services/edge/drizzle.config.ts ./
 
 # Create data directory
 RUN mkdir -p /app/data

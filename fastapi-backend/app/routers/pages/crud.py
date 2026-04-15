@@ -16,6 +16,7 @@ from ...database.utils import get_db, create_page, update_page, get_page_by_slug
 from ...models.schemas import PageCreateRequest, PageUpdateRequest
 from ...models.models import Page, PageDeployment, EdgeEngine
 from app.services.page_hash import compute_page_hash
+from app.services.publish_orchestrator import get_edge_headers
 from .versions import create_version_snapshot
 from sqlalchemy.orm import joinedload
 import asyncio
@@ -121,7 +122,8 @@ async def fan_out_unpublish(slug: str, page_id: str, db: Session):
         tasks = []
         for engine in engines:
             url = f"{str(engine.url).rstrip('/')}/api/import/{original_slug}"
-            tasks.append(client.delete(url))
+            auth_headers = get_edge_headers(engine)
+            tasks.append(client.delete(url, headers=auth_headers))
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
@@ -154,7 +156,8 @@ async def unpublish_from_single_target(slug: str, page_id: str, engine_id: str, 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             url = f"{str(engine.url).rstrip('/')}/api/import/{original_slug}"
-            response = await client.delete(url)
+            auth_headers = get_edge_headers(engine)
+            response = await client.delete(url, headers=auth_headers)
             if response.status_code == 200:
                 print(f"[Unpublish] Removed from {engine.name}: {original_slug}")
             else:

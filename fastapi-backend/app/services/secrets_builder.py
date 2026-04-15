@@ -431,7 +431,13 @@ def build_engine_secrets(
                     if schema_name:
                         state_db['schema'] = str(schema_name)
 
-            secrets['FRONTBASE_STATE_DB'] = json.dumps(state_db)
+            # Guard: cloud providers cannot use file: URLs
+            db_url = state_db.get('url', '')
+            if deploy_provider in ('cloudflare', 'vercel', 'netlify', 'deno', 'supabase') and db_url.startswith('file:'):
+                print(f"[SecretsBuilder] WARNING: Engine {engine_id} is cloud ({deploy_provider}) "
+                      f"but linked to local DB ({db_url}). Skipping FRONTBASE_STATE_DB to avoid file: URL error.")
+            else:
+                secrets['FRONTBASE_STATE_DB'] = json.dumps(state_db)
 
     # ─── FRONTBASE_CACHE ─────────────────────────────────────────────────
     if edge_cache_id:

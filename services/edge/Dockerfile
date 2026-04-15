@@ -39,6 +39,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/src ./src
 COPY tsup.*.ts tsconfig.json ./
 COPY shims ./shims
+COPY scripts ./scripts
 
 # Copy drizzle config for migrations (if needed at runtime)
 COPY drizzle.config.ts ./

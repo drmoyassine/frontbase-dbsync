@@ -1,7 +1,7 @@
 """Add provider_account_id to datasources
 
 Revision ID: e7f8a9b1c2d3
-Revises: e510beacc2ae
+Revises: 0042_add_universal_llm_fields
 Create Date: 2026-04-15 00:20:00.000000
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'e7f8a9b1c2d3'
-down_revision: Union[str, Sequence[str], None] = 'e510beacc2ae'
+down_revision: Union[str, Sequence[str], None] = '0042_add_universal_llm_fields'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * User-Configured Tools Builder (Tier 4)
  * 

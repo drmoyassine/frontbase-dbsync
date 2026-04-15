@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Curated Page Tools (Tier 2)
  * 

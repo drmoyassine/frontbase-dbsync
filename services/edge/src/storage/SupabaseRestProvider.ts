@@ -33,12 +33,11 @@ import type {
 
 const DEFAULT_FAVICON = '/static/icon.png';
 
-// Lazy schema — getStateDbConfig() may not be ready at module eval
+// Dynamic schema resolution
 function getSchema(): string {
     const { getStateDbConfig } = require('../config/env.js');
     return getStateDbConfig().schema || 'frontbase_edge';
 }
-const SCHEMA = process.env.FRONTBASE_SCHEMA_NAME || 'frontbase_edge';
 
 // =============================================================================
 // PostgREST Client (lazy singleton)
@@ -67,15 +66,17 @@ function getClient(): PgrestClient {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { PostgrestClient } = require('@supabase/postgrest-js');
 
+    const schema = getSchema();
+
     _client = new PostgrestClient(`${supabaseUrl}/rest/v1`, {
         headers: {
             apikey: anonKey,                         // API gateway auth
-            Authorization: `Bearer ${scopedJwt}`,    // PG role = frontbase_edge_role
+            Authorization: `Bearer ${scopedJwt}`,    // PG role = scoped dynamically
         },
-        schema: SCHEMA,
+        schema: schema,
     }) as PgrestClient;
 
-    console.log(`🐘 SupabaseRestProvider initialized: ${supabaseUrl} (schema: ${SCHEMA})`);
+    console.log(`🐘 SupabaseRestProvider initialized: ${supabaseUrl} (schema: ${schema})`);
     return _client;
 }
 
@@ -103,15 +104,29 @@ export class SupabaseRestProvider implements IStateProvider {
 
     async init(): Promise<void> {
         // Tables & schema are created at provisioning time via Management API.
-        // Just verify connectivity by doing a lightweight query.
-        const client = getClient();
-        const { error } = await client.from('published_pages').select('slug', { count: 'exact', head: true });
-        if (error) {
-            const e = error;
-            const detail = [e.message, e.details, e.hint, e.code].filter(Boolean).join(' | ');
-            throw new Error(`[SupabaseRest] init failed: ${detail || JSON.stringify(e)}`);
+        // Just verify connectivity by doing a lightweight raw fetch to avoid postgrest-js swallowing errors.
+        const { getStateDbConfig } = require('../config/env.js');
+        const cfg = getStateDbConfig();
+        
+        const schema = getSchema();
+        try {
+            const resp = await fetch(`${cfg.url}/rest/v1/published_pages?select=slug&limit=1`, {
+                headers: {
+                    'apikey': cfg.anonKey,
+                    'Authorization': `Bearer ${cfg.jwt}`,
+                    'Accept-Profile': schema
+                }
+            });
+            
+            if (!resp.ok) {
+                const text = await resp.text();
+                throw new Error(`[SupabaseRest] init failed (HTTP ${resp.status}): ${text.substring(0, 300)}`);
+            }
+        } catch (e: any) {
+            throw new Error(`[SupabaseRest] init failed: ${e.message || String(e)}`);
         }
-        console.log(`🐘 SupabaseRestProvider ready (PostgREST) — schema: ${SCHEMA}`);
+        
+        console.log(`🐘 SupabaseRestProvider ready (PostgREST) — schema: ${schema}`);
     }
 
     async initSettings(): Promise<void> {

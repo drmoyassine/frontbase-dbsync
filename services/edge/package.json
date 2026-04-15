@@ -3,8 +3,8 @@
     "version": "0.1.0",
     "type": "module",
     "scripts": {
-        "dev": "concurrently \"tsx watch src/index.ts\" \"vite build --watch\"",
-        "dev:server": "tsx watch src/index.ts",
+        "dev": "concurrently \"node --watch --import tsx src/index.ts\" \"vite build --watch\"",
+        "dev:server": "node --watch --import tsx src/index.ts",
         "dev:client": "vite build --watch",
         "build": "vite build && tsup src/index.ts --format esm --dts",
         "build:client": "vite build",

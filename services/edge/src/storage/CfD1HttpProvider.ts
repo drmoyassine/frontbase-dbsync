@@ -49,14 +49,28 @@ async function d1Query(
 ): Promise<D1Result> {
     const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`;
 
-    const resp = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiToken}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ sql: sqlStr, params }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+    let resp: Response;
+    try {
+        resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ sql: sqlStr, params }),
+            signal: controller.signal as any, // Cast for cross-compat
+        });
+    } catch (e: any) {
+        if (e.name === 'AbortError') {
+            throw new Error(`D1 HTTP API error: Connection timed out after 10s.`);
+        }
+        throw e;
+    } finally {
+        clearTimeout(timeout);
+    }
 
     if (!resp.ok) {
         const text = await resp.text();

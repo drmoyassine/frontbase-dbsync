@@ -309,7 +309,7 @@ async def init_supabase_state_db(
         migrations.append(f'ALTER TABLE IF EXISTS "{s}".{table} ENABLE ROW LEVEL SECURITY')
         migrations.append(
             f"DO $$ BEGIN\n"
-            f"  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = '{table}' AND policyname = 'edge_all_{table}') THEN\n"
+            f"  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = '{s}' AND tablename = '{table}' AND policyname = 'edge_all_{table}') THEN\n"
             f"    CREATE POLICY edge_all_{table} ON \"{s}\".{table} FOR ALL TO {role_name} USING (true) WITH CHECK (true);\n"
             f"  END IF;\n"
             f"END $$"
@@ -317,7 +317,7 @@ async def init_supabase_state_db(
         if table == 'published_pages':
             migrations.append(
                 f"DO $$ BEGIN\n"
-                f"  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = '{table}' AND policyname = 'anon_read_{table}') THEN\n"
+                f"  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = '{s}' AND tablename = '{table}' AND policyname = 'anon_read_{table}') THEN\n"
                 f"    CREATE POLICY anon_read_{table} ON \"{s}\".{table} FOR SELECT TO anon USING (true);\n"
                 f"  END IF;\n"
                 f"END $$"

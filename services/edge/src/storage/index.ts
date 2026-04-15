@@ -42,7 +42,7 @@ function isCloudRuntime(): boolean {
     return (
         process.env.FRONTBASE_ADAPTER_PLATFORM === 'cloudflare' ||
         process.env.FRONTBASE_DEPLOYMENT_MODE === 'cloud' ||
-        cfg.provider !== 'local' ||
+        !['local', 'sqlite'].includes(cfg.provider) ||
         !!cfg.url
     );
 }
@@ -64,6 +64,10 @@ function createInitialProvider(): IStateProvider {
         case 'turso':
             console.log('☁️ Using TursoHttpProvider (explicit)');
             return new TursoHttpProvider();
+
+        case 'sqlite':
+            console.log('💾 Using LocalSqliteProvider (explicit sqlite)');
+            return new LocalSqliteProvider();
 
         case 'cloudflare':
         case 'cloudflare_d1': {

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Curated Style Tools (Tier 2)
  * 

@@ -431,9 +431,9 @@ def build_engine_secrets(
                     if schema_name:
                         state_db['schema'] = str(schema_name)
 
-            # Guard: cloud providers cannot use file: URLs
+            # Guard: file: URLs are only valid for local/Docker edges
             db_url = state_db.get('url', '')
-            if deploy_provider in ('cloudflare', 'vercel', 'netlify', 'deno', 'supabase') and db_url.startswith('file:'):
+            if db_url.startswith('file:') and deploy_provider is not None:
                 print(f"[SecretsBuilder] WARNING: Engine {engine_id} is cloud ({deploy_provider}) "
                       f"but linked to local DB ({db_url}). Skipping FRONTBASE_STATE_DB to avoid file: URL error.")
             else:

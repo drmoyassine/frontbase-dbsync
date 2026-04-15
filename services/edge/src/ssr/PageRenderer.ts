@@ -15,6 +15,7 @@ import { liquid } from './lib/liquid.js';
 import { escapeHtml } from './components/lib/utils.js';
 import { buildInlineStyles, buildResponsiveCSS, buildVisibilityCSS, buildStyleString, buildClassName } from './styleHelpers.js';
 import type { TemplateContext } from './lib/context.js';
+import { stateProvider } from '../storage/index.js';
 
 // Type definitions
 export interface PageComponent {
@@ -121,9 +122,8 @@ async function renderComponent(
         const logoProps = resolvedProps.logo as any;
         // Inject faviconUrl if either useProjectLogo or showIcon is enabled
         if (logoProps.useProjectLogo || logoProps.showIcon) {
-            // Inject faviconUrl from project settings (Edge's local database)
-            const { getFaviconUrl } = await import('../db/project-settings.js');
-            const faviconUrl = await getFaviconUrl();
+            // Use the unified state provider (supports all runtimes: CF, Deno, Docker, local)
+            const faviconUrl = await stateProvider.getFaviconUrl();
 
             // Inject the favicon URL into the logo imageUrl property
             resolvedProps = {

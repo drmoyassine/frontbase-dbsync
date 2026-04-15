@@ -20,7 +20,7 @@ const healthRoute = new OpenAPIHono();
 
 type BindingStatus = { provider: string; status: 'ok' | 'error' | 'not_configured'; error?: string; schema?: string };
 
-const PING_TIMEOUT_MS = 8000;
+const PING_TIMEOUT_MS = 20000;
 
 /** Wrap a promise with a timeout — returns 'error' status if it takes too long */
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

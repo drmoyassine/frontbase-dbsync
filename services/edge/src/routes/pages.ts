@@ -17,6 +17,26 @@ import { getAuthConfig } from '../config/env.js';
 import type { AuthConfig } from '../ssr/htmlDocument.js';
 import { getRedis } from '../cache/redis.js';
 
+// ---- Cloud Fast-Fail Guards ----
+function isCloudEnv(): boolean {
+    return !!(
+        process.env.VERCEL || 
+        process.env.NETLIFY || 
+        process.env.FRONTBASE_ADAPTER_PLATFORM === 'cloudflare' ||
+        process.env.FRONTBASE_DEPLOYMENT_MODE === 'cloud'
+    );
+}
+
+function getSafeApiBase(): string | null {
+    if (process.env.BACKEND_URL) return process.env.BACKEND_URL;
+    if (isCloudEnv()) return null; // NEVER use internal Docker names in cloud
+    return 'http://127.0.0.1:8000'; // Default for local docker/dev
+}
+
+// ---------------------------------
+
+const PAGE_CACHE_TTL_MS = 60_000;
+
 // ============================================================================
 // Caches & Globals
 // ============================================================================
@@ -100,6 +120,12 @@ async function getCachedSettings(sessionAccessToken?: string): Promise<CachedSet
     }
 }
 
+// Response schemas
+const ErrorResponseSchema = z.object({
+    error: z.string(),
+    message: z.string().optional(),
+});
+
 // Type definitions for page data
 interface PageComponent {
     id: string;
@@ -128,10 +154,6 @@ interface PageData {
 }
 
 // Response schemas
-const ErrorResponseSchema = z.object({
-    error: z.string(),
-    message: z.string().optional(),
-});
 
 // Create the pages route
 const pagesRoute = new OpenAPIHono();
@@ -224,7 +246,11 @@ async function fetchPage(slug: string): Promise<PageData | null> {
 
     // Fallback to FastAPI for unpublished pages (dev mode only)
     if (!page) {
-        const apiBase = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
+        const apiBase = getSafeApiBase();
+        if (!apiBase) {
+            return null; // Do not attempt local fetch in cloud
+        }
+
         try {
             const url = `${apiBase}/api/pages/public/${slug}`;
             console.log(`[SSR] Fallback to FastAPI: ${url}`);
@@ -269,7 +295,11 @@ async function fetchTrackingConfig(): Promise<TrackingConfig> {
         return _trackingCache.config;
     }
 
-    const apiBase = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
+    const apiBase = getSafeApiBase();
+    if (!apiBase) {
+        return getDefaultTrackingConfig(); // Do not attempt local fetch in cloud
+    }
+
     try {
         // Note: use trailing slash to avoid 307 redirect from FastAPI
         const response = await fetch(`${apiBase}/api/settings/privacy/`);
@@ -452,11 +482,15 @@ pagesRoute.get('/', async (c) => {
                 console.log(`[SSR] Rendering homepage: ${homepage.slug} (v${homepage.version})`);
             } else {
                 // Pull-publish: Fetch homepage from FastAPI and store locally
-                console.log('[SSR] No local homepage found, pulling from FastAPI...');
+                const apiBase = getSafeApiBase();
+                if (!apiBase) {
+                    // Fail fast in production
+                    return c.json({ homepage: false, message: 'Waiting for Homepage to be published.' }, 200);
+                }
 
-                const fastapiUrl = process.env.BACKEND_URL || 'http://backend:8000';
+                console.log('[SSR] No local homepage found, pulling from FastAPI...');
                 try {
-                    const response = await fetch(`${fastapiUrl}/api/pages/homepage/`);
+                    const response = await fetch(`${apiBase}/api/pages/homepage/`);
 
                     if (response.ok) {
                         const result = await response.json();
@@ -602,7 +636,16 @@ pagesRoute.get('/', async (c) => {
             return c.html(fullHtml);
         }
     } catch (error) {
-        console.error('Error fetching homepage:', error);
+        console.error('[SSR] Error fetching homepage:', error);
+        
+        // Return 500 internally so Vercel does not hang
+        return c.json({
+            service: 'Frontbase Edge Engine',
+            mode: 'full',
+            status: 'error',
+            error: error instanceof Error ? error.message : String(error),
+            message: 'Database initialization or fetch failed. Check connection parameters.'
+        }, 500);
     }
 
     // Ultimate fallback: No homepage available

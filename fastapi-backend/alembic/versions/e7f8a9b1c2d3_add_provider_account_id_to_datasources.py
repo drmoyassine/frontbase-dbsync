@@ -22,7 +22,7 @@ def upgrade() -> None:
     inspector = sa.inspect(conn)
     columns = [c['name'] for c in inspector.get_columns('datasources')]
     if 'provider_account_id' not in columns:
-        with op.batch_alter_table('datasources', render_as_batch=True) as batch_op:
+        with op.batch_alter_table('datasources', schema=None) as batch_op:
             batch_op.add_column(
                 sa.Column('provider_account_id', sa.String(36), nullable=True)
             )
@@ -33,5 +33,5 @@ def downgrade() -> None:
     inspector = sa.inspect(conn)
     columns = [c['name'] for c in inspector.get_columns('datasources')]
     if 'provider_account_id' in columns:
-        with op.batch_alter_table('datasources', render_as_batch=True) as batch_op:
+        with op.batch_alter_table('datasources', schema=None) as batch_op:
             batch_op.drop_column('provider_account_id')

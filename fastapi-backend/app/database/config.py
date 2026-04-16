@@ -3,11 +3,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Database configuration — auto-construct URL from DATABASE env var
+# Database configuration
+# Priority: DATABASE_URL (full conn string) > DATABASE + DB_PASSWORD (constructed)
+DATABASE_URL_OVERRIDE = os.getenv("DATABASE_URL")
 DATABASE = os.getenv("DATABASE", "sqlite")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "frontbase-dev-password")
 
-if DATABASE == "postgresql":
+if DATABASE_URL_OVERRIDE:
+    # Direct connection string (e.g. Supabase: postgresql+psycopg2://...)
+    SYNC_DATABASE_URL = DATABASE_URL_OVERRIDE
+elif DATABASE == "postgresql":
     SYNC_DATABASE_URL = f"postgresql+psycopg2://frontbase:{DB_PASSWORD}@postgres:5432/frontbase"
 else:
     # Auto-detect Docker (/app/data volume) vs local dev (current dir)

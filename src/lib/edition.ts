@@ -1,43 +1,47 @@
 /**
- * Edition Helper — Controls whether Frontbase runs in self-host or cloud mode.
- * 
- * When VITE_FRONTBASE_EDITION is not set or "self-host":
+ * Edition detection — shared frontend helpers.
+ *
+ * Reads VITE_DEPLOYMENT_MODE at build time.
+ * "self-host" (default) → /frontbase-admin/ base path, session cookies.
+ * "cloud"               → /admin/ base path, JWT auth.
+ *
+ * When VITE_DEPLOYMENT_MODE is not set or "self-host":
  *   - SPA talks to FastAPI via relative URLs (Vite proxy)
  *   - Agent chat goes to FastAPI /api/agent/chat
  *   - Auth via ADMIN_EMAIL/ADMIN_PASSWORD session cookies
- * 
- * When VITE_FRONTBASE_EDITION is "cloud":
- *   - SPA talks to Mega Engine for tenant operations
- *   - Auth via Supabase JWT
- *   - FastAPI only handles master admin + billing
+ *
+ * When VITE_DEPLOYMENT_MODE is "cloud":
+ *   - Multi-tenant cloud SaaS at app.frontbase.dev
+ *   - Auth via JWT (signup + login)
+ *   - FastAPI handles master admin + cloud users
  */
 
-export const EDITION = import.meta.env.VITE_FRONTBASE_EDITION || 'self-host';
-export const isCloud = EDITION === 'cloud';
+export type DeploymentMode = 'self-host' | 'cloud';
+
+export const DEPLOYMENT_MODE: DeploymentMode =
+  (import.meta.env.VITE_DEPLOYMENT_MODE as DeploymentMode) || 'self-host';
+
+export const isCloud = (): boolean => DEPLOYMENT_MODE === 'cloud';
+export const isSelfHost = (): boolean => DEPLOYMENT_MODE !== 'cloud';
+
+/** BrowserRouter basename — differs between editions. */
+export const BASE_PATH: string = isCloud() ? '/admin' : '/frontbase-admin';
 
 /**
  * Get the API base URL for design-time operations.
- * 
- * Self-host: '' (relative URLs → Vite proxy → FastAPI)
- * Cloud users: Mega Engine URL
+ *
+ * Both modes: '' (relative URLs → Vite proxy / reverse proxy → FastAPI)
  */
 export function getApiBase(): string {
-    if (isCloud) {
-        return import.meta.env.VITE_MEGA_ENGINE_URL || 'https://api.frontbase.dev';
-    }
-    return ''; // relative → Vite proxy → FastAPI
+  return ''; // relative → Vite proxy (dev) / nginx (prod)
 }
 
 /**
  * Get the agent chat URL.
- * 
+ *
  * Self-host: FastAPI /api/agent/chat (Python, no Zod bugs)
- * Cloud: Mega Engine /api/agent/chat (tenant-scoped, BYOK)
+ * Cloud: same — FastAPI handles workspace agent
  */
 export function getAgentChatUrl(profileSlug: string): string {
-    if (isCloud) {
-        return `${getApiBase()}/api/agent/chat/${profileSlug}`;
-    }
-    // Self-host: FastAPI handles the workspace agent natively
-    return `/api/agent/chat/${profileSlug}`;
+  return `/api/agent/chat/${profileSlug}`;
 }

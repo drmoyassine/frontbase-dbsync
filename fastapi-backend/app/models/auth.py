@@ -1,6 +1,6 @@
 """Auth & settings domain models — User, UserSession, UserSetting, Project, AppVariable."""
 
-from sqlalchemy import Column, String, Text, Boolean, ForeignKey
+from sqlalchemy import Column, String, Text, Boolean, ForeignKey, Integer
 from sqlalchemy.orm import relationship
 
 from ..database.config import Base
@@ -59,8 +59,13 @@ class Project(Base):
     supabase_anon_key = Column(String)
     supabase_service_key_encrypted = Column(String)
     users_config = Column(Text)
+    tenant_id = Column(String, ForeignKey('tenants.id'), nullable=True)  # null = self-host
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
+    
+    # Relationships
+    tenant = relationship("Tenant", back_populates="projects")
+    pages = relationship("Page", back_populates="project")
 
 
 class AppVariable(Base):

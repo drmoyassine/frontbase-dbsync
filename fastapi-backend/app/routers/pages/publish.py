@@ -22,6 +22,7 @@ from app.services.publish_serializer import (
     convert_to_publish_schema,
 )
 from app.schemas.publish import ImportPagePayload
+from app.middleware.tenant_context import TenantContext, get_tenant_context
 
 
 router = APIRouter()
@@ -143,6 +144,9 @@ async def publish_to_target(page_id: str, engine_id: str):
         # Inject the computed hash
         if "page" in serialized:
             serialized["page"]["contentHash"] = page_content_hash
+            # Prepare for Phase 3 tenant-aware subdomain routing
+            if hasattr(page, 'project') and page.project and hasattr(page.project, 'tenant_id'):
+                serialized["page"]["tenantId"] = str(page.project.tenant_id) if page.project.tenant_id else None
             
         # POST to specific engine
         import_url = f"{engine_url.rstrip('/')}/api/import"

@@ -14,6 +14,9 @@ continue to work without modification.
 # Auth & Settings
 from .auth import User, UserSession, UserSetting, Project, AppVariable  # noqa: F401
 
+# Tenants (cloud multi-tenancy)
+from .tenant import Tenant, TenantMember  # noqa: F401
+
 # DB-Sync
 from .sync import SyncConfig, FieldMapping, SyncJob, Conflict, DatasourceView, TableSchemaCache  # noqa: F401
 

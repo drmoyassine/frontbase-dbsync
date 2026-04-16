@@ -25,10 +25,12 @@ class Page(Base):
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     content_hash = Column(String(64))  # SHA-256 of layout_data + seo_data before enrichment
+    project_id = Column(String, ForeignKey('project.id'), nullable=True)  # null = legacy / self-host
     
     # Relationships
     deployments = relationship("PageDeployment", back_populates="page", cascade="all, delete-orphan")
     versions = relationship("PageVersion", back_populates="page", cascade="all, delete-orphan", order_by="PageVersion.version_number.desc()")
+    project = relationship("Project", back_populates="pages")
     
     @property
     def layout_data_dict(self):

@@ -21,6 +21,11 @@ COPY vite.config.ts tsconfig*.json tailwind.config.ts postcss.config.js componen
 # Build with API URL (empty = same-origin, which is what we want for production)
 ARG VITE_API_URL=""
 ENV VITE_API_URL=${VITE_API_URL}
+
+# Deployment mode: "" or "self-host" = single tenant, "cloud" = multi-tenant SaaS
+ARG VITE_DEPLOYMENT_MODE=""
+ENV VITE_DEPLOYMENT_MODE=${VITE_DEPLOYMENT_MODE}
+
 ENV NODE_ENV=production
 
 # Run build and verify output exists

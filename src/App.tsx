@@ -12,6 +12,7 @@ import { useAuthStore } from "@/stores/auth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { GlobalAgentChat } from "@/components/agent/GlobalAgentChat";
+import { BASE_PATH, isCloud } from "@/lib/edition";
 
 // Unified Shell & DB-Sync Pages
 import { Layout as UnifiedShell } from "./modules/dbsync/components/Layout";
@@ -31,6 +32,7 @@ import { EdgeInfrastructurePanel } from "@/components/dashboard/EdgeInfrastructu
 
 // Auth Pages
 import LoginPage from "./pages/auth/LoginPage";
+import SignupPage from "./pages/auth/SignupPage";
 
 // Other Pages
 import BuilderPage from "./pages/BuilderPage";
@@ -112,13 +114,14 @@ const App = () => {
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          <BrowserRouter basename="/frontbase-admin">
+          <BrowserRouter basename={BASE_PATH}>
             {/* Global Chat Overlay (Protected via state) */}
             {isAuthenticated && <GlobalAgentChat />}
             <Routes>
               {/* Admin root redirects to dashboard */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/login" element={<LoginPage />} />
+              {isCloud() && <Route path="/signup" element={<SignupPage />} />}
               <Route path="/embed/auth/:formId" element={<EmbedAuthPage />} />
 
               {/* Protected Routes - Require Authentication */}

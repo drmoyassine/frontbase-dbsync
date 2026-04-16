@@ -9,8 +9,12 @@ export default defineConfig(({ mode }) => {
   // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
   const env = loadEnv(mode, process.cwd(), '');
 
+  // Edition-aware base path: cloud → /admin/, self-host → /frontbase-admin/
+  const deploymentMode = env.VITE_DEPLOYMENT_MODE || 'self-host';
+  const basePath = deploymentMode === 'cloud' ? '/admin/' : '/frontbase-admin/';
+
   return {
-    base: '/frontbase-admin/',
+    base: basePath,
     server: {
       host: "::",
       port: 5173,
@@ -74,6 +78,7 @@ export default defineConfig(({ mode }) => {
     define: {
       'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.SUPABASE_PROJECT_URL),
       'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.SUPABASE_ANON_KEY),
+      'import.meta.env.VITE_DEPLOYMENT_MODE': JSON.stringify(deploymentMode),
     },
   };
 });

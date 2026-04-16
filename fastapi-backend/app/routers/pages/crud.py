@@ -14,9 +14,10 @@ import httpx
 
 from ...database.utils import get_db, create_page, update_page, get_page_by_slug, get_current_timestamp
 from ...models.schemas import PageCreateRequest, PageUpdateRequest
-from ...models.models import Page, PageDeployment, EdgeEngine
+from ...models.models import Page, PageDeployment, EdgeEngine, Project
 from app.services.page_hash import compute_page_hash
 from app.services.edge_client import get_edge_headers
+from app.middleware.tenant_context import TenantContext, get_tenant_context
 from .versions import create_version_snapshot
 from sqlalchemy.orm import joinedload
 import asyncio
@@ -177,12 +178,26 @@ async def unpublish_from_single_target(slug: str, page_id: str, engine_id: str, 
 
 
 @router.get("/")
-async def get_pages(includeDeleted: bool = False, db: Session = Depends(get_db)):
+async def get_pages(
+    includeDeleted: bool = False,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """Get all pages - matches Express: { success, data: pages[] }"""
     try:
         base_query = db.query(Page).options(
             joinedload(Page.deployments).joinedload(PageDeployment.edge_engine)
         )
+
+        # Cloud mode: scope to tenant's projects
+        if ctx and ctx.tenant_id and not ctx.is_master:
+            project_ids = (
+                db.query(Project.id)
+                .filter(Project.tenant_id == ctx.tenant_id)
+                .subquery()
+            )
+            base_query = base_query.filter(Page.project_id.in_(project_ids))
+
         if includeDeleted:
             pages = base_query.all()
         else:
@@ -226,7 +241,11 @@ async def get_page(page_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/", status_code=201)
-async def create_page_endpoint(request: PageCreateRequest, db: Session = Depends(get_db)):
+async def create_page_endpoint(
+    request: PageCreateRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """Create a new page - matches Express: { success, data: page }"""
     try:
         # Check if slug is already taken
@@ -239,6 +258,17 @@ async def create_page_endpoint(request: PageCreateRequest, db: Session = Depends
         
         # Use model_dump with by_alias=False to get snake_case field names
         page_data = request.model_dump(by_alias=False)
+
+        # Cloud mode: assign page to the tenant's first project
+        if ctx and ctx.tenant_id and not ctx.is_master:
+            project = (
+                db.query(Project)
+                .filter(Project.tenant_id == ctx.tenant_id)
+                .first()
+            )
+            if project:
+                page_data["project_id"] = str(project.id)
+
         page = create_page(db, page_data)
         
         return {

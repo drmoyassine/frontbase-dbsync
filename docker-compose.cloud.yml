@@ -19,7 +19,11 @@ services:
     expose:
       - "8000"
     environment:
-      # Database: derived from COMPOSE_PROFILES (sqlite default, postgresql if profile active)
+      # Deployment mode — cloud = multi-tenant SaaS
+      - DEPLOYMENT_MODE=cloud
+      # Database: Supabase Postgres connection string
+      - DATABASE_URL=${DATABASE_URL}
+      # Legacy DB config (unused when DATABASE_URL is set, kept for compat)
       - DATABASE=${COMPOSE_PROFILES:-sqlite}
       - DB_PASSWORD=${DB_PASSWORD:-frontbase-dev-password}
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
@@ -27,7 +31,7 @@ services:
       # Edge Engine URL (override for distributed deployment)
       - EDGE_URL=${EDGE_URL:-http://edge:3002}
       - EDGE_SSR_URL=${EDGE_URL:-http://edge:3002}
-      # Admin Authentication
+      # Admin Authentication (master admin)
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
       - ENVIRONMENT=${ENVIRONMENT:-production}
@@ -105,6 +109,7 @@ services:
       args:
         # Empty = use relative URLs (recommended for production)
         VITE_API_URL: ""
+        VITE_DEPLOYMENT_MODE: "cloud"
     expose:
       - "80"
     depends_on:

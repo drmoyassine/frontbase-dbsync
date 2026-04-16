@@ -11,6 +11,7 @@ import uvicorn
 import os
 from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys, edge_agent_profiles, deno, themes, agent
 from app.middleware.test_mode import TestModeMiddleware
+from app.config.edition import is_cloud, DEPLOYMENT_MODE
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +27,7 @@ def _ensure_local_edge():
     Skipped in cloud (multi-tenant) mode — the edge container still runs
     for build-time services, but won't appear in the UI or as a publish target.
     """
-    mode = os.getenv("DEPLOYMENT_MODE", "self-host")
-    if mode == "cloud":
+    if is_cloud():
         return
 
     from datetime import datetime
@@ -178,6 +178,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[Main App Startup] Redis settings load failed (non-fatal): {e}")
     
+    logger.info(f"[Main App Startup] 🏷️ Mode: {DEPLOYMENT_MODE}")
     logger.info("[Main App Startup] 🚀 Application ready")
     yield
     logger.info("[Main App Shutdown] Shutting down...")
@@ -278,6 +279,7 @@ class TrailingSlashMiddleware:
         "/api/deno",
         "/api/settings",
         "/api/agent",
+        "/api/tenants",
     ]
     
     def __init__(self, app: ASGIApp):
@@ -296,8 +298,13 @@ app.add_middleware(TrailingSlashMiddleware)
 # Add test mode middleware
 app.add_middleware(TestModeMiddleware, test_mode=True)
 
-# Include routers
-app.include_router(auth.router)  # Auth routes (login, logout, me)
+# Include routers — edition-aware registration
+if is_cloud():
+    from app.routers import auth_cloud, tenants as tenants_router
+    app.include_router(auth_cloud.router)  # Cloud auth (signup, JWT login, /me)
+    app.include_router(tenants_router.router, prefix="/api/tenants", tags=["Tenants"])
+else:
+    app.include_router(auth.router)  # Self-host auth (login, logout, me)
 app.include_router(pages.router)
 app.include_router(project.router)
 app.include_router(variables.router)

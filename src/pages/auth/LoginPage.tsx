@@ -6,8 +6,9 @@
  */
 
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth';
+import { isCloud } from '@/lib/edition';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -79,6 +80,15 @@ export default function LoginPage() {
                         <Button type="submit" className="w-full" disabled={isLoading}>
                             {isLoading ? 'Signing in...' : 'Sign In'}
                         </Button>
+
+                        {isCloud() && (
+                            <p className="text-center text-sm text-muted-foreground">
+                                Don&apos;t have an account?{' '}
+                                <Link to="/signup" className="text-primary hover:underline font-medium">
+                                    Sign up
+                                </Link>
+                            </p>
+                        )}
                     </form>
                 </CardContent>
             </Card>

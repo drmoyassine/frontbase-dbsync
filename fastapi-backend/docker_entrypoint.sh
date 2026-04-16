@@ -43,30 +43,27 @@ print('Tables bootstrapped successfully')
 # all tables, so running incremental migrations would fail on existing tables.
 # On existing DBs, run upgrade normally for incremental changes.
 echo "Running database migrations..."
-python -c "
+DB_STATE=$(python -c "
 from app.database.config import engine
 from sqlalchemy import text, inspect
 with engine.connect() as conn:
     inspector = inspect(conn)
     tables = inspector.get_table_names()
     if 'alembic_version' not in tables:
-        # Completely fresh — create_all made tables, just stamp
-        print('Fresh database detected, stamping Alembic to head...')
-        exit(0)
+        print('fresh')
     else:
         row = conn.execute(text('SELECT version_num FROM alembic_version LIMIT 1')).fetchone()
         if row is None:
-            print('Empty alembic_version, stamping to head...')
-            exit(0)
+            print('fresh')
         else:
-            print(f'Existing database at revision {row[0]}, running upgrade...')
-            exit(1)
-"
-NEEDS_UPGRADE=$?
-if [ $NEEDS_UPGRADE -eq 0 ]; then
+            print('existing')
+")
+if [ "$DB_STATE" = "fresh" ]; then
+  echo "Fresh database detected, stamping Alembic to head..."
   alembic stamp head
   echo "Database stamped to head"
 else
+  echo "Existing database, running alembic upgrade..."
   alembic upgrade head
 fi
 

@@ -10,8 +10,14 @@ DATABASE = os.getenv("DATABASE", "sqlite")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "frontbase-dev-password")
 
 if DATABASE_URL_OVERRIDE:
-    # Direct connection string (e.g. Supabase: postgresql+psycopg2://...)
-    SYNC_DATABASE_URL = DATABASE_URL_OVERRIDE
+    # Normalize PostgreSQL URLs to use the psycopg2 sync driver
+    # Supabase/Heroku use postgresql:// or postgres://, SQLAlchemy needs +psycopg2
+    url = DATABASE_URL_OVERRIDE
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif url.startswith("postgresql://") and "+psycopg2" not in url:
+        url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    SYNC_DATABASE_URL = url
 elif DATABASE == "postgresql":
     SYNC_DATABASE_URL = f"postgresql+psycopg2://frontbase:{DB_PASSWORD}@postgres:5432/frontbase"
 else:

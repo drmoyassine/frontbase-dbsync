@@ -53,7 +53,8 @@ RUN mkdir -p /app/data
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1
-ENV DATABASE_URL=sqlite+aiosqlite:///./data/unified.db
+# Note: DATABASE_URL is NOT set here — it's resolved by config.py
+# (DATABASE_URL env var → DATABASE+DB_PASSWORD → SQLite default)
 
 # Expose port
 EXPOSE 8000

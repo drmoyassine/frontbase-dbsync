@@ -10,16 +10,15 @@ if [ -f /app/data/.env ]; then
   set +a
 fi
 
-# Wait for PostgreSQL if using it
-if [ "$DATABASE" = "postgresql" ]; then
+# Wait for PostgreSQL if using it (either via DATABASE_URL or DATABASE env var)
+if [ "$DATABASE" = "postgresql" ] || echo "$DATABASE_URL" | grep -q "^postgresql"; then
   echo "Waiting for PostgreSQL to be ready..."
   until python -c "
-import psycopg2, os
-psycopg2.connect(
-    host='postgres', port=5432, user='frontbase',
-    password=os.environ.get('DB_PASSWORD', 'frontbase-dev-password'),
-    dbname='frontbase'
-)
+from app.database.config import SYNC_DATABASE_URL
+from sqlalchemy import create_engine, text
+e = create_engine(SYNC_DATABASE_URL, pool_pre_ping=True)
+with e.connect() as c:
+    c.execute(text('SELECT 1'))
 " 2>/dev/null; do
     echo "  PostgreSQL not ready, retrying in 2s..."
     sleep 2

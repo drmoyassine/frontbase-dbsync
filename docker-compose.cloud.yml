@@ -106,6 +106,8 @@ services:
         VITE_DEPLOYMENT_MODE: "cloud"
     expose:
       - "80"
+    environment:
+      - DEPLOYMENT_MODE=cloud
     depends_on:
       - backend
       - edge

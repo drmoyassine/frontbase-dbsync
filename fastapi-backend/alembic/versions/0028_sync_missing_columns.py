@@ -24,6 +24,8 @@ depends_on = None
 
 def _add_if_missing(inspector, table, col_name, col_type, **kwargs):
     """Add a column only if it doesn't already exist."""
+    if table not in inspector.get_table_names():
+        return  # Table doesn't exist yet (fresh DB)
     existing = [c['name'] for c in inspector.get_columns(table)]
     if col_name not in existing:
         op.add_column(table, sa.Column(col_name, col_type, **kwargs))
@@ -36,7 +38,11 @@ def upgrade():
     conn = op.get_bind()
     inspector = inspect(conn)
 
+    existing_tables = inspector.get_table_names()
+
     # ── automation_drafts ──────────────────────────────────────────
+    if 'automation_drafts' not in existing_tables:
+        return  # Tables don't exist yet (fresh DB — create_all will handle)
     _add_if_missing(inspector, 'automation_drafts', 'deployed_engines',
                     sa.JSON(), nullable=True)
 

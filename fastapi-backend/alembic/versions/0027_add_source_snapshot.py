@@ -22,6 +22,9 @@ def upgrade():
     conn = op.get_bind()
     inspector = inspect(conn)
 
+    existing_tables = inspector.get_table_names()
+    if 'edge_engines' not in existing_tables:
+        return  # Table doesn't exist yet (fresh DB)
     columns = [c['name'] for c in inspector.get_columns('edge_engines')]
     if 'source_snapshot' not in columns:
         op.add_column('edge_engines', sa.Column('source_snapshot', sa.Text(), nullable=True))

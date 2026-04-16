@@ -34,6 +34,9 @@ def upgrade() -> None:
 
     # Introspect existing columns
     inspector = sa.inspect(conn)
+    existing_tables = inspector.get_table_names()
+    if 'datasource_views' not in existing_tables:
+        return  # Table doesn't exist yet (fresh DB — create_all will handle)
     existing = {col['name'] for col in inspector.get_columns('datasource_views')}
 
     missing = {name: col for name, col in EXPECTED_COLUMNS.items() if name not in existing}

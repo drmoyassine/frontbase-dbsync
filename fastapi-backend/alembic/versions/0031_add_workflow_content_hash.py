@@ -20,6 +20,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     conn = op.get_bind()
     inspector = sa.inspect(conn)
+    existing_tables = inspector.get_table_names()
+    if 'automation_drafts' not in existing_tables:
+        return  # Table doesn't exist yet (fresh DB)
     existing = [c['name'] for c in inspector.get_columns('automation_drafts')]
     if 'content_hash' not in existing:
         op.add_column('automation_drafts', sa.Column('content_hash', sa.String(64), nullable=True))

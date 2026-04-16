@@ -28,7 +28,11 @@ def upgrade():
     conn = op.get_bind()
     inspector = inspect(conn)
 
+    existing_tables = inspector.get_table_names()
+
     # 1. Add is_system to edge_databases (if missing)
+    if 'edge_databases' not in existing_tables:
+        return  # Tables don't exist yet (fresh DB — create_all will handle)
     edge_cols = [c['name'] for c in inspector.get_columns('edge_databases')]
     if 'is_system' not in edge_cols:
         op.add_column('edge_databases',

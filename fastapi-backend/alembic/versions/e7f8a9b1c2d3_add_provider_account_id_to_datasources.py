@@ -20,6 +20,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     conn = op.get_bind()
     inspector = sa.inspect(conn)
+    existing_tables = inspector.get_table_names()
+    if 'datasources' not in existing_tables:
+        return  # Table doesn't exist yet (fresh DB — create_all will handle)
     columns = [c['name'] for c in inspector.get_columns('datasources')]
     if 'provider_account_id' not in columns:
         with op.batch_alter_table('datasources', schema=None) as batch_op:

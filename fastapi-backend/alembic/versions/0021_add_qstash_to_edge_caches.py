@@ -23,6 +23,9 @@ def upgrade():
     conn = op.get_bind()
     inspector = inspect(conn)
 
+    existing_tables = inspector.get_table_names()
+    if 'edge_caches' not in existing_tables:
+        return  # Table doesn't exist yet (fresh DB)
     columns = [c['name'] for c in inspector.get_columns('edge_caches')]
     
     new_cols = {

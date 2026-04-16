@@ -22,6 +22,10 @@ def upgrade():
     conn = op.get_bind()
     inspector = inspect(conn)
 
+    existing_tables = inspector.get_table_names()
+    if 'automation_drafts' not in existing_tables:
+        return  # Table doesn't exist yet (fresh DB — create_all will handle)
+
     columns = [c['name'] for c in inspector.get_columns('automation_drafts')]
     if 'settings' not in columns:
         op.add_column('automation_drafts', sa.Column('settings', sa.JSON(), nullable=True))

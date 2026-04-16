@@ -27,6 +27,9 @@ def upgrade():
     inspector = inspect(conn)
 
     # Check if column already exists (idempotent)
+    existing_tables = inspector.get_table_names()
+    if 'deployment_targets' not in existing_tables:
+        return  # Table doesn't exist yet (fresh DB)
     columns = [c['name'] for c in inspector.get_columns('deployment_targets')]
     if 'provider_config' not in columns:
         op.add_column('deployment_targets', sa.Column('provider_config', sa.Text(), nullable=True))

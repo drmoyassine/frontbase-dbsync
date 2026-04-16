@@ -26,9 +26,49 @@ with e.connect() as c:
   echo "PostgreSQL is ready!"
 fi
 
-# Run Alembic migrations (handles all tables including Frontbase core)
+# Bootstrap: create all tables from SQLAlchemy models (idempotent — skips existing).
+# This MUST run before Alembic because the initial migration (c5311426ba79) is minimal
+# and assumes tables were already created by create_all(). On fresh DBs, without this
+# step, Alembic migrations crash with "NoSuchTableError".
+echo "Bootstrapping database tables..."
+python -c "
+from app.database.config import Base, engine
+import app.models.models  # register all models
+Base.metadata.create_all(bind=engine)
+print('Tables bootstrapped successfully')
+"
+
+# Run Alembic migrations.
+# On fresh DBs (no alembic_version row), stamp head — create_all() already made
+# all tables, so running incremental migrations would fail on existing tables.
+# On existing DBs, run upgrade normally for incremental changes.
 echo "Running database migrations..."
-alembic upgrade head
+python -c "
+from app.database.config import engine
+from sqlalchemy import text, inspect
+with engine.connect() as conn:
+    inspector = inspect(conn)
+    tables = inspector.get_table_names()
+    if 'alembic_version' not in tables:
+        # Completely fresh — create_all made tables, just stamp
+        print('Fresh database detected, stamping Alembic to head...')
+        exit(0)
+    else:
+        row = conn.execute(text('SELECT version_num FROM alembic_version LIMIT 1')).fetchone()
+        if row is None:
+            print('Empty alembic_version, stamping to head...')
+            exit(0)
+        else:
+            print(f'Existing database at revision {row[0]}, running upgrade...')
+            exit(1)
+"
+NEEDS_UPGRADE=$?
+if [ $NEEDS_UPGRADE -eq 0 ]; then
+  alembic stamp head
+  echo "Database stamped to head"
+else
+  alembic upgrade head
+fi
 
 # Start the application with proxy headers support (for HTTPS behind reverse proxy)
 echo "Starting application..."

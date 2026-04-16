@@ -109,12 +109,7 @@ services:
       - backend
       - edge
     restart: unless-stopped
-    healthcheck:
-      test: [ "CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:80/nginx-health" ]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+
 
   # Backend Redis — control plane caching only.
   # Edge engines have their own embedded Redis.

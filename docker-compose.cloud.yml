@@ -4,8 +4,8 @@ version: '3.8'
 # FRONTBASE CLOUD DOCKER COMPOSE 
 # ==============================================================================
 #
-# Removes the local Redis instances because the Cloud Edition assumes an
-# external Upstash serverless Redis instance is configured via Settings UI.
+# Multi-tenant SaaS mode — backend connects to Supabase Postgres,
+# edge has embedded Redis, backend has its own Redis container.
 #
 # Usage: docker-compose -f docker-compose.cloud.yml up -d
 #
@@ -19,7 +19,6 @@ services:
     expose:
       - "8000"
     environment:
-      # Deployment mode — cloud = multi-tenant SaaS
       - DEPLOYMENT_MODE=cloud
       # Database: Supabase Postgres connection string
       - DATABASE_URL=${DATABASE_URL}
@@ -31,6 +30,8 @@ services:
       # Edge Engine URL (override for distributed deployment)
       - EDGE_URL=${EDGE_URL:-http://edge:3002}
       - EDGE_SSR_URL=${EDGE_URL:-http://edge:3002}
+      # Backend Redis (control plane caching)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       # Admin Authentication (master admin)
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
@@ -75,9 +76,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=${EDGE_PORT:-3002}
-      # Upstash Redis (credentials from Settings UI, passthrough for override)
-      - FRONTBASE_REDIS_URL=${UPSTASH_REDIS_URL:-}
-      - FRONTBASE_REDIS_TOKEN=${UPSTASH_REDIS_TOKEN:-}
+      # Edge has embedded Redis — no external cache config needed for Docker
       # Database for edge storage (SQLite fallback)
       - SQLITE_PATH=/app/data/edge.db
       - DATABASE_URL=file:/app/data/edge.db
@@ -125,6 +124,25 @@ services:
       retries: 3
       start_period: 30s
 
+  # Backend Redis — control plane caching only.
+  # Edge engines have their own embedded Redis.
+  redis:
+    build:
+      context: .
+      dockerfile: Dockerfile.redis
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - frontbase
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 networks:
   frontbase:
     driver: bridge
@@ -133,3 +151,4 @@ volumes:
   backend_data:
   postgres_data:
   edge_data:
+  redis_data:

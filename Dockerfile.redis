@@ -1,10 +1,6 @@
-FROM hiett/serverless-redis-http:latest
+# Backend Redis — plain Redis instance for the control plane.
+# Edge engines have their own embedded Redis.
+FROM redis:7-alpine
 
-# Serverless Redis HTTP is based on elixir:1.13-alpine, so we can install redis directly
-# Switch to root to install packages if the base image lowered privileges
-USER root
-
-RUN apk add --no-cache redis
-
-# Start redis-server in the background, then start the SRH proxy in the foreground
-CMD redis-server --daemonize yes && _build/prod/rel/prod/bin/prod start
+# Persistence + memory limits for backend caching
+CMD ["redis-server", "--save", "60 1", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]

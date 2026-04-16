@@ -10,7 +10,6 @@
  */
 
 import { stateProvider } from '../storage/index.js';
-import { initRedis } from '../cache/redis.js';
 import { getPlatform } from '../adapters/shared.js';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
@@ -30,39 +29,24 @@ function sleep(ms: number): Promise<void> {
 type SyncResult = { status: 'success' } | { status: 'not-configured' } | { status: 'error'; retry: boolean };
 
 /**
- * Fetch Redis settings from FastAPI and initialize Redis client
+ * Initialize embedded Redis for Docker edges.
+ * Docker edges run redis-server locally (see start.sh), so we just
+ * init the ioredis adapter pointing at localhost — no backend call needed.
  */
-async function syncRedisSettingsFromFastAPI(): Promise<SyncResult> {
+async function initEmbeddedRedis(): Promise<SyncResult> {
     try {
-        const response = await fetch(`${BACKEND_URL}/api/sync/settings/redis/`, {
-            headers: { 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(5000),
-        });
+        const { IoRedisAdapter } = await import('../cache/ioredis-adapter.js');
+        const { setCacheProvider } = await import('../cache/index.js');
 
-        if (!response.ok) {
-            console.warn(`[Startup Sync] Redis settings fetch failed: ${response.status}`);
-            return { status: 'error', retry: response.status >= 500 };
-        }
-
-        const settings = await response.json();
-
-        if (settings.redis_enabled && settings.redis_url && settings.redis_token) {
-            initRedis({ url: settings.redis_url, token: settings.redis_token });
-            console.log('[Startup Sync] ✅ Redis initialized from settings');
-            return { status: 'success' };
-        } else {
-            console.log('[Startup Sync] ℹ️ Redis not enabled or not configured in Settings UI');
-            return { status: 'not-configured' };
-        }
+        const adapter = new IoRedisAdapter('redis://localhost:6379');
+        // Wait for the adapter to connect (it initializes asynchronously)
+        await adapter.ping();
+        setCacheProvider(adapter);
+        console.log('[Startup Sync] ✅ Embedded Redis initialized (localhost:6379)');
+        return { status: 'success' };
     } catch (error) {
-        // Network error - FastAPI not ready yet
-        const isConnectionError = (error as any)?.cause?.code === 'ECONNREFUSED';
-        if (isConnectionError) {
-            console.warn('[Startup Sync] ⏳ FastAPI not ready yet, will retry...');
-        } else {
-            console.warn('[Startup Sync] Redis settings sync failed:', (error as Error).message);
-        }
-        return { status: 'error', retry: true };
+        console.warn('[Startup Sync] ⚠️ Embedded Redis not available:', (error as Error).message);
+        return { status: 'not-configured' };
     }
 }
 
@@ -144,23 +128,9 @@ export async function runStartupSync(): Promise<void> {
         return;
     }
 
-    // Sync settings from backend with retries (FastAPI may not be ready yet)
-    console.log('[Startup Sync] Syncing settings from backend...');
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        const redisResult = await syncRedisSettingsFromFastAPI();
-
-        const allDone = (redisResult.status === 'success' || redisResult.status === 'not-configured');
-
-        if (allDone) break;
-
-        // At least one had a retryable error
-        const needsRetry = (redisResult.status === 'error' && redisResult.retry);
-
-        if (needsRetry && attempt < MAX_RETRIES) {
-            console.log(`[Startup Sync] Attempt ${attempt}/${MAX_RETRIES}, retrying in ${RETRY_DELAY_MS / 1000}s...`);
-            await sleep(RETRY_DELAY_MS);
-        }
-    }
+    // Docker platform: init embedded Redis (no backend call needed)
+    console.log('[Startup Sync] Initializing embedded Redis...');
+    await initEmbeddedRedis();
 
     // Check if we already have a homepage
     const existingHomepage = await stateProvider.getHomepage();

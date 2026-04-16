@@ -29,6 +29,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Install Redis server (embedded — edge-local cache, no network dependency)
+RUN apk add --no-cache redis
+
 # Copy package files and install ALL deps
 COPY services/edge/package*.json ./
 RUN npm install
@@ -49,6 +52,10 @@ COPY services/edge/scripts ./scripts
 # Copy drizzle config for migrations
 COPY services/edge/drizzle.config.ts ./
 
+# Copy startup script
+COPY services/edge/start.sh ./start.sh
+RUN chmod +x ./start.sh
+
 # Create data directory
 RUN mkdir -p /app/data
 
@@ -58,4 +65,5 @@ ENV PORT=3002
 
 EXPOSE 3002
 
-CMD ["node", "dist/index.js"]
+# Start embedded Redis + Node.js edge engine
+CMD ["./start.sh"]

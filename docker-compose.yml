@@ -88,8 +88,6 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
       - frontbase
     restart: unless-stopped
@@ -121,21 +119,14 @@ services:
       retries: 3
       start_period: 30s
 
+  # Backend Redis — control plane caching only.
+  # Edge engines have their own embedded Redis (see services/edge/Dockerfile).
   redis:
     build:
       context: .
       dockerfile: Dockerfile.redis
-    environment:
-      SRH_MODE: env
-      SRH_TOKEN: ${REDIS_TOKEN:-dev_token_change_in_prod}
-      SRH_CONNECTION_STRING: "redis://127.0.0.1:6379"
     expose:
-      - "80"
       - "6379"
-    # To expose redis HTTP on a host port (for external Cloudflare/Vercel Edge access),
-    # set REDIS_HTTP_PORT in .env (e.g., REDIS_HTTP_PORT=8079) and uncomment:
-    # ports:
-    #   - "${REDIS_HTTP_PORT}:80"
     volumes:
       - redis_data:/data
     networks:

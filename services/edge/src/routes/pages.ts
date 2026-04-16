@@ -649,6 +649,13 @@ pagesRoute.get('/', async (c) => {
     }
 
     // Ultimate fallback: No homepage available
+    // In SaaS Cloud Mode, the Docker Edge engine never holds published pages (they go to Cloudflare)
+    // and the root domain is exclusively the Dashboard. Redirect to console.
+    if (isCloudEnv()) {
+        return c.redirect('/admin/', 302);
+    }
+
+    // In Self-Host mode, show the placeholder
     return c.json({
         service: 'Frontbase Edge Engine',
         mode: 'full',

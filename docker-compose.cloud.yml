@@ -71,6 +71,7 @@ services:
       - "3002"
     environment:
       - NODE_ENV=production
+      - FRONTBASE_DEPLOYMENT_MODE=cloud
       - PORT=${EDGE_PORT:-3002}
       # Edge has embedded Redis — no external cache config needed for Docker
       # Database for edge storage (SQLite fallback)

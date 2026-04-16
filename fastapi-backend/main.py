@@ -265,6 +265,8 @@ class TrailingSlashMiddleware:
     harmless — the client follows it once.
     """
     EXCLUDE_PREFIXES = [
+        "/health",
+        "/api/test-route",
         "/api/auth",
         "/api/actions",
         "/api/storage",
@@ -344,7 +346,7 @@ app.mount("/static/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets
 async def root():
     return {"message": "Frontbase-DBSync API is running", "test_mode": True}
 
-@app.get("/health/")
+@app.get("/health")
 async def health_check():
     return {"status": "healthy", "message": "API is operational", "test_mode": True}
 

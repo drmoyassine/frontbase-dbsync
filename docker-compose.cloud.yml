@@ -153,11 +153,11 @@ services:
   # Activate with: docker compose --profile auth up
   supertokens:
     image: registry.supertokens.io/supertokens/supertokens-postgresql:9.0
-    profiles: ["auth"]
+    profiles: ["postgresql"]
     expose:
       - "3567"
     environment:
-      POSTGRESQL_CONNECTION_URI: ${SUPERTOKENS_DB_URL:-${DATABASE_URL:-postgresql://frontbase:frontbase-dev-password@postgres:5432/frontbase}}
+      POSTGRESQL_CONNECTION_URI: postgresql://frontbase:${DB_PASSWORD:-frontbase-dev-password}@postgres:5432/frontbase
       API_KEYS: ${SUPERTOKENS_API_KEY:-frontbase-dev-secret-key-change-me}
       ENABLE_MULTI_TENANCY: "true"
     depends_on:

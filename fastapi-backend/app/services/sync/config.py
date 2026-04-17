@@ -18,6 +18,18 @@ class Settings(BaseSettings):
         if os.getenv("DATABASE", "sqlite") == "postgresql"
         else f"sqlite+aiosqlite:///{'/app/data' if os.path.isdir('/app/data') else '.'}/frontbase.db"
     )
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def parse_database_url(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            # SQLAlchemy 2.0 requires strictly 'postgresql' prefix instead of 'postgres'
+            if v.startswith("postgres://"):
+                v = v.replace("postgres://", "postgresql://", 1)
+            # Ensure an async driver is configured for the async engine
+            if v.startswith("postgresql://") and "+asyncpg" not in v:
+                v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
     
     # Security
     secret_key: str = "dev-secret-key-change-in-production"

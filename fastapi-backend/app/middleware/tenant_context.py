@@ -46,7 +46,6 @@ async def get_tenant_context(request: Request) -> Optional[TenantContext]:
         return None
 
     from supertokens_python.recipe.session.asyncio import get_session
-    from supertokens_python.recipe.session.exceptions import try_refresh_token
     try:
         session = await get_session(request, session_required=True)
     except Exception as e:

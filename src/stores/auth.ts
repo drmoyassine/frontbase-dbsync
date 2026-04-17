@@ -10,6 +10,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { isCloud } from '@/lib/edition';
+import Session from "supertokens-auth-react/recipe/session";
+import { signOut } from "supertokens-auth-react/recipe/session";
 
 // User interface — extended for cloud tenancy
 export interface User {
@@ -238,7 +240,6 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: async () => {
-        const { token } = get();
         try {
           if (!isCloud()) {
             // Self-host: hit logout endpoint to clear server session
@@ -246,8 +247,9 @@ export const useAuthStore = create<AuthState>()(
               method: 'POST',
               credentials: 'include',
             });
+          } else {
+             await signOut();
           }
-          // Cloud: JWT is stateless — just clear local state
         } catch {
           // Ignore logout errors
         }
@@ -271,19 +273,19 @@ export const useAuthStore = create<AuthState>()(
         }
 
         _checkAuthPromise = (async () => {
-          const { token } = get();
-
-          // Cloud mode with no token — skip network call
-          if (isCloud() && !token) {
-            set({ user: null, tenant: null, isAuthenticated: false, isLoading: false });
-            return;
+          if (isCloud()) {
+             const hasSession = await Session.doesSessionExist();
+             if (!hasSession) {
+                set({ user: null, tenant: null, isAuthenticated: false, isLoading: false, token: null });
+                return;
+             }
           }
 
           set({ isLoading: true });
           try {
             const response = await fetch(
               `${API_BASE}/api/auth/me`,
-              fetchOpts(token),
+              fetchOpts(null), // no token, wait for cloud to auto attach supertokens cookie
             );
 
             if (response.ok) {

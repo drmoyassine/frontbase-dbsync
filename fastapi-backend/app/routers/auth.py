@@ -145,6 +145,23 @@ async def login(request: LoginRequest, response: Response):
 @router.get("/me")
 async def get_me(request: Request):
     """Get current authenticated user"""
+    from app.config.edition import is_cloud
+    if is_cloud():
+        from app.middleware.tenant_context import get_tenant_context
+        ctx = await get_tenant_context(request)
+        if not ctx:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        return {
+            "user": {
+                "id": ctx.user_id,
+                "email": ctx.email,
+                "tenant_id": ctx.tenant_id,
+                "tenant_slug": ctx.tenant_slug,
+                "role": ctx.role,
+                "is_master": ctx.is_master,
+            }
+        }
+
     user = get_current_user(request)
     
     if not user:

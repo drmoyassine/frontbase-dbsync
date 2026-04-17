@@ -33,7 +33,7 @@ def _ensure_local_edge():
     from datetime import datetime
     import uuid
     from app.database.config import SessionLocal
-    from app.models.models import EdgeEngine, EdgeDatabase, EdgeCache
+    from app.models.models import EdgeEngine, EdgeDatabase, EdgeCache, EdgeQueue
 
     edge_url = os.getenv("EDGE_URL", "http://localhost:3002")
     now = datetime.utcnow().isoformat()
@@ -81,6 +81,27 @@ def _ensure_local_edge():
             sys_cache.is_default = False  # type: ignore[assignment]
             logger.info("[Startup] Cleared is_default on system cache")
 
+        # --- 2.5 Local BullMQ system queue ---
+        sys_queue = db.query(EdgeQueue).filter(EdgeQueue.is_system == True).first()  # noqa: E712
+        if not sys_queue:
+            sys_queue = EdgeQueue(
+                id=str(uuid.uuid4()),
+                name="Local BullMQ",
+                provider="bullmq",
+                queue_url="redis://localhost:6379",
+                is_default=False,
+                is_system=True,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(sys_queue)
+            db.flush()
+            logger.info("[Startup] ✅ Local BullMQ queue seeded")
+        elif bool(sys_queue.is_default):
+            # Clear stale default on system resource
+            sys_queue.is_default = False  # type: ignore[assignment]
+            logger.info("[Startup] Cleared is_default on system queue")
+
         # --- 3. Local Edge system engine ---
         sys_engine = db.query(EdgeEngine).filter(EdgeEngine.is_system == True).first()  # noqa: E712
         if sys_engine:
@@ -95,6 +116,9 @@ def _ensure_local_edge():
             if str(sys_engine.edge_cache_id or "") != str(sys_cache.id):
                 sys_engine.edge_cache_id = sys_cache.id  # type: ignore[assignment]
                 changed = True
+            if str(sys_engine.edge_queue_id or "") != str(sys_queue.id):
+                sys_engine.edge_queue_id = sys_queue.id  # type: ignore[assignment]
+                changed = True
             if changed:
                 sys_engine.updated_at = now  # type: ignore[assignment]
                 logger.info("[Startup] Local Edge bindings updated")
@@ -107,6 +131,7 @@ def _ensure_local_edge():
                 url=edge_url,
                 edge_db_id=sys_db.id,
                 edge_cache_id=sys_cache.id,
+                edge_queue_id=sys_queue.id,
                 is_active=True,
                 is_system=True,
                 created_at=now,
@@ -184,12 +209,20 @@ async def lifespan(app: FastAPI):
     logger.info("[Main App Shutdown] Shutting down...")
 
 
+if is_cloud():
+    from app.auth.supertokens import init_supertokens
+    init_supertokens()
+
 app = FastAPI(
     title="Frontbase-DBSync API",
     description="Unified API for Frontbase and DB-Sync functionality",
     version="1.0.0",
     lifespan=lifespan,
 )
+
+if is_cloud():
+    from supertokens_python.framework.fastapi import get_middleware
+    app.add_middleware(get_middleware())
 
 # Global exception handler — catch hidden 500s and log full tracebacks
 from starlette.requests import Request as StarletteRequest
@@ -349,6 +382,17 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "message": "API is operational", "test_mode": True}
+
+@app.get("/api/queue/health")
+async def queue_health():
+    from app.services.task_queue import celery_app
+    i = celery_app.control.inspect()
+    try:
+        active = i.active() if i else None
+        registered = i.registered() if i else None
+        return {"status": "healthy", "active_workers": active is not None, "active": active, "registered": registered}
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
 
 @app.get("/api/test-route")
 async def test_route():

@@ -64,3 +64,4 @@ wheel==0.45.1
 alembic
 psycopg2-binary
 requests
+supertokens-python>=0.25.0

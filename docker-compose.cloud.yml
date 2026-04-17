@@ -46,6 +46,23 @@ services:
       retries: 5
       start_period: 120s
 
+  celery-worker:
+    build:
+      context: .
+      dockerfile: fastapi-backend/Dockerfile
+    command: celery -A app.services.task_queue worker --loglevel=info --concurrency=2
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE=${COMPOSE_PROFILES:-sqlite}
+      - DB_PASSWORD=${DB_PASSWORD:-frontbase-dev-password}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
   # PostgreSQL — only starts when COMPOSE_PROFILES=postgresql
   postgres:
     image: postgres:16-alpine
@@ -128,6 +145,27 @@ services:
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # SuperTokens — Identity and Access Management
+  supertokens:
+    image: registry.supertokens.io/supertokens/supertokens-postgresql:9.0
+    expose:
+      - "3567"
+    environment:
+      POSTGRESQL_CONNECTION_URI: ${DATABASE_URL:-postgresql://frontbase:frontbase-dev-password@postgres:5432/frontbase}
+      API_KEYS: ${SUPERTOKENS_API_KEY:-dev-secret-key}
+      # Required for multi-tenancy
+      ENABLE_MULTI_TENANCY: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: >
+        bash -c 'exec 3<>/dev/tcp/127.0.0.1/3567 && echo -e "GET /hello HTTP/1.1\r\nhost: 127.0.0.1:3567\r\nConnection: close\r\n\r\n" >&3 && cat <&3 | grep "Hello"'
       interval: 10s
       timeout: 5s
       retries: 5

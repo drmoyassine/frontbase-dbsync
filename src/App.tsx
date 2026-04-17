@@ -14,6 +14,11 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { GlobalAgentChat } from "@/components/agent/GlobalAgentChat";
 import { MasterAdminImpersonator } from "@/components/dashboard/admin/MasterAdminImpersonator";
 import { BASE_PATH, isCloud } from "@/lib/edition";
+import { SuperTokensWrapper } from "supertokens-auth-react";
+import { initSuperTokens } from "@/lib/supertokens";
+
+// Initialize SuperTokens
+initSuperTokens();
 
 // Unified Shell & DB-Sync Pages
 import { Layout as UnifiedShell } from "./modules/dbsync/components/Layout";
@@ -108,63 +113,65 @@ const App = () => {
 
   return (
     <ErrorBoundary>
-      <PersistQueryClientProvider
-        client={queryClient}
-        persistOptions={{ persister }}
-      >
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter basename={BASE_PATH}>
-            {/* Global Chat Overlay (Protected via state) */}
-            {isAuthenticated && (
-              <>
-                <GlobalAgentChat />
-                <MasterAdminImpersonator />
-              </>
-            )}
-            <Routes>
-              {/* Admin root redirects to dashboard */}
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/login" element={<LoginPage />} />
-              {isCloud() && <Route path="/signup" element={<SignupPage />} />}
-              <Route path="/embed/auth/:formId" element={<EmbedAuthPage />} />
+      <SuperTokensWrapper>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{ persister }}
+        >
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter basename={BASE_PATH}>
+              {/* Global Chat Overlay (Protected via state) */}
+              {isAuthenticated && (
+                <>
+                  <GlobalAgentChat />
+                  <MasterAdminImpersonator />
+                </>
+              )}
+              <Routes>
+                {/* Admin root redirects to dashboard */}
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/login" element={<LoginPage />} />
+                {isCloud() && <Route path="/signup" element={<SignupPage />} />}
+                <Route path="/embed/auth/:formId" element={<EmbedAuthPage />} />
 
-              {/* Protected Routes - Require Authentication */}
-              <Route element={<ProtectedRoute />}>
-                {/* Unified App Shell */}
-                <Route element={<UnifiedShell />}>
-                  <Route path="/dashboard" element={<Overview />} />
-                  <Route path="/pages" element={<PagesPanel />} />
-                  <Route path="/automations" element={<ActionsPage />} />
-                  <Route path="/automations/:id" element={<ActionsPage />} />
+                {/* Protected Routes - Require Authentication */}
+                <Route element={<ProtectedRoute />}>
+                  {/* Unified App Shell */}
+                  <Route element={<UnifiedShell />}>
+                    <Route path="/dashboard" element={<Overview />} />
+                    <Route path="/pages" element={<PagesPanel />} />
+                    <Route path="/automations" element={<ActionsPage />} />
+                    <Route path="/automations/:id" element={<ActionsPage />} />
 
-                  {/* Data Studio (Tabbed Interface) */}
-                  <Route path="/data-studio" element={<DataStudio />}>
-                    <Route index element={<Navigate to="datasources" replace />} />
-                    <Route path="datasources" element={<Datasources />} />
-                    <Route path="sync-configs" element={<SyncConfigs />} />
-                    <Route path="conflicts" element={<Conflicts />} />
-                    <Route path="jobs" element={<Jobs />} />
+                    {/* Data Studio (Tabbed Interface) */}
+                    <Route path="/data-studio" element={<DataStudio />}>
+                      <Route index element={<Navigate to="datasources" replace />} />
+                      <Route path="datasources" element={<Datasources />} />
+                      <Route path="sync-configs" element={<SyncConfigs />} />
+                      <Route path="conflicts" element={<Conflicts />} />
+                      <Route path="jobs" element={<Jobs />} />
+                    </Route>
+
+                    <Route path="/users" element={<UsersPanel />} />
+                    <Route path="/storage" element={<StoragePanel />} />
+                    <Route path="/edge" element={<EdgeInfrastructurePanel />} />
+                    <Route path="/settings" element={<SettingsPanel />} />
                   </Route>
 
-                  <Route path="/users" element={<UsersPanel />} />
-                  <Route path="/storage" element={<StoragePanel />} />
-                  <Route path="/edge" element={<EdgeInfrastructurePanel />} />
-                  <Route path="/settings" element={<SettingsPanel />} />
+                  {/* Standalone / Fullscreen Pages (Protected) */}
+                  <Route path="/builder/:pageId" element={<BuilderPage />} />
+                  <Route path="/variables" element={<VariablesPage />} />
                 </Route>
 
-                {/* Standalone / Fullscreen Pages (Protected) */}
-                <Route path="/builder/:pageId" element={<BuilderPage />} />
-                <Route path="/variables" element={<VariablesPage />} />
-              </Route>
-
-              {/* 404 */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </PersistQueryClientProvider>
+                {/* 404 */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </PersistQueryClientProvider>
+      </SuperTokensWrapper>
     </ErrorBoundary>
   );
 };

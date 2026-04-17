@@ -35,29 +35,32 @@ class TenantContext:
     is_master: bool
 
 
-def get_tenant_context(request: Request) -> Optional[TenantContext]:
+async def get_tenant_context(request: Request) -> Optional[TenantContext]:
     """FastAPI dependency — extract tenant context from request.
 
-    * **Cloud mode**: Decodes JWT from ``Authorization: Bearer <token>`` header.
+    * **Cloud mode**: Verifies SuperTokens session.
       Returns a ``TenantContext`` or raises 401.
     * **Self-host mode**: Returns ``None`` (no tenant scoping).
     """
     if not is_cloud():
         return None
 
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
-
-    token = auth_header[7:]  # Strip "Bearer "
+    from supertokens_python.recipe.session.asyncio import get_session
+    from supertokens_python.recipe.session.exceptions import try_refresh_token
     try:
-        from app.services.jwt_utils import decode_token
-        claims = decode_token(token)
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+        session = await get_session(request, session_required=True)
+    except Exception as e:
+        # SuperTokens throws specific errors, we catch all and map to 401
+        raise HTTPException(status_code=401, detail="Missing or invalid session")
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    user_id = session.get_user_id()
+    claims = session.get_access_token_payload()
 
     return TenantContext(
-        user_id=claims.get("sub", ""),
+        user_id=user_id,
         email=claims.get("email", ""),
         tenant_id=claims.get("tenant_id"),
         tenant_slug=claims.get("tenant_slug"),
@@ -66,9 +69,9 @@ def get_tenant_context(request: Request) -> Optional[TenantContext]:
     )
 
 
-def require_tenant_context(request: Request) -> TenantContext:
+async def require_tenant_context(request: Request) -> TenantContext:
     """Like ``get_tenant_context`` but 401s if context is ``None``."""
-    ctx = get_tenant_context(request)
+    ctx = await get_tenant_context(request)
     if ctx is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     return ctx

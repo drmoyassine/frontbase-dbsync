@@ -16,7 +16,9 @@
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { SuccessResponseSchema, ErrorResponseSchema } from '../schemas';
+import { SuccessResponseSchema, ErrorResponseSchema } from '../schemas/index.js';
+import { queueService } from '../services/queue/index.js';
+import { QStashProvider } from '../services/queue/qstash-provider.js';
 
 const queueRoute = new OpenAPIHono();
 
@@ -184,6 +186,52 @@ queueRoute.openapi(publishRoute, async (c) => {
             message: err.message || 'Failed to publish message',
         }, 400);
     }
+});
+
+// ── process /process — Process webhook from QStash ────────────────────────────
+
+const processRoute = createRoute({
+    method: 'post',
+    path: '/process',
+    tags: ['Queue'],
+    summary: 'Process queued message webhook',
+    description: 'Endpoint invoked by QStash when a message is ready to be handled',
+    responses: {
+        200: { description: 'Processed', content: { 'application/json': { schema: SuccessResponseSchema } } },
+        400: { description: 'Bad Request', content: { 'application/json': { schema: ErrorResponseSchema } } },
+        401: { description: 'Unauthorized', content: { 'application/json': { schema: ErrorResponseSchema } } },
+        404: { description: 'Not Found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+        500: { description: 'Internal error', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    }
+});
+
+queueRoute.openapi(processRoute, async (c) => {
+    const jobName = c.req.query('jobName');
+    if (!jobName) {
+        return c.json({ error: 'MissingJobName', message: 'Missing jobName query parameter' }, 400);
+    }
+
+    if (queueService instanceof QStashProvider) {
+        const signature = c.req.header('upstash-signature');
+        if (!signature) {
+            return c.json({ error: 'MissingSignature', message: 'Missing upstash-signature header' }, 401);
+        }
+        
+        const handler = queueService.getHandler(jobName);
+        if (!handler) {
+            return c.json({ error: 'NoHandler', message: `No handler configured for job ${jobName}` }, 404);
+        }
+
+        try {
+            const data = await c.req.json();
+            await handler(data);
+            return c.json({ success: true as const, message: 'Processed successfully' }, 200);
+        } catch (e: any) {
+            return c.json({ error: 'HandlerError', message: e.message }, 500);
+        }
+    }
+
+    return c.json({ error: 'InvalidProvider', message: 'Not using QStashProvider' }, 400);
 });
 
 export { queueRoute };

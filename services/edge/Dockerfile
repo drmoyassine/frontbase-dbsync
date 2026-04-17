@@ -36,6 +36,9 @@ RUN apk add --no-cache redis
 COPY services/edge/package*.json ./
 RUN npm install
 
+# BullMQ — only needed in Docker where Redis is embedded
+RUN npm install bullmq
+
 # Copy the monorepo packages for edge engine to resolve runtime packages
 COPY packages /packages
 

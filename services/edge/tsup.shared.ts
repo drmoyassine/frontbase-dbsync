@@ -107,7 +107,6 @@ const NODE_ALIASES: Record<string, string> = {
     // NPM packages — force edge-compatible variants
     '@libsql/client': '@libsql/client/web',
     '@upstash/redis': '@upstash/redis/cloudflare',
-    'bullmq': shim('empty'),
     'ws': shim('ws'),
     // UNSUPPORTED builtins → shim stubs
     'fs': shim('fs'), 'node:fs': shim('fs'), 'node:fs/promises': shim('fs'),
@@ -165,7 +164,7 @@ export function tsupConfigNode(entry: string) {
 const externalizeNodeOnly = {
     name: 'externalize-node-only',
     setup(build: any) {
-        build.onResolve({ filter: /^(ioredis|bullmq)$/ }, (args: any) => ({
+        build.onResolve({ filter: /^ioredis$/ }, (args: any) => ({
             path: args.path,
             external: true,
         }));
@@ -193,7 +192,7 @@ export function tsupConfigDeno(entry: string) {
 const stubIoredis = {
     name: 'stub-ioredis',
     setup(build: any) {
-        build.onResolve({ filter: /^(ioredis|bullmq)$/ }, () => ({
+        build.onResolve({ filter: /^ioredis$/ }, () => ({
             path: shim('empty'),
         }));
     },
@@ -211,6 +210,8 @@ export function tsupConfigVercel(entry: string) {
         },
     } as Options);
 }
+
+
 
 
 

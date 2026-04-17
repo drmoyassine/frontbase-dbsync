@@ -17,7 +17,7 @@
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { SuccessResponseSchema, ErrorResponseSchema } from '../schemas/index.js';
-import { queueService } from '../services/queue/index.js';
+import { queueServiceReady } from '../services/queue/index.js';
 import { QStashProvider } from '../services/queue/qstash-provider.js';
 
 const queueRoute = new OpenAPIHono();
@@ -210,6 +210,8 @@ queueRoute.openapi(processRoute, async (c) => {
     if (!jobName) {
         return c.json({ error: 'MissingJobName', message: 'Missing jobName query parameter' }, 400);
     }
+
+    const queueService = await queueServiceReady;
 
     if (queueService instanceof QStashProvider) {
         const signature = c.req.header('upstash-signature');

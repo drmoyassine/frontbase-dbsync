@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     @classmethod
     def parse_database_url(cls, v: Any) -> Any:
         if isinstance(v, str):
+            # If Docker Compose passes an empty string for DATABASE_URL because the env var is unset,
+            # we must manually evaluate the fallback because Pydantic blindly overrides the field with ""
+            if not v.strip():
+                return (
+                    f"postgresql+asyncpg://frontbase:{os.getenv('DB_PASSWORD', 'frontbase-dev-password')}@postgres:5432/frontbase"
+                    if os.getenv("DATABASE", "sqlite") == "postgresql"
+                    else f"sqlite+aiosqlite:///{'/app/data' if os.path.isdir('/app/data') else '.'}/frontbase.db"
+                )
             # SQLAlchemy 2.0 requires strictly 'postgresql' prefix instead of 'postgres'
             if v.startswith("postgres://"):
                 v = v.replace("postgres://", "postgresql://", 1)

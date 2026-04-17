@@ -33,7 +33,7 @@ export const DashboardHeader: React.FC = () => {
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
               <Avatar className="h-8 w-8">
                 <AvatarFallback>
-                  {user?.username.substring(0, 2).toUpperCase()}
+                  {(user?.username || user?.email || 'AD').substring(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
             </Button>
@@ -41,7 +41,7 @@ export const DashboardHeader: React.FC = () => {
           <DropdownMenuContent className="w-56" align="end" forceMount>
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">{user?.username}</p>
+                <p className="text-sm font-medium leading-none">{user?.username || user?.email || 'Admin'}</p>
                 <p className="text-xs leading-none text-muted-foreground">
                   {user?.email}
                 </p>

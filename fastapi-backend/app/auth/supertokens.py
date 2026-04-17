@@ -1,9 +1,16 @@
+"""
+SuperTokens SDK initialization — Cloud mode only.
+
+All imports are inside the function body so that importing this module
+is safe even when supertokens-python is not installed (self-host).
+"""
 import os
-from supertokens_python import init, InputAppInfo, SupertokensConfig
-from supertokens_python.recipe import thirdpartyaccountlinking, emailpassword, session, dashboard
-from supertokens_python.recipe.multitenancy import ServerlessMultiTenancyConfig
+
 
 def init_supertokens():
+    from supertokens_python import init, InputAppInfo, SupertokensConfig
+    from supertokens_python.recipe import emailpassword, thirdparty, session, dashboard
+
     api_base_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
     website_base_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
     supertokens_uri = os.environ.get("SUPERTOKENS_URI", "http://supertokens:3567")
@@ -24,12 +31,12 @@ def init_supertokens():
         framework='fastapi',
         recipe_list=[
             session.init(),
-            thirdpartyaccountlinking.init(
-                providers=[
-                    # Identity providers will be configured here dynamically per tenant
-                ]
-            ),
             emailpassword.init(),
+            thirdparty.init(
+                sign_in_and_up_feature=thirdparty.SignInAndUpFeature(providers=[
+                    # Providers configured dynamically per tenant
+                ])
+            ),
             dashboard.init()
         ],
         mode="asgi"

@@ -40,6 +40,13 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
 
+  // Master Admin Impersonation
+  isImpersonating: boolean;
+  _realUser: User | null;
+  _realTenant: TenantInfo | null;
+  setImpersonation: (plan: string, role: string) => void;
+  clearImpersonation: () => void;
+
   // Auth actions
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signup: (email: string, password: string, workspaceName: string, slug: string) => Promise<{ success: boolean; error?: string }>;
@@ -101,6 +108,43 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      
+      isImpersonating: false,
+      _realUser: null,
+      _realTenant: null,
+
+      setImpersonation: (plan, role) => {
+        const state = get();
+        // Only Master Admins can impersonate
+        if (!state.user?.is_master && !state._realUser?.is_master) return;
+        
+        // Save real state if not already impersonating
+        const realUser = state.isImpersonating ? state._realUser : state.user;
+        const realTenant = state.isImpersonating ? state._realTenant : state.tenant;
+        
+        if (!realUser || !realTenant) return;
+
+        set({
+          isImpersonating: true,
+          _realUser: realUser,
+          _realTenant: realTenant,
+          user: { ...realUser, is_master: false, role: role },
+          tenant: { ...realTenant, plan: plan },
+        });
+      },
+
+      clearImpersonation: () => {
+        const state = get();
+        if (!state.isImpersonating) return;
+        
+        set({
+          isImpersonating: false,
+          user: state._realUser,
+          tenant: state._realTenant,
+          _realUser: null,
+          _realTenant: null,
+        });
+      },
 
       login: async (email, password) => {
         set({ isLoading: true, error: null });
@@ -207,7 +251,16 @@ export const useAuthStore = create<AuthState>()(
         } catch {
           // Ignore logout errors
         }
-        set({ user: null, tenant: null, token: null, isAuthenticated: false, error: null });
+        set({ 
+          user: null, 
+          tenant: null, 
+          token: null, 
+          isAuthenticated: false, 
+          error: null,
+          isImpersonating: false,
+          _realUser: null,
+          _realTenant: null
+        });
       },
 
       checkAuth: async () => {
@@ -235,12 +288,22 @@ export const useAuthStore = create<AuthState>()(
 
             if (response.ok) {
               const data = await response.json();
-              set({
-                user: data.user,
-                tenant: data.tenant || get().tenant,
-                isAuthenticated: true,
-                isLoading: false,
-              });
+              if (get().isImpersonating) {
+                // If impersonating, background-sync the real identity without disturbing the fake UI
+                set({
+                  _realUser: data.user,
+                  _realTenant: data.tenant || get()._realTenant,
+                  isAuthenticated: true,
+                  isLoading: false,
+                });
+              } else {
+                set({
+                  user: data.user,
+                  tenant: data.tenant || get().tenant,
+                  isAuthenticated: true,
+                  isLoading: false,
+                });
+              }
             } else {
               set({ user: null, tenant: null, token: null, isAuthenticated: false, isLoading: false });
             }
@@ -257,13 +320,19 @@ export const useAuthStore = create<AuthState>()(
       clearError: () => set({ error: null }),
 
       // Legacy compatibility methods
-      cleanupAuthState: () => set({ user: null, tenant: null, token: null, isAuthenticated: false, error: null }),
+      cleanupAuthState: () => set({ 
+        user: null, tenant: null, token: null, isAuthenticated: false, error: null,
+        isImpersonating: false, _realUser: null, _realTenant: null
+      }),
       resetBackendConnection: async () => {
         await get().checkAuth();
         return get().isAuthenticated;
       },
       validateSession: () => get().isAuthenticated,
-      forceReauth: () => set({ user: null, tenant: null, token: null, isAuthenticated: false }),
+      forceReauth: () => set({ 
+        user: null, tenant: null, token: null, isAuthenticated: false,
+        isImpersonating: false, _realUser: null, _realTenant: null
+      }),
     }),
     {
       name: 'frontbase-auth',
@@ -272,6 +341,9 @@ export const useAuthStore = create<AuthState>()(
         tenant: state.tenant,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
+        isImpersonating: state.isImpersonating,
+        _realUser: state._realUser,
+        _realTenant: state._realTenant,
       }),
     }
   )

@@ -12,6 +12,7 @@ import { useAuthStore } from "@/stores/auth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { GlobalAgentChat } from "@/components/agent/GlobalAgentChat";
+import { MasterAdminImpersonator } from "@/components/dashboard/admin/MasterAdminImpersonator";
 import { BASE_PATH, isCloud } from "@/lib/edition";
 
 // Unified Shell & DB-Sync Pages
@@ -116,7 +117,12 @@ const App = () => {
           <Sonner />
           <BrowserRouter basename={BASE_PATH}>
             {/* Global Chat Overlay (Protected via state) */}
-            {isAuthenticated && <GlobalAgentChat />}
+            {isAuthenticated && (
+              <>
+                <GlobalAgentChat />
+                <MasterAdminImpersonator />
+              </>
+            )}
             <Routes>
               {/* Admin root redirects to dashboard */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />

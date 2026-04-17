@@ -77,6 +77,7 @@ services:
       # Database for edge storage (SQLite fallback)
       - SQLITE_PATH=/app/data/edge.db
       - DATABASE_URL=file:/app/data/edge.db
+      - FRONTBASE_STATE_DB={"provider":"sqlite"}
       - PAGES_DB_URL=${PAGES_DB_URL:-file:/app/data/pages.db}
       # Backend URL (override for distributed deployment)
       - BACKEND_URL=${BACKEND_URL:-http://backend:8000}

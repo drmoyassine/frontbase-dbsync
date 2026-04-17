@@ -52,9 +52,19 @@ export const updateApiInstance = () => {
   }
 };
 
-// Request interceptor - no longer needed for auth but keeping structure for future use
+import { useAuthStore } from '../stores/auth';
+import { isCloud } from '@/lib/edition';
+
+// Request interceptor - automatically bundle Bearer token for Cloud SaaS mode
 api.interceptors.request.use(
   (config) => {
+    // In cloud mode, the backend relies on JWT Bearer tokens instead of Cookies
+    if (isCloud()) {
+      const state = useAuthStore.getState();
+      if (state.token) {
+        config.headers['Authorization'] = `Bearer ${state.token}`;
+      }
+    }
     return config;
   },
   (error) => {

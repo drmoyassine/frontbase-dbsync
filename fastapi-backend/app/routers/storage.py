@@ -5,7 +5,7 @@ All bucket/file operations are scoped by storage_provider_id.
 Provider CRUD endpoints manage the StorageProvider records.
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query, Depends
 from typing import Optional, List
 from datetime import datetime, timezone
 import uuid
@@ -14,6 +14,8 @@ import json
 from app.database.config import SessionLocal
 from app.models.storage_provider import StorageProvider
 from app.services.storage_service import get_storage_adapter
+from app.middleware.tenant_context import TenantContext, get_tenant_context
+from app.database.utils import get_project
 
 router = APIRouter(prefix="/api/storage", tags=["storage"])
 
@@ -23,11 +25,19 @@ router = APIRouter(prefix="/api/storage", tags=["storage"])
 # ============================================================================
 
 @router.get("/providers/")
-async def list_storage_providers():
+async def list_storage_providers(ctx: TenantContext | None = Depends(get_tenant_context)):
     """List all explicitly-added storage providers."""
     db = SessionLocal()
     try:
-        providers = db.query(StorageProvider).order_by(StorageProvider.created_at.desc()).all()
+        query = db.query(StorageProvider)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(StorageProvider.project_id == project.id)
+            else:
+                return []
+                
+        providers = query.order_by(StorageProvider.created_at.desc()).all()
         result = []
         for sp in providers:
             account_name = ""
@@ -50,7 +60,7 @@ async def list_storage_providers():
 
 
 @router.post("/providers/")
-async def create_storage_provider(request: dict):
+async def create_storage_provider(request: dict, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a new storage provider linking to a connected account."""
     db = SessionLocal()
     try:
@@ -62,6 +72,12 @@ async def create_storage_provider(request: dict):
         if not account:
             raise HTTPException(404, "Connected account not found")
 
+        project_id = None
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                project_id = project.id
+
         now = datetime.now(timezone.utc)
         sp = StorageProvider(
             id=str(uuid.uuid4()),
@@ -72,6 +88,7 @@ async def create_storage_provider(request: dict):
             is_active=True,
             created_at=now,
             updated_at=now,
+            project_id=project_id,
         )
         db.add(sp)
         db.commit()
@@ -97,11 +114,19 @@ async def create_storage_provider(request: dict):
 
 
 @router.delete("/providers/{provider_id}")
-async def delete_storage_provider(provider_id: str):
+async def delete_storage_provider(provider_id: str, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Remove a storage provider."""
     db = SessionLocal()
     try:
-        sp = db.query(StorageProvider).filter(StorageProvider.id == provider_id).first()
+        query = db.query(StorageProvider).filter(StorageProvider.id == provider_id)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(StorageProvider.project_id == project.id)
+            else:
+                raise HTTPException(404, "Storage provider not found")
+        
+        sp = query.first()
         if not sp:
             raise HTTPException(404, "Storage provider not found")
         db.delete(sp)
@@ -295,10 +320,21 @@ async def create_vercel_project(request: dict):
 # Helper — resolve adapter from provider_id
 # ============================================================================
 
-def _resolve_adapter(provider_id: str):
-    """Fetch StorageProvider, resolve credentials, return adapter + release DB."""
+def _resolve_adapter(provider_id: str, ctx: TenantContext | None = None):
+    """Fetch StorageProvider, verify tenant scoping, and return adapter."""
     db = SessionLocal()
     try:
+        # Check tenant scoping first
+        query = db.query(StorageProvider).filter(StorageProvider.id == provider_id)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(StorageProvider.project_id == project.id)
+            else:
+                raise HTTPException(404, "Storage provider not found")
+        if not query.first():
+            raise HTTPException(404, "Storage provider not found")
+            
         adapter = get_storage_adapter(db, provider_id)
         return adapter
     finally:
@@ -310,13 +346,21 @@ def _resolve_adapter(provider_id: str):
 # ============================================================================
 
 @router.get("/buckets")
-async def list_buckets(provider_id: str = Query(..., description="StorageProvider ID")):
+async def list_buckets(provider_id: str = Query(..., description="StorageProvider ID"), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List all buckets for a storage provider (fast — no size computation)."""
     try:
         # Resolve the adapter AND provider metadata
         db = SessionLocal()
         try:
-            sp = db.query(StorageProvider).filter(StorageProvider.id == provider_id).first()
+            query = db.query(StorageProvider).filter(StorageProvider.id == provider_id)
+            if ctx and ctx.tenant_id:
+                project = get_project(db, ctx)
+                if project:
+                    query = query.filter(StorageProvider.project_id == project.id)
+                else:
+                    raise HTTPException(404, "Storage provider not found")
+                    
+            sp = query.first()
             if not sp:
                 raise HTTPException(404, "Storage provider not found")
             provider_label = str(sp.provider).capitalize()  # e.g. "Supabase"
@@ -349,6 +393,7 @@ async def compute_size(
     bucket: str = Query(..., description="Bucket name"),
     provider_id: str = Query(..., description="StorageProvider ID"),
     path: str = Query("", description="Folder path (empty for entire bucket)"),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Compute recursive size with L1/L2/L3 caching.
 
@@ -365,7 +410,7 @@ async def compute_size(
             return {"success": True, "bucket": bucket, "path": path, "size": cached, "cached": True}
 
         # L3: Compute
-        adapter = _resolve_adapter(provider_id)
+        adapter = _resolve_adapter(provider_id, ctx)
         size = await adapter.compute_folder_size(bucket, path)
 
         # Populate L1 + L2
@@ -382,12 +427,13 @@ async def compute_size(
 async def create_bucket(
     request: dict,
     provider_id: str = Query(..., description="StorageProvider ID"),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Create a new bucket."""
     import logging
     logger = logging.getLogger(__name__)
     try:
-        adapter = _resolve_adapter(provider_id)
+        adapter = _resolve_adapter(provider_id, ctx)
         logger.info(f"[Storage] create_bucket request body: {request}")
         # Build kwargs — project_id is Vercel-specific (for store↔project connection)
         kwargs: dict = {
@@ -414,10 +460,11 @@ async def create_bucket(
 async def get_bucket(
     bucket_id: str,
     provider_id: str = Query(..., description="StorageProvider ID"),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Get a specific bucket."""
     try:
-        adapter = _resolve_adapter(provider_id)
+        adapter = _resolve_adapter(provider_id, ctx)
         bucket = await adapter.get_bucket(bucket_id)
         return {"success": True, "bucket": bucket}
     except HTTPException:
@@ -431,10 +478,11 @@ async def update_bucket(
     bucket_id: str,
     request: dict,
     provider_id: str = Query(..., description="StorageProvider ID"),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Update bucket settings."""
     try:
-        adapter = _resolve_adapter(provider_id)
+        adapter = _resolve_adapter(provider_id, ctx)
         await adapter.update_bucket(
             bucket_id,
             public=request.get("public", False),
@@ -452,10 +500,11 @@ async def update_bucket(
 async def empty_bucket(
     bucket_id: str,
     provider_id: str = Query(..., description="StorageProvider ID"),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Empty a bucket."""
     try:
-        adapter = _resolve_adapter(provider_id)
+        adapter = _resolve_adapter(provider_id, ctx)
         await adapter.empty_bucket(bucket_id)
         # Invalidate size cache for this bucket
         from app.services.storage.cache import clear_cached_size
@@ -471,10 +520,11 @@ async def empty_bucket(
 async def delete_bucket(
     bucket_id: str,
     provider_id: str = Query(..., description="StorageProvider ID"),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Delete a bucket (must be empty)."""
     try:
-        adapter = _resolve_adapter(provider_id)
+        adapter = _resolve_adapter(provider_id, ctx)
         await adapter.delete_bucket(bucket_id)
         return {"success": True, "message": "Bucket deleted"}
     except HTTPException:
@@ -498,10 +548,11 @@ async def list_files(
     limit: int = 100,
     offset: int = 0,
     search: Optional[str] = None,
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """List files in a bucket path (fast — folder sizes fetched lazily via /compute-size)."""
     try:
-        adapter = _resolve_adapter(provider_id)
+        adapter = _resolve_adapter(provider_id, ctx)
         files = await adapter.list_files(bucket, path, limit, offset, search)
         return {"success": True, "files": files}
     except HTTPException:
@@ -516,10 +567,11 @@ async def upload_file(
     bucket: str = Form(...),
     path: Optional[str] = Form(None),
     provider_id: str = Form(...),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Upload a file."""
     try:
-        adapter = _resolve_adapter(provider_id)
+        adapter = _resolve_adapter(provider_id, ctx)
         content = await file.read()
         target_path = path if path else f"uploads/{file.filename}"
         result = await adapter.upload_file(
@@ -537,13 +589,13 @@ async def upload_file(
 
 
 @router.post("/create-folder")
-async def create_folder(request: dict):
+async def create_folder(request: dict, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a folder."""
     provider_id = request.get("provider_id")
     if not provider_id:
         raise HTTPException(400, "provider_id is required")
     try:
-        adapter = _resolve_adapter(provider_id)
+        adapter = _resolve_adapter(provider_id, ctx)
         await adapter.create_folder(
             request.get("bucket", ""),
             request.get("folderPath", ""),
@@ -556,13 +608,13 @@ async def create_folder(request: dict):
 
 
 @router.delete("/delete")
-async def delete_files(request: dict):
+async def delete_files(request: dict, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete files from a bucket."""
     provider_id = request.get("provider_id")
     if not provider_id:
         raise HTTPException(400, "provider_id is required")
     try:
-        adapter = _resolve_adapter(provider_id)
+        adapter = _resolve_adapter(provider_id, ctx)
         bucket = request.get("bucket", "")
         await adapter.delete_files(
             bucket,
@@ -584,10 +636,11 @@ async def get_signed_url(
     path: str,
     provider_id: str = Query(..., description="StorageProvider ID"),
     expiresIn: int = 3600,
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Get a signed URL for temporary download."""
     try:
-        adapter = _resolve_adapter(provider_id)
+        adapter = _resolve_adapter(provider_id, ctx)
         url = await adapter.get_signed_url(bucket, path, expiresIn)
         return {"success": True, "signedUrl": url}
     except HTTPException:
@@ -601,10 +654,11 @@ async def get_public_url(
     bucket: str,
     path: str,
     provider_id: str = Query(..., description="StorageProvider ID"),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Get the public URL for a file."""
     try:
-        adapter = _resolve_adapter(provider_id)
+        adapter = _resolve_adapter(provider_id, ctx)
         url = await adapter.get_public_url(bucket, path)
         return {"success": True, "publicUrl": url}
     except HTTPException:
@@ -614,13 +668,13 @@ async def get_public_url(
 
 
 @router.post("/move")
-async def move_file(request: dict):
+async def move_file(request: dict, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Move or rename a file."""
     provider_id = request.get("provider_id")
     if not provider_id:
         raise HTTPException(400, "provider_id is required")
     try:
-        adapter = _resolve_adapter(provider_id)
+        adapter = _resolve_adapter(provider_id, ctx)
         await adapter.move_file(
             request.get("bucket", ""),
             request.get("sourceKey", ""),

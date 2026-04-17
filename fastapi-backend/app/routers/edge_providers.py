@@ -6,6 +6,8 @@ import datetime
 
 from ..models.models import EdgeProviderAccount, EdgeEngine, EdgeDatabase, EdgeCache, EdgeQueue
 from ..database.config import get_db
+from app.database.utils import get_project
+from app.middleware.tenant_context import TenantContext, get_tenant_context
 from ..schemas.edge_providers import (
     EdgeProviderAccountCreate, EdgeProviderAccountUpdate, EdgeProviderAccountResponse,
     TestConnectionRequest, DiscoverRequest,
@@ -15,6 +17,18 @@ from ..services.provider_tester import test_provider_connection
 from ..services.provider_discovery import discover_resources as _discover_resources, create_resource
 
 router = APIRouter(prefix="/api/edge-providers", tags=["edge-providers"])
+
+
+def _scoped_provider_query(db: Session, ctx: TenantContext | None):
+    q = _scoped_provider_query(db, ctx)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            q = q.filter(EdgeProviderAccount.project_id == project.id)
+        else:
+            q = q.filter(EdgeProviderAccount.id == "not-found")
+    return q
+
 
 
 # =============================================================================
@@ -47,14 +61,14 @@ def _provider_response(provider: EdgeProviderAccount) -> dict:
 # =============================================================================
 
 @router.get("/workspace-agent-token")
-def get_workspace_agent_token(db: Session = Depends(get_db)):
+def get_workspace_agent_token(db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Generate a stateless JWT for the Workspace Agent using the active GPU provider."""
     from jose import jwt
     import os
     from ..core.security import get_provider_creds
 
     # Look for a provider explicitly marked as default
-    providers = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.is_active == True).all()
+    providers = _scoped_provider_query(db, ctx).filter(EdgeProviderAccount.is_active == True).all()
     default_provider = None
     fallback_provider = None
 
@@ -98,15 +112,15 @@ class SetWorkspaceDefaultRequest(BaseModel):
     provider_id: str
 
 @router.post("/workspace-agent-token")
-def set_workspace_agent_token(payload: SetWorkspaceDefaultRequest, db: Session = Depends(get_db)):
+def set_workspace_agent_token(payload: SetWorkspaceDefaultRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Set a specific provider as the default Workspace Agent provider and generate token."""
     import json
     
-    provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.provider_id).first()
+    provider = _scoped_provider_query(db, ctx).filter(EdgeProviderAccount.id == payload.provider_id).first()
     if not provider:
         raise HTTPException(404, "Provider not found")
         
-    all_providers = db.query(EdgeProviderAccount).all()
+    all_providers = _scoped_provider_query(db, ctx).all()
     for p in all_providers:
         if p.provider_metadata:
             try:
@@ -135,23 +149,23 @@ def set_workspace_agent_token(payload: SetWorkspaceDefaultRequest, db: Session =
 # =============================================================================
 
 @router.get("/", response_model=List[EdgeProviderAccountResponse])
-async def list_providers(db: Session = Depends(get_db)):
+async def list_providers(db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List all connected edge provider accounts."""
-    providers = db.query(EdgeProviderAccount).order_by(EdgeProviderAccount.created_at.desc()).all()
+    providers = _scoped_provider_query(db, ctx).order_by(EdgeProviderAccount.created_at.desc()).all()
     return [_provider_response(p) for p in providers]
 
 
 @router.get("/{provider_id}")
-async def get_provider(provider_id: str, db: Session = Depends(get_db)):
+async def get_provider(provider_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Get a specific edge provider account."""
-    provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id).first()
+    provider = _scoped_provider_query(db, ctx).filter(EdgeProviderAccount.id == provider_id).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider account not found")
     return _provider_response(provider)
 
 
 @router.post("/", status_code=201)
-async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depends(get_db)):
+async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create and connect a new edge provider account.
     
     Credentials are encrypted with Fernet AES-256 before storage.
@@ -164,7 +178,7 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
     # (Skip Turso — it uses manual DB registry, duplicates checked per-database)
     if payload.provider_credentials and payload.provider == "turso":
         # Turso: merge new DB into existing container account if one exists
-        existing_turso = db.query(EdgeProviderAccount).filter(
+        existing_turso = _scoped_provider_query(db, ctx).filter(
             EdgeProviderAccount.provider == "turso",
             EdgeProviderAccount.is_active == True
         ).first()
@@ -219,7 +233,7 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
         }
 
         if incoming_identity:
-            same_provider_accounts = db.query(EdgeProviderAccount).filter(
+            same_provider_accounts = _scoped_provider_query(db, ctx).filter(
                 EdgeProviderAccount.provider == payload.provider,
             ).all()
 
@@ -252,9 +266,15 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
         if metadata:
             metadata_str = json.dumps(metadata)
     
+    project_id_val = None
+    if ctx and ctx.tenant_id:
+        proj = get_project(db, ctx)
+        if proj: project_id_val = proj.id
+
     provider = EdgeProviderAccount(
         id=str(uuid.uuid4()),
         name=payload.name,
+        project_id=project_id_val,
         provider=payload.provider,
         provider_credentials=credentials_str,
         provider_metadata=metadata_str,
@@ -349,12 +369,12 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
 
 
 @router.put("/{provider_id}")
-async def update_provider(provider_id: str, payload: EdgeProviderAccountUpdate, db: Session = Depends(get_db)):
+async def update_provider(provider_id: str, payload: EdgeProviderAccountUpdate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Update a provider account. Credentials are re-encrypted on change."""
     import json
     from ..core.security import encrypt_credentials, split_credentials
     
-    provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id).first()
+    provider = _scoped_provider_query(db, ctx).filter(EdgeProviderAccount.id == provider_id).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider account not found")
         
@@ -377,9 +397,9 @@ async def update_provider(provider_id: str, payload: EdgeProviderAccountUpdate, 
 
 
 @router.delete("/{provider_id}", status_code=204)
-async def delete_provider(provider_id: str, db: Session = Depends(get_db)):
+async def delete_provider(provider_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete a provider account if no engines depend on it."""
-    provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id).first()
+    provider = _scoped_provider_query(db, ctx).filter(EdgeProviderAccount.id == provider_id).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider account not found")
         
@@ -409,14 +429,14 @@ async def delete_provider(provider_id: str, db: Session = Depends(get_db)):
 # =============================================================================
 
 @router.post("/retest/{provider_id}")
-async def retest_provider(provider_id: str, db: Session = Depends(get_db)):
+async def retest_provider(provider_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Re-validate an existing provider's credentials.
 
     Decrypts stored secrets server-side and calls the same validation logic.
     """
     from ..core.security import get_provider_creds
 
-    provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id).first()
+    provider = _scoped_provider_query(db, ctx).filter(EdgeProviderAccount.id == provider_id).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider account not found")
 
@@ -432,7 +452,7 @@ async def retest_provider(provider_id: str, db: Session = Depends(get_db)):
 # =============================================================================
 
 @router.get("/{provider_id}/credentials")
-def get_credentials(provider_id: str, db: Session = Depends(get_db)):
+def get_credentials(provider_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Return decrypted credentials for a provider account.
 
     Internal endpoint used by the db-synchronizer credential bridge to resolve
@@ -441,7 +461,7 @@ def get_credentials(provider_id: str, db: Session = Depends(get_db)):
     """
     from ..core.security import get_provider_creds
 
-    provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id).first()
+    provider = _scoped_provider_query(db, ctx).filter(EdgeProviderAccount.id == provider_id).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider account not found")
 
@@ -471,7 +491,7 @@ async def test_connection(payload: TestConnectionRequest):
 # =============================================================================
 
 @router.post("/discover-by-account/{account_id}")
-async def discover_by_account(account_id: str, db: Session = Depends(get_db)):
+async def discover_by_account(account_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Discover resources using stored credentials from a Connected Account.
     
     Decrypts saved credentials server-side and calls the same discovery logic.
@@ -480,7 +500,7 @@ async def discover_by_account(account_id: str, db: Session = Depends(get_db)):
     """
     from ..core.security import get_provider_creds
 
-    provider_row = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == account_id).first()
+    provider_row = _scoped_provider_query(db, ctx).filter(EdgeProviderAccount.id == account_id).first()
     if not provider_row:
         raise HTTPException(status_code=404, detail="Provider account not found")
 
@@ -529,12 +549,12 @@ async def discover_resources_endpoint(payload: DiscoverRequest):
 async def create_resource_by_account(
     account_id: str,
     payload: CreateResourceRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """Create a new resource (Redis DB) via Connected Account's management API."""
     from ..core.security import get_provider_creds
 
-    provider_row = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == account_id).first()
+    provider_row = _scoped_provider_query(db, ctx).filter(EdgeProviderAccount.id == account_id).first()
     if not provider_row:
         raise HTTPException(status_code=404, detail="Provider account not found")
 
@@ -556,12 +576,12 @@ async def create_resource_by_account(
 async def add_turso_database(
     account_id: str,
     payload: TursoDatabaseEntry,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """Add a database to a Turso provider account (manual registry)."""
     from ..core.security import decrypt_credentials, encrypt_credentials
 
-    provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == account_id).first()
+    provider = _scoped_provider_query(db, ctx).filter(EdgeProviderAccount.id == account_id).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider account not found")
     if str(provider.provider) != "turso":
@@ -605,12 +625,12 @@ async def add_turso_database(
 async def remove_turso_database(
     account_id: str,
     db_id: str,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """Remove a database from a Turso provider account."""
     from ..core.security import decrypt_credentials, encrypt_credentials
 
-    provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == account_id).first()
+    provider = _scoped_provider_query(db, ctx).filter(EdgeProviderAccount.id == account_id).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider account not found")
     if str(provider.provider) != "turso":
@@ -639,12 +659,12 @@ async def remove_turso_database(
 async def test_turso_database(
     account_id: str,
     db_id: str,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """Test connection to a specific Turso database within an account."""
     from ..core.security import decrypt_credentials, encrypt_credentials
 
-    provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == account_id).first()
+    provider = _scoped_provider_query(db, ctx).filter(EdgeProviderAccount.id == account_id).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider account not found")
     if str(provider.provider) != "turso":
@@ -707,7 +727,7 @@ async def test_turso_database(
 # =============================================================================
 
 @router.get("/accounts/{account_id}/tables")
-async def list_account_tables(account_id: str, db: Session = Depends(get_db)):
+async def list_account_tables(account_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List database tables from a connected account's credentials.
 
     Resolves credentials directly from EdgeProviderAccount — no sync datasource needed.
@@ -722,13 +742,13 @@ async def list_account_tables(account_id: str, db: Session = Depends(get_db)):
     from ..core.credential_resolver import get_provider_context_by_id
 
     try:
-        ctx = get_provider_context_by_id(db, account_id)
+        provider_ctx = get_provider_context_by_id(db, account_id)
     except HTTPException:
         raise HTTPException(status_code=404, detail="Provider account not found")
 
-    provider_type = ctx.get("provider_type", "")
+    provider_type = provider_ctx.get("provider_type", "")
     from ..services.table_discovery import list_tables_for_provider
-    return await list_tables_for_provider(provider_type, ctx)
+    return await list_tables_for_provider(provider_type, provider_ctx)
 
 
 
@@ -737,7 +757,7 @@ async def list_account_tables(account_id: str, db: Session = Depends(get_db)):
 # =============================================================================
 
 @router.post("/{account_id}/list-engines")
-async def list_engines_for_provider(account_id: str, db: Session = Depends(get_db)):
+async def list_engines_for_provider(account_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List engines/functions/apps from a connected edge provider.
 
     Dispatches to provider-specific listing API and returns unified shape.
@@ -745,7 +765,7 @@ async def list_engines_for_provider(account_id: str, db: Session = Depends(get_d
     from ..core.security import get_provider_creds
     from ..services.engine_lister import list_engines
 
-    provider_row = db.query(EdgeProviderAccount).filter(
+    provider_row = _scoped_provider_query(db, ctx).filter(
         EdgeProviderAccount.id == account_id
     ).first()
     if not provider_row:

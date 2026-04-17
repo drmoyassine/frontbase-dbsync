@@ -27,6 +27,9 @@ from ..database.config import get_db
 from sqlalchemy.orm import Session
 from ..models.models import EdgeEngine, EdgeProviderAccount
 
+from ..middleware.tenant_context import TenantContext, get_tenant_context
+from ..database.utils import get_project
+
 from ..schemas.edge_engines import (
     EdgeEngineCreate, EdgeEngineUpdate, EdgeEngineResponse,
     TestConnectionResult, ReconfigureRequest,
@@ -54,9 +57,9 @@ async def get_bundle_hashes():
 
 
 @router.post("/deploy")
-async def deploy_engine(payload: GenericDeployRequest, db: Session = Depends(get_db)):
+async def deploy_engine(payload: GenericDeployRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Provider-agnostic one-click deploy. Delegates to engine_provisioner."""
-    return await provision_and_deploy(payload, db)
+    return await provision_and_deploy(payload, db, ctx)
 
 
 # =============================================================================
@@ -94,21 +97,33 @@ async def batch_redeploy_engines(payload: BatchRequest, db: Session = Depends(ge
 
 
 @router.post("/batch/delete", response_model=BatchResult)
-async def batch_delete_engines(payload: BatchDeleteRequest, db: Session = Depends(get_db)):
-    """Batch delete engines. Optionally delete remote resources in parallel via asyncio.gather."""
-    result = BatchResult(total=len(payload.engine_ids))
-
-    # Phase 1: collect engines to delete
-    engines_to_delete: list[EdgeEngine] = []
-    for eid in payload.engine_ids:
-        engine = db.query(EdgeEngine).filter(EdgeEngine.id == eid).first()
+async def batch_delete_engines(
+    payload: BatchDeleteRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
+    """Batch delete engine records. Optionally delete remote resources."""
+    result = BatchResult(total=len(payload.ids))
+    
+    # Phase 1: Check permissions/existence
+    records_to_delete: list[EdgeEngine] = []
+    for eid in payload.ids:
+        query = db.query(EdgeEngine).filter(EdgeEngine.id == eid)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(EdgeEngine.project_id == project.id)
+            else:
+                query = query.filter(EdgeEngine.id == "not-found")
+                
+        engine = query.first()
         if not engine:
             result.failed.append({"id": eid, "error": "Not found"})
             continue
         if engine.is_system:  # type: ignore[truthy-bool]
             result.failed.append({"id": eid, "error": "Cannot delete system engine"})
             continue
-        engines_to_delete.append(engine)
+        records_to_delete.append(engine)
 
     # Phase 2: Delete remote resources in parallel (all providers)
     if payload.delete_remote:
@@ -119,10 +134,10 @@ async def batch_delete_engines(payload: BatchDeleteRequest, db: Session = Depend
             except Exception as e:
                 result.failed.append({"id": str(eng.id), "error": f"Remote delete failed: {e}"})
 
-        await asyncio.gather(*[_safe_delete(eng) for eng in engines_to_delete])
+        await asyncio.gather(*[_safe_delete(eng) for eng in records_to_delete])
 
     # Phase 3: Delete from DB
-    for engine in engines_to_delete:
+    for engine in records_to_delete:
         eid = str(engine.id)
         if any(f.get("id") == eid for f in result.failed):
             continue
@@ -137,37 +152,40 @@ async def batch_delete_engines(payload: BatchDeleteRequest, db: Session = Depend
 
 
 @router.post("/batch/toggle", response_model=BatchResult)
-async def batch_toggle_engines(payload: BatchToggleRequest, db: Session = Depends(get_db)):
-    """Batch toggle active status for multiple engines.
-    
-    Calls toggle_engine for each to ensure env vars are pushed to provider.
-    Concurrency level 5 (less intensive than full redeploys).
-    """
-    result = BatchResult(total=len(payload.engine_ids))
-    sem = asyncio.Semaphore(5)
-
-    engines = []
-    for eid in payload.engine_ids:
-        engine = db.query(EdgeEngine).filter(EdgeEngine.id == eid).first()
+async def batch_toggle_engines(
+    payload: BatchToggleRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
+    """Batch activate/deactivate routing."""
+    result = BatchResult(total=len(payload.ids))
+    for eid in payload.ids:
+        query = db.query(EdgeEngine).filter(EdgeEngine.id == eid)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(EdgeEngine.project_id == project.id)
+            else:
+                query = query.filter(EdgeEngine.id == "not-found")
+                
+        engine = query.first()
         if not engine:
             result.failed.append({"id": eid, "error": "Not found"})
             continue
-        engines.append(engine)
-
-    async def _safe_toggle(eng: EdgeEngine):
-        async with sem:
-            try:
-                await engine_reconfigure.toggle_engine(eng, payload.is_active, db)
-                result.success.append(str(eng.id))
-            except Exception as e:
-                result.failed.append({"id": str(eng.id), "error": str(e)})
-
-    await asyncio.gather(*[_safe_toggle(e) for e in engines])
+        engine.is_active = payload.is_active  # type: ignore[assignment]
+        engine.updated_at = datetime.utcnow().isoformat() + "Z"  # type: ignore[assignment]
+        result.success.append(eid)
+    
+    db.commit()
     return result
 
 
 @router.post("/batch/sync-check", response_model=BatchResult)
-async def batch_sync_check(payload: BatchRequest, db: Session = Depends(get_db)):
+async def batch_sync_check(
+    payload: BatchRequest, 
+    db: Session = Depends(get_db), 
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
     """Batch sync-check: verify engines are reachable and update last_synced_at."""
     result = BatchResult(total=len(payload.engine_ids))
 
@@ -185,7 +203,15 @@ async def batch_sync_check(payload: BatchRequest, db: Session = Depends(get_db))
 
     engines = []
     for eid in payload.engine_ids:
-        engine = db.query(EdgeEngine).filter(EdgeEngine.id == eid).first()
+        query = db.query(EdgeEngine).filter(EdgeEngine.id == eid)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(EdgeEngine.project_id == project.id)
+            else:
+                query = query.filter(EdgeEngine.id == "not-found")
+                
+        engine = query.first()
         if not engine:
             result.failed.append({"id": eid, "error": "Not found"})
             continue
@@ -198,32 +224,68 @@ async def batch_sync_check(payload: BatchRequest, db: Session = Depends(get_db))
 
 
 @router.get("/", response_model=List[EdgeEngineResponse])
-async def list_edge_engines(db: Session = Depends(get_db)):
+async def list_engines(
+    detailed: bool = Query(True, description="If true, fetches live versions concurrently"),
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
     """List all edge engines with outdated detection."""
-    current_hashes = get_current_hashes()
-    engines = db.query(EdgeEngine).order_by(EdgeEngine.created_at.desc()).all()
-    return [serialize_engine(e, current_hashes) for e in engines]
+    current_hashes = get_current_hashes()    # DB load
+    query = db.query(EdgeEngine)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            return []
+            
+    engines_db = query.order_by(EdgeEngine.created_at.desc()).all()
+    
+    # Fast path: skip live fetches
+    if not detailed:
+        return [serialize_engine(e, current_hashes) for e in engines_db]
+    
+    return [serialize_engine(e, current_hashes) for e in engines_db]
 
 
 @router.get("/{engine_id}", response_model=EdgeEngineResponse)
-async def get_edge_engine(engine_id: str, db: Session = Depends(get_db)):
-    """Get a single edge engine by ID."""
+async def get_engine(
+    engine_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
+    """Get standalone engine by ID with live status."""
     current_hashes = get_current_hashes()
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, f"Engine '{engine_id}' not found")
+            
+    engine = query.first()
     if not engine:
-        raise HTTPException(status_code=404, detail="Edge engine not found")
+        raise HTTPException(404, f"Engine '{engine_id}' not found")
     return serialize_engine(engine, current_hashes)
 
 
 @router.post("/", response_model=EdgeEngineResponse, status_code=201)
-async def create_edge_engine(payload: EdgeEngineCreate, db: Session = Depends(get_db)):
-    """Create a new edge engine."""
+async def create_engine(payload: EdgeEngineCreate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
+    """Create a new engine record (manual mode - does not deploy code)."""
     if payload.edge_provider_id:
         provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.edge_provider_id).first()
         if not provider:
             raise HTTPException(status_code=400, detail="Invalid edge_provider_id")
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.utcnow().isoformat() + "Z"
+    
+    project_id = None
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            project_id = project.id
+
     # Inject system key into engine_config for M2M auth
     from ..services.edge_client import inject_system_key
     raw_config = json.dumps(payload.engine_config) if payload.engine_config else None
@@ -243,6 +305,7 @@ async def create_edge_engine(payload: EdgeEngineCreate, db: Session = Depends(ge
         is_imported=payload.is_imported,
         created_at=now,
         updated_at=now,
+        project_id=project_id,
     )
     db.add(engine)
     db.commit()
@@ -251,9 +314,22 @@ async def create_edge_engine(payload: EdgeEngineCreate, db: Session = Depends(ge
 
 
 @router.put("/{engine_id}", response_model=EdgeEngineResponse)
-async def update_edge_engine(engine_id: str, payload: EdgeEngineUpdate, db: Session = Depends(get_db)):
-    """Update an existing edge engine."""
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+async def update_engine(
+    engine_id: str,
+    payload: EdgeEngineUpdate,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
+    """Update engine metadata (does not trigger redeploy)."""
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, f"Engine '{engine_id}' not found")
+            
+    engine = query.first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
@@ -293,12 +369,25 @@ async def update_edge_engine(engine_id: str, payload: EdgeEngineUpdate, db: Sess
 # =============================================================================
 
 @router.post("/{engine_id}/reconfigure")
-async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Session = Depends(get_db)):
+async def reconfigure_engine(
+    engine_id: str, 
+    payload: ReconfigureRequest, 
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
     """Live-reconfigure an engine's DB/cache/queue bindings.
     
     Delegates to engine_reconfigure service (CF Settings API PATCH).
     """
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, f"Engine '{engine_id}' not found")
+            
+    engine = query.first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
@@ -312,9 +401,21 @@ async def reconfigure_engine(engine_id: str, payload: ReconfigureRequest, db: Se
 # =============================================================================
 
 @router.post("/{engine_id}/redeploy")
-async def redeploy_engine(engine_id: str, db: Session = Depends(get_db)):
+async def redeploy_engine(
+    engine_id: str, 
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
     """Redeploy an engine with the latest bundle code + current secrets."""
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, f"Engine '{engine_id}' not found")
+            
+    engine = query.first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
@@ -328,13 +429,25 @@ async def redeploy_engine(engine_id: str, db: Session = Depends(get_db)):
 # =============================================================================
 
 @router.post("/{engine_id}/sync-manifest")
-async def sync_manifest(engine_id: str, db: Session = Depends(get_db)):
+async def sync_manifest(
+    engine_id: str, 
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
     """Fetch /api/manifest from a running engine and sync GPU models + metadata.
 
     Delegates to services/engine_manifest.py.
     Silent on failure — engine might not be a Frontbase engine.
     """
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, f"Engine '{engine_id}' not found")
+            
+    engine = query.first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
@@ -345,16 +458,25 @@ async def sync_manifest(engine_id: str, db: Session = Depends(get_db)):
 # Delete
 # =============================================================================
 
-@router.delete("/{engine_id}", status_code=204)
-async def delete_edge_engine(
+@router.delete("/{engine_id}")
+async def delete_engine(
     engine_id: str,
-    delete_remote: bool = Query(False, description="Also delete the remote resource"),
-    db: Session = Depends(get_db)
+    delete_remote: bool = Query(False, description="Also delete from provider"),
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
-    """Delete an edge engine. Optionally delete the remote resource too."""
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    """Delete an engine record explicitly."""
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, f"Engine '{engine_id}' not found")
+            
+    engine = query.first()
     if not engine:
-        raise HTTPException(status_code=404, detail="Edge engine not found")
+        raise HTTPException(404, f"Engine '{engine_id}' not found")
 
     if engine.is_system:  # type: ignore[truthy-bool]
         raise HTTPException(status_code=403, detail="Cannot delete a system edge engine")
@@ -372,11 +494,23 @@ async def delete_edge_engine(
 # =============================================================================
 
 @router.post("/{engine_id}/test", response_model=TestConnectionResult)
-async def test_edge_engine(engine_id: str, db: Session = Depends(get_db)):
-    """Test connectivity to an edge engine by hitting its /api/health endpoint."""
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+async def test_engine_connection(
+    engine_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
+    """Hit the engine's /_health route to check code version and connection status."""
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, f"Engine '{engine_id}' not found")
+            
+    engine = query.first()
     if not engine:
-        raise HTTPException(status_code=404, detail="Edge engine not found")
+        raise HTTPException(404, f"Engine '{engine_id}' not found")
         
     url = engine.url
     provider_name = engine.edge_provider.provider if engine.edge_provider else "unknown"
@@ -389,12 +523,24 @@ async def test_edge_engine(engine_id: str, db: Session = Depends(get_db)):
 # =============================================================================
 
 @router.get("/{engine_id}/source")
-async def get_engine_source(engine_id: str, db: Session = Depends(get_db)):
+async def get_engine_source(
+    engine_id: str, 
+    db: Session = Depends(get_db), 
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
     """Return the TypeScript source snapshot captured at last deploy.
 
     Provider-agnostic — works for any engine that has been deployed.
     """
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, "Engine not found")
+            
+    engine = query.first()
     if not engine:
         raise HTTPException(status_code=404, detail="Engine not found")
     if not str(engine.source_snapshot or ""):
@@ -416,7 +562,12 @@ from ..services.bundle import write_source_files, CORE_PREFIX
 
 
 @router.put("/{engine_id}/source")
-async def update_engine_source(engine_id: str, payload: dict, db: Session = Depends(get_db)):
+async def update_engine_source(
+    engine_id: str, 
+    payload: dict, 
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
     """Save modified source files to the engine's DB snapshot (per-engine isolation).
 
     Payload: { files: { "relative/path.ts": "content", ... } }
@@ -426,7 +577,15 @@ async def update_engine_source(engine_id: str, payload: dict, db: Session = Depe
     - Files under frontbase-core/ are tracked in modified_core_files
     - Files outside frontbase-core/ set is_forked = True
     """
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, "Engine not found")
+            
+    engine = query.first()
     if not engine:
         raise HTTPException(status_code=404, detail="Engine not found")
 
@@ -482,13 +641,24 @@ async def update_engine_source(engine_id: str, payload: dict, db: Session = Depe
 # =============================================================================
 
 @router.get("/active/by-scope/{scope}")
-async def list_active_engines_by_scope(scope: Literal["pages", "automations", "full"], db: Session = Depends(get_db)):
+async def list_active_engines_by_scope(
+    scope: Literal["pages", "automations", "full"], 
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
     """List active edge engines filtered by adapter scope.
     
     Used by the publish pipeline to determine where to push pages/automations.
     'full' scope targets match both 'pages' and 'automations' queries.
     """
     query = db.query(EdgeEngine).filter(EdgeEngine.is_active == True)  # noqa: E712
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            return []
+            
     if scope == "full":
         query = query.filter(EdgeEngine.adapter_type.in_(["full", "pages", "automations"]))
     else:
@@ -658,19 +828,28 @@ async def update_log_config(
     engine_id: str,
     payload: dict,
     db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Enable/disable log persistence and configure sync interval.
 
     Payload: {
         "enabled": bool,
-        "interval_hours": int,  # must be ≤ provider retention
+        "interval_hours": int,  # must be <= provider retention
     }
 
     Prerequisites: engine must have edge_db_id, edge_cache_id, edge_queue_id.
     """
     from ..services.edge_logs import get_retention_hours
 
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, f"Engine '{engine_id}' not found")
+            
+    engine = query.first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
@@ -726,11 +905,23 @@ async def update_log_config(
 
 
 @router.get("/{engine_id}/logs/retention")
-async def get_log_retention(engine_id: str, db: Session = Depends(get_db)):
+async def get_log_retention(
+    engine_id: str, 
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
     """Get the provider's log retention period and current plan tier."""
     from ..services.edge_logs import get_retention_hours
 
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, f"Engine '{engine_id}' not found")
+            
+    engine = query.first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
     if not str(engine.edge_provider_id or ""):

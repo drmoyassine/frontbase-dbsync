@@ -6,27 +6,37 @@ from ..models.schemas import (
     VariableCreateRequest, VariableUpdateRequest, VariableResponse,
     SuccessResponse, ErrorResponse
 )
+from ..middleware.tenant_context import TenantContext, get_tenant_context
 
 router = APIRouter(prefix="/api/variables", tags=["variables"])
 
 @router.get("/", response_model=List[VariableResponse])
-async def get_variables(db: Session = Depends(get_db)):
+async def get_variables(db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Get all variables"""
-    variables = get_all_variables(db)
+    variables = get_all_variables(db, ctx)
     return variables
 
 @router.post("/", response_model=VariableResponse)
-async def create_variable_endpoint(request: VariableCreateRequest, db: Session = Depends(get_db)):
+async def create_variable_endpoint(request: VariableCreateRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a new variable"""
-    variable = create_variable(db, request.dict())
+    variable = create_variable(db, request.dict(), ctx)
     return variable
 
 @router.get("/{variable_id}", response_model=VariableResponse)
-async def get_variable(variable_id: str, db: Session = Depends(get_db)):
+async def get_variable(variable_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Get a variable by ID"""
     from ..models.models import AppVariable
+    from ..database.utils import get_project
     
-    variable = db.query(AppVariable).filter(AppVariable.id == variable_id).first()
+    query = db.query(AppVariable).filter(AppVariable.id == variable_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(AppVariable.project_id == project.id)
+        else:
+            raise HTTPException(status_code=404, detail="Variable not found")
+            
+    variable = query.first()
     if not variable:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -36,12 +46,20 @@ async def get_variable(variable_id: str, db: Session = Depends(get_db)):
     return variable
 
 @router.put("/{variable_id}/", response_model=VariableResponse)
-async def update_variable_endpoint(variable_id: str, request: VariableUpdateRequest, db: Session = Depends(get_db)):
+async def update_variable_endpoint(variable_id: str, request: VariableUpdateRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Update a variable"""
     from ..models.models import AppVariable
-    from ..database.utils import get_current_timestamp
+    from ..database.utils import get_current_timestamp, get_project
     
-    variable = db.query(AppVariable).filter(AppVariable.id == variable_id).first()
+    query = db.query(AppVariable).filter(AppVariable.id == variable_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(AppVariable.project_id == project.id)
+        else:
+            raise HTTPException(status_code=404, detail="Variable not found")
+            
+    variable = query.first()
     if not variable:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -58,11 +76,20 @@ async def update_variable_endpoint(variable_id: str, request: VariableUpdateRequ
     return variable
 
 @router.delete("/{variable_id}/")
-async def delete_variable(variable_id: str, db: Session = Depends(get_db)):
+async def delete_variable(variable_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete a variable"""
     from ..models.models import AppVariable
+    from ..database.utils import get_project
     
-    variable = db.query(AppVariable).filter(AppVariable.id == variable_id).first()
+    query = db.query(AppVariable).filter(AppVariable.id == variable_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(AppVariable.project_id == project.id)
+        else:
+            raise HTTPException(status_code=404, detail="Variable not found")
+            
+    variable = query.first()
     if not variable:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -187,7 +214,7 @@ TEMPLATE_FILTERS = [
 
 
 @router.get("/registry/", response_model=TemplateRegistryResponse)
-async def get_template_registry(page_id: Optional[str] = None, db: Session = Depends(get_db)):
+async def get_template_registry(page_id: Optional[str] = None, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """
     Get available template variables and filters for Builder autocomplete.
     
@@ -205,7 +232,7 @@ async def get_template_registry(page_id: Optional[str] = None, db: Session = Dep
     
     # Try to load dynamic user variables from contacts table
     try:
-        project = get_project(db)
+        project = get_project(db, ctx)
         
         if project and project.users_config:  # type: ignore[truthy-bool]
             users_config = json.loads(str(project.users_config))

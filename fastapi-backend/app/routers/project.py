@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from ..database.utils import get_db, get_project, update_project
 from ..database.config import SessionLocal
 from ..models.schemas import ProjectUpdateRequest, ProjectResponse, SuccessResponse
+from ..middleware.tenant_context import TenantContext, get_tenant_context
 import os
 import uuid
 from pathlib import Path
@@ -31,25 +32,31 @@ ALLOWED_ASSET_TYPES = {
 }
 
 @router.get("/", response_model=ProjectResponse, response_model_by_alias=True)
-async def get_project_endpoint(db: Session = Depends(get_db)):
+async def get_project_endpoint(
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
     """Get project settings"""
-    project = get_project(db)
+    project = get_project(db, ctx)
     if not project:
         # Auto-create default project if it doesn't exist
         # This handles fresh deployments where the DB is initialized but empty
-        project = update_project(db, {"name": "My Project"})
+        project = update_project(db, {"name": "My Project"}, ctx)
         
     return project
 
 @router.put("/", response_model=ProjectResponse, response_model_by_alias=True)
-async def update_project_endpoint(request: ProjectUpdateRequest):
+async def update_project_endpoint(
+    request: ProjectUpdateRequest,
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
     """Update project settings and sync to Edge for SSR self-sufficiency.
     Optimized: Releases DB connection before Edge sync HTTP call.
     """
     # 1. DB OPERATIONS
     db = SessionLocal()
     try:
-        project = update_project(db, request.dict(exclude_unset=True))
+        project = update_project(db, request.dict(exclude_unset=True), ctx)
         # Detach the data we need for the response and Edge sync
         project_data = {
             "favicon_url": project.favicon_url,

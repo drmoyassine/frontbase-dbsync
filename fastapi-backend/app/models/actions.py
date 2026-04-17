@@ -4,7 +4,7 @@ SQLAlchemy Models for Actions/Automations
 Stores workflow drafts and published versions.
 """
 
-from sqlalchemy import Column, String, Text, Boolean, Integer, DateTime, JSON
+from sqlalchemy import Column, String, Text, Boolean, Integer, DateTime, JSON, ForeignKey
 from sqlalchemy.sql import func
 from ..database.config import Base
 import uuid
@@ -21,6 +21,7 @@ class AutomationDraft(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
+    project_id = Column(String, ForeignKey('project.id'), nullable=True)
     
     # Trigger configuration
     trigger_type = Column(String(50), nullable=False, default="manual")
@@ -55,6 +56,7 @@ class AutomationExecution(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     draft_id = Column(String(36), nullable=True)  # If test execution
     workflow_id = Column(String(36), nullable=True)  # If published execution
+    project_id = Column(String, ForeignKey('project.id'), nullable=True)
     
     status = Column(String(50), nullable=False)  # started, executing, completed, error
     trigger_type = Column(String(50), nullable=False)

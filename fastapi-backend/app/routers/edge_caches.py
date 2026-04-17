@@ -5,7 +5,7 @@ CRUD for managing named edge cache connections (Upstash, Redis, Dragonfly).
 Mirrors the EdgeDatabase pattern — each EdgeCache can be attached to
 one or more EdgeEngines (one-to-many).
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
@@ -14,6 +14,9 @@ import uuid
 from ..database.config import SessionLocal
 from ..models.models import EdgeCache, EdgeEngine, EdgeProviderAccount
 from ..services.cache_tester import test_cache, TestCacheResult
+
+from ..middleware.tenant_context import TenantContext, get_tenant_context
+from ..database.utils import get_project
 
 router = APIRouter(prefix="/api/edge-caches", tags=["edge-caches"])
 
@@ -112,11 +115,19 @@ def _serialize_cache(cache, db, engine_count: int = 0, linked_engines: Optional[
 # =============================================================================
 
 @router.get("/", response_model=List[EdgeCacheResponse])
-async def list_edge_caches():
+async def list_edge_caches(ctx: TenantContext | None = Depends(get_tenant_context)):
     """List all configured edge caches."""
     db = SessionLocal()
     try:
-        caches = db.query(EdgeCache).order_by(EdgeCache.created_at.desc()).all()
+        query = db.query(EdgeCache)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(EdgeCache.project_id == project.id)
+            else:
+                return []
+                
+        caches = query.order_by(EdgeCache.created_at.desc()).all()
         result = []
         for cache in caches:
             engine_count, linked = _query_linked_engines(db, EdgeEngine.edge_cache_id, cache.id)
@@ -127,7 +138,7 @@ async def list_edge_caches():
 
 
 @router.post("/", response_model=EdgeCacheResponse, status_code=201)
-async def create_edge_cache(payload: EdgeCacheCreate):
+async def create_edge_cache(payload: EdgeCacheCreate, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a new edge cache connection."""
     db = SessionLocal()
     try:
@@ -153,6 +164,12 @@ async def create_edge_cache(payload: EdgeCacheCreate):
         count = db.query(EdgeCache).count()
         is_default = payload.is_default or count == 0
         
+        project_id = None
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                project_id = project.id
+                
         from ..core.security import encrypt_field
         cache = EdgeCache(
             id=str(uuid.uuid4()),
@@ -164,6 +181,7 @@ async def create_edge_cache(payload: EdgeCacheCreate):
             is_default=is_default,
             created_at=now,
             updated_at=now,
+            project_id=project_id,
         )
 
         # CF lifecycle: create scoped token for KV resources
@@ -189,11 +207,19 @@ async def create_edge_cache(payload: EdgeCacheCreate):
 
 
 @router.put("/{cache_id}", response_model=EdgeCacheResponse)
-async def update_edge_cache(cache_id: str, payload: EdgeCacheUpdate):
+async def update_edge_cache(cache_id: str, payload: EdgeCacheUpdate, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Update an existing edge cache connection."""
     db = SessionLocal()
     try:
-        cache = db.query(EdgeCache).filter(EdgeCache.id == cache_id).first()
+        query = db.query(EdgeCache).filter(EdgeCache.id == cache_id)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(EdgeCache.project_id == project.id)
+            else:
+                raise HTTPException(404, f"Edge cache '{cache_id}' not found")
+                
+        cache = query.first()
         if not cache:
             raise HTTPException(404, f"Edge cache '{cache_id}' not found")
         
@@ -227,7 +253,7 @@ async def update_edge_cache(cache_id: str, payload: EdgeCacheUpdate):
 
 
 @router.delete("/{cache_id}")
-async def delete_edge_cache(cache_id: str, delete_remote: bool = False):
+async def delete_edge_cache(cache_id: str, delete_remote: bool = False, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete an edge cache connection.
     
     If delete_remote=True and the cache was created from a connected account,
@@ -235,7 +261,15 @@ async def delete_edge_cache(cache_id: str, delete_remote: bool = False):
     """
     db = SessionLocal()
     try:
-        cache = db.query(EdgeCache).filter(EdgeCache.id == cache_id).first()
+        query = db.query(EdgeCache).filter(EdgeCache.id == cache_id)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(EdgeCache.project_id == project.id)
+            else:
+                raise HTTPException(404, f"Edge cache '{cache_id}' not found")
+                
+        cache = query.first()
         if not cache:
             raise HTTPException(404, f"Edge cache '{cache_id}' not found")
         
@@ -310,7 +344,7 @@ class BatchResult(BaseModel):
 
 
 @router.post("/batch/delete", response_model=BatchResult)
-async def batch_delete_caches(payload: BatchDeleteCacheRequest):
+async def batch_delete_caches(payload: BatchDeleteCacheRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Batch delete caches. Optionally delete remote resources in parallel."""
     import asyncio
     result = BatchResult(total=len(payload.ids))
@@ -318,7 +352,15 @@ async def batch_delete_caches(payload: BatchDeleteCacheRequest):
     try:
         records_to_delete: list[EdgeCache] = []
         for cid in payload.ids:
-            cache = db.query(EdgeCache).filter(EdgeCache.id == cid).first()
+            query = db.query(EdgeCache).filter(EdgeCache.id == cid)
+            if ctx and ctx.tenant_id:
+                project = get_project(db, ctx)
+                if project:
+                    query = query.filter(EdgeCache.project_id == project.id)
+                else:
+                    query = query.filter(EdgeCache.id == "not-found")
+                    
+            cache = query.first()
             if not cache:
                 result.failed.append({"id": cid, "error": "Not found"})
                 continue
@@ -373,11 +415,19 @@ async def batch_delete_caches(payload: BatchDeleteCacheRequest):
 
 
 @router.post("/{cache_id}/test", response_model=TestCacheResult)
-async def test_edge_cache(cache_id: str):
+async def test_edge_cache(cache_id: str, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test connectivity to an edge cache."""
     db = SessionLocal()
     try:
-        cache = db.query(EdgeCache).filter(EdgeCache.id == cache_id).first()
+        query = db.query(EdgeCache).filter(EdgeCache.id == cache_id)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(EdgeCache.project_id == project.id)
+            else:
+                raise HTTPException(404, f"Edge cache '{cache_id}' not found")
+                
+        cache = query.first()
         if not cache:
             raise HTTPException(404, f"Edge cache '{cache_id}' not found")
         

@@ -5,7 +5,7 @@ CRUD for managing named edge queue connections (QStash, RabbitMQ, BullMQ, SQS).
 Mirrors the EdgeCache / EdgeDatabase pattern — each EdgeQueue can be attached to
 one or more EdgeEngines (one-to-many).
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
@@ -13,9 +13,23 @@ import uuid
 import httpx
 
 from ..database.config import SessionLocal
+from ..middleware.tenant_context import TenantContext, get_tenant_context
+from ..database.utils import get_project
 from ..models.models import EdgeQueue, EdgeEngine
 
 router = APIRouter(prefix="/api/edge-queues", tags=["edge-queues"])
+
+
+def _scoped_queue_query(db, ctx: TenantContext | None):
+    q = _scoped_queue_query(db, ctx)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            q = q.filter(EdgeQueue.project_id == project.id)
+        else:
+            q = q.filter(EdgeQueue.id == "not-found")
+    return q
+
 
 
 # =============================================================================
@@ -125,11 +139,11 @@ def _serialize_queue(queue, db, engine_count: int = 0, linked_engines: Optional[
 # =============================================================================
 
 @router.get("/", response_model=List[EdgeQueueResponse])
-async def list_edge_queues():
+async def list_edge_queues(ctx: TenantContext | None = Depends(get_tenant_context)):
     """List all configured edge queues."""
     db = SessionLocal()
     try:
-        queues = db.query(EdgeQueue).order_by(EdgeQueue.created_at.desc()).all()
+        queues = _scoped_queue_query(db, ctx).order_by(EdgeQueue.created_at.desc()).all()
         result = []
         for queue in queues:
             engine_count, linked = _query_linked_engines(db, EdgeEngine.edge_queue_id, queue.id)
@@ -148,20 +162,20 @@ class TestQueueInline(BaseModel):
     provider_account_id: Optional[str] = None
 
 @router.post("/test-connection", response_model=TestQueueResult)
-async def test_connection_inline(payload: TestQueueInline):
+async def test_connection_inline(payload: TestQueueInline, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test a queue connection before saving it."""
     return await _test_queue(payload.provider, payload.queue_url, payload.queue_token, payload.provider_account_id)
 
 
 
 @router.post("/", response_model=EdgeQueueResponse, status_code=201)
-async def create_edge_queue(payload: EdgeQueueCreate):
+async def create_edge_queue(payload: EdgeQueueCreate, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a new edge queue connection."""
     db = SessionLocal()
     try:
         import json
         # Prevent duplicate queue URLs
-        existing = db.query(EdgeQueue).filter(
+        existing = _scoped_queue_query(db, ctx).filter(
             EdgeQueue.queue_url == payload.queue_url
         ).first()
         if existing:
@@ -174,18 +188,25 @@ async def create_edge_queue(payload: EdgeQueueCreate):
         
         # If this is set as default, unset all others
         if payload.is_default:
-            db.query(EdgeQueue).filter(EdgeQueue.is_default == True).update(
+            _scoped_queue_query(db, ctx).filter(EdgeQueue.is_default == True).update(
                 {"is_default": False}
             )
         
         # If this is the first one, make it default
-        count = db.query(EdgeQueue).count()
+        count = _scoped_queue_query(db, ctx).count()
         is_default = payload.is_default or count == 0
         
         from ..core.security import encrypt_field
+
+        project_id_val = None
+        if ctx and ctx.tenant_id:
+            proj = get_project(db, ctx)
+            if proj: project_id_val = proj.id
+
         queue = EdgeQueue(
             id=str(uuid.uuid4()),
             name=payload.name,
+            project_id=project_id_val,
             provider=payload.provider,
             queue_url=payload.queue_url,
             queue_token=encrypt_field(payload.queue_token),
@@ -223,12 +244,12 @@ async def create_edge_queue(payload: EdgeQueueCreate):
 
 
 @router.put("/{queue_id}", response_model=EdgeQueueResponse)
-async def update_edge_queue(queue_id: str, payload: EdgeQueueUpdate):
+async def update_edge_queue(queue_id: str, payload: EdgeQueueUpdate, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Update an existing edge queue connection."""
     db = SessionLocal()
     try:
         import json
-        queue = db.query(EdgeQueue).filter(EdgeQueue.id == queue_id).first()
+        queue = _scoped_queue_query(db, ctx).filter(EdgeQueue.id == queue_id).first()
         if not queue:
             raise HTTPException(404, f"Edge queue '{queue_id}' not found")
         
@@ -251,7 +272,7 @@ async def update_edge_queue(queue_id: str, payload: EdgeQueueUpdate):
             queue.provider_account_id = payload.provider_account_id  # type: ignore[assignment]
         if payload.is_default is not None:
             if payload.is_default:
-                db.query(EdgeQueue).filter(EdgeQueue.id != queue_id).update(
+                _scoped_queue_query(db, ctx).filter(EdgeQueue.id != queue_id).update(
                     {"is_default": False}
                 )
             queue.is_default = payload.is_default  # type: ignore[assignment]
@@ -268,7 +289,7 @@ async def update_edge_queue(queue_id: str, payload: EdgeQueueUpdate):
 
 
 @router.delete("/{queue_id}")
-async def delete_edge_queue(queue_id: str, delete_remote: bool = False):
+async def delete_edge_queue(queue_id: str, delete_remote: bool = False, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete an edge queue connection.
     
     Fails if any edge engines still reference this queue.
@@ -276,7 +297,7 @@ async def delete_edge_queue(queue_id: str, delete_remote: bool = False):
     """
     db = SessionLocal()
     try:
-        queue = db.query(EdgeQueue).filter(EdgeQueue.id == queue_id).first()
+        queue = _scoped_queue_query(db, ctx).filter(EdgeQueue.id == queue_id).first()
         if not queue:
             raise HTTPException(404, f"Edge queue '{queue_id}' not found")
         
@@ -323,7 +344,7 @@ async def delete_edge_queue(queue_id: str, delete_remote: bool = False):
         db.delete(queue)
         
         if was_default:
-            next_queue = db.query(EdgeQueue).first()
+            next_queue = _scoped_queue_query(db, ctx).first()
             if next_queue:
                 next_queue.is_default = True  # type: ignore[assignment]
         
@@ -348,7 +369,7 @@ class BatchResult(BaseModel):
 
 
 @router.post("/batch/delete", response_model=BatchResult)
-async def batch_delete_queues(payload: BatchDeleteQueueRequest):
+async def batch_delete_queues(payload: BatchDeleteQueueRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Batch delete queues. Optionally delete remote resources in parallel."""
     import asyncio
     result = BatchResult(total=len(payload.ids))
@@ -356,7 +377,7 @@ async def batch_delete_queues(payload: BatchDeleteQueueRequest):
     try:
         records_to_delete: list[EdgeQueue] = []
         for qid in payload.ids:
-            queue = db.query(EdgeQueue).filter(EdgeQueue.id == qid).first()
+            queue = _scoped_queue_query(db, ctx).filter(EdgeQueue.id == qid).first()
             if not queue:
                 result.failed.append({"id": qid, "error": "Not found"})
                 continue
@@ -411,11 +432,11 @@ async def batch_delete_queues(payload: BatchDeleteQueueRequest):
 
 
 @router.post("/{queue_id}/test/", response_model=TestQueueResult)
-async def test_edge_queue(queue_id: str):
+async def test_edge_queue(queue_id: str, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test connectivity to a saved edge queue."""
     db = SessionLocal()
     try:
-        queue = db.query(EdgeQueue).filter(EdgeQueue.id == queue_id).first()
+        queue = _scoped_queue_query(db, ctx).filter(EdgeQueue.id == queue_id).first()
         if not queue:
             raise HTTPException(404, f"Edge queue '{queue_id}' not found")
         

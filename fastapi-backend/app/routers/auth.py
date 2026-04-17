@@ -221,6 +221,7 @@ def _set_session_cookie(response: Response, token: str) -> None:
         key=SESSION_COOKIE_NAME,
         value=token,
         max_age=SESSION_MAX_AGE,
+        path="/",
         httponly=True,
         samesite="lax",
         secure=os.getenv("ENVIRONMENT") == "production",

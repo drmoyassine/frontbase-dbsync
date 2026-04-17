@@ -26,6 +26,7 @@ class StorageProvider(Base):
         nullable=False,
     )
     config = Column(Text, nullable=True, default="{}")        # JSON — provider-specific config (project_ref, R2 prefix, etc.)
+    project_id = Column(String, ForeignKey('project.id'), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(
         DateTime,

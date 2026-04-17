@@ -6,11 +6,14 @@ These replace the old global Turso settings in settings.json.
 
 Each EdgeDatabase can be attached to one or more DeploymentTargets.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional, List
 from datetime import datetime
 import uuid
 import httpx
+
+from ..middleware.tenant_context import TenantContext, get_tenant_context
+from ..database.utils import get_project
 
 from ..database.config import SessionLocal
 from ..models.models import EdgeDatabase, EdgeEngine
@@ -95,11 +98,19 @@ def _serialize_edge_db(edb, db, target_count: int = 0, linked_engines: Optional[
 # =============================================================================
 
 @router.get("/", response_model=List[EdgeDatabaseResponse])
-async def list_edge_databases():
+async def list_edge_databases(ctx: TenantContext | None = Depends(get_tenant_context)):
     """List all configured edge databases."""
     db = SessionLocal()
     try:
-        edge_dbs = db.query(EdgeDatabase).order_by(EdgeDatabase.created_at.desc()).all()
+        query = db.query(EdgeDatabase)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(EdgeDatabase.project_id == project.id)
+            else:
+                return []
+        
+        edge_dbs = query.order_by(EdgeDatabase.created_at.desc()).all()
         result = []
         for edb in edge_dbs:
             target_count, linked = _query_linked_engines(db, EdgeEngine.edge_db_id, edb.id)
@@ -110,7 +121,7 @@ async def list_edge_databases():
 
 
 @router.post("/", response_model=EdgeDatabaseResponse, status_code=201)
-async def create_edge_database(payload: EdgeDatabaseCreate):
+async def create_edge_database(payload: EdgeDatabaseCreate, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a new edge database connection.
     
     If provider_account_id is provided, db_token is optional — it will be
@@ -130,6 +141,12 @@ async def create_edge_database(payload: EdgeDatabaseCreate):
         count = db.query(EdgeDatabase).count()
         is_default = payload.is_default or count == 0
         
+        project_id = None
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                project_id = project.id
+
         from ..core.security import encrypt_field
         edge_db = EdgeDatabase(
             id=str(uuid.uuid4()),
@@ -141,6 +158,7 @@ async def create_edge_database(payload: EdgeDatabaseCreate):
             is_default=is_default,
             created_at=now,
             updated_at=now,
+            project_id=project_id,
         )
 
         # Store schema_name in provider_config JSON (PG providers)
@@ -188,11 +206,19 @@ async def create_edge_database(payload: EdgeDatabaseCreate):
 
 
 @router.put("/{db_id}", response_model=EdgeDatabaseResponse)
-async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate):
+async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Update an existing edge database connection."""
     db = SessionLocal()
     try:
-        edge_db = db.query(EdgeDatabase).filter(EdgeDatabase.id == db_id).first()
+        query = db.query(EdgeDatabase).filter(EdgeDatabase.id == db_id)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(EdgeDatabase.project_id == project.id)
+            else:
+                raise HTTPException(404, f"Edge database '{db_id}' not found")
+                
+        edge_db = query.first()
         if not edge_db:
             raise HTTPException(404, f"Edge database '{db_id}' not found")
         
@@ -226,7 +252,7 @@ async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate):
 
 
 @router.delete("/{db_id}")
-async def delete_edge_database(db_id: str, delete_remote: bool = False):
+async def delete_edge_database(db_id: str, delete_remote: bool = False, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete an edge database connection.
     
     Fails if any deployment targets still reference this DB.
@@ -234,7 +260,15 @@ async def delete_edge_database(db_id: str, delete_remote: bool = False):
     """
     db = SessionLocal()
     try:
-        edge_db = db.query(EdgeDatabase).filter(EdgeDatabase.id == db_id).first()
+        query = db.query(EdgeDatabase).filter(EdgeDatabase.id == db_id)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(EdgeDatabase.project_id == project.id)
+            else:
+                raise HTTPException(404, f"Edge database '{db_id}' not found")
+                
+        edge_db = query.first()
         if not edge_db:
             raise HTTPException(404, f"Edge database '{db_id}' not found")
         
@@ -332,7 +366,7 @@ async def delete_edge_database(db_id: str, delete_remote: bool = False):
 
 
 @router.post("/batch/delete", response_model=BatchResult)
-async def batch_delete_databases(payload: BatchDeleteDatabaseRequest):
+async def batch_delete_databases(payload: BatchDeleteDatabaseRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Batch delete databases. Optionally delete remote resources in parallel."""
     import asyncio
     result = BatchResult(total=len(payload.ids))
@@ -341,7 +375,15 @@ async def batch_delete_databases(payload: BatchDeleteDatabaseRequest):
         # Phase 1: collect records
         records_to_delete: list[EdgeDatabase] = []
         for db_id in payload.ids:
-            edge_db = db.query(EdgeDatabase).filter(EdgeDatabase.id == db_id).first()
+            query = db.query(EdgeDatabase).filter(EdgeDatabase.id == db_id)
+            if ctx and ctx.tenant_id:
+                project = get_project(db, ctx)
+                if project:
+                    query = query.filter(EdgeDatabase.project_id == project.id)
+                else:
+                    query = query.filter(EdgeDatabase.id == "not-found")
+                    
+            edge_db = query.first()
             if not edge_db:
                 result.failed.append({"id": db_id, "error": "Not found"})
                 continue
@@ -400,11 +442,19 @@ async def batch_delete_databases(payload: BatchDeleteDatabaseRequest):
 
 
 @router.post("/{db_id}/test", response_model=TestConnectionResult)
-async def test_edge_database(db_id: str):
+async def test_edge_database(db_id: str, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test connectivity to an edge database."""
     db = SessionLocal()
     try:
-        edge_db = db.query(EdgeDatabase).filter(EdgeDatabase.id == db_id).first()
+        query = db.query(EdgeDatabase).filter(EdgeDatabase.id == db_id)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(EdgeDatabase.project_id == project.id)
+            else:
+                raise HTTPException(404, f"Edge database '{db_id}' not found")
+                
+        edge_db = query.first()
         if not edge_db:
             raise HTTPException(404, f"Edge database '{db_id}' not found")
         

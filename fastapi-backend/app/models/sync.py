@@ -14,6 +14,7 @@ class SyncConfig(Base):
     source_datasource_id = Column(String, nullable=False)
     target_datasource_id = Column(String, nullable=False)
     config_data = Column(Text, nullable=False)  # JSON
+    project_id = Column(String, ForeignKey('project.id'), nullable=True)
     sync_frequency = Column(String, default='manual')
     is_active = Column(Boolean, default=True)
     created_at = Column(String, nullable=False)

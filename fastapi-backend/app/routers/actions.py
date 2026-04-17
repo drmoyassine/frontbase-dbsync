@@ -16,7 +16,8 @@ import logging
 import asyncio
 import uuid
 
-from app.database.utils import get_db
+from app.database.utils import get_db, get_project
+from app.middleware.tenant_context import TenantContext, get_tenant_context
 from app.database.config import SessionLocal
 from app.models.actions import AutomationDraft, AutomationExecution
 from app.models.models import EdgeEngine
@@ -35,6 +36,37 @@ from app.schemas.actions import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+def _scoped_draft_select(db: Session, ctx: TenantContext | None):
+    q = _scoped_draft_select(db, ctx)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            q = q.where(AutomationDraft.project_id == project.id)
+        else:
+            q = q.where(AutomationDraft.id == "not-found")
+    return q
+
+def _scoped_draft_query(db: Session, ctx: TenantContext | None):
+    q = _scoped_draft_query(db, ctx)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            q = q.filter(AutomationDraft.project_id == project.id)
+        else:
+            q = q.filter(AutomationDraft.id == "not-found")
+    return q
+
+def _scoped_exec_select(db: Session, ctx: TenantContext | None):
+    q = _scoped_exec_select(db, ctx)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            q = q.where(AutomationExecution.project_id == project.id)
+        else:
+            q = q.where(AutomationExecution.id == "not-found")
+    return q
+
 
 # Edge Engine URL - configurable for production (Docker uses container name 'edge')
 # Defaults to localhost:3002 for local development
@@ -79,11 +111,11 @@ def _build_deploy_payload(draft: AutomationDraft, name_prefix: str = "", overrid
 async def list_drafts(
     skip: int = 0,
     limit: int = 50,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """List all workflow drafts"""
     result = db.execute(
-        select(AutomationDraft)
+        _scoped_draft_select(db, ctx)
         .order_by(AutomationDraft.updated_at.desc())
         .offset(skip)
         .limit(limit)
@@ -99,12 +131,12 @@ async def list_drafts(
 @router.post("/drafts", response_model=WorkflowDraftResponse, status_code=status.HTTP_201_CREATED)
 async def create_draft(
     draft: WorkflowDraftCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Create a new workflow draft"""
     # Check for duplicate workflow name
     existing = db.execute(
-        select(AutomationDraft).where(AutomationDraft.name == draft.name)
+        _scoped_draft_select(db, ctx).where(AutomationDraft.name == draft.name)
     ).scalar_one_or_none()
     
     if existing:
@@ -139,11 +171,11 @@ async def create_draft(
 @router.get("/drafts/{draft_id}", response_model=WorkflowDraftResponse)
 async def get_draft(
     draft_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Get a specific workflow draft"""
     result = db.execute(
-        select(AutomationDraft).where(AutomationDraft.id == draft_id)
+        _scoped_draft_select(db, ctx).where(AutomationDraft.id == draft_id)
     )
     draft = result.scalar_one_or_none()
     
@@ -157,11 +189,11 @@ async def get_draft(
 async def update_draft(
     draft_id: str,
     update: WorkflowDraftUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Update a workflow draft"""
     result = db.execute(
-        select(AutomationDraft).where(AutomationDraft.id == draft_id)
+        _scoped_draft_select(db, ctx).where(AutomationDraft.id == draft_id)
     )
     draft = result.scalar_one_or_none()
     
@@ -172,7 +204,7 @@ async def update_draft(
     update_data = update.model_dump(exclude_unset=True)
     if "name" in update_data and update_data["name"] != draft.name:
         existing = db.execute(
-            select(AutomationDraft).where(
+            _scoped_draft_select(db, ctx).where(
                 AutomationDraft.name == update_data["name"],
                 AutomationDraft.id != draft_id
             )
@@ -215,11 +247,11 @@ async def update_draft(
 @router.delete("/drafts/{draft_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_draft(
     draft_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Delete a workflow draft"""
     result = db.execute(
-        select(AutomationDraft).where(AutomationDraft.id == draft_id)
+        _scoped_draft_select(db, ctx).where(AutomationDraft.id == draft_id)
     )
     draft = result.scalar_one_or_none()
     
@@ -238,14 +270,14 @@ class BulkDeleteRequest(BaseModel):
 @router.post("/drafts/bulk-delete", status_code=status.HTTP_200_OK)
 async def bulk_delete_drafts(
     request: BulkDeleteRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Delete multiple workflow drafts at once"""
     if not request.ids:
         return {"deleted": 0}
     
     result = db.execute(
-        select(AutomationDraft).where(AutomationDraft.id.in_(request.ids))
+        _scoped_draft_select(db, ctx).where(AutomationDraft.id.in_(request.ids))
     )
     drafts = result.scalars().all()
     
@@ -266,10 +298,10 @@ class ToggleActiveRequest(BaseModel):
 async def toggle_draft_active(
     draft_id: str,
     request: ToggleActiveRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Toggle a workflow draft's is_active status."""
-    draft = db.query(AutomationDraft).filter(AutomationDraft.id == draft_id).first()
+    draft = _scoped_draft_query(db, ctx).filter(AutomationDraft.id == draft_id).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
 
@@ -284,14 +316,14 @@ async def toggle_draft_active(
 @router.post("/drafts/{draft_id}/publish", response_model=PublishResponse)
 async def publish_draft(
     draft_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """
     Publish a workflow draft to the local Edge Engine.
     Kept for backward compatibility (no engine_id = local dev edge).
     """
     result = db.execute(
-        select(AutomationDraft).where(AutomationDraft.id == draft_id)
+        _scoped_draft_select(db, ctx).where(AutomationDraft.id == draft_id)
     )
     draft = result.scalar_one_or_none()
     
@@ -346,7 +378,7 @@ async def publish_draft(
 async def publish_draft_to_engine(
     draft_id: str,
     engine_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """
     Publish a workflow draft to a specific Edge Engine target.
@@ -355,7 +387,7 @@ async def publish_draft_to_engine(
     """
     # 1. FETCH DATA — fast DB interaction
     result = db.execute(
-        select(AutomationDraft).where(AutomationDraft.id == draft_id)
+        _scoped_draft_select(db, ctx).where(AutomationDraft.id == draft_id)
     )
     draft = result.scalar_one_or_none()
     if not draft:
@@ -442,7 +474,7 @@ async def publish_draft_to_engine(
     # 3. UPDATE DB — new connection for post-deploy status update
     update_db = SessionLocal()
     try:
-        draft_record = update_db.query(AutomationDraft).filter(
+        draft_record = update__scoped_draft_query(db, ctx).filter(
             AutomationDraft.id == draft_id_str
         ).first()
         if draft_record:
@@ -478,7 +510,7 @@ class WorkflowBatchPublishRequest(BaseModel):
 async def publish_draft_batch(
     draft_id: str,
     request: WorkflowBatchPublishRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """
     Batch-publish a workflow draft to multiple Edge Engines.
@@ -486,7 +518,7 @@ async def publish_draft_batch(
     """
     from sqlalchemy.orm.attributes import flag_modified
 
-    draft = db.query(AutomationDraft).filter(AutomationDraft.id == draft_id).first()
+    draft = _scoped_draft_query(db, ctx).filter(AutomationDraft.id == draft_id).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
 
@@ -556,7 +588,7 @@ async def publish_draft_batch(
     # Update DB with deployment records
     update_db = SessionLocal()
     try:
-        draft_record = update_db.query(AutomationDraft).filter(AutomationDraft.id == draft_id_str).first()
+        draft_record = update__scoped_draft_query(db, ctx).filter(AutomationDraft.id == draft_id_str).first()
         if draft_record:
             deployed: dict = dict(draft_record.deployed_engines or {})  # type: ignore[arg-type]
             for r in results:
@@ -590,7 +622,7 @@ async def toggle_target_active(
     draft_id: str,
     engine_id: str,
     request: TargetToggleRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """
     Toggle a workflow's active status on a specific target engine by republishing it with the new active state.
@@ -605,7 +637,7 @@ async def toggle_target_active(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid draft ID format")
         
-    draft = db.query(AutomationDraft).filter(AutomationDraft.id == draft_id).first()
+    draft = _scoped_draft_query(db, ctx).filter(AutomationDraft.id == draft_id).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Workflow draft not found")
 
@@ -666,7 +698,7 @@ async def toggle_target_active(
 async def test_draft(
     draft_id: str,
     request: TestExecuteRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """
     Test-execute a workflow draft.
@@ -675,7 +707,7 @@ async def test_draft(
     and triggers an execution.
     """
     result = db.execute(
-        select(AutomationDraft).where(AutomationDraft.id == draft_id)
+        _scoped_draft_select(db, ctx).where(AutomationDraft.id == draft_id)
     )
     draft = result.scalar_one_or_none()
     
@@ -776,7 +808,7 @@ async def test_node(
     draft_id: str,
     node_id: str,
     request: TestExecuteRequest = TestExecuteRequest(),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """
     Test-execute a single node within a workflow draft.
@@ -785,7 +817,7 @@ async def test_node(
     (and its upstream dependencies).
     """
     result = db.execute(
-        select(AutomationDraft).where(AutomationDraft.id == draft_id)
+        _scoped_draft_select(db, ctx).where(AutomationDraft.id == draft_id)
     )
     draft = result.scalar_one_or_none()
     
@@ -982,7 +1014,7 @@ async def _collect_edge_urls(db: Session) -> dict:
     workflows deployed to them (matching deployed_engines keys)."""
     # Get all engine IDs that have at least one workflow deployed
     drafts = db.execute(
-        select(AutomationDraft).where(AutomationDraft.deployed_engines.isnot(None))
+        _scoped_draft_select(db, ctx).where(AutomationDraft.deployed_engines.isnot(None))
     ).scalars().all()
 
     deployed_engine_ids = set()
@@ -1049,7 +1081,7 @@ async def list_all_executions(
     engine_name: Optional[str] = None,
     trigger_type: Optional[str] = None,
     fresh: bool = False,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """Global execution log — pulls from all edges with deployed workflows.
     Caches in Redis for 20 minutes. Pass ?fresh=true to bypass cache."""
@@ -1076,7 +1108,7 @@ async def list_all_executions(
 
     # Also get test runs from PostgreSQL
     test_query = (
-        select(AutomationExecution)
+        _scoped_exec_select(db, ctx)
         .order_by(AutomationExecution.started_at.desc())
         .limit(limit)
     )
@@ -1181,7 +1213,7 @@ async def export_executions_csv(
     statuses: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """Export execution logs as CSV. Always pulls fresh from selected edges.
     Also updates the Redis cache with fresh data."""
@@ -1227,7 +1259,7 @@ async def export_executions_csv(
 
     # Also get test runs if no engine filter or "Test" is included
     if not engine_ids:
-        test_query = select(AutomationExecution).order_by(AutomationExecution.started_at.desc()).limit(500)
+        test_query = _scoped_exec_select(db, ctx).order_by(AutomationExecution.started_at.desc()).limit(500)
         if statuses:
             test_query = test_query.where(AutomationExecution.status.in_(statuses.split(",")))
         test_records = db.execute(test_query).scalars().all()
@@ -1307,13 +1339,13 @@ async def export_executions_csv(
 async def get_draft_executions(
     draft_id: str,
     limit: int = 20,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Get execution history for a draft — merges backend test logs + production
     logs from ALL edges where this workflow is deployed (fan-out)."""
     # 1. Test logs from backend DB
     test_records = db.execute(
-        select(AutomationExecution)
+        _scoped_exec_select(db, ctx)
         .where(AutomationExecution.draft_id == draft_id)
         .order_by(AutomationExecution.started_at.desc())
         .limit(limit)
@@ -1324,7 +1356,7 @@ async def get_draft_executions(
     # 2. Production logs from ALL deployed edges (fan-out)
     edge_logs: list = []
     draft = db.execute(
-        select(AutomationDraft).where(AutomationDraft.id == draft_id)
+        _scoped_draft_select(db, ctx).where(AutomationDraft.id == draft_id)
     ).scalar_one_or_none()
 
     deployed_engine_ids = set((draft.deployed_engines or {}).keys()) if draft else set()
@@ -1379,7 +1411,7 @@ async def get_production_executions(
     draft_id: str,
     engine_id: str,
     limit: int = 20,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Get production execution history from a specific edge engine."""
     engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()

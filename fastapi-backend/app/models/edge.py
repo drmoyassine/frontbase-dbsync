@@ -22,6 +22,7 @@ class EdgeDatabase(Base):
     db_token = Column(String(1000), nullable=True)       # auth token (encrypted at rest)
     provider_account_id = Column(String, ForeignKey('edge_providers_accounts.id'), nullable=True)  # FK → Connected Account
     provider_config = Column(Text, nullable=True)          # JSON — provider-specific metadata (scoped tokens, account IDs)
+    project_id = Column(String, ForeignKey('project.id'), nullable=True)
     is_default = Column(Boolean, default=False)
     is_system = Column(Boolean, default=False)            # True = pre-seeded, cannot be deleted
     created_at = Column(String, nullable=False)
@@ -48,6 +49,7 @@ class EdgeCache(Base):
     cache_token = Column(String(1000), nullable=True)   # auth token (write-only to frontend)
     provider_account_id = Column(String, ForeignKey('edge_providers_accounts.id'), nullable=True)  # FK → Connected Account
     provider_config = Column(Text, nullable=True)         # JSON — provider-specific metadata (scoped tokens, account IDs)
+    project_id = Column(String, ForeignKey('project.id'), nullable=True)
     is_default = Column(Boolean, default=False)
     is_system = Column(Boolean, default=False)      # System caches are undeletable
     created_at = Column(String, nullable=False)
@@ -76,6 +78,7 @@ class EdgeQueue(Base):
     next_signing_key = Column(String(500), nullable=True) # Key rotation (QStash)
     provider_config = Column(Text, nullable=True)        # JSON — extra provider-specific config
     provider_account_id = Column(String, ForeignKey('edge_providers_accounts.id'), nullable=True)  # FK → Connected Account
+    project_id = Column(String, ForeignKey('project.id'), nullable=True)
     is_default = Column(Boolean, default=False)
     is_system = Column(Boolean, default=False)
     created_at = Column(String, nullable=False)
@@ -96,6 +99,7 @@ class EdgeProviderAccount(Base):
     
     id = Column(String, primary_key=True)
     name = Column(String(100), nullable=False)          # "Personal Cloudflare", "My Docker Server"
+    project_id = Column(String, ForeignKey('project.id'), nullable=True)
     provider = Column(String(50), nullable=False)       # "cloudflare", "docker", "vercel", "fastapi"
     provider_credentials = Column(Text, nullable=True)  # JSON — encrypted secrets (api_token, etc.)
     provider_metadata = Column(Text, nullable=True)      # JSON — non-secret info (account_id, org_name) for UI display
@@ -124,6 +128,7 @@ class EdgeEngine(Base):
     edge_cache_id = Column(String, ForeignKey('edge_caches.id'), nullable=True)
     edge_queue_id = Column(String, ForeignKey('edge_queues.id'), nullable=True)
     engine_config = Column(Text, nullable=True)         # JSON — e.g., {"worker_name": "frontbase-edge"}
+    project_id = Column(String, ForeignKey('project.id'), nullable=True)
     is_active = Column(Boolean, default=True)
     is_system = Column(Boolean, default=False)           # True = pre-seeded, cannot be deleted
     is_imported = Column(Boolean, default=False)          # True = imported from provider, False = deployed from Frontbase

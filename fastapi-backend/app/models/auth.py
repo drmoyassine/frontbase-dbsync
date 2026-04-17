@@ -77,4 +77,5 @@ class AppVariable(Base):
     value = Column(String)
     formula = Column(String)
     description = Column(Text)
+    project_id = Column(String, ForeignKey('project.id'), nullable=True)
     created_at = Column(String, nullable=False)

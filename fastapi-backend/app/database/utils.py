@@ -7,6 +7,7 @@ from datetime import datetime
 import json
 import os
 from cryptography.fernet import Fernet
+from app.middleware.tenant_context import TenantContext
 
 def get_db():
     """Get database session"""
@@ -47,8 +48,14 @@ def get_user_by_email(db: Session, email: str):
     """Get user by email"""
     return db.query(User).filter(User.email == email).first()
 
-def create_page(db: Session, page_data: dict):
+def create_page(db: Session, page_data: dict, ctx: TenantContext | None = None):
     """Create a new page"""
+    project_id = None
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            project_id = project.id
+            
     page = Page(
         id=generate_uuid(),
         name=page_data['name'],
@@ -61,24 +68,46 @@ def create_page(db: Session, page_data: dict):
         layout_data=json.dumps(page_data['layout_data']),
         seo_data=json.dumps(page_data.get('seo_data', {})),
         created_at=get_current_timestamp(),
-        updated_at=get_current_timestamp()
+        updated_at=get_current_timestamp(),
+        project_id=project_id
     )
     db.add(page)
     db.commit()
     db.refresh(page)
     return page
 
-def get_page_by_slug(db: Session, slug: str):
+def get_page_by_slug(db: Session, slug: str, ctx: TenantContext | None = None):
     """Get page by slug"""
-    return db.query(Page).filter(Page.slug == slug, Page.deleted_at == None).first()
+    query = db.query(Page).filter(Page.slug == slug, Page.deleted_at == None)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(Page.project_id == project.id)
+        else:
+            return None
+    return query.first()
 
-def get_all_pages(db: Session):
+def get_all_pages(db: Session, ctx: TenantContext | None = None):
     """Get all pages"""
-    return db.query(Page).filter(Page.deleted_at == None).all()
+    query = db.query(Page).filter(Page.deleted_at == None)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(Page.project_id == project.id)
+        else:
+            return []
+    return query.all()
 
-def update_page(db: Session, page_id: str, page_data: dict):
+def update_page(db: Session, page_id: str, page_data: dict, ctx: TenantContext | None = None):
     """Update a page"""
-    page = db.query(Page).filter(Page.id == page_id).first()
+    query = db.query(Page).filter(Page.id == page_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(Page.project_id == project.id)
+        else:
+            return None
+    page = query.first()
     if not page:
         return None
     
@@ -105,13 +134,16 @@ def update_page(db: Session, page_id: str, page_data: dict):
     db.refresh(page)
     return page
 
-def get_project(db: Session):
-    """Get the project (there should be only one)"""
-    return db.query(Project).first()
+def get_project(db: Session, ctx: TenantContext | None = None):
+    """Get the project (one per tenant)"""
+    query = db.query(Project)
+    if ctx and ctx.tenant_id:
+        query = query.filter(Project.tenant_id == ctx.tenant_id)
+    return query.first()
 
-def update_project(db: Session, project_data: dict):
+def update_project(db: Session, project_data: dict, ctx: TenantContext | None = None):
     """Update the project"""
-    project = get_project(db)
+    project = get_project(db, ctx)
     if not project:
         # Create project if it doesn't exist
         project = Project(
@@ -122,7 +154,8 @@ def update_project(db: Session, project_data: dict):
             favicon_url=project_data.get('favicon_url'),
             logo_url=project_data.get('logo_url'),
             created_at=get_current_timestamp(),
-            updated_at=get_current_timestamp()
+            updated_at=get_current_timestamp(),
+            tenant_id=ctx.tenant_id if ctx else None
         )
         db.add(project)
     else:
@@ -146,8 +179,14 @@ def update_project(db: Session, project_data: dict):
     db.refresh(project)
     return project
 
-def create_variable(db: Session, variable_data: dict):
+def create_variable(db: Session, variable_data: dict, ctx: TenantContext | None = None):
     """Create a new variable"""
+    project_id = None
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            project_id = project.id
+            
     variable = AppVariable(
         id=generate_uuid(),
         name=variable_data['name'],
@@ -155,16 +194,24 @@ def create_variable(db: Session, variable_data: dict):
         value=variable_data.get('value'),
         formula=variable_data.get('formula'),
         description=variable_data.get('description'),
-        created_at=get_current_timestamp()
+        created_at=get_current_timestamp(),
+        project_id=project_id
     )
     db.add(variable)
     db.commit()
     db.refresh(variable)
     return variable
 
-def get_all_variables(db: Session):
+def get_all_variables(db: Session, ctx: TenantContext | None = None):
     """Get all variables"""
-    return db.query(AppVariable).all()
+    query = db.query(AppVariable)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(AppVariable.project_id == project.id)
+        else:
+            return []
+    return query.all()
 
 def get_project_settings(db: Session, project_id: str = "default"):
     """Get project settings"""

@@ -16,6 +16,8 @@ import asyncio
 import json
 
 import httpx
+from ..middleware.tenant_context import TenantContext, get_tenant_context
+from ..database.utils import get_project
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 
@@ -24,6 +26,18 @@ from ..models.models import EdgeEngine
 from ..core.credential_resolver import get_provider_context_by_id
 
 router = APIRouter(prefix="/api/edge-engines", tags=["Engine Inspector"])
+
+
+def _scoped_engine_query(db, tenant_ctx: TenantContext | None):
+    q = _scoped_engine_query(db, tenant_ctx)
+    if tenant_ctx and tenant_ctx.tenant_id:
+        project = get_project(db, tenant_ctx)
+        if project:
+            q = q.filter(EdgeEngine.project_id == project.id)
+        else:
+            q = q.filter(EdgeEngine.id == "not-found")
+    return q
+
 
 SUPABASE_API = "https://api.supabase.com/v1"
 
@@ -35,12 +49,12 @@ HIDDEN_SECRETS = {'FRONTBASE_SYSTEM_KEY', 'FRONTBASE_API_KEY_HASHES'}
 # Helpers — resolve engine → provider context
 # =============================================================================
 
-def _resolve_engine(engine_id: str, db: Session) -> tuple:
+def _resolve_engine(engine_id: str, db: Session, tenant_ctx: TenantContext | None = None) -> tuple:
     """Look up engine, parse config, resolve credentials.
 
     Returns (engine, provider, ctx, engine_config).
     """
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    engine = _scoped_engine_query(db, tenant_ctx).filter(EdgeEngine.id == engine_id).first()
     if not engine:
         raise HTTPException(404, "Edge engine not found")
 
@@ -251,9 +265,9 @@ def _cf_inspect_settings(api_token: str, account_id: str, worker_name: str) -> d
 # =============================================================================
 
 @router.get("/{engine_id}/inspect/source")
-async def inspect_engine_source(engine_id: str, db: Session = Depends(get_db)):
+async def inspect_engine_source(engine_id: str, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """Fetch deployed source code from provider API."""
-    engine, provider, ctx, cfg = _resolve_engine(engine_id, db)
+    engine, provider, ctx, cfg = _resolve_engine(engine_id, db, tenant_ctx)
 
     if provider == "cloudflare":
         from ..services.cloudflare_api import detect_account_id
@@ -285,9 +299,9 @@ async def inspect_engine_source(engine_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{engine_id}/inspect/settings")
-async def inspect_engine_settings(engine_id: str, db: Session = Depends(get_db)):
+async def inspect_engine_settings(engine_id: str, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """Fetch deployed engine settings/config from provider API."""
-    engine, provider, ctx, cfg = _resolve_engine(engine_id, db)
+    engine, provider, ctx, cfg = _resolve_engine(engine_id, db, tenant_ctx)
 
     if provider == "cloudflare":
         from ..services.cloudflare_api import detect_account_id
@@ -321,9 +335,9 @@ async def inspect_engine_settings(engine_id: str, db: Session = Depends(get_db))
 
 
 @router.get("/{engine_id}/inspect/secrets")
-async def inspect_engine_secrets(engine_id: str, db: Session = Depends(get_db)):
+async def inspect_engine_secrets(engine_id: str, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """Fetch deployed secrets/env vars from provider API."""
-    engine, provider, ctx, cfg = _resolve_engine(engine_id, db)
+    engine, provider, ctx, cfg = _resolve_engine(engine_id, db, tenant_ctx)
 
     if provider == "cloudflare":
         from ..services.cloudflare_api import detect_account_id
@@ -497,14 +511,14 @@ async def _vercel_inspect_secrets(ctx: dict, cfg: dict) -> dict:
 # Domain Management — multi-provider, dispatched via domain_manager.py
 # =============================================================================
 
-def _get_creds(engine_id: str, db: Session) -> tuple:
+def _get_creds(engine_id: str, db: Session, tenant_ctx: TenantContext | None = None) -> tuple:
     """Resolve engine + merged credentials (ctx + raw creds for provider-specific keys).
     
     Returns (engine, provider_type, merged_creds).
     """
     from ..core.security import decrypt_credentials
 
-    engine, provider, ctx, cfg = _resolve_engine(engine_id, db)
+    engine, provider, ctx, cfg = _resolve_engine(engine_id, db, tenant_ctx)
     
     # Raw creds include provider-specific keys like personal_token, user_id
     from ..models.models import EdgeProviderAccount
@@ -528,41 +542,41 @@ class _AddDomainBody(_BaseModel):
 
 
 @router.get("/{engine_id}/inspect/domains")
-async def inspect_engine_domains(engine_id: str, db: Session = Depends(get_db)):
+async def inspect_engine_domains(engine_id: str, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """List custom domains for this engine."""
     from ..services import domain_manager as dm
 
-    engine, provider, creds = _get_creds(engine_id, db)
+    engine, provider, creds = _get_creds(engine_id, db, tenant_ctx)
     result = await dm.list_domains(engine, creds, provider, db=db)
     return result.to_dict()
 
 
 @router.post("/{engine_id}/inspect/domains")
-async def add_engine_domain(engine_id: str, body: _AddDomainBody, db: Session = Depends(get_db)):
+async def add_engine_domain(engine_id: str, body: _AddDomainBody, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """Add a custom domain to this engine."""
     from ..services import domain_manager as dm
 
-    engine, provider, creds = _get_creds(engine_id, db)
+    engine, provider, creds = _get_creds(engine_id, db, tenant_ctx)
     result = await dm.add_domain(engine, creds, provider, body.domain, db=db)
     return result.to_dict()
 
 
 @router.delete("/{engine_id}/inspect/domains/{domain_id}")
-async def delete_engine_domain(engine_id: str, domain_id: str, db: Session = Depends(get_db)):
+async def delete_engine_domain(engine_id: str, domain_id: str, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """Remove a custom domain from this engine."""
     from ..services import domain_manager as dm
 
-    engine, provider, creds = _get_creds(engine_id, db)
+    engine, provider, creds = _get_creds(engine_id, db, tenant_ctx)
     result = await dm.delete_domain(engine, creds, provider, domain_id, db=db)
     return result.to_dict()
 
 
 @router.post("/{engine_id}/inspect/domains/{domain_id}/verify")
-async def verify_engine_domain(engine_id: str, domain_id: str, db: Session = Depends(get_db)):
+async def verify_engine_domain(engine_id: str, domain_id: str, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """Trigger DNS verification for a custom domain."""
     from ..services import domain_manager as dm
 
-    engine, provider, creds = _get_creds(engine_id, db)
+    engine, provider, creds = _get_creds(engine_id, db, tenant_ctx)
     result = await dm.verify_domain(engine, creds, provider, domain_id, db=db)
     return result.to_dict()
 
@@ -572,7 +586,7 @@ async def verify_engine_domain(engine_id: str, domain_id: str, db: Session = Dep
 # =============================================================================
 
 @router.get("/{engine_id}/health-check")
-async def health_check(engine_id: str, db: Session = Depends(get_db)):
+async def health_check(engine_id: str, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """Proxy health check to the edge engine with FRONTBASE_SYSTEM_KEY.
 
     Resolves the system key from engine_config (Fernet-encrypted),
@@ -581,7 +595,7 @@ async def health_check(engine_id: str, db: Session = Depends(get_db)):
     """
     from ..core.security import decrypt_field
 
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    engine = _scoped_engine_query(db, tenant_ctx).filter(EdgeEngine.id == engine_id).first()
     if not engine:
         raise HTTPException(404, "Edge engine not found")
 

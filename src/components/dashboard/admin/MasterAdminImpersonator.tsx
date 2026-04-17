@@ -10,11 +10,22 @@ export const MasterAdminImpersonator: React.FC = () => {
     // Only render in cloud mode
     if (!isCloud()) return null;
 
-    const { user, _realUser, isImpersonating, tenant, _realTenant, setImpersonation, clearImpersonation } = useAuthStore();
+    const { user, _realUser, isImpersonating, tenant, _realTenant, setImpersonation, clearImpersonation, isLoading } = useAuthStore();
     
     // Feature is purely for Master Admins
     const isMaster = user?.is_master || _realUser?.is_master;
-    if (!isMaster) return null;
+    
+    // DEBUG: If not master, show a tiny red bubble with the state
+    if (!isMaster) {
+        return (
+            <div className="fixed bottom-6 left-6 z-50 p-2 bg-red-900 text-white font-mono text-[10px] rounded shadow-lg max-w-xs break-all">
+                ⚠️ Not Master<br/>
+                user: {user ? 'obj' : 'null'} | is_master: {user?.is_master ? 'true' : 'false'}<br/>
+                loading: {isLoading ? 'true' : 'false'}<br/>
+                role: {user?.role || 'none'}
+            </div>
+        );
+    }
 
     const [isOpen, setIsOpen] = useState(false);
     

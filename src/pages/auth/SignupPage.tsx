@@ -5,7 +5,7 @@
  * Only available in cloud mode (DEPLOYMENT_MODE=cloud).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, startTransition } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth';
 import { Button } from '@/components/ui/button';
@@ -90,7 +90,9 @@ export default function SignupPage() {
 
     const result = await signup(email, password, workspaceName, slug);
     if (result.success) {
-      navigate('/dashboard', { replace: true });
+      startTransition(() => {
+        navigate('/dashboard', { replace: true });
+      });
     }
   };
 

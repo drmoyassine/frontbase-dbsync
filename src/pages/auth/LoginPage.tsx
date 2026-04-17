@@ -5,7 +5,7 @@
  * Uses session-based auth via FastAPI backend.
  */
 
-import { useState } from 'react';
+import { useState, startTransition } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth';
 import { isCloud } from '@/lib/edition';
@@ -31,7 +31,9 @@ export default function LoginPage() {
 
         const result = await login(email, password);
         if (result.success) {
-            navigate(from, { replace: true });
+            startTransition(() => {
+                navigate(from, { replace: true });
+            });
         }
     };
 

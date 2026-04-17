@@ -14,7 +14,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { SignInAndUp } from "supertokens-auth-react/recipe/emailpassword";
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
@@ -35,14 +34,6 @@ export default function LoginPage() {
             navigate(from, { replace: true });
         }
     };
-
-    if (isCloud()) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-background">
-                <SignInAndUp />
-            </div>
-        );
-    }
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-background">

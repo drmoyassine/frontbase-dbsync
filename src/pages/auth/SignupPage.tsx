@@ -9,7 +9,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth';
 import { Button } from '@/components/ui/button';
-import { SignInAndUp } from "supertokens-auth-react/recipe/emailpassword";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -96,14 +95,6 @@ export default function SignupPage() {
   };
 
   const formError = error || passwordError;
-
-  if (isCloud()) {
-      return (
-          <div className="min-h-screen flex items-center justify-center bg-background p-4">
-              <SignInAndUp />
-          </div>
-      );
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">

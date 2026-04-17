@@ -18,7 +18,7 @@ export const MasterAdminImpersonator: React.FC = () => {
     // DEBUG: If not master, show a tiny red bubble with the state
     if (!isMaster) {
         return (
-            <div className="fixed bottom-6 left-6 z-50 p-2 bg-red-900 text-white font-mono text-[10px] rounded shadow-lg max-w-xs break-all">
+            <div className="fixed bottom-6 left-[280px] z-[9999] p-2 bg-red-900 text-white font-mono text-[10px] rounded shadow-lg max-w-xs break-all">
                 ⚠️ Not Master<br/>
                 user: {user ? 'obj' : 'null'} | is_master: {user?.is_master ? 'true' : 'false'}<br/>
                 loading: {isLoading ? 'true' : 'false'}<br/>
@@ -44,7 +44,7 @@ export const MasterAdminImpersonator: React.FC = () => {
     };
 
     return (
-        <div className="fixed bottom-6 left-6 z-50">
+        <div className="fixed bottom-6 left-[280px] z-[9999]">
             {/* Widget Toggle Button */}
             {!isOpen && (
                 <button

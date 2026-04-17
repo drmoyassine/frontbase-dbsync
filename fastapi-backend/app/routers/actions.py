@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 def _scoped_draft_select(db: Session, ctx: TenantContext | None):
-    q = _scoped_draft_select(db, ctx)
+    q = select(AutomationDraft)
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:
@@ -48,7 +48,7 @@ def _scoped_draft_select(db: Session, ctx: TenantContext | None):
     return q
 
 def _scoped_draft_query(db: Session, ctx: TenantContext | None):
-    q = _scoped_draft_query(db, ctx)
+    q = db.query(AutomationDraft)
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:
@@ -58,7 +58,7 @@ def _scoped_draft_query(db: Session, ctx: TenantContext | None):
     return q
 
 def _scoped_exec_select(db: Session, ctx: TenantContext | None):
-    q = _scoped_exec_select(db, ctx)
+    q = select(AutomationExecution)
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:

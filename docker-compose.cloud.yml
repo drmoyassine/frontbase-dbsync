@@ -156,7 +156,7 @@ services:
       - "3567"
     environment:
       POSTGRESQL_CONNECTION_URI: ${DATABASE_URL:-postgresql://frontbase:frontbase-dev-password@postgres:5432/frontbase}
-      API_KEYS: ${SUPERTOKENS_API_KEY:-dev-secret-key}
+      API_KEYS: ${SUPERTOKENS_API_KEY:-frontbase-dev-secret-key-change-me}
       # Required for multi-tenancy
       ENABLE_MULTI_TENANCY: "true"
     depends_on:

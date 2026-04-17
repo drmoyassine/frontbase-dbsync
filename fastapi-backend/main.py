@@ -335,11 +335,12 @@ app.add_middleware(TestModeMiddleware, test_mode=True)
 
 # Include routers — edition-aware registration
 if is_cloud():
-    from app.routers import auth_cloud, tenants as tenants_router
-    app.include_router(auth_cloud.router)  # Cloud auth (signup, JWT login, /me)
-    app.include_router(tenants_router.router, prefix="/api/tenants", tags=["Tenants"])
-else:
-    app.include_router(auth.router)  # Self-host auth (login, logout, me)
+    try:
+        from app.routers import tenants as tenants_router
+        app.include_router(tenants_router.router, prefix="/api/tenants", tags=["Tenants"])
+    except ImportError:
+        pass  # Tenants router not yet available
+app.include_router(auth.router)  # Auth (login, logout, /me) — works for both modes
 app.include_router(pages.router)
 app.include_router(project.router)
 app.include_router(variables.router)

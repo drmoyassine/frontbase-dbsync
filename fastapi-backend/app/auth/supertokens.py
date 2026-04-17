@@ -14,7 +14,7 @@ def init_supertokens():
     api_base_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
     website_base_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
     supertokens_uri = os.environ.get("SUPERTOKENS_URI", "http://supertokens:3567")
-    api_key = os.environ.get("SUPERTOKENS_API_KEY", "dev-secret-key")
+    api_key = os.environ.get("SUPERTOKENS_API_KEY", "frontbase-dev-secret-key-change-me")
 
     init(
         app_info=InputAppInfo(

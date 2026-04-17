@@ -60,12 +60,28 @@ def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
 
-def create_session(user_id: str, email: str) -> str:
-    """Create a new session and return session token"""
+def create_session(
+    user_id: str,
+    email: str,
+    *,
+    tenant_id: Optional[str] = None,
+    tenant_slug: Optional[str] = None,
+    role: str = "master",
+    is_master: bool = True,
+) -> str:
+    """Create a new session and return session token.
+
+    For master admin: is_master=True, tenant_id=None.
+    For tenant users: is_master=False, tenant_id/slug/role populated.
+    """
     token = secrets.token_urlsafe(32)
     sessions[token] = {
         "user_id": user_id,
         "email": email,
+        "tenant_id": tenant_id,
+        "tenant_slug": tenant_slug,
+        "role": role,
+        "is_master": is_master,
         "created_at": datetime.utcnow().isoformat(),
         "expires_at": (datetime.utcnow() + timedelta(seconds=SESSION_MAX_AGE)).isoformat(),
     }
@@ -88,7 +104,12 @@ def get_session(token: str) -> Optional[dict]:
 
 
 def get_current_user(request: Request) -> Optional[dict]:
-    """Get current user from session cookie"""
+    """Get current user from session cookie.
+
+    Returns the session dict which includes tenant context fields.
+    For master admin, returns the ADMIN_USERS entry merged with session.
+    For tenant users, returns the session payload directly.
+    """
     token = request.cookies.get(SESSION_COOKIE_NAME)
     if not token:
         return None
@@ -98,7 +119,13 @@ def get_current_user(request: Request) -> Optional[dict]:
         return None
     
     email = session["email"]
-    return ADMIN_USERS.get(email)
+    admin = ADMIN_USERS.get(email)
+    if admin:
+        # Master admin — merge static admin data with session context
+        return {**admin, **session}
+    
+    # Tenant user — session has all needed fields
+    return session
 
 
 @router.options("/login")
@@ -109,19 +136,87 @@ async def login_options():
 
 @router.post("/login", response_model=AuthResponse)
 async def login(request: LoginRequest, response: Response):
-    """Login with email and password"""
+    """Login with email and password.
+
+    Checks master admin first, then DB users table (cloud mode).
+    """
     user = ADMIN_USERS.get(request.email)
     
-    if not user:
+    if user:
+        # Master admin login
+        if user["password_hash"] != hash_password(request.password):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+        token = create_session(
+            user["id"], user["email"],
+            is_master=True, role="master",
+        )
+        _set_session_cookie(response, token)
+        
+        return AuthResponse(
+            user=UserResponse(
+                id=user["id"],
+                email=user["email"],
+                created_at=user["created_at"],
+                updated_at=user["updated_at"],
+            ),
+            message="Login successful",
+        )
+    
+    # Not master admin — check DB users table (cloud mode)
+    from app.config.edition import is_cloud
+    if not is_cloud():
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    if user["password_hash"] != hash_password(request.password):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+    from app.database.config import SessionLocal
+    from app.models.models import User, TenantMember, Tenant
     
-    # Create session
-    token = create_session(user["id"], user["email"])
-    
-    # Set cookie
+    db = SessionLocal()
+    try:
+        db_user = db.query(User).filter(User.email == request.email).first()
+        if not db_user or str(db_user.password_hash) != hash_password(request.password):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+        # Find tenant membership
+        member = db.query(TenantMember).filter(
+            TenantMember.user_id == db_user.id
+        ).first()
+        
+        tenant_id = None
+        tenant_slug = None
+        role = "viewer"
+        
+        if member:
+            tenant = db.query(Tenant).filter(Tenant.id == member.tenant_id).first()
+            tenant_id = str(member.tenant_id)
+            tenant_slug = str(tenant.slug) if tenant else None
+            role = str(member.role)
+        
+        token = create_session(
+            str(db_user.id), str(db_user.email),
+            tenant_id=tenant_id,
+            tenant_slug=tenant_slug,
+            role=role,
+            is_master=False,
+        )
+        _set_session_cookie(response, token)
+        
+        return AuthResponse(
+            user=UserResponse(
+                id=str(db_user.id),
+                email=str(db_user.email),
+                username=str(db_user.username) if db_user.username else None,
+                created_at=str(db_user.created_at),
+                updated_at=str(db_user.updated_at),
+            ),
+            message="Login successful",
+        )
+    finally:
+        db.close()
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    """Set the session cookie on the response."""
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=token,
@@ -130,51 +225,28 @@ async def login(request: LoginRequest, response: Response):
         samesite="lax",
         secure=os.getenv("ENVIRONMENT") == "production",
     )
-    
-    return AuthResponse(
-        user=UserResponse(
-            id=user["id"],
-            email=user["email"],
-            created_at=user["created_at"],
-            updated_at=user["updated_at"],
-        ),
-        message="Login successful",
-    )
 
 
 @router.get("/me")
 async def get_me(request: Request):
-    """Get current authenticated user"""
-    from app.config.edition import is_cloud
-    if is_cloud():
-        from app.middleware.tenant_context import get_tenant_context
-        ctx = await get_tenant_context(request)
-        if not ctx:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-        return {
-            "user": {
-                "id": ctx.user_id,
-                "email": ctx.email,
-                "tenant_id": ctx.tenant_id,
-                "tenant_slug": ctx.tenant_slug,
-                "role": ctx.role,
-                "is_master": ctx.is_master,
-            }
-        }
-
+    """Get current authenticated user with tenant context."""
     user = get_current_user(request)
     
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     return {
-        "user": UserResponse(
-            id=user["id"],
-            email=user["email"],
-            username=user.get("username"),
-            created_at=user["created_at"],
-            updated_at=user["updated_at"],
-        )
+        "user": {
+            "id": user["user_id"],
+            "email": user["email"],
+            "username": user.get("username"),
+            "created_at": user.get("created_at", ""),
+            "updated_at": user.get("updated_at", ""),
+            "tenant_id": user.get("tenant_id"),
+            "tenant_slug": user.get("tenant_slug"),
+            "role": user.get("role", "master"),
+            "is_master": user.get("is_master", False),
+        }
     }
 
 

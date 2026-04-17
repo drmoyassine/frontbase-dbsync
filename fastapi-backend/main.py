@@ -340,6 +340,11 @@ if is_cloud():
         app.include_router(tenants_router.router, prefix="/api/tenants", tags=["Tenants"])
     except ImportError:
         pass  # Tenants router not yet available
+    try:
+        from app.routers import tenant_admin
+        app.include_router(tenant_admin.router, prefix="/api/admin/tenants", tags=["Tenant Admin"])
+    except ImportError:
+        pass  # Tenant admin router not yet available
 app.include_router(auth.router)  # Auth (login, logout, /me) — works for both modes
 app.include_router(pages.router)
 app.include_router(project.router)

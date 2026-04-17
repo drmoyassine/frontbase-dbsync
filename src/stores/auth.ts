@@ -165,27 +165,21 @@ export const useAuthStore = create<AuthState>()(
 
           const data = await response.json();
 
-          if (isCloud()) {
-            // Cloud mode — JWT response
-            set({
-              user: data.user,
-              tenant: data.tenant || null,
-              token: data.token,
-              isAuthenticated: true,
-              isLoading: false,
-              error: null,
-            });
-          } else {
-            // Self-host mode — session cookie response
-            set({
-              user: data.user,
-              tenant: null,
-              token: null,
-              isAuthenticated: true,
-              isLoading: false,
-              error: null,
-            });
-          }
+          // Both modes use cookie sessions — tenant context comes from the user object
+          set({
+            user: data.user,
+            tenant: data.user?.tenant_id ? {
+              id: data.user.tenant_id,
+              slug: data.user.tenant_slug || '',
+              name: data.user.tenant_slug || '', // Will be enriched on tenant fetch
+              plan: 'free',
+              status: 'active',
+            } : null,
+            token: null,  // Cookie-based — no JWT
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
+          });
           return { success: true };
         } catch (err) {
           const error = err instanceof Error ? err.message : 'Network error';
@@ -238,16 +232,12 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: async () => {
-        const { token } = get();
         try {
-          if (!isCloud()) {
-            // Self-host: hit logout endpoint to clear server session
-            await fetch(`${API_BASE}/api/auth/logout`, {
-              method: 'POST',
-              credentials: 'include',
-            });
-          }
-          // Cloud: JWT is stateless — just clear local state
+          // Both modes: hit logout endpoint to clear server session
+          await fetch(`${API_BASE}/api/auth/logout`, {
+            method: 'POST',
+            credentials: 'include',
+          });
         } catch {
           // Ignore logout errors
         }
@@ -271,19 +261,12 @@ export const useAuthStore = create<AuthState>()(
         }
 
         _checkAuthPromise = (async () => {
-          const { token } = get();
-
-          // Cloud mode with no token — skip network call
-          if (isCloud() && !token) {
-            set({ user: null, tenant: null, isAuthenticated: false, isLoading: false });
-            return;
-          }
-
+          // Both modes use cookie sessions — always check the backend
           set({ isLoading: true });
           try {
             const response = await fetch(
               `${API_BASE}/api/auth/me`,
-              fetchOpts(token),
+              { credentials: 'include' },
             );
 
             if (response.ok) {

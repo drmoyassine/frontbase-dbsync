@@ -76,23 +76,19 @@ const getApiBase = (): string => {
 const API_BASE = getApiBase();
 
 /**
- * Build fetch options — cloud mode adds JWT Authorization header,
- * self-host mode uses credentials: 'include' for cookies.
+ * Build fetch options — both modes use cookie-based sessions,
+ * so credentials: 'include' is always required.
  */
-function fetchOpts(token: string | null, extra: RequestInit = {}): RequestInit {
+function fetchOpts(_token: string | null, extra: RequestInit = {}): RequestInit {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(extra.headers as Record<string, string> || {}),
   };
 
-  if (isCloud() && token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
   return {
     ...extra,
     headers,
-    credentials: isCloud() ? 'omit' : 'include',
+    credentials: 'include',
   };
 }
 

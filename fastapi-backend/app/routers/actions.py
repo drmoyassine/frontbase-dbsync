@@ -474,7 +474,7 @@ async def publish_draft_to_engine(
     # 3. UPDATE DB — new connection for post-deploy status update
     update_db = SessionLocal()
     try:
-        draft_record = update__scoped_draft_query(db, ctx).filter(
+        draft_record = _scoped_draft_query(update_db, ctx).filter(
             AutomationDraft.id == draft_id_str
         ).first()
         if draft_record:
@@ -588,7 +588,7 @@ async def publish_draft_batch(
     # Update DB with deployment records
     update_db = SessionLocal()
     try:
-        draft_record = update__scoped_draft_query(db, ctx).filter(AutomationDraft.id == draft_id_str).first()
+        draft_record = _scoped_draft_query(update_db, ctx).filter(AutomationDraft.id == draft_id_str).first()
         if draft_record:
             deployed: dict = dict(draft_record.deployed_engines or {})  # type: ignore[arg-type]
             for r in results:
@@ -1008,7 +1008,7 @@ def _serialize_execution(r):
 
 EXEC_CACHE_TTL = 1200  # 20 minutes
 
-async def _collect_edge_urls(db: Session) -> dict:
+async def _collect_edge_urls(db: Session, ctx: TenantContext) -> dict:
     """Gather unique edge URLs from the EdgeEngine registry table.
     Returns {url: engine_name} mapping — only engines that have
     workflows deployed to them (matching deployed_engines keys)."""
@@ -1052,9 +1052,9 @@ async def _fetch_from_edge(client: httpx.AsyncClient, url: str, engine_name: str
     return []
 
 
-async def _pull_from_edges(db: Session, params: dict) -> list:
+async def _pull_from_edges(db: Session, params: dict, ctx: TenantContext) -> list:
     """Fan out to all edges with deployed workflows and collect executions."""
-    edge_map = await _collect_edge_urls(db)
+    edge_map = await _collect_edge_urls(db, ctx)
     if not edge_map:
         return []
 

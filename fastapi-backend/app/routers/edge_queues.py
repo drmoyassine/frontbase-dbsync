@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/edge-queues", tags=["edge-queues"])
 
 
 def _scoped_queue_query(db, ctx: TenantContext | None):
-    q = _scoped_queue_query(db, ctx)
+    q = db.query(EdgeQueue)
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:

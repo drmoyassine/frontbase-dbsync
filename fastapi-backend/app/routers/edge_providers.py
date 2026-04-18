@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/edge-providers", tags=["edge-providers"])
 
 
 def _scoped_provider_query(db: Session, ctx: TenantContext | None):
-    q = _scoped_provider_query(db, ctx)
+    q = db.query(EdgeProviderAccount)
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:

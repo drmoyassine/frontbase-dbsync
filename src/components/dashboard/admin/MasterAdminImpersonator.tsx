@@ -7,31 +7,29 @@ const PLAN_TIERS = ['free', 'starter', 'pro', 'enterprise'];
 const ROLES = ['owner', 'admin', 'editor', 'viewer'];
 
 export const MasterAdminImpersonator: React.FC = () => {
-    // Only render in cloud mode
-    if (!isCloud()) return null;
-
     const { user, _realUser, isImpersonating, tenant, _realTenant, setImpersonation, clearImpersonation, isLoading } = useAuthStore();
-    
+
+    // ALL hooks must be called unconditionally — React Rules of Hooks
+    const [isOpen, setIsOpen] = useState(false);
+    const [selectedPlan, setSelectedPlan] = useState('pro');
+    const [selectedRole, setSelectedRole] = useState('owner');
+
     // Feature is purely for Master Admins
     const isMaster = user?.is_master || _realUser?.is_master;
-    
-    // DEBUG: If not master, show a tiny red bubble with the state
-    if (!isMaster) {
-        return (
-            <div className="fixed bottom-6 left-[280px] z-[9999] p-2 bg-red-900 text-white font-mono text-[10px] rounded shadow-lg max-w-xs break-all">
-                ⚠️ Not Master<br/>
-                user: {user ? 'obj' : 'null'} | is_master: {user?.is_master ? 'true' : 'false'}<br/>
-                loading: {isLoading ? 'true' : 'false'}<br/>
-                role: {user?.role || 'none'}
-            </div>
-        );
-    }
 
-    const [isOpen, setIsOpen] = useState(false);
-    
-    // Initial states for the form based on current impersonation
-    const [selectedPlan, setSelectedPlan] = useState(_realTenant?.plan || tenant?.plan || 'pro');
-    const [selectedRole, setSelectedRole] = useState(user?.role || _realUser?.role || 'owner');
+    // Sync plan/role defaults when auth state loads (avoids stale initial values)
+    React.useEffect(() => {
+        if (isImpersonating) {
+            setSelectedPlan(_realTenant?.plan || tenant?.plan || 'pro');
+            setSelectedRole(user?.role || _realUser?.role || 'owner');
+        } else {
+            setSelectedPlan(tenant?.plan || 'pro');
+            setSelectedRole(user?.role || 'owner');
+        }
+    }, [user?.role, _realUser?.role, tenant?.plan, _realTenant?.plan, isImpersonating]);
+
+    // Only render in cloud mode, and only for master admins
+    if (!isCloud() || !isMaster) return null;
 
     const handleImpersonate = () => {
         setImpersonation(selectedPlan, selectedRole);

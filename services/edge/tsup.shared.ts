@@ -145,31 +145,32 @@ const DENO_ALIASES: Record<string, string> = {
 
 // ── Exported factories ───────────────────────────────────────────────
 
+// ── esbuild plugin: stub runtime-only node packages in edge builds ───
+// noExternal: [/.*/] forces esbuild to inline everything, including dynamic
+// imports. This plugin intercepts ioredis and bullmq (which rely on node builtins)
+// and redirects them to an empty shim. This prevents bundler errors (like missing
+// child_process, net, etc.) and allows these providers to fail cleanly at runtime.
+const stubNodeOnly = {
+    name: 'stub-node-only',
+    setup(build: any) {
+        build.onResolve({ filter: /^(ioredis|bullmq)$/ }, () => ({
+            path: shim('empty'),
+        }));
+    },
+};
+
 /** Node/V8 isolate config — for Cloudflare Workers, Vercel */
 export function tsupConfigNode(entry: string) {
     return defineConfig({
         ...BASE,
         entry: [entry],
         platform: 'node',
+        esbuildPlugins: [localSqlitePlugin, stubNodeOnly, embedClientAssetsPlugin],
         esbuildOptions(opts) {
             opts.alias = { ...opts.alias, ...NODE_ALIASES };
         },
     } as Options);
 }
-
-// ── esbuild plugin: externalize Node-only packages in edge builds ────
-// noExternal: [/.*/] forces esbuild to inline everything, including dynamic
-// imports. This plugin intercepts ioredis resolution and marks it external
-// so edge bundles (Supabase, Netlify, Deno) never pull in Node built-ins.
-const externalizeNodeOnly = {
-    name: 'externalize-node-only',
-    setup(build: any) {
-        build.onResolve({ filter: /^ioredis$/ }, (args: any) => ({
-            path: args.path,
-            external: true,
-        }));
-    },
-};
 
 /** Deno config — for Supabase Edge Functions, Netlify Edge, Deno Deploy */
 export function tsupConfigDeno(entry: string) {
@@ -177,26 +178,12 @@ export function tsupConfigDeno(entry: string) {
         ...BASE,
         entry: [entry],
         platform: 'browser',
-        esbuildPlugins: [localSqlitePlugin, externalizeNodeOnly, embedClientAssetsPlugin],
+        esbuildPlugins: [localSqlitePlugin, stubNodeOnly, embedClientAssetsPlugin],
         esbuildOptions(opts) {
             opts.alias = { ...opts.alias, ...DENO_ALIASES };
         },
     } as Options);
 }
-
-// ── esbuild plugin: stub ioredis for Vercel Edge ────────────────────
-// Vercel Edge Runtime can't resolve external imports (they hang instead
-// of failing). Instead of externalizing ioredis, redirect it to an
-// empty shim so the IoRedisAdapter constructor fails immediately and
-// falls back to NullCache.
-const stubIoredis = {
-    name: 'stub-ioredis',
-    setup(build: any) {
-        build.onResolve({ filter: /^ioredis$/ }, () => ({
-            path: shim('empty'),
-        }));
-    },
-};
 
 /** Vercel config — like Deno but stubs ioredis + post-build export fix */
 export function tsupConfigVercel(entry: string) {
@@ -204,14 +191,9 @@ export function tsupConfigVercel(entry: string) {
         ...BASE,
         entry: [entry],
         platform: 'browser',
-        esbuildPlugins: [localSqlitePlugin, stubIoredis, embedClientAssetsPlugin],
+        esbuildPlugins: [localSqlitePlugin, stubNodeOnly, embedClientAssetsPlugin],
         esbuildOptions(opts) {
             opts.alias = { ...opts.alias, ...DENO_ALIASES };
         },
     } as Options);
 }
-
-
-
-
-

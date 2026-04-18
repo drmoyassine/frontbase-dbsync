@@ -28,6 +28,7 @@ class NoopProvider implements QueueService {
 // node_modules dep in the Docker image and resolved at runtime.
 async function createBullMQProvider(): Promise<QueueService> {
   try {
+    // @ts-ignore - bullmq is only installed in the docker container
     const { Queue, Worker } = await import('bullmq');
 
     const parseRedisUrl = () => {
@@ -52,7 +53,7 @@ async function createBullMQProvider(): Promise<QueueService> {
       },
       process(jobName: string, handler: JobHandler): void {
         if (workers.has(jobName)) return;
-        const worker = new Worker(jobName, async (job) => {
+        const worker = new Worker(jobName, async (job: any) => {
           await handler(job.data);
         }, { connection: parseRedisUrl() });
         workers.set(jobName, worker);

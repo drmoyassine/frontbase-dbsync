@@ -1,14 +1,6 @@
-c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\middleware\tenant_filter.py
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\middleware\tenant_filter.py:50:42 - error: Argument of type "Subquery" cannot be assigned to parameter "other" of type "Iterable[Any] | BindParameter[Any] | InElementRole" in function "in_"
-    Type "Subquery" is not assignable to type "Iterable[Any] | BindParameter[Any] | InElementRole"
-      "Subquery" is incompatible with protocol "Iterable[Any]"
-        "__iter__" is not present
-      "Subquery" is not assignable to "BindParameter[Any]"
-      "Subquery" is not assignable to "InElementRole" (reportArgumentType)
 c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\actions.py
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\actions.py:477:24 - error: "update__scoped_draft_query" is not defined (reportUndefinedVariable)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\actions.py:591:24 - error: "update__scoped_draft_query" is not defined (reportUndefinedVariable)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\actions.py:1017:34 - error: "ctx" is not defined (reportUndefinedVariable)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\actions.py:1107:29 - error: Argument missing for parameter "ctx" (reportCallIssue)
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\actions.py:1226:22 - error: Argument missing for parameter "ctx" (reportCallIssue)
   c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\actions.py:1313:23 - error: Operator "-" not supported for types "tuple[Unknown | _DatetimeWithFold | datetime | Unbound, Unknown] | Unknown | _DatetimeWithFold | datetime" and "tuple[Unknown | _DatetimeWithFold | datetime | Unbound, Unknown] | Unknown | _DatetimeWithFold | datetime"
     Operator "-" not supported for types "tuple[Unknown | _DatetimeWithFold | datetime | Unbound, Unknown]" and "tuple[Unknown | _DatetimeWithFold | datetime | Unbound, Unknown]"
     Operator "-" not supported for types "tuple[Unknown | _DatetimeWithFold | datetime | Unbound, Unknown]" and "_DatetimeWithFold"
@@ -16,58 +8,18 @@ c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\rou
     Operator "-" not supported for types "_DatetimeWithFold" and "tuple[Unknown | _DatetimeWithFold | datetime | Unbound, Unknown]"
     Operator "-" not supported for types "_DatetimeWithFold" and "datetime"
     Operator "-" not supported for types "datetime" and "tuple[Unknown | _DatetimeWithFold | datetime | Unbound, Unknown]" (reportOperatorIssue)
-c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\auth.py
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\auth.py:208:51 - error: Invalid conditional operand of type "Column[str]"
-    Method __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
 c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py
   c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:62:52 - error: Expected 2 positional arguments (reportCallIssue)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:106:44 - error: Cannot access attribute "ids" for class "BatchDeleteRequest"
-    Attribute "ids" is unknown (reportAttributeAccessIssue)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:110:24 - error: Cannot access attribute "ids" for class "BatchDeleteRequest"
-    Attribute "ids" is unknown (reportAttributeAccessIssue)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:161:44 - error: Cannot access attribute "ids" for class "BatchToggleRequest"
-    Attribute "ids" is unknown (reportAttributeAccessIssue)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:162:24 - error: Cannot access attribute "ids" for class "BatchToggleRequest"
-    Attribute "ids" is unknown (reportAttributeAccessIssue)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:877:15 - error: Type "dict[Unknown, Unknown]" is not assignable to declared type "TenantContext | None"
-    Type "dict[Unknown, Unknown]" is not assignable to type "TenantContext | None"
-      "dict[Unknown, Unknown]" is not assignable to "TenantContext"
-      "dict[Unknown, Unknown]" is not assignable to "None" (reportAssignmentType)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:878:29 - error: Cannot access attribute "get" for class "TenantContext"
-    Attribute "get" is unknown (reportAttributeAccessIssue)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:878:29 - error: "get" is not a known attribute of "None" (reportOptionalMemberAccess)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:879:25 - error: Cannot access attribute "get" for class "TenantContext"
-    Attribute "get" is unknown (reportAttributeAccessIssue)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:879:25 - error: "get" is not a known attribute of "None" (reportOptionalMemberAccess)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:931:11 - error: Type "dict[Unknown, Unknown]" is not assignable to declared type "TenantContext | None"
-    Type "dict[Unknown, Unknown]" is not assignable to type "TenantContext | None"
-      "dict[Unknown, Unknown]" is not assignable to "TenantContext"
-      "dict[Unknown, Unknown]" is not assignable to "None" (reportAssignmentType)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:932:25 - error: Cannot access attribute "get" for class "TenantContext"
-    Attribute "get" is unknown (reportAttributeAccessIssue)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:932:25 - error: "get" is not a known attribute of "None" (reportOptionalMemberAccess)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:933:21 - error: Cannot access attribute "get" for class "TenantContext"
-    Attribute "get" is unknown (reportAttributeAccessIssue)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_engines.py:933:21 - error: "get" is not a known attribute of "None" (reportOptionalMemberAccess)
-c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\crud.py
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\pages\crud.py:199:64 - error: Argument of type "Subquery" cannot be assigned to parameter "other" of type "Iterable[Any] | BindParameter[Any] | InElementRole" in function "in_"
-    Type "Subquery" is not assignable to type "Iterable[Any] | BindParameter[Any] | InElementRole"
-      "Subquery" is incompatible with protocol "Iterable[Any]"
-        "__iter__" is not present
-      "Subquery" is not assignable to "BindParameter[Any]"
-      "Subquery" is not assignable to "InElementRole" (reportArgumentType)
-c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\tenant_admin.py
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\tenant_admin.py:89:33 - error: Invalid conditional operand of type "Column[str]"
+c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_providers.py
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_providers.py:79:16 - error: Invalid conditional operand of type "Column[str]"
     Method __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\tenant_admin.py:90:37 - error: Invalid conditional operand of type "Column[str]"
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_providers.py:125:12 - error: Invalid conditional operand of type "Column[str]"
     Method __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\tenant_admin.py:133:41 - error: Invalid conditional operand of type "Column[str]"
-    Method __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
-  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\tenant_admin.py:134:45 - error: Invalid conditional operand of type "Column[str]"
+  c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\edge_providers.py:135:8 - error: Invalid conditional operand of type "Column[str]"
     Method __bool__ for type "Column[str]" returns type "NoReturn" rather than "bool" (reportGeneralTypeIssues)
 c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\tenants.py
   c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\routers\tenants.py:121:10 - error: Import "app.routers.auth_cloud" could not be resolved (reportMissingImports)
 c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\main.py
   c:\Users\drmoy\OneDrive - studygram.me\VsCode\Frontbase-\fastapi-backend\app\services\sync\main.py:243:12 - error: Cannot access attribute "decode" for class "memoryview[int]"
     Attribute "decode" is unknown (reportAttributeAccessIssue)
-28 errors, 0 warnings, 0 informations
+9 errors, 0 warnings, 0 informations

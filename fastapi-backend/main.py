@@ -27,8 +27,8 @@ def _ensure_local_edge():
     Skipped in cloud (multi-tenant) mode — the edge container still runs
     for build-time services, but won't appear in the UI or as a publish target.
     """
-    if is_cloud():
-        return
+    # if is_cloud():
+    #     return
 
     from datetime import datetime
     import uuid

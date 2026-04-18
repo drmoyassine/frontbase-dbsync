@@ -462,8 +462,23 @@ async def _test_queue(provider: str, queue_url: str, queue_token: Optional[str],
         return await _test_qstash(queue_token)
     elif provider == "cloudflare":
         return await _test_cf_queue(queue_url, provider_account_id)
+    elif provider == "bullmq":
+        from ..services.sync.redis_client import test_redis_connection
+        import time
+        start = time.time()
+        success, message = await test_redis_connection(
+            redis_url=queue_url,
+            redis_token=queue_token or "",
+            redis_type="redis",
+        )
+        latency = round((time.time() - start) * 1000, 1)
+        return TestQueueResult(
+            success=success,
+            message=f"{message} ({latency}ms)" if success else message,
+            latency_ms=latency if success else None,
+        )
     else:
-        # Future providers (RabbitMQ, BullMQ, SQS) — not yet implemented
+        # Future providers (RabbitMQ, SQS) — not yet implemented
         return TestQueueResult(
             success=False,
             message=f"Test not yet implemented for provider: {provider}",

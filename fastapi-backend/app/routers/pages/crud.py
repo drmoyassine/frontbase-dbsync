@@ -194,7 +194,7 @@ async def get_pages(
             project_ids = (
                 db.query(Project.id)
                 .filter(Project.tenant_id == ctx.tenant_id)
-                .subquery()
+                .scalar_subquery()
             )
             base_query = base_query.filter(Page.project_id.in_(project_ids))
 

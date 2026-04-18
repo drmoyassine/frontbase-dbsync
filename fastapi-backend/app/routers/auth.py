@@ -205,7 +205,7 @@ async def login(request: LoginRequest, response: Response):
             user=UserResponse(
                 id=str(db_user.id),
                 email=str(db_user.email),
-                username=str(db_user.username) if db_user.username else None,
+                username=str(db_user.username) if getattr(db_user, 'username', None) is not None else None,
                 created_at=str(db_user.created_at),
                 updated_at=str(db_user.updated_at),
             ),

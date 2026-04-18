@@ -45,7 +45,7 @@ def scoped_pages_query(
         project_ids = (
             db.query(Project.id)
             .filter(Project.tenant_id == ctx.tenant_id)
-            .subquery()
+            .scalar_subquery()
         )
         q = q.filter(Page.project_id.in_(project_ids))
 

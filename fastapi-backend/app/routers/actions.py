@@ -1008,7 +1008,7 @@ def _serialize_execution(r):
 
 EXEC_CACHE_TTL = 1200  # 20 minutes
 
-async def _collect_edge_urls(db: Session, ctx: TenantContext) -> dict:
+async def _collect_edge_urls(db: Session, ctx: TenantContext | None = None) -> dict:
     """Gather unique edge URLs from the EdgeEngine registry table.
     Returns {url: engine_name} mapping — only engines that have
     workflows deployed to them (matching deployed_engines keys)."""
@@ -1052,7 +1052,7 @@ async def _fetch_from_edge(client: httpx.AsyncClient, url: str, engine_name: str
     return []
 
 
-async def _pull_from_edges(db: Session, params: dict, ctx: TenantContext) -> list:
+async def _pull_from_edges(db: Session, params: dict, ctx: TenantContext | None = None) -> list:
     """Fan out to all edges with deployed workflows and collect executions."""
     edge_map = await _collect_edge_urls(db, ctx)
     if not edge_map:
@@ -1223,7 +1223,7 @@ async def export_executions_csv(
     import csv
 
     # Determine which edges to query
-    edge_map = await _collect_edge_urls(db)
+    edge_map = await _collect_edge_urls(db, ctx)
 
     # Filter by engine_ids if specified
     if engine_ids:
@@ -1310,7 +1310,7 @@ async def export_executions_csv(
         if started and ended:
             try:
                 from dateutil.parser import parse as parse_dt
-                dur = (parse_dt(ended) - parse_dt(started)).total_seconds()
+                dur = (parse_dt(ended) - parse_dt(started)).total_seconds()  # type: ignore[operator]
                 duration = f"{dur:.1f}"
             except Exception:
                 pass

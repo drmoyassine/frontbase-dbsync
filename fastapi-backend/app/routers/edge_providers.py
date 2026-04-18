@@ -76,7 +76,7 @@ def get_workspace_agent_token(db: Session = Depends(get_db), ctx: TenantContext 
     for p in providers:
         if str(p.provider) in ("openai", "anthropic", "workers_ai", "ollama"):
             fallback_provider = p
-            if p.provider_metadata:
+            if getattr(p, 'provider_metadata', None) is not None:
                 try:
                     meta = json.loads(str(p.provider_metadata))
                     if meta.get("is_workspace_default"):
@@ -122,7 +122,7 @@ def set_workspace_agent_token(payload: SetWorkspaceDefaultRequest, db: Session =
         
     all_providers = _scoped_provider_query(db, ctx).all()
     for p in all_providers:
-        if p.provider_metadata:
+        if getattr(p, 'provider_metadata', None) is not None:
             try:
                 meta = json.loads(str(p.provider_metadata))
                 if meta.get("is_workspace_default"):
@@ -132,7 +132,7 @@ def set_workspace_agent_token(payload: SetWorkspaceDefaultRequest, db: Session =
                 pass
                 
     meta = {}
-    if provider.provider_metadata:
+    if getattr(provider, 'provider_metadata', None) is not None:
         try:
             meta = json.loads(str(provider.provider_metadata))
         except Exception:

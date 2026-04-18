@@ -103,11 +103,11 @@ async def batch_delete_engines(
     ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Batch delete engine records. Optionally delete remote resources."""
-    result = BatchResult(total=len(payload.ids))
+    result = BatchResult(total=len(payload.engine_ids))
     
     # Phase 1: Check permissions/existence
     records_to_delete: list[EdgeEngine] = []
-    for eid in payload.ids:
+    for eid in payload.engine_ids:
         query = db.query(EdgeEngine).filter(EdgeEngine.id == eid)
         if ctx and ctx.tenant_id:
             project = get_project(db, ctx)
@@ -158,8 +158,8 @@ async def batch_toggle_engines(
     ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Batch activate/deactivate routing."""
-    result = BatchResult(total=len(payload.ids))
-    for eid in payload.ids:
+    result = BatchResult(total=len(payload.engine_ids))
+    for eid in payload.engine_ids:
         query = db.query(EdgeEngine).filter(EdgeEngine.id == eid)
         if ctx and ctx.tenant_id:
             project = get_project(db, ctx)
@@ -874,9 +874,9 @@ async def update_log_config(
     # Validate interval against retention
     if interval_hours is not None and str(engine.edge_provider_id or ""):
         from ..core.credential_resolver import get_provider_context_by_id
-        ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
-        provider_type = ctx.get("provider_type", "")
-        plan_tier = ctx.get("_metadata", {}).get("plan_tier", "free")
+        provider_ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
+        provider_type = provider_ctx.get("provider_type", "")
+        plan_tier = provider_ctx.get("_metadata", {}).get("plan_tier", "free")
         retention = get_retention_hours(provider_type, plan_tier)
         if interval_hours > retention:
             raise HTTPException(
@@ -928,9 +928,9 @@ async def get_log_retention(
         raise HTTPException(status_code=400, detail="Engine has no linked provider account")
 
     from ..core.credential_resolver import get_provider_context_by_id
-    ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
-    provider_type = ctx.get("provider_type", "")
-    plan_tier = ctx.get("_metadata", {}).get("plan_tier", "free")
+    provider_ctx = get_provider_context_by_id(db, str(engine.edge_provider_id))
+    provider_type = provider_ctx.get("provider_type", "")
+    plan_tier = provider_ctx.get("_metadata", {}).get("plan_tier", "free")
     retention = get_retention_hours(provider_type, plan_tier)
 
     config = _get_engine_config(engine)

@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api/edge-engines", tags=["Engine Inspector"])
 
 
 def _scoped_engine_query(db, tenant_ctx: TenantContext | None):
-    q = _scoped_engine_query(db, tenant_ctx)
+    q = db.query(EdgeEngine)
     if tenant_ctx and tenant_ctx.tenant_id:
         project = get_project(db, tenant_ctx)
         if project:

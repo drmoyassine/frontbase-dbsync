@@ -59,7 +59,7 @@ async def get_bundle_hashes():
 @router.post("/deploy")
 async def deploy_engine(payload: GenericDeployRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Provider-agnostic one-click deploy. Delegates to engine_provisioner."""
-    return await provision_and_deploy(payload, db, ctx)
+    return await provision_and_deploy(payload, db)
 
 
 # =============================================================================

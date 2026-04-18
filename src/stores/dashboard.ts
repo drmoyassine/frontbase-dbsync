@@ -107,7 +107,9 @@ export const useDashboardStore = create<DashboardState>()(
               }
             }
 
-            set({ connections: transformedConnections });
+            if (JSON.stringify(get().connections) !== JSON.stringify(transformedConnections)) {
+              set({ connections: transformedConnections });
+            }
             get().notifyConnectionChange();
             debug.critical('DASHBOARD', 'Connections updated:', Object.keys(transformedConnections));
           } catch (error) {

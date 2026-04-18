@@ -240,7 +240,7 @@ async def views_swagger_ui():
         swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
         swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
         swagger_favicon_url="",
-    ).body.decode()
+    ).body.decode()  # type: ignore[attr-defined]
     
     # Inject CSS and JS
     html = html.replace("</head>", f"<style>{custom_css}</style></head>")

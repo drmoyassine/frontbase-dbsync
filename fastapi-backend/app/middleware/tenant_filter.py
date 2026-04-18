@@ -7,8 +7,9 @@ all rows, preserving existing behaviour.
 
 Usage::
 
-    from app.middleware.tenant_filter import scoped_pages_query
-
+    from app.middleware.tenant_filter import scoped_pages_query, scoped_project_query, _scoped_provider_query
+    
+    # ...
     pages = scoped_pages_query(db, ctx).all()
 """
 
@@ -20,6 +21,7 @@ from sqlalchemy.orm import Session, Query
 
 from app.models.page import Page
 from app.models.auth import Project
+from app.models.edge import EdgeProviderAccount
 
 if TYPE_CHECKING:
     from app.middleware.tenant_context import TenantContext
@@ -65,5 +67,27 @@ def scoped_project_query(
 
     if ctx and ctx.tenant_id and not ctx.is_master:
         q = q.filter(Project.tenant_id == ctx.tenant_id)
+
+    return q
+
+
+def _scoped_provider_query(
+    db: Session, ctx: "Optional[TenantContext]"
+) -> "Query[EdgeProviderAccount]":
+    """Return an EdgeProviderAccount query scoped to the tenant.
+
+    - ``ctx is None``      → unfiltered (self-host)
+    - ``ctx.is_master``    → unfiltered (platform admin)
+    - otherwise            → filtered by project_id ∈ tenant's projects
+    """
+    q: Query[EdgeProviderAccount] = db.query(EdgeProviderAccount)
+
+    if ctx and ctx.tenant_id and not ctx.is_master:
+        project_ids = (
+            db.query(Project.id)
+            .filter(Project.tenant_id == ctx.tenant_id)
+            .scalar_subquery()
+        )
+        q = q.filter(EdgeProviderAccount.project_id.in_(project_ids))
 
     return q

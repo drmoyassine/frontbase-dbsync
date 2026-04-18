@@ -103,7 +103,12 @@ const App = () => {
       ]);
     };
 
-    initializeApp();
+    // Fix for React #310 - Push fetchers out of the concurrent mount phase
+    const timeoutId = setTimeout(() => {
+      initializeApp();
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
   }, [isAuthenticated, fetchConnections, loadProjectFromDatabase, loadPagesFromDatabase, loadVariablesFromDatabase]);
 
   return (

@@ -118,10 +118,15 @@ async def check_slug(slug: str):
 
     # Validate format
     import re
-    from app.routers.auth_cloud import RESERVED_SLUGS, SLUG_PATTERN, _validate_slug
-    err = _validate_slug(slug)
-    if err:
-        return {"available": False, "error": err}
+    if len(slug) < 3 or len(slug) > 50:
+        return {"available": False, "error": "Slug must be between 3 and 50 characters"}
+        
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):
+        return {"available": False, "error": "Slug must be lowercase alphanumeric with hyphens, cannot start/end with hyphen"}
+        
+    RESERVED_SLUGS = {"admin", "app", "api", "auth", "login", "signup", "dashboard", "www", "test", "demo"}
+    if slug in RESERVED_SLUGS:
+        return {"available": False, "error": f"Slug '{slug}' is reserved"}
 
     db = SessionLocal()
     try:

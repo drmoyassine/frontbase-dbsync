@@ -129,10 +129,11 @@ async def batch_delete_engines(
     if payload.delete_remote:
         async def _safe_delete(eng: EdgeEngine):
             try:
-                if str(eng.edge_provider_id or ""):
+                if str(eng.edge_provider_id or "") and str(eng.edge_provider_id) not in ("None", "null"):
                     await engine_test.delete_remote_resource(eng, db)
             except Exception as e:
-                result.failed.append({"id": str(eng.id), "error": f"Remote delete failed: {e}"})
+                import logging
+                logging.error(f"Remote delete failed for {eng.id}: {e} - Proceeding with local DB deletion anyway.")
 
         await asyncio.gather(*[_safe_delete(eng) for eng in records_to_delete])
 
@@ -482,8 +483,12 @@ async def delete_engine(
         raise HTTPException(status_code=403, detail="Cannot delete a system edge engine")
 
     # Delete remote resource (works for all providers)
-    if delete_remote and str(engine.edge_provider_id or ""):
-        await engine_test.delete_remote_resource(engine, db)
+    if delete_remote and str(engine.edge_provider_id or "") and str(engine.edge_provider_id) not in ("None", "null"):
+        try:
+            await engine_test.delete_remote_resource(engine, db)
+        except Exception as e:
+            import logging
+            logging.error(f"Remote delete failed for {engine.id}: {e} - Proceeding with local DB deletion anyway.")
 
     db.delete(engine)
     db.commit()

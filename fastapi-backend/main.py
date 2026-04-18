@@ -62,12 +62,13 @@ def _ensure_local_edge():
 
         # --- 2. Local Redis system cache ---
         sys_cache = db.query(EdgeCache).filter(EdgeCache.is_system == True).first()  # noqa: E712
+        redis_url = os.getenv("REDIS_URL", "redis://redis:6379")
         if not sys_cache:
             sys_cache = EdgeCache(
                 id=str(uuid.uuid4()),
                 name="Local Redis",
                 provider="redis",
-                cache_url="redis://localhost:6379",
+                cache_url=redis_url,
                 is_default=False,
                 is_system=True,
                 created_at=now,
@@ -76,10 +77,14 @@ def _ensure_local_edge():
             db.add(sys_cache)
             db.flush()
             logger.info("[Startup] ✅ Local Redis cache seeded")
-        elif bool(sys_cache.is_default):
-            # Clear stale default on system resource
-            sys_cache.is_default = False  # type: ignore[assignment]
-            logger.info("[Startup] Cleared is_default on system cache")
+        else:
+            if sys_cache.cache_url == "redis://localhost:6379":
+                sys_cache.cache_url = redis_url  # type: ignore[assignment]
+                logger.info("[Startup] Patched sys_cache URL to external container reference")
+            if bool(sys_cache.is_default):
+                # Clear stale default on system resource
+                sys_cache.is_default = False  # type: ignore[assignment]
+                logger.info("[Startup] Cleared is_default on system cache")
 
         # --- 2.5 Local BullMQ system queue ---
         sys_queue = db.query(EdgeQueue).filter(EdgeQueue.is_system == True).first()  # noqa: E712
@@ -88,7 +93,7 @@ def _ensure_local_edge():
                 id=str(uuid.uuid4()),
                 name="Local BullMQ",
                 provider="bullmq",
-                queue_url="redis://localhost:6379",
+                queue_url=redis_url,
                 is_default=False,
                 is_system=True,
                 created_at=now,
@@ -97,10 +102,14 @@ def _ensure_local_edge():
             db.add(sys_queue)
             db.flush()
             logger.info("[Startup] ✅ Local BullMQ queue seeded")
-        elif bool(sys_queue.is_default):
-            # Clear stale default on system resource
-            sys_queue.is_default = False  # type: ignore[assignment]
-            logger.info("[Startup] Cleared is_default on system queue")
+        else:
+            if sys_queue.queue_url == "redis://localhost:6379":
+                sys_queue.queue_url = redis_url  # type: ignore[assignment]
+                logger.info("[Startup] Patched sys_queue URL to external container reference")
+            if bool(sys_queue.is_default):
+                # Clear stale default on system resource
+                sys_queue.is_default = False  # type: ignore[assignment]
+                logger.info("[Startup] Cleared is_default on system queue")
 
         # --- 3. Local Edge system engine ---
         sys_engine = db.query(EdgeEngine).filter(EdgeEngine.is_system == True).first()  # noqa: E712

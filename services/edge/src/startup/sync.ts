@@ -52,109 +52,21 @@ async function initEmbeddedRedis(): Promise<SyncResult> {
 
 
 
-/**
- * Fetch homepage from FastAPI and store in local pages.db
- */
-async function syncHomepageFromFastAPI(): Promise<boolean> {
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/pages/homepage/`, {
-            headers: { 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(5000), // 5s timeout
-        });
-
-        if (!response.ok) {
-            if (response.status === 404) {
-                console.log('[Startup Sync] No homepage configured in FastAPI yet');
-                return false;
-            }
-            console.warn(`[Startup Sync] FastAPI returned ${response.status}`);
-            return false;
-        }
-
-        const result = await response.json();
-        const pageData = result.data;
-
-        if (!pageData) {
-            console.warn('[Startup Sync] No page data in response');
-            return false;
-        }
-
-        // Convert to publish format
-        const publishData = {
-            id: pageData.id,
-            slug: pageData.slug,
-            name: pageData.name,
-            title: pageData.title || undefined,
-            description: pageData.description || undefined,
-            layoutData: pageData.layoutData,
-            seoData: pageData.seoData || undefined,
-            datasources: pageData.datasources || undefined,
-            version: 1,
-            publishedAt: new Date().toISOString(),
-            isPublic: pageData.isPublic ?? true,
-            isHomepage: true,
-        };
-
-        await stateProvider.upsertPage(publishData);
-        console.log(`[Startup Sync] ✅ Homepage synced: ${pageData.slug}`);
-        return true;
-
-    } catch (error) {
-        if (error instanceof Error && error.name === 'TimeoutError') {
-            console.warn('[Startup Sync] FastAPI request timed out');
-        } else {
-            console.warn('[Startup Sync] Failed to fetch homepage:', error);
-        }
-        return false;
-    }
-}
-
-/**
- * Run startup sync with retries
- * Called once when Edge boots up
- */
 export async function runStartupSync(): Promise<void> {
     console.log('[Startup Sync] 🚀 Starting Edge database initialization...');
 
     // Initialize state database (runs migrations including v2 for workflows/executions)
     await stateProvider.init();
 
-    // Only Docker (local) engines sync with FastAPI — all cloud platforms
-    // (cloudflare, supabase, vercel, netlify, deno, upstash) get their config
-    // from deploy-time secrets. Skip to avoid 15s of wasted cold-start retries.
     const platform = getPlatform();
-    if (platform !== 'docker') {
-        console.log(`[Startup Sync] ☁️  Platform "${platform}" — skipping backend sync (secrets pushed at deploy time)`);
-        return;
+    if (platform === 'docker') {
+        // Docker platform: init embedded Redis (no backend call needed)
+        console.log('[Startup Sync] Initializing embedded Redis...');
+        await initEmbeddedRedis();
     }
 
-    // Docker platform: init embedded Redis (no backend call needed)
-    console.log('[Startup Sync] Initializing embedded Redis...');
-    await initEmbeddedRedis();
-
-    // Check if we already have a homepage
-    const existingHomepage = await stateProvider.getHomepage();
-    if (existingHomepage) {
-        console.log(`[Startup Sync] Homepage already exists: ${existingHomepage.slug} (v${existingHomepage.version})`);
-        return;
-    }
-
-    // No local homepage - try to sync from FastAPI with retries
-    console.log('[Startup Sync] No local homepage, syncing from FastAPI...');
-
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        console.log(`[Startup Sync] Attempt ${attempt}/${MAX_RETRIES}...`);
-
-        const success = await syncHomepageFromFastAPI();
-        if (success) {
-            return;
-        }
-
-        if (attempt < MAX_RETRIES) {
-            console.log(`[Startup Sync] Waiting ${RETRY_DELAY_MS / 1000}s before retry...`);
-            await sleep(RETRY_DELAY_MS);
-        }
-    }
-
-    console.warn('[Startup Sync] ⚠️ Could not sync homepage after all retries. Homepage will be pull-published on first request.');
+    // All platforms rely on publish push (/api/import) or manual caching
+    // Disabling auto-fetch on startup to prevent 15s delays and ECONNREFUSED logs
+    // when backend is slow or unreachable.
+    console.log('[Startup Sync] 🏁 Edge Node Ready — waiting for publish events or requests');
 }

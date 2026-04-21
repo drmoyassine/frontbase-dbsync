@@ -518,7 +518,41 @@ export const DomainsPanel: React.FC<DomainsPanelProps> = ({
                                         <div className="flex items-start gap-2">
                                             <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
                                             <div className="space-y-1.5 flex-1">
-                                                {d.provider === 'cloudflare' ? (
+                                                {d.provider === 'cloudflare' && d.domain.startsWith('*.') ? (
+                                                    <>
+                                                        <p className="text-[11px] font-medium text-blue-700 dark:text-blue-400">
+                                                            Configure wildcard routing
+                                                        </p>
+                                                        <p className="text-[10px] text-muted-foreground">
+                                                            Cloudflare created the DNS record automatically. You must also add a <strong>Workers Route</strong> to wire traffic to the Worker.
+                                                        </p>
+                                                        <ol className="text-[10px] text-muted-foreground space-y-1 list-decimal list-inside">
+                                                            <li>
+                                                                Go to the Worker's <strong>Settings → Domains & Routes</strong>
+                                                            </li>
+                                                            <li>
+                                                                Click <strong>+ Add</strong> → select <strong>Route</strong>
+                                                            </li>
+                                                            <li>
+                                                                <div className="mt-0.5 ml-1 space-y-0.5">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="text-muted-foreground">Zone:</span>
+                                                                        <code className="text-[10px] font-mono bg-muted px-1 py-0.5 rounded">{d.domain.slice(2)}</code>
+                                                                        <CopyButton text={d.domain.slice(2)} />
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="text-muted-foreground">Route:</span>
+                                                                        <code className="text-[10px] font-mono bg-muted px-1 py-0.5 rounded">{d.domain}/*</code>
+                                                                        <CopyButton text={`${d.domain}/*`} />
+                                                                    </div>
+                                                                </div>
+                                                            </li>
+                                                        </ol>
+                                                        <p className="text-[10px] text-muted-foreground mt-1">
+                                                            After saving the route, click <strong>Verify DNS</strong> below.
+                                                        </p>
+                                                    </>
+                                                ) : d.provider === 'cloudflare' ? (
                                                     <>
                                                         <p className="text-[11px] font-medium text-blue-700 dark:text-blue-400">
                                                             Verify domain to activate

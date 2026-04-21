@@ -27,8 +27,8 @@ export function WizardComputeStep({ computeType, selectComputeAndProceed }: Depl
                     : 'border-border hover:border-muted-foreground/50'
                     }`}
             >
-                <div className="flex items-center gap-2">
-                    <Cpu className="w-5 h-5 text-blue-500" />
+                <div className="flex flex-wrap items-center gap-1.5">
+                    <Cpu className="w-5 h-5 text-blue-500 shrink-0" />
                     <span className="font-semibold text-sm">CPU</span>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-tight">
@@ -43,10 +43,10 @@ export function WizardComputeStep({ computeType, selectComputeAndProceed }: Depl
                     : 'border-border hover:border-muted-foreground/50'
                     }`}
             >
-                <div className="flex items-center gap-2">
-                    <Brain className="w-5 h-5 text-purple-500" />
+                <div className="flex flex-wrap items-center gap-1.5">
+                    <Brain className="w-5 h-5 text-purple-500 shrink-0" />
                     <span className="font-semibold text-sm">GPU</span>
-                    <Badge variant="secondary" className="text-[10px] h-4 py-0 bg-purple-500/10 text-purple-500">AI</Badge>
+                    <Badge variant="secondary" className="text-[10px] h-4 py-0 bg-purple-500/10 text-purple-500 ml-auto sm:ml-0">AI</Badge>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-tight">
                     Everything in CPU + AI model inference via Workers AI (LLMs, embeddings, vision…).
@@ -61,10 +61,10 @@ export function WizardComputeStep({ computeType, selectComputeAndProceed }: Depl
                         : 'border-border hover:border-muted-foreground/50'
                         }`}
                 >
-                    <div className="flex items-center gap-2">
-                        <Globe className="w-5 h-5 text-emerald-500" />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        <Globe className="w-5 h-5 text-emerald-500 shrink-0" />
                         <span className="font-semibold text-sm">Community</span>
-                        <Badge variant="secondary" className="text-[10px] h-4 py-0 bg-emerald-500/10 text-emerald-500">SaaS</Badge>
+                        <Badge variant="secondary" className="text-[10px] h-4 py-0 bg-emerald-500/10 text-emerald-500 ml-auto sm:ml-0">SaaS</Badge>
                     </div>
                     <p className="text-[11px] text-muted-foreground leading-tight">
                         Shared multi-tenant engine for *.frontbase.dev wildcard routing.

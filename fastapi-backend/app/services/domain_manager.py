@@ -296,8 +296,16 @@ async def _cf_delete(engine: EdgeEngine, creds: dict, domain_id: str, **kwargs: 
 
 
 async def _cf_verify(engine: EdgeEngine, creds: dict, domain_id: str, **kwargs: Any) -> DomainResult:
-    """Verify CF domain resolves via shared health check."""
-    # domain_id for CF is the API domain UUID — look up hostname from list
+    """Verify CF domain resolves via shared health check.
+
+    domain_id can be either a CF API UUID or a raw hostname (e.g. *.frontbase.dev).
+    If it looks like a hostname (contains '.'), skip the API lookup and probe directly.
+    """
+    # If domain_id looks like a hostname, skip CF lookup and verify directly
+    if '.' in domain_id:
+        return await _verify_domain_health(engine, domain_id, kwargs.get("db"))
+
+    # Otherwise, domain_id is a CF UUID — resolve hostname from API
     token = creds.get("api_token", "")
     account_id = creds.get("account_id", "")
     headers = {"Authorization": f"Bearer {token}"}

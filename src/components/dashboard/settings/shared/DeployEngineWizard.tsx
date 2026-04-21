@@ -54,7 +54,7 @@ export function DeployEngineWizard() {
 
             {/* Main deploy wizard dialog */}
             <Dialog open={open} onOpenChange={handleOpenChange}>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="sm:max-w-[680px]">
                     <DialogHeader>
                         <DialogTitle>{stepTitle()}</DialogTitle>
                         <DialogDescription>

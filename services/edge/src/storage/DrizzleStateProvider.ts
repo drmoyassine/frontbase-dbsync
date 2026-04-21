@@ -23,6 +23,7 @@ import type {
     WorkflowData, ExecutionData, NewExecutionData, ExecutionStats, DeadLetterData,
     AgentToolData,
 } from './IStateProvider';
+import { isMultiTenantSlug } from './IStateProvider';
 import { publishedPages, projectSettings, workflowsTable, executionsTable, agentToolsTable, type NewPublishedPage } from './schema';
 
 /** Default favicon path (Frontbase logo) */
@@ -48,8 +49,10 @@ export abstract class DrizzleStateProvider implements IStateProvider {
 
     async upsertPage(page: PublishPage): Promise<{ success: boolean; version: number }> {
         const database = this.getDb();
+        const tenantSlug = (page as any).tenantSlug || '_default';
         const record: NewPublishedPage = {
-            id: page.id, slug: page.slug, name: page.name,
+            id: page.id, slug: page.slug, tenantSlug,
+            name: page.name,
             title: page.title || null, description: page.description || null,
             layoutData: JSON.stringify(page.layoutData),
             seoData: page.seoData ? JSON.stringify(page.seoData) : null,
@@ -61,9 +64,14 @@ export abstract class DrizzleStateProvider implements IStateProvider {
         };
 
         if (page.isHomepage) {
+            // Only scope homepage reset to tenant on community engines
+            const conditions = [eq(publishedPages.isHomepage, true)];
+            if (isMultiTenantSlug(tenantSlug)) {
+                conditions.push(eq(publishedPages.tenantSlug, tenantSlug));
+            }
             await database.update(publishedPages)
                 .set({ isHomepage: false })
-                .where(eq(publishedPages.isHomepage, true));
+                .where(and(...conditions));
         }
 
         await database.insert(publishedPages)
@@ -76,40 +84,52 @@ export abstract class DrizzleStateProvider implements IStateProvider {
         return { success: true, version: page.version };
     }
 
-    async getPageBySlug(slug: string): Promise<PublishPage | null> {
+    async getPageBySlug(slug: string, tenantSlug?: string): Promise<PublishPage | null> {
+        const conditions = [eq(publishedPages.slug, slug)];
+        if (isMultiTenantSlug(tenantSlug)) conditions.push(eq(publishedPages.tenantSlug, tenantSlug));
         const record = await this.getDb().select()
-            .from(publishedPages).where(eq(publishedPages.slug, slug)).get();
+            .from(publishedPages).where(and(...conditions)).get();
         return record ? this.recordToPage(record) : null;
     }
 
-    async getHomepage(): Promise<PublishPage | null> {
+    async getHomepage(tenantSlug?: string): Promise<PublishPage | null> {
+        const conditions = [eq(publishedPages.isHomepage, true)];
+        if (isMultiTenantSlug(tenantSlug)) conditions.push(eq(publishedPages.tenantSlug, tenantSlug));
         const record = await this.getDb().select()
-            .from(publishedPages).where(eq(publishedPages.isHomepage, true)).get();
+            .from(publishedPages).where(and(...conditions)).get();
         return record ? this.recordToPage(record) : null;
     }
 
-    async deletePage(slug: string): Promise<boolean> {
-        await this.getDb().delete(publishedPages).where(eq(publishedPages.slug, slug));
+    async deletePage(slug: string, tenantSlug?: string): Promise<boolean> {
+        const conditions = [eq(publishedPages.slug, slug)];
+        if (isMultiTenantSlug(tenantSlug)) conditions.push(eq(publishedPages.tenantSlug, tenantSlug));
+        await this.getDb().delete(publishedPages).where(and(...conditions));
         return true;
     }
 
-    async listPages(): Promise<PublishedPageSummary[]> {
-        return await this.getDb().select({
+    async listPages(tenantSlug?: string): Promise<PublishedPageSummary[]> {
+        let query = this.getDb().select({
             id: publishedPages.id, slug: publishedPages.slug, name: publishedPages.name, version: publishedPages.version,
         }).from(publishedPages);
+        if (isMultiTenantSlug(tenantSlug)) query = query.where(eq(publishedPages.tenantSlug, tenantSlug));
+        return await query;
     }
 
-    async listPublicPageSlugs(): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]> {
+    async listPublicPageSlugs(tenantSlug?: string): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]> {
+        const conditions = [eq(publishedPages.isPublic, true)];
+        if (isMultiTenantSlug(tenantSlug)) conditions.push(eq(publishedPages.tenantSlug, tenantSlug));
         return await this.getDb().select({
             slug: publishedPages.slug,
             updatedAt: publishedPages.updatedAt,
             isHomepage: publishedPages.isHomepage,
-        }).from(publishedPages).where(eq(publishedPages.isPublic, true));
+        }).from(publishedPages).where(and(...conditions));
     }
 
     private recordToPage(record: any): PublishPage {
         return {
-            id: record.id, slug: record.slug, name: record.name,
+            id: record.id, slug: record.slug,
+            tenantSlug: record.tenantSlug || '_default',
+            name: record.name,
             title: record.title || undefined, description: record.description || undefined,
             layoutData: JSON.parse(record.layoutData) as PageLayout,
             seoData: record.seoData ? JSON.parse(record.seoData) as SeoData : undefined,

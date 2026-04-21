@@ -25,6 +25,7 @@ import type {
     WorkflowData, ExecutionData, NewExecutionData, ExecutionStats, DeadLetterData,
     AgentToolData,
 } from './IStateProvider';
+import { isMultiTenantSlug } from './IStateProvider';
 
 const DEFAULT_FAVICON = '/static/icon.png';
 
@@ -91,7 +92,8 @@ const PG_MIGRATIONS = [
     // Published pages
     `CREATE TABLE IF NOT EXISTS ${SCHEMA}.published_pages (
         id TEXT PRIMARY KEY,
-        slug TEXT NOT NULL UNIQUE,
+        slug TEXT NOT NULL,
+        tenant_slug TEXT NOT NULL DEFAULT '_default',
         name TEXT NOT NULL,
         title TEXT,
         description TEXT,
@@ -107,6 +109,7 @@ const PG_MIGRATIONS = [
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_pp_tenant_slug ON ${SCHEMA}.published_pages(tenant_slug, slug)`,
 
     // Project settings
     `CREATE TABLE IF NOT EXISTS ${SCHEMA}.project_settings (
@@ -231,23 +234,28 @@ export class NeonHttpProvider implements IStateProvider {
     // =========================================================================
 
     async upsertPage(page: PublishPage): Promise<{ success: boolean; version: number }> {
+        const tenantSlug = (page as any).tenantSlug || '_default';
         if (page.isHomepage) {
-            await this.query(`UPDATE ${SCHEMA}.published_pages SET is_homepage = FALSE WHERE is_homepage = TRUE`);
+            if (isMultiTenantSlug(tenantSlug)) {
+                await this.query(`UPDATE ${SCHEMA}.published_pages SET is_homepage = FALSE WHERE is_homepage = TRUE AND tenant_slug = $1`, [tenantSlug]);
+            } else {
+                await this.query(`UPDATE ${SCHEMA}.published_pages SET is_homepage = FALSE WHERE is_homepage = TRUE`);
+            }
         }
 
         await this.query(
-            `INSERT INTO ${SCHEMA}.published_pages (id, slug, name, title, description, layout_data, seo_data, datasources, css_bundle, version, published_at, is_public, is_homepage, content_hash, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            `INSERT INTO ${SCHEMA}.published_pages (id, slug, tenant_slug, name, title, description, layout_data, seo_data, datasources, css_bundle, version, published_at, is_public, is_homepage, content_hash, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
              ON CONFLICT(id) DO UPDATE SET
-               slug = EXCLUDED.slug, name = EXCLUDED.name, title = EXCLUDED.title,
-               description = EXCLUDED.description, layout_data = EXCLUDED.layout_data,
-               seo_data = EXCLUDED.seo_data, datasources = EXCLUDED.datasources,
-               css_bundle = EXCLUDED.css_bundle, version = EXCLUDED.version,
-               published_at = EXCLUDED.published_at, is_public = EXCLUDED.is_public,
-               is_homepage = EXCLUDED.is_homepage, content_hash = EXCLUDED.content_hash,
-               updated_at = EXCLUDED.updated_at`,
+               slug = EXCLUDED.slug, tenant_slug = EXCLUDED.tenant_slug, name = EXCLUDED.name,
+               title = EXCLUDED.title, description = EXCLUDED.description,
+               layout_data = EXCLUDED.layout_data, seo_data = EXCLUDED.seo_data,
+               datasources = EXCLUDED.datasources, css_bundle = EXCLUDED.css_bundle,
+               version = EXCLUDED.version, published_at = EXCLUDED.published_at,
+               is_public = EXCLUDED.is_public, is_homepage = EXCLUDED.is_homepage,
+               content_hash = EXCLUDED.content_hash, updated_at = EXCLUDED.updated_at`,
             [
-                page.id, page.slug, page.name,
+                page.id, page.slug, tenantSlug, page.name,
                 page.title || null, page.description || null,
                 JSON.stringify(page.layoutData),
                 page.seoData ? JSON.stringify(page.seoData) : null,
@@ -260,7 +268,7 @@ export class NeonHttpProvider implements IStateProvider {
             ]
         );
 
-        console.log(`🐘 Upserted page (PG): ${page.slug} (v${page.version})`);
+        console.log(`🐘 Upserted page (PG): ${tenantSlug}/${page.slug} (v${page.version})`);
         return { success: true, version: page.version };
     }
 
@@ -268,6 +276,7 @@ export class NeonHttpProvider implements IStateProvider {
         return {
             id: row.id as string,
             slug: row.slug as string,
+            tenantSlug: (row.tenant_slug as string) || '_default',
             name: row.name as string,
             title: (row.title as string) || undefined,
             description: (row.description as string) || undefined,
@@ -282,30 +291,48 @@ export class NeonHttpProvider implements IStateProvider {
         };
     }
 
-    async getPageBySlug(slug: string): Promise<PublishPage | null> {
-        const row = await this.get(`SELECT * FROM ${SCHEMA}.published_pages WHERE slug = $1`, [slug]);
+    async getPageBySlug(slug: string, tenantSlug?: string): Promise<PublishPage | null> {
+        const where = isMultiTenantSlug(tenantSlug)
+            ? `WHERE slug = $1 AND tenant_slug = $2`
+            : `WHERE slug = $1`;
+        const params = isMultiTenantSlug(tenantSlug) ? [slug, tenantSlug] : [slug];
+        const row = await this.get(`SELECT * FROM ${SCHEMA}.published_pages ${where}`, params);
         return row ? this.rowToPage(row) : null;
     }
 
-    async getHomepage(): Promise<PublishPage | null> {
-        const row = await this.get(`SELECT * FROM ${SCHEMA}.published_pages WHERE is_homepage = TRUE`);
+    async getHomepage(tenantSlug?: string): Promise<PublishPage | null> {
+        const where = isMultiTenantSlug(tenantSlug)
+            ? `WHERE is_homepage = TRUE AND tenant_slug = $1`
+            : `WHERE is_homepage = TRUE`;
+        const params = isMultiTenantSlug(tenantSlug) ? [tenantSlug] : [];
+        const row = await this.get(`SELECT * FROM ${SCHEMA}.published_pages ${where}`, params);
         return row ? this.rowToPage(row) : null;
     }
 
-    async deletePage(slug: string): Promise<boolean> {
-        await this.query(`DELETE FROM ${SCHEMA}.published_pages WHERE slug = $1`, [slug]);
+    async deletePage(slug: string, tenantSlug?: string): Promise<boolean> {
+        const where = isMultiTenantSlug(tenantSlug)
+            ? `WHERE slug = $1 AND tenant_slug = $2`
+            : `WHERE slug = $1`;
+        const params = isMultiTenantSlug(tenantSlug) ? [slug, tenantSlug] : [slug];
+        await this.query(`DELETE FROM ${SCHEMA}.published_pages ${where}`, params);
         return true;
     }
 
-    async listPages(): Promise<PublishedPageSummary[]> {
+    async listPages(tenantSlug?: string): Promise<PublishedPageSummary[]> {
+        const where = isMultiTenantSlug(tenantSlug) ? `WHERE tenant_slug = $1` : '';
+        const params = isMultiTenantSlug(tenantSlug) ? [tenantSlug] : [];
         return this.all<PublishedPageSummary>(
-            `SELECT id, slug, name, version FROM ${SCHEMA}.published_pages`
+            `SELECT id, slug, name, version FROM ${SCHEMA}.published_pages ${where}`, params
         );
     }
 
-    async listPublicPageSlugs(): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]> {
+    async listPublicPageSlugs(tenantSlug?: string): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]> {
+        const conditions = ['is_public = TRUE'];
+        const params: unknown[] = [];
+        if (isMultiTenantSlug(tenantSlug)) { conditions.push(`tenant_slug = $1`); params.push(tenantSlug); }
+        const where = `WHERE ${conditions.join(' AND ')}`;
         const rows = await this.all<{ slug: string; updated_at: string; is_homepage: boolean }>(
-            `SELECT slug, updated_at, is_homepage FROM ${SCHEMA}.published_pages WHERE is_public = TRUE`
+            `SELECT slug, updated_at, is_homepage FROM ${SCHEMA}.published_pages ${where}`, params
         );
         return rows.map(r => ({
             slug: r.slug,

@@ -22,6 +22,7 @@ import type {
     WorkflowData, ExecutionData, NewExecutionData, ExecutionStats, DeadLetterData,
     AgentToolData,
 } from './IStateProvider';
+import { isMultiTenantSlug } from './IStateProvider';
 import { runMigrations } from './edge-migrations';
 
 const DEFAULT_FAVICON = '/static/icon.png';
@@ -161,26 +162,34 @@ export class CfD1HttpProvider implements IStateProvider {
     // =========================================================================
 
     async upsertPage(page: PublishPage): Promise<{ success: boolean; version: number }> {
-        // Enforce homepage uniqueness
+        const tenantSlug = (page as any).tenantSlug || '_default';
+        // Enforce homepage uniqueness (scoped only on community engines)
         if (page.isHomepage) {
-            await this.run(
-                `UPDATE published_pages SET is_homepage = 0 WHERE is_homepage = 1`
-            );
+            if (isMultiTenantSlug(tenantSlug)) {
+                await this.run(
+                    `UPDATE published_pages SET is_homepage = 0 WHERE is_homepage = 1 AND tenant_slug = ?1`,
+                    [tenantSlug]
+                );
+            } else {
+                await this.run(
+                    `UPDATE published_pages SET is_homepage = 0 WHERE is_homepage = 1`
+                );
+            }
         }
 
         await this.run(
-            `INSERT INTO published_pages (id, slug, name, title, description, layout_data, seo_data, datasources, css_bundle, version, published_at, is_public, is_homepage, content_hash, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            `INSERT INTO published_pages (id, slug, tenant_slug, name, title, description, layout_data, seo_data, datasources, css_bundle, version, published_at, is_public, is_homepage, content_hash, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
              ON CONFLICT(id) DO UPDATE SET
-               slug = excluded.slug, name = excluded.name, title = excluded.title,
-               description = excluded.description, layout_data = excluded.layout_data,
-               seo_data = excluded.seo_data, datasources = excluded.datasources,
-               css_bundle = excluded.css_bundle, version = excluded.version,
-               published_at = excluded.published_at, is_public = excluded.is_public,
-               is_homepage = excluded.is_homepage, content_hash = excluded.content_hash,
-               updated_at = excluded.updated_at`,
+               slug = excluded.slug, tenant_slug = excluded.tenant_slug, name = excluded.name,
+               title = excluded.title, description = excluded.description,
+               layout_data = excluded.layout_data, seo_data = excluded.seo_data,
+               datasources = excluded.datasources, css_bundle = excluded.css_bundle,
+               version = excluded.version, published_at = excluded.published_at,
+               is_public = excluded.is_public, is_homepage = excluded.is_homepage,
+               content_hash = excluded.content_hash, updated_at = excluded.updated_at`,
             [
-                page.id, page.slug, page.name,
+                page.id, page.slug, tenantSlug, page.name,
                 page.title || null, page.description || null,
                 JSON.stringify(page.layoutData),
                 page.seoData ? JSON.stringify(page.seoData) : null,
@@ -193,7 +202,7 @@ export class CfD1HttpProvider implements IStateProvider {
             ]
         );
 
-        console.log(`🔶 Upserted page (D1): ${page.slug} (v${page.version})`);
+        console.log(`🔶 Upserted page (D1): ${tenantSlug}/${page.slug} (v${page.version})`);
         return { success: true, version: page.version };
     }
 
@@ -201,6 +210,7 @@ export class CfD1HttpProvider implements IStateProvider {
         return {
             id: row.id as string,
             slug: row.slug as string,
+            tenantSlug: (row.tenant_slug as string) || '_default',
             name: row.name as string,
             title: (row.title as string) || undefined,
             description: (row.description as string) || undefined,
@@ -215,35 +225,49 @@ export class CfD1HttpProvider implements IStateProvider {
         };
     }
 
-    async getPageBySlug(slug: string): Promise<PublishPage | null> {
-        const row = await this.get(
-            `SELECT * FROM published_pages WHERE slug = ?1`, [slug]
-        );
+    async getPageBySlug(slug: string, tenantSlug?: string): Promise<PublishPage | null> {
+        const where = isMultiTenantSlug(tenantSlug)
+            ? `WHERE slug = ?1 AND tenant_slug = ?2`
+            : `WHERE slug = ?1`;
+        const params = isMultiTenantSlug(tenantSlug) ? [slug, tenantSlug] : [slug];
+        const row = await this.get(`SELECT * FROM published_pages ${where}`, params);
         return row ? this.rowToPage(row) : null;
     }
 
-    async getHomepage(): Promise<PublishPage | null> {
-        const row = await this.get(
-            `SELECT * FROM published_pages WHERE is_homepage = 1`
-        );
+    async getHomepage(tenantSlug?: string): Promise<PublishPage | null> {
+        const where = isMultiTenantSlug(tenantSlug)
+            ? `WHERE is_homepage = 1 AND tenant_slug = ?1`
+            : `WHERE is_homepage = 1`;
+        const params = isMultiTenantSlug(tenantSlug) ? [tenantSlug] : [];
+        const row = await this.get(`SELECT * FROM published_pages ${where}`, params);
         return row ? this.rowToPage(row) : null;
     }
 
-    async deletePage(slug: string): Promise<boolean> {
-        await this.run(`DELETE FROM published_pages WHERE slug = ?1`, [slug]);
+    async deletePage(slug: string, tenantSlug?: string): Promise<boolean> {
+        const where = isMultiTenantSlug(tenantSlug)
+            ? `WHERE slug = ?1 AND tenant_slug = ?2`
+            : `WHERE slug = ?1`;
+        const params = isMultiTenantSlug(tenantSlug) ? [slug, tenantSlug] : [slug];
+        await this.run(`DELETE FROM published_pages ${where}`, params);
         return true;
     }
 
-    async listPages(): Promise<PublishedPageSummary[]> {
+    async listPages(tenantSlug?: string): Promise<PublishedPageSummary[]> {
+        const where = isMultiTenantSlug(tenantSlug) ? `WHERE tenant_slug = ?1` : '';
+        const params = isMultiTenantSlug(tenantSlug) ? [tenantSlug] : [];
         const rows = await this.all<{ id: string; slug: string; name: string; version: number }>(
-            `SELECT id, slug, name, version FROM published_pages`
+            `SELECT id, slug, name, version FROM published_pages ${where}`, params
         );
         return rows;
     }
 
-    async listPublicPageSlugs(): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]> {
+    async listPublicPageSlugs(tenantSlug?: string): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]> {
+        const conditions = ['is_public = 1'];
+        const params: unknown[] = [];
+        if (isMultiTenantSlug(tenantSlug)) { conditions.push(`tenant_slug = ?1`); params.push(tenantSlug); }
+        const where = `WHERE ${conditions.join(' AND ')}`;
         const rows = await this.all<{ slug: string; updated_at: string; is_homepage: number }>(
-            `SELECT slug, updated_at, is_homepage FROM published_pages WHERE is_public = 1`
+            `SELECT slug, updated_at, is_homepage FROM published_pages ${where}`, params
         );
         return rows.map(r => ({
             slug: r.slug,

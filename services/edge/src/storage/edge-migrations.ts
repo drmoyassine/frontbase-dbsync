@@ -191,6 +191,17 @@ export const MIGRATIONS: Migration[] = [
             `CREATE INDEX IF NOT EXISTS idx_agent_tools_type ON agent_tools(type)`,
         ],
     },
+    {
+        version: 10,
+        description: 'Add tenant_slug column to published_pages for multi-tenant routing',
+        sql: [
+            `ALTER TABLE published_pages ADD COLUMN tenant_slug TEXT NOT NULL DEFAULT '_default'`,
+            // Drop the old unique index on slug alone
+            `DROP INDEX IF EXISTS idx_published_pages_slug`,
+            // Create composite unique index: each tenant can have its own /about, /home, etc.
+            `CREATE UNIQUE INDEX IF NOT EXISTS idx_published_pages_tenant_slug ON published_pages(tenant_slug, slug)`,
+        ],
+    },
 ];
 
 // =============================================================================

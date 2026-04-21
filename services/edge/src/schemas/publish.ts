@@ -214,6 +214,7 @@ export const PublishPageSchema = z.object({
     // Page identity (can be UUID or custom string ID like "default-homepage")
     id: z.string().min(1),
     slug: z.string().min(1),
+    tenantSlug: z.string().default('_default'),  // Tenant namespace (community engine)
     name: z.string(),
     title: z.string().optional(),
     description: z.string().optional(),

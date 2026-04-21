@@ -1,5 +1,6 @@
 import { createLiteApp } from './lite.js';
 import { systemKeyAuth } from '../middleware/auth.js';
+import { tenantMiddleware } from '../middleware/tenant.js';
 import { HYDRATE_JS, HYDRATE_CSS, FAVICON_PNG_B64 } from '../ssr/staticAssets.js';
 
 // Page-specific routes (these pull in React, LiquidJS, SSR, etc.)
@@ -54,6 +55,9 @@ app.use('/api/import/*', systemKeyAuth);
 app.use('/api/data/execute', async (_c, next) => await next());
 app.use('/api/data/*', systemKeyAuth);
 app.use('/api/manage/*', systemKeyAuth);
+
+// ── Tenant middleware (cloud mode: extract slug from Host subdomain) ───
+app.use('*', tenantMiddleware);
 
 // ── Page / SSR Routes ──────────────────────────────────────────────────
 app.route('/api/import', importRoute);

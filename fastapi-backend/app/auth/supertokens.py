@@ -9,12 +9,26 @@ import os
 
 def init_supertokens():
     from supertokens_python import init, InputAppInfo, SupertokensConfig
-    from supertokens_python.recipe import emailpassword, thirdparty, session, dashboard
+    from supertokens_python.recipe import (
+        emailpassword,
+        thirdparty,
+        session,
+        dashboard,
+        usermetadata,
+    )
+    from supertokens_python.recipe.emailpassword.interfaces import APIInterface
 
     api_base_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
     website_base_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
     supertokens_uri = os.environ.get("SUPERTOKENS_URI", "http://supertokens:3567")
     api_key = os.environ.get("SUPERTOKENS_API_KEY", "frontbase-dev-secret-key-change-me")
+
+    # ── Override: disable built-in sign-up endpoint ─────────────────────
+    # We use a custom POST /api/auth/signup endpoint in auth.py that
+    # calls emailpassword.sign_up() internally + provisions a Tenant.
+    def override_emailpassword_apis(original: APIInterface) -> APIInterface:
+        original.disable_sign_up_post = True
+        return original
 
     init(
         app_info=InputAppInfo(
@@ -31,13 +45,18 @@ def init_supertokens():
         framework='fastapi',
         recipe_list=[
             session.init(),
-            emailpassword.init(),
+            emailpassword.init(
+                override=emailpassword.InputOverrideConfig(
+                    apis=override_emailpassword_apis,
+                ),
+            ),
             thirdparty.init(
                 sign_in_and_up_feature=thirdparty.SignInAndUpFeature(providers=[
                     # Providers configured dynamically per tenant
                 ])
             ),
-            dashboard.init()
+            usermetadata.init(),
+            dashboard.init(),
         ],
         mode="asgi"
     )

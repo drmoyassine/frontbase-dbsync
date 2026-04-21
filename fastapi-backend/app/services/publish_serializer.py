@@ -364,9 +364,17 @@ async def convert_to_publish_schema(page: Page, datasources: list) -> PublishPag
             print(f"[publish] Could not fetch primary auth form: {e}")
     # ======================================================
     
+    # ==== RESOLVE TENANT SLUG (cloud mode) ====
+    tenant_slug = '_default'
+    if hasattr(page, 'project') and page.project and hasattr(page.project, 'tenant') and page.project.tenant:
+        tenant_slug = str(page.project.tenant.slug)
+        print(f"[publish] Resolved tenant_slug='{tenant_slug}' from project '{page.project.name}'")
+    # =============================================
+
     return PublishPageRequest(
         id=str(page.id),
         slug=str(page.slug),
+        tenant_slug=tenant_slug,  # type: ignore[call-arg]
         name=str(page.name),
         title=str(page.title) if page.title else None,  # type: ignore[truthy-bool]
         description=str(page.description) if page.description else None,  # type: ignore[truthy-bool]

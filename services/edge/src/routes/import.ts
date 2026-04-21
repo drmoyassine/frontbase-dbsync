@@ -61,9 +61,9 @@ importRoute.post('/', async (c) => {
         console.log(`[Import] Validated page: ${page.slug} (v${page.version})`);
         console.log(`[Import] cssBundle present: ${!!page.cssBundle}, length: ${page.cssBundle?.length || 0}`);
 
-        // Check if page already exists with same or higher version
+        // Check if page already exists with same or higher version (tenant-scoped)
         if (!force) {
-            const existing = await stateProvider.getPageBySlug(page.slug);
+            const existing = await stateProvider.getPageBySlug(page.slug, page.tenantSlug);
             if (existing && existing.version >= page.version) {
                 return c.json({
                     success: false,
@@ -84,11 +84,13 @@ importRoute.post('/', async (c) => {
         try {
             const { getRedis } = await import('../cache/redis.js');
             const redis = getRedis();
-            await redis.del(`page:${page.slug}`);
-            console.log(`[Import] Cache invalidated: page:${page.slug}`);
+            const cachePrefix = page.tenantSlug && page.tenantSlug !== '_default'
+                ? `page:${page.tenantSlug}:` : 'page:';
+            await redis.del(`${cachePrefix}${page.slug}`);
+            console.log(`[Import] Cache invalidated: ${cachePrefix}${page.slug}`);
             if (page.isHomepage) {
-                await redis.del('page:__homepage__');
-                console.log(`[Import] Cache invalidated: page:__homepage__`);
+                await redis.del(`${cachePrefix}__homepage__`);
+                console.log(`[Import] Cache invalidated: ${cachePrefix}__homepage__`);
             }
             // Invalidate SEO caches — sitemap/llms may include new or changed pages
             await redis.del('seo:sitemap', 'seo:llms');
@@ -156,6 +158,7 @@ importRoute.post('/', async (c) => {
 importRoute.delete('/:slug', async (c) => {
     try {
         const slug = c.req.param('slug');
+        const tenantSlug = c.req.query('tenant_slug') || undefined;
 
         if (!slug) {
             return c.json({
@@ -164,10 +167,10 @@ importRoute.delete('/:slug', async (c) => {
             }, 400);
         }
 
-        console.log(`[Import] Unpublishing page: ${slug}`);
+        console.log(`[Import] Unpublishing page: ${tenantSlug ? tenantSlug + '/' : ''}${slug}`);
 
-        // Check if page exists
-        const existing = await stateProvider.getPageBySlug(slug);
+        // Check if page exists (tenant-scoped if provided)
+        const existing = await stateProvider.getPageBySlug(slug, tenantSlug);
         if (!existing) {
             console.log(`[Import] Page not found in SSR: ${slug}`);
             // Return success anyway - page might already be unpublished
@@ -177,8 +180,8 @@ importRoute.delete('/:slug', async (c) => {
             }, 200);
         }
 
-        // Delete the page
-        await stateProvider.deletePage(slug);
+        // Delete the page (tenant-scoped)
+        await stateProvider.deletePage(slug, tenantSlug);
         console.log(`[Import] Successfully unpublished: ${slug}`);
 
         invalidateHtmlCache(slug);

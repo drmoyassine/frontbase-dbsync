@@ -197,6 +197,7 @@ class PublishPageRequest(BaseModel):
     # Page identity
     id: str
     slug: str
+    tenant_slug: str = Field("_default", alias="tenantSlug")  # Tenant namespace (community engine)
     name: str
     title: Optional[str] = None
     description: Optional[str] = None

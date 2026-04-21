@@ -1,8 +1,11 @@
 """
-Auth Router - Admin Authentication Endpoints
+Auth Router - Dual-Mode Authentication Endpoints
 
-Provides session-based authentication for Frontbase admins/designers.
-Uses httponly cookies for session storage.
+Self-host mode: Session-based auth with env-var admin (ADMIN_EMAIL/ADMIN_PASSWORD).
+Cloud mode: SuperTokens emailpassword for tenant users + env-var master admin.
+
+Both modes share the same routes — the login endpoint checks master admin
+first (env-var), then falls through to SuperTokens (cloud only).
 """
 
 from fastapi import APIRouter, HTTPException, Response, Request, Depends
@@ -11,19 +14,25 @@ from typing import Optional
 import os
 import hashlib
 import secrets
+import logging
 from datetime import datetime, timedelta
+
+from app.config.edition import is_cloud
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
-# In-memory session storage (replace with Redis/DB in production)
+# ─────────────────────────────────────────────────────────────────────────────
+# Master Admin (env-var based — works in BOTH modes)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# In-memory session storage for master admin only
 sessions: dict[str, dict] = {}
 
-# Session configuration
 SESSION_COOKIE_NAME = "frontbase_session"
 SESSION_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
 
-# Admin users (replace with database in production)
-# For now, use environment variable or default dev credentials
 ADMIN_USERS = {
     os.getenv("ADMIN_EMAIL", "admin@frontbase.dev"): {
         "id": "admin-1",
@@ -37,9 +46,20 @@ ADMIN_USERS = {
 }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Schemas
+# ─────────────────────────────────────────────────────────────────────────────
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class SignupRequest(BaseModel):
+    email: EmailStr
+    password: str
+    workspace_name: str
+    slug: str
 
 
 class UserResponse(BaseModel):
@@ -55,8 +75,12 @@ class AuthResponse(BaseModel):
     message: str
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Master Admin Session Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
 def hash_password(password: str) -> str:
-    """Hash password with SHA256 (use bcrypt in production)"""
+    """Hash password with SHA256 (master admin only — ST uses bcrypt)."""
     return hashlib.sha256(password.encode()).hexdigest()
 
 
@@ -69,11 +93,7 @@ def create_session(
     role: str = "master",
     is_master: bool = True,
 ) -> str:
-    """Create a new session and return session token.
-
-    For master admin: is_master=True, tenant_id=None.
-    For tenant users: is_master=False, tenant_id/slug/role populated.
-    """
+    """Create a new master admin session and return session token."""
     token = secrets.token_urlsafe(32)
     sessions[token] = {
         "user_id": user_id,
@@ -89,134 +109,44 @@ def create_session(
 
 
 def get_session(token: str) -> Optional[dict]:
-    """Get session by token if valid"""
+    """Get master admin session by token if valid."""
     session = sessions.get(token)
     if not session:
         return None
-    
-    # Check expiration
+
     expires_at = datetime.fromisoformat(session["expires_at"])
     if datetime.utcnow() > expires_at:
         del sessions[token]
         return None
-    
+
     return session
 
 
 def get_current_user(request: Request) -> Optional[dict]:
-    """Get current user from session cookie.
+    """Get current user from master admin session cookie.
 
-    Returns the session dict which includes tenant context fields.
-    For master admin, returns the ADMIN_USERS entry merged with session.
-    For tenant users, returns the session payload directly.
+    Returns the session dict for master admin users.
+    For SuperTokens users, returns None (handled separately).
     """
     token = request.cookies.get(SESSION_COOKIE_NAME)
     if not token:
         return None
-    
+
     session = get_session(token)
     if not session:
         return None
-    
+
     email = session["email"]
     admin = ADMIN_USERS.get(email)
     if admin:
-        # Master admin — merge static admin data with session context
         return {**admin, **session}
-    
-    # Tenant user — session has all needed fields
+
+    # Legacy tenant session (pre-SuperTokens) — still valid if present
     return session
 
 
-@router.options("/login")
-async def login_options():
-    """Handle CORS preflight for login"""
-    return Response(status_code=200)
-
-
-@router.post("/login", response_model=AuthResponse)
-async def login(request: LoginRequest, response: Response):
-    """Login with email and password.
-
-    Checks master admin first, then DB users table (cloud mode).
-    """
-    user = ADMIN_USERS.get(request.email)
-    
-    if user:
-        # Master admin login
-        if user["password_hash"] != hash_password(request.password):
-            raise HTTPException(status_code=401, detail="Invalid email or password")
-        
-        token = create_session(
-            user["id"], user["email"],
-            is_master=True, role="master",
-        )
-        _set_session_cookie(response, token)
-        
-        return AuthResponse(
-            user=UserResponse(
-                id=user["id"],
-                email=user["email"],
-                created_at=user["created_at"],
-                updated_at=user["updated_at"],
-            ),
-            message="Login successful",
-        )
-    
-    # Not master admin — check DB users table (cloud mode)
-    from app.config.edition import is_cloud
-    if not is_cloud():
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    from app.database.config import SessionLocal
-    from app.models.models import User, TenantMember, Tenant
-    
-    db = SessionLocal()
-    try:
-        db_user = db.query(User).filter(User.email == request.email).first()
-        if not db_user or str(db_user.password_hash) != hash_password(request.password):
-            raise HTTPException(status_code=401, detail="Invalid email or password")
-        
-        # Find tenant membership
-        member = db.query(TenantMember).filter(
-            TenantMember.user_id == db_user.id
-        ).first()
-        
-        tenant_id = None
-        tenant_slug = None
-        role = "viewer"
-        
-        if member:
-            tenant = db.query(Tenant).filter(Tenant.id == member.tenant_id).first()
-            tenant_id = str(member.tenant_id)
-            tenant_slug = str(tenant.slug) if tenant else None
-            role = str(member.role)
-        
-        token = create_session(
-            str(db_user.id), str(db_user.email),
-            tenant_id=tenant_id,
-            tenant_slug=tenant_slug,
-            role=role,
-            is_master=False,
-        )
-        _set_session_cookie(response, token)
-        
-        return AuthResponse(
-            user=UserResponse(
-                id=str(db_user.id),
-                email=str(db_user.email),
-                username=str(db_user.username) if getattr(db_user, 'username', None) is not None else None,
-                created_at=str(db_user.created_at),
-                updated_at=str(db_user.updated_at),
-            ),
-            message="Login successful",
-        )
-    finally:
-        db.close()
-
-
 def _set_session_cookie(response: Response, token: str) -> None:
-    """Set the session cookie on the response."""
+    """Set the master admin session cookie on the response."""
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=token,
@@ -228,37 +158,359 @@ def _set_session_cookie(response: Response, token: str) -> None:
     )
 
 
-@router.get("/me")
-async def get_me(request: Request):
-    """Get current authenticated user with tenant context."""
-    user = get_current_user(request)
-    
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
+# ─────────────────────────────────────────────────────────────────────────────
+# CORS Preflight
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.options("/login")
+async def login_options():
+    """Handle CORS preflight for login."""
+    return Response(status_code=200)
+
+
+@router.options("/signup")
+async def signup_options():
+    """Handle CORS preflight for signup."""
+    return Response(status_code=200)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /api/auth/login — Dual-Path Login
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/login", response_model=AuthResponse)
+async def login(request: Request, body: LoginRequest, response: Response):
+    """Login with email and password.
+
+    Path 1: Master admin (env-var) — always checked first.
+    Path 2: SuperTokens emailpassword (cloud mode) — tenant users.
+    """
+    # ── Path 1: Master Admin ────────────────────────────────────────────
+    admin = ADMIN_USERS.get(body.email)
+    if admin:
+        if admin["password_hash"] != hash_password(body.password):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        token = create_session(
+            admin["id"], admin["email"],
+            is_master=True, role="master",
+        )
+        _set_session_cookie(response, token)
+
+        return AuthResponse(
+            user=UserResponse(
+                id=admin["id"],
+                email=admin["email"],
+                created_at=admin["created_at"],
+                updated_at=admin["updated_at"],
+            ),
+            message="Login successful",
+        )
+
+    # ── Path 2: SuperTokens (cloud mode) ────────────────────────────────
+    if not is_cloud():
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    from supertokens_python.recipe.emailpassword.asyncio import sign_in as st_sign_in
+    from supertokens_python.recipe.emailpassword.interfaces import SignInOkResult
+    from supertokens_python.recipe.session.asyncio import create_new_session
+    from supertokens_python.recipe.usermetadata.asyncio import get_user_metadata
+
+    result = await st_sign_in("public", body.email, body.password)
+
+    if not isinstance(result, SignInOkResult):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    st_user = result.user
+    st_user_id = st_user.id
+
+    # Load tenant context from user metadata
+    metadata_result = await get_user_metadata(st_user_id)
+    metadata = metadata_result.metadata
+
+    tenant_id = metadata.get("tenant_id")
+    tenant_slug = metadata.get("tenant_slug")
+    role = metadata.get("role", "owner")
+
+    # Create SuperTokens session with tenant claims in access token
+    from supertokens_python.types import RecipeUserId
+    recipe_uid = st_user.login_methods[0].recipe_user_id if st_user.login_methods else RecipeUserId(st_user.id)
+    session = await create_new_session(
+        request,
+        "public",
+        recipe_uid,
+        access_token_payload={
+            "email": body.email,
+            "tenant_id": tenant_id,
+            "tenant_slug": tenant_slug,
+            "role": role,
+            "is_master": False,
+        },
+    )
+
+    logger.info(f"[Auth] Tenant user login: {body.email} (tenant={tenant_slug})")
+
+    now = datetime.utcnow().isoformat()
+    return AuthResponse(
+        user=UserResponse(
+            id=st_user_id,
+            email=body.email,
+            created_at=now,
+            updated_at=now,
+        ),
+        message="Login successful",
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /api/auth/signup — Self-Service Tenant Signup (Cloud Only)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/signup")
+async def signup(request: Request, body: SignupRequest, response: Response):
+    """Register a new tenant user with workspace.
+
+    Creates: SuperTokens user → Tenant → TenantMember → Project → Session.
+    Cloud mode only.
+    """
+    if not is_cloud():
+        raise HTTPException(status_code=400, detail="Signup only available in cloud mode")
+
+    from supertokens_python.recipe.emailpassword.asyncio import sign_up as st_sign_up
+    from supertokens_python.recipe.emailpassword.interfaces import SignUpOkResult
+    from supertokens_python.recipe.emailpassword.interfaces import EmailAlreadyExistsError
+    from supertokens_python.recipe.session.asyncio import create_new_session
+    from supertokens_python.recipe.usermetadata.asyncio import update_user_metadata
+    from app.auth.supertokens_overrides import validate_slug, provision_tenant
+    from app.database.config import SessionLocal
+
+    # 1. Validate slug format
+    slug = body.slug.lower().strip()
+    slug_error = validate_slug(slug)
+    if slug_error:
+        raise HTTPException(status_code=400, detail=slug_error)
+
+    # 2. Check slug availability in DB
+    db = SessionLocal()
+    try:
+        from app.auth.supertokens_overrides import check_slug_available
+        if not check_slug_available(db, slug):
+            raise HTTPException(status_code=409, detail=f"Slug '{slug}' is already taken")
+    finally:
+        db.close()
+
+    # 3. Create SuperTokens user (handles bcrypt hashing)
+    st_result = await st_sign_up("public", body.email, body.password)
+
+    if isinstance(st_result, EmailAlreadyExistsError):
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+
+    if not isinstance(st_result, SignUpOkResult):
+        raise HTTPException(status_code=500, detail="Signup failed — unexpected error")
+
+    st_user = st_result.user
+    st_user_id = st_user.id
+
+    # 4. Provision Tenant + TenantMember + Project
+    db = SessionLocal()
+    try:
+        tenant_info = provision_tenant(
+            db,
+            st_user_id=st_user_id,
+            email=body.email,
+            slug=slug,
+            workspace_name=body.workspace_name,
+        )
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        # Rollback: delete the SuperTokens user we just created
+        try:
+            from supertokens_python.asyncio import delete_user
+            await delete_user(st_user_id)
+        except Exception:
+            logger.error(f"[Signup] Failed to rollback ST user {st_user_id}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        # Rollback: delete the SuperTokens user
+        try:
+            from supertokens_python.asyncio import delete_user
+            await delete_user(st_user_id)
+        except Exception:
+            logger.error(f"[Signup] Failed to rollback ST user {st_user_id}")
+        logger.error(f"[Signup] Tenant provisioning failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create workspace")
+    finally:
+        db.close()
+
+    # 5. Store tenant context in user metadata (persistent, survives session refresh)
+    await update_user_metadata(st_user_id, {
+        "tenant_id": tenant_info["tenant_id"],
+        "tenant_slug": tenant_info["tenant_slug"],
+        "role": tenant_info["role"],
+    })
+
+    # 6. Create SuperTokens session with tenant claims
+    from supertokens_python.types import RecipeUserId
+    recipe_uid = st_user.login_methods[0].recipe_user_id if st_user.login_methods else RecipeUserId(st_user.id)
+    session = await create_new_session(
+        request,
+        "public",
+        recipe_uid,
+        access_token_payload={
+            "email": body.email,
+            "tenant_id": tenant_info["tenant_id"],
+            "tenant_slug": tenant_info["tenant_slug"],
+            "role": tenant_info["role"],
+            "is_master": False,
+        },
+    )
+
+    logger.info(f"[Signup] New tenant: {slug} ({body.email})")
+
+    now = datetime.utcnow().isoformat()
     return {
         "user": {
-            "id": user["user_id"],
-            "email": user["email"],
-            "username": user.get("username"),
-            "created_at": user.get("created_at", ""),
-            "updated_at": user.get("updated_at", ""),
-            "tenant_id": user.get("tenant_id"),
-            "tenant_slug": user.get("tenant_slug"),
-            "role": user.get("role", "master"),
-            "is_master": user.get("is_master", False),
-        }
+            "id": st_user_id,
+            "email": body.email,
+            "tenant_id": tenant_info["tenant_id"],
+            "tenant_slug": tenant_info["tenant_slug"],
+            "role": tenant_info["role"],
+            "is_master": False,
+            "created_at": now,
+            "updated_at": now,
+        },
+        "tenant": {
+            "id": tenant_info["tenant_id"],
+            "slug": tenant_info["tenant_slug"],
+            "name": tenant_info["workspace_name"],
+            "project_id": tenant_info["project_id"],
+        },
+        "message": "Workspace created successfully",
     }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/auth/check-slug/{slug} — Public Slug Availability Check
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/check-slug/{slug}")
+async def check_slug(slug: str):
+    """Check if a workspace slug is available. Public endpoint."""
+    if not is_cloud():
+        raise HTTPException(status_code=400, detail="Not available in self-host mode")
+
+    from app.auth.supertokens_overrides import validate_slug, check_slug_available
+    from app.database.config import SessionLocal
+
+    slug = slug.lower().strip()
+
+    # Format validation
+    error = validate_slug(slug)
+    if error:
+        return {"available": False, "error": error}
+
+    # DB uniqueness check
+    db = SessionLocal()
+    try:
+        available = check_slug_available(db, slug)
+    finally:
+        db.close()
+
+    return {"available": available, "slug": slug}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/auth/me — Current User (Dual-Path)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/me")
+async def get_me(request: Request):
+    """Get current authenticated user with tenant context.
+
+    Checks SuperTokens session first (cloud mode), then master admin cookie.
+    """
+    # ── Try SuperTokens session first (cloud mode) ──────────────────────
+    if is_cloud():
+        try:
+            from supertokens_python.recipe.session.asyncio import get_session as st_get_session
+
+            session = await st_get_session(request, session_required=False)
+            if session:
+                payload = session.get_access_token_payload()
+                user_id = session.get_user_id()
+
+                # Email may be in access token or need fetching from ST
+                email = payload.get("email", "")
+                if not email:
+                    try:
+                        from supertokens_python.asyncio import get_user
+                        st_user = await get_user(user_id)
+                        if st_user and st_user.emails:
+                            email = st_user.emails[0]
+                    except Exception:
+                        pass
+
+                return {
+                    "user": {
+                        "id": user_id,
+                        "email": email,
+                        "username": None,
+                        "created_at": "",
+                        "updated_at": "",
+                        "tenant_id": payload.get("tenant_id"),
+                        "tenant_slug": payload.get("tenant_slug"),
+                        "role": payload.get("role", "owner"),
+                        "is_master": False,
+                    }
+                }
+        except Exception:
+            pass  # No SuperTokens session — try master admin
+
+    # ── Try master admin session ────────────────────────────────────────
+    user = get_current_user(request)
+    if user:
+        return {
+            "user": {
+                "id": user["user_id"],
+                "email": user["email"],
+                "username": user.get("username"),
+                "created_at": user.get("created_at", ""),
+                "updated_at": user.get("updated_at", ""),
+                "tenant_id": user.get("tenant_id"),
+                "tenant_slug": user.get("tenant_slug"),
+                "role": user.get("role", "master"),
+                "is_master": user.get("is_master", False),
+            }
+        }
+
+    raise HTTPException(status_code=401, detail="Not authenticated")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /api/auth/logout — Dual-Path Logout
+# ─────────────────────────────────────────────────────────────────────────────
+
 @router.post("/logout")
 async def logout(request: Request, response: Response):
-    """Logout and clear session"""
+    """Logout — revokes SuperTokens session and/or master admin cookie."""
+    # ── Revoke SuperTokens session if present ───────────────────────────
+    if is_cloud():
+        try:
+            from supertokens_python.recipe.session.asyncio import get_session as st_get_session
+            session = await st_get_session(request, session_required=False)
+            if session:
+                await session.revoke_session()
+                logger.info(f"[Auth] SuperTokens session revoked for user {session.get_user_id()}")
+        except Exception as e:
+            logger.warning(f"[Auth] SuperTokens logout error: {e}")
+
+    # ── Clear master admin session cookie ───────────────────────────────
     token = request.cookies.get(SESSION_COOKIE_NAME)
-    
     if token and token in sessions:
         del sessions[token]
-    
+
     response.delete_cookie(SESSION_COOKIE_NAME)
-    
+
     return {"message": "Logged out successfully"}

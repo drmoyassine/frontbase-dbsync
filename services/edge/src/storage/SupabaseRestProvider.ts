@@ -30,6 +30,7 @@ import type {
     WorkflowData, ExecutionData, NewExecutionData, ExecutionStats, DeadLetterData,
     AgentToolData,
 } from './IStateProvider';
+import { isMultiTenantSlug } from './IStateProvider';
 
 const DEFAULT_FAVICON = '/static/icon.png';
 
@@ -139,18 +140,24 @@ export class SupabaseRestProvider implements IStateProvider {
 
     async upsertPage(page: PublishPage): Promise<{ success: boolean; version: number }> {
         const client = getClient();
+        const tenantSlug = (page as any).tenantSlug || '_default';
 
-        // Clear existing homepage flag if this page is the new homepage
+        // Clear existing homepage flag (scoped to tenant only on community engines)
         if (page.isHomepage) {
-            await client
+            let homepageQuery = client
                 .from('published_pages')
                 .update({ is_homepage: false })
                 .eq('is_homepage', true);
+            if (isMultiTenantSlug(tenantSlug)) {
+                homepageQuery = homepageQuery.eq('tenant_slug', tenantSlug);
+            }
+            await homepageQuery;
         }
 
         const row = {
             id: page.id,
             slug: page.slug,
+            tenant_slug: tenantSlug,
             name: page.name,
             title: page.title || null,
             description: page.description || null,
@@ -169,9 +176,9 @@ export class SupabaseRestProvider implements IStateProvider {
         const result = await client
             .from('published_pages')
             .upsert(row, { onConflict: 'id' });
-        throwIfError(result, `upsertPage(${page.slug})`);
+        throwIfError(result, `upsertPage(${tenantSlug}/${page.slug})`);
 
-        console.log(`🐘 Upserted page (PostgREST): ${page.slug} (v${page.version})`);
+        console.log(`🐘 Upserted page (PostgREST): ${tenantSlug}/${page.slug} (v${page.version})`);
         return { success: true, version: page.version };
     }
 
@@ -179,6 +186,7 @@ export class SupabaseRestProvider implements IStateProvider {
         return {
             id: row.id as string,
             slug: row.slug as string,
+            tenantSlug: (row.tenant_slug as string) || '_default',
             name: row.name as string,
             title: (row.title as string) || undefined,
             description: (row.description as string) || undefined,
@@ -199,53 +207,61 @@ export class SupabaseRestProvider implements IStateProvider {
         };
     }
 
-    async getPageBySlug(slug: string): Promise<PublishPage | null> {
+    async getPageBySlug(slug: string, tenantSlug?: string): Promise<PublishPage | null> {
         const client = getClient();
-        const { data, error } = await client
+        let query = client
             .from('published_pages')
             .select('*')
-            .eq('slug', slug)
-            .maybeSingle();
+            .eq('slug', slug);
+        if (isMultiTenantSlug(tenantSlug)) query = query.eq('tenant_slug', tenantSlug);
+        const { data, error } = await query.maybeSingle();
         if (error) throw new Error(`[SupabaseRest] getPageBySlug: ${error.message}`);
         return data ? this.rowToPage(data) : null;
     }
 
-    async getHomepage(): Promise<PublishPage | null> {
+    async getHomepage(tenantSlug?: string): Promise<PublishPage | null> {
         const client = getClient();
-        const { data, error } = await client
+        let query = client
             .from('published_pages')
             .select('*')
-            .eq('is_homepage', true)
-            .maybeSingle();
+            .eq('is_homepage', true);
+        if (isMultiTenantSlug(tenantSlug)) query = query.eq('tenant_slug', tenantSlug);
+        const { data, error } = await query.maybeSingle();
         if (error) throw new Error(`[SupabaseRest] getHomepage: ${error.message}`);
         return data ? this.rowToPage(data) : null;
     }
 
-    async deletePage(slug: string): Promise<boolean> {
+    async deletePage(slug: string, tenantSlug?: string): Promise<boolean> {
         const client = getClient();
-        const result = await client
+        let query = client
             .from('published_pages')
             .delete()
             .eq('slug', slug);
+        if (isMultiTenantSlug(tenantSlug)) query = query.eq('tenant_slug', tenantSlug);
+        const result = await query;
         throwIfError(result, `deletePage(${slug})`);
         return true;
     }
 
-    async listPages(): Promise<PublishedPageSummary[]> {
+    async listPages(tenantSlug?: string): Promise<PublishedPageSummary[]> {
         const client = getClient();
-        const { data, error } = await client
+        let query = client
             .from('published_pages')
             .select('id, slug, name, version');
+        if (isMultiTenantSlug(tenantSlug)) query = query.eq('tenant_slug', tenantSlug);
+        const { data, error } = await query;
         if (error) throw new Error(`[SupabaseRest] listPages: ${error.message}`);
         return (data || []) as PublishedPageSummary[];
     }
 
-    async listPublicPageSlugs(): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]> {
+    async listPublicPageSlugs(tenantSlug?: string): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]> {
         const client = getClient();
-        const { data, error } = await client
+        let query = client
             .from('published_pages')
             .select('slug, updated_at, is_homepage')
             .eq('is_public', true);
+        if (isMultiTenantSlug(tenantSlug)) query = query.eq('tenant_slug', tenantSlug);
+        const { data, error } = await query;
         if (error) throw new Error(`[SupabaseRest] listPublicPageSlugs: ${error.message}`);
         return (data || []).map((r: any) => ({
             slug: r.slug as string,

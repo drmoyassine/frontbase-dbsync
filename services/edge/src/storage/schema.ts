@@ -17,7 +17,8 @@ import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
 
 export const publishedPages = sqliteTable('published_pages', {
     id: text('id').primaryKey(),
-    slug: text('slug').notNull().unique(),
+    slug: text('slug').notNull(),
+    tenantSlug: text('tenant_slug').notNull().default('_default'),
     name: text('name').notNull(),
     title: text('title'),
     description: text('description'),

@@ -16,6 +16,25 @@
 import type { PublishPage, DatasourceConfig } from '../schemas/publish';
 
 // =============================================================================
+// Tenant Scoping Utility
+// =============================================================================
+
+/**
+ * Returns true only when the tenantSlug represents an actual multi-tenant
+ * context (i.e., a community engine serving multiple tenants).
+ *
+ * '_default' and undefined mean the engine is single-tenant:
+ *   - Self-host: no multi-tenancy
+ *   - BYOE (paid plan): dedicated engine, one tenant owns everything
+ *
+ * Only community engines (shared workers) pass a real slug like 'acme'.
+ * Providers MUST use this to decide whether to add tenant_slug WHERE clauses.
+ */
+export function isMultiTenantSlug(tenantSlug?: string): tenantSlug is string {
+    return !!tenantSlug && tenantSlug !== '_default';
+}
+
+// =============================================================================
 // Published Page Types (provider-agnostic)
 // =============================================================================
 
@@ -154,16 +173,16 @@ export interface IStateProvider {
     // --- Pages ---
     /** Upsert a published page (insert or update) */
     upsertPage(page: PublishPage): Promise<{ success: boolean; version: number }>;
-    /** Get a published page by slug */
-    getPageBySlug(slug: string): Promise<PublishPage | null>;
-    /** Get the homepage */
-    getHomepage(): Promise<PublishPage | null>;
-    /** Delete a published page by slug */
-    deletePage(slug: string): Promise<boolean>;
-    /** List all published pages (summary only) */
-    listPages(): Promise<PublishedPageSummary[]>;
-    /** List public page slugs for sitemap/llms.txt (excludes private pages) */
-    listPublicPageSlugs(): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]>;
+    /** Get a published page by slug (optionally scoped to tenant) */
+    getPageBySlug(slug: string, tenantSlug?: string): Promise<PublishPage | null>;
+    /** Get the homepage (optionally scoped to tenant) */
+    getHomepage(tenantSlug?: string): Promise<PublishPage | null>;
+    /** Delete a published page by slug (optionally scoped to tenant) */
+    deletePage(slug: string, tenantSlug?: string): Promise<boolean>;
+    /** List all published pages (summary only, optionally scoped to tenant) */
+    listPages(tenantSlug?: string): Promise<PublishedPageSummary[]>;
+    /** List public page slugs for sitemap/llms.txt (optionally scoped to tenant) */
+    listPublicPageSlugs(tenantSlug?: string): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]>;
 
     // --- Project Settings ---
     /** Initialize settings storage */

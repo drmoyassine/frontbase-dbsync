@@ -60,7 +60,8 @@ seoRoute.get('/sitemap.xml', async (c) => {
     }
 
     const baseUrl = getBaseUrl(c.req.raw);
-    const pages = await stateProvider.listPublicPageSlugs();
+    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+    const pages = await stateProvider.listPublicPageSlugs(tenantSlug);
 
     const urls = pages.map((page) => {
         const loc = page.isHomepage ? baseUrl + '/' : `${baseUrl}/${page.slug}`;
@@ -122,7 +123,8 @@ seoRoute.get('/llms.txt', async (c) => {
     }
 
     const baseUrl = getBaseUrl(c.req.raw);
-    const pages = await stateProvider.listPublicPageSlugs();
+    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+    const pages = await stateProvider.listPublicPageSlugs(tenantSlug);
     const settings = await stateProvider.getProjectSettings();
 
     const siteName = (settings as any).siteName || 'Frontbase Site';

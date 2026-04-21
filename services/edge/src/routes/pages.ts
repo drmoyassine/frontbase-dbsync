@@ -205,8 +205,11 @@ const renderPageRoute = createRoute({
 // Note: Storage init is handled by import.ts module load
 
 
-async function fetchPage(slug: string): Promise<PageData | null> {
-    const cacheKey = `page:${slug}`;
+async function fetchPage(slug: string, tenantSlug?: string): Promise<PageData | null> {
+    // Build tenant-scoped cache key
+    const cachePrefix = tenantSlug && tenantSlug !== '_default'
+        ? `page:${tenantSlug}:` : 'page:';
+    const cacheKey = `${cachePrefix}${slug}`;
 
     // L2: Try Redis cache first (Upstash or local)
     try {
@@ -223,9 +226,9 @@ async function fetchPage(slug: string): Promise<PageData | null> {
     // L3: Try local published pages storage (SQLite/Turso)
     let page: PageData | null = null;
     try {
-        const publishedPage = await stateProvider.getPageBySlug(slug);
+        const publishedPage = await stateProvider.getPageBySlug(slug, tenantSlug);
         if (publishedPage) {
-            console.log(`[SSR] Found published page: ${slug} (v${publishedPage.version})`);
+            console.log(`[SSR] Found published page: ${tenantSlug ? tenantSlug + '/' : ''}${slug} (v${publishedPage.version})`);
             page = {
                 id: publishedPage.id,
                 name: publishedPage.name,
@@ -244,8 +247,8 @@ async function fetchPage(slug: string): Promise<PageData | null> {
         console.warn('[SSR] Error reading local storage:', error);
     }
 
-    // Fallback to FastAPI for unpublished pages (dev mode only)
-    if (!page) {
+    // Fallback to FastAPI for unpublished pages (dev mode only, single-tenant)
+    if (!page && (!tenantSlug || tenantSlug === '_default')) {
         const apiBase = getSafeApiBase();
         if (!apiBase) {
             return null; // Do not attempt local fetch in cloud
@@ -331,8 +334,9 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
         return c.html(cachedHtml.html);
     }
 
-    // Fetch page data
-    const page = await fetchPage(slug);
+    // Fetch page data (tenant-scoped in cloud mode)
+    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+    const page = await fetchPage(slug, tenantSlug);
 
     if (!page) {
         return c.json(
@@ -448,9 +452,14 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
 // Homepage route - renders homepage directly or pulls from FastAPI
 pagesRoute.get('/', async (c) => {
     try {
+        const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
         const deviceMatch = c.req.header('user-agent')?.toLowerCase().match(/(mobile|tablet|ipad|android(?=.*mobile)|iphone)/i) || [];
         const deviceType = deviceMatch[0] ? (deviceMatch[0].includes('ipad') || deviceMatch[0].includes('tablet') ? 'tablet' : 'mobile') : 'desktop';
-        const htmlKey = getCacheKey('__homepage__', deviceType);
+
+        // Tenant-scoped cache keys
+        const cachePrefix = tenantSlug && tenantSlug !== '_default'
+            ? `${tenantSlug}:` : '';
+        const htmlKey = getCacheKey(`${cachePrefix}__homepage__`, deviceType);
 
         // Try L1 cache FIRST before doing any DB or Redis lookups
         const cachedHtml = _htmlCache.get(htmlKey);
@@ -461,7 +470,9 @@ pagesRoute.get('/', async (c) => {
             return c.html(cachedHtml.html);
         }
 
-        const cacheKey = 'page:__homepage__';
+        const redisCachePrefix = tenantSlug && tenantSlug !== '_default'
+            ? `page:${tenantSlug}:` : 'page:';
+        const cacheKey = `${redisCachePrefix}__homepage__`;
         let homepage: any = null;
 
         // L2: Try Redis cache first
@@ -476,12 +487,19 @@ pagesRoute.get('/', async (c) => {
         }
 
         if (!homepage) {
-            homepage = await stateProvider.getHomepage();
+            homepage = await stateProvider.getHomepage(tenantSlug);
 
             if (homepage) {
                 console.log(`[SSR] Rendering homepage: ${homepage.slug} (v${homepage.version})`);
             } else {
-                // Pull-publish: Fetch homepage from FastAPI and store locally
+                // For tenant subdomains with no homepage: show branded 404
+                if (tenantSlug && tenantSlug !== '_default') {
+                    const { renderWorkspaceNotFound } = await import('../middleware/tenant.js');
+                    c.header('Content-Type', 'text/html; charset=utf-8');
+                    return c.html(renderWorkspaceNotFound(tenantSlug), 404);
+                }
+
+                // Pull-publish: Fetch homepage from FastAPI and store locally (self-host only)
                 const apiBase = getSafeApiBase();
                 if (!apiBase) {
                     // Fail fast in production
@@ -510,6 +528,7 @@ pagesRoute.get('/', async (c) => {
                             publishedAt: new Date().toISOString(),
                             isPublic: pageData.isPublic ?? true,
                             isHomepage: true,
+                            tenantSlug: '_default',
                         };
 
                         await stateProvider.upsertPage(publishData);

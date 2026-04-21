@@ -66,6 +66,7 @@ class EdgeEngineResponse(BaseModel):
     is_active: bool
     is_system: bool = False
     is_imported: bool = False
+    is_shared: bool = False
     bundle_checksum: Optional[str] = None
     config_checksum: Optional[str] = None
     last_deployed_at: Optional[str] = None
@@ -128,6 +129,7 @@ class GenericDeployRequest(BaseModel):
     edge_db_id: Optional[str] = None
     edge_cache_id: Optional[str] = None
     edge_queue_id: Optional[str] = None
+    compute_type: Optional[str] = None  # "community" → sets is_shared=True
 
     @field_validator("worker_name")
     @classmethod

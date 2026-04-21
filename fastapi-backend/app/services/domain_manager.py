@@ -150,34 +150,47 @@ async def _verify_domain_health(engine: EdgeEngine, domain: str, db: Optional[Se
 
     Used by ALL providers (CF, Vercel, Netlify, Deno) to confirm that the
     custom domain actually resolves before updating the engine URL.
+
+    Wildcard support: if domain starts with "*.", we generate a random
+    probe subdomain (e.g. health-a1b2c3d4.frontbase.dev) to verify
+    wildcard DNS propagation, then save the original wildcard string.
     """
+    import secrets
+
+    # Wildcard bypass: *.frontbase.dev → probe health-{hex}.frontbase.dev
+    original_domain = domain
+    probe_domain = domain
+    if domain.startswith("*."):
+        base = domain[2:]  # "frontbase.dev"
+        probe_domain = f"health-{secrets.token_hex(4)}.{base}"
+
     is_resolving = False
     try:
         # verify=False: SSL cert may not be provisioned yet — we just need
         # to confirm the domain routes to the right server, not validate cert.
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, verify=False) as client:
-            probe = await client.get(f"https://{domain}/api/health")
+            probe = await client.get(f"https://{probe_domain}/api/health")
             is_resolving = probe.status_code < 500
     except Exception:
         # HTTPS failed entirely — try HTTP as last resort
         try:
             async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-                probe = await client.get(f"http://{domain}/api/health")
+                probe = await client.get(f"http://{probe_domain}/api/health")
                 is_resolving = probe.status_code < 500
         except Exception:
             pass
 
     if is_resolving:
-        _save_custom_domain(engine, domain, db)
+        _save_custom_domain(engine, original_domain, db)
         return DomainResult(
             success=True,
-            domain=DomainInfo(id=domain, domain=domain, status="active", provider="").to_dict(),
+            domain=DomainInfo(id=original_domain, domain=original_domain, status="active", provider="").to_dict(),
             detail="Domain verified and saved!",
         )
     else:
         return DomainResult(
             success=True,
-            domain=DomainInfo(id=domain, domain=domain, status="pending", provider="").to_dict(),
+            domain=DomainInfo(id=original_domain, domain=original_domain, status="pending", provider="").to_dict(),
             detail="DNS not yet resolving — add the DNS record and try again.",
         )
 

@@ -112,6 +112,7 @@ def serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) -> 
         "sync_status": sync_status,
         "is_outdated": is_outdated,
         "is_forked": is_engine_forked,
+        "is_shared": bool(engine.is_shared) if hasattr(engine, 'is_shared') else False,
         "modified_core_files": json.loads(str(engine.modified_core_files)) if getattr(engine, 'modified_core_files', None) else [],
         "created_at": str(engine.created_at),
         "updated_at": str(engine.updated_at),

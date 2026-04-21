@@ -231,6 +231,8 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session) -> di
         existing.edge_queue_id = edge_queue_id  # type: ignore[assignment]
         existing.engine_config = engine_cfg  # type: ignore[assignment]
         existing.updated_at = now  # type: ignore[assignment]
+        if payload.compute_type == "community":
+            existing.is_shared = True  # type: ignore[assignment]
         engine_id = str(existing.id)
         db.commit()
         engine = existing
@@ -246,6 +248,7 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session) -> di
             edge_queue_id=edge_queue_id,
             engine_config=engine_cfg,
             is_active=True,
+            is_shared=payload.compute_type == "community",
             created_at=now,
             updated_at=now,
         )

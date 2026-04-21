@@ -31,7 +31,7 @@ import type { CatalogModel } from '../edgeConstants';
 // ============================================================================
 
 export type WizardStep = 'provider' | 'compute-type' | 'engine-config' | 'ai-model' | 'deploying';
-export type ComputeType = 'cpu' | 'gpu';
+export type ComputeType = 'cpu' | 'gpu' | 'community';
 
 // ============================================================================
 // Hook
@@ -204,6 +204,7 @@ export function useDeployWizard() {
                         edge_db_id: selectedDbId === 'none' ? '__none__' : selectedDbId === 'default' ? undefined : selectedDbId,
                         edge_cache_id: selectedCacheId === 'none' ? '__none__' : selectedCacheId,
                         edge_queue_id: selectedQueueId === 'none' ? '__none__' : selectedQueueId,
+                        compute_type: computeType === 'community' ? 'community' : undefined,
                     }),
                 });
             } finally {

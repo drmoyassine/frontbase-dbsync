@@ -25,6 +25,7 @@ import uuid
 
 from ..database.config import get_db
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from ..models.models import EdgeEngine, EdgeProviderAccount
 
 from ..middleware.tenant_context import TenantContext, get_tenant_context
@@ -236,7 +237,7 @@ async def list_engines(
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:
-            query = query.filter(EdgeEngine.project_id == project.id)
+            query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
         else:
             return []
             
@@ -660,7 +661,7 @@ async def list_active_engines_by_scope(
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:
-            query = query.filter(EdgeEngine.project_id == project.id)
+            query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
         else:
             return []
             

@@ -152,7 +152,7 @@ services:
   # SuperTokens — Identity and Access Management
   # Activate with: docker compose --profile auth up
   supertokens:
-    image: registry.supertokens.io/supertokens/supertokens-postgresql:9.0
+    image: registry.supertokens.io/supertokens/supertokens-postgresql:latest
     profiles: ["postgresql"]
     expose:
       - "3567"
